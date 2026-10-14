@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+# The whole installer lives in main() and runs only from the last line, so `curl | sh`
+# parses the complete script before any command can read from the same stdin.
+main() {
+
 DOCKER=${DOCKER:-docker}
 OPENSSL=${OPENSSL:-openssl}
 SLEEP=${SLEEP:-sleep}
@@ -128,7 +132,10 @@ if [ -f .initialized ]; then
 fi
 
 PAIRING_URL=$("$DOCKER" compose exec -T server /app/colliedesk create-workspace \
-  --name "$WORKSPACE_NAME" --admin-email "$ADMIN_EMAIL")
+  --name "$WORKSPACE_NAME" --admin-email "$ADMIN_EMAIL" </dev/null)
 [ -n "$PAIRING_URL" ] || fail 'Workspace creation did not return a pairing URL.'
 touch .initialized
 printf 'CollieDesk is ready. Open this one-time pairing URL:\n%s\n' "$PAIRING_URL"
+}
+
+main "$@"
