@@ -32,3 +32,8 @@ test('lets a cloud identity choose one of its workspaces', () => {
 	expect(onSelectWorkspace).toHaveBeenCalledWith('beta');
 	expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
+
+test('a refused link says what happened and what to do next', () => {
+	render(<RedeemPage token="spent" failed />);
+	expect(screen.getByRole('alert')).toHaveTextContent('This link is invalid, expired, or already used. Ask your workspace admin for a new link.');
+});

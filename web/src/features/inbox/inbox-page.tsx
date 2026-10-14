@@ -26,15 +26,22 @@ interface InboxPageProps {
   onPage?: (page: number) => void;
   onRetryDelivery?: (messageId: string) => void;
   outboundNotice?: string;
+  filtered?: boolean;
+  loading?: boolean;
+  failed?: boolean;
+  onRetry?: () => void;
+  canManage?: boolean;
+  onOpenSettings?: () => void;
 }
 
-export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice }: InboxPageProps) {
+export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, filtered, loading, failed, onRetry, canManage, onOpenSettings }: InboxPageProps) {
   return (
     <main className="inbox-shell">
       <InboxFilters tags={tags} onChange={onFilters} />
       <div className="inbox-grid">
         <ConversationList items={conversations} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
-          page={page} hasNextPage={hasNextPage} onPage={onPage} />
+          page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} loading={loading}
+          failed={failed} onRetry={onRetry} canManage={canManage} onOpenSettings={onOpenSettings} />
         <div className="conversation-center"><TimelinePanel conversation={selected} items={timeline} timeEntries={timeEntries} timezone={timezone} onRetryDelivery={onRetryDelivery} />
           {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}</p>}
           <ReplyComposer disabled={!selected} onSubmit={onMessage} /></div>

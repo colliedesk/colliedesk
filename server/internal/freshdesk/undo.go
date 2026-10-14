@@ -55,6 +55,11 @@ func Undo(ctx context.Context, pool *pgxpool.Pool, storage attachments.Storage, 
 		return UndoResult{}, err
 	}
 	defer release()
+	// Undo usually follows an import within minutes, before autovacuum has analyzed the rows it
+	// wrote; with stale statistics the keep query below took 37 s for a 300-ticket import.
+	if err := db.RefreshStatistics(ctx, "import_items", "conversations", "messages", "attachments", "contacts", "tags", "conversation_tags", "time_entries"); err != nil {
+		return UndoResult{}, err
+	}
 	tx, err := db.BeginWorkspace(ctx, workspaceID)
 	if err != nil {
 		return UndoResult{}, fmt.Errorf("begin undo: %w", err)

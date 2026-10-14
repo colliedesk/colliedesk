@@ -101,6 +101,7 @@ export const timeEntryListSchema = z.object({ items: z.array(timeEntrySchema) })
 export const tagListSchema = z.object({ items: z.array(tagSchema) }) satisfies z.ZodType<JsonResponse<'listTags', 200>>;
 
 export type Agent = Generated<'Agent'>;
+export type Me = Generated<'Me'>;
 export type Attachment = Generated<'Attachment'>;
 export type ConversationOrigin = Generated<'ConversationOrigin'>;
 export type MessageOrigin = Generated<'MessageOrigin'>;

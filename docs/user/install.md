@@ -23,13 +23,18 @@ clone of the repository.
    docker compose exec server /app/colliedesk create-workspace \
      --name "Example Support" --admin-email "admin@example.com"
    ```
-3. Open the one-time URL the command prints. It signs you in as the admin.
+3. Open the one-time URL the command prints. It signs you in as the admin. The command also
+   prints the workspace slug and the exact `pair` command for a new link; keep that line.
 
 The link works once and expires after 15 minutes. If it expires, print a new one:
 
 ```sh
 docker compose exec server /app/colliedesk pair --workspace <slug> --email admin@example.com
 ```
+
+After you sign in, the empty inbox links to the next steps: connect your support email, import
+from Freshdesk, and invite your team. The top bar shows the workspace and the address you are signed
+in as.
 
 ## Data to back up
 

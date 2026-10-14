@@ -43,12 +43,21 @@ func TestCreateWorkspaceAndPairPrintFreshOneTimeURLs(t *testing.T) {
 		t.Skip("TEST_DATABASE_URL is unset; skipping real PostgreSQL CLI test")
 	}
 	databaseURL := isolatedDatabaseURL(t, baseURL)
-	var first bytes.Buffer
-	err := run(context.Background(), []string{"create-workspace", "--name", "CLI Desk", "--admin-email", "admin@cli.example.com"}, &first, databaseURL, "https://desk.example.com")
+	var first, hint bytes.Buffer
+	stderr = &hint
+	t.Cleanup(func() { stderr = os.Stderr })
+	err := run(context.Background(), []string{"create-workspace", "--name", "CLI Desk", "--admin-email", "Admin@CLI.example.com"}, &first, databaseURL, "https://desk.example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
 	firstURL := strings.TrimSpace(first.String())
+	if strings.Count(first.String(), "\n") != 1 {
+		t.Fatalf("stdout must hold only the link (install.sh captures it): %q", first.String())
+	}
+	// A self-hoster whose link expired cannot sign in to look up the slug, so creation tells them.
+	if want := "colliedesk pair --workspace cli-desk --email admin@cli.example.com"; !strings.Contains(hint.String(), want) {
+		t.Fatalf("create-workspace hint %q does not contain %q", hint.String(), want)
+	}
 	parsed, err := url.Parse(firstURL)
 	if err != nil || parsed.Query().Get("token") == "" || parsed.Path != "/redeem" {
 		t.Fatalf("invalid pairing URL %q: %v", firstURL, err)

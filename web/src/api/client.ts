@@ -8,19 +8,31 @@ import {
 } from './schemas';
 import type { WorkspaceChoice } from './schemas';
 
+// UnauthorizedError means the browser has no valid session: never signed in, expired, or revoked.
+export class UnauthorizedError extends Error {
+  constructor() {
+    super('API 401');
+    this.name = 'UnauthorizedError';
+  }
+}
+
+function failure(status: number): Error {
+  return status === 401 ? new UnauthorizedError() : new Error(`API ${status}`);
+}
+
 async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', ...init?.headers },
     ...init,
   });
-  if (!response.ok) throw new Error(`API ${response.status}`);
+  if (!response.ok) throw failure(response.status);
   return schema.parse(await response.json());
 }
 
 async function requestNoContent(path: string, init: RequestInit): Promise<void> {
   const response = await fetch(path, { credentials: 'same-origin', ...init });
-  if (!response.ok) throw new Error(`API ${response.status}`);
+  if (!response.ok) throw failure(response.status);
 }
 
 export type RequestBody<Operation extends keyof operations> =

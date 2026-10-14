@@ -55,6 +55,35 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
 - Market is international: timestamps are stored and returned in UTC; the UI formats them in the
   agent's IANA timezone. No country-specific defaults.
 
+## Onboarding journeys
+
+Customers leaving Freshdesk judge CollieDesk in their first hour. These end-to-end tests run the
+real server, CLI, PostgreSQL and a browser; only external services are local stand-ins (Freshdesk
+API, identity provider JWKS, Mailpit as the SMTP relay). They run on every PR in the CI jobs
+`onboarding` and `install-smoke`. A change to an onboarding surface (`install.sh`,
+`create-workspace` / `pair`, redeem, invites, sessions, cloud sign-in, the email channel,
+`import freshdesk` / `import undo`, the empty inbox) must keep them green. Never skip, weaken or
+untag one; fix the product instead. `corepack pnpm test` fails when this list and the
+`@onboarding` tests in `web/e2e/` differ.
+
+- `self-host first run: fresh database, create-workspace, pairing link, empty inbox that explains the next step` (`web/e2e/onboarding-self-host.spec.ts`)
+- `invite teammate: admin invites, teammate joins under the agent ceiling, admin revokes, revoked session refused` (`web/e2e/onboarding-invite.spec.ts`)
+- `email channel: forwarded mail opens a conversation, the reply is delivered by SMTP with threading headers, the customer reply threads back` (`web/e2e/onboarding-email.spec.ts`)
+- `freshdesk import: reconcile OK with exact counts, tickets searchable with original timestamps, undo removes exactly the import` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
+- `freshdesk import: a wrong API key stops before writing anything and says why` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
+- `freshdesk import: an archive refused with 403 is reported UNVERIFIED, never OK` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
+- `cloud sign-in: a verified identity of an existing agent gets a CollieDesk session; every other token is refused` (`web/e2e/onboarding-cloud-sign-in.spec.ts`)
+- `link errors: expired, reused, revoked, mistyped, missing and another workspace's link explain themselves` (`web/e2e/onboarding-link-errors.spec.ts`)
+
+Also: `tests/install-smoke.sh` (real `install.sh` with Docker against the image built from the
+commit; the printed link must sign in) and `tests/install-test.sh` (installer with stubbed Docker).
+
+Ports and temp files derive from the checkout path (`web/e2e/support/checkout.ts`), so two
+checkouts can run them at once; `COLLIEDESK_E2E_PORT_BASE` overrides the ports.
+Run locally: `docker compose --profile test up -d postgres mailpit`, then
+`make e2e E2E_ARGS='--grep @onboarding'`; for the installer,
+`docker build -t colliedesk:smoke -f server/Dockerfile . && COLLIE_DESK_IMAGE=colliedesk:smoke sh tests/install-smoke.sh`.
+
 ## Clean room
 
 Do not open, copy, translate or paraphrase the source code of other helpdesks, especially

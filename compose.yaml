@@ -46,6 +46,14 @@ services:
         condition: service_healthy
     command: ["sh", "-c", "/app/colliedesk migrate && exec /app/colliedesk serve"]
 
+  # SMTP sink for the end-to-end tests (make e2e): docker compose --profile test up -d mailpit
+  mailpit:
+    image: axllent/mailpit:v1.27
+    profiles: ["test"]
+    ports:
+      - "127.0.0.1:55425:1025"
+      - "127.0.0.1:55426:8025"
+
 volumes:
   postgres-data:
   attachments-data:

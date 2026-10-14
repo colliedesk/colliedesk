@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "corepack pnpm check:api && tsc --noEmit && vite build",
     "bundle:check": "node scripts/check-bundle-budget.mjs",
-    "typecheck": "corepack pnpm check:api && tsc --noEmit",
+    "typecheck": "corepack pnpm check:api && tsc --noEmit && tsc --noEmit -p e2e",
     "test": "vitest run",
     "e2e": "playwright test",
     "generate:api": "openapi-typescript ../contracts/openapi.yaml -o src/api/generated.ts",

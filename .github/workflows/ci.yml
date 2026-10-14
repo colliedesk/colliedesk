@@ -34,6 +34,8 @@ jobs:
           cache: false
       - name: Mail pipe wrapper exit codes
         run: sh tests/mail-pipe-test.sh
+      - name: Installer argument and failure handling (stubbed Docker)
+        run: sh tests/install-test.sh
       - name: Validate migrations
         working-directory: server
         run: go run ./cmd/migration-check --repo=..
@@ -93,5 +95,67 @@ jobs:
       - name: Install Chromium
         working-directory: web
         run: corepack pnpm exec playwright install --with-deps chromium
-      - name: Run end-to-end workflow
-        run: make e2e
+      - name: Run end-to-end workflows
+        run: make e2e E2E_ARGS='--grep-invert @onboarding'
+  # The customer onboarding journeys listed in AGENTS.md. A separate job so they run in parallel
+  # with the other end-to-end tests; every test runs in exactly one of the two jobs.
+  onboarding:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_DB: colliedesk_test
+          POSTGRES_USER: colliedesk
+          POSTGRES_PASSWORD: colliedesk
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U colliedesk -d colliedesk_test"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 15
+      mailpit:
+        image: axllent/mailpit:v1.27
+        ports: ["1025:1025", "8025:8025"]
+    env:
+      TEST_DATABASE_URL: postgres://colliedesk:colliedesk@127.0.0.1:5432/colliedesk_test?sslmode=disable
+      MAILPIT_SMTP_PORT: '1025'
+      MAILPIT_API_URL: http://127.0.0.1:8025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: false
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.x'
+          package-manager-cache: false
+      - name: Install frozen dependencies
+        working-directory: web
+        run: corepack pnpm install --frozen-lockfile
+      - name: Install Chromium
+        working-directory: web
+        run: corepack pnpm exec playwright install --with-deps chromium
+      - name: Run onboarding journeys
+        run: make e2e E2E_ARGS='--grep @onboarding'
+  # install.sh exactly as a self-hoster runs it, against the image built from this commit.
+  install-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/Dockerfile
+          load: true
+          tags: colliedesk:smoke
+      - name: Install with install.sh and sign in with the printed link
+        run: sh tests/install-smoke.sh
+        env:
+          COLLIE_DESK_IMAGE: colliedesk:smoke

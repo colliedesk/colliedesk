@@ -60,3 +60,21 @@ test('loads the time entries of the selected conversation', async () => {
   expect(await screen.findByText('Total 30 min')).toBeInTheDocument();
   expect(api.timeEntries).toHaveBeenCalledWith(alpha.id);
 });
+
+test('coming back to the inbox shows mail that arrived meanwhile, even within the cache window', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValueOnce({ items: [], page: 1, page_size: 50 }).mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  // Same cache settings as the app (main.tsx).
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 15_000 } } });
+  const first = render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await waitFor(() => expect(api.conversations).toHaveBeenCalledTimes(1));
+  first.unmount(); // the agent opens Settings, the customer's email arrives
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  expect(await screen.findByRole('button', { name: /alpha conversation/i })).toBeInTheDocument();
+});
