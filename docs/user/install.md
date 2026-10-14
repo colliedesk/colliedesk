@@ -31,5 +31,5 @@ The link works once and expires after 15 minutes. If it expires, print a new one
 docker compose exec server /app/colliedesk pair --workspace <slug> --email admin@example.com
 ```
 
-Limits today: no email channel yet, so conversations are created through the API or UI.
+To receive and answer customer email, set up the [email channel](email-channel.md).
 See the [roadmap](../../ROADMAP.md).

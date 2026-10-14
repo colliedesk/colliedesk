@@ -87,6 +87,11 @@ services:
       APP_ORIGIN: ${APP_ORIGIN}
       APP_SECRET: ${APP_SECRET}
       LISTEN_ADDR: :8080
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
     ports:
       - "127.0.0.1:${COLLIE_DESK_PORT}:8080"
     depends_on:
