@@ -100,6 +100,7 @@ export const messages = {
   smtpNotConfigured: 'Outgoing email is not configured. Set SMTP_HOST and related variables on the server; until then replies are marked Delivery failed.',
   deliveryStatuses: { queued: 'Queued', sent: 'Sent', failed: 'Delivery failed' },
   retryDelivery: 'Retry delivery',
+  downloadOriginalEmail: 'Download original email',
   senderFailedVerification: 'Failed sender verification',
   senderNotVerified: 'Sender not verified',
   attachmentsNotImported: (names: string[]) => `${names.length} attachment${names.length === 1 ? '' : 's'} not imported: ${names.join(', ')}`,

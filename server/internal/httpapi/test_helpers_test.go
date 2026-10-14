@@ -69,7 +69,11 @@ func testAPIWithConfig(t *testing.T, mutate func(*httpapi.Config)) (http.Handler
 		t.Fatal(err)
 	}
 	dns := &fakeDNS{records: map[string][]string{}}
-	config := httpapi.Config{Origin: testOrigin, LookupTXT: dns.lookupTXT, Email: email.Config{
+	storage, err := attachments.NewLocalDisk(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := httpapi.Config{Origin: testOrigin, LookupTXT: dns.lookupTXT, Attachments: storage, Email: email.Config{
 		SMTP:              email.SMTPConfig{Host: "smtp.test.invalid", Port: 587, StartTLS: true},
 		FromPolicy:        email.FromPolicyAny,
 		TrustedAuthServID: "mx.example.net",

@@ -55,6 +55,7 @@ export const emailAuthenticationSchema = z.enum(['pass', 'fail', 'none']);
 export const incomingEmailSchema = z.object({
   from: z.string(), authentication: emailAuthenticationSchema,
   attachments: z.array(z.object({ filename: z.string(), content_type: z.string() })),
+  original_attachment_id: z.string().uuid().nullable(),
 }) satisfies z.ZodType<Generated<'IncomingEmail'>>;
 export const attachmentSchema = z.object({
   id: z.string().uuid(), message_id: z.string().uuid(), filename: z.string(), content_type: z.string(),

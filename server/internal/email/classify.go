@@ -18,7 +18,7 @@ const (
 
 var (
 	resultPattern     = regexp.MustCompile(`\b(spf|dkim|dmarc)\s*=\s*([a-z]+)`)
-	replyTokenPattern = regexp.MustCompile(`\+r-([a-f0-9]{32})@`)
+	replyTokenPattern = regexp.MustCompile(`(?:\+r-|^reply\+)([a-f0-9]{32})@`)
 )
 
 // authentication reads the topmost Authentication-Results header stamped by the trusted receiving
@@ -102,6 +102,24 @@ func ReplyToken(recipients []string) string {
 	for _, recipient := range recipients {
 		if match := replyTokenPattern.FindStringSubmatch(strings.ToLower(recipient)); match != nil {
 			return match[1]
+		}
+	}
+	return ""
+}
+
+// PlatformReplyToken returns the token of a reply+<token>@<domain> recipient on the platform sending
+// domain, used when a workspace sends without a verified domain.
+func PlatformReplyToken(recipients []string, domain string) string {
+	if domain == "" {
+		return ""
+	}
+	suffix := "@" + strings.ToLower(domain)
+	for _, recipient := range recipients {
+		recipient = strings.ToLower(recipient)
+		if strings.HasSuffix(recipient, suffix) && strings.HasPrefix(recipient, "reply+") {
+			if match := replyTokenPattern.FindStringSubmatch(recipient); match != nil {
+				return match[1]
+			}
 		}
 	}
 	return ""

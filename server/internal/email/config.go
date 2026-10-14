@@ -23,16 +23,20 @@ type Config struct {
 	FromPolicy        string
 	MailFromDomain    string
 	TrustedAuthServID string
+	// PlatformInboundSecret authenticates the forwarder for MAIL_FROM_DOMAIN, which receives replies and
+	// bounces addressed to reply+<token>@MAIL_FROM_DOMAIN for every workspace.
+	PlatformInboundSecret string
 }
 
-// ConfigFromEnv reads SMTP_*, EMAIL_FROM_POLICY (verified), MAIL_FROM_DOMAIN and EMAIL_TRUSTED_AUTHSERV_ID.
+// ConfigFromEnv reads SMTP_*, EMAIL_FROM_POLICY (verified), MAIL_FROM_DOMAIN, MAIL_FROM_INBOUND_SECRET and
+// EMAIL_TRUSTED_AUTHSERV_ID.
 func ConfigFromEnv(getenv func(string) string) (Config, error) {
 	smtp, err := SMTPConfigFromEnv(getenv)
 	if err != nil {
 		return Config{}, err
 	}
 	config := Config{SMTP: smtp, FromPolicy: FromPolicyVerified, MailFromDomain: strings.ToLower(strings.TrimSpace(getenv("MAIL_FROM_DOMAIN"))),
-		TrustedAuthServID: strings.TrimSpace(getenv("EMAIL_TRUSTED_AUTHSERV_ID"))}
+		TrustedAuthServID: strings.TrimSpace(getenv("EMAIL_TRUSTED_AUTHSERV_ID")), PlatformInboundSecret: strings.TrimSpace(getenv("MAIL_FROM_INBOUND_SECRET"))}
 	if value := strings.TrimSpace(getenv("EMAIL_FROM_POLICY")); value != "" {
 		config.FromPolicy = value
 	}
@@ -41,6 +45,9 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 	}
 	if config.MailFromDomain != "" && !hostnamePattern.MatchString(config.MailFromDomain) {
 		return Config{}, fmt.Errorf("MAIL_FROM_DOMAIN must be a domain name, got %q", config.MailFromDomain)
+	}
+	if config.PlatformInboundSecret != "" && (len(config.PlatformInboundSecret) < 32 || config.MailFromDomain == "") {
+		return Config{}, fmt.Errorf("MAIL_FROM_INBOUND_SECRET needs MAIL_FROM_DOMAIN and at least 32 characters")
 	}
 	return config, nil
 }
