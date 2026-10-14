@@ -6,12 +6,17 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// stderr receives hints meant for the person at the terminal; stdout stays machine-readable.
+var stderr io.Writer = os.Stderr
 
 func run(ctx context.Context, args []string, output io.Writer, databaseURL, origin string) error {
 	if len(args) == 0 {
@@ -104,11 +109,15 @@ func createWorkspace(ctx context.Context, pool *pgxpool.Pool, origin string, arg
 	if err := database.Migrate(ctx, pool); err != nil {
 		return err
 	}
-	_, link, err := auth.New(pool, origin).CreateWorkspace(ctx, *name, *email)
+	workspace, link, err := auth.New(pool, origin).CreateWorkspace(ctx, *name, *email)
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(output, link)
+	if _, err := fmt.Fprintln(output, link); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(stderr, "Workspace %q created (slug %s). The link works once and expires in 15 minutes; print a new one with:\n  colliedesk pair --workspace %s --email %s\n",
+		workspace.Name, workspace.Slug, workspace.Slug, strings.ToLower(*email))
 	return err
 }
 
