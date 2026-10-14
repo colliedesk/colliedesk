@@ -95,3 +95,37 @@ func TestLastTicketIDExtendsTheProbe(t *testing.T) {
 		t.Fatalf("tickets=%+v method=%q", report.Tickets, report.Verification.Tickets.Method)
 	}
 }
+
+func TestArchivedTicketsRefusedOnceAreImportedWhenTheArchiveWorksAgain(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.archiveForbidden = true
+	refused := env.mustRun(t)
+	if refused.Status != freshdesk.StatusUnverified {
+		t.Fatalf("archive refused: status=%s", refused.Status)
+	}
+	var cached int
+	if err := env.pool.QueryRow(context.Background(), `SELECT count(*) FROM import_items WHERE workspace_id=$1 AND entity='ticket' AND source_id='3'`, env.workspaceID).Scan(&cached); err != nil || cached != 0 {
+		t.Fatalf("ticket 3 got a ledger verdict while the archive was refused: rows=%d err=%v", cached, err)
+	}
+	env.fake.archiveForbidden = false
+	recovered := env.mustRun(t)
+	if recovered.Status != freshdesk.StatusOK || recovered.Tickets.Imported != 5 || recovered.Tickets.Archived != 2 {
+		t.Fatalf("after the archive works again: status=%s tickets=%+v", recovered.Status, recovered.Tickets)
+	}
+	env.target(t, "ticket", "3")
+}
+
+func TestAbsentVerdictWithoutAConfirmedArchiveIsProbedAgain(t *testing.T) {
+	env := newImportEnv(t)
+	// A verdict written by an earlier version, or while the archive was refused,
+	// carries no proof that the archive was checked.
+	if _, err := env.pool.Exec(context.Background(), `INSERT INTO import_items(workspace_id,source,entity,source_id,status,error)
+		VALUES($1,'freshdesk:account:777','ticket','3','skipped','absent')`, env.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	report := env.mustRun(t)
+	if report.Status != freshdesk.StatusOK || report.Tickets.Imported != 5 {
+		t.Fatalf("status=%s tickets=%+v", report.Status, report.Tickets)
+	}
+	env.target(t, "ticket", "3")
+}

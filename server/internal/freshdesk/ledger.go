@@ -44,8 +44,11 @@ type execer interface {
 // so a re-run that skips the ticket can still report source counts.
 type ticketMeta struct {
 	// Created marks contacts and tags the import created (undo removes only those).
-	Created         bool  `json:"created,omitempty"`
-	Archived        bool  `json:"archived"`
+	Created  bool `json:"created,omitempty"`
+	Archived bool `json:"archived"`
+	// ArchiveChecked marks an absent verdict reached with a working archive
+	// endpoint; only such a verdict is trusted by later runs.
+	ArchiveChecked  bool  `json:"archive_checked,omitempty"`
 	Messages        int   `json:"messages"`
 	Attachments     int   `json:"attachments"`
 	AttachmentBytes int64 `json:"attachment_bytes"`

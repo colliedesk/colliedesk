@@ -34,6 +34,7 @@ type probeResult struct {
 type knownTicket struct {
 	status, reason  string
 	archived        bool
+	archiveChecked  bool
 	sourceUpdatedAt *time.Time
 }
 
@@ -101,6 +102,9 @@ func (r *run) classifyTickets(ctx context.Context) error {
 func (r *run) fromLedger(id int64, ticket knownTicket) bool {
 	key := strconv.FormatInt(id, 10)
 	switch {
+	case ticket.status == ledgerSkipped && ticket.reason == skipAbsent && !ticket.archiveChecked:
+		// The archive was not confirmed when this id was found missing: ask again.
+		return false
 	case ticket.status == ledgerSkipped && ticket.reason != skipDeleted:
 		r.recordSkip(ticket.reason, key)
 		if ticket.reason != skipAbsent {
@@ -140,7 +144,7 @@ func (r *run) loadTicketLedger(ctx context.Context) (map[int64]knownTicket, erro
 		if err := json.Unmarshal(raw, &meta); err != nil {
 			return nil, fmt.Errorf("read import ledger meta: %w", err)
 		}
-		ticket.archived = meta.Archived
+		ticket.archived, ticket.archiveChecked = meta.Archived, meta.ArchiveChecked
 		if id, err := strconv.ParseInt(key, 10, 64); err == nil {
 			known[id] = ticket
 		}
