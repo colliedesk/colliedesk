@@ -1,4 +1,5 @@
 DROP TABLE IF EXISTS email_outbox;
+DROP INDEX IF EXISTS messages_workspace_incoming_recent_idx;
 DROP INDEX IF EXISTS messages_workspace_email_message_id_idx;
 ALTER TABLE messages
     DROP CONSTRAINT IF EXISTS messages_workspace_id_id_key,

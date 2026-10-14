@@ -19,6 +19,10 @@ ALTER TABLE messages
 CREATE UNIQUE INDEX messages_workspace_email_message_id_idx
     ON messages(workspace_id, email_message_id) WHERE email_message_id IS NOT NULL;
 
+-- Serves the per-sender inbound rate limit, which counts recent incoming mail.
+CREATE INDEX messages_workspace_incoming_recent_idx
+    ON messages(workspace_id, created_at) WHERE kind = 'incoming';
+
 CREATE TABLE email_outbox (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
