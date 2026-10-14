@@ -5,7 +5,8 @@ export const statusTable = `| Capability | CollieDesk |
 | Passwordless sign-in, revocable sessions, isolated workspaces | **Shipped v0.1** |
 | Email channel (inbound and outbound, threading) | **Coming v0.2** |
 | Freshdesk importer with reconcile report | **Coming v0.2** |
-| One-command install, CollieDesk Cloud | **Coming v0.2** |
+| One-command install and published container image | **Shipped** |
+| CollieDesk Cloud for founding customers | **Coming v0.2** |
 | AI draft replies, triage, auto-answer with a human in the loop | **Coming v0.3** |
 | Knowledge base and public help center | **Coming v0.3** |
 | Automations, macros, SLA, business hours, time tracking | **Coming v0.4** |

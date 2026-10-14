@@ -28,12 +28,10 @@ const faq = [
   },
 ];
 
-const terminal = `<figure class="terminal" aria-label="Self-host CollieDesk in two commands">
-  <div class="terminal-bar"><span></span><span></span><span></span><figcaption>self-host in two commands</figcaption></div>
-<pre><code><span class="t-prompt">$</span> docker compose up -d --build
-<span class="t-prompt">$</span> docker compose exec server /app/colliedesk \\
-    create-workspace --name "Acme Support" \\
-    --admin-email "you@acme.com"
+const terminal = `<figure class="terminal" aria-label="Self-host CollieDesk with one command">
+  <div class="terminal-bar"><span></span><span></span><span></span><figcaption>self-host in one command</figcaption></div>
+<pre><code><span class="t-prompt">$</span> curl -fsSL https://raw.githubusercontent.com/colliedesk/colliedesk/main/install.sh \\
+    | sh -s -- --name "Acme Support" --email "you@acme.com"
 <span class="t-link">http://localhost:8080/redeem?token=…</span>
 <span class="t-out"># one-time sign-in link, no passwords</span></code></pre>
 </figure>`;

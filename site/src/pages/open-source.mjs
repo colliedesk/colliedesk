@@ -50,18 +50,16 @@ These five rules are in the repository's \`AGENTS.md\`, for every person and cod
 4. **No lock-in.** The data model and the export format stay open and documented.
 5. **Open at the core.** Roadmap, decisions and code are public.
 
-## Self-host in two commands
+## Self-host in one command
 
 Requirements: Docker with Compose v2.
 
 \`\`\`sh
-docker compose up -d --build
-docker compose exec server /app/colliedesk create-workspace \\
-  --name "Example Support" \\
-  --admin-email "admin@example.com"
+curl -fsSL https://raw.githubusercontent.com/colliedesk/colliedesk/main/install.sh | sh -s -- \\
+  --name "Example Support" --email "admin@example.com"
 \`\`\`
 
-Open the one-time URL the command prints. CollieDesk has no passwords. A one-command installer and a published container image are **coming in v0.2**. Full guide: [Install and create a workspace](/docs/install).
+The installer starts CollieDesk and PostgreSQL with the published container image, keeps secrets in a local \`.env\`, and prints a one-time sign-in URL. CollieDesk has no passwords. Full guide: [Install and create a workspace](/docs/install).
 
 ## Clean room
 
