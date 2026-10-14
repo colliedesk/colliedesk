@@ -44,3 +44,5 @@
 .danger-action { border: 1px solid var(--ink-200); border-radius: var(--radius); background: transparent; color: var(--danger-700); padding: var(--space-2) var(--space-3); }
 .danger-action:hover { border-color: var(--danger-700); transform: translateY(-1px); }
 .email-channel .invite-link { margin: 0; }
+.email-channel .button-row button:not(.danger-action) { border: 1px solid var(--ink-200); border-radius: var(--radius); background: transparent; padding: var(--space-2) var(--space-3); }
+.email-channel .button-row button:not(.danger-action):hover { border-color: var(--signal-700); color: var(--signal-700); transform: translateY(-1px); }
