@@ -22,6 +22,7 @@ run `docker compose up -d`.
 | `SMTP_STARTTLS` | `true` | Require STARTTLS before login. |
 | `EMAIL_FROM_POLICY` | `verified` | `verified`: send as the support address only after its domain is verified (step 3). `any`: always send as the support address. |
 | `MAIL_FROM_DOMAIN` | empty | Domain used to send for workspaces whose domain is not verified, for example `mail.example.com`. |
+| `MAIL_FROM_INBOUND_SECRET` | empty | Secret (32+ characters) for the forwarder of `MAIL_FROM_DOMAIN` (step 5). |
 | `EMAIL_TRUSTED_AUTHSERV_ID` | empty | Name of the receiving mail server whose SPF/DKIM/DMARC result you trust (step 4). Empty: no result is trusted. |
 
 **Self-hosted with your own relay:** set `EMAIL_FROM_POLICY=any`. You own the relay, so every
@@ -107,7 +108,9 @@ message your receiving server delivered.
 ```js
 export default {
   async email(message, env) {
-    const raw = await new Response(message.raw).arrayBuffer();
+    // Prepend the envelope recipient so reply tokens work even when the message hides it (Bcc).
+    const envelope = new TextEncoder().encode(`X-Original-To: ${message.to}\r\n`);
+    const raw = await new Blob([envelope, await new Response(message.raw).arrayBuffer()]).arrayBuffer();
     const response = await fetch(env.INBOUND_URL, {
       method: "POST",
       headers: {
@@ -155,10 +158,31 @@ message to the sender. The wrapper maps the responses:
 
 The secret is passed in a private header file, never on the command line.
 
+## 5. Receive replies and bounces for MAIL_FROM_DOMAIN (shared relay)
+
+Workspaces without a verified domain send from `reply+<token>@<MAIL_FROM_DOMAIN>`. Most customers
+reply to the support address (it is in `Reply-To`), but some mail clients reply to the From
+address, and bounces always go to it. The server operator routes that domain once for all
+workspaces:
+
+1. Point the MX records of `MAIL_FROM_DOMAIN` at a forwarder, for example Cloudflare Email Routing
+   with a catch-all rule to a Worker.
+2. Set `MAIL_FROM_INBOUND_SECRET` on the server to a random value of at least 32 characters.
+3. Use the same Worker code as in step 4, with `INBOUND_SECRET` set to `MAIL_FROM_INBOUND_SECRET`.
+   Keep the `X-Original-To` line: it carries the `reply+<token>` address.
+
+CollieDesk finds the conversation from the token and files the message in its workspace, like any
+reply. A bounce marks the reply **Delivery failed**. Mail for an unknown token is answered `200`
+with status `dropped` and reason `unknown_recipient`; the Worker forwards nothing for it.
+
 ## What you see in the inbox
 
 - Incoming messages show the sender address and are shown as plain text: no remote images load,
   and only web addresses written in the text become links.
+- Attachments are listed under the message; select a file name to download it. **Show original**
+  opens the HTML version in a locked frame; inline images in it come from the stored message,
+  never from the internet. **Download original email** gives the complete message as received
+  (`.eml.gz`), so nothing is lost even if a part could not be shown.
 - **Failed sender verification**: the trusted receiving server reported an SPF, DKIM, or DMARC
   failure. Treat the message as possibly forged.
 - **Sender not verified**: no trusted verification result was present.
@@ -183,7 +207,9 @@ conversation contact.
 
 ## Limits
 
-- Attachments are not imported yet. The timeline lists their file names.
+- A message may be up to 25 MiB with at most 100 attachments. Larger mail gets `413` and nothing
+  is stored; the forwarder should keep a copy for a person.
+- If attachment storage fails, the forwarder gets `500` and nothing is stored; it retries.
 - Mail marked as automatic is dropped: auto-replies (`Auto-Submitted`, out-of-office), bulk mail
   (`Precedence: bulk` or `junk`, or list headers together with a bulk-sender marker such as
   one-click unsubscribe), and delivery reports (`MAILER-DAEMON`, `postmaster`). A delivery report

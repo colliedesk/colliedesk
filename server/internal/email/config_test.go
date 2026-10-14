@@ -25,3 +25,19 @@ func TestConfigFromEnvDefaultsToVerifiedPolicyAndValidates(t *testing.T) {
 		t.Fatalf("parsed: %+v %v", config, err)
 	}
 }
+
+func TestConfigFromEnvReadsThePlatformInboundSecret(t *testing.T) {
+	env := map[string]string{"MAIL_FROM_DOMAIN": "mail.example.com", "MAIL_FROM_INBOUND_SECRET": "0123456789abcdef0123456789abcdef"}
+	config, err := email.ConfigFromEnv(func(key string) string { return env[key] })
+	if err != nil || config.PlatformInboundSecret != env["MAIL_FROM_INBOUND_SECRET"] {
+		t.Fatalf("platform secret not read: %+v %v", config, err)
+	}
+	for name, bad := range map[string]map[string]string{
+		"short secret":     {"MAIL_FROM_DOMAIN": "mail.example.com", "MAIL_FROM_INBOUND_SECRET": "short"},
+		"secret no domain": {"MAIL_FROM_INBOUND_SECRET": "0123456789abcdef0123456789abcdef"},
+	} {
+		if _, err := email.ConfigFromEnv(func(key string) string { return bad[key] }); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+}

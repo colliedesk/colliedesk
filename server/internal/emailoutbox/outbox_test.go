@@ -48,7 +48,7 @@ func newFixture(t *testing.T) fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := st.IngestEmail(ctx, workspace.ID, parsed, time.Now().UTC())
+	result, err := st.IngestEmail(ctx, workspace.ID, parsed, time.Now().UTC(), nil)
 	if err != nil || result.ConversationID == nil {
 		t.Fatalf("ingest: %+v %v", result, err)
 	}

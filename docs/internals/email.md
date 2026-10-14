@@ -61,12 +61,25 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
 - **Customer email renders as plain text.** No Markdown, no remote images, links only for visible
   http(s) URLs with `rel="noopener noreferrer nofollow"`. Agent replies and notes keep Markdown.
 
-## TODO
+## Files and the raw message
 
-- **Store the raw message and attachments (H1).** Attachments and the raw `.eml` are not kept
-  after a 200; only file names and types are recorded in `messages.email_meta`. Store the raw
-  message per incoming email in the ingest transaction once the attachment model lands, so files
-  can be extracted and older mail backfilled. Until then the docs state the limit.
+- **Every file is kept.** Attachments, inline images (with their Content-ID) and embedded messages
+  are decoded and written to `attachments.Storage` with their SHA-256 and linked to the incoming
+  message. The raw message is stored gzip-compressed as `original-message.eml.gz`;
+  `email_meta.original_attachment_id` points at it.
+- **Storage runs inside the ingest transaction, after the decision.** Dropped and duplicate mail
+  writes nothing. A storage error rolls back the message, contact and conversation and returns
+  500, so the forwarder retries.
+- **Inline images become `data:` URIs** in `body_html` (5 MiB budget per message). The sandboxed
+  original allows only `data:` images, so nothing is fetched from the network.
+- **Limits before storage:** 25 MiB request body, 100 files; both are 413.
+- **Platform domain inbound.** `MAIL_FROM_INBOUND_SECRET` authenticates the forwarder of
+  `MAIL_FROM_DOMAIN` on the same endpoint. The workspace comes from the conversation of the
+  `reply+<token>@MAIL_FROM_DOMAIN` recipient (tokens are unique and 128-bit). Only that domain
+  counts; a token on another domain does not route.
+
+## Open
+
 - **Filtered mail is not stored.** Dropped automatic mail is reported only in the 200 response.
 
 ## Traps
@@ -83,6 +96,9 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   are folded onto continuation lines.
 - **`net/smtp` refuses PLAIN auth without TLS** except on localhost, and has no implicit TLS;
   port 465 is rejected at startup.
+- **Never delete stored objects after a failed request.** Objects are content-addressed per
+  workspace (same bytes, same key), so a logo in two concurrent mails is one object. A failed
+  request leaves its objects; the retry writes the same keys and references them.
 - **The `messages (workspace_id, id)` key** belongs to the attachment and import migration, which
   sorts before this one. This migration adds it only when missing and its down migration leaves
   it. A database that applied an earlier draft of this migration before that one merged would hit

@@ -45,6 +45,10 @@ type Inbound struct {
 	DropReason     string
 	// BouncedMessageIDs are the Message-IDs named in a delivery status report's returned headers.
 	BouncedMessageIDs []string
+	// Files holds every attachment, inline image and embedded message with its bytes.
+	Files []File
+	// BodyHTML is the HTML part with inline images embedded; empty when the message has no HTML.
+	BodyHTML string
 }
 
 var (
@@ -80,6 +84,10 @@ func Parse(raw []byte, trustedAuthServID string) (Inbound, error) {
 	parsed.Body = content.text()
 	parsed.Attachments = content.attachments
 	parsed.BouncedMessageIDs = content.bouncedIDs
+	parsed.Files = content.files
+	if strings.TrimSpace(content.html) != "" {
+		parsed.BodyHTML = strings.ToValidUTF8(strings.ReplaceAll(inlineImages(content.html, content.files), "\x00", ""), "")
+	}
 	parsed.Authentication = authentication(header["Authentication-Results"], trustedAuthServID)
 	parsed.DropReason = dropReason(header, parsed.FromAddress)
 	return parsed, nil

@@ -37,8 +37,20 @@ test('connects email, receives a customer email and shows why the reply is not e
     'Subject: E2E email thread',
     `Message-ID: <e2e-${suffix}@customer.example>`,
     'Authentication-Results: mx.example.net; dmarc=fail header.from=customer.example',
+    'MIME-Version: 1.0',
+    'Content-Type: multipart/mixed; boundary="e2e"',
+    '',
+    '--e2e',
+    'Content-Type: text/plain; charset=utf-8',
     '',
     'My order never arrived.',
+    '--e2e',
+    'Content-Type: application/pdf; name="receipt.pdf"',
+    'Content-Disposition: attachment; filename="receipt.pdf"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    Buffer.from('%PDF-1.4 e2e receipt').toString('base64'),
+    '--e2e--',
   ].join('\r\n');
   const inbound = await page.request.post(`${baseURL}/api/v1/channels/email/inbound`, {
     headers: { 'Content-Type': 'message/rfc822', 'X-CollieDesk-Inbound-Secret': secret }, data: Buffer.from(raw),
@@ -51,6 +63,11 @@ test('connects email, receives a customer email and shows why the reply is not e
   await expect(page.getByText('My order never arrived.')).toBeVisible();
   await expect(page.getByText(`erin-${suffix}@customer.example`)).toBeVisible();
   await expect(page.getByText('Failed sender verification')).toBeVisible();
+  const receipt = page.getByRole('link', { name: 'receipt.pdf' });
+  await expect(receipt).toBeVisible();
+  const download = await page.request.get(`${baseURL}${await receipt.getAttribute('href')}`);
+  expect(await download.text()).toBe('%PDF-1.4 e2e receipt');
+  await expect(page.getByRole('link', { name: 'Download original email' })).toBeVisible();
   await expect(page.getByRole('status')).toHaveText(/Outgoing email is not configured on this server/);
 
   await page.getByLabel('Message body').last().fill('We are on it.');

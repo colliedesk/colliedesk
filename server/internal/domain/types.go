@@ -144,9 +144,11 @@ type IncomingEmail struct {
 	From           string            `json:"from"`
 	Authentication string            `json:"authentication"`
 	Attachments    []EmailAttachment `json:"attachments"`
+	// OriginalAttachmentID is the stored, gzip-compressed raw message (an attachment of this message).
+	OriginalAttachmentID *string `json:"original_attachment_id"`
 }
 
-// EmailAttachment records an attachment seen in an inbound message; its content is not stored.
+// EmailAttachment names an attachment seen in an inbound message; stored bytes are in Message.Attachments.
 type EmailAttachment struct {
 	Filename    string `json:"filename"`
 	ContentType string `json:"content_type"`

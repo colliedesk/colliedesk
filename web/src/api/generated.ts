@@ -303,7 +303,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Accepts one raw RFC 5322 message from a forwarder (Cloudflare Email Worker, Postmark or SES forwarding, an MTA pipe). Authenticated by the workspace inbound secret, not by a session. Every accepted outcome is 200 so the forwarder does not retry; the `status` says what happened. */
+        /** @description Accepts one raw RFC 5322 message from a forwarder (Cloudflare Email Worker, Postmark or SES forwarding, an MTA pipe). Authenticated by the workspace inbound secret, not by a session. Every accepted outcome is 200 so the forwarder does not retry; the `status` says what happened. The server-wide MAIL_FROM_INBOUND_SECRET is also accepted: it is used by the forwarder of MAIL_FROM_DOMAIN, and the workspace is taken from the reply+<token>@MAIL_FROM_DOMAIN recipient. Attachments, inline images and the gzip-compressed raw message are stored with the message; a storage failure returns 500 and stores nothing. */
         post: operations["receiveInboundEmail"];
         delete?: never;
         options?: never;
@@ -672,10 +672,6 @@ export interface components {
             sha256: string;
             /** Format: date-time */
             created_at: string;
-            /** @description Email delivery of an outgoing reply; null when the reply was not emailed. */
-            delivery?: null | components["schemas"]["MessageDelivery"];
-            /** @description Envelope details of an incoming email; null for messages that did not arrive by email. */
-            email?: null | components["schemas"]["IncomingEmail"];
         };
         /** @enum {string} */
         DeliveryStatus: "queued" | "sent" | "failed";
@@ -694,7 +690,12 @@ export interface components {
         IncomingEmail: {
             from: string;
             authentication: components["schemas"]["EmailAuthentication"];
-            /** @description Attachments seen in the message. Their content is not stored yet. */
+            /**
+             * Format: uuid
+             * @description Attachment holding the complete raw message, gzip-compressed (original-message.eml.gz). Null for mail received before raw messages were kept.
+             */
+            original_attachment_id: string | null;
+            /** @description Names of the files in the message. Their bytes are in the message's `attachments` (mail received before attachments were stored lists names only). */
             attachments: {
                 filename: string;
                 content_type: string;
@@ -741,7 +742,7 @@ export interface components {
         InboundEmailResult: {
             /** @enum {string} */
             status: "created" | "threaded" | "duplicate" | "dropped";
-            /** @description Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address. */
+            /** @description Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address, unknown_recipient (no conversation for a reply+<token>@MAIL_FROM_DOMAIN recipient). */
             reason: string | null;
             /** Format: uuid */
             conversation_id: string | null;
@@ -809,7 +810,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Message larger than the inbound limit */
+        /** @description Message larger than 25 MiB or with more than 100 attachments; nothing was stored */
         PayloadTooLarge: {
             headers: {
                 [name: string]: unknown;

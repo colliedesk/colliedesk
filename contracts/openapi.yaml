@@ -390,6 +390,10 @@ paths:
         Accepts one raw RFC 5322 message from a forwarder (Cloudflare Email Worker, Postmark or SES
         forwarding, an MTA pipe). Authenticated by the workspace inbound secret, not by a session.
         Every accepted outcome is 200 so the forwarder does not retry; the `status` says what happened.
+        The server-wide MAIL_FROM_INBOUND_SECRET is also accepted: it is used by the forwarder of
+        MAIL_FROM_DOMAIN, and the workspace is taken from the reply+<token>@MAIL_FROM_DOMAIN recipient.
+        Attachments, inline images and the gzip-compressed raw message are stored with the message;
+        a storage failure returns 500 and stores nothing.
       requestBody:
         required: true
         content:
@@ -653,7 +657,7 @@ components:
       description: Temporary server failure; the message was not stored and the forwarder should retry
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     PayloadTooLarge:
-      description: Message larger than the inbound limit
+      description: Message larger than 25 MiB or with more than 100 attachments; nothing was stored
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     TooManyRequests:
       description: Per-contact inbound rate limit reached; the forwarder should retry later
@@ -890,16 +894,6 @@ components:
         size: {type: integer, minimum: 0}
         sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
         created_at: {type: string, format: date-time}
-        delivery:
-          description: Email delivery of an outgoing reply; null when the reply was not emailed.
-          oneOf:
-            - {type: 'null'}
-            - {$ref: '#/components/schemas/MessageDelivery'}
-        email:
-          description: Envelope details of an incoming email; null for messages that did not arrive by email.
-          oneOf:
-            - {type: 'null'}
-            - {$ref: '#/components/schemas/IncomingEmail'}
     DeliveryStatus: {type: string, enum: [queued, sent, failed]}
     MessageDelivery:
       type: object
@@ -915,13 +909,21 @@ components:
       description: Upstream SPF/DKIM/DMARC verdict from Authentication-Results; `none` when no verdict was present.
     IncomingEmail:
       type: object
-      required: [from, authentication, attachments]
+      required: [from, authentication, attachments, original_attachment_id]
       properties:
         from: {type: string}
         authentication: {$ref: '#/components/schemas/EmailAuthentication'}
+        original_attachment_id:
+          type: [string, 'null']
+          format: uuid
+          description: >-
+            Attachment holding the complete raw message, gzip-compressed (original-message.eml.gz).
+            Null for mail received before raw messages were kept.
         attachments:
           type: array
-          description: Attachments seen in the message. Their content is not stored yet.
+          description: >-
+            Names of the files in the message. Their bytes are in the message's `attachments` (mail received
+            before attachments were stored lists names only).
           items:
             type: object
             required: [filename, content_type]
@@ -972,7 +974,7 @@ components:
       required: [status, reason, conversation_id, message_id, authentication]
       properties:
         status: {type: string, enum: [created, threaded, duplicate, dropped]}
-        reason: {type: [string, 'null'], description: 'Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address.'}
+        reason: {type: [string, 'null'], description: 'Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address, unknown_recipient (no conversation for a reply+<token>@MAIL_FROM_DOMAIN recipient).'}
         conversation_id: {type: [string, 'null'], format: uuid}
         message_id: {type: [string, 'null'], format: uuid}
         authentication: {$ref: '#/components/schemas/EmailAuthentication'}

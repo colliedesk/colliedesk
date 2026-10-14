@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/jackc/pgx/v5"
@@ -36,18 +37,46 @@ type InboundResult struct {
 	Authentication string  `json:"authentication"`
 }
 
+// EmailFile is a file of an inbound message already written to attachment storage.
+type EmailFile struct {
+	Filename    string
+	ContentType string
+	// Original marks the stored raw message; its attachment id is recorded in the email metadata.
+	Original bool
+	Object   attachments.Object
+}
+
+// StashFunc writes an inbound message's files to attachment storage. It runs inside the ingest
+// transaction only for mail that will be stored, so dropped and duplicate mail writes nothing, and a
+// storage error rolls the whole message back.
+type StashFunc func(ctx context.Context) ([]EmailFile, error)
+
 // IngestEmail files one parsed message into the workspace: duplicate, dropped, threaded or new.
-func (s *Store) IngestEmail(ctx context.Context, workspaceID string, in email.Inbound, now time.Time) (InboundResult, error) {
-	result, err := s.ingest(ctx, workspaceID, in, now)
+// A nil stash stores no files.
+func (s *Store) IngestEmail(ctx context.Context, workspaceID string, in email.Inbound, now time.Time, stash StashFunc) (InboundResult, error) {
+	result, err := s.ingest(ctx, workspaceID, in, now, stash)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		// A concurrent delivery of the same Message-ID won the race; report it as the duplicate it is.
-		return s.ingest(ctx, workspaceID, in, now)
+		return s.ingest(ctx, workspaceID, in, now, stash)
 	}
 	return result, err
 }
 
-func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound, now time.Time) (InboundResult, error) {
+// WorkspaceForReplyToken finds the workspace of the conversation a reply token belongs to.
+func (s *Store) WorkspaceForReplyToken(ctx context.Context, token string) (string, bool, error) {
+	var workspaceID string
+	err := s.pool.QueryRow(ctx, `SELECT workspace_id::text FROM conversations WHERE email_reply_token=$1`, token).Scan(&workspaceID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("find reply token: %w", err)
+	}
+	return workspaceID, true, nil
+}
+
+func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound, now time.Time, stash StashFunc) (InboundResult, error) {
 	result := InboundResult{Authentication: in.Authentication}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -129,10 +158,19 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 	if strings.TrimSpace(body) == "" {
 		body = "(no text content)"
 	}
+	var files []EmailFile
+	if stash != nil {
+		if files, err = stash(ctx); err != nil {
+			return result, fmt.Errorf("store inbound files: %w", err)
+		}
+	}
 	var messageID string
-	if err := tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,email_message_id,email_meta)
-		VALUES($1,$2,'incoming',$3,$4,$5) RETURNING id::text`, workspaceID, conversationID, body, in.MessageID, meta).Scan(&messageID); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,body_html,email_message_id,email_meta)
+		VALUES($1,$2,'incoming',$3,NULLIF($4,''),$5,$6) RETURNING id::text`, workspaceID, conversationID, body, in.BodyHTML, in.MessageID, meta).Scan(&messageID); err != nil {
 		return result, fmt.Errorf("store inbound message: %w", err)
+	}
+	if err := linkFiles(ctx, tx, workspaceID, messageID, files); err != nil {
+		return result, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return result, fmt.Errorf("commit inbound email: %w", err)

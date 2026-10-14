@@ -40,15 +40,18 @@ interface MessageItemProps {
 
 export function MessageItem({ item, timezone, onRetryDelivery }: MessageItemProps) {
   const [showOriginal, setShowOriginal] = useState(false);
+  // The stored raw email is offered on its own, not mixed with the customer's files.
+  const originalID = item.email?.original_attachment_id ?? null;
+  const files = item.attachments.filter((file) => file.id !== originalID);
   return (
     <article className={`message message-${item.kind}`}>
       <div className="message-meta"><span><strong>{kindLabel(item.kind)}</strong>
         {item.author_name && <span className="message-author">{item.author_name}</span>}</span>
         <time dateTime={item.created_at}>{formatDate(item.created_at, timezone)}</time></div>
-      {item.email && <EmailEnvelope email={item.email} />}
+      {item.email && <EmailEnvelope email={item.email} storedFiles={files.length} />}
       {item.origin && <OriginLine origin={item.origin} />}
       <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} /> : <Markdown>{item.body}</Markdown>}</div>
-      {item.attachments.length > 0 && <AttachmentList items={item.attachments} />}
+      {files.length > 0 && <AttachmentList items={files} />}
       <DeliveryStatus item={item} onRetry={onRetryDelivery} />
       {item.body_html && (
         <div className="message-original">
@@ -66,14 +69,15 @@ function kindLabel(kind: Message['kind']) {
   return kind === 'incoming' ? messages.incoming : messages.replyMode;
 }
 
-function EmailEnvelope({ email }: { email: NonNullable<Message['email']> }) {
+function EmailEnvelope({ email, storedFiles }: { email: NonNullable<Message['email']>; storedFiles: number }) {
   const warning = email.authentication === 'fail' ? messages.senderFailedVerification
     : email.authentication === 'none' ? messages.senderNotVerified : undefined;
   return (
     <div className="message-envelope">
       <span>{email.from}</span>
       {warning && <span className={`badge badge-${email.authentication}`}>{warning}</span>}
-      {email.attachments.length > 0 && <span>{messages.attachmentsNotImported(email.attachments.map((item) => item.filename))}</span>}
+      {email.attachments.length > 0 && storedFiles === 0 && <span>{messages.attachmentsNotImported(email.attachments.map((item) => item.filename))}</span>}
+      {email.original_attachment_id && <a href={`/api/v1/attachments/${email.original_attachment_id}`} download="original-message.eml.gz">{messages.downloadOriginalEmail}</a>}
     </div>
   );
 }

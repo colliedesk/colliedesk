@@ -2,6 +2,7 @@ package email
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/base64"
 	"html"
 	"io"
@@ -28,7 +29,13 @@ type content struct {
 	plain, html                   string
 	plainTruncated, htmlTruncated bool
 	attachments                   []domain.EmailAttachment
+	files                         []File
 	bouncedIDs                    []string
+}
+
+func (c *content) addFile(file File) {
+	c.attachments = append(c.attachments, domain.EmailAttachment{Filename: file.Filename, ContentType: file.ContentType})
+	c.files = append(c.files, file)
 }
 
 // text prefers the first text/plain part and falls back to the first text/html part reduced to text.
@@ -73,13 +80,18 @@ func walk(header textproto.MIMEHeader, body io.Reader, depth int, result *conten
 		}
 	}
 	if mediaType == "message/rfc822" || mediaType == "text/rfc822-headers" || mediaType == "message/rfc822-headers" {
+		data := decodeFile(header.Get("Content-Transfer-Encoding"), body)
 		// A delivery status report returns the headers of the message that bounced.
-		if returned, err := textproto.NewReader(bufio.NewReader(io.LimitReader(body, 1<<20))).ReadMIMEHeader(); err == nil || len(returned) > 0 {
+		if returned, err := textproto.NewReader(bufio.NewReader(bytes.NewReader(data))).ReadMIMEHeader(); err == nil || len(returned) > 0 {
 			if id := firstID(returned.Get("Message-Id")); id != "" {
 				result.bouncedIDs = append(result.bouncedIDs, boundID(id))
 			}
 		}
-		result.attachments = append(result.attachments, domain.EmailAttachment{Filename: "(returned message)", ContentType: mediaType})
+		name := "message.eml"
+		if mediaType != "message/rfc822" {
+			name = "returned-headers.txt"
+		}
+		result.addFile(File{Filename: name, ContentType: mediaType, Data: data})
 		return
 	}
 	disposition, dispositionParams, _ := mime.ParseMediaType(header.Get("Content-Disposition"))
@@ -89,7 +101,8 @@ func walk(header textproto.MIMEHeader, body io.Reader, depth int, result *conten
 		if filename == "" {
 			filename = "(unnamed)"
 		}
-		result.attachments = append(result.attachments, domain.EmailAttachment{Filename: cleanLine(filename), ContentType: mediaType})
+		result.addFile(File{Filename: cleanLine(filename), ContentType: mediaType, ContentID: contentID(header.Get("Content-Id")),
+			Inline: disposition != "attachment" && header.Get("Content-Id") != "", Data: decodeFile(header.Get("Content-Transfer-Encoding"), body)})
 		return
 	}
 	text, truncated := decodePart(header.Get("Content-Transfer-Encoding"), params["charset"], body)
