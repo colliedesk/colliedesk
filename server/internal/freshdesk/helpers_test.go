@@ -22,6 +22,7 @@ const testOrigin = "https://desk.example.com"
 type importEnv struct {
 	pool        *pgxpool.Pool
 	storage     *attachments.LocalDisk
+	storageRoot string
 	auth        *auth.Service
 	fake        *fakeFreshdesk
 	workspaceID string
@@ -36,7 +37,8 @@ func newImportEnv(t *testing.T) *importEnv {
 	if err := database.Migrate(context.Background(), pool); err != nil {
 		t.Fatal(err)
 	}
-	storage, err := attachments.NewLocalDisk(t.TempDir())
+	root := t.TempDir()
+	storage, err := attachments.NewLocalDisk(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +47,7 @@ func newImportEnv(t *testing.T) *importEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &importEnv{pool: pool, storage: storage, auth: service, fake: newFakeFreshdesk(t), workspaceID: workspace.ID, pairingURL: link}
+	return &importEnv{pool: pool, storage: storage, storageRoot: root, auth: service, fake: newFakeFreshdesk(t), workspaceID: workspace.ID, pairingURL: link}
 }
 
 func (e *importEnv) options() freshdesk.Options {

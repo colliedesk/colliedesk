@@ -24,7 +24,8 @@ func (r *run) reconcile(ctx context.Context, report *Report) (*Report, error) {
 	report.Verification = r.verification
 	steps := []func(context.Context, *Report, []string, []string) error{r.countTickets, r.countChildren, r.collectFailures}
 	if !r.opts.DryRun {
-		steps = append(steps, r.verifyAttachments)
+		// Verify first: a damaged file turns its ledger rows back to failed.
+		steps = append([]func(context.Context, *Report, []string, []string) error{r.verifyAttachments}, steps...)
 	}
 	for _, step := range steps {
 		if err := step(ctx, report, ticketIDs, contactIDs); err != nil {

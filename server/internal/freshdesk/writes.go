@@ -84,6 +84,13 @@ func (r *run) importMessage(ctx context.Context, ticketKey, conversationID, enti
 	failed := 0
 	for _, file := range files {
 		if err := r.importAttachment(ctx, ticketKey, messageID, file, refresh); err != nil {
+			if errors.Is(err, errDiskFull) {
+				// Every later download would fail too: stop the run.
+				if r.internalErr == nil {
+					r.internalErr = err
+				}
+				return failed + 1
+			}
 			r.itemFailed(ctx, entityAttachment, strconv.FormatInt(file.ID, 10), ticketKey, err)
 			failed++
 		}

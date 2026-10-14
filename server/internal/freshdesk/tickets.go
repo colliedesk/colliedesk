@@ -80,6 +80,9 @@ func (r *run) importTicket(ctx context.Context, ref ticketRef) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if r.internalErr != nil {
+		return r.internalErr
+	}
 	status, errText := ledgerDone, ""
 	if failed > 0 {
 		status, errText = ledgerFailed, fmt.Sprintf("%d item(s) of this ticket failed; see their entries", failed)

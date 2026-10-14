@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"time"
 )
 
 // Object describes stored bytes.
@@ -26,9 +27,18 @@ type Object struct {
 // Storage persists attachment bytes under workspace-scoped keys.
 type Storage interface {
 	// Put streams body into storage and returns its key, size and SHA-256.
-	Put(ctx context.Context, workspaceID string, body io.Reader) (Object, error)
+	// With expectedSize >= 0, bytes of any other length are rejected and
+	// nothing is stored.
+	Put(ctx context.Context, workspaceID string, body io.Reader, expectedSize int64) (Object, error)
 	// Open returns the bytes stored under key.
 	Open(ctx context.Context, key string) (io.ReadCloser, error)
+	// Delete removes the bytes stored under key.
+	Delete(ctx context.Context, key string) error
+}
+
+// SpaceReporter is implemented by backends that can report free space.
+type SpaceReporter interface {
+	Available() (int64, error)
 }
 
 var (
@@ -40,21 +50,37 @@ var (
 // <root>/<workspace_id>/<sha256[0:2]>/<sha256>. Writing the same bytes twice
 // yields the same key, so a retried import never leaves duplicate files.
 type LocalDisk struct {
-	root string
+	root    string
+	syncDir func(string) error
 }
 
-// NewLocalDisk creates the root directory when needed.
+// staleUpload is the age after which a temp file in .incoming cannot belong
+// to a running upload any more and is removed at startup.
+const staleUpload = 24 * time.Hour
+
+// NewLocalDisk creates the root directory when needed and removes stale
+// temp files left by a crash.
 func NewLocalDisk(root string) (*LocalDisk, error) {
 	if root == "" {
 		return nil, errors.New("attachments directory is required")
 	}
-	if err := os.MkdirAll(filepath.Join(root, ".incoming"), 0o750); err != nil {
+	incoming := filepath.Join(root, ".incoming")
+	if err := os.MkdirAll(incoming, 0o750); err != nil {
 		return nil, fmt.Errorf("create attachments directory: %w", err)
 	}
-	return &LocalDisk{root: root}, nil
+	entries, err := os.ReadDir(incoming)
+	if err != nil {
+		return nil, fmt.Errorf("read attachments directory: %w", err)
+	}
+	for _, entry := range entries {
+		if info, err := entry.Info(); err == nil && !entry.IsDir() && time.Since(info.ModTime()) > staleUpload {
+			_ = os.Remove(filepath.Join(incoming, entry.Name()))
+		}
+	}
+	return &LocalDisk{root: root, syncDir: syncDirectory}, nil
 }
 
-func (d *LocalDisk) Put(ctx context.Context, workspaceID string, body io.Reader) (Object, error) {
+func (d *LocalDisk) Put(ctx context.Context, workspaceID string, body io.Reader, expectedSize int64) (Object, error) {
 	if !workspacePattern.MatchString(workspaceID) {
 		return Object{}, errors.New("store attachment: invalid workspace id")
 	}
@@ -70,9 +96,16 @@ func (d *LocalDisk) Put(ctx context.Context, workspaceID string, body io.Reader)
 		}
 	}()
 	hash := sha256.New()
-	size, err := io.Copy(io.MultiWriter(temp, hash), contextReader{ctx: ctx, reader: body})
+	source := io.Reader(contextReader{ctx: ctx, reader: body})
+	if expectedSize >= 0 {
+		source = io.LimitReader(source, expectedSize+1)
+	}
+	size, err := io.Copy(io.MultiWriter(temp, hash), source)
 	if err != nil {
 		return Object{}, fmt.Errorf("store attachment: %w", err)
+	}
+	if expectedSize >= 0 && size != expectedSize {
+		return Object{}, fmt.Errorf("store attachment: size mismatch: expected %d bytes, received %s", expectedSize, received(size, expectedSize))
 	}
 	if err := temp.Sync(); err != nil {
 		return Object{}, fmt.Errorf("store attachment: %w", err)
@@ -90,6 +123,12 @@ func (d *LocalDisk) Put(ctx context.Context, workspaceID string, body io.Reader)
 		return Object{}, fmt.Errorf("store attachment: %w", err)
 	}
 	committed = true
+	// The rename is durable only once the directories holding it are synced.
+	for _, dir := range []string{filepath.Dir(target), filepath.Dir(filepath.Dir(target))} {
+		if err := d.syncDir(dir); err != nil {
+			return Object{}, fmt.Errorf("store attachment: sync directory: %w", err)
+		}
+	}
 	return Object{Key: key, Size: size, SHA256: sum}, nil
 }
 
@@ -124,4 +163,35 @@ func (r contextReader) Read(p []byte) (int, error) {
 		return 0, err
 	}
 	return r.reader.Read(p)
+}
+
+func (d *LocalDisk) Delete(_ context.Context, key string) error {
+	if !keyPattern.MatchString(key) {
+		return errors.New("delete attachment: invalid key")
+	}
+	if err := os.Remove(filepath.Join(d.root, filepath.FromSlash(key))); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("delete attachment: %w", err)
+	}
+	return nil
+}
+
+// Available returns the bytes free for this process on the attachments volume.
+func (d *LocalDisk) Available() (int64, error) {
+	return availableBytes(d.root)
+}
+
+func syncDirectory(dir string) error {
+	handle, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer handle.Close()
+	return handle.Sync()
+}
+
+func received(size, expected int64) string {
+	if size > expected {
+		return "more"
+	}
+	return fmt.Sprint(size)
 }

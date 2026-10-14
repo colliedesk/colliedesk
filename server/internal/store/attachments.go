@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
@@ -87,4 +88,21 @@ func (s *Store) attachConversationFiles(ctx context.Context, workspaceID, conver
 		return fmt.Errorf("iterate attachments: %w", err)
 	}
 	return nil
+}
+
+// ReplaceAttachmentBytes points an existing attachment at freshly stored bytes,
+// for example after its stored file was lost. It reports false when the
+// attachment no longer exists on that message.
+func ReplaceAttachmentBytes(ctx context.Context, q Querier, workspaceID, id string, input NewAttachment) (bool, error) {
+	var replaced string
+	err := q.QueryRow(ctx, `UPDATE attachments SET filename=$4,content_type=$5,size=$6,sha256=$7,storage_key=$8
+		WHERE workspace_id=$1 AND id=$2 AND message_id=$3 RETURNING id::text`, workspaceID, id, input.MessageID,
+		input.Filename, input.ContentType, input.Object.Size, input.Object.SHA256, input.Object.Key).Scan(&replaced)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("replace attachment bytes: %w", err)
+	}
+	return true, nil
 }

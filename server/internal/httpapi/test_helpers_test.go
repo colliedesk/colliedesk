@@ -58,7 +58,7 @@ func seedAttachment(t *testing.T, pool *pgxpool.Pool, storage attachments.Storag
 		} `json:"workspace"`
 	}
 	decode(t, request(t, api, http.MethodGet, "/api/v1/auth/me", nil, token, nil), &me)
-	object, err := storage.Put(context.Background(), me.Workspace.ID, strings.NewReader(content))
+	object, err := storage.Put(context.Background(), me.Workspace.ID, strings.NewReader(content), int64(len(content)))
 	if err != nil {
 		t.Fatal(err)
 	}
