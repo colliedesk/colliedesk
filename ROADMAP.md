@@ -24,7 +24,7 @@ Feature details live in [docs/feature-spec.md](docs/feature-spec.md).
 - Auto-answer for repetitive tickets, with a human in the loop.
 - Usage metering; bring your own AI key.
 - Knowledge base and public help center.
-- Google and Microsoft sign-in for the cloud.
+- Cloud sign-in with Google, Microsoft and email through Clerk; your workspace session stays ours, self-hosted installs keep one-time links.
 
 ## Later
 

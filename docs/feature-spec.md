@@ -50,8 +50,10 @@ it must keep its MIT notice in `THIRD-PARTY-NOTICES.md`.
 5. **Every route declares its permission.** Permissions: `conversations:read`, `conversations:write`,
    `contacts:read`, `contacts:write`, `access:read`, `access:write`. Roles map to permission sets. A test
    enumerates every registered API route and fails if one has no declared permission.
-6. **Later.** Email magic link (v0.2, with the email channel); Google and Microsoft OIDC for the cloud
-   (v0.3); MCP clients sign in through OAuth authorization code + PKCE and receive either a
+6. **Later.** Email magic link (v0.2, with the email channel). **Cloud sign-in through Clerk** (v0.3):
+   Clerk authenticates the account (Google, Microsoft, email, MFA; SAML when an enterprise needs it),
+   then the CollieDesk server mints a one-time link that is redeemed for an ordinary CollieDesk session.
+   Clerk never holds a CollieDesk session; self-hosted installs do not use Clerk at all; MCP clients sign in through OAuth authorization code + PKCE and receive either a
    read-only grant or an operate grant (v0.4+).
 
 ## Engineering principles (learned from T3 Code)
