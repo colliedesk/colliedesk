@@ -39,12 +39,12 @@ func newFixture(t *testing.T) fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st := store.New(pool)
+	st := store.New(pool).WithOutbound(store.OutboundPolicy{Enabled: true})
 	if _, err := st.UpsertEmailChannel(ctx, workspace.ID, "support@outbound.example.com"); err != nil {
 		t.Fatal(err)
 	}
-	parsed, err := email.Parse([]byte("From: Olive Customer <olive@customer.example>\r\nTo: support@outbound.example.com\r\n" +
-		"Subject: Broken export\r\nMessage-ID: <export-1@customer.example>\r\n\r\nExport fails.\r\n"))
+	parsed, err := email.Parse([]byte("From: Olive Customer <olive@customer.example>\r\nTo: support@outbound.example.com\r\n"+
+		"Subject: Broken export\r\nMessage-ID: <export-1@customer.example>\r\n\r\nExport fails.\r\n"), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,9 +83,13 @@ func (f fixture) delivery(t *testing.T, messageID string) *domain.MessageDeliver
 	return nil
 }
 
-func newWorker(f fixture, server *smtpServer, clock *time.Time) *emailoutbox.Worker {
+func newWorker(f fixture, server *smtpServer, clock *time.Time, mutate ...func(*emailoutbox.Options)) *emailoutbox.Worker {
 	sender := email.SMTPSender{Config: email.SMTPConfig{Host: "127.0.0.1", Port: server.port(), StartTLS: false}}
-	return emailoutbox.New(f.store, sender, emailoutbox.Options{Now: func() time.Time { return *clock }, MaxAttempts: 3, Lease: time.Minute})
+	options := emailoutbox.Options{Now: func() time.Time { return *clock }, MaxAttempts: 3, Lease: time.Minute, FromPolicy: email.FromPolicyAny}
+	for _, change := range mutate {
+		change(&options)
+	}
+	return emailoutbox.New(f.store, sender, options)
 }
 
 func process(t *testing.T, worker *emailoutbox.Worker) int {
@@ -273,4 +277,40 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		admin.Close()
 	})
 	return pool
+}
+
+type writtenReply struct{ ID, ConversationID string }
+
+// secondConversationReply writes a reply on a new conversation with its own contact.
+func (f fixture) secondConversationReply(t *testing.T, contactEmail, body string) writtenReply {
+	t.Helper()
+	ctx := context.Background()
+	contact, err := f.store.CreateContact(ctx, f.workspaceID, "Second", contactEmail)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conversation, err := f.store.CreateConversation(ctx, f.workspaceID, contact.ID, "Second thread")
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, err := f.store.CreateMessage(ctx, f.workspaceID, conversation.ID, f.agentID, "outgoing", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return writtenReply{ID: message.ID, ConversationID: conversation.ID}
+}
+
+func (f fixture) deliveryIn(t *testing.T, conversationID, messageID string) *domain.MessageDelivery {
+	t.Helper()
+	items, err := f.store.ListMessages(context.Background(), f.workspaceID, conversationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range items {
+		if item.ID == messageID {
+			return item.Delivery
+		}
+	}
+	t.Fatalf("message %s not found", messageID)
+	return nil
 }

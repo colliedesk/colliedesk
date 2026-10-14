@@ -36,6 +36,9 @@ func SMTPConfigFromEnv(getenv func(string) string) (SMTPConfig, error) {
 		if err != nil || port < 1 || port > 65535 {
 			return SMTPConfig{}, fmt.Errorf("SMTP_PORT must be a TCP port, got %q", value)
 		}
+		if port == 465 {
+			return SMTPConfig{}, fmt.Errorf("SMTP_PORT 465 (implicit TLS) is not supported; use port 587 with STARTTLS")
+		}
 		config.Port = port
 	}
 	if value := getenv("SMTP_STARTTLS"); value != "" {

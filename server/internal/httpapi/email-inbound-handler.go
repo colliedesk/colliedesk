@@ -38,7 +38,7 @@ func (a *API) receiveInboundEmail(response http.ResponseWriter, request *http.Re
 		writeError(response, http.StatusBadRequest, "invalid_request", "The message body could not be read.")
 		return
 	}
-	parsed, err := email.Parse(raw)
+	parsed, err := email.Parse(raw, a.config.Email.TrustedAuthServID)
 	if err != nil {
 		writeError(response, http.StatusBadRequest, "invalid_message", "The body is not an RFC 5322 message with a sender.")
 		return

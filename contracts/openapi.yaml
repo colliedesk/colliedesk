@@ -299,7 +299,9 @@ paths:
     post:
       operationId: retryMessageDelivery
       x-permission: conversations:write
-      description: Requeue a reply whose email delivery failed. Only `failed` deliveries can be retried.
+      description: >
+        Requeue a reply whose email delivery failed. Only `failed` deliveries can be retried, and only
+        while outgoing email can work (SMTP configured, domain verified or a platform sender set); 409 says why not.
       responses:
         '200':
           description: Reply with its delivery requeued
@@ -310,6 +312,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
   /api/v1/channels/email:
     get:
       operationId: getEmailChannel
@@ -334,6 +337,7 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
     delete:
       operationId: deleteEmailChannel
       x-permission: access:write
@@ -343,6 +347,20 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/channels/email/domain-verification:
+    post:
+      operationId: verifyEmailDomain
+      x-permission: access:write
+      description: >
+        Look up the TXT record `dns_record_name` and mark the support address domain verified when it
+        holds `dns_record_value`. Changing the support address resets verification.
+      responses:
+        '200': {$ref: '#/components/responses/EmailChannelSettings'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
   /api/v1/channels/email/secret:
     post:
       operationId: rotateEmailInboundSecret
@@ -362,6 +380,7 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
   /api/v1/channels/email/inbound:
     post:
       operationId: receiveInboundEmail
@@ -794,11 +813,15 @@ components:
               content_type: {type: string}
     EmailChannel:
       type: object
-      required: [support_address, secret_set, secret_rotated_at, created_at, updated_at]
+      required: [support_address, secret_set, secret_rotated_at, domain, domain_verified_at, dns_record_name, dns_record_value, created_at, updated_at]
       properties:
         support_address: {type: string, format: email}
         secret_set: {type: boolean}
         secret_rotated_at: {type: [string, 'null'], format: date-time}
+        domain: {type: string}
+        domain_verified_at: {type: [string, 'null'], format: date-time}
+        dns_record_name: {type: string, description: TXT record name that proves control of the domain}
+        dns_record_value: {type: string, description: Value the TXT record must hold}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
     SMTPStatus:
@@ -812,8 +835,15 @@ components:
         authenticated: {type: boolean}
     EmailChannelSettings:
       type: object
-      required: [channel, inbound_url, smtp]
+      required: [channel, inbound_url, smtp, from_policy, sending_from]
       properties:
+        from_policy:
+          type: string
+          enum: [verified, any]
+          description: '`verified`: send as the support address only after domain verification. `any`: always (operator owns the relay).'
+        sending_from:
+          type: [string, 'null']
+          description: The From address replies use now; null when replies cannot be emailed.
         channel:
           oneOf:
             - {type: 'null'}

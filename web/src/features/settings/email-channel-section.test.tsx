@@ -7,10 +7,17 @@ const disconnected: EmailChannelSettings = {
   channel: null,
   inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound',
   smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false },
+  from_policy: 'verified',
+  sending_from: null,
 };
 const connected: EmailChannelSettings = {
   ...disconnected,
-  channel: { support_address: 'support@example.com', secret_set: true, secret_rotated_at: '2026-10-14T09:00:00Z', created_at: '2026-10-14T08:00:00Z', updated_at: '2026-10-14T09:00:00Z' },
+  channel: {
+    support_address: 'support@example.com', secret_set: true, secret_rotated_at: '2026-10-14T09:00:00Z',
+    domain: 'example.com', domain_verified_at: null, dns_record_name: '_colliedesk.example.com', dns_record_value: 'colliedesk-verification=abc123',
+    created_at: '2026-10-14T08:00:00Z', updated_at: '2026-10-14T09:00:00Z',
+  },
+  sending_from: 'reply+…@mail.colliedesk.example',
   smtp: { configured: true, host: 'smtp.example.net', port: 587, starttls: true, authenticated: true },
 };
 

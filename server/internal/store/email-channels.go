@@ -8,20 +8,32 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/jackc/pgx/v5"
 )
 
-const channelColumns = `support_address,secret_key_id IS NOT NULL,secret_rotated_at,created_at,updated_at`
+const channelColumns = `support_address,secret_key_id IS NOT NULL,secret_rotated_at,domain_verification_token,domain_verified_at,created_at,updated_at`
+
+// DomainRecordPrefix names the TXT record that proves control of the support address domain.
+const DomainRecordPrefix = "_colliedesk."
 
 func scanChannel(row pgx.Row) (domain.EmailChannel, error) {
 	var channel domain.EmailChannel
-	if err := row.Scan(&channel.SupportAddress, &channel.SecretSet, &channel.SecretRotatedAt, &channel.CreatedAt, &channel.UpdatedAt); err != nil {
+	var token string
+	if err := row.Scan(&channel.SupportAddress, &channel.SecretSet, &channel.SecretRotatedAt, &token, &channel.DomainVerifiedAt,
+		&channel.CreatedAt, &channel.UpdatedAt); err != nil {
 		return domain.EmailChannel{}, err
 	}
+	channel.Domain = email.Domain(channel.SupportAddress)
+	channel.DNSRecordName = DomainRecordPrefix + channel.Domain
+	channel.DNSRecordValue = "colliedesk-verification=" + token
+	channel.DomainVerifiedAt = domain.UTCOptional(channel.DomainVerifiedAt)
 	channel.SecretRotatedAt = domain.UTCOptional(channel.SecretRotatedAt)
 	channel.CreatedAt, channel.UpdatedAt = domain.UTC(channel.CreatedAt), domain.UTC(channel.UpdatedAt)
 	return channel, nil
@@ -40,14 +52,53 @@ func (s *Store) GetEmailChannel(ctx context.Context, workspaceID string) (*domai
 }
 
 // UpsertEmailChannel connects email or changes the support address; an existing secret is kept.
+// A changed address loses its domain verification and gets a new verification token.
 func (s *Store) UpsertEmailChannel(ctx context.Context, workspaceID, supportAddress string) (domain.EmailChannel, error) {
-	channel, err := scanChannel(s.pool.QueryRow(ctx, `INSERT INTO email_channels(workspace_id,support_address) VALUES($1,lower($2))
-		ON CONFLICT(workspace_id) DO UPDATE SET support_address=EXCLUDED.support_address,updated_at=now()
-		RETURNING `+channelColumns, workspaceID, supportAddress))
+	token, err := email.NewToken()
+	if err != nil {
+		return domain.EmailChannel{}, err
+	}
+	channel, err := scanChannel(s.pool.QueryRow(ctx, `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token)
+		VALUES($1,lower($2),$3)
+		ON CONFLICT(workspace_id) DO UPDATE SET
+			domain_verification_token=CASE WHEN email_channels.support_address=EXCLUDED.support_address
+				THEN email_channels.domain_verification_token ELSE EXCLUDED.domain_verification_token END,
+			domain_verified_at=CASE WHEN email_channels.support_address=EXCLUDED.support_address
+				THEN email_channels.domain_verified_at END,
+			support_address=EXCLUDED.support_address,updated_at=now()
+		RETURNING `+channelColumns, workspaceID, supportAddress, token))
 	if err != nil {
 		return domain.EmailChannel{}, fmt.Errorf("save email channel: %w", err)
 	}
 	return channel, nil
+}
+
+// ErrDomainRecordMissing means the verification TXT record was not found with the expected value.
+var ErrDomainRecordMissing = errors.New("domain verification record not found")
+
+// VerifyEmailDomain looks up the channel's TXT record and records the verification when it matches.
+func (s *Store) VerifyEmailDomain(ctx context.Context, workspaceID string, lookupTXT func(context.Context, string) ([]string, error), now time.Time) (domain.EmailChannel, error) {
+	channel, err := s.GetEmailChannel(ctx, workspaceID)
+	if err != nil {
+		return domain.EmailChannel{}, err
+	}
+	if channel == nil {
+		return domain.EmailChannel{}, fmt.Errorf("verify email domain: email channel not found")
+	}
+	values, err := lookupTXT(ctx, channel.DNSRecordName)
+	var dnsErr *net.DNSError
+	if err != nil && !(errors.As(err, &dnsErr) && dnsErr.IsNotFound) {
+		return domain.EmailChannel{}, fmt.Errorf("look up %s: %w", channel.DNSRecordName, err)
+	}
+	if !slices.Contains(values, channel.DNSRecordValue) {
+		return *channel, ErrDomainRecordMissing
+	}
+	verified, err := scanChannel(s.pool.QueryRow(ctx, `UPDATE email_channels SET domain_verified_at=$3,updated_at=$3
+		WHERE workspace_id=$1 AND support_address=$2 RETURNING `+channelColumns, workspaceID, channel.SupportAddress, now))
+	if err != nil {
+		return domain.EmailChannel{}, fmt.Errorf("record domain verification: %w", err)
+	}
+	return verified, nil
 }
 
 // DeleteEmailChannel disconnects email. Conversations, messages and delivery history stay.

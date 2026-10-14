@@ -1,6 +1,7 @@
 package email
 
 import (
+	"bufio"
 	"encoding/base64"
 	"html"
 	"io"
@@ -21,17 +22,25 @@ const (
 	maxDepth     = 10
 )
 
+const truncationNotice = "\n\n[Message text truncated at 5 MiB]"
+
 type content struct {
-	plain, html string
-	attachments []domain.EmailAttachment
+	plain, html                   string
+	plainTruncated, htmlTruncated bool
+	attachments                   []domain.EmailAttachment
+	bouncedIDs                    []string
 }
 
 // text prefers the first text/plain part and falls back to the first text/html part reduced to text.
 func (c content) text() string {
-	if strings.TrimSpace(c.plain) != "" {
-		return normalizeText(c.plain)
+	text, truncated := normalizeText(c.plain), c.plainTruncated
+	if strings.TrimSpace(c.plain) == "" {
+		text, truncated = normalizeText(htmlToText(c.html)), c.htmlTruncated
 	}
-	return normalizeText(htmlToText(c.html))
+	if truncated {
+		text += truncationNotice
+	}
+	return text
 }
 
 func textprotoHeader(header mail.Header) textproto.MIMEHeader {
@@ -63,6 +72,16 @@ func walk(header textproto.MIMEHeader, body io.Reader, depth int, result *conten
 			walk(part.Header, part, depth+1, result)
 		}
 	}
+	if mediaType == "message/rfc822" || mediaType == "text/rfc822-headers" || mediaType == "message/rfc822-headers" {
+		// A delivery status report returns the headers of the message that bounced.
+		if returned, err := textproto.NewReader(bufio.NewReader(io.LimitReader(body, 1<<20))).ReadMIMEHeader(); err == nil || len(returned) > 0 {
+			if id := firstID(returned.Get("Message-Id")); id != "" {
+				result.bouncedIDs = append(result.bouncedIDs, boundID(id))
+			}
+		}
+		result.attachments = append(result.attachments, domain.EmailAttachment{Filename: "(returned message)", ContentType: mediaType})
+		return
+	}
 	disposition, dispositionParams, _ := mime.ParseMediaType(header.Get("Content-Disposition"))
 	filename := decodeHeader(firstNonEmpty(dispositionParams["filename"], params["name"]))
 	isText := mediaType == "text/plain" || mediaType == "text/html"
@@ -73,17 +92,41 @@ func walk(header textproto.MIMEHeader, body io.Reader, depth int, result *conten
 		result.attachments = append(result.attachments, domain.EmailAttachment{Filename: cleanLine(filename), ContentType: mediaType})
 		return
 	}
-	text := decodePart(header.Get("Content-Transfer-Encoding"), params["charset"], body)
+	text, truncated := decodePart(header.Get("Content-Transfer-Encoding"), params["charset"], body)
 	if mediaType == "text/plain" && result.plain == "" {
-		result.plain = text
+		result.plain, result.plainTruncated = text, truncated
 	}
 	if mediaType == "text/html" && result.html == "" {
-		result.html = text
+		result.html, result.htmlTruncated = text, truncated
 	}
 }
 
-func decodePart(encoding, charset string, body io.Reader) string {
-	reader := io.LimitReader(body, maxPartBytes)
+// limitedReader stops after limit bytes and records whether more input remained.
+type limitedReader struct {
+	reader    io.Reader
+	remaining int64
+	truncated bool
+}
+
+func (l *limitedReader) Read(buffer []byte) (int, error) {
+	if l.remaining <= 0 {
+		var probe [1]byte
+		if count, _ := l.reader.Read(probe[:]); count > 0 {
+			l.truncated = true
+		}
+		return 0, io.EOF
+	}
+	if int64(len(buffer)) > l.remaining {
+		buffer = buffer[:l.remaining]
+	}
+	count, err := l.reader.Read(buffer)
+	l.remaining -= int64(count)
+	return count, err
+}
+
+func decodePart(encoding, charset string, body io.Reader) (string, bool) {
+	limited := &limitedReader{reader: body, remaining: maxPartBytes}
+	var reader io.Reader = limited
 	switch strings.ToLower(strings.TrimSpace(encoding)) {
 	case "base64":
 		reader = base64.NewDecoder(base64.StdEncoding, newlineStripper{reader})
@@ -96,7 +139,7 @@ func decodePart(encoding, charset string, body io.Reader) string {
 		}
 	}
 	data, _ := io.ReadAll(reader)
-	return strings.ToValidUTF8(string(data), string(utf8.RuneError))
+	return strings.ToValidUTF8(string(data), string(utf8.RuneError)), limited.truncated
 }
 
 // newlineStripper drops CR and LF so base64 bodies wrapped at 76 columns decode.

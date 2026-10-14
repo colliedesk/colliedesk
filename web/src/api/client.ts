@@ -57,6 +57,7 @@ export const api = {
   emailChannel: () => request('/api/v1/channels/email', emailChannelSettingsSchema),
   saveEmailChannel: (support_address: string) => request('/api/v1/channels/email', emailChannelSettingsSchema, { method: 'PUT', body: json<'putEmailChannel'>({ support_address }) }),
   disconnectEmailChannel: () => requestNoContent('/api/v1/channels/email', { method: 'DELETE' }),
+  verifyEmailDomain: () => request('/api/v1/channels/email/domain-verification', emailChannelSettingsSchema, { method: 'POST' }),
   rotateEmailSecret: () => request('/api/v1/channels/email/secret', inboundSecretSchema, { method: 'POST' }),
   retryDelivery: (conversationId: string, messageId: string) => request(`/api/v1/conversations/${conversationId}/messages/${messageId}/retry`, messageSchema, { method: 'POST' }),
   config: () => request('/api/v1/config', publicConfigSchema),

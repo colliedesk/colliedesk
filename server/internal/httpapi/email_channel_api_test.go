@@ -34,7 +34,7 @@ func TestEmailChannelSettingsLifecycle(t *testing.T) {
 	admin := createSession(t, api, service, "Settings Mail", "admin@settings-mail.example.com")
 
 	settings, _ := getEmailSettings(t, api, admin)
-	if settings.Channel != nil || settings.InboundURL != testOrigin+inboundPath || settings.SMTP.Configured {
+	if settings.Channel != nil || settings.InboundURL != testOrigin+inboundPath || !settings.SMTP.Configured {
 		t.Fatalf("unexpected initial settings: %+v", settings)
 	}
 	if response := request(t, api, http.MethodPost, "/api/v1/channels/email/secret", nil, admin, nil); response.Code != http.StatusNotFound {

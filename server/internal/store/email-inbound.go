@@ -14,13 +14,17 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// Inbound rate limit per sender address and workspace.
+// Inbound limits: a loop guard per sender address and an abuse ceiling on new conversations per
+// workspace. The sender is the header From, which a sender controls, so the workspace ceiling is the
+// bound that holds when From rotates.
 const (
-	InboundRateLimit  = 10
-	InboundRateWindow = 10 * time.Minute
+	InboundRateLimit            = 10
+	InboundNewConversationLimit = 200
+	InboundRateWindow           = 10 * time.Minute
+	bounceReason                = "The recipient's mail server bounced this reply."
 )
 
-// ErrRateLimited means the sender exceeded InboundRateLimit messages in InboundRateWindow.
+// ErrRateLimited means a sender or the workspace exceeded an inbound limit in InboundRateWindow.
 var ErrRateLimited = errors.New("inbound email rate limit reached")
 
 // InboundResult says what happened to one inbound message.
@@ -50,6 +54,10 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 		return result, fmt.Errorf("begin inbound email: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+	// Serialize deliveries from one sender so the rate count and duplicate check see each other.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "email-inbound:"+workspaceID+":"+in.FromAddress); err != nil {
+		return result, fmt.Errorf("lock inbound sender: %w", err)
+	}
 
 	var existingID, existingKind, existingConversation string
 	err = tx.QueryRow(ctx, `SELECT id::text,kind,conversation_id::text FROM messages WHERE workspace_id=$1 AND email_message_id=$2`,
@@ -70,6 +78,14 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 	if in.FromAddress == supportAddress {
 		return dropped(result, email.DropOwnAddress), nil
 	}
+	if in.DropReason == email.DropMailerDaemon && len(in.BouncedMessageIDs) > 0 {
+		if err := markBounced(ctx, tx, workspaceID, in.BouncedMessageIDs); err != nil {
+			return result, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return result, fmt.Errorf("commit bounce: %w", err)
+		}
+	}
 	if in.DropReason != "" {
 		return dropped(result, in.DropReason), nil
 	}
@@ -88,6 +104,14 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 	}
 	result.Status = "threaded"
 	if conversationID == "" {
+		var created int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM conversations WHERE workspace_id=$1 AND created_at>$2`,
+			workspaceID, now.Add(-InboundRateWindow)).Scan(&created); err != nil {
+			return result, fmt.Errorf("check new conversation ceiling: %w", err)
+		}
+		if created >= InboundNewConversationLimit {
+			return result, ErrRateLimited
+		}
 		result.Status = "created"
 		if conversationID, err = createEmailConversation(ctx, tx, workspaceID, in); err != nil {
 			return result, err
@@ -120,58 +144,4 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 func dropped(result InboundResult, reason string) InboundResult {
 	result.Status, result.Reason = "dropped", &reason
 	return result
-}
-
-// findThread matches In-Reply-To, then References (newest first), then the reply token; all within the workspace.
-func findThread(ctx context.Context, tx pgx.Tx, workspaceID string, in email.Inbound) (string, error) {
-	candidates := append([]string{}, in.InReplyTo...)
-	for index := len(in.References) - 1; index >= 0; index-- {
-		candidates = append(candidates, in.References[index])
-	}
-	for _, candidate := range candidates {
-		var conversationID string
-		err := tx.QueryRow(ctx, `SELECT conversation_id::text FROM messages WHERE workspace_id=$1 AND email_message_id=$2`, workspaceID, candidate).Scan(&conversationID)
-		if err == nil {
-			return conversationID, nil
-		}
-		if !errors.Is(err, pgx.ErrNoRows) {
-			return "", fmt.Errorf("match thread reference: %w", err)
-		}
-	}
-	token := email.ReplyToken(in.Recipients)
-	if token == "" {
-		return "", nil
-	}
-	var conversationID string
-	err := tx.QueryRow(ctx, `SELECT id::text FROM conversations WHERE workspace_id=$1 AND email_reply_token=$2`, workspaceID, token).Scan(&conversationID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("match reply token: %w", err)
-	}
-	return conversationID, nil
-}
-
-func createEmailConversation(ctx context.Context, tx pgx.Tx, workspaceID string, in email.Inbound) (string, error) {
-	name := in.FromName
-	if name == "" {
-		name = in.FromAddress[:strings.LastIndex(in.FromAddress, "@")]
-	}
-	var contactID string
-	err := tx.QueryRow(ctx, `INSERT INTO contacts(workspace_id,name,email) VALUES($1,$2,$3)
-		ON CONFLICT(workspace_id,email) DO UPDATE SET email=contacts.email RETURNING id::text`, workspaceID, name, in.FromAddress).Scan(&contactID)
-	if err != nil {
-		return "", fmt.Errorf("find or create contact: %w", err)
-	}
-	subject := in.Subject
-	if subject == "" {
-		subject = "(no subject)"
-	}
-	var conversationID string
-	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject) VALUES($1,$2,$3) RETURNING id::text`,
-		workspaceID, contactID, subject).Scan(&conversationID); err != nil {
-		return "", fmt.Errorf("create conversation: %w", err)
-	}
-	return conversationID, nil
 }

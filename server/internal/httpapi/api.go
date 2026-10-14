@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"strings"
 
@@ -17,7 +18,9 @@ const sessionCookie = "colliedesk_session"
 type Config struct {
 	Origin    string
 	CloudAuth cloudauth.Config
-	SMTP      email.SMTPConfig
+	Email     email.Config
+	// LookupTXT resolves DNS TXT records for domain verification; nil uses the system resolver.
+	LookupTXT func(ctx context.Context, name string) ([]string, error)
 }
 
 type Route struct {
@@ -42,7 +45,15 @@ type principalKey struct{}
 
 func New(pool *pgxpool.Pool, config Config) http.Handler {
 	config.Origin = strings.TrimRight(config.Origin, "/")
-	api := &API{config: config, auth: auth.New(pool, config.Origin), store: store.New(pool)}
+	if config.LookupTXT == nil {
+		config.LookupTXT = net.DefaultResolver.LookupTXT
+	}
+	outbound := store.OutboundPolicy{
+		Enabled:               config.Email.SMTP.Configured(),
+		RequireVerifiedDomain: config.Email.FromPolicy != email.FromPolicyAny,
+		FallbackDomain:        config.Email.MailFromDomain,
+	}
+	api := &API{config: config, auth: auth.New(pool, config.Origin), store: store.New(pool).WithOutbound(outbound)}
 	if config.CloudAuth.Enabled() {
 		api.cloud = cloudauth.New(config.CloudAuth)
 	}
@@ -87,6 +98,7 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/channels/email", auth.PermissionAccessRead},
 		{http.MethodPut, "/api/v1/channels/email", auth.PermissionAccessWrite},
 		{http.MethodDelete, "/api/v1/channels/email", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/channels/email/domain-verification", auth.PermissionAccessWrite},
 		{http.MethodPost, "/api/v1/channels/email/inbound", auth.PermissionChannelInbound},
 		{http.MethodPost, "/api/v1/channels/email/secret", auth.PermissionAccessWrite},
 	}

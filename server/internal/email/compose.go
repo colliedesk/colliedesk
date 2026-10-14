@@ -17,6 +17,7 @@ type Outgoing struct {
 	FromName    string
 	FromAddress string
 	ReplyTo     string
+	ReplyToName string
 	ToName      string
 	ToAddress   string
 	Subject     string
@@ -29,8 +30,11 @@ type Outgoing struct {
 
 // Compose renders a plain-text UTF-8 RFC 5322 message. Every header value is single-line by construction.
 func Compose(message Outgoing) ([]byte, error) {
-	if message.FromAddress == "" || message.ToAddress == "" || message.MessageID == "" {
-		return nil, fmt.Errorf("compose: from, to and message id are required")
+	if message.MessageID == "" {
+		return nil, fmt.Errorf("compose: message id is required")
+	}
+	if !validAddress(message.FromAddress) || !validAddress(message.ToAddress) || (message.ReplyTo != "" && !validAddress(message.ReplyTo)) {
+		return nil, fmt.Errorf("compose: from, to and reply-to must be plain addresses")
 	}
 	var buffer bytes.Buffer
 	header := func(name, value string) {
@@ -42,9 +46,13 @@ func Compose(message Outgoing) ([]byte, error) {
 	header("From", from.String())
 	header("To", (&mail.Address{Name: cleanLine(message.ToName), Address: message.ToAddress}).String())
 	if message.ReplyTo != "" {
-		header("Reply-To", (&mail.Address{Name: from.Name, Address: message.ReplyTo}).String())
+		name := from.Name
+		if message.ReplyToName != "" {
+			name = cleanLine(message.ReplyToName)
+		}
+		header("Reply-To", (&mail.Address{Name: name, Address: message.ReplyTo}).String())
 	}
-	header("Subject", mime.QEncoding.Encode("utf-8", replySubject(message.Subject)))
+	header("Subject", foldEncodedWords(mime.QEncoding.Encode("utf-8", replySubject(message.Subject))))
 	header("Date", message.Date.UTC().Format(time.RFC1123Z))
 	header("Message-ID", angle(message.MessageID))
 	header("In-Reply-To", angle(message.InReplyTo))
@@ -68,8 +76,19 @@ func Compose(message Outgoing) ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
+// foldEncodedWords puts each RFC 2047 encoded-word on its own continuation line so no header line
+// passes the 998-byte limit. Encoded-words never contain spaces, so the split is unambiguous.
+func foldEncodedWords(value string) string {
+	return strings.ReplaceAll(value, "?= =?", "?=\r\n =?")
+}
+
+const maxSubjectRunes = 250
+
 func replySubject(subject string) string {
 	subject = cleanLine(subject)
+	if runes := []rune(subject); len(runes) > maxSubjectRunes {
+		subject = string(runes[:maxSubjectRunes])
+	}
 	if strings.HasPrefix(strings.ToLower(subject), "re:") {
 		return subject
 	}
@@ -100,4 +119,9 @@ func NewToken() (string, error) {
 		return "", fmt.Errorf("generate token: %w", err)
 	}
 	return hex.EncodeToString(raw), nil
+}
+
+func validAddress(address string) bool {
+	parsed, err := mail.ParseAddress(address)
+	return err == nil && parsed.Address == address
 }

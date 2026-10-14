@@ -24,7 +24,11 @@ const (
 	AuthNone = "none"
 )
 
-const maxReferences = 50
+const (
+	maxReferences   = 50
+	maxInReplyTo    = 10
+	maxMessageIDLen = 255
+)
 
 // Inbound is the part of a received message CollieDesk stores or uses for threading.
 type Inbound struct {
@@ -39,6 +43,8 @@ type Inbound struct {
 	Attachments    []domain.EmailAttachment
 	Authentication string
 	DropReason     string
+	// BouncedMessageIDs are the Message-IDs named in a delivery status report's returned headers.
+	BouncedMessageIDs []string
 }
 
 var (
@@ -48,7 +54,7 @@ var (
 )
 
 // Parse reads one raw RFC 5322 message. It fails only when the message has no usable sender.
-func Parse(raw []byte) (Inbound, error) {
+func Parse(raw []byte, trustedAuthServID string) (Inbound, error) {
 	message, err := mail.ReadMessage(bytes.NewReader(raw))
 	if err != nil {
 		return Inbound{}, fmt.Errorf("read message: %w", err)
@@ -59,8 +65,8 @@ func Parse(raw []byte) (Inbound, error) {
 		return Inbound{}, fmt.Errorf("parse From: %w", err)
 	}
 	parsed := Inbound{
-		MessageID:   firstID(header.Get("Message-Id")),
-		InReplyTo:   ids(header.Get("In-Reply-To")),
+		MessageID:   boundID(firstID(header.Get("Message-Id"))),
+		InReplyTo:   firstN(ids(header.Get("In-Reply-To")), maxInReplyTo),
 		References:  lastN(ids(header.Get("References")), maxReferences),
 		FromAddress: strings.ToLower(from.Address),
 		FromName:    cleanLine(from.Name),
@@ -68,13 +74,13 @@ func Parse(raw []byte) (Inbound, error) {
 		Subject:     cleanLine(decodeHeader(header.Get("Subject"))),
 	}
 	if parsed.MessageID == "" {
-		digest := sha256.Sum256(raw)
-		parsed.MessageID = "sha256-" + hex.EncodeToString(digest[:16]) + "@colliedesk.invalid"
+		parsed.MessageID = syntheticID(header, raw)
 	}
 	content := extractContent(textprotoHeader(header), message.Body)
 	parsed.Body = content.text()
 	parsed.Attachments = content.attachments
-	parsed.Authentication = authentication(header["Authentication-Results"])
+	parsed.BouncedMessageIDs = content.bouncedIDs
+	parsed.Authentication = authentication(header["Authentication-Results"], trustedAuthServID)
 	parsed.DropReason = dropReason(header, parsed.FromAddress)
 	return parsed, nil
 }
@@ -90,9 +96,41 @@ func ids(value string) []string {
 	matches := messageIDPattern.FindAllStringSubmatch(value, -1)
 	result := make([]string, 0, len(matches))
 	for _, match := range matches {
-		result = append(result, match[1])
+		result = append(result, boundID(match[1]))
 	}
 	return result
+}
+
+// boundID keeps Message-IDs indexable: an over-long ID maps to a stable digest, so a duplicate
+// delivery and a later reference to the same long ID still match.
+func boundID(id string) string {
+	if len(id) <= maxMessageIDLen {
+		return id
+	}
+	digest := sha256.Sum256([]byte(id))
+	return "long-" + hex.EncodeToString(digest[:16]) + "@colliedesk.invalid"
+}
+
+// syntheticID identifies a message without Message-ID by its content, ignoring trace headers that
+// each relay hop adds, so a redelivery through another path is still recognised as a duplicate.
+func syntheticID(header mail.Header, raw []byte) string {
+	hash := sha256.New()
+	for _, name := range []string{"From", "To", "Cc", "Subject", "Date", "Content-Type"} {
+		fmt.Fprintf(hash, "%s:%s\n", name, strings.Join(header[name], ","))
+	}
+	if index := bytes.Index(raw, []byte("\r\n\r\n")); index >= 0 {
+		hash.Write(raw[index+4:])
+	} else if index := bytes.Index(raw, []byte("\n\n")); index >= 0 {
+		hash.Write(raw[index+2:])
+	}
+	return "sha256-" + hex.EncodeToString(hash.Sum(nil)[:16]) + "@colliedesk.invalid"
+}
+
+func firstN(values []string, n int) []string {
+	if len(values) > n {
+		return values[:n]
+	}
+	return values
 }
 
 func lastN(values []string, n int) []string {

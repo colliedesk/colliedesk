@@ -21,14 +21,27 @@ var (
 	replyTokenPattern = regexp.MustCompile(`\+r-([a-f0-9]{32})@`)
 )
 
-// authentication reads the topmost Authentication-Results header, the one added by the receiving
-// server nearest to CollieDesk. DMARC decides when present; otherwise any DKIM or SPF pass is a pass.
-func authentication(headers []string) string {
-	if len(headers) == 0 {
+// authentication reads the topmost Authentication-Results header stamped by the trusted receiving
+// server (its authserv-id). Any other header may have been written by the sender and is ignored.
+// DMARC decides when present; otherwise any DKIM or SPF pass is a pass.
+func authentication(headers []string, trustedAuthServID string) string {
+	if trustedAuthServID == "" {
+		return AuthNone
+	}
+	var stamp string
+	for _, header := range headers {
+		authServ, _, _ := strings.Cut(header, ";")
+		fields := strings.Fields(authServ)
+		if len(fields) > 0 && strings.EqualFold(fields[0], trustedAuthServID) {
+			stamp = header
+			break
+		}
+	}
+	if stamp == "" {
 		return AuthNone
 	}
 	results := map[string][]string{}
-	for _, match := range resultPattern.FindAllStringSubmatch(strings.ToLower(headers[0]), -1) {
+	for _, match := range resultPattern.FindAllStringSubmatch(strings.ToLower(stamp), -1) {
 		results[match[1]] = append(results[match[1]], match[2])
 	}
 	has := func(method string, values ...string) bool {
@@ -72,7 +85,12 @@ func dropReason(header mail.Header, from string) string {
 		header.Get("X-Autorespond") != "" || precedence == "auto_reply" {
 		return DropAutoSubmitted
 	}
-	if precedence == "bulk" || precedence == "junk" || precedence == "list" || header.Get("List-Id") != "" {
+	// List headers alone are not bulk: a Google Group or list alias in front of support@ stamps
+	// List-Id and Precedence: list on every real customer message. They count only with a bulk-sender
+	// signal (one-click unsubscribe, an ESP feedback id).
+	listSignal := header.Get("List-Id") != "" || precedence == "list"
+	bulkSender := header.Get("List-Unsubscribe-Post") != "" || header.Get("Feedback-Id") != ""
+	if precedence == "bulk" || precedence == "junk" || (listSignal && bulkSender) {
 		return DropBulk
 	}
 	return ""

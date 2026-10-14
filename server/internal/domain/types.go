@@ -103,11 +103,15 @@ type EmailAttachment struct {
 }
 
 type EmailChannel struct {
-	SupportAddress  string     `json:"support_address"`
-	SecretSet       bool       `json:"secret_set"`
-	SecretRotatedAt *time.Time `json:"secret_rotated_at"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	SupportAddress   string     `json:"support_address"`
+	SecretSet        bool       `json:"secret_set"`
+	SecretRotatedAt  *time.Time `json:"secret_rotated_at"`
+	Domain           string     `json:"domain"`
+	DomainVerifiedAt *time.Time `json:"domain_verified_at"`
+	DNSRecordName    string     `json:"dns_record_name"`
+	DNSRecordValue   string     `json:"dns_record_value"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 func UTC(value time.Time) time.Time { return value.UTC() }

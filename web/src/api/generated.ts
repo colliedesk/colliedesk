@@ -235,7 +235,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Requeue a reply whose email delivery failed. Only `failed` deliveries can be retried. */
+        /** @description Requeue a reply whose email delivery failed. Only `failed` deliveries can be retried, and only while outgoing email can work (SMTP configured, domain verified or a platform sender set); 409 says why not. */
         post: operations["retryMessageDelivery"];
         delete?: never;
         options?: never;
@@ -255,6 +255,23 @@ export interface paths {
         post?: never;
         /** @description Disconnect the email channel. Conversations and messages stay; the inbound secret stops working. */
         delete: operations["deleteEmailChannel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/email/domain-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Look up the TXT record `dns_record_name` and mark the support address domain verified when it holds `dns_record_value`. Changing the support address resets verification. */
+        post: operations["verifyEmailDomain"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -581,6 +598,13 @@ export interface components {
             secret_set: boolean;
             /** Format: date-time */
             secret_rotated_at: string | null;
+            domain: string;
+            /** Format: date-time */
+            domain_verified_at: string | null;
+            /** @description TXT record name that proves control of the domain */
+            dns_record_name: string;
+            /** @description Value the TXT record must hold */
+            dns_record_value: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -594,6 +618,13 @@ export interface components {
             authenticated: boolean;
         };
         EmailChannelSettings: {
+            /**
+             * @description `verified`: send as the support address only after domain verification. `any`: always (operator owns the relay).
+             * @enum {string}
+             */
+            from_policy: "verified" | "any";
+            /** @description The From address replies use now; null when replies cannot be emailed. */
+            sending_from: string | null;
             channel: null | components["schemas"]["EmailChannel"];
             /** Format: uri */
             inbound_url: string;
@@ -1215,6 +1246,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
         };
     };
     getEmailChannel: {
@@ -1250,6 +1282,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
         };
     };
     deleteEmailChannel: {
@@ -1271,6 +1304,23 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    verifyEmailDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["EmailChannelSettings"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
         };
     };
     rotateEmailInboundSecret: {
@@ -1298,6 +1348,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
         };
     };
     receiveInboundEmail: {

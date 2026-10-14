@@ -98,7 +98,7 @@ func (s *Store) CreateMessage(ctx context.Context, workspaceID, conversationID, 
 		return domain.Message{}, fmt.Errorf("touch conversation: %w", err)
 	}
 	if kind == "outgoing" {
-		if err := enqueueReply(ctx, tx, workspaceID, conversationID, messageID); err != nil {
+		if err := s.enqueueReply(ctx, tx, workspaceID, conversationID, messageID); err != nil {
 			return domain.Message{}, err
 		}
 	}

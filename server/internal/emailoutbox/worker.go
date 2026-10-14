@@ -4,7 +4,9 @@ package emailoutbox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -19,6 +21,8 @@ const (
 	firstBackoff       = 30 * time.Second
 	maxBackoff         = time.Hour
 	maxErrorLength     = 500
+	defaultHourlyLimit = 300
+	limitDeferral      = 10 * time.Minute
 )
 
 // Sender hands one composed message to a mail relay.
@@ -33,6 +37,11 @@ type Options struct {
 	Lease       time.Duration
 	BatchSize   int
 	Logger      *slog.Logger
+	// FromPolicy and MailFromDomain choose the sending identity (see email.FromPolicyVerified).
+	FromPolicy     string
+	MailFromDomain string
+	// HourlyLimit caps replies sent per workspace per hour; zero uses the default.
+	HourlyLimit int
 }
 
 // Worker drains the email outbox.
@@ -59,6 +68,12 @@ func New(st *store.Store, sender Sender, options Options) *Worker {
 	if options.Logger == nil {
 		options.Logger = slog.Default()
 	}
+	if options.HourlyLimit <= 0 {
+		options.HourlyLimit = defaultHourlyLimit
+	}
+	if options.FromPolicy == "" {
+		options.FromPolicy = email.FromPolicyVerified
+	}
 	return &Worker{store: st, sender: sender, options: options}
 }
 
@@ -74,20 +89,29 @@ func Backoff(attempt int) time.Duration {
 	return delay
 }
 
-// ProcessDue sends every due delivery once and returns how many were attempted.
+// ProcessDue sends every due delivery once and returns how many were attempted. It claims one row at
+// a time so a lease never has to cover more than one send.
 func (w *Worker) ProcessDue(ctx context.Context) (int, error) {
-	now := w.options.Now()
-	items, err := w.store.ClaimDueDeliveries(ctx, now, w.options.BatchSize, w.options.Lease)
-	if err != nil {
-		return 0, err
-	}
 	var errs []error
-	for _, item := range items {
-		if err := w.deliver(ctx, item, now); err != nil {
+	attempted := 0
+	for attempted < w.options.BatchSize {
+		items, err := w.store.ClaimDueDeliveries(ctx, w.options.Now(), 1, w.options.Lease)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		if len(items) == 0 {
+			if err == nil {
+				break
+			}
+			attempted++
+			continue
+		}
+		attempted++
+		if err := w.deliver(ctx, items[0]); err != nil {
 			errs = append(errs, err)
 		}
 	}
-	return len(items), errors.Join(errs...)
+	return attempted, errors.Join(errs...)
 }
 
 // Run processes the outbox every interval until the context ends.
@@ -106,28 +130,58 @@ func (w *Worker) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
-func (w *Worker) deliver(ctx context.Context, item store.Delivery, now time.Time) error {
+func (w *Worker) deliver(ctx context.Context, item store.Delivery) error {
+	if item.Attempts > w.options.MaxAttempts {
+		return w.store.MarkDeliveryFailed(ctx, item, fmt.Sprintf("Gave up after %d attempts.", w.options.MaxAttempts))
+	}
 	if item.SupportAddress == "" {
 		return w.store.MarkDeliveryFailed(ctx, item, "The email channel is not connected.")
 	}
+	sent, err := w.store.CountSentSince(ctx, item.WorkspaceID, w.options.Now().Add(-time.Hour))
+	if err != nil {
+		return err
+	}
+	if sent >= w.options.HourlyLimit {
+		return w.store.DeferDelivery(ctx, item, w.options.Now().Add(limitDeferral),
+			fmt.Sprintf("Waiting: this workspace reached its hourly limit of %d emailed replies.", w.options.HourlyLimit))
+	}
+	from, envelope, ok := w.identity(item)
+	if !ok {
+		return w.store.MarkDeliveryFailed(ctx, item, "Verify the support address domain in Settings before replies can be emailed.")
+	}
 	message, err := email.Compose(email.Outgoing{
-		FromName: item.WorkspaceName, FromAddress: item.SupportAddress, ReplyTo: email.PlusAddress(item.SupportAddress, item.ReplyToken),
-		ToName: item.ContactName, ToAddress: item.ContactEmail, Subject: item.Subject, Body: item.Body,
-		MessageID: item.EmailMessageID, InReplyTo: item.InReplyTo, References: item.References, Date: now,
+		FromName: from.Name, FromAddress: from.Address, ReplyTo: email.PlusAddress(item.SupportAddress, item.ReplyToken),
+		ReplyToName: item.WorkspaceName,
+		ToName:      item.ContactName, ToAddress: item.ContactEmail, Subject: item.Subject, Body: item.Body,
+		MessageID: item.EmailMessageID, InReplyTo: item.InReplyTo, References: item.References, Date: w.options.Now(),
 	})
 	if err != nil {
 		return w.store.MarkDeliveryFailed(ctx, item, truncate(err.Error()))
 	}
-	sendErr := w.sender.Send(ctx, item.SupportAddress, []string{item.ContactEmail}, message)
+	sendErr := w.sender.Send(ctx, envelope, []string{item.ContactEmail}, message)
 	switch {
 	case sendErr == nil:
-		return w.store.MarkDeliverySent(ctx, item, now)
+		return w.store.MarkDeliverySent(ctx, item, w.options.Now())
 	case email.IsPermanent(sendErr) || item.Attempts >= w.options.MaxAttempts:
 		w.options.Logger.Warn("email delivery failed", "workspace", item.WorkspaceID, "message", item.MessageID, "attempts", item.Attempts, "error", sendErr)
 		return w.store.MarkDeliveryFailed(ctx, item, truncate(sendErr.Error()))
 	default:
-		return w.store.MarkDeliveryRetry(ctx, item, now.Add(Backoff(item.Attempts)), truncate(sendErr.Error()))
+		return w.store.MarkDeliveryRetry(ctx, item, w.options.Now().Add(Backoff(item.Attempts)), truncate(sendErr.Error()))
 	}
+}
+
+// identity returns the From header and envelope sender. A shared relay may send as the support address
+// only for a verified domain; otherwise it sends from the platform domain and keeps the support address
+// in Reply-To, so the customer's reply still reaches the workspace and threads.
+func (w *Worker) identity(item store.Delivery) (mail.Address, string, bool) {
+	if w.options.FromPolicy == email.FromPolicyAny || item.DomainVerified {
+		return mail.Address{Name: item.WorkspaceName, Address: item.SupportAddress}, item.SupportAddress, true
+	}
+	if w.options.MailFromDomain == "" || item.ReplyToken == "" {
+		return mail.Address{}, "", false
+	}
+	address := "reply+" + item.ReplyToken + "@" + w.options.MailFromDomain
+	return mail.Address{Name: item.WorkspaceName + " via CollieDesk", Address: address}, address, true
 }
 
 func truncate(value string) string {

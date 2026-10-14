@@ -5,17 +5,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -30,12 +33,49 @@ func testAPI(t *testing.T) (http.Handler, *auth.Service) {
 
 func testAPIWithPool(t *testing.T) (http.Handler, *auth.Service, *pgxpool.Pool) {
 	t.Helper()
+	api, service, pool, _ := testAPIWithConfig(t, nil)
+	return api, service, pool
+}
+
+// fakeDNS stands in for the public DNS resolver, an external boundary.
+type fakeDNS struct {
+	mu      sync.Mutex
+	records map[string][]string
+}
+
+func (d *fakeDNS) set(name string, values ...string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.records[name] = values
+}
+
+func (d *fakeDNS) lookupTXT(_ context.Context, name string) ([]string, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if values, ok := d.records[name]; ok {
+		return values, nil
+	}
+	return nil, &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
+}
+
+// testAPIWithConfig builds the API with an SMTP relay configured (no worker runs in these tests),
+// the "any" From policy, a trusted authserv-id of mx.example.net and a fake DNS resolver.
+func testAPIWithConfig(t *testing.T, mutate func(*httpapi.Config)) (http.Handler, *auth.Service, *pgxpool.Pool, *fakeDNS) {
+	t.Helper()
 	pool := testPool(t)
 	if err := database.Migrate(context.Background(), pool); err != nil {
 		t.Fatal(err)
 	}
-	authService := auth.New(pool, testOrigin)
-	return httpapi.New(pool, httpapi.Config{Origin: testOrigin}), authService, pool
+	dns := &fakeDNS{records: map[string][]string{}}
+	config := httpapi.Config{Origin: testOrigin, LookupTXT: dns.lookupTXT, Email: email.Config{
+		SMTP:              email.SMTPConfig{Host: "smtp.test.invalid", Port: 587, StartTLS: true},
+		FromPolicy:        email.FromPolicyAny,
+		TrustedAuthServID: "mx.example.net",
+	}}
+	if mutate != nil {
+		mutate(&config)
+	}
+	return httpapi.New(pool, config), auth.New(pool, testOrigin), pool, dns
 }
 
 func createSession(t *testing.T, api http.Handler, service *auth.Service, workspace, email string) string {

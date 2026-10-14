@@ -22,7 +22,7 @@ type contractFixture struct {
 
 func newContractFixture(t *testing.T) contractFixture {
 	t.Helper()
-	api, service, pool := testAPIWithPool(t)
+	api, service, pool, dns := testAPIWithConfig(t, nil)
 	adminToken := createSession(t, api, service, "Contract All", "admin@contract-all.example.com")
 	contactID := create(t, api, adminToken, "/api/v1/contacts", map[string]any{
 		"name": "Contract Contact", "email": "contact@contract-all.example.com",
@@ -71,6 +71,8 @@ func newContractFixture(t *testing.T) contractFixture {
 	decode(t, logoutRedeem, &logout)
 
 	api, inboundSecret, failedReplyID := withFailedEmailReply(t, api, pool, adminToken, conversationID)
+	record := domainState(t, api, adminToken).Channel
+	dns.set(record.DNSRecordName, record.DNSRecordValue)
 	deleteChannelToken := createSession(t, api, service, "Contract Disconnect", "admin@contract-disconnect.example.com")
 	_ = connectEmail(t, api, deleteChannelToken, "support@contract-disconnect.example.com")
 

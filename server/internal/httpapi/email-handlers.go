@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/jackc/pgx/v5"
 )
 
 const inboundEmailPath = "/api/v1/channels/email/inbound"
@@ -23,16 +25,55 @@ type smtpStatus struct {
 }
 
 type emailChannelSettings struct {
-	Channel    *domain.EmailChannel `json:"channel"`
-	InboundURL string               `json:"inbound_url"`
-	SMTP       smtpStatus           `json:"smtp"`
+	Channel     *domain.EmailChannel `json:"channel"`
+	InboundURL  string               `json:"inbound_url"`
+	SMTP        smtpStatus           `json:"smtp"`
+	FromPolicy  string               `json:"from_policy"`
+	SendingFrom *string              `json:"sending_from"`
 }
 
 func (a *API) emailSettings(channel *domain.EmailChannel) emailChannelSettings {
-	smtp := a.config.SMTP
-	return emailChannelSettings{Channel: channel, InboundURL: a.config.Origin + inboundEmailPath, SMTP: smtpStatus{
-		Configured: smtp.Configured(), Host: smtp.Host, Port: smtp.Port, StartTLS: smtp.StartTLS, Authenticated: smtp.Username != "",
-	}}
+	config := a.config.Email
+	smtp := config.SMTP
+	settings := emailChannelSettings{Channel: channel, InboundURL: a.config.Origin + inboundEmailPath, FromPolicy: config.FromPolicy,
+		SMTP: smtpStatus{Configured: smtp.Configured(), Host: smtp.Host, Port: smtp.Port, StartTLS: smtp.StartTLS, Authenticated: smtp.Username != ""}}
+	if settings.FromPolicy == "" {
+		settings.FromPolicy = email.FromPolicyVerified
+	}
+	if channel == nil || !smtp.Configured() {
+		return settings
+	}
+	switch {
+	case settings.FromPolicy == email.FromPolicyAny || channel.DomainVerifiedAt != nil:
+		settings.SendingFrom = &channel.SupportAddress
+	case config.MailFromDomain != "":
+		platform := "reply+…@" + config.MailFromDomain
+		settings.SendingFrom = &platform
+	}
+	return settings
+}
+
+func (a *API) verifyEmailDomain(response http.ResponseWriter, request *http.Request) {
+	channel, err := a.store.VerifyEmailDomain(request.Context(), principal(request).Workspace.ID, a.config.LookupTXT, time.Now().UTC())
+	if errors.Is(err, store.ErrDomainRecordMissing) {
+		writeError(response, http.StatusConflict, "dns_record_not_found",
+			"Add a TXT record named "+channel.DNSRecordName+" with the value "+channel.DNSRecordValue+", then try again. DNS changes can take a few minutes.")
+		return
+	}
+	if err != nil {
+		writeEmailStoreError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, a.emailSettings(&channel))
+}
+
+// writeEmailStoreError reports a missing resource as 404 and anything else as a server failure.
+func writeEmailStoreError(response http.ResponseWriter, err error) {
+	if errors.Is(err, pgx.ErrNoRows) || strings.Contains(err.Error(), "not found") {
+		writeError(response, http.StatusNotFound, "not_found", "The requested resource was not found.")
+		return
+	}
+	writeInternalError(response, err)
 }
 
 func (a *API) getEmailChannel(response http.ResponseWriter, request *http.Request) {
@@ -54,7 +95,7 @@ func (a *API) putEmailChannel(response http.ResponseWriter, request *http.Reques
 	}
 	channel, err := a.store.UpsertEmailChannel(request.Context(), principal(request).Workspace.ID, input.SupportAddress)
 	if err != nil {
-		writeStoreError(response, err)
+		writeEmailStoreError(response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, a.emailSettings(&channel))
@@ -82,7 +123,7 @@ func (a *API) deleteEmailChannel(response http.ResponseWriter, request *http.Req
 func (a *API) rotateEmailSecret(response http.ResponseWriter, request *http.Request) {
 	secret, err := a.store.RotateEmailSecret(request.Context(), principal(request).Workspace.ID, time.Now().UTC())
 	if err != nil {
-		writeStoreError(response, err)
+		writeEmailStoreError(response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, map[string]string{"inbound_secret": secret, "inbound_url": a.config.Origin + inboundEmailPath})
@@ -94,8 +135,12 @@ func (a *API) retryMessageDelivery(response http.ResponseWriter, request *http.R
 		writeError(response, http.StatusConflict, "not_failed", "Only a failed delivery can be retried.")
 		return
 	}
+	if errors.Is(err, store.ErrOutboundNotReady) {
+		writeError(response, http.StatusConflict, "outbound_not_ready", strings.TrimPrefix(err.Error(), store.ErrOutboundNotReady.Error()+": "))
+		return
+	}
 	if err != nil {
-		writeStoreError(response, err)
+		writeEmailStoreError(response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, message)

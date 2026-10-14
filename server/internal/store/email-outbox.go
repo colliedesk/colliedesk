@@ -6,21 +6,21 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/colliedesk/colliedesk/server/internal/domain"
-	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/jackc/pgx/v5"
 )
 
 const maxReplyReferences = 20
 
-// ErrDeliveryNotFailed means a retry was requested for a delivery that is queued or already sent.
-var ErrDeliveryNotFailed = errors.New("only a failed delivery can be retried")
+// ErrLeaseLost means another worker reclaimed the delivery; this worker's result is discarded.
+var ErrLeaseLost = errors.New("delivery lease was lost")
 
 // Delivery is one claimed outbox row with everything needed to compose the email.
 type Delivery struct {
 	OutboxID, WorkspaceID, MessageID string
+	ClaimToken                       string
 	Attempts                         int
 	WorkspaceName, SupportAddress    string
+	DomainVerified                   bool
 	ContactName, ContactEmail        string
 	Subject, Body                    string
 	EmailMessageID, ReplyToken       string
@@ -28,76 +28,49 @@ type Delivery struct {
 	References                       []string
 }
 
-// enqueueReply gives a reply its Message-ID and queues it when the workspace has an email channel.
-// The Message-ID is fixed here so every retry, including after a crash, carries the same one.
-func enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID string) error {
-	var supportAddress string
-	err := tx.QueryRow(ctx, `SELECT support_address FROM email_channels WHERE workspace_id=$1`, workspaceID).Scan(&supportAddress)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("load email channel: %w", err)
-	}
-	emailMessageID, err := email.NewMessageID(email.Domain(supportAddress))
-	if err != nil {
-		return err
-	}
-	token, err := email.NewToken()
-	if err != nil {
-		return err
-	}
-	if _, err := tx.Exec(ctx, `UPDATE messages SET email_message_id=$3 WHERE workspace_id=$1 AND id=$2`, workspaceID, messageID, emailMessageID); err != nil {
-		return fmt.Errorf("assign Message-ID: %w", err)
-	}
-	if _, err := tx.Exec(ctx, `UPDATE conversations SET email_reply_token=COALESCE(email_reply_token,$3) WHERE workspace_id=$1 AND id=$2`,
-		workspaceID, conversationID, token); err != nil {
-		return fmt.Errorf("assign reply token: %w", err)
-	}
-	if _, err := tx.Exec(ctx, `INSERT INTO email_outbox(workspace_id,message_id) VALUES($1,$2)`, workspaceID, messageID); err != nil {
-		return fmt.Errorf("queue reply: %w", err)
-	}
-	return nil
-}
-
-// ClaimDueDeliveries leases due rows and counts the attempt. A lease that expires without a result
-// (crash, timeout) makes the row due again: delivery is at least once, deduplicated by Message-ID.
+// ClaimDueDeliveries leases due rows, counts the attempt and stamps a claim token that every finish
+// must present. A lease that expires without a result makes the row due again: delivery is at least
+// once, deduplicated by Message-ID. A row whose data cannot be loaded fails alone.
 func (s *Store) ClaimDueDeliveries(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]Delivery, error) {
 	rows, err := s.pool.Query(ctx, `WITH due AS (
 			SELECT id FROM email_outbox WHERE status='queued' AND next_attempt_at<=$1 AND (locked_until IS NULL OR locked_until<=$1)
 			ORDER BY next_attempt_at LIMIT $2 FOR UPDATE SKIP LOCKED)
-		UPDATE email_outbox o SET locked_until=$3,attempts=o.attempts+1,updated_at=$1 FROM due WHERE o.id=due.id
-		RETURNING o.id::text,o.workspace_id::text,o.message_id::text,o.attempts`, now, limit, now.Add(lease))
+		UPDATE email_outbox o SET locked_until=$3,attempts=o.attempts+1,claim_token=gen_random_uuid(),updated_at=$1 FROM due WHERE o.id=due.id
+		RETURNING o.id::text,o.workspace_id::text,o.message_id::text,o.claim_token::text,o.attempts`, now, limit, now.Add(lease))
 	if err != nil {
 		return nil, fmt.Errorf("claim deliveries: %w", err)
 	}
 	claimed, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Delivery, error) {
 		var item Delivery
-		err := row.Scan(&item.OutboxID, &item.WorkspaceID, &item.MessageID, &item.Attempts)
+		err := row.Scan(&item.OutboxID, &item.WorkspaceID, &item.MessageID, &item.ClaimToken, &item.Attempts)
 		return item, err
 	})
 	if err != nil {
 		return nil, fmt.Errorf("scan claimed deliveries: %w", err)
 	}
-	for index := range claimed {
-		if err := s.loadDelivery(ctx, &claimed[index]); err != nil {
-			return nil, err
+	loaded := claimed[:0]
+	var errs []error
+	for _, item := range claimed {
+		if err := s.loadDelivery(ctx, &item); err != nil {
+			errs = append(errs, err, s.MarkDeliveryFailed(ctx, item, "The reply could not be loaded for sending."))
+			continue
 		}
+		loaded = append(loaded, item)
 	}
-	return claimed, nil
+	return loaded, errors.Join(errs...)
 }
 
 func (s *Store) loadDelivery(ctx context.Context, item *Delivery) error {
 	var conversationID string
 	var createdAt time.Time
-	err := s.pool.QueryRow(ctx, `SELECT w.name,COALESCE(ch.support_address,''),ct.name,ct.email,c.subject,m.body,
-			COALESCE(m.email_message_id,''),COALESCE(c.email_reply_token,''),c.id::text,m.created_at
+	err := s.pool.QueryRow(ctx, `SELECT w.name,COALESCE(ch.support_address,''),COALESCE(ch.domain_verified_at IS NOT NULL,false),
+			ct.name,ct.email,c.subject,m.body,COALESCE(m.email_message_id,''),COALESCE(c.email_reply_token,''),c.id::text,m.created_at
 		FROM messages m JOIN conversations c ON c.workspace_id=m.workspace_id AND c.id=m.conversation_id
 		JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
 		JOIN workspaces w ON w.id=m.workspace_id
 		LEFT JOIN email_channels ch ON ch.workspace_id=m.workspace_id
 		WHERE m.workspace_id=$1 AND m.id=$2`, item.WorkspaceID, item.MessageID).
-		Scan(&item.WorkspaceName, &item.SupportAddress, &item.ContactName, &item.ContactEmail, &item.Subject, &item.Body,
+		Scan(&item.WorkspaceName, &item.SupportAddress, &item.DomainVerified, &item.ContactName, &item.ContactEmail, &item.Subject, &item.Body,
 			&item.EmailMessageID, &item.ReplyToken, &conversationID, &createdAt)
 	if err != nil {
 		return fmt.Errorf("load delivery %s: %w", item.OutboxID, err)
@@ -134,45 +107,47 @@ func (s *Store) loadDelivery(ctx context.Context, item *Delivery) error {
 	return nil
 }
 
+// CountSentSince counts replies the workspace handed to the relay since the given time.
+func (s *Store) CountSentSince(ctx context.Context, workspaceID string, since time.Time) (int, error) {
+	var count int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM email_outbox WHERE workspace_id=$1 AND status='sent' AND sent_at>$2`,
+		workspaceID, since).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count sent replies: %w", err)
+	}
+	return count, nil
+}
+
 // MarkDeliverySent records a successful hand-off to the SMTP relay.
-func (s *Store) MarkDeliverySent(ctx context.Context, item Delivery, now time.Time) error {
-	return s.finishDelivery(ctx, item, `status='sent',sent_at=$3,last_error=NULL`, now)
+func (s *Store) MarkDeliverySent(ctx context.Context, item Delivery, sentAt time.Time) error {
+	return s.finishDelivery(ctx, item, `status='sent',sent_at=$4,last_error=NULL`, sentAt)
 }
 
 // MarkDeliveryRetry keeps the row queued and schedules the next attempt.
 func (s *Store) MarkDeliveryRetry(ctx context.Context, item Delivery, next time.Time, reason string) error {
-	return s.finishDelivery(ctx, item, `next_attempt_at=$3,last_error=$4`, next, reason)
+	return s.finishDelivery(ctx, item, `next_attempt_at=$4,last_error=$5`, next, reason)
+}
+
+// DeferDelivery postpones a claimed row without spending the attempt it was claimed with.
+func (s *Store) DeferDelivery(ctx context.Context, item Delivery, next time.Time, reason string) error {
+	return s.finishDelivery(ctx, item, `next_attempt_at=$4,last_error=$5,attempts=GREATEST(attempts-1,0)`, next, reason)
 }
 
 // MarkDeliveryFailed stops automatic retries; an agent can requeue with RetryDelivery.
 func (s *Store) MarkDeliveryFailed(ctx context.Context, item Delivery, reason string) error {
-	return s.finishDelivery(ctx, item, `status='failed',last_error=$3`, reason)
+	return s.finishDelivery(ctx, item, `status='failed',last_error=$4`, reason)
 }
 
+// finishDelivery applies a result only while this worker still holds the claim, so a worker whose
+// lease expired cannot overwrite the result of the worker that reclaimed the row.
 func (s *Store) finishDelivery(ctx context.Context, item Delivery, set string, args ...any) error {
-	_, err := s.pool.Exec(ctx, `UPDATE email_outbox SET `+set+`,locked_until=NULL,updated_at=now() WHERE workspace_id=$1 AND id=$2`,
-		append([]any{item.WorkspaceID, item.OutboxID}, args...)...)
+	result, err := s.pool.Exec(ctx, `UPDATE email_outbox SET `+set+`,locked_until=NULL,claim_token=NULL,updated_at=now()
+		WHERE workspace_id=$1 AND id=$2 AND claim_token=$3::uuid AND status='queued'`,
+		append([]any{item.WorkspaceID, item.OutboxID, item.ClaimToken}, args...)...)
 	if err != nil {
 		return fmt.Errorf("update delivery %s: %w", item.OutboxID, err)
 	}
-	return nil
-}
-
-// RetryDelivery requeues a failed delivery of a reply in this workspace and conversation.
-func (s *Store) RetryDelivery(ctx context.Context, workspaceID, conversationID, messageID string) (domain.Message, error) {
-	result, err := s.pool.Exec(ctx, `UPDATE email_outbox o SET status='queued',attempts=0,next_attempt_at=now(),locked_until=NULL,
-			last_error=NULL,updated_at=now()
-		FROM messages m WHERE o.workspace_id=$1 AND o.message_id=$3 AND o.status='failed'
-		AND m.workspace_id=o.workspace_id AND m.id=o.message_id AND m.conversation_id=$2`, workspaceID, conversationID, messageID)
-	if err != nil {
-		return domain.Message{}, fmt.Errorf("retry delivery: %w", err)
-	}
-	message, err := getMessage(ctx, s.pool, workspaceID, messageID)
-	if err != nil || message.ConversationID != conversationID || message.Delivery == nil {
-		return domain.Message{}, fmt.Errorf("retry delivery: not found")
-	}
 	if result.RowsAffected() != 1 {
-		return domain.Message{}, ErrDeliveryNotFailed
+		return fmt.Errorf("update delivery %s: %w", item.OutboxID, ErrLeaseLost)
 	}
-	return message, nil
+	return nil
 }
