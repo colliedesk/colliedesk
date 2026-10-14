@@ -1,0 +1,4 @@
+# Placeholder MAIL_FROM_INBOUND_SECRET values ("0123456789abcdef" twice) in a config-parse test.
+# The current file carries gitleaks:allow markers; these entries cover the commit that added them.
+fbf62629a0924d88d219199f7617f68048e03a11:server/internal/email/config_test.go:generic-api-key:30
+fbf62629a0924d88d219199f7617f68048e03a11:server/internal/email/config_test.go:generic-api-key:37
