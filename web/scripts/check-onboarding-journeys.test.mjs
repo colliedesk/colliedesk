@@ -11,7 +11,7 @@ describe('compareJourneys', () => {
   test('passes when every listed journey is a tagged test and every tagged test is listed', () => {
     const specs = { 'a.spec.ts': "test('self-host first run: works', { tag: '@onboarding' }, async () => {});",
       'b.spec.ts': "test('invite teammate: works', { tag: '@onboarding' }, async ({ page }) => {});" };
-    expect(compareJourneys(agents, specs)).toEqual({ missing: [], unlisted: [] });
+    expect(compareJourneys(agents, specs)).toEqual({ missing: [], unlisted: [], disabled: [] });
   });
 
   test('reports a listed journey whose test was deleted, renamed or lost its tag', () => {
@@ -24,8 +24,17 @@ describe('compareJourneys', () => {
     const specs = { 'a.spec.ts': "test('self-host first run: works', { tag: '@onboarding' }, async () => {});\ntest('invite teammate: works', { tag: '@onboarding' }, async () => {});\ntest('it\\'s new', { tag: '@onboarding' }, async () => {});" };
     expect(compareJourneys(agents, specs).unlisted).toEqual(["it's new"]);
   });
+
+  test.each([
+    ["  test.skip(true, 'flaky');"], ['  test.fixme();'], ["test.only('x', async () => {});"], ['test.fail();'],
+    ["test.describe.skip('group', () => {});"], ["test.describe.only('group', () => {});"],
+  ])('reports a spec with onboarding journeys that disables or narrows tests: %s', (line) => {
+    const specs = { 'a.spec.ts': `test('self-host first run: works', { tag: '@onboarding' }, async () => {\n${line}\n});`,
+      'b.spec.ts': "test('invite teammate: works', { tag: '@onboarding' }, async () => {});" };
+    expect(compareJourneys(agents, specs).disabled).toEqual(['a.spec.ts']);
+  });
 });
 
 test('AGENTS.md lists exactly the onboarding journey tests in web/e2e', async () => {
-  expect(await checkOnboardingJourneys()).toEqual({ missing: [], unlisted: [] });
+  expect(await checkOnboardingJourneys()).toEqual({ missing: [], unlisted: [], disabled: [] });
 });

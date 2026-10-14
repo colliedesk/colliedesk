@@ -1,5 +1,5 @@
 // Keeps the "Onboarding journeys" list in AGENTS.md and the @onboarding end-to-end tests in
-// web/e2e identical, so a journey cannot be deleted, renamed or untagged (and so dropped from the
+// web/e2e identical, so a journey cannot be deleted, renamed, untagged, skipped or narrowed by .only (and so dropped from the
 // onboarding CI job) without the list, and the people reading it, noticing.
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -17,10 +17,15 @@ function taggedJourneys(specSources) {
   return Object.values(specSources).flatMap((source) => [...source.matchAll(pattern)].map((match) => match[1].replace(/\\(.)/g, '$1')));
 }
 
+// A journey that is skipped, marked fixme/fail, or narrowed by .only still passes CI silently.
+const disabling = /\b(?:test|describe)(?:\.describe)?\.(?:skip|fixme|fail|only)\s*\(/;
+
 export function compareJourneys(agentsMarkdown, specSources) {
   const listed = listedJourneys(agentsMarkdown);
   const tagged = taggedJourneys(specSources);
-  return { missing: listed.filter((title) => !tagged.includes(title)), unlisted: tagged.filter((title) => !listed.includes(title)) };
+  const disabled = Object.entries(specSources)
+    .filter(([, source]) => taggedJourneys({ source }).length > 0 && disabling.test(source)).map(([name]) => name);
+  return { missing: listed.filter((title) => !tagged.includes(title)), unlisted: tagged.filter((title) => !listed.includes(title)), disabled };
 }
 
 export async function checkOnboardingJourneys() {
@@ -32,8 +37,9 @@ export async function checkOnboardingJourneys() {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  const { missing, unlisted } = await checkOnboardingJourneys();
+  const { missing, unlisted, disabled } = await checkOnboardingJourneys();
   for (const title of missing) console.error(`AGENTS.md lists an onboarding journey with no @onboarding test: ${title}`);
   for (const title of unlisted) console.error(`@onboarding test missing from the AGENTS.md list: ${title}`);
-  process.exit(missing.length + unlisted.length > 0 ? 1 : 0);
+  for (const name of disabled) console.error(`${name} holds onboarding journeys and skips, fixmes, fails or .only's a test`);
+  process.exit(missing.length + unlisted.length + disabled.length > 0 ? 1 : 0);
 }

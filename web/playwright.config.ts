@@ -31,6 +31,8 @@ export default defineConfig({
   outputDir: '/tmp/colliedesk-playwright-results',
   reporter: 'list',
   fullyParallel: false,
+  // A stray test.only would silently narrow both CI jobs to one test.
+  forbidOnly: !!process.env.CI,
   workers: 1,
   use: { trace: 'retain-on-failure', launchOptions: { executablePath: localChrome } },
   webServer: [
