@@ -1,0 +1,72 @@
+[
+  {
+    "id": 7001,
+    "body": "<div>Still wrong, see screenshot</div>",
+    "body_text": "Still wrong, see screenshot",
+    "incoming": true,
+    "private": false,
+    "user_id": 201,
+    "support_email": null,
+    "source": 0,
+    "ticket_id": 1,
+    "from_email": "carol@globex.example",
+    "to_emails": [
+      "support@acme.example"
+    ],
+    "cc_emails": [
+      "accounts@globex.example"
+    ],
+    "bcc_emails": [],
+    "attachments": [
+      {
+        "id": 9002,
+        "name": "screenshot.png",
+        "content_type": "image/png",
+        "size": 9,
+        "attachment_url": "{{files}}/9002",
+        "created_at": "2025-01-16T01:00:00Z",
+        "updated_at": "2025-01-16T01:00:00Z"
+      }
+    ],
+    "created_at": "2025-01-16T01:00:00Z",
+    "updated_at": "2025-01-16T01:00:00Z"
+  },
+  {
+    "id": 7002,
+    "body": "<div>We fixed it. <img src=\"https://acme.freshdesk.com/inline/attachment?token=abc\"></div>",
+    "body_text": "We fixed it.",
+    "incoming": false,
+    "private": false,
+    "user_id": 101,
+    "support_email": "support@acme.example",
+    "source": 0,
+    "ticket_id": 1,
+    "from_email": null,
+    "to_emails": [
+      "carol@globex.example"
+    ],
+    "cc_emails": [],
+    "bcc_emails": [],
+    "attachments": [],
+    "created_at": "2025-01-16T03:00:00Z",
+    "updated_at": "2025-01-16T03:00:00Z"
+  },
+  {
+    "id": 7003,
+    "body": "<div>Internal: refund approved</div>",
+    "body_text": "Internal: refund approved",
+    "incoming": false,
+    "private": true,
+    "user_id": 102,
+    "support_email": null,
+    "source": 2,
+    "ticket_id": 1,
+    "from_email": null,
+    "to_emails": [],
+    "cc_emails": [],
+    "bcc_emails": [],
+    "attachments": [],
+    "created_at": "2025-01-16T07:59:59Z",
+    "updated_at": "2025-01-16T07:59:59Z"
+  }
+]

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CollieDesk API
-  version: 0.1.0
+  version: 0.2.0
   description: Passwordless, workspace-scoped helpdesk API.
 servers:
   - url: /
@@ -406,6 +406,44 @@ paths:
         '413': {$ref: '#/components/responses/PayloadTooLarge'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
         '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/conversations/{id}/time-entries:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: listTimeEntries
+      x-permission: conversations:read
+      description: Time logged on a conversation, oldest first (for example imported from Freshdesk).
+      responses:
+        '200':
+          description: Time entries of the conversation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/TimeEntry'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/attachments/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: downloadAttachment
+      x-permission: conversations:read
+      description: >-
+        Streams the stored bytes of an attachment in the caller's workspace. Always served as a
+        download (`Content-Disposition: attachment`) with `application/octet-stream`; the original
+        media type is in the attachment metadata on the message.
+      responses:
+        '200':
+          description: Attachment bytes
+          headers:
+            Content-Disposition: {schema: {type: string}}
+            X-Content-SHA256: {schema: {type: string}, description: 'Hex SHA-256 recorded when the file was stored'}
+          content:
+            application/octet-stream:
+              schema: {type: string, format: binary}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/contacts:
     get:
       operationId: listContacts
@@ -722,11 +760,12 @@ components:
         revoked_at: {type: [string, 'null'], format: date-time}
     Contact:
       type: object
-      required: [id, name, email, created_at, updated_at]
+      required: [id, name, email, organization, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         name: {type: string}
         email: {type: string, format: email}
+        organization: {type: [string, 'null'], description: 'Company or organization name, for example imported from a Freshdesk company'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
     ContactDetail:
@@ -745,7 +784,7 @@ components:
         color: {type: string}
     Conversation:
       type: object
-      required: [id, contact_id, subject, status, priority, assignee_id, tags, created_at, updated_at]
+      required: [id, contact_id, subject, status, priority, assignee_id, tags, origin, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         contact_id: {type: string, format: uuid}
@@ -754,8 +793,25 @@ components:
         priority: {$ref: '#/components/schemas/Priority'}
         assignee_id: {type: [string, 'null'], format: uuid}
         tags: {type: array, items: {$ref: '#/components/schemas/Tag'}}
+        origin:
+          description: Where an imported conversation came from; null for conversations created in CollieDesk.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/ConversationOrigin'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+    ConversationOrigin:
+      type: object
+      required: [system, external_id, type, source, due_at, first_response_due_at, cc, forwarded_to]
+      properties:
+        system: {type: string, description: 'Source system, for example freshdesk'}
+        external_id: {type: string, description: Ticket id in the source system}
+        type: {type: [string, 'null'], description: Ticket type in the source system}
+        source: {type: [string, 'null'], description: 'Channel the ticket came from: email, portal, phone, chat, feedback_widget, outbound_email or other'}
+        due_at: {type: [string, 'null'], format: date-time}
+        first_response_due_at: {type: [string, 'null'], format: date-time}
+        cc: {type: array, items: {type: string}}
+        forwarded_to: {type: array, items: {type: string}}
     ConversationPage:
       type: object
       required: [items, page, page_size]
@@ -765,13 +821,74 @@ components:
         page_size: {type: integer, minimum: 1}
     Message:
       type: object
-      required: [id, conversation_id, author_agent_id, kind, body, created_at, delivery, email]
+      required: [id, conversation_id, author_agent_id, author_name, kind, body, body_html, origin, attachments, created_at, delivery, email]
       properties:
         id: {type: string, format: uuid}
         conversation_id: {type: string, format: uuid}
         author_agent_id: {type: [string, 'null'], format: uuid}
+        author_name: {type: [string, 'null'], description: 'Display name of an author without a CollieDesk agent account (customer or imported agent)'}
         kind: {type: string, enum: [incoming, outgoing, note]}
         body: {type: string}
+        body_html:
+          type: [string, 'null']
+          description: >-
+            Original HTML of an imported message. Untrusted content: render it only in a sandboxed
+            frame that runs no scripts and loads nothing from the network.
+        origin:
+          description: Where an imported message came from; null for messages written in CollieDesk.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/MessageOrigin'}
+        attachments: {type: array, items: {$ref: '#/components/schemas/Attachment'}}
+        created_at: {type: string, format: date-time}
+        delivery:
+          description: Email delivery of an outgoing reply; null when the reply was not emailed.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/MessageDelivery'}
+        email:
+          description: Envelope details of an incoming email; null for messages that did not arrive by email.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/IncomingEmail'}
+    MessageOrigin:
+      type: object
+      required: [system, external_id, kind, from, to, cc, bcc]
+      properties:
+        system: {type: string}
+        external_id: {type: string}
+        kind:
+          type: string
+          enum: [description, reply, incoming, private_note, public_note, forward, forwarded_email, other]
+          description: >-
+            How the source system classified the item. public_note was visible to the customer there;
+            forward went to a third party, not to the customer.
+        from: {type: [string, 'null']}
+        to: {type: array, items: {type: string}}
+        cc: {type: array, items: {type: string}}
+        bcc: {type: array, items: {type: string}}
+    TimeEntry:
+      type: object
+      required: [id, conversation_id, agent_id, agent_name, minutes, note, billable, executed_at]
+      properties:
+        id: {type: string, format: uuid}
+        conversation_id: {type: string, format: uuid}
+        agent_id: {type: [string, 'null'], format: uuid}
+        agent_name: {type: string}
+        minutes: {type: integer, minimum: 0}
+        note: {type: string}
+        billable: {type: boolean}
+        executed_at: {type: string, format: date-time}
+    Attachment:
+      type: object
+      required: [id, message_id, filename, content_type, size, sha256, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        message_id: {type: string, format: uuid}
+        filename: {type: string}
+        content_type: {type: string}
+        size: {type: integer, minimum: 0}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
         created_at: {type: string, format: date-time}
         delivery:
           description: Email delivery of an outgoing reply; null when the reply was not emailed.

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
@@ -30,6 +31,10 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
+	storage, err := attachmentStorage()
+	if err != nil {
+		return err
+	}
 	emailConfig, err := email.ConfigFromEnv(os.Getenv)
 	if err != nil {
 		return err
@@ -41,7 +46,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	}
 	server := &http.Server{
 		Addr:              *address,
-		Handler:           webui.Handler(httpapi.New(pool, httpapi.Config{Origin: origin, CloudAuth: cloudAuthConfig(), Email: emailConfig})),
+		Handler:           webui.Handler(httpapi.New(pool, httpapi.Config{Origin: origin, CloudAuth: cloudAuthConfig(), Email: emailConfig, Attachments: storage})),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	done := make(chan error, 1)
@@ -60,6 +65,16 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		}
 		return nil
 	}
+}
+
+// attachmentStorage opens the local-disk attachment store at ATTACHMENTS_DIR
+// (default ./data/attachments). serve and import must point at the same place.
+func attachmentStorage() (*attachments.LocalDisk, error) {
+	dir := os.Getenv("ATTACHMENTS_DIR")
+	if dir == "" {
+		dir = "data/attachments"
+	}
+	return attachments.NewLocalDisk(dir)
 }
 
 func cloudAuthConfig() cloudauth.Config {

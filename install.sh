@@ -99,6 +99,9 @@ services:
       EMAIL_FROM_POLICY: ${EMAIL_FROM_POLICY:-verified}
       MAIL_FROM_DOMAIN: ${MAIL_FROM_DOMAIN:-}
       EMAIL_TRUSTED_AUTHSERV_ID: ${EMAIL_TRUSTED_AUTHSERV_ID:-}
+      ATTACHMENTS_DIR: /data/attachments
+    volumes:
+      - attachments-data:/data/attachments
     ports:
       - "127.0.0.1:${COLLIE_DESK_PORT}:8080"
     depends_on:
@@ -114,6 +117,7 @@ services:
 
 volumes:
   postgres-data:
+  attachments-data:
 COMPOSE
 
 cd "$TARGET_DIR"

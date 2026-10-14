@@ -16,10 +16,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -76,6 +78,38 @@ func testAPIWithConfig(t *testing.T, mutate func(*httpapi.Config)) (http.Handler
 		mutate(&config)
 	}
 	return httpapi.New(pool, config), auth.New(pool, testOrigin), pool, dns
+}
+
+// testAPIWithStorage is testAPIWithConfig with local-disk attachment storage.
+func testAPIWithStorage(t *testing.T) (http.Handler, *auth.Service, *pgxpool.Pool, attachments.Storage) {
+	t.Helper()
+	storage, err := attachments.NewLocalDisk(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.Attachments = storage })
+	return api, service, pool, storage
+}
+
+func seedAttachment(t *testing.T, pool *pgxpool.Pool, storage attachments.Storage, token string, api http.Handler, messageID, filename, content string) string {
+	t.Helper()
+	var me struct {
+		Workspace struct {
+			ID string `json:"id"`
+		} `json:"workspace"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/auth/me", nil, token, nil), &me)
+	object, err := storage.Put(context.Background(), me.Workspace.ID, strings.NewReader(content), int64(len(content)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, err := store.New(pool).CreateAttachment(context.Background(), me.Workspace.ID, store.NewAttachment{
+		MessageID: messageID, Filename: filename, ContentType: "text/plain", Object: object,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return item.ID
 }
 
 func createSession(t *testing.T, api http.Handler, service *auth.Service, workspace, email string) string {
@@ -190,4 +224,39 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		admin.Close()
 	})
 	return pool
+}
+
+func workspaceID(t *testing.T, api http.Handler, token string) string {
+	t.Helper()
+	var me struct {
+		Workspace struct {
+			ID string `json:"id"`
+		} `json:"workspace"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/auth/me", nil, token, nil), &me)
+	return me.Workspace.ID
+}
+
+// seedImportDetails gives a conversation and message the shape an importer
+// writes, and logs one time entry, so tests cover the non-null API forms.
+func seedImportDetails(t *testing.T, pool *pgxpool.Pool, workspace, conversationID, messageID string) {
+	t.Helper()
+	ctx := context.Background()
+	statements := []struct {
+		sql  string
+		args []any
+	}{
+		{`UPDATE conversations SET origin='{"system":"freshdesk","external_id":"41","type":"Problem","source":"email","due_at":"2025-01-18T23:30:00Z","first_response_due_at":null,"cc":["cc@example.com"],"forwarded_to":[]}'
+			WHERE workspace_id=$1 AND id=$2`, []any{workspace, conversationID}},
+		{`UPDATE messages SET body_html='<p onclick="x()">Hi <b>there</b></p>',
+			origin='{"system":"freshdesk","external_id":"7002","kind":"public_note","from":null,"to":["a@example.com"],"cc":[],"bcc":[]}'
+			WHERE workspace_id=$1 AND id=$2`, []any{workspace, messageID}},
+		{`INSERT INTO time_entries(workspace_id,conversation_id,agent_name,minutes,note,billable,executed_at)
+			VALUES($1,$2,'Former Agent',90,'Call',true,'2025-01-16T02:00:00Z')`, []any{workspace, conversationID}},
+	}
+	for _, statement := range statements {
+		if _, err := pool.Exec(ctx, statement.sql, statement.args...); err != nil {
+			t.Fatal(err)
+		}
+	}
 }

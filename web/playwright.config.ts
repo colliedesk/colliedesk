@@ -20,6 +20,7 @@ export default defineConfig({
       ...process.env,
       APP_ORIGIN: baseURL,
       DATABASE_URL: databaseURL,
+      ATTACHMENTS_DIR: '/tmp/colliedesk-e2e-attachments',
       EMAIL_TRUSTED_AUTHSERV_ID: 'mx.example.net',
       GOPATH: '/tmp/colliedesk-gopath',
       GOMODCACHE: '/tmp/colliedesk-gopath/pkg/mod',

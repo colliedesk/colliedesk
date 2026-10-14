@@ -33,8 +33,11 @@ services:
       EMAIL_FROM_POLICY: ${EMAIL_FROM_POLICY:-verified}
       MAIL_FROM_DOMAIN: ${MAIL_FROM_DOMAIN:-}
       EMAIL_TRUSTED_AUTHSERV_ID: ${EMAIL_TRUSTED_AUTHSERV_ID:-}
+      ATTACHMENTS_DIR: /data/attachments
     ports:
       - "127.0.0.1:8080:8080"
+    volumes:
+      - attachments-data:/data/attachments
     depends_on:
       postgres:
         condition: service_healthy
@@ -42,3 +45,4 @@ services:
 
 volumes:
   postgres-data:
+  attachments-data:

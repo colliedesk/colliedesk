@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { UpdateConversationRequest } from '../../api/client';
-import type { Agent, Conversation, Tag } from '../../api/schemas';
+import type { Agent, Conversation, ConversationOrigin, Tag } from '../../api/schemas';
+import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 
 interface DetailsPanelProps {
@@ -11,13 +12,15 @@ interface DetailsPanelProps {
   onAddTag?: (conversationId: string, tagId: string) => void;
   onRemoveTag?: (conversationId: string, tagId: string) => void;
   onCreateTag?: (conversationId: string, name: string) => void;
+  timezone?: string;
 }
 
-export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, onRemoveTag, onCreateTag }: DetailsPanelProps) {
+export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, onRemoveTag, onCreateTag, timezone = 'UTC' }: DetailsPanelProps) {
   const [tagName, setTagName] = useState('');
   return (
     <aside className="details-panel" aria-label={messages.conversationDetails}>
       <h2>{messages.conversationDetails}</h2>
+      {conversation?.origin && <ConversationOriginBlock origin={conversation.origin} timezone={timezone} />}
       <label><span>{messages.status}</span><select value={conversation?.status ?? 'open'} disabled={!conversation}
         onChange={(event) => conversation && onUpdate?.(conversation.id, { status: event.target.value as UpdateConversationRequest['status'] })}>
         {Object.entries(messages.statuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -44,5 +47,16 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
           }}>{messages.createTag}</button></div>
       </fieldset>
     </aside>
+  );
+}
+
+function ConversationOriginBlock({ origin, timezone }: { origin: ConversationOrigin; timezone: string }) {
+  const system = messages.systemNames[origin.system] ?? origin.system;
+  return (
+    <div className="conversation-origin">
+      <span>{messages.importedTicket(system, origin.external_id)}</span>
+      {origin.type && <span>{messages.ticketType(origin.type)}</span>}
+      {origin.due_at && <span>{messages.dueAt} <time dateTime={origin.due_at}>{formatDate(origin.due_at, timezone)}</time></span>}
+    </div>
   );
 }

@@ -1,0 +1,27 @@
+{
+  "id": 3,
+  "subject": "Old closed question",
+  "status": 5,
+  "priority": 2,
+  "source": 3,
+  "type": null,
+  "spam": false,
+  "deleted": false,
+  "requester_id": 203,
+  "responder_id": 102,
+  "company_id": null,
+  "group_id": null,
+  "tags": [
+    "legacy"
+  ],
+  "description": "<div>How do I reset?</div>",
+  "description_text": "How do I reset?",
+  "attachments": [],
+  "created_at": "2024-06-01T05:00:00Z",
+  "updated_at": "2024-06-10T05:00:00Z",
+  "due_by": null,
+  "fr_due_by": null,
+  "cc_emails": [],
+  "fwd_emails": [],
+  "to_emails": null
+}

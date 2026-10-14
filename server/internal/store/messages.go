@@ -7,11 +7,10 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
-	"github.com/jackc/pgx/v5"
 )
 
 // messageSelect returns timeline rows with their email delivery (outgoing) and envelope (incoming).
-const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_id::text,m.kind,m.body,m.created_at,m.email_meta,
+const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_id::text,m.author_name,m.kind,m.body,m.body_html,m.origin,m.created_at,m.email_meta,
 	o.status,o.attempts,o.last_error,o.sent_at
 	FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
 	LEFT JOIN email_outbox o ON o.workspace_id=m.workspace_id AND o.message_id=m.id`
@@ -26,11 +25,12 @@ func scanMessage(row rowScanner) (domain.Message, error) {
 	var status, lastError *string
 	var attempts *int32
 	var sentAt *time.Time
-	if err := row.Scan(&message.ID, &message.ConversationID, &message.AuthorAgentID, &message.Kind, &message.Body, &message.CreatedAt,
-		&meta, &status, &attempts, &lastError, &sentAt); err != nil {
+	if err := row.Scan(&message.ID, &message.ConversationID, &message.AuthorAgentID, &message.AuthorName, &message.Kind, &message.Body,
+		&message.BodyHTML, &message.Origin, &message.CreatedAt, &meta, &status, &attempts, &lastError, &sentAt); err != nil {
 		return domain.Message{}, err
 	}
 	message.CreatedAt = domain.UTC(message.CreatedAt)
+	message.Attachments = []domain.Attachment{}
 	if status != nil && attempts != nil {
 		message.Delivery = &domain.MessageDelivery{Status: *status, Attempts: int(*attempts), LastError: lastError, SentAt: domain.UTCOptional(sentAt)}
 	}
@@ -64,19 +64,24 @@ func (s *Store) ListMessages(ctx context.Context, workspaceID, conversationID st
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate messages: %w", err)
 	}
-	return messages, nil
+	rows.Close()
+	return messages, s.attachConversationFiles(ctx, workspaceID, conversationID, messages)
 }
 
-func getMessage(ctx context.Context, query querier, workspaceID, messageID string) (domain.Message, error) {
+type messageQuerier interface {
+	Querier
+	rowsQuerier
+}
+
+func getMessage(ctx context.Context, query messageQuerier, workspaceID, messageID string) (domain.Message, error) {
 	message, err := scanMessage(query.QueryRow(ctx, messageSelect+` WHERE m.workspace_id=$1 AND m.id=$2`, workspaceID, messageID))
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("get message: %w", err)
 	}
+	if err := attachMessageFiles(ctx, query, workspaceID, &message); err != nil {
+		return domain.Message{}, err
+	}
 	return message, nil
-}
-
-type querier interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
 // CreateMessage stores a reply or note. A reply is queued for email when the workspace has an

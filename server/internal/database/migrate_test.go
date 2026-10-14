@@ -34,7 +34,7 @@ func TestMigrateCreatesTenantScopedTables(t *testing.T) {
 		}
 		got = append(got, name)
 	}
-	want := []string{"agents", "contacts", "conversation_tags", "conversations", "email_channels", "email_outbox", "messages", "pairing_links", "sessions", "tags"}
+	want := []string{"agents", "attachments", "contacts", "conversation_tags", "conversations", "email_channels", "email_outbox", "import_items", "messages", "pairing_links", "sessions", "tags", "time_entries"}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("workspace-scoped tables = %v, want %v", got, want)
 	}

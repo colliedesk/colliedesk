@@ -16,6 +16,8 @@ with the composer below it, and **conversation details** on the right.
   **Delivery failed** (with **Retry delivery**).
 - **Private note** is visible only to your team.
 - Messages support Markdown.
+- Attachments appear under their message with name and size. Select a file name to download it.
+  Files always download; they are never opened inside CollieDesk.
 
 **Change the conversation** (details pane)
 - **Status**: every status can be changed back, for example Resolved → Open to reopen.

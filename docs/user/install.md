@@ -31,5 +31,13 @@ The link works once and expires after 15 minutes. If it expires, print a new one
 docker compose exec server /app/colliedesk pair --workspace <slug> --email admin@example.com
 ```
 
+## Data to back up
+
+CollieDesk keeps data in two places. Back up both:
+
+- PostgreSQL (the `postgres-data` volume).
+- Attachment files in `ATTACHMENTS_DIR` (the `attachments-data` volume, mounted at
+  `/data/attachments`). Without a volume, files are lost when the container is recreated.
+
 To receive and answer customer email, set up the [email channel](email-channel.md).
 See the [roadmap](../../ROADMAP.md).

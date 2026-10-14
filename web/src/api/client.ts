@@ -3,7 +3,7 @@ import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactDetailSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema,
   cloudWorkspaceChoicesSchema, emailChannelSettingsSchema, inboundSecretSchema,
-  inviteCreatedSchema, inviteListSchema, meSchema, messageListSchema, messageSchema,
+  inviteCreatedSchema, inviteListSchema, meSchema, messageListSchema, messageSchema, timeEntryListSchema,
   publicConfigSchema, redeemedSchema, sessionListSchema, tagListSchema, tagSchema, workspaceSchema,
 } from './schemas';
 import type { WorkspaceChoice } from './schemas';
@@ -80,6 +80,7 @@ export const api = {
   addConversationTag: (id: string, tagId: string) => request(`/api/v1/conversations/${id}/tags/${tagId}`, conversationSchema, { method: 'PUT' }),
   removeConversationTag: (id: string, tagId: string) => request(`/api/v1/conversations/${id}/tags/${tagId}`, conversationSchema, { method: 'DELETE' }),
   messages: (id: string) => request(`/api/v1/conversations/${id}/messages`, messageListSchema),
+  timeEntries: (id: string) => request(`/api/v1/conversations/${id}/time-entries`, timeEntryListSchema),
   createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string) => request(`/api/v1/conversations/${id}/messages`, messageSchema, { method: 'POST', body: json<'createMessage'>({ kind, body }) }),
   contacts: (search = '') => request(`/api/v1/contacts?search=${encodeURIComponent(search)}`, contactListSchema),
   contact: (id: string) => request(`/api/v1/contacts/${id}`, contactDetailSchema),

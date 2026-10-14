@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/email"
@@ -16,9 +17,10 @@ import (
 const sessionCookie = "colliedesk_session"
 
 type Config struct {
-	Origin    string
-	CloudAuth cloudauth.Config
-	Email     email.Config
+	Origin      string
+	CloudAuth   cloudauth.Config
+	Email       email.Config
+	Attachments attachments.Storage
 	// LookupTXT resolves DNS TXT records for domain verification; nil uses the system resolver.
 	LookupTXT func(ctx context.Context, name string) ([]string, error)
 }
@@ -84,6 +86,8 @@ func Routes() []Route {
 		{http.MethodDelete, "/api/v1/conversations/{id}/tags/{tagId}", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/conversations/{id}/messages", auth.PermissionConversationsRead},
 		{http.MethodPost, "/api/v1/conversations/{id}/messages", auth.PermissionConversationsWrite},
+		{http.MethodGet, "/api/v1/conversations/{id}/time-entries", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/attachments/{id}", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/contacts", auth.PermissionContactsRead},
 		{http.MethodPost, "/api/v1/contacts", auth.PermissionContactsWrite},
 		{http.MethodGet, "/api/v1/contacts/{id}", auth.PermissionContactsRead},

@@ -10,7 +10,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.createInvite, a.listInvites, a.revokeInvite,
 		a.listConversations, a.createConversation, a.getConversation, a.updateConversation,
 		a.addConversationTag, a.removeConversationTag,
-		a.listMessages, a.createMessage,
+		a.listMessages, a.createMessage, a.listTimeEntries, a.downloadAttachment,
 		a.listContacts, a.createContact, a.getContact,
 		a.listAgents, a.updateWorkspaceTimezone, a.updateAgentTimezone,
 		a.listTags, a.createTag, a.updateTag, a.deleteTag,

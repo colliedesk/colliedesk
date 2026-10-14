@@ -311,6 +311,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{id}/time-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description Time logged on a conversation, oldest first (for example imported from Freshdesk). */
+        get: operations["listTimeEntries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attachments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description Streams the stored bytes of an attachment in the caller's workspace. Always served as a download (`Content-Disposition: attachment`) with `application/octet-stream`; the original media type is in the attachment metadata on the message. */
+        get: operations["downloadAttachment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/contacts": {
         parameters: {
             query?: never;
@@ -517,6 +555,8 @@ export interface components {
             name: string;
             /** Format: email */
             email: string;
+            /** @description Company or organization name, for example imported from a Freshdesk company */
+            organization: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -542,10 +582,28 @@ export interface components {
             /** Format: uuid */
             assignee_id: string | null;
             tags: components["schemas"]["Tag"][];
+            /** @description Where an imported conversation came from; null for conversations created in CollieDesk. */
+            origin: null | components["schemas"]["ConversationOrigin"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        ConversationOrigin: {
+            /** @description Source system, for example freshdesk */
+            system: string;
+            /** @description Ticket id in the source system */
+            external_id: string;
+            /** @description Ticket type in the source system */
+            type: string | null;
+            /** @description Channel the ticket came from: email, portal, phone, chat, feedback_widget, outbound_email or other */
+            source: string | null;
+            /** Format: date-time */
+            due_at: string | null;
+            /** Format: date-time */
+            first_response_due_at: string | null;
+            cc: string[];
+            forwarded_to: string[];
         };
         ConversationPage: {
             items: components["schemas"]["Conversation"][];
@@ -559,15 +617,65 @@ export interface components {
             conversation_id: string;
             /** Format: uuid */
             author_agent_id: string | null;
+            /** @description Display name of an author without a CollieDesk agent account (customer or imported agent) */
+            author_name: string | null;
             /** @enum {string} */
             kind: "incoming" | "outgoing" | "note";
             body: string;
+            /** @description Original HTML of an imported message. Untrusted content: render it only in a sandboxed frame that runs no scripts and loads nothing from the network. */
+            body_html: string | null;
+            /** @description Where an imported message came from; null for messages written in CollieDesk. */
+            origin: null | components["schemas"]["MessageOrigin"];
+            attachments: components["schemas"]["Attachment"][];
             /** Format: date-time */
             created_at: string;
             /** @description Email delivery of an outgoing reply; null when the reply was not emailed. */
             delivery: null | components["schemas"]["MessageDelivery"];
             /** @description Envelope details of an incoming email; null for messages that did not arrive by email. */
             email: null | components["schemas"]["IncomingEmail"];
+        };
+        MessageOrigin: {
+            system: string;
+            external_id: string;
+            /**
+             * @description How the source system classified the item. public_note was visible to the customer there; forward went to a third party, not to the customer.
+             * @enum {string}
+             */
+            kind: "description" | "reply" | "incoming" | "private_note" | "public_note" | "forward" | "forwarded_email" | "other";
+            from: string | null;
+            to: string[];
+            cc: string[];
+            bcc: string[];
+        };
+        TimeEntry: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            conversation_id: string;
+            /** Format: uuid */
+            agent_id: string | null;
+            agent_name: string;
+            minutes: number;
+            note: string;
+            billable: boolean;
+            /** Format: date-time */
+            executed_at: string;
+        };
+        Attachment: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            message_id: string;
+            filename: string;
+            content_type: string;
+            size: number;
+            sha256: string;
+            /** Format: date-time */
+            created_at: string;
+            /** @description Email delivery of an outgoing reply; null when the reply was not emailed. */
+            delivery?: null | components["schemas"]["MessageDelivery"];
+            /** @description Envelope details of an incoming email; null for messages that did not arrive by email. */
+            email?: null | components["schemas"]["IncomingEmail"];
         };
         /** @enum {string} */
         DeliveryStatus: "queued" | "sent" | "failed";
@@ -1378,6 +1486,59 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    listTimeEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Time entries of the conversation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["TimeEntry"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    downloadAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Attachment bytes */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    /** @description Hex SHA-256 recorded when the file was stored */
+                    "X-Content-SHA256"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     listContacts: {

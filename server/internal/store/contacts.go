@@ -10,8 +10,8 @@ import (
 func (s *Store) CreateContact(ctx context.Context, workspaceID, name, email string) (domain.Contact, error) {
 	var contact domain.Contact
 	err := s.pool.QueryRow(ctx, `INSERT INTO contacts(workspace_id,name,email) VALUES($1,$2,lower($3))
-		RETURNING id::text,name,email,created_at,updated_at`, workspaceID, name, email).
-		Scan(&contact.ID, &contact.Name, &contact.Email, &contact.CreatedAt, &contact.UpdatedAt)
+		RETURNING id::text,name,email,organization,created_at,updated_at`, workspaceID, name, email).
+		Scan(&contact.ID, &contact.Name, &contact.Email, &contact.Organization, &contact.CreatedAt, &contact.UpdatedAt)
 	if err != nil {
 		return domain.Contact{}, fmt.Errorf("create contact: %w", err)
 	}
@@ -21,8 +21,8 @@ func (s *Store) CreateContact(ctx context.Context, workspaceID, name, email stri
 
 func (s *Store) GetContact(ctx context.Context, workspaceID, id string) (domain.ContactDetail, error) {
 	var contact domain.ContactDetail
-	err := s.pool.QueryRow(ctx, `SELECT id::text,name,email,created_at,updated_at FROM contacts WHERE workspace_id=$1 AND id=$2`, workspaceID, id).
-		Scan(&contact.Contact.ID, &contact.Contact.Name, &contact.Contact.Email, &contact.Contact.CreatedAt, &contact.Contact.UpdatedAt)
+	err := s.pool.QueryRow(ctx, `SELECT id::text,name,email,organization,created_at,updated_at FROM contacts WHERE workspace_id=$1 AND id=$2`, workspaceID, id).
+		Scan(&contact.Contact.ID, &contact.Contact.Name, &contact.Contact.Email, &contact.Contact.Organization, &contact.Contact.CreatedAt, &contact.Contact.UpdatedAt)
 	if err != nil {
 		return domain.ContactDetail{}, fmt.Errorf("get contact: %w", err)
 	}
@@ -36,7 +36,7 @@ func (s *Store) GetContact(ctx context.Context, workspaceID, id string) (domain.
 }
 
 func (s *Store) ListContacts(ctx context.Context, workspaceID, search string) ([]domain.Contact, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id::text,name,email,created_at,updated_at FROM contacts
+	rows, err := s.pool.Query(ctx, `SELECT id::text,name,email,organization,created_at,updated_at FROM contacts
 		WHERE workspace_id=$1 AND ($2='' OR name ILIKE '%'||$2||'%' ESCAPE '\' OR email ILIKE '%'||$2||'%' ESCAPE '\') ORDER BY name`, workspaceID, escapeLikePattern(search))
 	if err != nil {
 		return nil, fmt.Errorf("list contacts: %w", err)
@@ -45,7 +45,7 @@ func (s *Store) ListContacts(ctx context.Context, workspaceID, search string) ([
 	contacts := make([]domain.Contact, 0)
 	for rows.Next() {
 		var contact domain.Contact
-		if err := rows.Scan(&contact.ID, &contact.Name, &contact.Email, &contact.CreatedAt, &contact.UpdatedAt); err != nil {
+		if err := rows.Scan(&contact.ID, &contact.Name, &contact.Email, &contact.Organization, &contact.CreatedAt, &contact.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan contact: %w", err)
 		}
 		contact.CreatedAt, contact.UpdatedAt = domain.UTC(contact.CreatedAt), domain.UTC(contact.UpdatedAt)

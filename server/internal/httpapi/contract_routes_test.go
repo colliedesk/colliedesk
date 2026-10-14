@@ -149,5 +149,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/channels/email/inbound": {path: inboundPath, status: 200, raw: mail([]string{
 			"From: Contract Customer <contract@customer.example>", "Subject: Contract mail", "Message-ID: <contract@customer.example>",
 		}, "Contract inbound.")},
+		"GET /api/v1/conversations/{id}/time-entries": {path: "/api/v1/conversations/" + f.conversationID + "/time-entries", token: admin, status: 200},
+		"GET /api/v1/attachments/{id}":                {path: "/api/v1/attachments/" + f.attachmentID, token: admin, status: 200},
 	}
 }
