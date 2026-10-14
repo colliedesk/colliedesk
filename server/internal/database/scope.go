@@ -5,14 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sync"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-// AppRole is the role every workspace-scoped transaction switches to. It owns nothing, cannot log
-// in and has no BYPASSRLS, so the workspace_isolation policies always apply to it.
-const AppRole = "colliedesk_app"
 
 // ErrNoWorkspace means a workspace-scoped transaction was requested without a valid workspace id.
 var ErrNoWorkspace = errors.New("workspace-scoped query needs a workspace id")
@@ -23,6 +20,9 @@ var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]
 // declared privileged with a reviewed reason (Privileged). There is no third way to query.
 type DB struct {
 	pool *pgxpool.Pool
+
+	mu      sync.Mutex
+	appRole string
 }
 
 // New wraps the connection pool. The pool connects as the schema owner; scoping happens per
@@ -31,18 +31,45 @@ func New(pool *pgxpool.Pool) *DB {
 	return &DB{pool: pool}
 }
 
-// BeginWorkspace starts a transaction as AppRole with app.workspace_id set for this transaction
+// AppRole returns the role every workspace-scoped transaction switches to. The migration creates it
+// per database (colliedesk_app_<database>) and binds the workspace_isolation policies to it; the
+// name is read back from the policy on workspaces, so the migration stays the single source.
+// The role owns nothing, cannot log in and has no BYPASSRLS.
+func (d *DB) AppRole(ctx context.Context) (string, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.appRole != "" {
+		return d.appRole, nil
+	}
+	var role string
+	err := d.pool.QueryRow(ctx, `SELECT roles[1]::text FROM pg_policies
+		WHERE schemaname=current_schema() AND tablename='workspaces' AND policyname='workspace_isolation'`).Scan(&role)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", errors.New("row-level security is not set up in this schema; run `colliedesk migrate` first")
+	}
+	if err != nil {
+		return "", fmt.Errorf("read the app role: %w", err)
+	}
+	d.appRole = role
+	return role, nil
+}
+
+// BeginWorkspace starts a transaction as the app role with app.workspace_id set for this transaction
 // only. Row-level security then limits every statement to that workspace. The caller commits or
 // rolls back; both end the scope, so a pooled connection never carries it to the next user.
 func (d *DB) BeginWorkspace(ctx context.Context, workspaceID string) (pgx.Tx, error) {
 	if !uuidPattern.MatchString(workspaceID) {
 		return nil, ErrNoWorkspace
 	}
+	role, err := d.AppRole(ctx)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := d.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin workspace transaction: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `SELECT set_config('role',$1,true),set_config('app.workspace_id',$2,true)`, AppRole, workspaceID); err != nil {
+	if _, err := tx.Exec(ctx, `SELECT set_config('role',$1,true),set_config('app.workspace_id',$2,true)`, role, workspaceID); err != nil {
 		_ = tx.Rollback(ctx)
 		return nil, fmt.Errorf("scope transaction to workspace: %w", err)
 	}
@@ -130,20 +157,24 @@ func (d *DB) TryAdvisoryLock(ctx context.Context, key string) (func(), error) {
 // Verify refuses to serve when row-level security could be skipped: the app role must exist, must
 // not be a superuser or BYPASSRLS, and the connecting role must be able to switch to it.
 func (d *DB) Verify(ctx context.Context) error {
+	role, err := d.AppRole(ctx)
+	if err != nil {
+		return err
+	}
 	var super, bypass, canSet bool
-	err := d.pool.QueryRow(ctx, `SELECT rolsuper,rolbypassrls,pg_has_role(current_user,oid,'SET') FROM pg_roles WHERE rolname=$1`, AppRole).
+	err = d.pool.QueryRow(ctx, `SELECT rolsuper,rolbypassrls,pg_has_role(current_user,oid,'SET') FROM pg_roles WHERE rolname=$1`, role).
 		Scan(&super, &bypass, &canSet)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("database role %s is missing; run `colliedesk migrate` first", AppRole)
+		return fmt.Errorf("database role %s is missing; run `colliedesk migrate` first", role)
 	}
 	if err != nil {
-		return fmt.Errorf("check database role %s: %w", AppRole, err)
+		return fmt.Errorf("check database role %s: %w", role, err)
 	}
 	if super || bypass {
-		return fmt.Errorf("database role %s must not be SUPERUSER or BYPASSRLS; row-level security would be skipped", AppRole)
+		return fmt.Errorf("database role %s must not be SUPERUSER or BYPASSRLS; row-level security would be skipped", role)
 	}
 	if !canSet {
-		return fmt.Errorf("the DATABASE_URL role cannot SET ROLE %s; run `GRANT %s TO <that role>` as a superuser", AppRole, AppRole)
+		return fmt.Errorf("the DATABASE_URL role cannot SET ROLE %s; run `GRANT %s TO <that role>` as a superuser", role, role)
 	}
 	return nil
 }

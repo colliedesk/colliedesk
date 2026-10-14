@@ -1,11 +1,14 @@
 -- Turns row-level security off and removes the app role's grants in this schema. The role itself
--- stays: roles are shared by every database of the cluster and may serve another CollieDesk.
+-- stays because other schemas of this database may still use it; drop it by hand once no schema does.
 
 DO $$
 DECLARE
     schema_name text := current_schema();
+    app_role text;
     table_name text;
 BEGIN
+    SELECT roles[1]::text INTO app_role FROM pg_policies
+        WHERE schemaname = schema_name AND tablename = 'workspaces' AND policyname = 'workspace_isolation';
     FOREACH table_name IN ARRAY ARRAY['workspaces', 'agents', 'pairing_links', 'sessions', 'contacts', 'conversations',
         'messages', 'tags', 'conversation_tags', 'attachments', 'time_entries', 'import_items', 'email_channels', 'email_outbox']
     LOOP
@@ -14,10 +17,10 @@ BEGIN
         EXECUTE format('ALTER TABLE %I NO FORCE ROW LEVEL SECURITY', table_name);
         EXECUTE format('ALTER TABLE %I DISABLE ROW LEVEL SECURITY', table_name);
     END LOOP;
-    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'colliedesk_app') THEN
-        EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA %I REVOKE ALL ON TABLES FROM colliedesk_app', schema_name);
-        EXECUTE format('REVOKE ALL ON ALL TABLES IN SCHEMA %I FROM colliedesk_app', schema_name);
-        EXECUTE format('REVOKE USAGE ON SCHEMA %I FROM colliedesk_app', schema_name);
+    IF app_role IS NOT NULL THEN
+        EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA %I REVOKE ALL ON TABLES FROM %I', schema_name, app_role);
+        EXECUTE format('REVOKE ALL ON ALL TABLES IN SCHEMA %I FROM %I', schema_name, app_role);
+        EXECUTE format('REVOKE USAGE ON SCHEMA %I FROM %I', schema_name, app_role);
     END IF;
 END
 $$;

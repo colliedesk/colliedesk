@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -94,13 +95,14 @@ func TestQueryWithoutWorkspaceContextSeesNoRows(t *testing.T) {
 	if got := subjects(t, New(single), ids.a); len(got) != 1 {
 		t.Fatalf("scoped query = %v", got)
 	}
+	role := pgx.Identifier{policyRole(t, pool)}.Sanitize()
 	for _, table := range []string{"workspaces", "contacts", "conversations", "messages", "tags"} {
 		tx, err := single.Begin(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
 		var count int
-		_, err = tx.Exec(ctx, `SET LOCAL ROLE `+AppRole)
+		_, err = tx.Exec(ctx, `SET LOCAL ROLE `+role)
 		if err == nil {
 			err = tx.QueryRow(ctx, `SELECT count(*) FROM `+table).Scan(&count)
 		}
@@ -189,7 +191,7 @@ func securityGaps(t *testing.T, pool *pgxpool.Pool) (checked, gaps []string) {
 			AND (c.relname = 'workspaces'
 				OR EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'workspace_id' AND NOT a.attisdropped)
 				OR has_table_privilege($1, c.oid, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER'))
-		ORDER BY c.relname`, AppRole)
+		ORDER BY c.relname`, policyRole(t, pool))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,16 +255,20 @@ func TestAppRoleCannotBypassRowLevelSecurity(t *testing.T) {
 		t.Fatalf("Verify: %v", err)
 	}
 	var super, bypass, login bool
-	if err := pool.QueryRow(context.Background(), `SELECT rolsuper,rolbypassrls,rolcanlogin FROM pg_roles WHERE rolname=$1`, AppRole).
+	role := policyRole(t, pool)
+	if !strings.HasPrefix(role, "colliedesk_app_") {
+		t.Fatalf("app role %q is not per database", role)
+	}
+	if err := pool.QueryRow(context.Background(), `SELECT rolsuper,rolbypassrls,rolcanlogin FROM pg_roles WHERE rolname=$1`, role).
 		Scan(&super, &bypass, &login); err != nil {
 		t.Fatal(err)
 	}
 	if super || bypass || login {
-		t.Fatalf("%s superuser=%v bypassrls=%v login=%v", AppRole, super, bypass, login)
+		t.Fatalf("%s superuser=%v bypassrls=%v login=%v", role, super, bypass, login)
 	}
 	var ledger bool
-	if err := pool.QueryRow(context.Background(), `SELECT has_table_privilege($1, 'schema_migrations', 'SELECT')`, AppRole).Scan(&ledger); err != nil || ledger {
-		t.Fatalf("%s can read the migration ledger: %v %v", AppRole, ledger, err)
+	if err := pool.QueryRow(context.Background(), `SELECT has_table_privilege($1, 'schema_migrations', 'SELECT')`, role).Scan(&ledger); err != nil || ledger {
+		t.Fatalf("%s can read the migration ledger: %v %v", role, ledger, err)
 	}
 }
 
@@ -308,32 +314,38 @@ func TestRowLevelSecurityMigrationKeepsAndIsolatesExistingData(t *testing.T) {
 	}
 }
 
-// TestNonSuperuserOwnerIsAlsoFailClosed runs migrations and the privileged path as a table owner that
-// is not a superuser, the shape of a managed PostgreSQL: forced row-level security applies to it too.
-func TestNonSuperuserOwnerIsAlsoFailClosed(t *testing.T) {
-	admin := testPool(t)
+// ownedSchemaPool connects as a fresh non-superuser role that owns its own schema, the shape of a
+// managed PostgreSQL. With grantApp the role may switch to the app role, as an operator would set it
+// up. The role and schema are dropped when the test ends.
+func ownedSchemaPool(t *testing.T, admin *pgxpool.Pool, grantApp bool) (*pgxpool.Pool, string) {
+	t.Helper()
 	ctx := context.Background()
-	if err := Migrate(ctx, admin); err != nil { // creates the app role cluster-wide if missing
+	if err := Migrate(ctx, admin); err != nil { // creates this database's app role if missing
 		t.Fatal(err)
 	}
-	const owner = "colliedesk_test_owner"
-	if _, err := admin.Exec(ctx, `DO $$ BEGIN
-		CREATE ROLE `+owner+` NOLOGIN NOSUPERUSER NOBYPASSRLS;
-		EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL; END $$`); err != nil {
+	owner := fmt.Sprintf("colliedesk_test_owner_%d", time.Now().UnixNano())
+	if _, err := admin.Exec(ctx, `CREATE ROLE `+owner+` NOLOGIN NOSUPERUSER NOBYPASSRLS`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := admin.Exec(ctx, `GRANT `+AppRole+` TO `+owner); err != nil {
-		t.Fatal(err)
+	t.Cleanup(func() {
+		if _, err := admin.Exec(context.Background(), `DROP ROLE `+owner); err != nil {
+			t.Errorf("drop role %s: %v", owner, err)
+		}
+	})
+	if grantApp {
+		if _, err := admin.Exec(ctx, `GRANT `+pgx.Identifier{policyRole(t, admin)}.Sanitize()+` TO `+owner); err != nil {
+			t.Fatal(err)
+		}
 	}
-	var schema string
-	if err := admin.QueryRow(ctx, `SELECT current_schema()`).Scan(&schema); err != nil {
-		t.Fatal(err)
-	}
-	ownedSchema := schema + "_owned"
+	ownedSchema := strings.Replace(owner, "_owner_", "_schema_", 1) // short: identifiers stop at 63 bytes
 	if _, err := admin.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA %s AUTHORIZATION %s`, ownedSchema, owner)); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _, _ = admin.Exec(context.Background(), `DROP SCHEMA `+ownedSchema+` CASCADE`) })
+	t.Cleanup(func() {
+		if _, err := admin.Exec(context.Background(), `DROP SCHEMA `+ownedSchema+` CASCADE`); err != nil {
+			t.Errorf("drop schema %s: %v", ownedSchema, err)
+		}
+	})
 	config := admin.Config().Copy()
 	config.ConnConfig.RuntimeParams["search_path"] = ownedSchema
 	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
@@ -345,12 +357,20 @@ func TestNonSuperuserOwnerIsAlsoFailClosed(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
+	return pool, owner
+}
+
+// TestNonSuperuserOwnerIsAlsoFailClosed runs migrations and the privileged path as a table owner that
+// is not a superuser: forced row-level security applies to it too.
+func TestNonSuperuserOwnerIsAlsoFailClosed(t *testing.T) {
+	ctx := context.Background()
+	pool, _ := ownedSchemaPool(t, testPool(t), true)
 	if err := Migrate(ctx, pool); err != nil {
 		t.Fatalf("migrate as non-superuser owner: %v", err)
 	}
 	db := New(pool)
 	var a string
-	err = db.Privileged(ctx, PrivilegeCreateWorkspace, func(tx pgx.Tx) error {
+	err := db.Privileged(ctx, PrivilegeCreateWorkspace, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `WITH w AS (INSERT INTO workspaces(slug,name) VALUES('alpha','Alpha') RETURNING id),
 			c AS (INSERT INTO contacts(workspace_id,name,email) SELECT id,'A','a@example.com' FROM w RETURNING id,workspace_id),
 			v AS (INSERT INTO conversations(workspace_id,contact_id,subject) SELECT workspace_id,id,'alpha ticket' FROM c RETURNING 1)
@@ -365,6 +385,16 @@ func TestNonSuperuserOwnerIsAlsoFailClosed(t *testing.T) {
 	}
 	if got := subjects(t, db, a); !slices.Equal(got, []string{"alpha ticket"}) {
 		t.Fatalf("scoped query as owner-connected app role: %v", got)
+	}
+}
+
+func TestMigrateExplainsHowToGrantTheAppRole(t *testing.T) {
+	admin := testPool(t)
+	pool, owner := ownedSchemaPool(t, admin, false)
+	err := Migrate(context.Background(), pool)
+	want := "GRANT " + policyRole(t, admin) + " TO " + owner
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("migrate without the app role: %v; want the instruction %q", err, want)
 	}
 }
 
@@ -393,6 +423,73 @@ func rollbackThrough(ctx context.Context, pool *pgxpool.Pool, name string) error
 		if latest == name || strings.Compare(latest, name) < 0 {
 			return nil
 		}
+	}
+}
+
+// policyRole reads the app role that the migration bound to workspace_isolation.
+func policyRole(t *testing.T, pool *pgxpool.Pool) string {
+	t.Helper()
+	var role string
+	if err := pool.QueryRow(context.Background(), `SELECT roles[1]::text FROM pg_policies
+		WHERE schemaname=current_schema() AND tablename='workspaces' AND policyname='workspace_isolation'`).Scan(&role); err != nil {
+		t.Fatal(err)
+	}
+	return role
+}
+
+// otherDatabase creates a second database on the same cluster, the shape of a second install.
+func otherDatabase(t *testing.T, pool *pgxpool.Pool) *pgxpool.Pool {
+	t.Helper()
+	ctx := context.Background()
+	name := fmt.Sprintf("colliedesk_test_other_%d", time.Now().UnixNano())
+	if _, err := pool.Exec(ctx, `CREATE DATABASE `+name); err != nil {
+		t.Fatal(err)
+	}
+	config := pool.Config().Copy()
+	config.ConnConfig.Database = name
+	delete(config.ConnConfig.RuntimeParams, "search_path")
+	other, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		other.Close()
+		if _, err := pool.Exec(context.Background(), `DROP DATABASE `+name+` WITH (FORCE)`); err != nil {
+			t.Errorf("drop %s: %v", name, err)
+		}
+		// The migration created this database's own app role; nothing else uses it.
+		if _, err := pool.Exec(context.Background(), `DROP ROLE IF EXISTS colliedesk_app_`+name); err != nil {
+			t.Errorf("drop app role of %s: %v", name, err)
+		}
+	})
+	return other
+}
+
+func TestAppRoleOfOneDatabaseCannotReachAnother(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+	other := otherDatabase(t, pool)
+	if err := Migrate(ctx, other); err != nil {
+		t.Fatal(err)
+	}
+	ids := seedTwoWorkspaces(t, other)
+	mine, theirs := policyRole(t, pool), policyRole(t, other)
+	tx, err := other.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	var count int
+	_, err = tx.Exec(ctx, `SELECT set_config('role',$1,true),set_config('app.workspace_id',$2,true)`, mine, ids.a)
+	if err == nil {
+		err = tx.QueryRow(ctx, `SELECT count(*) FROM workspaces`).Scan(&count)
+	}
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "42501" {
+		t.Fatalf("app role %s of this database read %d workspace(s) of another database (err=%v); app role there is %s", mine, count, err, theirs)
 	}
 }
 
