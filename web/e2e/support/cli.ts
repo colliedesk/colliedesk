@@ -1,12 +1,14 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { ports, scratchDir } from './checkout';
 import type { ChildProcess } from 'node:child_process';
 
 // Ports and URLs shared with playwright.config.ts.
 export const servers = {
-  main: 'http://localhost:18080',
-  cloud: 'http://localhost:18084',
-  mail: 'http://localhost:18082',
+  main: `http://localhost:${ports.main}`,
+  cloud: `http://localhost:${ports.cloud}`,
+  mail: `http://localhost:${ports.mail}`,
 } as const;
 
 export const databaseURL = process.env.TEST_DATABASE_URL
@@ -16,13 +18,13 @@ export const goEnv = {
   GOPATH: '/tmp/colliedesk-gopath', GOMODCACHE: '/tmp/colliedesk-gopath/pkg/mod', GOCACHE: '/tmp/colliedesk-go-cache',
 };
 
-export const attachmentsDir = '/tmp/colliedesk-e2e-attachments';
+export const attachmentsDir = join(scratchDir, 'attachments');
 
 export interface CommandResult { status: number | null; stdout: string; stderr: string }
 
 interface CommandOptions { origin?: string; databaseURL?: string; env?: Record<string, string>; tags?: string }
 
-const binDir = '/tmp/colliedesk-e2e-bin';
+const binDir = join(scratchDir, 'bin');
 const built = new Set<string>();
 
 // binary builds the real CLI from source once per test worker; tags 'e2e' adds only the

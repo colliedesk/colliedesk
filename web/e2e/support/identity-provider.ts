@@ -2,16 +2,16 @@ import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import { createHash, createPrivateKey, generateKeyPairSync, sign } from 'node:crypto';
 import type { KeyObject } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { ports, scratchDir } from './checkout';
 import { join } from 'node:path';
 
 // A local stand-in for the hosted identity provider: an RS256 key pair, its JWKS endpoint, and
 // session tokens signed with it. It is the only external boundary of the cloud sign-in journey.
 export const identity = {
-  jwksPort: 18091,
+  jwksPort: ports.jwks,
   issuer: 'https://identity.e2e.colliedesk.test',
-  authorizedParty: 'http://localhost:18084',
+  authorizedParty: `http://localhost:${ports.cloud}`,
   publishableKey: 'pk_test_e2e_colliedesk',
 } as const;
 
@@ -22,7 +22,8 @@ const base64url = (value: Buffer | string) => Buffer.from(value).toString('base6
 // The server caches signing keys by key id for its whole life, like a real deployment. The key is
 // kept on disk so a re-loaded test file (retries, --repeat-each) signs with the key already cached.
 function signingKey(): KeyObject {
-  const path = join(tmpdir(), 'colliedesk-e2e-identity-key.pem');
+  mkdirSync(scratchDir, { recursive: true });
+  const path = join(scratchDir, 'identity-key.pem');
   if (!existsSync(path)) {
     const key = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey;
     writeFileSync(path, key.export({ format: 'pem', type: 'pkcs8' }), { mode: 0o600 });

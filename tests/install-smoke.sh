@@ -7,7 +7,8 @@ set -eu
 
 ROOT=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
 : "${COLLIE_DESK_IMAGE:?set COLLIE_DESK_IMAGE to a locally built image}"
-PORT=${COLLIE_DESK_PORT:-18090}
+# Default port derives from the checkout path, so two checkouts on one host do not collide.
+PORT=${COLLIE_DESK_PORT:-$((18100 + $(printf '%s' "$ROOT" | cksum | cut -d" " -f1) % 800))}
 TMP=${TMPDIR:-/tmp}/colliedesk-install-smoke-$$
 # The installer's compose file names the project "colliedesk"; a unique name keeps this test away
 # from any real installation on the same Docker host.

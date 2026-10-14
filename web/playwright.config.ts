@@ -1,4 +1,6 @@
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { scratchDir } from './e2e/support/checkout';
 import { defineConfig } from '@playwright/test';
 import { attachmentsDir, databaseURL, goEnv, servers } from './e2e/support/cli';
 import { identity, jwksURL } from './e2e/support/identity-provider';
@@ -28,7 +30,7 @@ function server(origin: string, env: Record<string, string> = {}) {
 
 export default defineConfig({
   testDir: './e2e',
-  outputDir: '/tmp/colliedesk-playwright-results',
+  outputDir: join(scratchDir, 'results'),
   reporter: 'list',
   fullyParallel: false,
   // A stray test.only would silently narrow both CI jobs to one test.

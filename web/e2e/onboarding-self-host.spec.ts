@@ -1,10 +1,11 @@
 import type { ChildProcess } from 'node:child_process';
 import { expect, test } from '@playwright/test';
 import { colliedesk, databaseURL, mustColliedesk, psql, startServer, stopServer, uniqueSuffix, withDatabase } from './support/cli';
+import { ports } from './support/checkout';
 import { appNavigationWith, expectReadablePage, redeemLink } from './support/browser';
 
 // Journey 1: a self-hoster follows docs/user/install.md "From a clone" on an empty database.
-const port = 18083;
+const port = ports.fresh;
 const origin = `http://localhost:${port}`;
 const database = `colliedesk_onboard_fresh_${process.pid}`;
 const freshURL = withDatabase(databaseURL, database);

@@ -1,9 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
+import { databaseURL, servers } from './support/cli';
 
-const baseURL = 'http://localhost:18080';
-const databaseURL = process.env.TEST_DATABASE_URL
-  ?? 'postgres://colliedesk:colliedesk@127.0.0.1:55441/colliedesk_test?sslmode=disable';
+const baseURL = servers.main;
 
 test('redeems a CLI pairing link and completes the inbox workflow', async ({ page }) => {
   const suffix = `${Date.now()}-${process.pid}`;
