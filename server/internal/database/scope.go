@@ -205,8 +205,8 @@ func (d *DB) Verify(ctx context.Context) error {
 
 // EnsureRequestLogin creates the login role named in requestURL, with the password in it, when the
 // role does not exist, and lets it switch to the app role without inheriting its rights. The owner
-// pool needs CREATEROLE (or superuser) to create it. The password is sent once, in a CREATE ROLE
-// statement; keep log_statement below 'ddl' on that server.
+// pool needs CREATEROLE (or superuser) to create it. Only a SCRAM-SHA-256 verifier of the password
+// is sent, so a logged or failed CREATE ROLE never shows the plaintext.
 func EnsureRequestLogin(ctx context.Context, owner *pgxpool.Pool, requestURL string) error {
 	config, err := pgx.ParseConfig(requestURL)
 	if err != nil {
@@ -232,9 +232,13 @@ func EnsureRequestLogin(ctx context.Context, owner *pgxpool.Pool, requestURL str
 			return fmt.Errorf("check request login %s: %w", user, err)
 		}
 		if !exists {
+			verifier, err := newSCRAMVerifier(config.Password)
+			if err != nil {
+				return fmt.Errorf("DATABASE_REQUEST_URL password: %w", err)
+			}
 			var statement string
 			if err := tx.QueryRow(ctx, `SELECT format('CREATE ROLE %I LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE PASSWORD %L',
-				$1::text, $2::text)`, user, config.Password).Scan(&statement); err != nil {
+				$1::text, $2::text)`, user, verifier).Scan(&statement); err != nil {
 				return fmt.Errorf("prepare request login %s: %w", user, err)
 			}
 			if _, err := tx.Exec(ctx, statement); err != nil {
