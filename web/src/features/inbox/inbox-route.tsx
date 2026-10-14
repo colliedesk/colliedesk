@@ -4,6 +4,7 @@ import { useNavigate, useParams } from '@tanstack/react-router';
 import { api } from '../../api/client';
 import type { UpdateConversationRequest } from '../../api/client';
 import { InboxPage } from './inbox-page';
+import { messages } from '../../messages';
 
 export function InboxRoute() {
   const client = useQueryClient();
@@ -22,9 +23,15 @@ export function InboxRoute() {
   const conversations = useQuery({ queryKey: ['conversations', query], queryFn: () => api.conversations(query) });
   const agents = useQuery({ queryKey: ['agents'], queryFn: api.agents });
   const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags });
+  const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
+  const outbound = emailChannel.data;
+  const outboundNotice = outbound?.channel && outbound.sending_from === null
+    ? (outbound.smtp.configured ? messages.outboundNeedsVerification : messages.outboundNotConfigured) : undefined;
   const activeID = selectedId ?? params.conversationId;
   const selected = conversations.data?.items.find((item) => item.id === activeID) ?? conversations.data?.items[0];
-  const timeline = useQuery({ queryKey: ['messages', selected?.id], queryFn: () => api.messages(selected!.id), enabled: Boolean(selected) });
+  const timeline = useQuery({ queryKey: ['messages', selected?.id], queryFn: () => api.messages(selected!.id), enabled: Boolean(selected),
+    // Poll while a reply waits in the email outbox so its delivery status updates without a reload.
+    refetchInterval: (query) => (query.state.data?.items.some((item) => item.delivery?.status === 'queued') ? 5000 : false) });
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes), onSuccess: refresh });
   const addTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.addConversationTag(conversationId, tagId), onSuccess: refresh });
@@ -35,6 +42,8 @@ export function InboxRoute() {
   } });
   const message = useMutation({ mutationFn: ({ kind, body }: { kind: 'outgoing' | 'note'; body: string }) => api.createMessage(selected!.id, kind, body),
     onSuccess: () => client.invalidateQueries({ queryKey: ['messages', selected?.id] }) });
+  const retryDelivery = useMutation({ mutationFn: ({ conversationId, messageId }: { conversationId: string; messageId: string }) => api.retryDelivery(conversationId, messageId),
+    onSuccess: (retried) => client.invalidateQueries({ queryKey: ['messages', retried.conversation_id] }) });
   return <InboxPage conversations={conversations.data?.items} selected={selected} timeline={timeline.data?.items}
     agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone}
     page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} onPage={setPage}
@@ -43,5 +52,7 @@ export function InboxRoute() {
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body) => message.mutate({ kind, body })}
+    outboundNotice={outboundNotice}
+    onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })} />;
 }

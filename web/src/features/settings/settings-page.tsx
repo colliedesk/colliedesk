@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { Invite, Session } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
@@ -18,11 +19,12 @@ interface SettingsPageProps {
   onSetWorkspaceTimezone?: (timezone: string) => void;
   onSetAgentTimezone?: (timezone: string | null) => void;
   error?: string;
+  emailSection?: ReactNode;
 }
 
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
   workspaceTimezone = 'UTC', timezoneOverride = null, createdInviteUrl, onCreateInvite, onRevokeInvite,
-  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, error }: SettingsPageProps) {
+  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, error, emailSection }: SettingsPageProps) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'admin' | 'agent'>('agent');
   const [workspaceZone, setWorkspaceZone] = useState(workspaceTimezone);
@@ -42,6 +44,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
               <button type="button" onClick={() => { setAgentZone(''); onSetAgentTimezone?.(null); }}>{messages.clearPersonalTimezone}</button></span></label>
         </div>
       </section>
+      {emailSection}
       <section><div className="section-heading"><div><h2>{messages.sessions}</h2><p>{messages.sessionsDescription}</p></div></div>
         <div className="data-list">{sessions.map((session) => <article key={session.id}>
           <div><strong>{session.label}</strong><span>{session.agent_email}</span><time>{formatDate(session.last_seen_at, timezone)}</time></div>

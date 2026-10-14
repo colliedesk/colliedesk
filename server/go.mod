@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/getkin/kin-openapi v0.150.0
 	github.com/jackc/pgx/v5 v5.11.0
+	golang.org/x/text v0.42.0
 )
 
 require (
@@ -18,5 +19,4 @@ require (
 	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
 	golang.org/x/sync v0.23.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
 )

@@ -4,6 +4,7 @@ GO_ENV := GOPATH=/tmp/colliedesk-gopath GOMODCACHE=/tmp/colliedesk-gopath/pkg/mo
 TEST_DATABASE_URL ?= postgres://colliedesk:colliedesk@127.0.0.1:55441/colliedesk_test?sslmode=disable
 
 test:
+	sh tests/mail-pipe-test.sh
 	cd server && $(GO_ENV) go vet ./...
 	cd server && TEST_DATABASE_URL='$(TEST_DATABASE_URL)' $(GO_ENV) go test ./...
 	cd web && corepack pnpm typecheck

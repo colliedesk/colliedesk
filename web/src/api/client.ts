@@ -2,7 +2,7 @@ import type { z } from 'zod';
 import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactDetailSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema,
-  cloudWorkspaceChoicesSchema,
+  cloudWorkspaceChoicesSchema, emailChannelSettingsSchema, inboundSecretSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, messageListSchema, messageSchema,
   publicConfigSchema, redeemedSchema, sessionListSchema, tagListSchema, tagSchema, workspaceSchema,
 } from './schemas';
@@ -54,6 +54,12 @@ async function exchangeCloudSession(token: string, workspaceSlug?: string) {
 }
 
 export const api = {
+  emailChannel: () => request('/api/v1/channels/email', emailChannelSettingsSchema),
+  saveEmailChannel: (support_address: string) => request('/api/v1/channels/email', emailChannelSettingsSchema, { method: 'PUT', body: json<'putEmailChannel'>({ support_address }) }),
+  disconnectEmailChannel: () => requestNoContent('/api/v1/channels/email', { method: 'DELETE' }),
+  verifyEmailDomain: () => request('/api/v1/channels/email/domain-verification', emailChannelSettingsSchema, { method: 'POST' }),
+  rotateEmailSecret: () => request('/api/v1/channels/email/secret', inboundSecretSchema, { method: 'POST' }),
+  retryDelivery: (conversationId: string, messageId: string) => request(`/api/v1/conversations/${conversationId}/messages/${messageId}/retry`, messageSchema, { method: 'POST' }),
   config: () => request('/api/v1/config', publicConfigSchema),
   exchangeCloudSession,
   redeem: (token: string, label: string) => request('/api/v1/auth/redeem', redeemedSchema, {

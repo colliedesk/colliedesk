@@ -33,10 +33,31 @@ export const conversationSchema = z.object({
   tags: z.array(tagSchema), created_at: z.string().datetime(), updated_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'Conversation'>>;
 export const contactDetailSchema = contactSchema.extend({ conversations: z.array(conversationSchema) }) satisfies z.ZodType<Generated<'ContactDetail'>>;
+export const deliveryStatusSchema = z.enum(['queued', 'sent', 'failed']);
+export const messageDeliverySchema = z.object({
+  status: deliveryStatusSchema, attempts: z.number().int().min(0), last_error: z.string().nullable(), sent_at: nullableDate,
+}) satisfies z.ZodType<Generated<'MessageDelivery'>>;
+export const emailAuthenticationSchema = z.enum(['pass', 'fail', 'none']);
+export const incomingEmailSchema = z.object({
+  from: z.string(), authentication: emailAuthenticationSchema,
+  attachments: z.array(z.object({ filename: z.string(), content_type: z.string() })),
+}) satisfies z.ZodType<Generated<'IncomingEmail'>>;
 export const messageSchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), author_agent_id: z.string().uuid().nullable(),
   kind: z.enum(['incoming', 'outgoing', 'note']), body: z.string(), created_at: z.string().datetime(),
+  delivery: messageDeliverySchema.nullable(), email: incomingEmailSchema.nullable(),
 }) satisfies z.ZodType<Generated<'Message'>>;
+export const emailChannelSchema = z.object({
+  support_address: z.string().email(), secret_set: z.boolean(), secret_rotated_at: nullableDate,
+  domain: z.string(), domain_verified_at: nullableDate, dns_record_name: z.string(), dns_record_value: z.string(),
+  created_at: z.string().datetime(), updated_at: z.string().datetime(),
+}) satisfies z.ZodType<Generated<'EmailChannel'>>;
+export const emailChannelSettingsSchema = z.object({
+  channel: emailChannelSchema.nullable(), inbound_url: z.string().url(),
+  from_policy: z.enum(['verified', 'any']), sending_from: z.string().nullable(),
+  smtp: z.object({ configured: z.boolean(), host: z.string(), port: z.number().int(), starttls: z.boolean(), authenticated: z.boolean() }),
+}) satisfies z.ZodType<Generated<'EmailChannelSettings'>>;
+export const inboundSecretSchema = z.object({ inbound_secret: z.string().min(1), inbound_url: z.string().url() }) satisfies z.ZodType<JsonResponse<'rotateEmailInboundSecret', 200>>;
 export const sessionSchema = z.object({
   id: z.string().uuid(), agent_id: z.string().uuid(), agent_email: z.string().email(), label: z.string(),
   created_at: z.string().datetime(), last_seen_at: z.string().datetime(), expires_at: z.string().datetime(), revoked_at: nullableDate,
@@ -62,5 +83,6 @@ export type WorkspaceChoice = Generated<'WorkspaceChoice'>;
 export type Conversation = Generated<'Conversation'>;
 export type Invite = Generated<'Invite'>;
 export type Message = Generated<'Message'>;
+export type EmailChannelSettings = Generated<'EmailChannelSettings'>;
 export type Session = Generated<'Session'>;
 export type Tag = Generated<'Tag'>;

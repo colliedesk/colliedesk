@@ -11,7 +11,10 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
+	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/colliedesk/colliedesk/server/internal/webui"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -27,9 +30,18 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
+	emailConfig, err := email.ConfigFromEnv(os.Getenv)
+	if err != nil {
+		return err
+	}
+	if emailConfig.SMTP.Configured() {
+		worker := emailoutbox.New(store.New(pool), email.SMTPSender{Config: emailConfig.SMTP},
+			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain})
+		go worker.Run(ctx, 5*time.Second)
+	}
 	server := &http.Server{
 		Addr:              *address,
-		Handler:           webui.Handler(httpapi.New(pool, httpapi.Config{Origin: origin, CloudAuth: cloudAuthConfig()})),
+		Handler:           webui.Handler(httpapi.New(pool, httpapi.Config{Origin: origin, CloudAuth: cloudAuthConfig(), Email: emailConfig})),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	done := make(chan error, 1)

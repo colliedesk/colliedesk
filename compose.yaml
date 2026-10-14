@@ -25,6 +25,14 @@ services:
       DATABASE_URL: postgres://colliedesk:colliedesk@postgres:5432/colliedesk?sslmode=disable
       APP_ORIGIN: http://localhost:8080
       LISTEN_ADDR: :8080
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      EMAIL_FROM_POLICY: ${EMAIL_FROM_POLICY:-verified}
+      MAIL_FROM_DOMAIN: ${MAIL_FROM_DOMAIN:-}
+      EMAIL_TRUSTED_AUTHSERV_ID: ${EMAIL_TRUSTED_AUTHSERV_ID:-}
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
