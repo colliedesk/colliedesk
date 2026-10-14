@@ -4,8 +4,6 @@ import type { Attachment, Message, MessageOrigin } from '../../api/schemas';
 import { formatBytes } from '../../lib/format-bytes';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
-import { Avatar } from '../../ui/avatar';
-import { LockIcon, PaperclipIcon } from '../../ui/icons';
 import { PlainTextBody } from './plain-text-body';
 
 // Imported HTML is untrusted. It is shown only in a sandboxed frame (no
@@ -47,14 +45,9 @@ export function MessageItem({ item, timezone, onRetryDelivery }: MessageItemProp
   const files = item.attachments.filter((file) => file.id !== originalID);
   return (
     <article className={`message message-${item.kind}`}>
-      <header className="message-meta">
-        <Avatar name={item.author_name ?? item.email?.from ?? kindLabel(item.kind)} />
-        <div className="message-byline">
-          {item.author_name && <span className="message-author">{item.author_name}</span>}
-          <span className="message-kind">{item.kind === 'note' && <LockIcon />}{kindLabel(item.kind)}</span>
-        </div>
-        <time dateTime={item.created_at}>{formatDate(item.created_at, timezone)}</time>
-      </header>
+      <div className="message-meta"><span><strong>{kindLabel(item.kind)}</strong>
+        {item.author_name && <span className="message-author">{item.author_name}</span>}</span>
+        <time dateTime={item.created_at}>{formatDate(item.created_at, timezone)}</time></div>
       {item.email && <EmailEnvelope email={item.email} storedFiles={files.length} />}
       {item.origin && <OriginLine origin={item.origin} />}
       <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} /> : <Markdown>{item.body}</Markdown>}</div>
@@ -116,7 +109,7 @@ function AttachmentList({ items }: { items: Attachment[] }) {
     <ul className="message-attachments" aria-label={messages.attachments}>
       {items.map((file) => (
         <li key={file.id}>
-          <PaperclipIcon /><a href={`/api/v1/attachments/${file.id}`} download={file.filename} title={messages.downloadAttachment(file.filename)}>{file.filename}</a>
+          <a href={`/api/v1/attachments/${file.id}`} download={file.filename} title={messages.downloadAttachment(file.filename)}>{file.filename}</a>
           <span className="attachment-size">{formatBytes(file.size)}</span>
         </li>
       ))}

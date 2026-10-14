@@ -27,7 +27,7 @@ export function RedeemPage({
           {workspaces.length > 0 ? <>
             <h2>{messages.chooseWorkspace}</h2>
             <div className="workspace-choices">
-              {workspaces.map((workspace) => <button type="button" key={workspace.slug}
+              {workspaces.map((workspace) => <button className="secondary-action" type="button" key={workspace.slug}
                 onClick={() => onSelectWorkspace?.(workspace.slug)} disabled={pending}>{workspace.name}</button>)}
             </div>
           </> : cloudSignIn}
