@@ -44,6 +44,7 @@ type fakeFreshdesk struct {
 	stallFile            string
 	archiveError         string
 	stallPath            string
+	extraReplyOnTicket6  bool
 	fileBody             map[string]string
 	fileLength           map[string]string
 	onRequest            func(path string)
@@ -152,7 +153,12 @@ func (f *fakeFreshdesk) serveAPI(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 2 && parts[0] == "tickets":
 		f.ticket(w, parts[1], n)
 	case len(parts) == 3 && parts[2] == "conversations":
-		f.page(w, r, f.withFiles(f.list("conversations-"+parts[1]+".json"), n))
+		items := f.list("conversations-" + parts[1] + ".json")
+		if parts[1] == "6" && f.extraReplyOnTicket6 {
+			items = append(items, map[string]any{"id": 7007, "body": "<p>Any news?</p>", "body_text": "Any news?", "incoming": true, "private": false,
+				"user_id": 299, "source": 0, "ticket_id": 6, "attachments": []any{}, "created_at": "2025-04-05T10:00:00Z", "updated_at": "2025-04-05T10:00:00Z"})
+		}
+		f.page(w, r, f.withFiles(items, n))
 	case len(parts) == 3 && parts[2] == "time_entries":
 		f.page(w, r, f.list("time-entries-"+parts[1]+".json"))
 	default:
@@ -211,6 +217,9 @@ func (f *fakeFreshdesk) archived(w http.ResponseWriter, id string, n int) {
 func (f *fakeFreshdesk) listedTicket(id string) map[string]any {
 	for _, item := range f.list("tickets.json") {
 		if fmt.Sprint(item["id"]) == id {
+			if id == "6" && f.extraReplyOnTicket6 {
+				item["updated_at"] = "2025-04-05T10:00:00Z"
+			}
 			return item
 		}
 	}
@@ -236,6 +245,9 @@ func (f *fakeFreshdesk) ticketList(since string) []map[string]any {
 	}
 	var items []map[string]any
 	for _, item := range f.list("tickets.json") {
+		if fmt.Sprint(item["id"]) == "6" && f.extraReplyOnTicket6 {
+			item["updated_at"] = "2025-04-05T10:00:00Z"
+		}
 		updated, _ := time.Parse(time.RFC3339, item["updated_at"].(string))
 		if !updated.Before(from) {
 			delete(item, "attachments")

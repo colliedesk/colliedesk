@@ -71,3 +71,41 @@ func TestAttachmentDownloadIsWorkspaceScoped(t *testing.T) {
 		t.Fatalf("owner download status=%d", response.Code)
 	}
 }
+
+func TestDownloadFilenameUsesOnlyRFC5987AttrChars(t *testing.T) {
+	api, service, pool, storage := testAPIWithStorage(t)
+	token := createSession(t, api, service, "Names Desk", "admin@names.example.com")
+	contactID := create(t, api, token, "/api/v1/contacts", map[string]any{"name": "N", "email": "n@names.example.com"})
+	conversationID := create(t, api, token, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Names"})
+	messageID := create(t, api, token, "/api/v1/conversations/"+conversationID+"/messages", map[string]any{"kind": "note", "body": "x"})
+	attachmentID := seedAttachment(t, pool, storage, token, api, messageID, "a;b,c=d é.txt", "names")
+	disposition := request(t, api, http.MethodGet, "/api/v1/attachments/"+attachmentID, nil, token, nil).Header().Get("Content-Disposition")
+	if !strings.Contains(disposition, "filename*=UTF-8''a%3Bb%2Cc%3Dd%20%C3%A9.txt") {
+		t.Fatalf("Content-Disposition = %q", disposition)
+	}
+}
+
+func TestDownloadRefusesAStorageKeyOfAnotherWorkspace(t *testing.T) {
+	api, service, pool, storage := testAPIWithStorage(t)
+	tokenA := createSession(t, api, service, "Keys A", "admin@keys-a.example.com")
+	tokenB := createSession(t, api, service, "Keys B", "admin@keys-b.example.com")
+	contactB := create(t, api, tokenB, "/api/v1/contacts", map[string]any{"name": "B", "email": "b@keys.example.com"})
+	conversationB := create(t, api, tokenB, "/api/v1/conversations", map[string]any{"contact_id": contactB, "subject": "B"})
+	messageB := create(t, api, tokenB, "/api/v1/conversations/"+conversationB+"/messages", map[string]any{"kind": "note", "body": "b"})
+	attachmentB := seedAttachment(t, pool, storage, tokenB, api, messageB, "b.txt", "workspace-b-bytes")
+	contactA := create(t, api, tokenA, "/api/v1/contacts", map[string]any{"name": "A", "email": "a@keys.example.com"})
+	conversationA := create(t, api, tokenA, "/api/v1/conversations", map[string]any{"contact_id": contactA, "subject": "A"})
+	messageA := create(t, api, tokenA, "/api/v1/conversations/"+conversationA+"/messages", map[string]any{"kind": "note", "body": "a"})
+	var rowA string
+	// A corrupted row in workspace A that points at workspace B's stored bytes.
+	err := pool.QueryRow(t.Context(), `INSERT INTO attachments(workspace_id,message_id,filename,content_type,size,sha256,storage_key)
+		SELECT $1,$2,'stolen.txt','text/plain',size,sha256,storage_key FROM attachments WHERE id=$3 RETURNING id::text`,
+		workspaceID(t, api, tokenA), messageA, attachmentB).Scan(&rowA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := request(t, api, http.MethodGet, "/api/v1/attachments/"+rowA, nil, tokenA, nil)
+	if response.Code != http.StatusNotFound || strings.Contains(response.Body.String(), "workspace-b-bytes") {
+		t.Fatalf("download of another workspace's stored key: status=%d body=%q", response.Code, response.Body.String())
+	}
+}

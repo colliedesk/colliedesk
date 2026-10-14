@@ -1,10 +1,10 @@
 package httpapi
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 )
@@ -17,8 +17,11 @@ func (a *API) downloadAttachment(response http.ResponseWriter, request *http.Req
 		writeError(response, http.StatusNotFound, "not_found", "The requested resource was not found.")
 		return
 	}
-	item, key, err := a.store.GetAttachment(request.Context(), principal(request).Workspace.ID, request.PathValue("id"))
-	if err != nil {
+	workspaceID := principal(request).Workspace.ID
+	item, key, err := a.store.GetAttachment(request.Context(), workspaceID, request.PathValue("id"))
+	// Storage keys start with the owning workspace id; a row pointing at
+	// another workspace's bytes is never served.
+	if err != nil || !strings.HasPrefix(key, workspaceID+"/") {
 		writeError(response, http.StatusNotFound, "not_found", "The requested resource was not found.")
 		return
 	}
@@ -49,5 +52,26 @@ func contentDisposition(filename string) string {
 		}
 		return r
 	}, filename)
-	return `attachment; filename="` + fallback + `"; filename*=UTF-8''` + url.PathEscape(filename)
+	return `attachment; filename="` + fallback + `"; filename*=UTF-8''` + encodeAttrChars(filename)
+}
+
+// encodeAttrChars percent-encodes every byte that is not an RFC 5987 attr-char.
+func encodeAttrChars(value string) string {
+	var b strings.Builder
+	for _, c := range []byte(value) {
+		if isAttrChar(c) {
+			b.WriteByte(c)
+			continue
+		}
+		fmt.Fprintf(&b, "%%%02X", c)
+	}
+	return b.String()
+}
+
+func isAttrChar(c byte) bool {
+	switch {
+	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		return true
+	}
+	return strings.IndexByte("!#$&+-.^_`|~", c) >= 0
 }

@@ -82,6 +82,13 @@ func (r *run) importContacts(ctx context.Context) error {
 func (r *run) requesterContact(ctx context.Context, freshdeskID int64) (string, error) {
 	key := strconv.FormatInt(freshdeskID, 10)
 	if id, ok, err := r.ledger.done(ctx, entityContact, key); err != nil || ok {
+		if ok && r.contactNames[freshdeskID] == "" {
+			// Keep the author name for new messages from a contact the list does not return.
+			var name string
+			if err := r.pool.QueryRow(ctx, `SELECT name FROM contacts WHERE workspace_id=$1 AND id=$2`, r.workspaceID, id).Scan(&name); err == nil {
+				r.contactNames[freshdeskID] = name
+			}
+		}
 		return id, err
 	}
 	var contact fdContact
