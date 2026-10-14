@@ -1,5 +1,5 @@
 import { afterEach, expect, expectTypeOf, test, vi } from 'vitest';
-import { api, CloudWorkspaceChoiceError, type UpdateConversationRequest } from './client';
+import { api, CloudWorkspaceChoiceError, UnauthorizedError, type UpdateConversationRequest } from './client';
 import type { operations } from './generated';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -27,4 +27,11 @@ test('cloud exchange exposes workspace choices from a conflict response', async 
 		name: CloudWorkspaceChoiceError.name,
 		workspaces: [{ slug: 'alpha', name: 'Alpha' }, { slug: 'beta', name: 'Beta' }],
 	}));
+});
+
+test('a 401 is reported as a signed-out session, distinct from other failures', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401, json: vi.fn() }));
+  await expect(api.me()).rejects.toBeInstanceOf(UnauthorizedError);
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403, json: vi.fn() }));
+  await expect(api.me()).rejects.not.toBeInstanceOf(UnauthorizedError);
 });

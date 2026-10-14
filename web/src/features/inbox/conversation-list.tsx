@@ -10,13 +10,25 @@ interface ConversationListProps {
   page: number;
   hasNextPage: boolean;
   onPage?: (page: number) => void;
+  filtered?: boolean;
+  loading?: boolean;
 }
 
-export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage }: ConversationListProps) {
+export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, loading = false }: ConversationListProps) {
+  const brandNew = items.length === 0 && !filtered && !loading && page === 1;
   return (
     <section className="conversation-list" aria-label={messages.conversationList}>
       <header><h1>{messages.inbox}</h1><span>{items.length}</span></header>
-      {items.length === 0 && <p className="empty-copy">{messages.noConversations}</p>}
+      {brandNew && <section className="get-started" aria-label={messages.getStarted}>
+        <h2>{messages.noConversationsYet}</h2>
+        <p className="muted-copy">{messages.getStartedExplanation}</p>
+        <ul>
+          <li><a href="/settings">{messages.connectEmail}</a></li>
+          <li><a href={messages.importFreshdeskURL} target="_blank" rel="noreferrer">{messages.importFreshdesk}</a></li>
+          <li><a href="/settings">{messages.inviteTeam}</a></li>
+        </ul>
+      </section>}
+      {items.length === 0 && !brandNew && !loading && <p className="empty-copy">{messages.noConversations}</p>}
       {items.map((item) => (
         <button className="conversation-row" data-selected={item.id === selectedId} key={item.id} onClick={() => onSelect?.(item.id)}>
           <span className="conversation-subject">{item.subject}</span>

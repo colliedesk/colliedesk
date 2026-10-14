@@ -22,6 +22,18 @@ interface SettingsPageProps {
   emailSection?: ReactNode;
 }
 
+function sessionState(session: Session): keyof typeof messages.sessionStates {
+  if (session.revoked_at) return 'revoked';
+  return Date.parse(session.expires_at) <= Date.now() ? 'expired' : 'active';
+}
+
+// inviteState makes every way an invite can end visible: used, revoked or expired.
+function inviteState(invite: Invite): keyof typeof messages.inviteStates {
+  if (invite.used_at) return 'accepted';
+  if (invite.revoked_at) return 'revoked';
+  return Date.parse(invite.expires_at) <= Date.now() ? 'expired' : 'pending';
+}
+
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
   workspaceTimezone = 'UTC', timezoneOverride = null, createdInviteUrl, onCreateInvite, onRevokeInvite,
   onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, error, emailSection }: SettingsPageProps) {
@@ -45,13 +57,17 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
         </div>
       </section>
       {emailSection}
-      <section><div className="section-heading"><div><h2>{messages.sessions}</h2><p>{messages.sessionsDescription}</p></div></div>
-        <div className="data-list">{sessions.map((session) => <article key={session.id}>
-          <div><strong>{session.label}</strong><span>{session.agent_email}</span><time>{formatDate(session.last_seen_at, timezone)}</time></div>
-          <button type="button" onClick={() => onRevokeSession?.(session.id)}>{messages.revoke}</button>
-        </article>)}</div>
+      <section aria-labelledby="sessions-heading"><div className="section-heading"><div><h2 id="sessions-heading">{messages.sessions}</h2><p>{messages.sessionsDescription}</p></div></div>
+        <div className="data-list">{sessions.map((session) => {
+          const state = sessionState(session);
+          return <article key={session.id}>
+            <div><strong>{session.label}</strong><span>{session.agent_email}</span><span>{messages.sessionStates[state]}</span>
+              <time>{formatDate(session.last_seen_at, timezone)}</time></div>
+            {state === 'active' && <button type="button" onClick={() => onRevokeSession?.(session.id)}>{messages.revoke}</button>}
+          </article>;
+        })}</div>
       </section>
-      <section><div className="section-heading"><div><h2>{messages.invites}</h2><p>{messages.invitesDescription}</p></div></div>
+      <section aria-labelledby="invites-heading"><div className="section-heading"><div><h2 id="invites-heading">{messages.invites}</h2><p>{messages.invitesDescription}</p></div></div>
         {canCreateInvites && <form className="invite-form" onSubmit={(event) => { event.preventDefault(); onCreateInvite?.(email, role); }}>
           <label><span>{messages.inviteEmail}</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
           <label><span>{messages.roleCeiling}</span><select value={role} onChange={(event) => setRole(event.target.value as 'admin' | 'agent')}>
@@ -63,10 +79,14 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
           <input aria-label={messages.inviteLink} readOnly value={createdInviteUrl} />
           <small>{messages.inviteLinkNotice}</small>
         </label>}
-        <div className="data-list">{invites.map((invite) => <article key={invite.id}>
-          <div><strong>{invite.email}</strong><span>{messages.roles[invite.role_ceiling]}</span><time>{formatDate(invite.expires_at, timezone)}</time></div>
-          {canCreateInvites && <button type="button" onClick={() => onRevokeInvite?.(invite.id)}>{messages.revoke}</button>}
-        </article>)}</div>
+        <div className="data-list">{invites.map((invite) => {
+          const state = inviteState(invite);
+          return <article key={invite.id}>
+            <div><strong>{invite.email}</strong><span>{messages.roles[invite.role_ceiling]}</span>
+              <span>{messages.inviteStates[state]}</span><time>{formatDate(invite.expires_at, timezone)}</time></div>
+            {canCreateInvites && state === 'pending' && <button type="button" onClick={() => onRevokeInvite?.(invite.id)}>{messages.revoke}</button>}
+          </article>;
+        })}</div>
       </section>
     </main>
   );

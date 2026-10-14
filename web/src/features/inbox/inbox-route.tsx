@@ -20,7 +20,8 @@ export function InboxRoute() {
     return values.toString();
   }, [filters, page]);
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
-  const conversations = useQuery({ queryKey: ['conversations', query], queryFn: () => api.conversations(query) });
+  // Always refetch when the inbox opens: mail may have arrived while the agent was in Settings.
+  const conversations = useQuery({ queryKey: ['conversations', query], queryFn: () => api.conversations(query), refetchOnMount: 'always' });
   const agents = useQuery({ queryKey: ['agents'], queryFn: api.agents });
   const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags });
   const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
@@ -53,7 +54,7 @@ export function InboxRoute() {
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body) => message.mutate({ kind, body })}
-    outboundNotice={outboundNotice}
+    outboundNotice={outboundNotice} filtered={Object.values(filters).some(Boolean)} loading={conversations.isPending}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })} />;
 }

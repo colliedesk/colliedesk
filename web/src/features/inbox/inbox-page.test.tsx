@@ -165,3 +165,18 @@ test('shows where an imported conversation came from', () => {
   expect(within(details).getByText('Freshdesk ticket 41')).toBeInTheDocument();
   expect(within(details).getByText('Type: Problem')).toBeInTheDocument();
 });
+
+test('an empty new workspace explains the next steps instead of a filter message', () => {
+  render(<InboxPage conversations={[]} />);
+  const start = screen.getByRole('region', { name: /get started/i });
+  expect(start).toHaveTextContent('No conversations yet');
+  expect(within(start).getByRole('link', { name: 'Connect your support email' })).toHaveAttribute('href', '/settings');
+  expect(within(start).getByRole('link', { name: 'Import from Freshdesk' })).toHaveAttribute('href', 'https://colliedesk.com/docs/import-freshdesk');
+  expect(within(start).getByRole('link', { name: 'Invite your team' })).toHaveAttribute('href', '/settings');
+});
+
+test('an empty filtered list says no conversation matches', () => {
+  render(<InboxPage conversations={[]} filtered />);
+  expect(screen.queryByRole('region', { name: /get started/i })).not.toBeInTheDocument();
+  expect(screen.getByText('No conversations match these filters.')).toBeInTheDocument();
+});

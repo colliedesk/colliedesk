@@ -10,6 +10,10 @@ Admins invite people from **Settings → Invites**.
 The role ceiling is a maximum: an invite can never give more access than its ceiling, even if
 the person already has a higher role. Revoke an unused invite with **Revoke** in the invite list.
 
+Each invite shows its state: **Pending** (not used yet), **Accepted**, **Revoked** or **Expired**.
+Only a pending invite can be revoked. To remove a teammate who already joined, revoke their
+devices in [Sessions and devices](sessions.md).
+
 Roles:
 
 | Role | Can do |
