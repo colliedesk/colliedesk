@@ -87,6 +87,9 @@ services:
       APP_ORIGIN: ${APP_ORIGIN}
       APP_SECRET: ${APP_SECRET}
       LISTEN_ADDR: :8080
+      ATTACHMENTS_DIR: /data/attachments
+    volumes:
+      - attachments-data:/data/attachments
     ports:
       - "127.0.0.1:${COLLIE_DESK_PORT}:8080"
     depends_on:
@@ -102,6 +105,7 @@ services:
 
 volumes:
   postgres-data:
+  attachments-data:
 COMPOSE
 
 cd "$TARGET_DIR"
