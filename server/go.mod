@@ -1,4 +1,4 @@
-module github.com/hclabsco/colliedesk/server
+module github.com/colliedesk/colliedesk/server
 
 go 1.26.0
 

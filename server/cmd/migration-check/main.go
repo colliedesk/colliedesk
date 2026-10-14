@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/hclabsco/colliedesk/server/internal/migrationcheck"
+	"github.com/colliedesk/colliedesk/server/internal/migrationcheck"
 )
 
 func main() {

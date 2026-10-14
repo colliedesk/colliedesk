@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hclabsco/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 func (s *Store) CreateContact(ctx context.Context, workspaceID, name, email string) (domain.Contact, error) {

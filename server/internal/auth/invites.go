@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hclabsco/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 func (s *Service) CreateInvite(ctx context.Context, principal Principal, email, ceiling string) (domain.Invite, string, error) {

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/hclabsco/colliedesk/server/internal/auth"
-	"github.com/hclabsco/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

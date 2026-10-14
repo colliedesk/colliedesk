@@ -9,8 +9,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/hclabsco/colliedesk/server/internal/httpapi"
-	"github.com/hclabsco/colliedesk/server/internal/webui"
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/webui"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

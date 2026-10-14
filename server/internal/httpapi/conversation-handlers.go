@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hclabsco/colliedesk/server/internal/store"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
 func (a *API) createConversation(response http.ResponseWriter, request *http.Request) {

@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/hclabsco/colliedesk/server/internal/auth"
-	"github.com/hclabsco/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
 type contractCase struct {

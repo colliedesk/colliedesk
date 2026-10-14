@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hclabsco/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 func (s *Store) UpdateWorkspaceTimezone(ctx context.Context, workspaceID, timezone string) (domain.Workspace, error) {

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hclabsco/colliedesk/server/migrations"
+	"github.com/colliedesk/colliedesk/server/migrations"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

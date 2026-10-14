@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/hclabsco/colliedesk/server/internal/migrationcheck"
+	"github.com/colliedesk/colliedesk/server/internal/migrationcheck"
 )
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)

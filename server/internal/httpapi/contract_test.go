@@ -10,7 +10,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers/legacy"
-	"github.com/hclabsco/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
 func TestRegisteredRoutesExistInOpenAPI(t *testing.T) {

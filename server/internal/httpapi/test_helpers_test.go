@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hclabsco/colliedesk/server/internal/auth"
-	"github.com/hclabsco/colliedesk/server/internal/database"
-	"github.com/hclabsco/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

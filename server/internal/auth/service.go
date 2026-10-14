@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hclabsco/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

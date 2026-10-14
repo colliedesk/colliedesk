@@ -3,7 +3,7 @@ package httpapi_test
 import (
 	"testing"
 
-	"github.com/hclabsco/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
 func TestEveryAPIRouteDeclaresPermission(t *testing.T) {

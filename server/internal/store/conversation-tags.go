@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hclabsco/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 func (s *Store) AddConversationTag(ctx context.Context, workspaceID, conversationID, tagID string) (domain.Conversation, error) {
