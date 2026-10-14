@@ -39,5 +39,15 @@ CollieDesk keeps data in two places. Back up both:
 - Attachment files in `ATTACHMENTS_DIR` (the `attachments-data` volume, mounted at
   `/data/attachments`). Without a volume, files are lost when the container is recreated.
 
+PostgreSQL row-level security keeps each workspace's rows apart. Because of it:
+
+1. Run `pg_dump` as a superuser, for example the `colliedesk` user of the compose setup.
+2. Before you restore into a new PostgreSQL server, create the role that CollieDesk uses for requests:
+   ```sql
+   CREATE ROLE colliedesk_app NOLOGIN;
+   GRANT colliedesk_app TO colliedesk;
+   ```
+   Replace `colliedesk` with your `DATABASE_URL` user if it is different.
+
 To receive and answer customer email, set up the [email channel](email-channel.md).
 See the [roadmap](../../ROADMAP.md).
