@@ -7,10 +7,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers/legacy"
-	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
 func TestRegisteredRoutesExistInOpenAPI(t *testing.T) {
@@ -37,7 +38,8 @@ func TestOpenAPIDeclaresAuthorizationResponses(t *testing.T) {
 		if operation.Responses.Value("401") == nil {
 			t.Errorf("%s %s lacks 401 response", registered.Method, registered.Pattern)
 		}
-		if registered.Method != http.MethodGet && operation.Responses.Value("403") == nil {
+		// 403 comes from session permissions and CSRF; secret-authenticated channel routes have neither.
+		if registered.Method != http.MethodGet && registered.Permission != auth.PermissionChannelInbound && operation.Responses.Value("403") == nil {
 			t.Errorf("%s %s lacks 403 response", registered.Method, registered.Pattern)
 		}
 	}
@@ -62,6 +64,11 @@ func TestAPIResponsesMatchOpenAPIContract(t *testing.T) {
 	validateContractRequest(t, meRequest)
 	me := serve(api, meRequest)
 	validateContractResponse(t, meRequest, me)
+}
+
+func init() {
+	// Inbound email bodies are raw RFC 5322 bytes; validate them as an opaque string.
+	openapi3filter.RegisterBodyDecoder("message/rfc822", openapi3filter.FileBodyDecoder)
 }
 
 func loadContract(t *testing.T) *openapi3.T {

@@ -34,7 +34,7 @@ func TestMigrateCreatesTenantScopedTables(t *testing.T) {
 		}
 		got = append(got, name)
 	}
-	want := []string{"agents", "contacts", "conversation_tags", "conversations", "messages", "pairing_links", "sessions", "tags"}
+	want := []string{"agents", "contacts", "conversation_tags", "conversations", "email_channels", "email_outbox", "messages", "pairing_links", "sessions", "tags"}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("workspace-scoped tables = %v, want %v", got, want)
 	}
@@ -83,8 +83,14 @@ func TestMigrationAppliesUpDownAndUpAgain(t *testing.T) {
 	if err := Migrate(ctx, pool); err != nil {
 		t.Fatalf("first up: %v", err)
 	}
-	if !tableExists(t, pool, "workspaces") {
-		t.Fatal("workspaces table missing after first up")
+	if !tableExists(t, pool, "workspaces") || !tableExists(t, pool, "email_outbox") {
+		t.Fatal("tables missing after first up")
+	}
+	if err := rollbackLatest(ctx, pool); err != nil {
+		t.Fatalf("down email channel: %v", err)
+	}
+	if tableExists(t, pool, "email_outbox") || tableExists(t, pool, "email_channels") || !tableExists(t, pool, "workspaces") {
+		t.Fatal("email channel down must remove only its own tables")
 	}
 	var applied int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM schema_migrations`).Scan(&applied); err != nil {
@@ -101,8 +107,62 @@ func TestMigrationAppliesUpDownAndUpAgain(t *testing.T) {
 	if err := Migrate(ctx, pool); err != nil {
 		t.Fatalf("second up: %v", err)
 	}
-	if !tableExists(t, pool, "workspaces") {
-		t.Fatal("workspaces table missing after second up")
+	if !tableExists(t, pool, "workspaces") || !tableExists(t, pool, "email_outbox") {
+		t.Fatal("tables missing after second up")
+	}
+}
+
+func TestEmailChannelMigrationPreservesExistingHelpdeskData(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `CREATE TABLE schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := migrations.Files.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".up.sql") && entry.Name() < "20261014101628-email-channel.up.sql" {
+			if err := applyMigration(ctx, pool, entry.Name()); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	var workspace, agent, contact, conversation, message string
+	steps := []struct {
+		sql    string
+		args   func() []any
+		target *string
+	}{
+		{`INSERT INTO workspaces(slug,name) VALUES('legacy','Legacy') RETURNING id::text`, func() []any { return nil }, &workspace},
+		{`INSERT INTO agents(workspace_id,email,role) VALUES($1,'admin@legacy.example','admin') RETURNING id::text`, func() []any { return []any{workspace} }, &agent},
+		{`INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Old Customer','old@customer.example') RETURNING id::text`, func() []any { return []any{workspace} }, &contact},
+		{`INSERT INTO conversations(workspace_id,contact_id,subject,status) VALUES($1,$2,'Old ticket','resolved') RETURNING id::text`, func() []any { return []any{workspace, contact} }, &conversation},
+		{`INSERT INTO messages(workspace_id,conversation_id,author_agent_id,kind,body,created_at) VALUES($1,$2,$3,'outgoing','Old reply','2026-01-02T03:04:05Z') RETURNING id::text`, func() []any { return []any{workspace, conversation, agent} }, &message},
+	}
+	for _, step := range steps {
+		if err := pool.QueryRow(ctx, step.sql, step.args()...).Scan(step.target); err != nil {
+			t.Fatalf("%s: %v", step.sql, err)
+		}
+	}
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("upgrade: %v", err)
+	}
+	var body, status, createdAt string
+	var emailID, token *string
+	err = pool.QueryRow(ctx, `SELECT m.body,c.status,to_char(m.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS'),m.email_message_id,c.email_reply_token
+		FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
+		WHERE m.workspace_id=$1 AND m.id=$2`, workspace, message).Scan(&body, &status, &createdAt, &emailID, &token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body != "Old reply" || status != "resolved" || createdAt != "2026-01-02T03:04:05" || emailID != nil || token != nil {
+		t.Fatalf("upgrade changed data: body=%q status=%q created=%q email=%v token=%v", body, status, createdAt, emailID, token)
+	}
+	var outbox int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM email_outbox`).Scan(&outbox); err != nil || outbox != 0 {
+		t.Fatalf("upgrade must not queue historic replies: %d %v", outbox, err)
 	}
 }
 

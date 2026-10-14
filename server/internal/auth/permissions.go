@@ -9,6 +9,8 @@ const (
 	PermissionContactsWrite      = "contacts:write"
 	PermissionAccessRead         = "access:read"
 	PermissionAccessWrite        = "access:write"
+	// PermissionChannelInbound marks routes authenticated by a channel secret instead of a session.
+	PermissionChannelInbound = "channels:inbound"
 )
 
 var agentPermissions = map[string]bool{

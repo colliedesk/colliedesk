@@ -7,6 +7,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
+	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -16,6 +17,7 @@ const sessionCookie = "colliedesk_session"
 type Config struct {
 	Origin    string
 	CloudAuth cloudauth.Config
+	SMTP      email.SMTPConfig
 }
 
 type Route struct {
@@ -81,12 +83,19 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/tags", auth.PermissionConversationsWrite},
 		{http.MethodPatch, "/api/v1/tags/{id}", auth.PermissionConversationsWrite},
 		{http.MethodDelete, "/api/v1/tags/{id}", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/conversations/{id}/messages/{messageId}/retry", auth.PermissionConversationsWrite},
+		{http.MethodGet, "/api/v1/channels/email", auth.PermissionAccessRead},
+		{http.MethodPut, "/api/v1/channels/email", auth.PermissionAccessWrite},
+		{http.MethodDelete, "/api/v1/channels/email", auth.PermissionAccessWrite},
+		{http.MethodPost, "/api/v1/channels/email/inbound", auth.PermissionChannelInbound},
+		{http.MethodPost, "/api/v1/channels/email/secret", auth.PermissionAccessWrite},
 	}
 }
 
 func (a *API) authorize(permission string, next http.HandlerFunc) http.HandlerFunc {
 	return func(response http.ResponseWriter, request *http.Request) {
-		if permission == auth.PermissionPublic {
+		if permission == auth.PermissionPublic || permission == auth.PermissionChannelInbound {
+			// Channel routes authenticate their own secret in the handler; sessions never grant them.
 			next(response, request)
 			return
 		}

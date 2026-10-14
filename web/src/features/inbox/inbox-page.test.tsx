@@ -65,6 +65,8 @@ test('renders message Markdown in the timeline', () => {
     kind: 'incoming',
     body: 'Use the **secure link**.',
     created_at: '2026-10-14T00:00:00Z',
+    delivery: null,
+    email: null,
   }]} />);
   expect(screen.getByText('secure link').tagName).toBe('STRONG');
   expect(screen.getByText('Incoming')).toBeInTheDocument();
