@@ -437,12 +437,12 @@ func policyRole(t *testing.T, pool *pgxpool.Pool) string {
 	return role
 }
 
-// otherDatabase creates a second database on the same cluster, the shape of a second install.
-func otherDatabase(t *testing.T, pool *pgxpool.Pool) *pgxpool.Pool {
+// otherDatabase creates a second database on the same cluster, the shape of a second install. The
+// database and the app role its migration created are dropped when the test ends.
+func otherDatabase(t *testing.T, pool *pgxpool.Pool, name string) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
-	name := fmt.Sprintf("colliedesk_test_other_%d", time.Now().UnixNano())
-	if _, err := pool.Exec(ctx, `CREATE DATABASE `+name); err != nil {
+	if _, err := pool.Exec(ctx, `CREATE DATABASE `+pgx.Identifier{name}.Sanitize()); err != nil {
 		t.Fatal(err)
 	}
 	config := pool.Config().Copy()
@@ -453,16 +453,48 @@ func otherDatabase(t *testing.T, pool *pgxpool.Pool) *pgxpool.Pool {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
+		ctx := context.Background()
+		var role string
+		_ = other.QueryRow(ctx, `SELECT roles[1]::text FROM pg_policies WHERE tablename='workspaces' AND policyname='workspace_isolation'`).Scan(&role)
 		other.Close()
-		if _, err := pool.Exec(context.Background(), `DROP DATABASE `+name+` WITH (FORCE)`); err != nil {
+		if _, err := pool.Exec(ctx, `DROP DATABASE `+pgx.Identifier{name}.Sanitize()+` WITH (FORCE)`); err != nil {
 			t.Errorf("drop %s: %v", name, err)
 		}
-		// The migration created this database's own app role; nothing else uses it.
-		if _, err := pool.Exec(context.Background(), `DROP ROLE IF EXISTS colliedesk_app_`+name); err != nil {
-			t.Errorf("drop app role of %s: %v", name, err)
+		if role != "" {
+			if _, err := pool.Exec(ctx, `DROP ROLE `+pgx.Identifier{role}.Sanitize()); err != nil {
+				t.Errorf("drop app role %s: %v", role, err)
+			}
 		}
 	})
 	return other
+}
+
+func TestLongNonASCIIDatabaseNamesGetDistinctAppRolesWithinSixtyThreeBytes(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	// 60 bytes but 32 characters each; "colliedesk_app_" plus the name is 75 bytes, over PostgreSQL's
+	// 63, and the two names differ only in their last byte.
+	stem := fmt.Sprintf("c%d_", time.Now().UnixNano()%100) + strings.Repeat("é", 28)
+	roles := map[string]bool{}
+	for _, suffix := range []string{"a", "b"} {
+		name := stem + suffix
+		other := otherDatabase(t, pool, name)
+		if err := Migrate(ctx, other); err != nil {
+			t.Fatalf("migrate %s: %v", name, err)
+		}
+		role := policyRole(t, other)
+		if len(role) > 63 || !strings.HasPrefix(role, "colliedesk_app_") {
+			t.Fatalf("app role %q is %d bytes", role, len(role))
+		}
+		roles[role] = true
+		ids := seedTwoWorkspaces(t, other)
+		if got := subjects(t, New(other), ids.a); !slices.Equal(got, []string{"alpha ticket"}) {
+			t.Fatalf("scoped query in %s: %v", name, got)
+		}
+	}
+	if len(roles) != 2 {
+		t.Fatalf("two databases share the app role %v", roles)
+	}
 }
 
 func TestAppRoleOfOneDatabaseCannotReachAnother(t *testing.T) {
@@ -471,7 +503,7 @@ func TestAppRoleOfOneDatabaseCannotReachAnother(t *testing.T) {
 	if err := Migrate(ctx, pool); err != nil {
 		t.Fatal(err)
 	}
-	other := otherDatabase(t, pool)
+	other := otherDatabase(t, pool, fmt.Sprintf("colliedesk_test_other_%d", time.Now().UnixNano()))
 	if err := Migrate(ctx, other); err != nil {
 		t.Fatal(err)
 	}

@@ -17,8 +17,13 @@ DECLARE
     table_name text;
     key_column text;
 BEGIN
-    IF length(app_role) > 63 THEN
-        app_role := left(app_role, 50) || '_' || left(md5(current_database()), 12);
+    -- Role names stop at 63 bytes, not characters. Longer names are cut on a character boundary and
+    -- get an md5 suffix, so two databases that differ only past that point keep distinct roles.
+    IF octet_length(app_role) > 63 THEN
+        WHILE octet_length(app_role) > 50 LOOP
+            app_role := left(app_role, -1);
+        END LOOP;
+        app_role := app_role || '_' || left(md5(current_database()), 12);
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = app_role) THEN
