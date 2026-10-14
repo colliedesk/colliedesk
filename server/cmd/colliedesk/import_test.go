@@ -104,3 +104,20 @@ func cliDatabase(t *testing.T) string {
 	}
 	return isolatedDatabaseURL(t, baseURL)
 }
+
+func TestImportUndoReportsWhenThereIsNothingToUndo(t *testing.T) {
+	databaseURL := cliDatabase(t)
+	t.Setenv("ATTACHMENTS_DIR", t.TempDir())
+	var created bytes.Buffer
+	if err := run(context.Background(), []string{"create-workspace", "--name", "Undo Desk", "--admin-email", "admin@undo.example.com"}, &created, databaseURL, "https://desk.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	err := run(context.Background(), []string{"import", "undo", "--workspace", "undo-desk", "--dry-run"}, &output, databaseURL, "https://desk.example.com")
+	if err == nil || !strings.Contains(err.Error(), "no Freshdesk import found") {
+		t.Fatalf("undo without an import: %v", err)
+	}
+	if err := run(context.Background(), []string{"import", "undo"}, &output, databaseURL, "https://desk.example.com"); err == nil {
+		t.Fatal("undo without --workspace was accepted")
+	}
+}

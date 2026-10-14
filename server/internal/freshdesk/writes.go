@@ -56,12 +56,8 @@ func (r *run) writeConversation(ctx context.Context, ticket fdTicket, contactID 
 		if name = strings.TrimSpace(name); name == "" {
 			continue
 		}
-		if _, err := tx.Exec(ctx, `WITH t AS (
-				INSERT INTO tags(workspace_id,name) VALUES($1,$3)
-				ON CONFLICT (workspace_id,name) DO UPDATE SET name=EXCLUDED.name RETURNING id)
-			INSERT INTO conversation_tags(workspace_id,conversation_id,tag_id) SELECT $1,$2,id FROM t ON CONFLICT DO NOTHING`,
-			r.workspaceID, id, name); err != nil {
-			return "", fmt.Errorf("tag conversation: %w", err)
+		if err := r.tagConversation(ctx, tx, id, name); err != nil {
+			return "", err
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -163,6 +159,28 @@ func (r *run) writeTimeEntry(ctx context.Context, ticketKey, conversationID, key
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit time entry import: %w", err)
+	}
+	return nil
+}
+
+// tagConversation adds a tag by name, creating it when needed; a tag the
+// import created is recorded so an undo can remove it again.
+func (r *run) tagConversation(ctx context.Context, tx pgx.Tx, conversationID, name string) error {
+	var tagID string
+	var inserted bool
+	err := tx.QueryRow(ctx, `INSERT INTO tags(workspace_id,name) VALUES($1,$2)
+		ON CONFLICT (workspace_id,name) DO UPDATE SET name=EXCLUDED.name RETURNING id::text,(xmax=0)`, r.workspaceID, name).Scan(&tagID, &inserted)
+	if err != nil {
+		return fmt.Errorf("tag conversation: %w", err)
+	}
+	if inserted {
+		if err := r.ledger.mark(ctx, tx, ledgerMark{entity: entityTag, sourceID: name, targetID: &tagID, status: ledgerDone, meta: &ticketMeta{Created: true}}); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO conversation_tags(workspace_id,conversation_id,tag_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
+		r.workspaceID, conversationID, tagID); err != nil {
+		return fmt.Errorf("tag conversation: %w", err)
 	}
 	return nil
 }

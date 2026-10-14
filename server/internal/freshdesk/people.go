@@ -149,9 +149,11 @@ func (r *run) writeContact(ctx context.Context, key, name, email string, organiz
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 	var id string
+	var meta *ticketMeta
 	err = tx.QueryRow(ctx, `SELECT id::text FROM contacts WHERE workspace_id=$1 AND email=$2`, r.workspaceID, email).Scan(&id)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
+		meta = &ticketMeta{Created: true}
 		err = tx.QueryRow(ctx, `INSERT INTO contacts(workspace_id,name,email,organization,created_at,updated_at)
 			VALUES($1,$2,$3,$4,$5,$6) RETURNING id::text`, r.workspaceID, name, email, organization, created, updated).Scan(&id)
 	case err == nil:
@@ -160,7 +162,7 @@ func (r *run) writeContact(ctx context.Context, key, name, email string, organiz
 	if err != nil {
 		return "", fmt.Errorf("write contact: %w", err)
 	}
-	if err := r.ledger.mark(ctx, tx, ledgerMark{entity: entityContact, sourceID: key, targetID: &id, status: ledgerDone}); err != nil {
+	if err := r.ledger.mark(ctx, tx, ledgerMark{entity: entityContact, sourceID: key, targetID: &id, status: ledgerDone, meta: meta}); err != nil {
 		return "", err
 	}
 	if err := tx.Commit(ctx); err != nil {

@@ -21,6 +21,7 @@ const (
 	entityMessage     = "conversation"
 	entityAttachment  = "attachment"
 	entityTimeEntry   = "time_entry"
+	entityTag         = "tag"
 
 	ledgerDone    = "done"
 	ledgerFailed  = "failed"
@@ -42,6 +43,8 @@ type execer interface {
 // ticketMeta records what Freshdesk held for a ticket when it was imported,
 // so a re-run that skips the ticket can still report source counts.
 type ticketMeta struct {
+	// Created marks contacts and tags the import created (undo removes only those).
+	Created         bool  `json:"created,omitempty"`
 	Archived        bool  `json:"archived"`
 	Messages        int   `json:"messages"`
 	Attachments     int   `json:"attachments"`

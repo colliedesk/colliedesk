@@ -220,3 +220,6 @@ func numericLess(a, b string) bool {
 // ErrImportRunning means another import into the same workspace from the same
 // Freshdesk account holds the run lock.
 var ErrImportRunning = errors.New("an import from this Freshdesk account into this workspace is already running")
+
+// ErrNoImport means the workspace holds no import from the requested source.
+var ErrNoImport = errors.New("no Freshdesk import found in this workspace")
