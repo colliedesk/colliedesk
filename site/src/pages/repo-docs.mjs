@@ -8,8 +8,8 @@ import { techArticle } from '../schema.mjs';
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const readRepo = (rel) => readFileSync(`${repoRoot}${rel}`, 'utf8');
 
-// Order and slugs follow docs/user/README.md.
-export const DOC_FILES = ['install', 'sign-in', 'invites', 'inbox', 'tags', 'timezones', 'sessions'];
+// Order and slugs follow the links in docs/user/README.md, so a new guide only needs a line there.
+export const DOC_FILES = [...readRepo('docs/user/README.md').matchAll(/\]\(([a-z-]+)\.md\)/g)].map((m) => m[1]);
 
 function rewriteLink(href, fromDir) {
   if (/^(https?:|mailto:|#)/.test(href)) return href;
