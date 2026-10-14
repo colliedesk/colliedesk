@@ -20,9 +20,12 @@ import (
 // Tests point it at a local fake; there is no user-facing override.
 var freshdeskBaseURL = func(domain string) string { return "https://" + domain }
 
+// importRun is the importer entry point; tests replace it to check the command alone.
+var importRun = freshdesk.Run
+
 var freshdeskDomain = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.freshdesk\.com$`)
 
-const importUsage = "usage: colliedesk import freshdesk --workspace <slug> --domain <account>.freshdesk.com [--api-key-env FRESHDESK_API_KEY] [--since YYYY-MM-DD] [--dry-run] [--report-dir DIR]"
+const importUsage = "usage: colliedesk import freshdesk --workspace <slug> --domain <account>.freshdesk.com [--api-key-env FRESHDESK_API_KEY] [--since YYYY-MM-DD] [--last-ticket-id N] [--dry-run] [--report-dir DIR]"
 
 func importCommand(ctx context.Context, pool *pgxpool.Pool, args []string, output io.Writer) error {
 	if len(args) == 0 || args[0] != "freshdesk" {
@@ -42,7 +45,7 @@ func importCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 		}
 		options.Storage = storage
 	}
-	report, err := freshdesk.Run(ctx, pool, options)
+	report, err := importRun(ctx, pool, options)
 	if err != nil {
 		return fmt.Errorf("import stopped: %w (completed items are kept; run the same command again to resume)", err)
 	}
@@ -56,8 +59,11 @@ func importCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 		report.TimeEntries.Imported, report.TimeEntries.Source, markdownPath, jsonPath); err != nil {
 		return err
 	}
-	if report.Status == freshdesk.StatusFailed {
+	switch report.Status {
+	case freshdesk.StatusFailed:
 		return fmt.Errorf("import FAILED: %d failure(s); see %s, fix the cause and run the same command again", len(report.Failures), markdownPath)
+	case freshdesk.StatusUnverified:
+		return fmt.Errorf("import UNVERIFIED: the Freshdesk totals could not confirm that everything was imported; see the verification section of %s", markdownPath)
 	}
 	return nil
 }
@@ -71,10 +77,11 @@ func parseImportFlags(args []string) (freshdesk.Options, string, error) {
 	since := flags.String("since", "", "only tickets updated at or after this UTC date (YYYY-MM-DD) or RFC 3339 time")
 	dryRun := flags.Bool("dry-run", false, "count what would be imported without writing anything")
 	reportDir := flags.String("report-dir", ".", "directory for the reconcile report")
+	lastTicket := flags.Int64("last-ticket-id", 0, "highest ticket number shown in Freshdesk; the id check covers at least this far")
 	if err := flags.Parse(args); err != nil {
 		return freshdesk.Options{}, "", fmt.Errorf("%w\n%s", err, importUsage)
 	}
-	if flags.NArg() != 0 || *workspace == "" {
+	if flags.NArg() != 0 || *workspace == "" || *lastTicket < 0 {
 		return freshdesk.Options{}, "", errors.New(importUsage)
 	}
 	host := strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(*domain), "https://"), "/"))
@@ -85,7 +92,7 @@ func parseImportFlags(args []string) (freshdesk.Options, string, error) {
 	if apiKey == "" {
 		return freshdesk.Options{}, "", fmt.Errorf("environment variable %s is empty; export your Freshdesk API key there", *keyEnv)
 	}
-	options := freshdesk.Options{WorkspaceSlug: *workspace, BaseURL: freshdeskBaseURL(host), APIKey: apiKey, DryRun: *dryRun}
+	options := freshdesk.Options{WorkspaceSlug: *workspace, BaseURL: freshdeskBaseURL(host), APIKey: apiKey, DryRun: *dryRun, LastTicketID: *lastTicket}
 	if *since != "" {
 		parsed, err := parseSince(*since)
 		if err != nil {

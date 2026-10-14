@@ -14,6 +14,9 @@ const (
 	StatusOK     = "OK"
 	StatusFailed = "FAILED"
 	StatusDryRun = "DRY_RUN"
+	// StatusUnverified: nothing failed, but the expected totals could not be
+	// confirmed from an independent source, so completeness is not proven.
+	StatusUnverified = "UNVERIFIED"
 )
 
 type EntityCount struct {
@@ -29,6 +32,22 @@ type TicketCount struct {
 	Spam            []string `json:"spam"`
 	AbsentIDs       int      `json:"absent_ids"`
 	Archived        int      `json:"archived"`
+	HighestID       int64    `json:"highest_existing_id"`
+	HighestProbedID int64    `json:"highest_probed_id"`
+	ProbedIDs       int      `json:"probed_ids"`
+}
+
+// Verification says how an expected total was established independently of
+// the list endpoints the importer reads.
+type Verification struct {
+	Verified bool   `json:"verified"`
+	Method   string `json:"method"`
+	Detail   string `json:"detail"`
+}
+
+type Verifications struct {
+	Tickets  Verification `json:"tickets"`
+	Contacts Verification `json:"contacts"`
 }
 
 type AttachmentCount struct {
@@ -67,24 +86,25 @@ type Warning struct {
 // Report is the reconcile report of one import run: source counts versus
 // what CollieDesk holds, so a customer can prove nothing was lost.
 type Report struct {
-	Status      string          `json:"status"`
-	Domain      string          `json:"domain"`
-	Workspace   string          `json:"workspace"`
-	DryRun      bool            `json:"dry_run"`
-	Since       *time.Time      `json:"since"`
-	StartedAt   time.Time       `json:"started_at"`
-	FinishedAt  time.Time       `json:"finished_at"`
-	Contacts    EntityCount     `json:"contacts"`
-	Companies   CompanyCount    `json:"companies"`
-	Agents      AgentCount      `json:"agents"`
-	Tickets     TicketCount     `json:"tickets"`
-	Messages    EntityCount     `json:"messages"`
-	Attachments AttachmentCount `json:"attachments"`
-	TimeEntries EntityCount     `json:"time_entries"`
-	Missing     []string        `json:"missing"`
-	Failures    []Failure       `json:"failures"`
-	Warnings    []Warning       `json:"warnings"`
-	NotImported []string        `json:"not_imported"`
+	Status       string          `json:"status"`
+	Domain       string          `json:"domain"`
+	Workspace    string          `json:"workspace"`
+	DryRun       bool            `json:"dry_run"`
+	Since        *time.Time      `json:"since"`
+	StartedAt    time.Time       `json:"started_at"`
+	FinishedAt   time.Time       `json:"finished_at"`
+	Contacts     EntityCount     `json:"contacts"`
+	Companies    CompanyCount    `json:"companies"`
+	Agents       AgentCount      `json:"agents"`
+	Tickets      TicketCount     `json:"tickets"`
+	Messages     EntityCount     `json:"messages"`
+	Attachments  AttachmentCount `json:"attachments"`
+	TimeEntries  EntityCount     `json:"time_entries"`
+	Verification Verifications   `json:"verification"`
+	Missing      []string        `json:"missing"`
+	Failures     []Failure       `json:"failures"`
+	Warnings     []Warning       `json:"warnings"`
+	NotImported  []string        `json:"not_imported"`
 }
 
 // notImported lists Freshdesk data this importer does not carry over, so the
@@ -147,7 +167,19 @@ func (r *Report) Markdown() string {
 		r.Attachments.SourceBytes, r.Attachments.ImportedBytes, r.Attachments.ChecksumVerified)
 	fmt.Fprintf(&b, "Companies: %d, %d kept as contact organization. Agents: %d, %d matched to CollieDesk agents by email.\n",
 		r.Companies.Source, r.Companies.Attached, r.Agents.Source, r.Agents.Matched)
-	fmt.Fprintf(&b, "Archived tickets found by id probing: %d. Ticket ids that do not exist in Freshdesk: %d.\n", r.Tickets.Archived, r.Tickets.AbsentIDs)
+	fmt.Fprintf(&b, "Archived tickets found by id probing: %d. Ticket ids that do not exist in Freshdesk: %d. Ids probed this run: %d (up to id %d).\n",
+		r.Tickets.Archived, r.Tickets.AbsentIDs, r.Tickets.ProbedIDs, r.Tickets.HighestProbedID)
+	b.WriteString("\n## How the totals were verified\n\n")
+	for _, row := range []struct {
+		name string
+		v    Verification
+	}{{"Tickets", r.Verification.Tickets}, {"Contacts", r.Verification.Contacts}} {
+		verdict := "verified"
+		if !row.v.Verified {
+			verdict = "NOT verified"
+		}
+		fmt.Fprintf(&b, "- **%s: %s.** %s %s\n", row.name, verdict, row.v.Method, row.v.Detail)
+	}
 	writeList(&b, "Missing", r.Missing)
 	if len(r.Failures) > 0 {
 		b.WriteString("\n## Failures\n\n| Entity | Freshdesk id | Ticket | Error |\n|---|---|---|---|\n")

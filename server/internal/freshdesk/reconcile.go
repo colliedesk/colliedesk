@@ -20,6 +20,8 @@ func (r *run) reconcile(ctx context.Context, report *Report) (*Report, error) {
 	report.Tickets.DeletedAtSource = uniqueSorted(r.deleted)
 	report.Tickets.Trashed, report.Tickets.Spam = uniqueSorted(r.trashed), uniqueSorted(r.spam)
 	report.Tickets.AbsentIDs, report.Tickets.Archived = r.absent, r.archived
+	report.Tickets.HighestID, report.Tickets.HighestProbedID, report.Tickets.ProbedIDs = r.highestExisting, r.highestProbed, r.probed
+	report.Verification = r.verification
 	steps := []func(context.Context, *Report, []string, []string) error{r.countTickets, r.countChildren, r.collectFailures}
 	if !r.opts.DryRun {
 		steps = append(steps, r.verifyAttachments)
@@ -36,6 +38,8 @@ func (r *run) reconcile(ctx context.Context, report *Report) (*Report, error) {
 		report.Status = StatusDryRun
 	case len(report.Missing) > 0 || len(report.Failures) > 0:
 		report.Status = StatusFailed
+	case !report.Verification.Tickets.Verified || !report.Verification.Contacts.Verified:
+		report.Status = StatusUnverified
 	default:
 		report.Status = StatusOK
 	}
@@ -68,7 +72,7 @@ func (r *run) expectedTickets() []string {
 	for _, id := range r.deleted {
 		gone[id] = true
 	}
-	var ids []string
+	ids := append(append([]string{}, r.unclassified...), r.unchanged...)
 	for _, ref := range r.refs {
 		if id := strconv.FormatInt(ref.id, 10); !gone[id] {
 			ids = append(ids, id)

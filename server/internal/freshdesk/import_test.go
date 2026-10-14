@@ -10,6 +10,8 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
 )
 
+const fullImportRows = "contacts=4 conversations=5 messages=11 attachments=3 time_entries=3 tags=4 conversation_tags=4"
+
 func TestFullImportReconcilesEveryEntity(t *testing.T) {
 	env := newImportEnv(t)
 	report := env.mustRun(t)
@@ -19,10 +21,10 @@ func TestFullImportReconcilesEveryEntity(t *testing.T) {
 	}
 	// Fixture: 3 listed contacts + requester 299 fetched on demand.
 	assertCount(t, "contacts", report.Contacts, 4, 4)
-	// Listed 1,2,4,6 + archived 3 found by probing; 4 vanished at source.
-	assertCount(t, "tickets", report.Tickets.EntityCount, 4, 4)
-	// 4 descriptions + 3 + 1 + 1 conversations.
-	assertCount(t, "messages", report.Messages, 9, 9)
+	// Listed 1,2,4,6 + archived 3 and 7 found by probing; 4 vanished at source.
+	assertCount(t, "tickets", report.Tickets.EntityCount, 5, 5)
+	// 5 descriptions + 3 + 1 + 1 + 1 conversations.
+	assertCount(t, "messages", report.Messages, 11, 11)
 	assertCount(t, "attachments", report.Attachments.EntityCount, 3, 3)
 	assertCount(t, "time entries", report.TimeEntries, 3, 3)
 	if report.Attachments.SourceBytes != 30 || report.Attachments.ImportedBytes != 30 || report.Attachments.ChecksumVerified != 3 {
@@ -37,7 +39,7 @@ func TestFullImportReconcilesEveryEntity(t *testing.T) {
 	if report.Companies.Source != 2 || report.Companies.Attached != 1 || strings.Join(report.Companies.Unattached, ",") != "502" {
 		t.Fatalf("companies = %+v", report.Companies)
 	}
-	if got := env.tableCounts(t); got != "contacts=4 conversations=4 messages=9 attachments=3 time_entries=3 tags=4 conversation_tags=4" {
+	if got := env.tableCounts(t); got != fullImportRows {
 		t.Fatalf("rows = %s", got)
 	}
 	for _, code := range []string{"inline_images_not_rehosted", "custom_status_mapped", "contact_without_email", "agent_not_matched", "company_without_contacts"} {
@@ -85,7 +87,7 @@ func TestResumeAfterInterruptionImportsTheRestWithoutDuplicates(t *testing.T) {
 	if report.Status != "OK" {
 		t.Fatalf("resumed status=%s missing=%v failures=%+v", report.Status, report.Missing, report.Failures)
 	}
-	if got := env.tableCounts(t); got != "contacts=4 conversations=4 messages=9 attachments=3 time_entries=3 tags=4 conversation_tags=4" {
+	if got := env.tableCounts(t); got != fullImportRows {
 		t.Fatalf("rows after resume = %s", got)
 	}
 	if env.fake.count("/api/v2/tickets/1") != viewsOfDoneTicket {
@@ -132,7 +134,7 @@ func TestPartialFailureIsReportedAsFailedWithFreshdeskIDs(t *testing.T) {
 
 	env.fake.failAttachment = ""
 	retry := env.mustRun(t)
-	if retry.Status != "OK" || env.count(t, "messages") != 9 || env.count(t, "attachments") != 3 {
+	if retry.Status != "OK" || env.count(t, "messages") != 11 || env.count(t, "attachments") != 3 {
 		t.Fatalf("retry status=%s rows=%s", retry.Status, env.tableCounts(t))
 	}
 }
@@ -143,7 +145,7 @@ func TestDryRunWritesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Status != "DRY_RUN" || report.Contacts.Source != 3 || report.Tickets.Source != 5 {
+	if report.Status != "DRY_RUN" || report.Contacts.Source != 3 || report.Tickets.Source != 6 || report.Tickets.ProbedIDs == 0 {
 		t.Fatalf("dry run report = %+v", report)
 	}
 	if env.count(t, "conversations") != 0 || env.count(t, "import_items") != 0 || env.fake.count("/files/9003") != 0 {

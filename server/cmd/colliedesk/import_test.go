@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const cliTestKey = "cli-secret-key-NEVER-PRINT"
@@ -24,6 +26,7 @@ func TestImportFreshdeskRejectsBadArgumentsWithoutPrintingTheKey(t *testing.T) {
 		"key on command line":  {"import", "freshdesk", "--workspace", "cli-desk", "--domain", "acme.freshdesk.com", "--api-key=" + cliTestKey},
 		"unknown source":       {"import", "zendesk", "--workspace", "cli-desk"},
 		"missing workspace":    {"import", "freshdesk", "--domain", "acme.freshdesk.com"},
+		"bad last ticket id":   {"import", "freshdesk", "--workspace", "cli-desk", "--domain", "acme.freshdesk.com", "--last-ticket-id", "-3"},
 	}
 	for name, args := range cases {
 		var output bytes.Buffer
@@ -38,64 +41,56 @@ func TestImportFreshdeskRejectsBadArgumentsWithoutPrintingTheKey(t *testing.T) {
 	}
 }
 
-func TestImportFreshdeskWritesReportsAndFailsOnPartialImport(t *testing.T) {
+func TestImportFreshdeskWritesReportsAndExitsNonZeroUnlessOK(t *testing.T) {
 	databaseURL := cliDatabase(t)
 	t.Setenv("FRESHDESK_API_KEY", cliTestKey)
 	t.Setenv("ATTACHMENTS_DIR", t.TempDir())
-	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user, _, _ := r.BasicAuth()
-		if user != cliTestKey && r.URL.Path != "/files/1" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		body := map[string]string{
-			"/api/v2/agents": `[]`, "/api/v2/companies": `[]`, "/api/v2/contacts": `[]`,
-			"/api/v2/tickets":                 `[{"id":1,"subject":"Hi","status":2,"priority":1,"requester_id":9,"updated_at":"2025-05-01T00:00:00Z","created_at":"2025-05-01T00:00:00Z"}]`,
-			"/api/v2/tickets/1":               `{"id":1,"subject":"Hi","status":2,"priority":1,"requester_id":9,"description_text":"Hello","tags":[],"attachments":[{"id":5,"name":"a.txt","content_type":"text/plain","size":999,"attachment_url":"` + "http://" + r.Host + `/files/1"}],"updated_at":"2025-05-01T00:00:00Z","created_at":"2025-05-01T00:00:00Z"}`,
-			"/api/v2/tickets/1/conversations": `[]`,
-			"/api/v2/tickets/1/time_entries":  `[]`,
-			"/api/v2/contacts/9":              `{"id":9,"name":"Nine","email":"nine@example.com","created_at":"2025-05-01T00:00:00Z","updated_at":"2025-05-01T00:00:00Z"}`,
-			"/files/1":                        `abc`,
-		}[r.URL.Path]
-		if body == "" {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		_, _ = w.Write([]byte(body))
-	}))
-	defer fake.Close()
-	previous := freshdeskBaseURL
-	freshdeskBaseURL = func(string) string { return fake.URL }
-	t.Cleanup(func() { freshdeskBaseURL = previous })
-
 	var created bytes.Buffer
 	if err := run(context.Background(), []string{"create-workspace", "--name", "Import Desk", "--admin-email", "admin@import.example.com"}, &created, databaseURL, "https://desk.example.com"); err != nil {
 		t.Fatal(err)
 	}
-	reports := t.TempDir()
-	var output bytes.Buffer
-	err := run(context.Background(), []string{"import", "freshdesk", "--workspace", "import-desk", "--domain", "acme.freshdesk.com", "--report-dir", reports}, &output, databaseURL, "https://desk.example.com")
-	if err == nil || !strings.Contains(err.Error(), "FAILED") {
-		t.Fatalf("partial import error = %v, output:\n%s", err, output.String())
-	}
-	if !strings.Contains(output.String(), "Status: FAILED") || strings.Contains(output.String(), cliTestKey) {
-		t.Fatalf("output:\n%s", output.String())
-	}
-	files, _ := filepath.Glob(filepath.Join(reports, "freshdesk-import-import-desk-*"))
-	if len(files) != 2 {
-		t.Fatalf("report files = %v", files)
-	}
-	for _, file := range files {
-		data, readErr := os.ReadFile(file)
-		if readErr != nil || strings.Contains(string(data), cliTestKey) || !strings.Contains(string(data), "size mismatch") {
-			t.Fatalf("report %s: %v\n%s", file, readErr, data)
+	for _, status := range []string{freshdesk.StatusFailed, freshdesk.StatusUnverified, freshdesk.StatusOK} {
+		var received freshdesk.Options
+		previous := importRun
+		importRun = func(_ context.Context, _ *pgxpool.Pool, options freshdesk.Options) (*freshdesk.Report, error) {
+			received = options
+			return &freshdesk.Report{Status: status, Workspace: options.WorkspaceSlug, StartedAt: time.Date(2026, 10, 14, 1, 2, 3, 0, time.UTC),
+				Failures: []freshdesk.Failure{{Entity: "attachment", FreshdeskID: "5", TicketID: "1", Error: "size mismatch"}}}, nil
 		}
-		if strings.HasSuffix(file, ".json") {
-			var report struct {
-				Status string `json:"status"`
+		reports := t.TempDir()
+		var output bytes.Buffer
+		err := run(context.Background(), []string{"import", "freshdesk", "--workspace", "import-desk", "--domain", "Acme.freshdesk.com",
+			"--last-ticket-id", "4200", "--report-dir", reports}, &output, databaseURL, "https://desk.example.com")
+		importRun = previous
+		if status == freshdesk.StatusOK {
+			if err != nil {
+				t.Fatalf("OK import returned %v", err)
 			}
-			if err := json.Unmarshal(data, &report); err != nil || report.Status != "FAILED" {
-				t.Fatalf("json report status=%q err=%v", report.Status, err)
+		} else if err == nil || !strings.Contains(err.Error(), status) {
+			t.Fatalf("%s import error = %v", status, err)
+		}
+		if received.BaseURL != "https://acme.freshdesk.com" || received.LastTicketID != 4200 || received.APIKey != cliTestKey || received.Storage == nil {
+			t.Fatalf("importer options: base=%q last=%d storage=%v", received.BaseURL, received.LastTicketID, received.Storage != nil)
+		}
+		if !strings.Contains(output.String(), "Status: "+status) || strings.Contains(output.String(), cliTestKey) {
+			t.Fatalf("output:\n%s", output.String())
+		}
+		files, _ := filepath.Glob(filepath.Join(reports, "freshdesk-import-import-desk-*"))
+		if len(files) != 2 {
+			t.Fatalf("report files = %v", files)
+		}
+		for _, file := range files {
+			data, readErr := os.ReadFile(file)
+			if readErr != nil || strings.Contains(string(data), cliTestKey) {
+				t.Fatalf("report %s: %v", file, readErr)
+			}
+			if strings.HasSuffix(file, ".json") {
+				var report struct {
+					Status string `json:"status"`
+				}
+				if err := json.Unmarshal(data, &report); err != nil || report.Status != status {
+					t.Fatalf("json report status=%q err=%v", report.Status, err)
+				}
 			}
 		}
 	}

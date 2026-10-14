@@ -48,7 +48,7 @@ func TestConversationFieldsMapToCollieDesk(t *testing.T) {
 	env.mustRun(t)
 	data := store.New(env.pool)
 	ctx := context.Background()
-	want := map[string]string{"1": "open/low/billing,vip", "2": "resolved/high/", "3": "closed/normal/legacy", "6": "pending/urgent/vendor"}
+	want := map[string]string{"1": "open/low/billing,vip", "2": "resolved/high/", "3": "closed/normal/legacy", "6": "pending/urgent/vendor", "7": "closed/low/"}
 	for ticket, expected := range want {
 		item, err := data.GetConversation(ctx, env.workspaceID, env.target(t, "ticket", ticket))
 		if err != nil {
@@ -82,9 +82,9 @@ func TestConversationFieldsMapToCollieDesk(t *testing.T) {
 	if strings.Join(got, " ") != "incoming:Carol Customer:- incoming:Carol Customer:- outgoing:Alice Agent:alice note:Bob Former:-" {
 		t.Fatalf("timeline = %v", got)
 	}
-	empty, err := data.ListMessages(ctx, env.workspaceID, env.target(t, "ticket", "2"))
-	if err != nil || len(empty) != 2 || strings.TrimSpace(empty[1].Body) == "" {
-		t.Fatalf("attachment-only reply must keep a visible body: %+v %v", empty, err)
+	empty, err := data.ListMessages(ctx, env.workspaceID, env.target(t, "ticket", "7"))
+	if err != nil || len(empty) != 1 || strings.TrimSpace(empty[0].Body) == "" {
+		t.Fatalf("a message without text must keep a visible body: %+v %v", empty, err)
 	}
 }
 

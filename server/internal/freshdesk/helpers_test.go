@@ -49,7 +49,7 @@ func newImportEnv(t *testing.T) *importEnv {
 }
 
 func (e *importEnv) options() freshdesk.Options {
-	return freshdesk.Options{
+	options := freshdesk.Options{
 		WorkspaceSlug:  "acme-support",
 		BaseURL:        e.fake.api.URL,
 		APIKey:         testAPIKey,
@@ -63,6 +63,9 @@ func (e *importEnv) options() freshdesk.Options {
 			return ctx.Err()
 		},
 	}
+	freshdesk.UseTestNetwork(&options, e.fake.roots, e.fake.api.Listener.Addr().String(), e.fake.files.Listener.Addr().String())
+	freshdesk.SetProbeAhead(&options, 3)
+	return options
 }
 
 func (e *importEnv) run(t *testing.T, ctx context.Context, mutate func(*freshdesk.Options)) (*freshdesk.Report, error) {

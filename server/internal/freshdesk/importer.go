@@ -4,12 +4,13 @@ package freshdesk
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
@@ -23,17 +24,29 @@ type Options struct {
 	BaseURL string
 	APIKey  string
 	// Since limits tickets to those updated at or after this instant.
-	Since  *time.Time
-	DryRun bool
+	Since *time.Time
+	// LastTicketID is the highest ticket number the operator sees in
+	// Freshdesk; the id probe always covers at least this far.
+	LastTicketID int64
+	DryRun       bool
 	// Storage receives attachment bytes; not needed for a dry run.
-	Storage    attachments.Storage
-	HTTPClient *http.Client
+	Storage attachments.Storage
 	// Sleep waits between rate-limited requests; tests replace it.
 	Sleep func(context.Context, time.Duration) error
 	// MaxTicketPages is the list-endpoint page cap (Freshdesk: 300 pages).
 	MaxTicketPages int
 	// RateLimitPause is the wait after a response reports zero remaining calls.
 	RateLimitPause time.Duration
+
+	hooks testHooks
+}
+
+// testHooks are set only by tests (export_test.go).
+type testHooks struct {
+	rootCAs                 *x509.CertPool
+	allowDial               map[string]bool
+	apiTimeout, idleTimeout time.Duration
+	probeAhead              int
 }
 
 type ticketRef struct {
@@ -62,6 +75,16 @@ type run struct {
 	archived      int
 	warnings      []*Warning
 	internalErr   error
+
+	listedContacts     int
+	probeAhead         int
+	probed             int
+	highestExisting    int64
+	highestProbed      int64
+	unclassified       []string
+	unchanged          []string
+	archiveUnavailable atomic.Bool
+	verification       Verifications
 }
 
 // Run imports (or, with DryRun, only counts) a Freshdesk account. Item-level
@@ -74,10 +97,17 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 	}
 	report := &Report{Domain: r.client.base.Host, Workspace: options.WorkspaceSlug, DryRun: options.DryRun,
 		Since: options.Since, StartedAt: time.Now().UTC(), NotImported: notImported}
-	steps := []func(context.Context) error{r.loadAgents, r.loadCompanies, r.importContacts, r.listTickets}
-	if options.Since == nil {
-		steps = append(steps, r.probeGaps)
+	if r.ledger.source, err = r.accountSource(ctx); err != nil {
+		return nil, err
 	}
+	if !options.DryRun {
+		release, err := acquireRunLock(ctx, pool, r.workspaceID, r.ledger.source)
+		if err != nil {
+			return nil, err
+		}
+		defer release()
+	}
+	steps := []func(context.Context) error{r.loadAgents, r.loadCompanies, r.importContacts, r.listTickets, r.classifyTickets, r.verifyTotals}
 	if !options.DryRun {
 		steps = append(steps, r.importTickets)
 	}
@@ -94,17 +124,17 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 
 func newRun(ctx context.Context, pool *pgxpool.Pool, options Options) (*run, error) {
 	base, err := url.Parse(strings.TrimRight(options.BaseURL, "/"))
-	if err != nil || (base.Scheme != "https" && base.Scheme != "http") || base.Host == "" {
+	if err != nil || base.Host == "" {
 		return nil, errors.New("invalid Freshdesk base URL")
+	}
+	if base.Scheme != "https" {
+		return nil, errors.New("Freshdesk base URL must use https")
 	}
 	if options.APIKey == "" {
 		return nil, errors.New("Freshdesk API key is empty")
 	}
 	if options.Storage == nil && !options.DryRun {
 		return nil, errors.New("attachment storage is required")
-	}
-	if options.HTTPClient == nil {
-		options.HTTPClient = &http.Client{Timeout: 30 * time.Minute}
 	}
 	if options.Sleep == nil {
 		options.Sleep = sleepContext
@@ -121,11 +151,18 @@ func newRun(ctx context.Context, pool *pgxpool.Pool, options Options) (*run, err
 	}
 	return &run{
 		opts: options, pool: pool, workspaceID: workspaceID,
-		client: &client{base: base, apiKey: options.APIKey, http: options.HTTPClient, sleep: options.Sleep, pause: options.RateLimitPause},
-		ledger: ledger{pool: pool, workspaceID: workspaceID, source: "freshdesk:" + base.Host},
+		client: newClient(base, options.APIKey, options),
+		ledger: ledger{pool: pool, workspaceID: workspaceID}, probeAhead: probeAhead(options.hooks),
 		agents: map[int64]fdAgent{}, agentTargets: map[int64]string{}, companies: map[int64]string{},
 		usedCompanies: map[int64]bool{}, contactNames: map[int64]string{},
 	}, nil
+}
+
+func probeAhead(hooks testHooks) int {
+	if hooks.probeAhead > 0 {
+		return hooks.probeAhead
+	}
+	return defaultProbeAhead
 }
 
 func (r *run) endpoint(path string, query url.Values) string {
@@ -138,13 +175,17 @@ func pageQuery() url.Values {
 
 // warn adds a Freshdesk id to a warning, creating the warning on first use.
 func (r *run) warn(code, message, id string) {
+	var ids []string
+	if id != "" {
+		ids = []string{id}
+	}
 	for _, warning := range r.warnings {
 		if warning.Code == code {
-			warning.FreshdeskIDs = append(warning.FreshdeskIDs, id)
+			warning.FreshdeskIDs = append(warning.FreshdeskIDs, ids...)
 			return
 		}
 	}
-	r.warnings = append(r.warnings, &Warning{Code: code, Message: message, FreshdeskIDs: []string{id}})
+	r.warnings = append(r.warnings, &Warning{Code: code, Message: message, FreshdeskIDs: ids})
 }
 
 func (r *run) reportWarnings() []Warning {
@@ -175,3 +216,7 @@ func numericLess(a, b string) bool {
 	}
 	return a < b
 }
+
+// ErrImportRunning means another import into the same workspace from the same
+// Freshdesk account holds the run lock.
+var ErrImportRunning = errors.New("an import from this Freshdesk account into this workspace is already running")

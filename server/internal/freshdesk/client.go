@@ -11,11 +11,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 var (
 	errNotFound   = errors.New("not found in Freshdesk")
+	errForbidden  = errors.New("forbidden by Freshdesk")
 	errURLExpired = errors.New("attachment URL expired")
 	linkNext      = regexp.MustCompile(`<([^>]+)>\s*;\s*rel="?next"?`)
 )
@@ -27,16 +29,30 @@ const (
 )
 
 // client talks to the Freshdesk API v2. It honours X-Ratelimit-Remaining and
-// 429 Retry-After, retries 5xx and network errors, and never puts the API key
-// in an error, a log line or a request to a host other than the account's.
+// 429 Retry-After, retries 5xx and network errors, sends the API key only over
+// HTTPS to the account host, and never puts the key in an error or log line.
+// It is safe for concurrent use.
 type client struct {
 	base   *url.URL
 	apiKey string
-	http   *http.Client
+	api    *http.Client
+	files  *http.Client
+	idle   time.Duration
 	sleep  func(context.Context, time.Duration) error
 	pause  time.Duration
+
+	mu sync.Mutex
 	// exhausted is set when the last response reported no remaining calls.
 	exhausted bool
+}
+
+func newClient(base *url.URL, apiKey string, options Options) *client {
+	api, files := newHTTPClients(base, options.hooks)
+	idle := options.hooks.idleTimeout
+	if idle <= 0 {
+		idle = defaultIdleTimeout
+	}
+	return &client{base: base, apiKey: apiKey, api: api, files: files, idle: idle, sleep: options.Sleep, pause: options.RateLimitPause}
 }
 
 func (c *client) wait(ctx context.Context, d time.Duration) error {
@@ -46,9 +62,13 @@ func (c *client) wait(ctx context.Context, d time.Duration) error {
 	return ctx.Err()
 }
 
+func (c *client) onAccountHost(target *url.URL) bool {
+	return target.Scheme == "https" && target.Host == c.base.Host
+}
+
 // getJSON decodes the response of a GET into out and returns the next page URL.
 func (c *client) getJSON(ctx context.Context, target string, out any) (string, error) {
-	response, err := c.do(ctx, target, true, false)
+	response, err := c.do(ctx, target, true)
 	if err != nil {
 		return "", err
 	}
@@ -56,11 +76,15 @@ func (c *client) getJSON(ctx context.Context, target string, out any) (string, e
 	if err := json.NewDecoder(response.Body).Decode(out); err != nil {
 		return "", fmt.Errorf("decode %s: %w", redact(target), err)
 	}
-	next := ""
-	if match := linkNext.FindStringSubmatch(response.Header.Get("Link")); match != nil {
-		next = match[1]
+	match := linkNext.FindStringSubmatch(response.Header.Get("Link"))
+	if match == nil {
+		return "", nil
 	}
-	return next, nil
+	next, err := url.Parse(match[1])
+	if err != nil || !c.onAccountHost(next) {
+		return "", fmt.Errorf("Freshdesk returned a next page link to another host (%s); stopping", redact(match[1]))
+	}
+	return next.String(), nil
 }
 
 // listAll walks every page of a list endpoint.
@@ -81,28 +105,39 @@ func listAll[T any](ctx context.Context, c *client, target string, each func(T) 
 	return nil
 }
 
-// download opens an attachment URL. Credentials are sent only to the account host;
-// pre-signed storage URLs must not receive the API key.
+// download opens an attachment URL. The body fails when no bytes arrive for
+// the idle timeout; the caller must close it.
 func (c *client) download(ctx context.Context, target string) (io.ReadCloser, int64, error) {
 	parsed, err := url.Parse(target)
-	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") {
-		return nil, 0, fmt.Errorf("invalid attachment URL")
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return nil, 0, errors.New("attachment URL is not an HTTPS URL")
 	}
-	response, err := c.do(ctx, target, parsed.Host == c.base.Host, true)
+	downloadCtx, cancel := context.WithCancel(ctx)
+	response, err := c.do(downloadCtx, target, false)
 	if err != nil {
+		cancel()
 		return nil, 0, err
 	}
-	return response.Body, response.ContentLength, nil
+	return newIdleBody(response.Body, cancel, c.idle), response.ContentLength, nil
 }
 
-func (c *client) do(ctx context.Context, target string, withKey, download bool) (*http.Response, error) {
+func (c *client) do(ctx context.Context, target string, apiCall bool) (*http.Response, error) {
+	parsed, err := url.Parse(target)
+	if err != nil {
+		return nil, errors.New("invalid URL")
+	}
+	withKey := c.onAccountHost(parsed)
+	if apiCall && !withKey {
+		return nil, fmt.Errorf("refusing to send the API key to %s", redact(target))
+	}
+	httpClient := c.files
+	if apiCall {
+		httpClient = c.api
+	}
 	serverRetries, throttleRetries := 0, 0
 	for {
-		if c.exhausted && withKey {
-			if err := c.wait(ctx, c.pause); err != nil {
-				return nil, err
-			}
-			c.exhausted = false
+		if err := c.respectExhausted(ctx, withKey); err != nil {
+			return nil, err
 		}
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 		if err != nil {
@@ -113,10 +148,16 @@ func (c *client) do(ctx context.Context, target string, withKey, download bool) 
 		if withKey {
 			request.SetBasicAuth(c.apiKey, "X")
 		}
-		response, err := c.http.Do(request)
+		response, err := httpClient.Do(request)
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
+			}
+			if errors.Is(err, errBlockedAddress) {
+				return nil, fmt.Errorf("GET %s: %w", redact(target), errBlockedAddress)
+			}
+			if strings.Contains(err.Error(), "refusing redirect") {
+				return nil, fmt.Errorf("GET %s: redirect refused (not HTTPS, off the account host, or too many)", redact(target))
 			}
 			if serverRetries < maxServerRetries {
 				serverRetries++
@@ -125,12 +166,10 @@ func (c *client) do(ctx context.Context, target string, withKey, download bool) 
 				}
 				continue
 			}
-			return nil, fmt.Errorf("GET %s: network error after %d retries", redact(target), serverRetries)
+			return nil, fmt.Errorf("GET %s: network error after %d retries (%s)", redact(target), serverRetries, networkReason(err))
 		}
 		if withKey {
-			if remaining, err := strconv.Atoi(response.Header.Get("X-Ratelimit-Remaining")); err == nil && remaining <= 0 {
-				c.exhausted = true
-			}
+			c.noteRemaining(response.Header.Get("X-Ratelimit-Remaining"))
 		}
 		switch {
 		case response.StatusCode >= 200 && response.StatusCode < 300:
@@ -138,7 +177,7 @@ func (c *client) do(ctx context.Context, target string, withKey, download bool) 
 		case response.StatusCode == http.StatusTooManyRequests && throttleRetries < maxThrottleRetries:
 			throttleRetries++
 			drain(response)
-			c.exhausted = false
+			c.setExhausted(false)
 			if err := c.wait(ctx, retryAfter(response.Header.Get("Retry-After"))); err != nil {
 				return nil, err
 			}
@@ -150,9 +189,32 @@ func (c *client) do(ctx context.Context, target string, withKey, download bool) 
 			}
 		default:
 			drain(response)
-			return nil, statusError(response.StatusCode, target, download)
+			return nil, statusError(response.StatusCode, target, !apiCall)
 		}
 	}
+}
+
+func (c *client) respectExhausted(ctx context.Context, withKey bool) error {
+	c.mu.Lock()
+	exhausted := c.exhausted && withKey
+	c.exhausted = c.exhausted && !withKey
+	c.mu.Unlock()
+	if exhausted {
+		return c.wait(ctx, c.pause)
+	}
+	return nil
+}
+
+func (c *client) noteRemaining(header string) {
+	if remaining, err := strconv.Atoi(header); err == nil && remaining <= 0 {
+		c.setExhausted(true)
+	}
+}
+
+func (c *client) setExhausted(value bool) {
+	c.mu.Lock()
+	c.exhausted = value
+	c.mu.Unlock()
 }
 
 // statusError classifies a failed response. A download refused with 400, 403
@@ -165,9 +227,18 @@ func statusError(status int, target string, download bool) error {
 		return fmt.Errorf("GET %s: HTTP %d: %w", redact(target), status, errURLExpired)
 	case status == http.StatusUnauthorized:
 		return fmt.Errorf("GET %s: HTTP 401: Freshdesk rejected the API key", redact(target))
+	case status == http.StatusForbidden:
+		return fmt.Errorf("GET %s: HTTP 403: %w", redact(target), errForbidden)
 	default:
 		return fmt.Errorf("GET %s: HTTP %d", redact(target), status)
 	}
+}
+
+func networkReason(err error) string {
+	if strings.Contains(err.Error(), "Client.Timeout") || strings.Contains(err.Error(), "timeout") {
+		return "timeout"
+	}
+	return "connection failed"
 }
 
 // redact drops the query string, which holds signatures on pre-signed URLs.

@@ -49,6 +49,7 @@ func (r *run) loadCompanies(ctx context.Context) error {
 
 func (r *run) importContacts(ctx context.Context) error {
 	err := listAll(ctx, r.client, r.endpoint("/api/v2/contacts", pageQuery()), func(contact fdContact) error {
+		r.listedContacts++
 		if contact.CompanyID != nil {
 			if _, known := r.companies[*contact.CompanyID]; known {
 				r.usedCompanies[*contact.CompanyID] = true
