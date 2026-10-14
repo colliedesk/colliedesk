@@ -15,10 +15,10 @@ import (
 
 func run(ctx context.Context, args []string, output io.Writer, databaseURL, origin string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("expected subcommand: serve, migrate, create-workspace, pair, or healthcheck")
+		return fmt.Errorf("expected subcommand: serve, migrate, create-workspace, pair, import, or healthcheck")
 	}
 	if args[0] == "--help" || args[0] == "help" {
-		_, err := fmt.Fprintln(output, "Usage: colliedesk <serve|migrate|create-workspace|pair|healthcheck>")
+		_, err := fmt.Fprintln(output, "Usage: colliedesk <serve|migrate|create-workspace|pair|import|healthcheck>")
 		return err
 	}
 	if args[0] == "healthcheck" {
@@ -49,6 +49,8 @@ func run(ctx context.Context, args []string, output io.Writer, databaseURL, orig
 		return pairAgent(ctx, pool, origin, args[1:], output)
 	case "serve":
 		return serve(ctx, pool, origin, args[1:])
+	case "import":
+		return importCommand(ctx, pool, args[1:], output)
 	default:
 		return fmt.Errorf("unknown subcommand %q", args[0])
 	}
