@@ -35,5 +35,8 @@
 .redeem-panel { width: min(100%, 30rem); border: 1px solid var(--ink-400); border-radius: var(--radius); background: var(--fog-50); padding: var(--space-8); }
 .redeem-panel h1 { margin: var(--space-6) 0 var(--space-3); font-size: 2.75rem; line-height: 1.05; letter-spacing: -0.03em; }
 .redeem-panel p + p, .redeem-panel p + button { margin-top: var(--space-4); }
+.cloud-sign-in { margin-top: var(--space-6); }
+.cloud-sign-in h2 { margin-bottom: var(--space-3); }
+.workspace-choices { display: grid; gap: var(--space-2); }
 @media (max-width: 64rem) { .inbox-grid { grid-template-columns: minmax(15rem, 0.75fr) minmax(22rem, 1.5fr); } .details-panel { display: none; } }
 @media (max-width: 44rem) { .app-nav { height: auto; min-height: 4rem; } .inbox-shell { height: auto; min-height: calc(100dvh - 4rem); } .inbox-filters { grid-template-columns: 1fr 1fr; } .inbox-filters > input { grid-column: 1 / -1; } .inbox-grid { grid-template-columns: 1fr; } .conversation-list { max-height: 18rem; border-right: 0; border-bottom: 1px solid var(--ink-200); } .conversation-center { min-height: 36rem; border-right: 0; } .invite-form { grid-template-columns: 1fr; } .redeem-panel { padding: var(--space-6); } .redeem-panel h1 { font-size: 2.25rem; } }

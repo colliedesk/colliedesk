@@ -17,14 +17,14 @@ func (s *Service) CreateInvite(ctx context.Context, principal Principal, email, 
 		return domain.Invite{}, "", fmt.Errorf("begin invite: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
-	link, linkID, err := s.createLinkTx(ctx, tx, principal.Workspace.ID, "", strings.ToLower(email), "invite", ceiling, &principal.Agent.ID)
+	link, err := s.createLinkTx(ctx, tx, principal.Workspace.ID, "", strings.ToLower(email), "invite", ceiling, &principal.Agent.ID)
 	if err != nil {
 		return domain.Invite{}, "", err
 	}
 	var invite domain.Invite
 	err = tx.QueryRow(ctx, `SELECT p.id::text,p.email,p.role_ceiling,a.email,p.created_at,p.expires_at,p.used_at,p.revoked_at
 		FROM pairing_links p JOIN agents a ON a.id=p.created_by_agent_id
-		WHERE p.workspace_id=$1 AND p.id=$2`, principal.Workspace.ID, linkID).
+		WHERE p.workspace_id=$1 AND p.id=$2`, principal.Workspace.ID, link.ID).
 		Scan(&invite.ID, &invite.Email, &invite.RoleCeiling, &invite.CreatedByEmail, &invite.CreatedAt, &invite.ExpiresAt, &invite.UsedAt, &invite.RevokedAt)
 	if err != nil {
 		return domain.Invite{}, "", fmt.Errorf("load invite: %w", err)
@@ -33,7 +33,7 @@ func (s *Service) CreateInvite(ctx context.Context, principal Principal, email, 
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Invite{}, "", fmt.Errorf("commit invite: %w", err)
 	}
-	return invite, link, nil
+	return invite, link.URL, nil
 }
 
 func (s *Service) ListInvites(ctx context.Context, workspaceID string) ([]domain.Invite, error) {

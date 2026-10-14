@@ -13,6 +13,11 @@ export const prioritySchema = z.enum(['low', 'normal', 'high', 'urgent']);
 export const workspaceSchema = z.object({
   id: z.string().uuid(), slug: z.string(), name: z.string(), timezone: z.string(),
 }) satisfies z.ZodType<Generated<'Workspace'>>;
+export const workspaceChoiceSchema = z.object({ slug: z.string(), name: z.string() }) satisfies z.ZodType<Generated<'WorkspaceChoice'>>;
+export const cloudWorkspaceChoicesSchema = z.object({ workspaces: z.array(workspaceChoiceSchema).min(2) }) satisfies z.ZodType<Generated<'CloudWorkspaceChoices'>>;
+export const publicConfigSchema = z.object({
+  cloud_sign_in: z.object({ enabled: z.boolean(), publishable_key: z.string().nullable() }),
+}) satisfies z.ZodType<Generated<'PublicConfig'>>;
 export const agentSchema = z.object({
   id: z.string().uuid(), email: z.string().email(), display_name: z.string(),
   role: roleSchema, timezone_override: z.string().nullable(),
@@ -53,6 +58,7 @@ export const agentListSchema = z.object({ items: z.array(agentSchema) }) satisfi
 export const tagListSchema = z.object({ items: z.array(tagSchema) }) satisfies z.ZodType<JsonResponse<'listTags', 200>>;
 
 export type Agent = Generated<'Agent'>;
+export type WorkspaceChoice = Generated<'WorkspaceChoice'>;
 export type Conversation = Generated<'Conversation'>;
 export type Invite = Generated<'Invite'>;
 export type Message = Generated<'Message'>;

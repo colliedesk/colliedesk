@@ -2,6 +2,18 @@
 
 CollieDesk runs as one server plus PostgreSQL. Requirements: Docker with Compose v2.
 
+## One command
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/colliedesk/colliedesk/main/install.sh | sh -s -- \
+  --name "My Support Desk" --email "admin@example.com"
+```
+
+Re-running the installer keeps your existing `.env`. The steps below do the same by hand from a
+clone of the repository.
+
+## From a clone
+
 1. Start the stack:
    ```sh
    docker compose up -d --build

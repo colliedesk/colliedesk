@@ -9,6 +9,41 @@ security:
   - bearerAuth: []
   - sessionCookie: []
 paths:
+  /api/v1/config:
+    get:
+      operationId: getPublicConfig
+      security: []
+      x-permission: public
+      responses:
+        '200':
+          description: Public instance configuration
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PublicConfig'}
+  /api/v1/auth/cloud/exchange:
+    post:
+      operationId: exchangeCloudSession
+      security:
+        - bearerAuth: []
+      x-permission: public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                workspace_slug: {type: string, minLength: 1}
+      responses:
+        '200': {$ref: '#/components/responses/Redeemed'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: The verified email belongs to multiple workspaces
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CloudWorkspaceChoices'}
   /api/v1/auth/redeem:
     post:
       operationId: redeemLink
@@ -466,6 +501,30 @@ components:
       description: Resource not found in this workspace
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   schemas:
+    PublicConfig:
+      type: object
+      required: [cloud_sign_in]
+      properties:
+        cloud_sign_in:
+          type: object
+          required: [enabled, publishable_key]
+          properties:
+            enabled: {type: boolean}
+            publishable_key: {type: [string, 'null']}
+    WorkspaceChoice:
+      type: object
+      required: [slug, name]
+      properties:
+        slug: {type: string}
+        name: {type: string}
+    CloudWorkspaceChoices:
+      type: object
+      required: [workspaces]
+      properties:
+        workspaces:
+          type: array
+          minItems: 2
+          items: {$ref: '#/components/schemas/WorkspaceChoice'}
     Role: {type: string, enum: [admin, agent]}
     ConversationStatus: {type: string, enum: [open, pending, resolved, closed]}
     Priority: {type: string, enum: [low, normal, high, urgent]}

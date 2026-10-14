@@ -51,14 +51,14 @@ func (s *Service) CreateWorkspace(ctx context.Context, name, email string) (doma
 	if err := tx.QueryRow(ctx, `INSERT INTO agents(workspace_id,email,role) VALUES($1,lower($2),'admin') RETURNING id::text`, workspace.ID, email).Scan(&agentID); err != nil {
 		return domain.Workspace{}, "", fmt.Errorf("create admin agent: %w", err)
 	}
-	link, _, err := s.createLinkTx(ctx, tx, workspace.ID, agentID, strings.ToLower(email), "pairing", "admin", nil)
+	link, err := s.createLinkTx(ctx, tx, workspace.ID, agentID, strings.ToLower(email), "pairing", "admin", nil)
 	if err != nil {
 		return domain.Workspace{}, "", err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return domain.Workspace{}, "", fmt.Errorf("commit workspace creation: %w", err)
 	}
-	return workspace, link, nil
+	return workspace, link.URL, nil
 }
 
 func (s *Service) Pair(ctx context.Context, workspaceSlug, email string) (string, error) {
@@ -73,14 +73,14 @@ func (s *Service) Pair(ctx context.Context, workspaceSlug, email string) (string
 		return "", fmt.Errorf("begin pairing: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
-	link, _, err := s.createLinkTx(ctx, tx, workspaceID, agentID, strings.ToLower(email), "pairing", role, nil)
+	link, err := s.createLinkTx(ctx, tx, workspaceID, agentID, strings.ToLower(email), "pairing", role, nil)
 	if err != nil {
 		return "", err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return "", fmt.Errorf("commit pairing: %w", err)
 	}
-	return link, nil
+	return link.URL, nil
 }
 
 var nonSlug = regexp.MustCompile(`[^a-z0-9]+`)

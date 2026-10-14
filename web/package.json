@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "corepack pnpm check:api && tsc --noEmit && vite build",
+    "bundle:check": "node scripts/check-bundle-budget.mjs",
     "typecheck": "corepack pnpm check:api && tsc --noEmit",
     "test": "vitest run",
     "e2e": "playwright test",
@@ -14,6 +15,7 @@
     "check:api": "node scripts/check-generated-api.mjs"
   },
   "dependencies": {
+    "@clerk/clerk-react": "5.55.0",
     "@fontsource-variable/geist": "5.2.8",
     "@tanstack/react-query": "5.102.8",
     "@tanstack/react-router": "1.170.35",
