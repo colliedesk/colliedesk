@@ -1,0 +1,14 @@
+{
+  "name": "colliedesk-site",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "build": "node src/build.mjs",
+    "check": "node scripts/check.mjs",
+    "serve": "node scripts/serve.mjs"
+  },
+  "dependencies": {
+    "marked": "^18.1.1"
+  }
+}
