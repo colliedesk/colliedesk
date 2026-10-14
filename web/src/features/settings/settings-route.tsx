@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
+import { EmailChannelSection } from './email-channel-section';
 import { SettingsPage } from './settings-page';
 import { messages } from '../../messages';
 
@@ -14,10 +15,19 @@ export function SettingsRoute() {
   const revokeSession = useMutation({ mutationFn: api.revokeSession, onSuccess: () => refresh('sessions') });
   const workspaceTimezone = useMutation({ mutationFn: api.updateWorkspaceTimezone, onSuccess: () => refresh('me') });
   const agentTimezone = useMutation({ mutationFn: api.updateAgentTimezone, onSuccess: () => refresh('me') });
+  const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
+  const saveEmail = useMutation({ mutationFn: api.saveEmailChannel, onSuccess: () => refresh('email-channel') });
+  const rotateSecret = useMutation({ mutationFn: api.rotateEmailSecret, onSuccess: () => refresh('email-channel') });
+  const disconnectEmail = useMutation({ mutationFn: api.disconnectEmailChannel, onSuccess: () => { rotateSecret.reset(); void refresh('email-channel'); } });
+  const isAdmin = me.data?.agent.role === 'admin';
+  const emailFailed = saveEmail.isError || rotateSecret.isError || disconnectEmail.isError;
   return <SettingsPage sessions={sessions.data?.items ?? []} invites={invites.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'}
-    canCreateInvites={me.data?.agent.role === 'admin'} canManageWorkspace={me.data?.agent.role === 'admin'}
+    canCreateInvites={isAdmin} canManageWorkspace={isAdmin}
     workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
-    error={revokeInvite.isError || revokeSession.isError ? messages.settingsActionFailed : undefined}
+    error={revokeInvite.isError || revokeSession.isError || emailFailed ? messages.settingsActionFailed : undefined}
+    emailSection={<EmailChannelSection settings={emailChannel.data} timezone={me.data?.timezone ?? 'UTC'} canManage={isAdmin}
+      createdSecret={rotateSecret.data?.inbound_secret} onSave={(address) => saveEmail.mutate(address)}
+      onRotate={() => rotateSecret.mutate()} onDisconnect={() => disconnectEmail.mutate()} />}
     createdInviteUrl={createInvite.data?.url}
     onCreateInvite={(email, role) => createInvite.mutate({ email, role })}
     onRevokeInvite={(id) => revokeInvite.mutate(id)} onRevokeSession={(id) => revokeSession.mutate(id)}
