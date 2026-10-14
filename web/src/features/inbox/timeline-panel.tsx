@@ -8,9 +8,10 @@ interface TimelinePanelProps {
   items: Message[];
   timeEntries?: TimeEntry[];
   timezone: string;
+  onRetryDelivery?: (messageId: string) => void;
 }
 
-export function TimelinePanel({ conversation, items, timeEntries = [], timezone }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, items, timeEntries = [], timezone, onRetryDelivery }: TimelinePanelProps) {
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
       <header className="timeline-header">
@@ -19,7 +20,7 @@ export function TimelinePanel({ conversation, items, timeEntries = [], timezone 
         </div>
       </header>
       <div className="timeline-scroll">
-        {items.map((item) => <MessageItem key={item.id} item={item} timezone={timezone} />)}
+        {items.map((item) => <MessageItem key={item.id} item={item} timezone={timezone} onRetryDelivery={onRetryDelivery} />)}
         {timeEntries.length > 0 && <TimeEntriesSection items={timeEntries} timezone={timezone} />}
       </div>
     </section>

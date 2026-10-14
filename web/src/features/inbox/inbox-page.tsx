@@ -24,16 +24,19 @@ interface InboxPageProps {
   page?: number;
   hasNextPage?: boolean;
   onPage?: (page: number) => void;
+  onRetryDelivery?: (messageId: string) => void;
+  outboundNotice?: string;
 }
 
-export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage }: InboxPageProps) {
+export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice }: InboxPageProps) {
   return (
     <main className="inbox-shell">
       <InboxFilters tags={tags} onChange={onFilters} />
       <div className="inbox-grid">
         <ConversationList items={conversations} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
           page={page} hasNextPage={hasNextPage} onPage={onPage} />
-        <div className="conversation-center"><TimelinePanel conversation={selected} items={timeline} timeEntries={timeEntries} timezone={timezone} />
+        <div className="conversation-center"><TimelinePanel conversation={selected} items={timeline} timeEntries={timeEntries} timezone={timezone} onRetryDelivery={onRetryDelivery} />
+          {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}</p>}
           <ReplyComposer disabled={!selected} onSubmit={onMessage} /></div>
         <DetailsPanel conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate}
           onAddTag={onAddTag} onRemoveTag={onRemoveTag} onCreateTag={onCreateTag} />

@@ -1,0 +1,89 @@
+# Email channel internals
+
+Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, config; no database),
+`server/internal/store/email-*.go`, `server/internal/emailoutbox` (worker),
+`infra/mail/colliedesk-inbound-pipe.sh` (MTA wrapper, tested by `tests/mail-pipe-test.sh`).
+
+## Decisions
+
+- **Forwarder-agnostic inbound.** One endpoint takes a raw RFC 5322 message. No vendor SDK and
+  no provider-specific JSON.
+- **The secret picks the workspace, never the message.** The inbound secret is
+  `<key id>.<random>`. The key id finds the channel row; the SHA-256 digest of the whole secret
+  is compared with `subtle.ConstantTimeCompare`. An unknown key id compares against a zero
+  digest. Every later lookup (duplicates, references, reply tokens, contacts, bounces) filters
+  by that workspace.
+- **Accepted means 200; storage failure means 500.** Forwarders must retry 429 and 5xx. MTAs only
+  retry on exit 75, so the shipped pipe wrapper maps those to `EX_TEMPFAIL`.
+- **Idempotency on Message-ID per workspace.** IDs longer than 255 bytes map to
+  `long-<sha256>@colliedesk.invalid` (a btree entry over ~2.7 KB fails to insert); references are
+  mapped the same way so they still match. A message without Message-ID gets
+  `sha256-<digest>@colliedesk.invalid` from From, To, Cc, Subject, Date, Content-Type and the body,
+  not the raw bytes, so a redelivery through another hop is still a duplicate. In-Reply-To is
+  capped at 10 ids and References at the last 50; all candidates resolve in one `= ANY` query.
+- **Trusted authentication only.** Only the topmost `Authentication-Results` whose authserv-id
+  equals `EMAIL_TRUSTED_AUTHSERV_ID` counts; without that setting every message is `none`. DMARC
+  decides when present; otherwise any DKIM or SPF pass is `pass`. The verdict is shown, not enforced.
+- **Bulk needs a bulk-sender signal.** `Precedence: bulk|junk` drops. `List-Id` or
+  `Precedence: list` drop only with `List-Unsubscribe-Post` or `Feedback-ID`, because a Google
+  Group in front of support@ stamps list headers (and `List-Unsubscribe`) on every customer mail.
+- **Sending identity on a shared relay (`EMAIL_FROM_POLICY=verified`, the default).** A workspace
+  sends as its support address only after a DNS TXT check: `_colliedesk.<domain>` must hold
+  `colliedesk-verification=<token>`. The token is per workspace, so one workspace's record never
+  verifies another's. Changing the address resets verification and the token. Unverified, the
+  worker sends `"<workspace> via CollieDesk" <reply+<conversation token>@MAIL_FROM_DOMAIN>` as
+  From and envelope sender, with `Reply-To: support+r-<token>@<support domain>`; replies thread
+  through Reply-To and In-Reply-To. Without `MAIL_FROM_DOMAIN` an unverified workspace cannot send.
+  `any` keeps the support address always (self-host, operator owns the relay).
+- **Replies that cannot be sent fail visibly at once.** With no SMTP relay, or an unverified domain
+  and no platform domain, the outbox row is created `failed` with the reason. Retry returns 409
+  until the cause is fixed, so a reply never sits in `queued` forever.
+- **Outbox leasing with a claim token.** The worker claims one row at a time
+  (`FOR UPDATE SKIP LOCKED`), so the 5-minute lease covers one send (at most ~75 s). The claim
+  stamps a random `claim_token`; every finish requires that token and `status='queued'`, so a
+  worker whose lease expired cannot overwrite the result of the worker that reclaimed the row
+  (`ErrLeaseLost`). Outgoing Message-ID is fixed at enqueue, so resends carry the same ID.
+- **Poison rows fail alone.** A row whose data cannot be loaded is failed in the claim; a row that
+  cannot be composed (invalid contact address) fails in the worker; a row claimed after it used
+  every attempt (crash loop) fails without sending. Backoff 30 s doubling to 1 h, 8 attempts,
+  any 5xx fails at once.
+- **Per-workspace hourly send limit (300).** Over the limit, the row is deferred 10 minutes
+  without spending the attempt.
+- **Bounces.** A delivery report (`multipart/report`, `MAILER-DAEMON`) is still dropped, but the
+  Message-IDs in its returned headers mark our matching replies `failed`.
+- **Inbound limits are a loop guard plus a ceiling.** 10 messages per sender address per 10
+  minutes (the header From, which a sender controls) and 200 new conversations per workspace per
+  10 minutes (holds when From rotates). A per-(workspace, sender) advisory lock serializes the
+  count and duplicate check.
+- **Third-party senders in a thread.** A known Message-ID or reply token threads regardless of
+  sender (CC'd colleagues). The message shows its sender; replies go only to the conversation
+  contact. With an untrusted verdict the message shows **Sender not verified**.
+- **Customer email renders as plain text.** No Markdown, no remote images, links only for visible
+  http(s) URLs with `rel="noopener noreferrer nofollow"`. Agent replies and notes keep Markdown.
+
+## TODO
+
+- **Store the raw message and attachments (H1).** Attachments and the raw `.eml` are not kept
+  after a 200; only file names and types are recorded in `messages.email_meta`. Store the raw
+  message per incoming email in the ingest transaction once the attachment model lands, so files
+  can be extracted and older mail backfilled. Until then the docs state the limit.
+- **Filtered mail is not stored.** Dropped automatic mail is reported only in the 200 response.
+
+## Traps
+
+- **Reply tokens are lowercase hex.** Some relays lowercase the local part of an address.
+- **Plus addressing must reach us.** Cloudflare Email Routing needs subaddressing or a
+  catch-all for `support+r-…@`. Threading by In-Reply-To works without it.
+- **Trusting the wrong authserv-id trusts the sender.** If the receiving server does not stamp
+  its own header, a sender's header with the trusted name is the topmost match.
+- **`multipart.Reader.NextPart` decodes quoted-printable and deletes the header**; the parser
+  uses `NextRawPart` and decodes once, by the part's own `Content-Transfer-Encoding`.
+- **PostgreSQL text rejects NUL bytes.** The parser strips them from bodies.
+- **Header lines must stay under 998 bytes.** Subjects are cut to 250 characters and encoded-words
+  are folded onto continuation lines.
+- **`net/smtp` refuses PLAIN auth without TLS** except on localhost, and has no implicit TLS;
+  port 465 is rejected at startup.
+- **The `messages (workspace_id, id)` key** belongs to the attachment and import migration, which
+  sorts before this one. This migration adds it only when missing and its down migration leaves
+  it. A database that applied an earlier draft of this migration before that one merged would hit
+  a duplicate constraint; no shared database ever did.

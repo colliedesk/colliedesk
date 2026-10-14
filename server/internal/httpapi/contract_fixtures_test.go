@@ -4,6 +4,10 @@ import (
 	"context"
 	"net/http"
 	"testing"
+
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type contractFixture struct {
@@ -14,11 +18,18 @@ type contractFixture struct {
 	updateTagID, deleteTagID  string
 	attachmentID              string
 	redeemToken, logoutToken  string
+	inboundSecret             string
+	failedReplyID             string
+	deleteChannelToken        string
 }
 
 func newContractFixture(t *testing.T) contractFixture {
 	t.Helper()
-	api, service, pool, storage := testAPIWithStorage(t)
+	storage, err := attachments.NewLocalDisk(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	api, service, pool, dns := testAPIWithConfig(t, func(config *httpapi.Config) { config.Attachments = storage })
 	adminToken := createSession(t, api, service, "Contract All", "admin@contract-all.example.com")
 	contactID := create(t, api, adminToken, "/api/v1/contacts", map[string]any{
 		"name": "Contract Contact", "email": "contact@contract-all.example.com",
@@ -68,7 +79,13 @@ func newContractFixture(t *testing.T) contractFixture {
 	}
 	decode(t, logoutRedeem, &logout)
 
-	return contractFixture{api: api, adminToken: adminToken, agentToken: agentSession.Token,
+	api, inboundSecret, failedReplyID := withFailedEmailReply(t, api, pool, adminToken, conversationID)
+	record := domainState(t, api, adminToken).Channel
+	dns.set(record.DNSRecordName, record.DNSRecordValue)
+	deleteChannelToken := createSession(t, api, service, "Contract Disconnect", "admin@contract-disconnect.example.com")
+	_ = connectEmail(t, api, deleteChannelToken, "support@contract-disconnect.example.com")
+
+	return contractFixture{api: api, inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, attachmentID: attachmentID, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token}
 }
@@ -103,4 +120,15 @@ func findSessionID(t *testing.T, api http.Handler, token, label string) string {
 	}
 	t.Fatalf("session %q not found", label)
 	return ""
+}
+
+// withFailedEmailReply connects the email channel and leaves one reply whose delivery failed, so retry has a target.
+func withFailedEmailReply(t *testing.T, api http.Handler, pool *pgxpool.Pool, admin, conversationID string) (http.Handler, string, string) {
+	t.Helper()
+	secret := connectEmail(t, api, admin, "support@contract-all.example.com")
+	replyID := create(t, api, admin, "/api/v1/conversations/"+conversationID+"/messages", map[string]any{"kind": "outgoing", "body": "Contract reply"})
+	if _, err := pool.Exec(context.Background(), `UPDATE email_outbox SET status='failed', last_error='550 mailbox unavailable' WHERE message_id=$1`, replyID); err != nil {
+		t.Fatal(err)
+	}
+	return api, secret, replyID
 }

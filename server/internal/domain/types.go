@@ -107,16 +107,18 @@ type TimeEntry struct {
 }
 
 type Message struct {
-	ID             string         `json:"id"`
-	ConversationID string         `json:"conversation_id"`
-	AuthorAgentID  *string        `json:"author_agent_id"`
-	AuthorName     *string        `json:"author_name"`
-	Kind           string         `json:"kind"`
-	Body           string         `json:"body"`
-	BodyHTML       *string        `json:"body_html"`
-	Origin         *MessageOrigin `json:"origin"`
-	Attachments    []Attachment   `json:"attachments"`
-	CreatedAt      time.Time      `json:"created_at"`
+	ID             string           `json:"id"`
+	ConversationID string           `json:"conversation_id"`
+	AuthorAgentID  *string          `json:"author_agent_id"`
+	AuthorName     *string          `json:"author_name"`
+	Kind           string           `json:"kind"`
+	Body           string           `json:"body"`
+	BodyHTML       *string          `json:"body_html"`
+	Origin         *MessageOrigin   `json:"origin"`
+	Attachments    []Attachment     `json:"attachments"`
+	CreatedAt      time.Time        `json:"created_at"`
+	Delivery       *MessageDelivery `json:"delivery"`
+	Email          *IncomingEmail   `json:"email"`
 }
 
 type Attachment struct {
@@ -127,6 +129,39 @@ type Attachment struct {
 	Size        int64     `json:"size"`
 	SHA256      string    `json:"sha256"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+// MessageDelivery is the email delivery state of an outgoing reply.
+type MessageDelivery struct {
+	Status    string     `json:"status"`
+	Attempts  int        `json:"attempts"`
+	LastError *string    `json:"last_error"`
+	SentAt    *time.Time `json:"sent_at"`
+}
+
+// IncomingEmail is the envelope of a message that arrived by email.
+type IncomingEmail struct {
+	From           string            `json:"from"`
+	Authentication string            `json:"authentication"`
+	Attachments    []EmailAttachment `json:"attachments"`
+}
+
+// EmailAttachment records an attachment seen in an inbound message; its content is not stored.
+type EmailAttachment struct {
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+}
+
+type EmailChannel struct {
+	SupportAddress   string     `json:"support_address"`
+	SecretSet        bool       `json:"secret_set"`
+	SecretRotatedAt  *time.Time `json:"secret_rotated_at"`
+	Domain           string     `json:"domain"`
+	DomainVerifiedAt *time.Time `json:"domain_verified_at"`
+	DNSRecordName    string     `json:"dns_record_name"`
+	DNSRecordValue   string     `json:"dns_record_value"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 func UTC(value time.Time) time.Time { return value.UTC() }

@@ -25,6 +25,8 @@ if [ "${1:-}" = inspect ]; then
   exit
 fi
 if [ "${1:-}" = compose ] && [ "${2:-}" = exec ]; then
+  # Real `docker compose exec` forwards stdin even with -T; consume it the same way.
+  cat >/dev/null || :
   printf '%s\n' 'http://localhost:8080/redeem?token=pairing-token'
   exit
 fi
@@ -72,5 +74,13 @@ if printf '%s' "$output" | grep -F 0123456789abcdef >/dev/null; then
   printf '%s\n' 'installer printed a generated secret' >&2
   exit 1
 fi
+
+piped=$TMP/piped
+# Feed the script line by line, like `curl | sh` over a network, so sh cannot buffer all of it.
+output=$(while IFS= read -r line || [ -n "$line" ]; do printf '%s\n' "$line"; sleep 0.01; done <"$ROOT/install.sh" | sh -s -- --dir "$piped" --name Desk --email admin@example.com 2>&1)
+printf '%s' "$output" | grep -F 'http://localhost:8080/redeem?token=pairing-token' >/dev/null || {
+  printf 'piped install did not print the pairing URL:\n%s\n' "$output" >&2
+  exit 1
+}
 
 printf '%s\n' 'install tests passed'

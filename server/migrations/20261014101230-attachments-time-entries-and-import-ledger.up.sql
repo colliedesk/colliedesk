@@ -1,4 +1,12 @@
-ALTER TABLE messages ADD CONSTRAINT messages_workspace_id_id_key UNIQUE (workspace_id, id);
+-- This migration owns the composite key that lets attachments reference a message of the same
+-- workspace. The email channel migration adds the same key when it runs first (databases that got
+-- main before this migration), so add it only when it is missing.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'messages'::regclass AND conname = 'messages_workspace_id_id_key') THEN
+        ALTER TABLE messages ADD CONSTRAINT messages_workspace_id_id_key UNIQUE (workspace_id, id);
+    END IF;
+END $$;
 ALTER TABLE messages ADD COLUMN author_name text;
 ALTER TABLE messages ADD COLUMN body_html text;
 ALTER TABLE messages ADD COLUMN origin jsonb;

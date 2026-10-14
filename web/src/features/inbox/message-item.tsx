@@ -4,6 +4,7 @@ import type { Attachment, Message, MessageOrigin } from '../../api/schemas';
 import { formatBytes } from '../../lib/format-bytes';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { PlainTextBody } from './plain-text-body';
 
 // Imported HTML is untrusted: it is shown only in a sandboxed frame (no
 // scripts, unique origin) whose policy blocks every network load.
@@ -13,16 +14,24 @@ export function originalDocument(html: string): string {
   return `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${sandboxPolicy}">${html}`;
 }
 
-export function MessageItem({ item, timezone }: { item: Message; timezone: string }) {
+interface MessageItemProps {
+  item: Message;
+  timezone: string;
+  onRetryDelivery?: (messageId: string) => void;
+}
+
+export function MessageItem({ item, timezone, onRetryDelivery }: MessageItemProps) {
   const [showOriginal, setShowOriginal] = useState(false);
   return (
     <article className={`message message-${item.kind}`}>
-      <div className="message-meta"><span><strong>{item.kind === 'note' ? messages.noteMode : item.kind === 'incoming' ? messages.incoming : messages.replyMode}</strong>
+      <div className="message-meta"><span><strong>{kindLabel(item.kind)}</strong>
         {item.author_name && <span className="message-author">{item.author_name}</span>}</span>
         <time dateTime={item.created_at}>{formatDate(item.created_at, timezone)}</time></div>
+      {item.email && <EmailEnvelope email={item.email} />}
       {item.origin && <OriginLine origin={item.origin} />}
-      <div className="markdown-body"><Markdown>{item.body}</Markdown></div>
+      <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} /> : <Markdown>{item.body}</Markdown>}</div>
       {item.attachments.length > 0 && <AttachmentList items={item.attachments} />}
+      <DeliveryStatus item={item} onRetry={onRetryDelivery} />
       {item.body_html && (
         <div className="message-original">
           <button type="button" className="link-button" onClick={() => setShowOriginal(!showOriginal)}>
@@ -31,6 +40,34 @@ export function MessageItem({ item, timezone }: { item: Message; timezone: strin
         </div>
       )}
     </article>
+  );
+}
+
+function kindLabel(kind: Message['kind']) {
+  if (kind === 'note') return messages.noteMode;
+  return kind === 'incoming' ? messages.incoming : messages.replyMode;
+}
+
+function EmailEnvelope({ email }: { email: NonNullable<Message['email']> }) {
+  const warning = email.authentication === 'fail' ? messages.senderFailedVerification
+    : email.authentication === 'none' ? messages.senderNotVerified : undefined;
+  return (
+    <div className="message-envelope">
+      <span>{email.from}</span>
+      {warning && <span className={`badge badge-${email.authentication}`}>{warning}</span>}
+      {email.attachments.length > 0 && <span>{messages.attachmentsNotImported(email.attachments.map((item) => item.filename))}</span>}
+    </div>
+  );
+}
+
+function DeliveryStatus({ item, onRetry }: { item: Message; onRetry?: (messageId: string) => void }) {
+  if (!item.delivery) return null;
+  const { status, last_error: lastError } = item.delivery;
+  return (
+    <div className="message-envelope">
+      <span className={`badge badge-delivery-${status}`} title={lastError ?? undefined}>{messages.deliveryStatuses[status]}</span>
+      {status === 'failed' && <button type="button" className="link-action" onClick={() => onRetry?.(item.id)}>{messages.retryDelivery}</button>}
+    </div>
   );
 }
 

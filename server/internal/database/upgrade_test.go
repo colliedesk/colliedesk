@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// importMigration is the first migration that is not on main yet; everything
-// sorted before it is main's schema.
+// importMigration is the only migration not on main yet. Main may already run
+// migrations sorted after it (the email channel), so upgrades apply it last.
 const importMigration = "20261014101230-attachments-time-entries-and-import-ledger.up.sql"
 
 func upMigrations(t *testing.T) []string {
@@ -106,6 +106,10 @@ func TestImportMigrationUpgradesMainSchemaWithBusinessData(t *testing.T) {
 	if after := rowCounts(t, pool); after != before {
 		t.Fatalf("rolling back the import migration changed main data: %s -> %s", before, after)
 	}
+	var keyKept bool
+	if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_constraint WHERE conname='messages_workspace_id_id_key')`).Scan(&keyKept); err != nil || !keyKept {
+		t.Fatalf("rollback dropped the key the email outbox depends on: %v", err)
+	}
 }
 
 func applyMainSchema(t *testing.T, pool *pgxpool.Pool) {
@@ -115,8 +119,8 @@ func applyMainSchema(t *testing.T, pool *pgxpool.Pool) {
 		t.Fatal(err)
 	}
 	for _, name := range upMigrations(t) {
-		if name >= importMigration {
-			break
+		if name == importMigration {
+			continue
 		}
 		contents, err := migrations.Files.ReadFile(name)
 		if err != nil {

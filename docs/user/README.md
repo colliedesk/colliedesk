@@ -6,6 +6,7 @@ One page per feature. Each page says what the feature does, how to use it, and i
 - [Sign in without passwords](sign-in.md)
 - [Invite your team](invites.md)
 - [Work the inbox](inbox.md)
+- [Email channel](email-channel.md)
 - [Tags](tags.md)
 - [Timezones](timezones.md)
 - [Sessions and devices](sessions.md)

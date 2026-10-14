@@ -5,18 +5,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -32,22 +35,60 @@ func testAPI(t *testing.T) (http.Handler, *auth.Service) {
 
 func testAPIWithPool(t *testing.T) (http.Handler, *auth.Service, *pgxpool.Pool) {
 	t.Helper()
-	api, service, pool, _ := testAPIWithStorage(t)
+	api, service, pool, _ := testAPIWithConfig(t, nil)
 	return api, service, pool
 }
 
-func testAPIWithStorage(t *testing.T) (http.Handler, *auth.Service, *pgxpool.Pool, attachments.Storage) {
+// fakeDNS stands in for the public DNS resolver, an external boundary.
+type fakeDNS struct {
+	mu      sync.Mutex
+	records map[string][]string
+}
+
+func (d *fakeDNS) set(name string, values ...string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.records[name] = values
+}
+
+func (d *fakeDNS) lookupTXT(_ context.Context, name string) ([]string, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if values, ok := d.records[name]; ok {
+		return values, nil
+	}
+	return nil, &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
+}
+
+// testAPIWithConfig builds the API with an SMTP relay configured (no worker runs in these tests),
+// the "any" From policy, a trusted authserv-id of mx.example.net and a fake DNS resolver.
+func testAPIWithConfig(t *testing.T, mutate func(*httpapi.Config)) (http.Handler, *auth.Service, *pgxpool.Pool, *fakeDNS) {
 	t.Helper()
 	pool := testPool(t)
 	if err := database.Migrate(context.Background(), pool); err != nil {
 		t.Fatal(err)
 	}
+	dns := &fakeDNS{records: map[string][]string{}}
+	config := httpapi.Config{Origin: testOrigin, LookupTXT: dns.lookupTXT, Email: email.Config{
+		SMTP:              email.SMTPConfig{Host: "smtp.test.invalid", Port: 587, StartTLS: true},
+		FromPolicy:        email.FromPolicyAny,
+		TrustedAuthServID: "mx.example.net",
+	}}
+	if mutate != nil {
+		mutate(&config)
+	}
+	return httpapi.New(pool, config), auth.New(pool, testOrigin), pool, dns
+}
+
+// testAPIWithStorage is testAPIWithConfig with local-disk attachment storage.
+func testAPIWithStorage(t *testing.T) (http.Handler, *auth.Service, *pgxpool.Pool, attachments.Storage) {
+	t.Helper()
 	storage, err := attachments.NewLocalDisk(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	authService := auth.New(pool, testOrigin)
-	return httpapi.New(pool, httpapi.Config{Origin: testOrigin, Attachments: storage}), authService, pool, storage
+	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.Attachments = storage })
+	return api, service, pool, storage
 }
 
 func seedAttachment(t *testing.T, pool *pgxpool.Pool, storage attachments.Storage, token string, api http.Handler, messageID, filename, content string) string {

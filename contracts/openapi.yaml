@@ -289,6 +289,123 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/conversations/{id}/messages/{messageId}/retry:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - name: messageId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    post:
+      operationId: retryMessageDelivery
+      x-permission: conversations:write
+      description: >
+        Requeue a reply whose email delivery failed. Only `failed` deliveries can be retried, and only
+        while outgoing email can work (SMTP configured, domain verified or a platform sender set); 409 says why not.
+      responses:
+        '200':
+          description: Reply with its delivery requeued
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Message'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/channels/email:
+    get:
+      operationId: getEmailChannel
+      x-permission: access:read
+      responses:
+        '200': {$ref: '#/components/responses/EmailChannelSettings'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    put:
+      operationId: putEmailChannel
+      x-permission: access:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [support_address]
+              properties:
+                support_address: {type: string, format: email}
+      responses:
+        '200': {$ref: '#/components/responses/EmailChannelSettings'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    delete:
+      operationId: deleteEmailChannel
+      x-permission: access:write
+      description: Disconnect the email channel. Conversations and messages stay; the inbound secret stops working.
+      responses:
+        '204': {description: Email channel disconnected}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/channels/email/domain-verification:
+    post:
+      operationId: verifyEmailDomain
+      x-permission: access:write
+      description: >
+        Look up the TXT record `dns_record_name` and mark the support address domain verified when it
+        holds `dns_record_value`. Changing the support address resets verification.
+      responses:
+        '200': {$ref: '#/components/responses/EmailChannelSettings'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/channels/email/secret:
+    post:
+      operationId: rotateEmailInboundSecret
+      x-permission: access:write
+      description: Create or replace the inbound secret. The raw secret is returned once; the previous one stops working.
+      responses:
+        '200':
+          description: New inbound secret, shown once
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [inbound_secret, inbound_url]
+                properties:
+                  inbound_secret: {type: string, minLength: 1}
+                  inbound_url: {type: string, format: uri}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/channels/email/inbound:
+    post:
+      operationId: receiveInboundEmail
+      security: [{inboundSecret: []}]
+      x-permission: channels:inbound
+      description: >
+        Accepts one raw RFC 5322 message from a forwarder (Cloudflare Email Worker, Postmark or SES
+        forwarding, an MTA pipe). Authenticated by the workspace inbound secret, not by a session.
+        Every accepted outcome is 200 so the forwarder does not retry; the `status` says what happened.
+      requestBody:
+        required: true
+        content:
+          message/rfc822:
+            schema: {type: string}
+      responses:
+        '200':
+          description: Message accepted, threaded, recognised as a duplicate, or dropped by loop protection
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/InboundEmailResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '500': {$ref: '#/components/responses/InternalError'}
   /api/v1/conversations/{id}/time-entries:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -503,6 +620,7 @@ components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
     sessionCookie: {type: apiKey, in: cookie, name: colliedesk_session}
+    inboundSecret: {type: apiKey, in: header, name: X-CollieDesk-Inbound-Secret}
   parameters:
     ID:
       name: id
@@ -522,7 +640,26 @@ components:
       content:
         application/json:
           schema: {$ref: '#/components/schemas/Conversation'}
+    EmailChannelSettings:
+      description: Email channel settings for this workspace
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/EmailChannelSettings'}
     BadRequest: {$ref: '#/components/responses/Error400'}
+    Conflict:
+      description: The resource is not in a state that allows this action
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    InternalError:
+      description: Temporary server failure; the message was not stored and the forwarder should retry
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    PayloadTooLarge:
+      description: Message larger than the inbound limit
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    TooManyRequests:
+      description: Per-contact inbound rate limit reached; the forwarder should retry later
+      headers:
+        Retry-After: {schema: {type: integer}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Unauthorized: {$ref: '#/components/responses/Error401'}
     Forbidden: {$ref: '#/components/responses/Error403'}
     NotFound: {$ref: '#/components/responses/Error404'}
@@ -658,7 +795,9 @@ components:
         tags: {type: array, items: {$ref: '#/components/schemas/Tag'}}
         origin:
           description: Where an imported conversation came from; null for conversations created in CollieDesk.
-          anyOf: [{$ref: '#/components/schemas/ConversationOrigin'}, {type: 'null'}]
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/ConversationOrigin'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
     ConversationOrigin:
@@ -682,7 +821,7 @@ components:
         page_size: {type: integer, minimum: 1}
     Message:
       type: object
-      required: [id, conversation_id, author_agent_id, author_name, kind, body, body_html, origin, attachments, created_at]
+      required: [id, conversation_id, author_agent_id, author_name, kind, body, body_html, origin, attachments, created_at, delivery, email]
       properties:
         id: {type: string, format: uuid}
         conversation_id: {type: string, format: uuid}
@@ -697,9 +836,21 @@ components:
             frame that runs no scripts and loads nothing from the network.
         origin:
           description: Where an imported message came from; null for messages written in CollieDesk.
-          anyOf: [{$ref: '#/components/schemas/MessageOrigin'}, {type: 'null'}]
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/MessageOrigin'}
         attachments: {type: array, items: {$ref: '#/components/schemas/Attachment'}}
         created_at: {type: string, format: date-time}
+        delivery:
+          description: Email delivery of an outgoing reply; null when the reply was not emailed.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/MessageDelivery'}
+        email:
+          description: Envelope details of an incoming email; null for messages that did not arrive by email.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/IncomingEmail'}
     MessageOrigin:
       type: object
       required: [system, external_id, kind, from, to, cc, bcc]
@@ -739,6 +890,92 @@ components:
         size: {type: integer, minimum: 0}
         sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
         created_at: {type: string, format: date-time}
+        delivery:
+          description: Email delivery of an outgoing reply; null when the reply was not emailed.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/MessageDelivery'}
+        email:
+          description: Envelope details of an incoming email; null for messages that did not arrive by email.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/IncomingEmail'}
+    DeliveryStatus: {type: string, enum: [queued, sent, failed]}
+    MessageDelivery:
+      type: object
+      required: [status, attempts, last_error, sent_at]
+      properties:
+        status: {$ref: '#/components/schemas/DeliveryStatus'}
+        attempts: {type: integer, minimum: 0}
+        last_error: {type: [string, 'null']}
+        sent_at: {type: [string, 'null'], format: date-time}
+    EmailAuthentication:
+      type: string
+      enum: [pass, fail, none]
+      description: Upstream SPF/DKIM/DMARC verdict from Authentication-Results; `none` when no verdict was present.
+    IncomingEmail:
+      type: object
+      required: [from, authentication, attachments]
+      properties:
+        from: {type: string}
+        authentication: {$ref: '#/components/schemas/EmailAuthentication'}
+        attachments:
+          type: array
+          description: Attachments seen in the message. Their content is not stored yet.
+          items:
+            type: object
+            required: [filename, content_type]
+            properties:
+              filename: {type: string}
+              content_type: {type: string}
+    EmailChannel:
+      type: object
+      required: [support_address, secret_set, secret_rotated_at, domain, domain_verified_at, dns_record_name, dns_record_value, created_at, updated_at]
+      properties:
+        support_address: {type: string, format: email}
+        secret_set: {type: boolean}
+        secret_rotated_at: {type: [string, 'null'], format: date-time}
+        domain: {type: string}
+        domain_verified_at: {type: [string, 'null'], format: date-time}
+        dns_record_name: {type: string, description: TXT record name that proves control of the domain}
+        dns_record_value: {type: string, description: Value the TXT record must hold}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    SMTPStatus:
+      type: object
+      required: [configured, host, port, starttls, authenticated]
+      properties:
+        configured: {type: boolean}
+        host: {type: string}
+        port: {type: integer}
+        starttls: {type: boolean}
+        authenticated: {type: boolean}
+    EmailChannelSettings:
+      type: object
+      required: [channel, inbound_url, smtp, from_policy, sending_from]
+      properties:
+        from_policy:
+          type: string
+          enum: [verified, any]
+          description: '`verified`: send as the support address only after domain verification. `any`: always (operator owns the relay).'
+        sending_from:
+          type: [string, 'null']
+          description: The From address replies use now; null when replies cannot be emailed.
+        channel:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/EmailChannel'}
+        inbound_url: {type: string, format: uri}
+        smtp: {$ref: '#/components/schemas/SMTPStatus'}
+    InboundEmailResult:
+      type: object
+      required: [status, reason, conversation_id, message_id, authentication]
+      properties:
+        status: {type: string, enum: [created, threaded, duplicate, dropped]}
+        reason: {type: [string, 'null'], description: 'Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address.'}
+        conversation_id: {type: [string, 'null'], format: uuid}
+        message_id: {type: [string, 'null'], format: uuid}
+        authentication: {$ref: '#/components/schemas/EmailAuthentication'}
     Error:
       type: object
       required: [error]

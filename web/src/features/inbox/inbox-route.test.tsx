@@ -6,7 +6,8 @@ import { InboxRoute } from './inbox-route';
 const api = vi.hoisted(() => ({
   me: vi.fn(), conversations: vi.fn(), agents: vi.fn(), tags: vi.fn(), messages: vi.fn(), timeEntries: vi.fn(),
   updateConversation: vi.fn(), createMessage: vi.fn(), createTag: vi.fn(),
-  addConversationTag: vi.fn(), removeConversationTag: vi.fn(),
+  addConversationTag: vi.fn(), removeConversationTag: vi.fn(), retryDelivery: vi.fn(),
+  emailChannel: vi.fn(async () => ({ channel: null, inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null })),
 }));
 
 vi.mock('../../api/client', () => ({ api }));

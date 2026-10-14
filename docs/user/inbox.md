@@ -11,7 +11,9 @@ with the composer below it, and **conversation details** on the right.
 - The list is ordered by latest activity. Use **Previous page** and **Next page** to move.
 
 **Reply or take a note**
-- **Reply** sends an outgoing message on the timeline.
+- **Reply** sends an outgoing message on the timeline. With the [email channel](email-channel.md)
+  connected, it is also emailed to the contact and shows **Queued**, **Sent** or
+  **Delivery failed** (with **Retry delivery**).
 - **Private note** is visible only to your team.
 - Messages support Markdown.
 - Attachments appear under their message with name and size. Select a file name to download it.

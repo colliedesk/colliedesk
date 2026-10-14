@@ -39,5 +39,5 @@ CollieDesk keeps data in two places. Back up both:
 - Attachment files in `ATTACHMENTS_DIR` (the `attachments-data` volume, mounted at
   `/data/attachments`). Without a volume, files are lost when the container is recreated.
 
-Limits today: no email channel yet, so conversations are created through the API or UI.
+To receive and answer customer email, set up the [email channel](email-channel.md).
 See the [roadmap](../../ROADMAP.md).

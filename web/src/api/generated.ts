@@ -223,6 +223,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{id}/messages/{messageId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                messageId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Requeue a reply whose email delivery failed. Only `failed` deliveries can be retried, and only while outgoing email can work (SMTP configured, domain verified or a platform sender set); 409 says why not. */
+        post: operations["retryMessageDelivery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getEmailChannel"];
+        put: operations["putEmailChannel"];
+        post?: never;
+        /** @description Disconnect the email channel. Conversations and messages stay; the inbound secret stops working. */
+        delete: operations["deleteEmailChannel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/email/domain-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Look up the TXT record `dns_record_name` and mark the support address domain verified when it holds `dns_record_value`. Changing the support address resets verification. */
+        post: operations["verifyEmailDomain"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/email/secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Create or replace the inbound secret. The raw secret is returned once; the previous one stops working. */
+        post: operations["rotateEmailInboundSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/email/inbound": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Accepts one raw RFC 5322 message from a forwarder (Cloudflare Email Worker, Postmark or SES forwarding, an MTA pipe). Authenticated by the workspace inbound secret, not by a session. Every accepted outcome is 200 so the forwarder does not retry; the `status` says what happened. */
+        post: operations["receiveInboundEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversations/{id}/time-entries": {
         parameters: {
             query?: never;
@@ -495,7 +583,7 @@ export interface components {
             assignee_id: string | null;
             tags: components["schemas"]["Tag"][];
             /** @description Where an imported conversation came from; null for conversations created in CollieDesk. */
-            origin: components["schemas"]["ConversationOrigin"] | null;
+            origin: null | components["schemas"]["ConversationOrigin"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -537,10 +625,14 @@ export interface components {
             /** @description Original HTML of an imported message. Untrusted content: render it only in a sandboxed frame that runs no scripts and loads nothing from the network. */
             body_html: string | null;
             /** @description Where an imported message came from; null for messages written in CollieDesk. */
-            origin: components["schemas"]["MessageOrigin"] | null;
+            origin: null | components["schemas"]["MessageOrigin"];
             attachments: components["schemas"]["Attachment"][];
             /** Format: date-time */
             created_at: string;
+            /** @description Email delivery of an outgoing reply; null when the reply was not emailed. */
+            delivery: null | components["schemas"]["MessageDelivery"];
+            /** @description Envelope details of an incoming email; null for messages that did not arrive by email. */
+            email: null | components["schemas"]["IncomingEmail"];
         };
         MessageOrigin: {
             system: string;
@@ -580,6 +672,82 @@ export interface components {
             sha256: string;
             /** Format: date-time */
             created_at: string;
+            /** @description Email delivery of an outgoing reply; null when the reply was not emailed. */
+            delivery?: null | components["schemas"]["MessageDelivery"];
+            /** @description Envelope details of an incoming email; null for messages that did not arrive by email. */
+            email?: null | components["schemas"]["IncomingEmail"];
+        };
+        /** @enum {string} */
+        DeliveryStatus: "queued" | "sent" | "failed";
+        MessageDelivery: {
+            status: components["schemas"]["DeliveryStatus"];
+            attempts: number;
+            last_error: string | null;
+            /** Format: date-time */
+            sent_at: string | null;
+        };
+        /**
+         * @description Upstream SPF/DKIM/DMARC verdict from Authentication-Results; `none` when no verdict was present.
+         * @enum {string}
+         */
+        EmailAuthentication: "pass" | "fail" | "none";
+        IncomingEmail: {
+            from: string;
+            authentication: components["schemas"]["EmailAuthentication"];
+            /** @description Attachments seen in the message. Their content is not stored yet. */
+            attachments: {
+                filename: string;
+                content_type: string;
+            }[];
+        };
+        EmailChannel: {
+            /** Format: email */
+            support_address: string;
+            secret_set: boolean;
+            /** Format: date-time */
+            secret_rotated_at: string | null;
+            domain: string;
+            /** Format: date-time */
+            domain_verified_at: string | null;
+            /** @description TXT record name that proves control of the domain */
+            dns_record_name: string;
+            /** @description Value the TXT record must hold */
+            dns_record_value: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SMTPStatus: {
+            configured: boolean;
+            host: string;
+            port: number;
+            starttls: boolean;
+            authenticated: boolean;
+        };
+        EmailChannelSettings: {
+            /**
+             * @description `verified`: send as the support address only after domain verification. `any`: always (operator owns the relay).
+             * @enum {string}
+             */
+            from_policy: "verified" | "any";
+            /** @description The From address replies use now; null when replies cannot be emailed. */
+            sending_from: string | null;
+            channel: null | components["schemas"]["EmailChannel"];
+            /** Format: uri */
+            inbound_url: string;
+            smtp: components["schemas"]["SMTPStatus"];
+        };
+        InboundEmailResult: {
+            /** @enum {string} */
+            status: "created" | "threaded" | "duplicate" | "dropped";
+            /** @description Why a message was dropped: auto_submitted, bulk, mailer_daemon, own_message, own_address. */
+            reason: string | null;
+            /** Format: uuid */
+            conversation_id: string | null;
+            /** Format: uuid */
+            message_id: string | null;
+            authentication: components["schemas"]["EmailAuthentication"];
         };
         Error: {
             error: {
@@ -608,11 +776,57 @@ export interface components {
                 "application/json": components["schemas"]["Conversation"];
             };
         };
+        /** @description Email channel settings for this workspace */
+        EmailChannelSettings: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["EmailChannelSettings"];
+            };
+        };
         BadRequest: {
             headers: {
                 [name: string]: unknown;
             };
             content?: never;
+        };
+        /** @description The resource is not in a state that allows this action */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Temporary server failure; the message was not stored and the forwarder should retry */
+        InternalError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Message larger than the inbound limit */
+        PayloadTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Per-contact inbound rate limit reached; the forwarder should retry later */
+        TooManyRequests: {
+            headers: {
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
         };
         Unauthorized: {
             headers: {
@@ -1113,6 +1327,165 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    retryMessageDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                messageId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reply with its delivery requeued */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getEmailChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["EmailChannelSettings"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    putEmailChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    support_address: string;
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["EmailChannelSettings"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteEmailChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Email channel disconnected */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    verifyEmailDomain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["EmailChannelSettings"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    rotateEmailInboundSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description New inbound secret, shown once */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        inbound_secret: string;
+                        /** Format: uri */
+                        inbound_url: string;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    receiveInboundEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "message/rfc822": string;
+            };
+        };
+        responses: {
+            /** @description Message accepted, threaded, recognised as a duplicate, or dropped by loop protection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundEmailResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
+            429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalError"];
         };
     };
     listTimeEntries: {

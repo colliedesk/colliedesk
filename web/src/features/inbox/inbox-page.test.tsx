@@ -64,15 +64,22 @@ test('renders message Markdown in the timeline', () => {
     conversation_id: conversation.id,
     author_agent_id: null,
     author_name: null,
-    kind: 'incoming',
+    kind: 'outgoing',
     body: 'Use the **secure link**.',
     body_html: null,
     origin: null,
     attachments: [],
     created_at: '2026-10-14T00:00:00Z',
+    delivery: null,
+    email: null,
   }]} />);
   expect(screen.getByText('secure link').tagName).toBe('STRONG');
-  expect(screen.getByText('Incoming')).toBeInTheDocument();
+  expect(screen.getByRole('article')).toHaveTextContent('Reply');
+});
+
+test('tells the agent when replies will not be emailed', () => {
+  render(<InboxPage selected={conversation} conversations={[conversation]} outboundNotice="Outgoing email is not configured on this server." />);
+  expect(screen.getByRole('status')).toHaveTextContent('Outgoing email is not configured on this server.');
 });
 
 test('shows the author name and attachment download links on a timeline message', () => {
@@ -95,6 +102,8 @@ test('shows the author name and attachment download links on a timeline message'
       created_at: '2026-10-14T00:00:00Z',
     }],
     created_at: '2026-10-14T00:00:00Z',
+    delivery: null,
+    email: null,
   }]} />);
   expect(screen.getByText('Grace Hopper')).toBeInTheDocument();
   const link = screen.getByRole('link', { name: /server\.log/ });
@@ -114,6 +123,8 @@ const imported = {
   origin: { system: 'freshdesk', external_id: '7004', kind: 'forward' as const, from: null, to: ['vendor@partner.example'], cc: ['boss@acme.example'], bcc: [] },
   attachments: [],
   created_at: '2026-10-14T00:00:00Z',
+  delivery: null,
+  email: null,
 };
 
 test('labels imported messages with their source kind and recipients', () => {
