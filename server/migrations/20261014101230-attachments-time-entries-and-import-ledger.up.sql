@@ -1,6 +1,8 @@
 ALTER TABLE messages ADD CONSTRAINT messages_workspace_id_id_key UNIQUE (workspace_id, id);
 ALTER TABLE messages ADD COLUMN author_name text;
 ALTER TABLE messages ADD COLUMN body_html text;
+ALTER TABLE messages ADD COLUMN origin jsonb;
+ALTER TABLE conversations ADD COLUMN origin jsonb;
 ALTER TABLE contacts ADD COLUMN organization text;
 
 CREATE TABLE attachments (
