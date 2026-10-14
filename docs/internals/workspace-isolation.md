@@ -10,6 +10,26 @@ Two layers keep one workspace's data away from another:
 
 Layer 1 stays mandatory. Layer 2 catches the query that layer 1 missed.
 
+## What RLS does not protect against
+
+RLS here is a defence against a **forgotten filter**, not against **SQL injection**.
+
+- **Single-login mode** (only `DATABASE_URL` is set; every install created before the request
+  login). The request connection's session user is the owner,
+  and that is a superuser in the default compose setup. Injected SQL can run `RESET ROLE` or
+  `set_config('role', '<owner>', true)` and leave the app role. It then sees every workspace.
+  With a non-superuser owner it can still set `app.privileged` itself. The test
+  `TestRequestLoginCannotLeaveTheWorkspaceScope` pins this behaviour.
+- **Request-login mode** (`DATABASE_REQUEST_URL` is also set; fresh installs from `install.sh`).
+  Requests connect as a separate login that holds the app role with `INHERIT FALSE`. After
+  `RESET ROLE` it has no rights on any table. It cannot become the owner. The same test proves
+  "permission denied" for `RESET ROLE`, for switching to the owner, and for setting
+  `app.privileged`.
+- In both modes, injected SQL inside a scoped transaction can still set `app.workspace_id` to
+  another workspace's id. RLS cannot stop that, because the request path sets this value itself.
+  Ids are random UUIDs, and the policy never reveals another workspace's id. Parameterized queries
+  remain the defence against injection.
+
 ## How the database enforces it
 
 Migration `20261014135950-workspace-row-level-security` does this for `workspaces` (keyed by `id`)
@@ -17,7 +37,7 @@ and every table with a `workspace_id` column:
 
 - `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY`, so the table owner is also subject
   to the policies.
-- Policy `workspace_isolation`, `TO colliedesk_app`:
+- Policy `workspace_isolation`, `TO` the app role:
   `workspace_id = (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid)`, for reads
   and writes. An unset or empty setting compares with `NULL` and matches no row. There is no error,
   so nothing leaks through error text.
@@ -28,8 +48,7 @@ and every table with a `workspace_id` column:
 The settings sit in scalar subqueries on purpose. PostgreSQL then reads them once per query (an
 InitPlan), not once per row. The app role's qual has no `OR`, so the planner can still use the
 `workspace_id` indexes. Before this change, inline `current_setting()` plus an `OR` branch for the
-privileged policy cost about 28 ms p95 on the inbox gate. Measured on cook-01 with four alternating
-runs against main: status p95 38.6 → 40.9 ms, search p95 49.3 → 56.7 ms (budget 100 ms).
+privileged policy cost about 28 ms p95 on the inbox gate. See `performance.md` for the gate.
 
 Referential integrity checks and `ON DELETE CASCADE` run as the table owner without RLS, so
 composite foreign keys keep working across the scoped tables.
@@ -38,37 +57,58 @@ composite foreign keys keep working across the scoped tables.
 
 | Role | Who | Sees |
 |---|---|---|
-| `DATABASE_URL` role (owner) | Opens the pool, runs migrations | Superuser: all rows (PostgreSQL skips RLS for superusers). Other owner: only rows of a transaction marked `app.privileged`. |
-| `colliedesk_app` | Every request-path transaction switches to it | Only the workspace in `app.workspace_id` |
+| `DATABASE_URL` role (owner) | Runs migrations, privileged lookups, the advisory lock | Superuser: all rows (PostgreSQL skips RLS for superusers). Other owner: only rows of a transaction marked `app.privileged`. |
+| `colliedesk_app_<database>` (app role) | Every workspace-scoped transaction switches to it | Only the workspace in `app.workspace_id` |
+| `DATABASE_REQUEST_URL` login (optional, `colliedesk_request` in installs) | Opens the request pool | Nothing by itself; it can only `SET ROLE` to the app role |
 
-`colliedesk_app` is `NOLOGIN NOSUPERUSER NOBYPASSRLS`. It has `SELECT, INSERT, UPDATE, DELETE` on
-the schema's tables (also future tables through default privileges) and nothing on
-`schema_migrations`. The migration creates the role when it is missing and grants it to the
-migrating role.
-
-Design choice: one `DATABASE_URL`, role switch per transaction. A second login role would need a
-second password in every install. The installer and `compose.yaml` would change, and existing
-installs would need a manual step. `SET ROLE` inside the transaction needs neither.
+- **App role.** `NOLOGIN NOSUPERUSER NOBYPASSRLS`, one per database. The name is
+  `colliedesk_app_` plus the database name; past 63 bytes it is shortened with an md5 suffix. Two
+  installs on one cluster therefore never share a role, and the owner of one cannot act in the
+  other's database (`TestAppRoleOfOneDatabaseCannotReachAnother`). It has
+  `SELECT, INSERT, UPDATE, DELETE` on the schema's tables, also future tables through default
+  privileges, and nothing on `schema_migrations`. The migration creates the role and grants it to
+  the owner. The server reads the name back from the `workspace_isolation` policy, so the
+  migration is the only place that defines it.
+- **Request login.** `colliedesk migrate` creates it when `DATABASE_REQUEST_URL` is set
+  (`database.EnsureRequestLogin`). The user and password come from that URL. It is granted the app
+  role `WITH INHERIT FALSE, SET TRUE`. The owner needs `CREATEROLE` for this. The installer's owner
+  has it; PostgreSQL 16+ limits it to roles that the owner created.
+- **Fresh installs** (`install.sh`):
+  1. The `postgres` superuser is used only by the image to create the database.
+  2. `initdb/10-colliedesk-owner.sh` runs once, when the volume is created. It creates the
+     non-superuser owner `colliedesk` (`LOGIN CREATEROLE`) and hands it the database.
+  3. `.env` holds `DATABASE_URL` (the owner) and `DATABASE_REQUEST_URL` (`colliedesk_request`).
+- **The repository's `compose.yaml`** (development, "From a clone") keeps the superuser owner,
+  because the tests need it, and sets `DATABASE_REQUEST_URL` so that requests run in
+  request-login mode.
+- **Existing installs** keep upgrading with no manual step. Their `.env` has neither variable, so
+  `compose.yaml` falls back to the old superuser `DATABASE_URL`, and they run in single-login mode.
 
 `colliedesk serve` calls `database.DB.Verify` at start and refuses to run in these cases:
 
-- `colliedesk_app` is missing.
-- `colliedesk_app` is a superuser or has `BYPASSRLS`.
-- The `DATABASE_URL` role cannot `SET ROLE colliedesk_app`.
+- The app role is missing, is a superuser or has `BYPASSRLS`.
+- The request connection cannot `SET ROLE` to the app role.
+- With a separate request login: that login is a superuser, has `BYPASSRLS` or is a member of the
+  owner.
 
 ## The two ways to query
 
 All queries go through `internal/database.DB` (`scope.go`):
 
-- `InWorkspace(ctx, workspaceID, fn)` / `BeginWorkspace(ctx, workspaceID)` start a transaction,
-  then run `SELECT set_config('role','colliedesk_app',true), set_config('app.workspace_id',$1,true)`.
-  Both settings are transaction-local. Commit or rollback ends them, so a pooled connection never
-  carries a workspace to the next request. An empty or malformed workspace id returns
-  `ErrNoWorkspace` before any SQL runs.
-- `Privileged(ctx, reason, fn)` runs as the owner with `app.privileged = 'on'` for that transaction.
+- `InWorkspace(ctx, workspaceID, fn)` / `BeginWorkspace(ctx, workspaceID)` start a transaction on
+  the request pool, then run
+  `SELECT set_config('role',<app role>,true), set_config('app.workspace_id',$1,true)`.
+  - Both settings are transaction-local. Commit or rollback ends them, so a pooled connection
+    never carries a workspace to the next request.
+  - An empty or malformed workspace id returns `ErrNoWorkspace` before any SQL runs.
+  - The rollback is deferred, so a panicking callback also returns its connection and releases its
+    row and advisory locks (`TestPanickingCallbackReleasesConnectionAndLocks`).
+- `Privileged(ctx, reason, fn)` runs on the owner pool with `app.privileged = 'on'` for that
+  transaction.
 
-A plain query on the pool is not workspace scoped. The store, auth, importer and email code have no
-access to the pool. Their constructors wrap it in a `database.DB`.
+`database.New(pool)` uses one pool for both. `database.NewSplit(owner, request)` is the
+request-login mode. `httpapi.Config.RequestPool` and `store.NewWithDB` / `auth.NewWithDB` carry it.
+The store, auth, importer and email code never touch a pool.
 
 ## Privileged allowlist
 
@@ -78,6 +118,7 @@ transaction only resolves the workspace; the work after that runs in `InWorkspac
 | Privilege | Call site | Why it crosses workspaces |
 |---|---|---|
 | `PrivilegeMigrate` | `database/migrate.go` | Schema changes and data migrations |
+| `PrivilegeRequestLogin` | `database/scope.go` (`EnsureRequestLogin`) | Creates the request login and grants it the app role (`colliedesk migrate`) |
 | `PrivilegeCreateWorkspace` | `auth/service.go` | Inserts the workspace, its first admin and pairing link (CLI `create-workspace`) |
 | `PrivilegeWorkspaceBySlug` | `database/scope.go` (`WorkspaceIDBySlug`) | CLI `pair`, `import freshdesk`, `import undo` name a workspace by slug |
 | `PrivilegeSessionToken` | `auth/sessions.go` | Session token hash → workspace; session checks then run scoped |
@@ -92,46 +133,67 @@ The Freshdesk importer and undo resolve the slug once, then run every read and w
 
 ## Guards
 
-- `TestEveryWorkspaceTableEnforcesRowLevelSecurity` reads the catalog. It fails when a table with a
-  `workspace_id` column, or `workspaces`, lacks ENABLE, FORCE or the `workspace_isolation` policy.
-  A new table must add all three in its own migration, together with `privileged_access`. Copy the
-  statements from the migration above.
-- `TestPrivilegedPathsMatchTheReviewedAllowlist` parses the server source. It fails when a
-  `Privileged(...)` call site is added or removed, or when a new file imports `pgxpool`. To add a
-  privileged path, update the test's allowlist and the table above in the same change. Explain in
-  the review why the path must cross workspaces.
-- `TestUnfilteredQueryInWorkspaceSeesOnlyThatWorkspace`, `TestQueryWithoutWorkspaceContextSeesNoRows`
-  and `TestWorkspaceCannotWriteRowsOfAnotherWorkspace` check the policies themselves.
-- `TestNonSuperuserOwnerIsAlsoFailClosed` runs migrations and queries as a non-superuser owner,
-  the shape of a managed PostgreSQL. Forced RLS hides all rows from its plain queries.
+- **`TestEveryWorkspaceTableEnforcesRowLevelSecurity`** reads the catalog.
+  - It checks every table in the schema that has a `workspace_id` column or that the app role holds
+    any privilege on, plus `workspaces`.
+  - It fails when one of them lacks ENABLE, FORCE or the `workspace_isolation` policy.
+  - Default privileges grant every new table to the app role, so a new table must add all three in
+    its own migration, together with `privileged_access`, or revoke the app role. There is no
+    allowlist; `schema_migrations` is revoked.
+  - `TestSecurityGuardFlagsAnyTableTheAppRoleCanReach` proves the gate catches a table without
+    `workspace_id`.
+- **`TestPrivilegedPathsMatchTheReviewedAllowlist`** parses the server source. It fails in three
+  cases:
+  - A `Privileged(...)` call site is added or removed.
+  - A new file imports `pgxpool`.
+  - Code outside `internal/database` calls `Query`, `QueryRow`, `Exec`, `Begin`, `BeginTx`,
+    `Acquire`, `SendBatch` or `CopyFrom` on a `*pgxpool.Pool` (parameter, field, variable, or
+    result of `pgxpool.New`).
+
+  To add a privileged path, update the test's allowlist and the table above in the same change.
+  Explain in the review why the path must cross workspaces.
+- **Policy tests:** `TestUnfilteredQueryInWorkspaceSeesOnlyThatWorkspace`,
+  `TestQueryWithoutWorkspaceContextSeesNoRows` and
+  `TestWorkspaceCannotWriteRowsOfAnotherWorkspace` check the policies themselves.
+- **Non-superuser owner:** `TestNonSuperuserOwnerIsAlsoFailClosed` runs migrations and queries as a
+  non-superuser owner. Forced RLS hides all rows from its plain queries.
 
 ## Traps
 
 - **Tests connect as a superuser.** Raw `pool.Query` calls in tests bypass RLS on purpose; they
-  seed and inspect data. Production code must never copy that pattern. The pgxpool guard catches
-  a new file that tries.
+  seed and inspect data. Production code must never copy that pattern; the raw-pool guard fails on
+  it outside `internal/database`.
 - **One transaction, one workspace.** Do not call a public `Store` method from inside a scoped
   callback. It opens a second transaction on a second connection, and a small pool can deadlock.
   Use the package-level helpers that take the `pgx.Tx` (`getConversation`, `getMessage`, …).
 - **Do not hold a scoped transaction across network calls** (DNS, SMTP, Freshdesk). Read, end the
   transaction, then call out. `VerifyEmailDomain` and the importer follow this.
-- **Roles are cluster-wide.** Several CollieDesk databases on one PostgreSQL share
-  `colliedesk_app`. The down migration removes grants and policies in its schema and keeps the role.
 - **Performance.** A scoped call adds `BEGIN`, one `set_config` round trip and `COMMIT`. The inbox
   p95 gate in `performance.md` runs through this path and must stay within budget.
 
 ## Operator notes
 
-- Upgrades need no manual step: `colliedesk migrate` (run by the compose command) creates the role
-  and grants it.
-- A `DATABASE_URL` role that is not a superuser and has no `CREATEROLE` cannot create
-  `colliedesk_app`. The migration then stops with a hint. Run once as a superuser:
-  `CREATE ROLE colliedesk_app NOLOGIN; GRANT colliedesk_app TO <database_url_role>;`, then run
-  `colliedesk migrate` again.
-- `privileged_access` names the role that ran the migration. If you move to another
-  `DATABASE_URL` role that is not a superuser, make it the owner of the tables and recreate that
-  policy for it. A superuser role needs nothing.
-- Backups: `pg_dump` does not include roles. Run it as a superuser (the compose default
-  `POSTGRES_USER` is one). With FORCE RLS, a non-superuser owner stops with "query would be
-  affected by row-level security policy". Before you restore into a new cluster, create the role:
-  `CREATE ROLE colliedesk_app NOLOGIN; GRANT colliedesk_app TO <database_url_role>;`.
+- **PostgreSQL 16 or newer** is required. The `SET` option of role membership (`pg_has_role(...,
+  'SET')`, `GRANT ... WITH INHERIT FALSE, SET TRUE`) appeared in 16. `compose.yaml`, `install.sh`
+  and CI use `postgres:17-bookworm`.
+- **Upgrades** need no manual step. `colliedesk migrate`, which the compose command runs, creates
+  the app role and grants it.
+- **Optional hardening for an existing install** (request-login mode):
+  1. Add a line to `.env`:
+     `DATABASE_REQUEST_URL=postgres://colliedesk_request:<new random password>@postgres:5432/colliedesk?sslmode=disable`
+  2. Run `docker compose up -d`. Migrate creates the login.
+  3. Optional: to also move off the superuser owner, create a non-superuser owner and reassign the
+     database to it. This is a manual DBA step, not automated.
+- **Managed PostgreSQL** (owner not a superuser, no `CREATEROLE`): the migration stops with the
+  exact statement to run as a superuser. One example is
+  `CREATE ROLE colliedesk_app_<db> NOLOGIN; GRANT colliedesk_app_<db> TO <owner>;`. Then run
+  `colliedesk migrate` again. The same applies when only the GRANT is missing.
+- **Changing the owner role.** `privileged_access` names the role that ran the migration. If you
+  move to another `DATABASE_URL` role that is not a superuser, make it the owner of the tables and
+  recreate that policy for it. A superuser role needs nothing.
+- **Backups.** `pg_dump` does not include roles. Run it as a superuser. With FORCE RLS, a
+  non-superuser owner stops with "query would be affected by row-level security policy". Before
+  you restore into a new cluster, create the app role:
+  `CREATE ROLE colliedesk_app_<db> NOLOGIN; GRANT colliedesk_app_<db> TO <owner>;`.
+- **Password logging.** The request login's password is sent once, in a `CREATE ROLE` statement.
+  Keep `log_statement` below `ddl` on that server.
