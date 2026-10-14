@@ -25,8 +25,11 @@ services:
       DATABASE_URL: postgres://colliedesk:colliedesk@postgres:5432/colliedesk?sslmode=disable
       APP_ORIGIN: http://localhost:8080
       LISTEN_ADDR: :8080
+      ATTACHMENTS_DIR: /data/attachments
     ports:
       - "127.0.0.1:8080:8080"
+    volumes:
+      - attachments-data:/data/attachments
     depends_on:
       postgres:
         condition: service_healthy
@@ -34,3 +37,4 @@ services:
 
 volumes:
   postgres-data:
+  attachments-data:

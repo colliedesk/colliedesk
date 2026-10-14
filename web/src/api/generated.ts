@@ -191,6 +191,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/attachments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description Streams the stored bytes of an attachment in the caller's workspace. Always served as a download (`Content-Disposition: attachment`) with `application/octet-stream`; the original media type is in the attachment metadata on the message. */
+        get: operations["downloadAttachment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/contacts": {
         parameters: {
             query?: never;
@@ -384,6 +403,8 @@ export interface components {
             name: string;
             /** Format: email */
             email: string;
+            /** @description Company or organization name, for example imported from a Freshdesk company */
+            organization: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -426,9 +447,24 @@ export interface components {
             conversation_id: string;
             /** Format: uuid */
             author_agent_id: string | null;
+            /** @description Display name of an author without a CollieDesk agent account (customer or imported agent) */
+            author_name: string | null;
             /** @enum {string} */
             kind: "incoming" | "outgoing" | "note";
             body: string;
+            attachments: components["schemas"]["Attachment"][];
+            /** Format: date-time */
+            created_at: string;
+        };
+        Attachment: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            message_id: string;
+            filename: string;
+            content_type: string;
+            size: number;
+            sha256: string;
             /** Format: date-time */
             created_at: string;
         };
@@ -913,6 +949,33 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    downloadAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Attachment bytes */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    /** @description Hex SHA-256 recorded when the file was stored */
+                    "X-Content-SHA256"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
     };

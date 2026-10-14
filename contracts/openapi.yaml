@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CollieDesk API
-  version: 0.1.0
+  version: 0.2.0
   description: Passwordless, workspace-scoped helpdesk API.
 servers:
   - url: /
@@ -253,6 +253,26 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/attachments/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: downloadAttachment
+      x-permission: conversations:read
+      description: >-
+        Streams the stored bytes of an attachment in the caller's workspace. Always served as a
+        download (`Content-Disposition: attachment`) with `application/octet-stream`; the original
+        media type is in the attachment metadata on the message.
+      responses:
+        '200':
+          description: Attachment bytes
+          headers:
+            Content-Disposition: {schema: {type: string}}
+            X-Content-SHA256: {schema: {type: string}, description: 'Hex SHA-256 recorded when the file was stored'}
+          content:
+            application/octet-stream:
+              schema: {type: string, format: binary}
+        '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/contacts:
     get:
@@ -526,11 +546,12 @@ components:
         revoked_at: {type: [string, 'null'], format: date-time}
     Contact:
       type: object
-      required: [id, name, email, created_at, updated_at]
+      required: [id, name, email, organization, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         name: {type: string}
         email: {type: string, format: email}
+        organization: {type: [string, 'null'], description: 'Company or organization name, for example imported from a Freshdesk company'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
     ContactDetail:
@@ -569,13 +590,26 @@ components:
         page_size: {type: integer, minimum: 1}
     Message:
       type: object
-      required: [id, conversation_id, author_agent_id, kind, body, created_at]
+      required: [id, conversation_id, author_agent_id, author_name, kind, body, attachments, created_at]
       properties:
         id: {type: string, format: uuid}
         conversation_id: {type: string, format: uuid}
         author_agent_id: {type: [string, 'null'], format: uuid}
+        author_name: {type: [string, 'null'], description: 'Display name of an author without a CollieDesk agent account (customer or imported agent)'}
         kind: {type: string, enum: [incoming, outgoing, note]}
         body: {type: string}
+        attachments: {type: array, items: {$ref: '#/components/schemas/Attachment'}}
+        created_at: {type: string, format: date-time}
+    Attachment:
+      type: object
+      required: [id, message_id, filename, content_type, size, sha256, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        message_id: {type: string, format: uuid}
+        filename: {type: string}
+        content_type: {type: string}
+        size: {type: integer, minimum: 0}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
         created_at: {type: string, format: date-time}
     Error:
       type: object

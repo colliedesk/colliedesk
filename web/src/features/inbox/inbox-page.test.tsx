@@ -62,10 +62,38 @@ test('renders message Markdown in the timeline', () => {
     id: '44444444-4444-4444-8444-444444444444',
     conversation_id: conversation.id,
     author_agent_id: null,
+    author_name: null,
     kind: 'incoming',
     body: 'Use the **secure link**.',
+    attachments: [],
     created_at: '2026-10-14T00:00:00Z',
   }]} />);
   expect(screen.getByText('secure link').tagName).toBe('STRONG');
   expect(screen.getByText('Incoming')).toBeInTheDocument();
+});
+
+test('shows the author name and attachment download links on a timeline message', () => {
+  render(<InboxPage selected={conversation} conversations={[conversation]} timeline={[{
+    id: '55555555-5555-4555-8555-555555555555',
+    conversation_id: conversation.id,
+    author_agent_id: null,
+    author_name: 'Grace Hopper',
+    kind: 'incoming',
+    body: 'Logs attached.',
+    attachments: [{
+      id: '66666666-6666-4666-8666-666666666666',
+      message_id: '55555555-5555-4555-8555-555555555555',
+      filename: 'server.log',
+      content_type: 'text/plain',
+      size: 2048,
+      sha256: 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9',
+      created_at: '2026-10-14T00:00:00Z',
+    }],
+    created_at: '2026-10-14T00:00:00Z',
+  }]} />);
+  expect(screen.getByText('Grace Hopper')).toBeInTheDocument();
+  const link = screen.getByRole('link', { name: /server\.log/ });
+  expect(link).toHaveAttribute('href', '/api/v1/attachments/66666666-6666-4666-8666-666666666666');
+  expect(link).toHaveAttribute('download');
+  expect(screen.getByText('2.0 KB')).toBeInTheDocument();
 });

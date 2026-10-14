@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,7 +14,8 @@ import (
 const sessionCookie = "colliedesk_session"
 
 type Config struct {
-	Origin string
+	Origin      string
+	Attachments attachments.Storage
 }
 
 type Route struct {
@@ -63,6 +65,7 @@ func Routes() []Route {
 		{http.MethodDelete, "/api/v1/conversations/{id}/tags/{tagId}", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/conversations/{id}/messages", auth.PermissionConversationsRead},
 		{http.MethodPost, "/api/v1/conversations/{id}/messages", auth.PermissionConversationsWrite},
+		{http.MethodGet, "/api/v1/attachments/{id}", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/contacts", auth.PermissionContactsRead},
 		{http.MethodPost, "/api/v1/contacts", auth.PermissionContactsWrite},
 		{http.MethodGet, "/api/v1/contacts/{id}", auth.PermissionContactsRead},

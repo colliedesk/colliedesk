@@ -14,9 +14,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -30,12 +32,43 @@ func testAPI(t *testing.T) (http.Handler, *auth.Service) {
 
 func testAPIWithPool(t *testing.T) (http.Handler, *auth.Service, *pgxpool.Pool) {
 	t.Helper()
+	api, service, pool, _ := testAPIWithStorage(t)
+	return api, service, pool
+}
+
+func testAPIWithStorage(t *testing.T) (http.Handler, *auth.Service, *pgxpool.Pool, attachments.Storage) {
+	t.Helper()
 	pool := testPool(t)
 	if err := database.Migrate(context.Background(), pool); err != nil {
 		t.Fatal(err)
 	}
+	storage, err := attachments.NewLocalDisk(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	authService := auth.New(pool, testOrigin)
-	return httpapi.New(pool, httpapi.Config{Origin: testOrigin}), authService, pool
+	return httpapi.New(pool, httpapi.Config{Origin: testOrigin, Attachments: storage}), authService, pool, storage
+}
+
+func seedAttachment(t *testing.T, pool *pgxpool.Pool, storage attachments.Storage, token string, api http.Handler, messageID, filename, content string) string {
+	t.Helper()
+	var me struct {
+		Workspace struct {
+			ID string `json:"id"`
+		} `json:"workspace"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/auth/me", nil, token, nil), &me)
+	object, err := storage.Put(context.Background(), me.Workspace.ID, strings.NewReader(content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, err := store.New(pool).CreateAttachment(context.Background(), me.Workspace.ID, store.NewAttachment{
+		MessageID: messageID, Filename: filename, ContentType: "text/plain", Object: object,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return item.ID
 }
 
 func createSession(t *testing.T, api http.Handler, service *auth.Service, workspace, email string) string {

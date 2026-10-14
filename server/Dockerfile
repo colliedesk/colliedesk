@@ -19,6 +19,8 @@ RUN CGO_ENABLED=0 go build -trimpath -o /out/colliedesk ./cmd/colliedesk
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=go /out/colliedesk /app/colliedesk
+RUN mkdir -p /data/attachments && chown -R 65532:65532 /data
+ENV ATTACHMENTS_DIR=/data/attachments
 USER 65532:65532
 EXPOSE 8080
 ENTRYPOINT ["/app/colliedesk"]

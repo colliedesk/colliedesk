@@ -34,7 +34,7 @@ func TestMigrateCreatesTenantScopedTables(t *testing.T) {
 		}
 		got = append(got, name)
 	}
-	want := []string{"agents", "contacts", "conversation_tags", "conversations", "messages", "pairing_links", "sessions", "tags"}
+	want := []string{"agents", "attachments", "contacts", "conversation_tags", "conversations", "import_items", "messages", "pairing_links", "sessions", "tags", "time_entries"}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("workspace-scoped tables = %v, want %v", got, want)
 	}
@@ -86,8 +86,10 @@ func TestMigrationAppliesUpDownAndUpAgain(t *testing.T) {
 	if !tableExists(t, pool, "workspaces") {
 		t.Fatal("workspaces table missing after first up")
 	}
-	if err := rollbackLatest(ctx, pool); err != nil {
-		t.Fatalf("down: %v", err)
+	for tableExists(t, pool, "workspaces") {
+		if err := rollbackLatest(ctx, pool); err != nil {
+			t.Fatalf("down: %v", err)
+		}
 	}
 	if tableExists(t, pool, "workspaces") {
 		t.Fatal("workspaces table remains after down")

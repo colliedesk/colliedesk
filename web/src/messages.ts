@@ -38,6 +38,8 @@ export const messages = {
   replyMode: 'Reply',
   incoming: 'Incoming',
   noteMode: 'Private note',
+  attachments: 'Attachments',
+  downloadAttachment: (filename: string) => `Download ${filename}`,
   priority: 'Priority',
   contact: 'Contact',
   tags: 'Tags',

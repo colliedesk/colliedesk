@@ -40,11 +40,12 @@ type Invite struct {
 }
 
 type Contact struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Email     string    `json:"email"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Email        string    `json:"email"`
+	Organization *string   `json:"organization"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type ContactDetail struct {
@@ -71,12 +72,24 @@ type Conversation struct {
 }
 
 type Message struct {
-	ID             string    `json:"id"`
-	ConversationID string    `json:"conversation_id"`
-	AuthorAgentID  *string   `json:"author_agent_id"`
-	Kind           string    `json:"kind"`
-	Body           string    `json:"body"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID             string       `json:"id"`
+	ConversationID string       `json:"conversation_id"`
+	AuthorAgentID  *string      `json:"author_agent_id"`
+	AuthorName     *string      `json:"author_name"`
+	Kind           string       `json:"kind"`
+	Body           string       `json:"body"`
+	Attachments    []Attachment `json:"attachments"`
+	CreatedAt      time.Time    `json:"created_at"`
+}
+
+type Attachment struct {
+	ID          string    `json:"id"`
+	MessageID   string    `json:"message_id"`
+	Filename    string    `json:"filename"`
+	ContentType string    `json:"content_type"`
+	Size        int64     `json:"size"`
+	SHA256      string    `json:"sha256"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 func UTC(value time.Time) time.Time { return value.UTC() }

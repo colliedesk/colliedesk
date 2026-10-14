@@ -1,5 +1,6 @@
 import Markdown from 'react-markdown';
-import type { Conversation, Message } from '../../api/schemas';
+import type { Attachment, Conversation, Message } from '../../api/schemas';
+import { formatBytes } from '../../lib/format-bytes';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 
@@ -20,12 +21,27 @@ export function TimelinePanel({ conversation, items, timezone }: TimelinePanelPr
       <div className="timeline-scroll">
         {items.map((item) => (
           <article className={`message message-${item.kind}`} key={item.id}>
-            <div className="message-meta"><strong>{item.kind === 'note' ? messages.noteMode : item.kind === 'incoming' ? messages.incoming : messages.replyMode}</strong>
+            <div className="message-meta"><span><strong>{item.kind === 'note' ? messages.noteMode : item.kind === 'incoming' ? messages.incoming : messages.replyMode}</strong>
+              {item.author_name && <span className="message-author">{item.author_name}</span>}</span>
               <time dateTime={item.created_at}>{formatDate(item.created_at, timezone)}</time></div>
             <div className="markdown-body"><Markdown>{item.body}</Markdown></div>
+            {item.attachments.length > 0 && <AttachmentList items={item.attachments} />}
           </article>
         ))}
       </div>
     </section>
+  );
+}
+
+function AttachmentList({ items }: { items: Attachment[] }) {
+  return (
+    <ul className="message-attachments" aria-label={messages.attachments}>
+      {items.map((file) => (
+        <li key={file.id}>
+          <a href={`/api/v1/attachments/${file.id}`} download={file.filename} title={messages.downloadAttachment(file.filename)}>{file.filename}</a>
+          <span className="attachment-size">{formatBytes(file.size)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

@@ -19,7 +19,7 @@ export const agentSchema = z.object({
 }) satisfies z.ZodType<Generated<'Agent'>>;
 export const tagSchema = z.object({ id: z.string().uuid(), name: z.string(), color: z.string() }) satisfies z.ZodType<Generated<'Tag'>>;
 export const contactSchema = z.object({
-  id: z.string().uuid(), name: z.string(), email: z.string().email(),
+  id: z.string().uuid(), name: z.string(), email: z.string().email(), organization: z.string().nullable(),
   created_at: z.string().datetime(), updated_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'Contact'>>;
 export const conversationSchema = z.object({
@@ -28,9 +28,14 @@ export const conversationSchema = z.object({
   tags: z.array(tagSchema), created_at: z.string().datetime(), updated_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'Conversation'>>;
 export const contactDetailSchema = contactSchema.extend({ conversations: z.array(conversationSchema) }) satisfies z.ZodType<Generated<'ContactDetail'>>;
+export const attachmentSchema = z.object({
+  id: z.string().uuid(), message_id: z.string().uuid(), filename: z.string(), content_type: z.string(),
+  size: z.number().int().nonnegative(), sha256: z.string().regex(/^[0-9a-f]{64}$/), created_at: z.string().datetime(),
+}) satisfies z.ZodType<Generated<'Attachment'>>;
 export const messageSchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), author_agent_id: z.string().uuid().nullable(),
-  kind: z.enum(['incoming', 'outgoing', 'note']), body: z.string(), created_at: z.string().datetime(),
+  author_name: z.string().nullable(), kind: z.enum(['incoming', 'outgoing', 'note']), body: z.string(),
+  attachments: z.array(attachmentSchema), created_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'Message'>>;
 export const sessionSchema = z.object({
   id: z.string().uuid(), agent_id: z.string().uuid(), agent_email: z.string().email(), label: z.string(),
@@ -53,6 +58,7 @@ export const agentListSchema = z.object({ items: z.array(agentSchema) }) satisfi
 export const tagListSchema = z.object({ items: z.array(tagSchema) }) satisfies z.ZodType<JsonResponse<'listTags', 200>>;
 
 export type Agent = Generated<'Agent'>;
+export type Attachment = Generated<'Attachment'>;
 export type Conversation = Generated<'Conversation'>;
 export type Invite = Generated<'Invite'>;
 export type Message = Generated<'Message'>;
