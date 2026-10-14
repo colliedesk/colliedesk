@@ -84,8 +84,9 @@ cat >"$TARGET_DIR/initdb/10-colliedesk-owner.sh" <<'INITDB'
 #!/bin/sh
 set -e
 if [ -n "${COLLIEDESK_OWNER_PASSWORD:-}" ]; then
-  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres \
-    --set owner_password="$COLLIEDESK_OWNER_PASSWORD" <<'SQL'
+  # psql reads the password from its environment, so it never appears in a process list.
+  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres <<'SQL'
+\getenv owner_password COLLIEDESK_OWNER_PASSWORD
 CREATE ROLE colliedesk LOGIN CREATEROLE PASSWORD :'owner_password';
 ALTER DATABASE colliedesk OWNER TO colliedesk;
 SQL

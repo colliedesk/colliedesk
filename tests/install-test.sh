@@ -75,6 +75,12 @@ grep -E '^DATABASE_URL=postgres://colliedesk:[0-9a-f]{64}@postgres:5432/colliede
 grep -E '^DATABASE_REQUEST_URL=postgres://colliedesk_request:[0-9a-f]{64}@postgres:5432/colliedesk\?sslmode=disable$' "$fresh/.env" >/dev/null
 grep -E '^COLLIEDESK_OWNER_PASSWORD=[0-9a-f]{64}$' "$fresh/.env" >/dev/null
 [ -f "$fresh/initdb/10-colliedesk-owner.sh" ]
+# The owner password reaches psql through its environment, never its argv (visible in ps).
+grep -F '\getenv owner_password COLLIEDESK_OWNER_PASSWORD' "$fresh/initdb/10-colliedesk-owner.sh" >/dev/null
+if grep -F 'COLLIEDESK_OWNER_PASSWORD"' "$fresh/initdb/10-colliedesk-owner.sh" >/dev/null; then
+  printf '%s\n' 'initdb script passes the owner password on the psql command line' >&2
+  exit 1
+fi
 grep -F './initdb:/docker-entrypoint-initdb.d:ro' "$fresh/compose.yaml" >/dev/null
 grep -F 'DATABASE_REQUEST_URL: ${DATABASE_REQUEST_URL:-}' "$fresh/compose.yaml" >/dev/null
 # Installs whose .env predates the request login keep connecting as before.
