@@ -83,7 +83,12 @@ func (r *run) expectedTickets() []string {
 }
 
 func (r *run) countTickets(ctx context.Context, report *Report, ticketIDs, contactIDs []string) error {
-	rows, err := r.pool.Query(ctx, `SELECT entity,status,meta FROM import_items WHERE workspace_id=$1 AND source=$2
+	tx, err := r.begin(ctx)
+	if err != nil {
+		return fmt.Errorf("reconcile tickets: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // read only
+	rows, err := tx.Query(ctx, `SELECT entity,status,meta FROM import_items WHERE workspace_id=$1 AND source=$2
 		AND ((entity='ticket' AND source_id=ANY($3)) OR (entity='contact' AND source_id=ANY($4)))`,
 		r.workspaceID, r.ledger.source, ticketIDs, contactIDs)
 	if err != nil {
@@ -114,7 +119,12 @@ func (r *run) countTickets(ctx context.Context, report *Report, ticketIDs, conta
 }
 
 func (r *run) countChildren(ctx context.Context, report *Report, ticketIDs, _ []string) error {
-	rows, err := r.pool.Query(ctx, `SELECT entity,status,count(*) FROM import_items
+	tx, err := r.begin(ctx)
+	if err != nil {
+		return fmt.Errorf("reconcile items: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // read only
+	rows, err := tx.Query(ctx, `SELECT entity,status,count(*) FROM import_items
 		WHERE workspace_id=$1 AND source=$2 AND parent_source_id=ANY($3) GROUP BY entity,status`, r.workspaceID, r.ledger.source, ticketIDs)
 	if err != nil {
 		return fmt.Errorf("reconcile items: %w", err)
@@ -145,7 +155,12 @@ func addStatus(target *EntityCount, status string) {
 }
 
 func (r *run) collectFailures(ctx context.Context, report *Report, ticketIDs, contactIDs []string) error {
-	rows, err := r.pool.Query(ctx, `SELECT entity,source_id,COALESCE(parent_source_id,''),error FROM import_items
+	tx, err := r.begin(ctx)
+	if err != nil {
+		return fmt.Errorf("reconcile failures: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // read only
+	rows, err := tx.Query(ctx, `SELECT entity,source_id,COALESCE(parent_source_id,''),error FROM import_items
 		WHERE workspace_id=$1 AND source=$2 AND status='failed' AND ((entity='ticket' AND source_id=ANY($3))
 		OR parent_source_id=ANY($3) OR (entity='contact' AND source_id=ANY($4)))
 		ORDER BY entity,length(source_id),source_id`, r.workspaceID, r.ledger.source, ticketIDs, contactIDs)

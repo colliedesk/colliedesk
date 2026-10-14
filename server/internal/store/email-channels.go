@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/jackc/pgx/v5"
@@ -41,7 +42,9 @@ func scanChannel(row pgx.Row) (domain.EmailChannel, error) {
 
 // GetEmailChannel returns the workspace channel, or nil when email is not connected.
 func (s *Store) GetEmailChannel(ctx context.Context, workspaceID string) (*domain.EmailChannel, error) {
-	channel, err := scanChannel(s.pool.QueryRow(ctx, `SELECT `+channelColumns+` FROM email_channels WHERE workspace_id=$1`, workspaceID))
+	channel, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.EmailChannel, error) {
+		return scanChannel(tx.QueryRow(ctx, `SELECT `+channelColumns+` FROM email_channels WHERE workspace_id=$1`, workspaceID))
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -58,15 +61,17 @@ func (s *Store) UpsertEmailChannel(ctx context.Context, workspaceID, supportAddr
 	if err != nil {
 		return domain.EmailChannel{}, err
 	}
-	channel, err := scanChannel(s.pool.QueryRow(ctx, `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token)
-		VALUES($1,lower($2),$3)
-		ON CONFLICT(workspace_id) DO UPDATE SET
-			domain_verification_token=CASE WHEN email_channels.support_address=EXCLUDED.support_address
-				THEN email_channels.domain_verification_token ELSE EXCLUDED.domain_verification_token END,
-			domain_verified_at=CASE WHEN email_channels.support_address=EXCLUDED.support_address
-				THEN email_channels.domain_verified_at END,
-			support_address=EXCLUDED.support_address,updated_at=now()
-		RETURNING `+channelColumns, workspaceID, supportAddress, token))
+	channel, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.EmailChannel, error) {
+		return scanChannel(tx.QueryRow(ctx, `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token)
+			VALUES($1,lower($2),$3)
+			ON CONFLICT(workspace_id) DO UPDATE SET
+				domain_verification_token=CASE WHEN email_channels.support_address=EXCLUDED.support_address
+					THEN email_channels.domain_verification_token ELSE EXCLUDED.domain_verification_token END,
+				domain_verified_at=CASE WHEN email_channels.support_address=EXCLUDED.support_address
+					THEN email_channels.domain_verified_at END,
+				support_address=EXCLUDED.support_address,updated_at=now()
+			RETURNING `+channelColumns, workspaceID, supportAddress, token))
+	})
 	if err != nil {
 		return domain.EmailChannel{}, fmt.Errorf("save email channel: %w", err)
 	}
@@ -93,8 +98,10 @@ func (s *Store) VerifyEmailDomain(ctx context.Context, workspaceID string, looku
 	if !slices.Contains(values, channel.DNSRecordValue) {
 		return *channel, ErrDomainRecordMissing
 	}
-	verified, err := scanChannel(s.pool.QueryRow(ctx, `UPDATE email_channels SET domain_verified_at=$3,updated_at=$3
-		WHERE workspace_id=$1 AND support_address=$2 RETURNING `+channelColumns, workspaceID, channel.SupportAddress, now))
+	verified, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.EmailChannel, error) {
+		return scanChannel(tx.QueryRow(ctx, `UPDATE email_channels SET domain_verified_at=$3,updated_at=$3
+			WHERE workspace_id=$1 AND support_address=$2 RETURNING `+channelColumns, workspaceID, channel.SupportAddress, now))
+	})
 	if err != nil {
 		return domain.EmailChannel{}, fmt.Errorf("record domain verification: %w", err)
 	}
@@ -103,11 +110,14 @@ func (s *Store) VerifyEmailDomain(ctx context.Context, workspaceID string, looku
 
 // DeleteEmailChannel disconnects email. Conversations, messages and delivery history stay.
 func (s *Store) DeleteEmailChannel(ctx context.Context, workspaceID string) (bool, error) {
-	result, err := s.pool.Exec(ctx, `DELETE FROM email_channels WHERE workspace_id=$1`, workspaceID)
+	deleted, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
+		result, err := tx.Exec(ctx, `DELETE FROM email_channels WHERE workspace_id=$1`, workspaceID)
+		return result.RowsAffected() == 1, err
+	})
 	if err != nil {
 		return false, fmt.Errorf("delete email channel: %w", err)
 	}
-	return result.RowsAffected() == 1, nil
+	return deleted, nil
 }
 
 // RotateEmailSecret replaces the inbound secret and returns the raw value once. The secret has the
@@ -123,12 +133,15 @@ func (s *Store) RotateEmailSecret(ctx context.Context, workspaceID string, now t
 	}
 	secret := keyID + "." + random
 	hash := sha256.Sum256([]byte(secret))
-	result, err := s.pool.Exec(ctx, `UPDATE email_channels SET secret_key_id=$2,secret_hash=$3,secret_rotated_at=$4,updated_at=$4
-		WHERE workspace_id=$1`, workspaceID, keyID, hash[:], now)
+	rotated, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
+		result, err := tx.Exec(ctx, `UPDATE email_channels SET secret_key_id=$2,secret_hash=$3,secret_rotated_at=$4,updated_at=$4
+			WHERE workspace_id=$1`, workspaceID, keyID, hash[:], now)
+		return result.RowsAffected() == 1, err
+	})
 	if err != nil {
 		return "", fmt.Errorf("rotate inbound secret: %w", err)
 	}
-	if result.RowsAffected() != 1 {
+	if !rotated {
 		return "", fmt.Errorf("rotate inbound secret: email channel not found")
 	}
 	return secret, nil
@@ -143,7 +156,9 @@ func (s *Store) WorkspaceForInboundSecret(ctx context.Context, secret string) (s
 	}
 	var workspaceID string
 	var stored []byte
-	err := s.pool.QueryRow(ctx, `SELECT workspace_id::text,secret_hash FROM email_channels WHERE secret_key_id=$1`, keyID).Scan(&workspaceID, &stored)
+	err := s.db.Privileged(ctx, database.PrivilegeInboundSecret, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT workspace_id::text,secret_hash FROM email_channels WHERE secret_key_id=$1`, keyID).Scan(&workspaceID, &stored)
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		stored = make([]byte, sha256.Size)
 	} else if err != nil {

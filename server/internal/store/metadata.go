@@ -5,10 +5,15 @@ import (
 	"fmt"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/jackc/pgx/v5"
 )
 
 func (s *Store) ListAgents(ctx context.Context, workspaceID string) ([]domain.Agent, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id::text,email,display_name,role,timezone_override FROM agents WHERE workspace_id=$1 ORDER BY email`, workspaceID)
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.Agent, error) { return listAgents(ctx, tx, workspaceID) })
+}
+
+func listAgents(ctx context.Context, tx pgx.Tx, workspaceID string) ([]domain.Agent, error) {
+	rows, err := tx.Query(ctx, `SELECT id::text,email,display_name,role,timezone_override FROM agents WHERE workspace_id=$1 ORDER BY email`, workspaceID)
 	if err != nil {
 		return nil, fmt.Errorf("list agents: %w", err)
 	}
@@ -28,7 +33,11 @@ func (s *Store) ListAgents(ctx context.Context, workspaceID string) ([]domain.Ag
 }
 
 func (s *Store) ListTags(ctx context.Context, workspaceID string) ([]domain.Tag, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id::text,name,color FROM tags WHERE workspace_id=$1 ORDER BY name`, workspaceID)
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.Tag, error) { return listTags(ctx, tx, workspaceID) })
+}
+
+func listTags(ctx context.Context, tx pgx.Tx, workspaceID string) ([]domain.Tag, error) {
+	rows, err := tx.Query(ctx, `SELECT id::text,name,color FROM tags WHERE workspace_id=$1 ORDER BY name`, workspaceID)
 	if err != nil {
 		return nil, fmt.Errorf("list tags: %w", err)
 	}

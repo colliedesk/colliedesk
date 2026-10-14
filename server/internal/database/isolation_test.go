@@ -1,0 +1,369 @@
+package database
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// rlsMigration turns on row-level security; upgrade tests stop just before it.
+const rlsMigration = "20261014135950-workspace-row-level-security.up.sql"
+
+type twoWorkspaces struct{ a, b string }
+
+// seedTwoWorkspaces writes a contact, a conversation, a message and a tag in workspaces alpha and
+// beta through the migrating (owner) connection, the way existing installs already hold data.
+func seedTwoWorkspaces(t *testing.T, pool *pgxpool.Pool) twoWorkspaces {
+	t.Helper()
+	var ids twoWorkspaces
+	for slug, target := range map[string]*string{"alpha": &ids.a, "beta": &ids.b} {
+		err := pool.QueryRow(context.Background(), `WITH w AS (INSERT INTO workspaces(slug,name) VALUES($1,$1) RETURNING id),
+			c AS (INSERT INTO contacts(workspace_id,name,email) SELECT id,$1,$1||'@example.com' FROM w RETURNING id,workspace_id),
+			v AS (INSERT INTO conversations(workspace_id,contact_id,subject) SELECT workspace_id,id,$1||' ticket' FROM c RETURNING id,workspace_id),
+			m AS (INSERT INTO messages(workspace_id,conversation_id,kind,body) SELECT workspace_id,id,'note',$1||' note' FROM v RETURNING 1),
+			g AS (INSERT INTO tags(workspace_id,name) SELECT id,$1||'-tag' FROM w RETURNING 1)
+			SELECT id::text FROM w`, slug).Scan(target)
+		if err != nil {
+			t.Fatalf("seed %s: %v", slug, err)
+		}
+	}
+	return ids
+}
+
+func subjects(t *testing.T, db *DB, workspaceID string) []string {
+	t.Helper()
+	var got []string
+	err := db.InWorkspace(context.Background(), workspaceID, func(tx pgx.Tx) error {
+		// Deliberately unfiltered: row-level security alone must scope it.
+		rows, err := tx.Query(context.Background(), `SELECT subject FROM conversations ORDER BY subject`)
+		if err != nil {
+			return err
+		}
+		got, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		return err
+	})
+	if err != nil {
+		t.Fatalf("unfiltered query in workspace %s: %v", workspaceID, err)
+	}
+	return got
+}
+
+func TestUnfilteredQueryInWorkspaceSeesOnlyThatWorkspace(t *testing.T) {
+	pool := testPool(t)
+	if err := Migrate(context.Background(), pool); err != nil {
+		t.Fatal(err)
+	}
+	ids := seedTwoWorkspaces(t, pool)
+	db := New(pool)
+	if got := subjects(t, db, ids.a); !slices.Equal(got, []string{"alpha ticket"}) {
+		t.Fatalf("workspace alpha sees %v", got)
+	}
+	if got := subjects(t, db, ids.b); !slices.Equal(got, []string{"beta ticket"}) {
+		t.Fatalf("workspace beta sees %v", got)
+	}
+	var workspaces []string
+	err := db.InWorkspace(context.Background(), ids.a, func(tx pgx.Tx) error {
+		rows, err := tx.Query(context.Background(), `SELECT slug FROM workspaces ORDER BY slug`)
+		if err != nil {
+			return err
+		}
+		workspaces, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		return err
+	})
+	if err != nil || !slices.Equal(workspaces, []string{"alpha"}) {
+		t.Fatalf("workspace alpha lists workspaces %v (%v)", workspaces, err)
+	}
+}
+
+func TestQueryWithoutWorkspaceContextSeesNoRows(t *testing.T) {
+	pool := testPool(t)
+	if err := Migrate(context.Background(), pool); err != nil {
+		t.Fatal(err)
+	}
+	ids := seedTwoWorkspaces(t, pool)
+	ctx := context.Background()
+	// One connection, so the bare transaction below reuses the connection the scoped one used.
+	single := singleConnection(t, pool)
+	if got := subjects(t, New(single), ids.a); len(got) != 1 {
+		t.Fatalf("scoped query = %v", got)
+	}
+	for _, table := range []string{"workspaces", "contacts", "conversations", "messages", "tags"} {
+		tx, err := single.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var count int
+		_, err = tx.Exec(ctx, `SET LOCAL ROLE `+AppRole)
+		if err == nil {
+			err = tx.QueryRow(ctx, `SELECT count(*) FROM `+table).Scan(&count)
+		}
+		_ = tx.Rollback(ctx)
+		if err != nil {
+			t.Fatalf("%s without workspace context: %v", table, err)
+		}
+		if count != 0 {
+			t.Fatalf("%s without workspace context returned %d rows", table, count)
+		}
+	}
+}
+
+func TestWorkspaceCannotWriteRowsOfAnotherWorkspace(t *testing.T) {
+	pool := testPool(t)
+	if err := Migrate(context.Background(), pool); err != nil {
+		t.Fatal(err)
+	}
+	ids := seedTwoWorkspaces(t, pool)
+	db := New(pool)
+	ctx := context.Background()
+	err := db.InWorkspace(ctx, ids.a, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO tags(workspace_id,name) VALUES($1,'smuggled')`, ids.b)
+		return err
+	})
+	if err == nil {
+		t.Fatal("workspace alpha inserted a tag into workspace beta")
+	}
+	var changed int64
+	err = db.InWorkspace(ctx, ids.a, func(tx pgx.Tx) error {
+		result, err := tx.Exec(ctx, `UPDATE conversations SET subject='overwritten'`)
+		changed = result.RowsAffected()
+		return err
+	})
+	if err != nil || changed != 1 {
+		t.Fatalf("unfiltered update in alpha changed %d rows (%v), want 1", changed, err)
+	}
+	if got := subjects(t, db, ids.b); !slices.Equal(got, []string{"beta ticket"}) {
+		t.Fatalf("beta after alpha's unfiltered update: %v", got)
+	}
+}
+
+func TestInWorkspaceRejectsMissingOrMalformedWorkspace(t *testing.T) {
+	pool := testPool(t)
+	if err := Migrate(context.Background(), pool); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	for _, id := range []string{"", "alpha", "00000000-0000-0000-0000-00000000000g"} {
+		err := New(pool).InWorkspace(context.Background(), id, func(pgx.Tx) error { called = true; return nil })
+		if !errors.Is(err, ErrNoWorkspace) {
+			t.Fatalf("workspace %q: err=%v, want ErrNoWorkspace", id, err)
+		}
+	}
+	if called {
+		t.Fatal("callback ran without a workspace")
+	}
+}
+
+func TestPrivilegedPathSeesEveryWorkspace(t *testing.T) {
+	pool := testPool(t)
+	if err := Migrate(context.Background(), pool); err != nil {
+		t.Fatal(err)
+	}
+	seedTwoWorkspaces(t, pool)
+	var count int
+	err := New(pool).Privileged(context.Background(), PrivilegeWorkspaceBySlug, func(tx pgx.Tx) error {
+		return tx.QueryRow(context.Background(), `SELECT count(*) FROM conversations`).Scan(&count)
+	})
+	if err != nil || count != 2 {
+		t.Fatalf("privileged count = %d (%v), want 2", count, err)
+	}
+}
+
+// TestEveryWorkspaceTableEnforcesRowLevelSecurity is the gate for future tables: a table with a
+// workspace_id column must enable and force row-level security and carry the workspace policy.
+func TestEveryWorkspaceTableEnforcesRowLevelSecurity(t *testing.T) {
+	pool := testPool(t)
+	if err := Migrate(context.Background(), pool); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := pool.Query(context.Background(), `
+		SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
+			EXISTS (SELECT 1 FROM pg_policies p WHERE p.schemaname = n.nspname AND p.tablename = c.relname
+				AND p.policyname = 'workspace_isolation' AND p.cmd = 'ALL' AND p.roles = ARRAY['colliedesk_app']::name[]
+				AND p.qual LIKE '%app.workspace_id%' AND p.with_check LIKE '%app.workspace_id%')
+		FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p')
+			AND (c.relname = 'workspaces' OR EXISTS (SELECT 1 FROM pg_attribute a
+				WHERE a.attrelid = c.oid AND a.attname = 'workspace_id' AND NOT a.attisdropped))
+		ORDER BY c.relname`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var checked []string
+	for rows.Next() {
+		var name string
+		var enabled, forced, policy bool
+		if err := rows.Scan(&name, &enabled, &forced, &policy); err != nil {
+			t.Fatal(err)
+		}
+		checked = append(checked, name)
+		if !enabled || !forced || !policy {
+			t.Errorf("table %s: row level security enabled=%v forced=%v workspace_isolation policy=%v; "+
+				"add ENABLE, FORCE and the policy in its migration (docs/internals/workspace-isolation.md)", name, enabled, forced, policy)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(checked) < 14 {
+		t.Fatalf("checked only %v", checked)
+	}
+}
+
+func TestAppRoleCannotBypassRowLevelSecurity(t *testing.T) {
+	pool := testPool(t)
+	if err := Migrate(context.Background(), pool); err != nil {
+		t.Fatal(err)
+	}
+	if err := New(pool).Verify(context.Background()); err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	var super, bypass, login bool
+	if err := pool.QueryRow(context.Background(), `SELECT rolsuper,rolbypassrls,rolcanlogin FROM pg_roles WHERE rolname=$1`, AppRole).
+		Scan(&super, &bypass, &login); err != nil {
+		t.Fatal(err)
+	}
+	if super || bypass || login {
+		t.Fatalf("%s superuser=%v bypassrls=%v login=%v", AppRole, super, bypass, login)
+	}
+	var ledger bool
+	if err := pool.QueryRow(context.Background(), `SELECT has_table_privilege($1, 'schema_migrations', 'SELECT')`, AppRole).Scan(&ledger); err != nil || ledger {
+		t.Fatalf("%s can read the migration ledger: %v %v", AppRole, ledger, err)
+	}
+}
+
+func TestRowLevelSecurityMigrationKeepsAndIsolatesExistingData(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `CREATE TABLE schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range upMigrations(t) {
+		if name < rlsMigration {
+			if err := applyMigration(ctx, pool, name); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	ids := seedTwoWorkspaces(t, pool)
+	before := rowCounts(t, pool)
+
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("upgrade: %v", err)
+	}
+	if after := rowCounts(t, pool); after != before {
+		t.Fatalf("row counts changed by the upgrade: %s -> %s", before, after)
+	}
+	db := New(pool)
+	if got := subjects(t, db, ids.a); !slices.Equal(got, []string{"alpha ticket"}) {
+		t.Fatalf("alpha after upgrade sees %v", got)
+	}
+	if got := subjects(t, db, ids.b); !slices.Equal(got, []string{"beta ticket"}) {
+		t.Fatalf("beta after upgrade sees %v", got)
+	}
+	if err := rollbackThrough(ctx, pool, rlsMigration); err != nil {
+		t.Fatalf("down: %v", err)
+	}
+	if after := rowCounts(t, pool); after != before {
+		t.Fatalf("rolling back changed data: %s -> %s", before, after)
+	}
+	var secured int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+		WHERE n.nspname=current_schema() AND (c.relrowsecurity OR c.relforcerowsecurity)`).Scan(&secured); err != nil || secured != 0 {
+		t.Fatalf("tables still secured after down: %d %v", secured, err)
+	}
+}
+
+// TestNonSuperuserOwnerIsAlsoFailClosed runs migrations and the privileged path as a table owner that
+// is not a superuser, the shape of a managed PostgreSQL: forced row-level security applies to it too.
+func TestNonSuperuserOwnerIsAlsoFailClosed(t *testing.T) {
+	admin := testPool(t)
+	ctx := context.Background()
+	if err := Migrate(ctx, admin); err != nil { // creates the app role cluster-wide if missing
+		t.Fatal(err)
+	}
+	const owner = "colliedesk_test_owner"
+	if _, err := admin.Exec(ctx, `DO $$ BEGIN
+		CREATE ROLE `+owner+` NOLOGIN NOSUPERUSER NOBYPASSRLS;
+		EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL; END $$`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := admin.Exec(ctx, `GRANT `+AppRole+` TO `+owner); err != nil {
+		t.Fatal(err)
+	}
+	var schema string
+	if err := admin.QueryRow(ctx, `SELECT current_schema()`).Scan(&schema); err != nil {
+		t.Fatal(err)
+	}
+	ownedSchema := schema + "_owned"
+	if _, err := admin.Exec(ctx, fmt.Sprintf(`CREATE SCHEMA %s AUTHORIZATION %s`, ownedSchema, owner)); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = admin.Exec(context.Background(), `DROP SCHEMA `+ownedSchema+` CASCADE`) })
+	config := admin.Config().Copy()
+	config.ConnConfig.RuntimeParams["search_path"] = ownedSchema
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, `SET ROLE `+owner)
+		return err
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("migrate as non-superuser owner: %v", err)
+	}
+	db := New(pool)
+	var a string
+	err = db.Privileged(ctx, PrivilegeCreateWorkspace, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `WITH w AS (INSERT INTO workspaces(slug,name) VALUES('alpha','Alpha') RETURNING id),
+			c AS (INSERT INTO contacts(workspace_id,name,email) SELECT id,'A','a@example.com' FROM w RETURNING id,workspace_id),
+			v AS (INSERT INTO conversations(workspace_id,contact_id,subject) SELECT workspace_id,id,'alpha ticket' FROM c RETURNING 1)
+			SELECT id::text FROM w`).Scan(&a)
+	})
+	if err != nil {
+		t.Fatalf("privileged insert as owner: %v", err)
+	}
+	var bare int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM conversations`).Scan(&bare); err != nil || bare != 0 {
+		t.Fatalf("owner query outside both paths saw %d rows (%v), want 0", bare, err)
+	}
+	if got := subjects(t, db, a); !slices.Equal(got, []string{"alpha ticket"}) {
+		t.Fatalf("scoped query as owner-connected app role: %v", got)
+	}
+}
+
+func singleConnection(t *testing.T, pool *pgxpool.Pool) *pgxpool.Pool {
+	t.Helper()
+	config := pool.Config().Copy()
+	config.MaxConns = 1
+	single, err := pgxpool.NewWithConfig(context.Background(), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(single.Close)
+	return single
+}
+
+// rollbackThrough rolls back the latest migrations until name has been rolled back.
+func rollbackThrough(ctx context.Context, pool *pgxpool.Pool, name string) error {
+	for {
+		var latest string
+		if err := pool.QueryRow(ctx, `SELECT name FROM schema_migrations ORDER BY applied_at DESC,name DESC LIMIT 1`).Scan(&latest); err != nil {
+			return fmt.Errorf("find latest migration before %s: %w", name, err)
+		}
+		if err := rollbackLatest(ctx, pool); err != nil {
+			return err
+		}
+		if latest == name || strings.Compare(latest, name) < 0 {
+			return nil
+		}
+	}
+}

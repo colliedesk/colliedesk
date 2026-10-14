@@ -126,7 +126,12 @@ func (r *run) fromLedger(id int64, ticket knownTicket) bool {
 }
 
 func (r *run) loadTicketLedger(ctx context.Context) (map[int64]knownTicket, error) {
-	rows, err := r.pool.Query(ctx, `SELECT source_id,status,error,meta,source_updated_at FROM import_items
+	tx, err := r.begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read import ledger: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // read only
+	rows, err := tx.Query(ctx, `SELECT source_id,status,error,meta,source_updated_at FROM import_items
 		WHERE workspace_id=$1 AND source=$2 AND entity='ticket'`, r.workspaceID, r.ledger.source)
 	if err != nil {
 		return nil, fmt.Errorf("read import ledger: %w", err)

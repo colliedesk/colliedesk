@@ -85,7 +85,13 @@ func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conver
 // RetryDelivery requeues a failed delivery of a reply in this workspace and conversation, if outbound
 // email can work now.
 func (s *Store) RetryDelivery(ctx context.Context, workspaceID, conversationID, messageID string) (domain.Message, error) {
-	message, err := getMessage(ctx, s.pool, workspaceID, messageID)
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Message, error) {
+		return s.retryDelivery(ctx, tx, workspaceID, conversationID, messageID)
+	})
+}
+
+func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID string) (domain.Message, error) {
+	message, err := getMessage(ctx, tx, workspaceID, messageID)
 	if err != nil || message.ConversationID != conversationID || message.Delivery == nil {
 		return domain.Message{}, fmt.Errorf("retry delivery: not found")
 	}
@@ -93,7 +99,7 @@ func (s *Store) RetryDelivery(ctx context.Context, workspaceID, conversationID, 
 		return domain.Message{}, ErrDeliveryNotFailed
 	}
 	var verified bool
-	err = s.pool.QueryRow(ctx, `SELECT domain_verified_at IS NOT NULL FROM email_channels WHERE workspace_id=$1`, workspaceID).Scan(&verified)
+	err = tx.QueryRow(ctx, `SELECT domain_verified_at IS NOT NULL FROM email_channels WHERE workspace_id=$1`, workspaceID).Scan(&verified)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Message{}, fmt.Errorf("%w: The email channel is not connected.", ErrOutboundNotReady)
 	}
@@ -103,7 +109,7 @@ func (s *Store) RetryDelivery(ctx context.Context, workspaceID, conversationID, 
 	if reason := s.outbound.notReadyReason(verified); reason != "" {
 		return domain.Message{}, fmt.Errorf("%w: %s", ErrOutboundNotReady, reason)
 	}
-	result, err := s.pool.Exec(ctx, `UPDATE email_outbox SET status='queued',attempts=0,next_attempt_at=now(),locked_until=NULL,
+	result, err := tx.Exec(ctx, `UPDATE email_outbox SET status='queued',attempts=0,next_attempt_at=now(),locked_until=NULL,
 		claim_token=NULL,last_error=NULL,updated_at=now() WHERE workspace_id=$1 AND message_id=$2 AND status='failed'`, workspaceID, messageID)
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("retry delivery: %w", err)
@@ -111,5 +117,5 @@ func (s *Store) RetryDelivery(ctx context.Context, workspaceID, conversationID, 
 	if result.RowsAffected() != 1 {
 		return domain.Message{}, ErrDeliveryNotFailed
 	}
-	return getMessage(ctx, s.pool, workspaceID, messageID)
+	return getMessage(ctx, tx, workspaceID, messageID)
 }

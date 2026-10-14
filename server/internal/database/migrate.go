@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/migrations"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -50,19 +51,14 @@ func applyMigration(ctx context.Context, pool *pgxpool.Pool, name string) error 
 	if err != nil {
 		return fmt.Errorf("read migration %s: %w", name, err)
 	}
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("begin migration %s: %w", name, err)
-	}
-	defer tx.Rollback(ctx) //nolint:errcheck
-	if _, err := tx.Exec(ctx, string(contents)); err != nil {
-		return fmt.Errorf("apply migration %s: %w", name, err)
-	}
-	if _, err := tx.Exec(ctx, `INSERT INTO schema_migrations(name) VALUES($1)`, name); err != nil {
-		return fmt.Errorf("record migration %s: %w", name, err)
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit migration %s: %w", name, err)
-	}
-	return nil
+	// Privileged so data changes in a migration see every workspace when the owner is not a superuser.
+	return New(pool).Privileged(ctx, PrivilegeMigrate, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, string(contents)); err != nil {
+			return fmt.Errorf("apply migration %s: %w", name, err)
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO schema_migrations(name) VALUES($1)`, name); err != nil {
+			return fmt.Errorf("record migration %s: %w", name, err)
+		}
+		return nil
+	})
 }

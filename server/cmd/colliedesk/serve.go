@@ -12,6 +12,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
@@ -29,6 +30,9 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	}
 	address := flags.String("listen", defaultAddress, "listen address")
 	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if err := database.New(pool).Verify(ctx); err != nil {
 		return err
 	}
 	storage, err := attachmentStorage()

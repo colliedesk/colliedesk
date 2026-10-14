@@ -2,34 +2,25 @@ package freshdesk
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/colliedesk/colliedesk/server/internal/database"
 )
 
 // acquireRunLock holds a PostgreSQL advisory lock on the workspace for a whole
 // import or undo. It is per workspace, not per source: imports of different
 // accounts share content-addressed files, so an undo deleting unreferenced
 // files must never overlap another import into the same workspace.
-func acquireRunLock(ctx context.Context, pool *pgxpool.Pool, workspaceID string) (func(), error) {
-	key := "colliedesk-import|" + workspaceID
-	conn, err := pool.Acquire(ctx)
+func acquireRunLock(ctx context.Context, db *database.DB, workspaceID string) (func(), error) {
+	release, err := db.TryAdvisoryLock(ctx, "colliedesk-import|"+workspaceID)
+	if errors.Is(err, database.ErrLockHeld) {
+		return nil, fmt.Errorf("%w; wait for it to finish, then run again", ErrImportRunning)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("take import lock: %w", err)
 	}
-	var locked bool
-	if err := conn.QueryRow(ctx, `SELECT pg_try_advisory_lock(hashtextextended($1,0))`, key).Scan(&locked); err != nil {
-		conn.Release()
-		return nil, fmt.Errorf("take import lock: %w", err)
-	}
-	if !locked {
-		conn.Release()
-		return nil, fmt.Errorf("%w; wait for it to finish, then run again", ErrImportRunning)
-	}
-	return func() {
-		_, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock(hashtextextended($1,0))`, key)
-		conn.Release()
-	}, nil
+	return release, nil
 }
 
 // accountSource reads the Freshdesk account id. The ledger is keyed by it, so

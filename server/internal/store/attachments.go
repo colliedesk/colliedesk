@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Querier is satisfied by both a pool and a transaction, so callers such as
-// importers can record an attachment in the same transaction as their ledger.
+// Querier is satisfied by a transaction, so callers such as importers can record
+// an attachment in the same transaction as their ledger.
 type Querier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
@@ -46,15 +46,19 @@ func InsertAttachment(ctx context.Context, q Querier, workspaceID string, input 
 }
 
 func (s *Store) CreateAttachment(ctx context.Context, workspaceID string, input NewAttachment) (domain.Attachment, error) {
-	return InsertAttachment(ctx, s.pool, workspaceID, input)
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Attachment, error) {
+		return InsertAttachment(ctx, tx, workspaceID, input)
+	})
 }
 
 // GetAttachment returns attachment metadata and its storage key within one workspace.
 func (s *Store) GetAttachment(ctx context.Context, workspaceID, id string) (domain.Attachment, string, error) {
 	var item domain.Attachment
 	var key string
-	err := s.pool.QueryRow(ctx, `SELECT `+attachmentColumns+`,storage_key FROM attachments WHERE workspace_id=$1 AND id=$2`, workspaceID, id).
-		Scan(&item.ID, &item.MessageID, &item.Filename, &item.ContentType, &item.Size, &item.SHA256, &item.CreatedAt, &key)
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT `+attachmentColumns+`,storage_key FROM attachments WHERE workspace_id=$1 AND id=$2`, workspaceID, id).
+			Scan(&item.ID, &item.MessageID, &item.Filename, &item.ContentType, &item.Size, &item.SHA256, &item.CreatedAt, &key)
+	})
 	if err != nil {
 		return domain.Attachment{}, "", fmt.Errorf("get attachment: %w", err)
 	}
@@ -62,13 +66,13 @@ func (s *Store) GetAttachment(ctx context.Context, workspaceID, id string) (doma
 	return item, key, nil
 }
 
-// rowsQuerier is satisfied by a pool and by a transaction.
+// rowsQuerier is satisfied by a transaction.
 type rowsQuerier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-func (s *Store) attachConversationFiles(ctx context.Context, workspaceID, conversationID string, messages []domain.Message) error {
-	return attachFiles(ctx, s.pool, messages, `SELECT a.id::text,a.message_id::text,a.filename,a.content_type,a.size,a.sha256,a.created_at
+func attachConversationFiles(ctx context.Context, q rowsQuerier, workspaceID, conversationID string, messages []domain.Message) error {
+	return attachFiles(ctx, q, messages, `SELECT a.id::text,a.message_id::text,a.filename,a.content_type,a.size,a.sha256,a.created_at
 		FROM attachments a JOIN messages m ON m.workspace_id=a.workspace_id AND m.id=a.message_id
 		WHERE a.workspace_id=$1 AND m.conversation_id=$2 ORDER BY a.created_at,a.id`, workspaceID, conversationID)
 }
