@@ -16,10 +16,12 @@ var ErrNoWorkspace = errors.New("workspace-scoped query needs a workspace id")
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
-// DB runs every query in a transaction that is either scoped to one workspace (InWorkspace) or
-// declared privileged with a reviewed reason (Privileged). There is no third way to query.
+// DB runs every query that reads or writes rows in a transaction that is either scoped to one
+// workspace (InWorkspace) or declared privileged with a reviewed reason (Privileged). The owner pool
+// also runs maintenance that returns no rows: advisory locks (TryAdvisoryLock) and table statistics
+// (RefreshStatistics). Nothing else touches the owner pool outside these methods.
 type DB struct {
-	pool    *pgxpool.Pool // owner: migrations, privileged lookups, locks
+	pool    *pgxpool.Pool // owner: migrations, privileged lookups, locks, ANALYZE
 	request *pgxpool.Pool // workspace-scoped transactions
 
 	mu      sync.Mutex

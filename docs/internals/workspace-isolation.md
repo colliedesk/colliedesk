@@ -57,7 +57,7 @@ composite foreign keys keep working across the scoped tables.
 
 | Role | Who | Sees |
 |---|---|---|
-| `DATABASE_URL` role (owner) | Runs migrations, privileged lookups, the advisory lock, `ANALYZE` before an import undo (statistics only, no rows returned) | Superuser: all rows (PostgreSQL skips RLS for superusers). Other owner: only rows of a transaction marked `app.privileged`. |
+| `DATABASE_URL` role (owner) | Runs migrations, privileged lookups, the advisory lock, `ANALYZE` through `DB.RefreshStatistics` before an import undo (owner-pool maintenance: statistics only, no rows returned; `pg_stats` hides RLS tables from the app role) | Superuser: all rows (PostgreSQL skips RLS for superusers). Other owner: only rows of a transaction marked `app.privileged`. |
 | `colliedesk_app_<database>` (app role) | Every workspace-scoped transaction switches to it | Only the workspace in `app.workspace_id` |
 | `DATABASE_REQUEST_URL` login (optional, `colliedesk_request` in installs) | Opens the request pool | Nothing by itself; it can only `SET ROLE` to the app role |
 
