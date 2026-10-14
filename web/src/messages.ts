@@ -1,6 +1,6 @@
 export const messages = {
   brand: 'CollieDesk',
-  brandInitial: 'O',
+  brandInitial: 'C',
   inbox: 'Inbox',
   settings: 'Settings',
   timezoneSettings: 'Timezone',
