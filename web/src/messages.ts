@@ -79,7 +79,7 @@ export const messages = {
   outgoingEmail: 'Outgoing email (SMTP)',
   smtpConfigured: (host: string, port: number, starttls: boolean, authenticated: boolean) =>
     `${host}:${port} · STARTTLS ${starttls ? 'on' : 'off'} · ${authenticated ? 'authenticated' : 'no login'}`,
-  smtpNotConfigured: 'Outgoing email is not configured. Set SMTP_HOST and related variables on the server; replies stay queued until then.',
+  smtpNotConfigured: 'Outgoing email is not configured. Set SMTP_HOST and related variables on the server; until then replies are marked Delivery failed.',
   deliveryStatuses: { queued: 'Queued', sent: 'Sent', failed: 'Delivery failed' },
   retryDelivery: 'Retry delivery',
   senderFailedVerification: 'Failed sender verification',
