@@ -1,6 +1,8 @@
 import type { Conversation } from '../../api/schemas';
-import { formatDate } from '../../lib/format-date';
+import { formatDate, formatShortDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
+import { PriorityLabel, StatusLabel } from './conversation-labels';
 
 interface ConversationListProps {
   items: Conversation[];
@@ -12,24 +14,29 @@ interface ConversationListProps {
   onPage?: (page: number) => void;
 }
 
+const visibleTags = 2;
+
 export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage }: ConversationListProps) {
   return (
-    <section className="conversation-list" aria-label={messages.conversationList}>
-      <header><h1>{messages.inbox}</h1><span>{items.length}</span></header>
+    <div className="conversation-scroll">
       {items.length === 0 && <p className="empty-copy">{messages.noConversations}</p>}
       {items.map((item) => (
         <button className="conversation-row" data-selected={item.id === selectedId} key={item.id} onClick={() => onSelect?.(item.id)}>
           <span className="conversation-subject">{item.subject}</span>
-          <time dateTime={item.updated_at}>{formatDate(item.updated_at, timezone)}</time>
-          <span className={`status status-${item.status}`}>{messages.statuses[item.status]}</span>
-          <span className="priority">{messages.priorities[item.priority]}</span>
+          <time dateTime={item.updated_at} title={formatDate(item.updated_at, timezone)}>{formatShortDate(item.updated_at, timezone)}</time>
+          <span className="conversation-meta">
+            <StatusLabel status={item.status} />
+            <PriorityLabel priority={item.priority} />
+            {item.tags.slice(0, visibleTags).map((tag) => <span className="tag-pill" key={tag.id}>{tag.name}</span>)}
+            {item.tags.length > visibleTags && <span className="tag-pill">+{item.tags.length - visibleTags}</span>}
+          </span>
         </button>
       ))}
-      <nav className="pagination" aria-label={messages.conversationList}>
-        <button type="button" disabled={page <= 1} onClick={() => onPage?.(page - 1)}>{messages.previousPage}</button>
+      {(page > 1 || hasNextPage) && <nav className="pagination" aria-label={messages.conversationList}>
+        <button type="button" className="icon-button" aria-label={messages.previousPage} disabled={page <= 1} onClick={() => onPage?.(page - 1)}><ChevronLeftIcon /></button>
         <span>{page}</span>
-        <button type="button" disabled={!hasNextPage} onClick={() => onPage?.(page + 1)}>{messages.nextPage}</button>
-      </nav>
-    </section>
+        <button type="button" className="icon-button" aria-label={messages.nextPage} disabled={!hasNextPage} onClick={() => onPage?.(page + 1)}><ChevronRightIcon /></button>
+      </nav>}
+    </div>
   );
 }

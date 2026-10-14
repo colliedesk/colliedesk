@@ -14,7 +14,8 @@ export default defineConfig({
   workers: 1,
   use: { baseURL, trace: 'retain-on-failure', launchOptions: { executablePath: localChrome } },
   webServer: {
-    command: 'go run ./cmd/colliedesk serve --listen 127.0.0.1:18080',
+    // serve refuses to start until row-level security is migrated, so migrate first like compose does.
+    command: 'go run ./cmd/colliedesk migrate && go run ./cmd/colliedesk serve --listen 127.0.0.1:18080',
     cwd: '../server',
     env: {
       ...process.env,

@@ -24,7 +24,7 @@ function CloudSession({ onSessionToken }: Pick<CloudSignInProps, 'onSessionToken
 	});
   }, [failed, getToken, isLoaded, isSignedIn, onSessionToken]);
 
-  if (failed) return <button className="secondary-action" type="button" onClick={() => setFailed(false)}>{messages.retryCloudSignIn}</button>;
+  if (failed) return <button type="button" onClick={() => setFailed(false)}>{messages.retryCloudSignIn}</button>;
   if (!isLoaded || isSignedIn) return <p>{messages.cloudSigningIn}</p>;
   return <SignIn routing="hash" />;
 }

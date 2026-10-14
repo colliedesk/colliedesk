@@ -165,3 +165,15 @@ test('shows where an imported conversation came from', () => {
   expect(within(details).getByText('Freshdesk ticket 41')).toBeInTheDocument();
   expect(within(details).getByText('Type: Problem')).toBeInTheDocument();
 });
+
+test('details drawer takes focus when opened and returns it on Escape', () => {
+  render(<InboxPage selected={conversation} conversations={[conversation]} />);
+  const toggle = screen.getByRole('button', { name: /show details/i });
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByRole('button', { name: /hide details/i })).toHaveFocus();
+  fireEvent.keyDown(screen.getByRole('complementary', { name: /conversation details/i }), { key: 'Escape' });
+  expect(screen.queryByRole('button', { name: /hide details/i })).not.toBeInTheDocument();
+  expect(toggle).toHaveFocus();
+});
