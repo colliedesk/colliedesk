@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Ledger entities. A ledger row maps one Freshdesk id to one CollieDesk row
@@ -64,7 +64,7 @@ type ledgerEntry struct {
 }
 
 type ledger struct {
-	pool        *pgxpool.Pool
+	db          *database.DB
 	workspaceID string
 	source      string
 }
@@ -72,9 +72,11 @@ type ledger struct {
 func (l ledger) get(ctx context.Context, entity, sourceID string) (ledgerEntry, bool, error) {
 	var entry ledgerEntry
 	var meta []byte
-	err := l.pool.QueryRow(ctx, `SELECT status,target_id::text,error,source_updated_at,meta FROM import_items
-		WHERE workspace_id=$1 AND source=$2 AND entity=$3 AND source_id=$4`, l.workspaceID, l.source, entity, sourceID).
-		Scan(&entry.Status, &entry.TargetID, &entry.Error, &entry.SourceUpdatedAt, &meta)
+	err := l.db.InWorkspace(ctx, l.workspaceID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT status,target_id::text,error,source_updated_at,meta FROM import_items
+			WHERE workspace_id=$1 AND source=$2 AND entity=$3 AND source_id=$4`, l.workspaceID, l.source, entity, sourceID).
+			Scan(&entry.Status, &entry.TargetID, &entry.Error, &entry.SourceUpdatedAt, &meta)
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ledgerEntry{}, false, nil
 	}
@@ -103,10 +105,11 @@ type ledgerMark struct {
 	meta                       *ticketMeta
 }
 
-// mark upserts a ledger row. A later mark never clears a known target id.
+// mark upserts a ledger row in q's transaction, or in its own when q is nil.
+// A later mark never clears a known target id.
 func (l ledger) mark(ctx context.Context, q execer, m ledgerMark) error {
 	if q == nil {
-		q = l.pool
+		return l.db.InWorkspace(ctx, l.workspaceID, func(tx pgx.Tx) error { return l.mark(ctx, tx, m) })
 	}
 	meta := []byte(`{}`)
 	if m.meta != nil {

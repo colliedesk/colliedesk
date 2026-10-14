@@ -100,7 +100,7 @@ func TestImportMigrationUpgradesMainSchemaWithBusinessData(t *testing.T) {
 		VALUES($1,$2,'old.txt','text/plain',1,repeat('a',64),'k')`, ids.workspace, ids.message); err != nil {
 		t.Fatalf("attachment on a pre-upgrade message: %v", err)
 	}
-	if err := rollbackLatest(ctx, pool); err != nil {
+	if err := rollbackThrough(ctx, pool, importMigration); err != nil {
 		t.Fatalf("down to main schema: %v", err)
 	}
 	if after := rowCounts(t, pool); after != before {
@@ -119,7 +119,7 @@ func applyMainSchema(t *testing.T, pool *pgxpool.Pool) {
 		t.Fatal(err)
 	}
 	for _, name := range upMigrations(t) {
-		if name == importMigration {
+		if name == importMigration || name >= rlsMigration {
 			continue
 		}
 		contents, err := migrations.Files.ReadFile(name)

@@ -86,7 +86,7 @@ func TestMigrationAppliesUpDownAndUpAgain(t *testing.T) {
 	if !tableExists(t, pool, "workspaces") || !tableExists(t, pool, "email_outbox") {
 		t.Fatal("tables missing after first up")
 	}
-	if err := rollbackLatest(ctx, pool); err != nil {
+	if err := rollbackThrough(ctx, pool, "20261014101628-email-channel.up.sql"); err != nil {
 		t.Fatalf("down email channel: %v", err)
 	}
 	if tableExists(t, pool, "email_outbox") || tableExists(t, pool, "email_channels") || !tableExists(t, pool, "workspaces") {

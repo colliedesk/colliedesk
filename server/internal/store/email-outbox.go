@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -32,21 +33,29 @@ type Delivery struct {
 // must present. A lease that expires without a result makes the row due again: delivery is at least
 // once, deduplicated by Message-ID. A row whose data cannot be loaded fails alone.
 func (s *Store) ClaimDueDeliveries(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]Delivery, error) {
-	rows, err := s.pool.Query(ctx, `WITH due AS (
-			SELECT id FROM email_outbox WHERE status='queued' AND next_attempt_at<=$1 AND (locked_until IS NULL OR locked_until<=$1)
-			ORDER BY next_attempt_at LIMIT $2 FOR UPDATE SKIP LOCKED)
-		UPDATE email_outbox o SET locked_until=$3,attempts=o.attempts+1,claim_token=gen_random_uuid(),updated_at=$1 FROM due WHERE o.id=due.id
-		RETURNING o.id::text,o.workspace_id::text,o.message_id::text,o.claim_token::text,o.attempts`, now, limit, now.Add(lease))
-	if err != nil {
-		return nil, fmt.Errorf("claim deliveries: %w", err)
-	}
-	claimed, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Delivery, error) {
-		var item Delivery
-		err := row.Scan(&item.OutboxID, &item.WorkspaceID, &item.MessageID, &item.ClaimToken, &item.Attempts)
-		return item, err
+	// Only the lease crosses workspaces; each claimed row is then loaded and finished in its own workspace.
+	var claimed []Delivery
+	err := s.db.Privileged(ctx, database.PrivilegeOutboxClaim, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `WITH due AS (
+				SELECT id FROM email_outbox WHERE status='queued' AND next_attempt_at<=$1 AND (locked_until IS NULL OR locked_until<=$1)
+				ORDER BY next_attempt_at LIMIT $2 FOR UPDATE SKIP LOCKED)
+			UPDATE email_outbox o SET locked_until=$3,attempts=o.attempts+1,claim_token=gen_random_uuid(),updated_at=$1 FROM due WHERE o.id=due.id
+			RETURNING o.id::text,o.workspace_id::text,o.message_id::text,o.claim_token::text,o.attempts`, now, limit, now.Add(lease))
+		if err != nil {
+			return fmt.Errorf("claim deliveries: %w", err)
+		}
+		claimed, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (Delivery, error) {
+			var item Delivery
+			err := row.Scan(&item.OutboxID, &item.WorkspaceID, &item.MessageID, &item.ClaimToken, &item.Attempts)
+			return item, err
+		})
+		if err != nil {
+			return fmt.Errorf("scan claimed deliveries: %w", err)
+		}
+		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("scan claimed deliveries: %w", err)
+		return nil, err
 	}
 	loaded := claimed[:0]
 	var errs []error
@@ -61,9 +70,13 @@ func (s *Store) ClaimDueDeliveries(ctx context.Context, now time.Time, limit int
 }
 
 func (s *Store) loadDelivery(ctx context.Context, item *Delivery) error {
+	return s.db.InWorkspace(ctx, item.WorkspaceID, func(tx pgx.Tx) error { return loadDelivery(ctx, tx, item) })
+}
+
+func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
 	var conversationID string
 	var createdAt time.Time
-	err := s.pool.QueryRow(ctx, `SELECT w.name,COALESCE(ch.support_address,''),COALESCE(ch.domain_verified_at IS NOT NULL,false),
+	err := tx.QueryRow(ctx, `SELECT w.name,COALESCE(ch.support_address,''),COALESCE(ch.domain_verified_at IS NOT NULL,false),
 			ct.name,ct.email,c.subject,m.body,COALESCE(m.email_message_id,''),COALESCE(c.email_reply_token,''),c.id::text,m.created_at
 		FROM messages m JOIN conversations c ON c.workspace_id=m.workspace_id AND c.id=m.conversation_id
 		JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
@@ -75,7 +88,7 @@ func (s *Store) loadDelivery(ctx context.Context, item *Delivery) error {
 	if err != nil {
 		return fmt.Errorf("load delivery %s: %w", item.OutboxID, err)
 	}
-	rows, err := s.pool.Query(ctx, `SELECT email_message_id,kind FROM messages
+	rows, err := tx.Query(ctx, `SELECT email_message_id,kind FROM messages
 		WHERE workspace_id=$1 AND conversation_id=$2 AND email_message_id IS NOT NULL AND id<>$3 AND created_at<=$4
 		ORDER BY created_at,id`, item.WorkspaceID, conversationID, item.MessageID, createdAt)
 	if err != nil {
@@ -109,9 +122,13 @@ func (s *Store) loadDelivery(ctx context.Context, item *Delivery) error {
 
 // CountSentSince counts replies the workspace handed to the relay since the given time.
 func (s *Store) CountSentSince(ctx context.Context, workspaceID string, since time.Time) (int, error) {
-	var count int
-	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM email_outbox WHERE workspace_id=$1 AND status='sent' AND sent_at>$2`,
-		workspaceID, since).Scan(&count); err != nil {
+	count, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (int, error) {
+		var count int
+		err := tx.QueryRow(ctx, `SELECT count(*) FROM email_outbox WHERE workspace_id=$1 AND status='sent' AND sent_at>$2`,
+			workspaceID, since).Scan(&count)
+		return count, err
+	})
+	if err != nil {
 		return 0, fmt.Errorf("count sent replies: %w", err)
 	}
 	return count, nil
@@ -140,13 +157,16 @@ func (s *Store) MarkDeliveryFailed(ctx context.Context, item Delivery, reason st
 // finishDelivery applies a result only while this worker still holds the claim, so a worker whose
 // lease expired cannot overwrite the result of the worker that reclaimed the row.
 func (s *Store) finishDelivery(ctx context.Context, item Delivery, set string, args ...any) error {
-	result, err := s.pool.Exec(ctx, `UPDATE email_outbox SET `+set+`,locked_until=NULL,claim_token=NULL,updated_at=now()
-		WHERE workspace_id=$1 AND id=$2 AND claim_token=$3::uuid AND status='queued'`,
-		append([]any{item.WorkspaceID, item.OutboxID, item.ClaimToken}, args...)...)
+	updated, err := scoped(ctx, s, item.WorkspaceID, func(tx pgx.Tx) (int64, error) {
+		result, err := tx.Exec(ctx, `UPDATE email_outbox SET `+set+`,locked_until=NULL,claim_token=NULL,updated_at=now()
+			WHERE workspace_id=$1 AND id=$2 AND claim_token=$3::uuid AND status='queued'`,
+			append([]any{item.WorkspaceID, item.OutboxID, item.ClaimToken}, args...)...)
+		return result.RowsAffected(), err
+	})
 	if err != nil {
 		return fmt.Errorf("update delivery %s: %w", item.OutboxID, err)
 	}
-	if result.RowsAffected() != 1 {
+	if updated != 1 {
 		return fmt.Errorf("update delivery %s: %w", item.OutboxID, ErrLeaseLost)
 	}
 	return nil

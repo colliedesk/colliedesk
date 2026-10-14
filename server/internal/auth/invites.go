@@ -6,13 +6,14 @@ import (
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/jackc/pgx/v5"
 )
 
 func (s *Service) CreateInvite(ctx context.Context, principal Principal, email, ceiling string) (domain.Invite, string, error) {
 	if !CanDelegate(principal.Agent.Role, ceiling) || !strings.Contains(email, "@") {
 		return domain.Invite{}, "", fmt.Errorf("invalid invite grant")
 	}
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.db.BeginWorkspace(ctx, principal.Workspace.ID)
 	if err != nil {
 		return domain.Invite{}, "", fmt.Errorf("begin invite: %w", err)
 	}
@@ -37,7 +38,17 @@ func (s *Service) CreateInvite(ctx context.Context, principal Principal, email, 
 }
 
 func (s *Service) ListInvites(ctx context.Context, workspaceID string) ([]domain.Invite, error) {
-	rows, err := s.pool.Query(ctx, `SELECT p.id::text,p.email,p.role_ceiling,a.email,p.created_at,p.expires_at,p.used_at,p.revoked_at
+	var invites []domain.Invite
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		var err error
+		invites, err = listInvites(ctx, tx, workspaceID)
+		return err
+	})
+	return invites, err
+}
+
+func listInvites(ctx context.Context, tx pgx.Tx, workspaceID string) ([]domain.Invite, error) {
+	rows, err := tx.Query(ctx, `SELECT p.id::text,p.email,p.role_ceiling,a.email,p.created_at,p.expires_at,p.used_at,p.revoked_at
 		FROM pairing_links p JOIN agents a ON a.id=p.created_by_agent_id
 		WHERE p.workspace_id=$1 AND p.kind='invite' ORDER BY p.created_at DESC`, workspaceID)
 	if err != nil {
@@ -67,9 +78,14 @@ func normalizeInvite(invite *domain.Invite) {
 }
 
 func (s *Service) RevokeInvite(ctx context.Context, workspaceID, inviteID string) (bool, error) {
-	result, err := s.pool.Exec(ctx, `UPDATE pairing_links SET revoked_at=COALESCE(revoked_at,$3) WHERE id=$1 AND workspace_id=$2 AND kind='invite'`, inviteID, workspaceID, s.now())
+	var revoked bool
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		result, err := tx.Exec(ctx, `UPDATE pairing_links SET revoked_at=COALESCE(revoked_at,$3) WHERE id=$1 AND workspace_id=$2 AND kind='invite'`, inviteID, workspaceID, s.now())
+		revoked = result.RowsAffected() == 1
+		return err
+	})
 	if err != nil {
 		return false, fmt.Errorf("revoke invite: %w", err)
 	}
-	return result.RowsAffected() == 1, nil
+	return revoked, nil
 }

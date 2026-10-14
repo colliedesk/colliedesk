@@ -5,13 +5,14 @@ package freshdesk
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/url"
 	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -23,7 +24,7 @@ type ticketRef struct {
 
 type run struct {
 	opts          Options
-	pool          *pgxpool.Pool
+	db            *database.DB
 	client        *client
 	ledger        ledger
 	workspaceID   string
@@ -57,7 +58,7 @@ type run struct {
 // problems are recorded in the ledger and reported; Run returns an error only
 // when the run cannot continue (bad key, unreachable account, cancellation).
 func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, error) {
-	r, err := newRun(ctx, pool, options)
+	r, err := newRun(ctx, database.New(pool), options)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +68,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 		return nil, err
 	}
 	if !options.DryRun {
-		release, err := acquireRunLock(ctx, pool, r.workspaceID)
+		release, err := acquireRunLock(ctx, r.db, r.workspaceID)
 		if err != nil {
 			return nil, err
 		}
@@ -88,7 +89,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 	return r.reconcile(ctx, report)
 }
 
-func newRun(ctx context.Context, pool *pgxpool.Pool, options Options) (*run, error) {
+func newRun(ctx context.Context, db *database.DB, options Options) (*run, error) {
 	base, err := url.Parse(strings.TrimRight(options.BaseURL, "/"))
 	if err != nil || base.Host == "" {
 		return nil, errors.New("invalid Freshdesk base URL")
@@ -111,17 +112,23 @@ func newRun(ctx context.Context, pool *pgxpool.Pool, options Options) (*run, err
 	if options.RateLimitPause <= 0 {
 		options.RateLimitPause = time.Minute
 	}
-	var workspaceID string
-	if err := pool.QueryRow(ctx, `SELECT id::text FROM workspaces WHERE slug=$1`, options.WorkspaceSlug).Scan(&workspaceID); err != nil {
-		return nil, fmt.Errorf("find workspace %q: %w", options.WorkspaceSlug, err)
+	workspaceID, err := db.WorkspaceIDBySlug(ctx, options.WorkspaceSlug)
+	if err != nil {
+		return nil, err
 	}
 	return &run{
-		opts: options, pool: pool, workspaceID: workspaceID,
+		opts: options, db: db, workspaceID: workspaceID,
 		client: newClient(base, options.APIKey, options),
-		ledger: ledger{pool: pool, workspaceID: workspaceID}, probeAhead: probeAhead(options.hooks),
+		ledger: ledger{db: db, workspaceID: workspaceID}, probeAhead: probeAhead(options.hooks),
 		agents: map[int64]fdAgent{}, agentTargets: map[int64]string{}, companies: map[int64]string{},
 		usedCompanies: map[int64]bool{}, contactNames: map[int64]string{},
 	}, nil
+}
+
+// begin starts a transaction scoped to the import workspace; the importer never reads or writes
+// another workspace.
+func (r *run) begin(ctx context.Context) (pgx.Tx, error) {
+	return r.db.BeginWorkspace(ctx, r.workspaceID)
 }
 
 func probeAhead(hooks testHooks) int {

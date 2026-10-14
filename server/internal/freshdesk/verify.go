@@ -11,11 +11,17 @@ import (
 // size with what was recorded at download time. A lost or changed file marks
 // the attachment and its ticket not done, so the next run downloads it again.
 func (r *run) verifyAttachments(ctx context.Context, report *Report, ticketIDs, _ []string) error {
-	rows, err := r.pool.Query(ctx, `SELECT i.source_id,i.parent_source_id,a.size,a.sha256,a.storage_key FROM import_items i
+	tx, err := r.begin(ctx)
+	if err != nil {
+		return fmt.Errorf("reconcile attachments: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // also covers a panic; a second rollback is a no-op
+	rows, err := tx.Query(ctx, `SELECT i.source_id,i.parent_source_id,a.size,a.sha256,a.storage_key FROM import_items i
 		JOIN attachments a ON a.workspace_id=i.workspace_id AND a.id=i.target_id
 		WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='attachment' AND i.status='done' AND i.parent_source_id=ANY($3)`,
 		r.workspaceID, r.ledger.source, ticketIDs)
 	if err != nil {
+		_ = tx.Rollback(ctx)
 		return fmt.Errorf("reconcile attachments: %w", err)
 	}
 	type stored struct {
@@ -27,11 +33,13 @@ func (r *run) verifyAttachments(ctx context.Context, report *Report, ticketIDs, 
 		var file stored
 		if err := rows.Scan(&file.id, &file.ticket, &file.size, &file.sha, &file.key); err != nil {
 			rows.Close()
+			_ = tx.Rollback(ctx)
 			return fmt.Errorf("reconcile attachments: %w", err)
 		}
 		files = append(files, file)
 	}
 	rows.Close()
+	_ = tx.Rollback(ctx) // read only; end it before re-reading stored files
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("reconcile attachments: %w", err)
 	}

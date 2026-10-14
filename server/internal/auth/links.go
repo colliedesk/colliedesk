@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
 )
@@ -39,7 +40,16 @@ func (s *Service) createLinkTx(ctx context.Context, tx pgx.Tx, workspaceID, agen
 }
 
 func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string) (Redeemed, error) {
-	tx, err := s.pool.Begin(ctx)
+	// The link's workspace is unknown until the token hash is looked up; the redemption itself,
+	// with its checks and the row lock, runs scoped to that workspace.
+	var linkWorkspace string
+	err := s.db.Privileged(ctx, database.PrivilegeLinkToken, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT workspace_id::text FROM pairing_links WHERE token_hash=$1`, tokenHash(token)).Scan(&linkWorkspace)
+	})
+	if err != nil {
+		return Redeemed{}, fmt.Errorf("redeem link: %w", err)
+	}
+	tx, err := s.db.BeginWorkspace(ctx, linkWorkspace)
 	if err != nil {
 		return Redeemed{}, fmt.Errorf("begin redeem: %w", err)
 	}

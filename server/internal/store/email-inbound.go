@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/jackc/pgx/v5"
@@ -66,7 +67,9 @@ func (s *Store) IngestEmail(ctx context.Context, workspaceID string, in email.In
 // WorkspaceForReplyToken finds the workspace of the conversation a reply token belongs to.
 func (s *Store) WorkspaceForReplyToken(ctx context.Context, token string) (string, bool, error) {
 	var workspaceID string
-	err := s.pool.QueryRow(ctx, `SELECT workspace_id::text FROM conversations WHERE email_reply_token=$1`, token).Scan(&workspaceID)
+	err := s.db.Privileged(ctx, database.PrivilegeReplyToken, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT workspace_id::text FROM conversations WHERE email_reply_token=$1`, token).Scan(&workspaceID)
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, nil
 	}
@@ -78,7 +81,7 @@ func (s *Store) WorkspaceForReplyToken(ctx context.Context, token string) (strin
 
 func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound, now time.Time, stash StashFunc) (InboundResult, error) {
 	result := InboundResult{Authentication: in.Authentication}
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.db.BeginWorkspace(ctx, workspaceID)
 	if err != nil {
 		return result, fmt.Errorf("begin inbound email: %w", err)
 	}

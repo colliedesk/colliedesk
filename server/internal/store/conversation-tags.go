@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/jackc/pgx/v5"
 )
 
 func (s *Store) AddConversationTag(ctx context.Context, workspaceID, conversationID, tagID string) (domain.Conversation, error) {
@@ -16,13 +17,14 @@ func (s *Store) RemoveConversationTag(ctx context.Context, workspaceID, conversa
 }
 
 func (s *Store) setConversationTag(ctx context.Context, workspaceID, conversationID, tagID string, add bool) (domain.Conversation, error) {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return domain.Conversation{}, fmt.Errorf("begin conversation tag update: %w", err)
-	}
-	defer tx.Rollback(ctx) //nolint:errcheck
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Conversation, error) {
+		return setConversationTag(ctx, tx, workspaceID, conversationID, tagID, add)
+	})
+}
+
+func setConversationTag(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, tagID string, add bool) (domain.Conversation, error) {
 	var conversationExists, tagExists bool
-	err = tx.QueryRow(ctx, `SELECT
+	err := tx.QueryRow(ctx, `SELECT
 		EXISTS(SELECT 1 FROM conversations WHERE workspace_id=$1 AND id=$2),
 		EXISTS(SELECT 1 FROM tags WHERE workspace_id=$1 AND id=$3)`, workspaceID, conversationID, tagID).
 		Scan(&conversationExists, &tagExists)
@@ -45,8 +47,5 @@ func (s *Store) setConversationTag(ctx context.Context, workspaceID, conversatio
 			return domain.Conversation{}, fmt.Errorf("touch tagged conversation: %w", err)
 		}
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Conversation{}, fmt.Errorf("commit conversation tag update: %w", err)
-	}
-	return s.GetConversation(ctx, workspaceID, conversationID)
+	return getConversation(ctx, tx, workspaceID, conversationID)
 }

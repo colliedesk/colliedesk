@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/jackc/pgx/v5"
 )
 
 // messageSelect returns timeline rows with their email delivery (outgoing) and envelope (incoming).
@@ -48,7 +49,13 @@ func scanMessage(row rowScanner) (domain.Message, error) {
 }
 
 func (s *Store) ListMessages(ctx context.Context, workspaceID, conversationID string) ([]domain.Message, error) {
-	rows, err := s.pool.Query(ctx, messageSelect+` WHERE m.workspace_id=$1 AND m.conversation_id=$2 ORDER BY m.created_at,m.id`, workspaceID, conversationID)
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.Message, error) {
+		return listMessages(ctx, tx, workspaceID, conversationID)
+	})
+}
+
+func listMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) ([]domain.Message, error) {
+	rows, err := tx.Query(ctx, messageSelect+` WHERE m.workspace_id=$1 AND m.conversation_id=$2 ORDER BY m.created_at,m.id`, workspaceID, conversationID)
 	if err != nil {
 		return nil, fmt.Errorf("list messages: %w", err)
 	}
@@ -65,7 +72,7 @@ func (s *Store) ListMessages(ctx context.Context, workspaceID, conversationID st
 		return nil, fmt.Errorf("iterate messages: %w", err)
 	}
 	rows.Close()
-	return messages, s.attachConversationFiles(ctx, workspaceID, conversationID, messages)
+	return messages, attachConversationFiles(ctx, tx, workspaceID, conversationID, messages)
 }
 
 type messageQuerier interface {
@@ -87,7 +94,7 @@ func getMessage(ctx context.Context, query messageQuerier, workspaceID, messageI
 // CreateMessage stores a reply or note. A reply is queued for email when the workspace has an
 // email channel; a note never is.
 func (s *Store) CreateMessage(ctx context.Context, workspaceID, conversationID, agentID, kind, body string) (domain.Message, error) {
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.db.BeginWorkspace(ctx, workspaceID)
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("begin message creation: %w", err)
 	}
