@@ -10,6 +10,7 @@ const conversation = {
   priority: 'normal' as const,
   assignee_id: null,
   tags: [],
+  origin: null,
   created_at: '2026-10-14T00:00:00Z',
   updated_at: '2026-10-14T00:00:00Z',
 };
@@ -65,6 +66,8 @@ test('renders message Markdown in the timeline', () => {
     author_name: null,
     kind: 'incoming',
     body: 'Use the **secure link**.',
+    body_html: null,
+    origin: null,
     attachments: [],
     created_at: '2026-10-14T00:00:00Z',
   }]} />);
@@ -80,6 +83,8 @@ test('shows the author name and attachment download links on a timeline message'
     author_name: 'Grace Hopper',
     kind: 'incoming',
     body: 'Logs attached.',
+    body_html: null,
+    origin: null,
     attachments: [{
       id: '66666666-6666-4666-8666-666666666666',
       message_id: '55555555-5555-4555-8555-555555555555',
@@ -96,4 +101,56 @@ test('shows the author name and attachment download links on a timeline message'
   expect(link).toHaveAttribute('href', '/api/v1/attachments/66666666-6666-4666-8666-666666666666');
   expect(link).toHaveAttribute('download');
   expect(screen.getByText('2.0 KB')).toBeInTheDocument();
+});
+
+const imported = {
+  id: '77777777-7777-4777-8777-777777777777',
+  conversation_id: conversation.id,
+  author_agent_id: null,
+  author_name: 'Bob Former',
+  kind: 'note' as const,
+  body: 'Forwarding the logs',
+  body_html: '<p onclick="steal()">Forwarding the <b>logs</b><img src="https://tracker.example/p.gif"></p>',
+  origin: { system: 'freshdesk', external_id: '7004', kind: 'forward' as const, from: null, to: ['vendor@partner.example'], cc: ['boss@acme.example'], bcc: [] },
+  attachments: [],
+  created_at: '2026-10-14T00:00:00Z',
+};
+
+test('labels imported messages with their source kind and recipients', () => {
+  render(<InboxPage selected={conversation} conversations={[conversation]} timeline={[imported]} />);
+  expect(screen.getByText('Forwarded from Freshdesk')).toBeInTheDocument();
+  expect(screen.getByText('To: vendor@partner.example')).toBeInTheDocument();
+  expect(screen.getByText('Cc: boss@acme.example')).toBeInTheDocument();
+});
+
+test('shows the original HTML only inside a sandboxed frame that loads nothing', () => {
+  const { container } = render(<InboxPage selected={conversation} conversations={[conversation]} timeline={[imported]} />);
+  expect(container.querySelector('iframe')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /show original/i }));
+  const frame = screen.getByTitle('Original message');
+  expect(frame.tagName).toBe('IFRAME');
+  expect(frame).toHaveAttribute('sandbox', '');
+  const document = frame.getAttribute('srcdoc') ?? '';
+  expect(document).toContain("default-src 'none'");
+  expect(document).toContain('<b>logs</b>');
+  expect(container.querySelector('[onclick]')).toBeNull();
+});
+
+test('lists time entries with the total time logged', () => {
+  render(<InboxPage selected={conversation} conversations={[conversation]} timeline={[]} timeEntries={[
+    { id: '88888888-8888-4888-8888-888888888888', conversation_id: conversation.id, agent_id: null, agent_name: 'Alice Agent', minutes: 90, note: 'Call', billable: true, executed_at: '2025-01-16T02:00:00Z' },
+    { id: '99999999-9999-4999-8999-999999999999', conversation_id: conversation.id, agent_id: null, agent_name: 'Bob Former', minutes: 15, note: '', billable: false, executed_at: '2025-01-16T07:00:00Z' },
+  ]} />);
+  const section = screen.getByRole('region', { name: /time logged/i });
+  expect(within(section).getByText('Total 1 h 45 min')).toBeInTheDocument();
+  expect(within(section).getByText(/Alice Agent/)).toBeInTheDocument();
+  expect(within(section).getByText('Billable')).toBeInTheDocument();
+});
+
+test('shows where an imported conversation came from', () => {
+  const origin = { system: 'freshdesk', external_id: '41', type: 'Problem', source: 'email', due_at: '2025-01-18T23:30:00Z', first_response_due_at: null, cc: [], forwarded_to: [] };
+  render(<InboxPage selected={{ ...conversation, origin }} conversations={[conversation]} />);
+  const details = screen.getByRole('complementary', { name: /conversation details/i });
+  expect(within(details).getByText('Freshdesk ticket 41')).toBeInTheDocument();
+  expect(within(details).getByText('Type: Problem')).toBeInTheDocument();
 });

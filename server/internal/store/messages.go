@@ -8,7 +8,7 @@ import (
 )
 
 func (s *Store) ListMessages(ctx context.Context, workspaceID, conversationID string) ([]domain.Message, error) {
-	rows, err := s.pool.Query(ctx, `SELECT m.id::text,m.conversation_id::text,m.author_agent_id::text,m.author_name,m.kind,m.body,m.created_at
+	rows, err := s.pool.Query(ctx, `SELECT m.id::text,m.conversation_id::text,m.author_agent_id::text,m.author_name,m.kind,m.body,m.body_html,m.origin,m.created_at
 		FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
 		WHERE m.workspace_id=$1 AND m.conversation_id=$2 ORDER BY m.created_at,m.id`, workspaceID, conversationID)
 	if err != nil {
@@ -18,7 +18,7 @@ func (s *Store) ListMessages(ctx context.Context, workspaceID, conversationID st
 	messages := make([]domain.Message, 0)
 	for rows.Next() {
 		var message domain.Message
-		if err := rows.Scan(&message.ID, &message.ConversationID, &message.AuthorAgentID, &message.AuthorName, &message.Kind, &message.Body, &message.CreatedAt); err != nil {
+		if err := rows.Scan(&message.ID, &message.ConversationID, &message.AuthorAgentID, &message.AuthorName, &message.Kind, &message.Body, &message.BodyHTML, &message.Origin, &message.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
 		message.CreatedAt = domain.UTC(message.CreatedAt)

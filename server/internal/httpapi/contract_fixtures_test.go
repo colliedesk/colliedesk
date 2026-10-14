@@ -30,6 +30,7 @@ func newContractFixture(t *testing.T) contractFixture {
 		"kind": "note", "body": "Contract note",
 	})
 	attachmentID := seedAttachment(t, pool, storage, adminToken, api, noteID, "contract.txt", "contract bytes")
+	seedImportDetails(t, pool, workspaceID(t, api, adminToken), conversationID, noteID)
 	updateTagID := create(t, api, adminToken, "/api/v1/tags", map[string]any{"name": "Update contract tag"})
 	deleteTagID := create(t, api, adminToken, "/api/v1/tags", map[string]any{"name": "Delete contract tag"})
 

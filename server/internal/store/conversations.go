@@ -36,9 +36,9 @@ func (s *Store) CreateConversation(ctx context.Context, workspaceID, contactID, 
 
 func (s *Store) GetConversation(ctx context.Context, workspaceID, id string) (domain.Conversation, error) {
 	var item domain.Conversation
-	err := s.pool.QueryRow(ctx, `SELECT id::text,contact_id::text,subject,status,priority,assignee_id::text,created_at,updated_at
+	err := s.pool.QueryRow(ctx, `SELECT id::text,contact_id::text,subject,status,priority,assignee_id::text,origin,created_at,updated_at
 		FROM conversations WHERE workspace_id=$1 AND id=$2`, workspaceID, id).
-		Scan(&item.ID, &item.ContactID, &item.Subject, &item.Status, &item.Priority, &item.AssigneeID, &item.CreatedAt, &item.UpdatedAt)
+		Scan(&item.ID, &item.ContactID, &item.Subject, &item.Status, &item.Priority, &item.AssigneeID, &item.Origin, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return domain.Conversation{}, fmt.Errorf("get conversation: %w", err)
 	}
@@ -81,7 +81,7 @@ func (s *Store) ListConversations(ctx context.Context, workspaceID string, filte
 	}
 
 	rows, err := s.pool.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,
-		c.assignee_id::text,c.created_at,c.updated_at,COALESCE(tag_data.tags,'[]'::jsonb)
+		c.assignee_id::text,c.origin,c.created_at,c.updated_at,COALESCE(tag_data.tags,'[]'::jsonb)
 		FROM conversations c
 		LEFT JOIN LATERAL (
 			SELECT jsonb_agg(jsonb_build_object('id',t.id::text,'name',t.name,'color',t.color) ORDER BY t.name) AS tags
@@ -99,7 +99,7 @@ func (s *Store) ListConversations(ctx context.Context, workspaceID string, filte
 		var item domain.Conversation
 		var tagsJSON []byte
 		if err := rows.Scan(&item.ID, &item.ContactID, &item.Subject, &item.Status, &item.Priority,
-			&item.AssigneeID, &item.CreatedAt, &item.UpdatedAt, &tagsJSON); err != nil {
+			&item.AssigneeID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &tagsJSON); err != nil {
 			return ConversationPage{}, fmt.Errorf("scan conversation: %w", err)
 		}
 		if err := json.Unmarshal(tagsJSON, &item.Tags); err != nil {

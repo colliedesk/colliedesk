@@ -58,6 +58,12 @@ type fdTicket struct {
 	Deleted         bool           `json:"deleted"`
 	Spam            bool           `json:"spam"`
 	Attachments     []fdAttachment `json:"attachments"`
+	Type            *string        `json:"type"`
+	DueBy           *time.Time     `json:"due_by"`
+	FrDueBy         *time.Time     `json:"fr_due_by"`
+	CcEmails        []string       `json:"cc_emails"`
+	FwdEmails       []string       `json:"fwd_emails"`
+	ToEmails        []string       `json:"to_emails"`
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at"`
 }
@@ -69,6 +75,11 @@ type fdConversation struct {
 	Incoming    bool           `json:"incoming"`
 	Private     bool           `json:"private"`
 	UserID      int64          `json:"user_id"`
+	Source      int            `json:"source"`
+	FromEmail   *string        `json:"from_email"`
+	ToEmails    []string       `json:"to_emails"`
+	CcEmails    []string       `json:"cc_emails"`
+	BccEmails   []string       `json:"bcc_emails"`
 	Attachments []fdAttachment `json:"attachments"`
 	CreatedAt   time.Time      `json:"created_at"`
 }

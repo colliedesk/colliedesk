@@ -35,15 +35,15 @@ func (r *run) writeConversation(ctx context.Context, ticket fdTicket, contactID 
 	defer tx.Rollback(ctx) //nolint:errcheck
 	var id string
 	if existing != nil {
-		err = tx.QueryRow(ctx, `UPDATE conversations SET subject=$3,status=$4,priority=$5,assignee_id=$6,updated_at=$7
+		err = tx.QueryRow(ctx, `UPDATE conversations SET subject=$3,status=$4,priority=$5,assignee_id=$6,updated_at=$7,origin=$8
 			WHERE workspace_id=$1 AND id=$2 RETURNING id::text`, r.workspaceID, *existing,
-			subjectOrDefault(ticket.Subject), status, priority, assignee, ticket.UpdatedAt.UTC()).Scan(&id)
+			subjectOrDefault(ticket.Subject), status, priority, assignee, ticket.UpdatedAt.UTC(), ticketOrigin(ticket)).Scan(&id)
 	}
 	if existing == nil || errors.Is(err, pgx.ErrNoRows) {
-		err = tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,status,priority,assignee_id,created_at,updated_at)
-			SELECT $1,c.id,$3,$4,$5,$6,$7,$8 FROM contacts c WHERE c.workspace_id=$1 AND c.id=$2 RETURNING id::text`,
+		err = tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,status,priority,assignee_id,created_at,updated_at,origin)
+			SELECT $1,c.id,$3,$4,$5,$6,$7,$8,$9 FROM contacts c WHERE c.workspace_id=$1 AND c.id=$2 RETURNING id::text`,
 			r.workspaceID, contactID, subjectOrDefault(ticket.Subject), status, priority, assignee,
-			ticket.CreatedAt.UTC(), ticket.UpdatedAt.UTC()).Scan(&id)
+			ticket.CreatedAt.UTC(), ticket.UpdatedAt.UTC(), ticketOrigin(ticket)).Scan(&id)
 		if err == nil {
 			err = r.ledger.mark(ctx, tx, ledgerMark{entity: entityTicket, sourceID: key, targetID: &id, status: ledgerFailed,
 				errText: "incomplete: the import stopped before this ticket finished", meta: &ticketMeta{Archived: archived}})
@@ -105,9 +105,9 @@ func (r *run) insertMessage(ctx context.Context, ticketKey, conversationID, enti
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 	var id string
-	err = tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,author_agent_id,author_name,kind,body,body_html,created_at)
-		SELECT $1,c.id,$3,$4,$5,$6,$7,$8 FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2 RETURNING id::text`,
-		r.workspaceID, conversationID, m.authorAgentID, m.authorName, m.kind, m.body, m.html, m.createdAt).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,author_agent_id,author_name,kind,body,body_html,origin,created_at)
+		SELECT $1,c.id,$3,$4,$5,$6,$7,$8,$9 FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2 RETURNING id::text`,
+		r.workspaceID, conversationID, m.authorAgentID, m.authorName, m.kind, m.body, m.html, m.origin, m.createdAt).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("write message: %w", err)
 	}

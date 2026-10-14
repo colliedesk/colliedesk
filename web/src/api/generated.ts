@@ -223,6 +223,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{id}/time-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description Time logged on a conversation, oldest first (for example imported from Freshdesk). */
+        get: operations["listTimeEntries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/attachments/{id}": {
         parameters: {
             query?: never;
@@ -475,10 +494,28 @@ export interface components {
             /** Format: uuid */
             assignee_id: string | null;
             tags: components["schemas"]["Tag"][];
+            /** @description Where an imported conversation came from; null for conversations created in CollieDesk. */
+            origin: components["schemas"]["ConversationOrigin"] | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        ConversationOrigin: {
+            /** @description Source system, for example freshdesk */
+            system: string;
+            /** @description Ticket id in the source system */
+            external_id: string;
+            /** @description Ticket type in the source system */
+            type: string | null;
+            /** @description Channel the ticket came from: email, portal, phone, chat, feedback_widget, outbound_email or other */
+            source: string | null;
+            /** Format: date-time */
+            due_at: string | null;
+            /** Format: date-time */
+            first_response_due_at: string | null;
+            cc: string[];
+            forwarded_to: string[];
         };
         ConversationPage: {
             items: components["schemas"]["Conversation"][];
@@ -497,9 +534,40 @@ export interface components {
             /** @enum {string} */
             kind: "incoming" | "outgoing" | "note";
             body: string;
+            /** @description Original HTML of an imported message. Untrusted content: render it only in a sandboxed frame that runs no scripts and loads nothing from the network. */
+            body_html: string | null;
+            /** @description Where an imported message came from; null for messages written in CollieDesk. */
+            origin: components["schemas"]["MessageOrigin"] | null;
             attachments: components["schemas"]["Attachment"][];
             /** Format: date-time */
             created_at: string;
+        };
+        MessageOrigin: {
+            system: string;
+            external_id: string;
+            /**
+             * @description How the source system classified the item. public_note was visible to the customer there; forward went to a third party, not to the customer.
+             * @enum {string}
+             */
+            kind: "description" | "reply" | "incoming" | "private_note" | "public_note" | "forward" | "forwarded_email" | "other";
+            from: string | null;
+            to: string[];
+            cc: string[];
+            bcc: string[];
+        };
+        TimeEntry: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            conversation_id: string;
+            /** Format: uuid */
+            agent_id: string | null;
+            agent_name: string;
+            minutes: number;
+            note: string;
+            billable: boolean;
+            /** Format: date-time */
+            executed_at: string;
         };
         Attachment: {
             /** Format: uuid */
@@ -1044,6 +1112,32 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listTimeEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Time entries of the conversation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["TimeEntry"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
         };
     };

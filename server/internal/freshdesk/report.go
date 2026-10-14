@@ -110,14 +110,17 @@ type Report struct {
 // notImported lists Freshdesk data this importer does not carry over, so the
 // report never implies more than it delivers.
 var notImported = []string{
-	"Custom ticket and contact fields",
-	"Contact phone numbers, other emails, addresses and social handles",
+	"Custom ticket fields and custom contact fields",
+	"Ticket group, product, company link, email_config_id, escalation flags, watchers, parent/child and merge links",
+	"Contact phone numbers, other emails, addresses, job titles and social handles",
 	"Companies other than their name (domains, notes, custom fields)",
-	"Satisfaction ratings, SLA policies, groups, products, canned responses, automations",
+	"Message structured_body, support_email, notified_to and edit history (last_edited_*)",
+	"Satisfaction ratings, SLA policies, canned responses, automations",
 	"Solution (knowledge base) articles",
-	"Inline images inside message HTML are kept as links to Freshdesk, not copied (see warnings)",
+	"Inline images inside message HTML stay links to Freshdesk; the original HTML is kept (see warnings)",
 	"Tickets in Freshdesk Trash or Spam (listed by id in this report)",
 	"Time entries of archived tickets (the Freshdesk API documents no endpoint for them)",
+	"A re-run takes subject, status, priority and assignee from Freshdesk again and only adds tags; tags removed in Freshdesk stay",
 }
 
 func (r *Report) JSON() ([]byte, error) {

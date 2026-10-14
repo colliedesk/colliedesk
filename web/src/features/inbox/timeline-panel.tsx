@@ -1,16 +1,16 @@
-import Markdown from 'react-markdown';
-import type { Attachment, Conversation, Message } from '../../api/schemas';
-import { formatBytes } from '../../lib/format-bytes';
-import { formatDate } from '../../lib/format-date';
+import type { Conversation, Message, TimeEntry } from '../../api/schemas';
 import { messages } from '../../messages';
+import { MessageItem } from './message-item';
+import { TimeEntriesSection } from './time-entries-section';
 
 interface TimelinePanelProps {
   conversation?: Conversation;
   items: Message[];
+  timeEntries?: TimeEntry[];
   timezone: string;
 }
 
-export function TimelinePanel({ conversation, items, timezone }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, items, timeEntries = [], timezone }: TimelinePanelProps) {
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
       <header className="timeline-header">
@@ -19,29 +19,9 @@ export function TimelinePanel({ conversation, items, timezone }: TimelinePanelPr
         </div>
       </header>
       <div className="timeline-scroll">
-        {items.map((item) => (
-          <article className={`message message-${item.kind}`} key={item.id}>
-            <div className="message-meta"><span><strong>{item.kind === 'note' ? messages.noteMode : item.kind === 'incoming' ? messages.incoming : messages.replyMode}</strong>
-              {item.author_name && <span className="message-author">{item.author_name}</span>}</span>
-              <time dateTime={item.created_at}>{formatDate(item.created_at, timezone)}</time></div>
-            <div className="markdown-body"><Markdown>{item.body}</Markdown></div>
-            {item.attachments.length > 0 && <AttachmentList items={item.attachments} />}
-          </article>
-        ))}
+        {items.map((item) => <MessageItem key={item.id} item={item} timezone={timezone} />)}
+        {timeEntries.length > 0 && <TimeEntriesSection items={timeEntries} timezone={timezone} />}
       </div>
     </section>
-  );
-}
-
-function AttachmentList({ items }: { items: Attachment[] }) {
-  return (
-    <ul className="message-attachments" aria-label={messages.attachments}>
-      {items.map((file) => (
-        <li key={file.id}>
-          <a href={`/api/v1/attachments/${file.id}`} download={file.filename} title={messages.downloadAttachment(file.filename)}>{file.filename}</a>
-          <span className="attachment-size">{formatBytes(file.size)}</span>
-        </li>
-      ))}
-    </ul>
   );
 }

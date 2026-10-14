@@ -25,6 +25,7 @@ export function InboxRoute() {
   const activeID = selectedId ?? params.conversationId;
   const selected = conversations.data?.items.find((item) => item.id === activeID) ?? conversations.data?.items[0];
   const timeline = useQuery({ queryKey: ['messages', selected?.id], queryFn: () => api.messages(selected!.id), enabled: Boolean(selected) });
+  const timeEntries = useQuery({ queryKey: ['time-entries', selected?.id], queryFn: () => api.timeEntries(selected!.id), enabled: Boolean(selected) });
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes), onSuccess: refresh });
   const addTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.addConversationTag(conversationId, tagId), onSuccess: refresh });
@@ -35,7 +36,7 @@ export function InboxRoute() {
   } });
   const message = useMutation({ mutationFn: ({ kind, body }: { kind: 'outgoing' | 'note'; body: string }) => api.createMessage(selected!.id, kind, body),
     onSuccess: () => client.invalidateQueries({ queryKey: ['messages', selected?.id] }) });
-  return <InboxPage conversations={conversations.data?.items} selected={selected} timeline={timeline.data?.items}
+  return <InboxPage conversations={conversations.data?.items} selected={selected} timeline={timeline.data?.items} timeEntries={timeEntries.data?.items}
     agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone}
     page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} onPage={setPage}
     onSelect={(id) => { setSelectedId(id); navigate({ to: '/conversations/$conversationId', params: { conversationId: id } }); }}

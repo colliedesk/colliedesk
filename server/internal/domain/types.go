@@ -60,26 +60,63 @@ type Tag struct {
 }
 
 type Conversation struct {
-	ID         string    `json:"id"`
-	ContactID  string    `json:"contact_id"`
-	Subject    string    `json:"subject"`
-	Status     string    `json:"status"`
-	Priority   string    `json:"priority"`
-	AssigneeID *string   `json:"assignee_id"`
-	Tags       []Tag     `json:"tags"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID         string              `json:"id"`
+	ContactID  string              `json:"contact_id"`
+	Subject    string              `json:"subject"`
+	Status     string              `json:"status"`
+	Priority   string              `json:"priority"`
+	AssigneeID *string             `json:"assignee_id"`
+	Tags       []Tag               `json:"tags"`
+	Origin     *ConversationOrigin `json:"origin"`
+	CreatedAt  time.Time           `json:"created_at"`
+	UpdatedAt  time.Time           `json:"updated_at"`
+}
+
+// ConversationOrigin records where an imported conversation came from.
+type ConversationOrigin struct {
+	System             string     `json:"system"`
+	ExternalID         string     `json:"external_id"`
+	Type               *string    `json:"type"`
+	Source             *string    `json:"source"`
+	DueAt              *time.Time `json:"due_at"`
+	FirstResponseDueAt *time.Time `json:"first_response_due_at"`
+	CC                 []string   `json:"cc"`
+	ForwardedTo        []string   `json:"forwarded_to"`
+}
+
+// MessageOrigin records where an imported message came from and who it was addressed to.
+type MessageOrigin struct {
+	System     string   `json:"system"`
+	ExternalID string   `json:"external_id"`
+	Kind       string   `json:"kind"`
+	From       *string  `json:"from"`
+	To         []string `json:"to"`
+	CC         []string `json:"cc"`
+	BCC        []string `json:"bcc"`
+}
+
+type TimeEntry struct {
+	ID             string    `json:"id"`
+	ConversationID string    `json:"conversation_id"`
+	AgentID        *string   `json:"agent_id"`
+	AgentName      string    `json:"agent_name"`
+	Minutes        int       `json:"minutes"`
+	Note           string    `json:"note"`
+	Billable       bool      `json:"billable"`
+	ExecutedAt     time.Time `json:"executed_at"`
 }
 
 type Message struct {
-	ID             string       `json:"id"`
-	ConversationID string       `json:"conversation_id"`
-	AuthorAgentID  *string      `json:"author_agent_id"`
-	AuthorName     *string      `json:"author_name"`
-	Kind           string       `json:"kind"`
-	Body           string       `json:"body"`
-	Attachments    []Attachment `json:"attachments"`
-	CreatedAt      time.Time    `json:"created_at"`
+	ID             string         `json:"id"`
+	ConversationID string         `json:"conversation_id"`
+	AuthorAgentID  *string        `json:"author_agent_id"`
+	AuthorName     *string        `json:"author_name"`
+	Kind           string         `json:"kind"`
+	Body           string         `json:"body"`
+	BodyHTML       *string        `json:"body_html"`
+	Origin         *MessageOrigin `json:"origin"`
+	Attachments    []Attachment   `json:"attachments"`
+	CreatedAt      time.Time      `json:"created_at"`
 }
 
 type Attachment struct {

@@ -73,6 +73,7 @@ func Routes() []Route {
 		{http.MethodDelete, "/api/v1/conversations/{id}/tags/{tagId}", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/conversations/{id}/messages", auth.PermissionConversationsRead},
 		{http.MethodPost, "/api/v1/conversations/{id}/messages", auth.PermissionConversationsWrite},
+		{http.MethodGet, "/api/v1/conversations/{id}/time-entries", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/attachments/{id}", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/contacts", auth.PermissionContactsRead},
 		{http.MethodPost, "/api/v1/contacts", auth.PermissionContactsWrite},

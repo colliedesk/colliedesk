@@ -2,6 +2,8 @@ package freshdesk
 
 import (
 	"fmt"
+
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"regexp"
 	"strconv"
 	"strings"
@@ -58,6 +60,7 @@ func parseTimeSpent(value string) (int, error) {
 }
 
 type newMessage struct {
+	origin        *domain.MessageOrigin
 	kind          string
 	body          string
 	html          string
@@ -79,21 +82,68 @@ func (r *run) descriptionMessage(ticket fdTicket) newMessage {
 		kind, author = "outgoing", *ticket.ResponderID
 	}
 	agentID, name := r.author(author)
-	return newMessage{kind: kind, body: messageBody(ticket.DescriptionText), html: ticket.Description,
+	origin := &domain.MessageOrigin{System: "freshdesk", ExternalID: strconv.FormatInt(ticket.ID, 10), Kind: "description",
+		To: list(ticket.ToEmails), CC: list(ticket.CcEmails), BCC: []string{}}
+	return newMessage{origin: origin, kind: kind, body: messageBody(ticket.DescriptionText), html: ticket.Description,
 		authorAgentID: agentID, authorName: name, createdAt: ticket.CreatedAt.UTC()}
 }
 
+// Freshdesk conversation sources (API v2 docs): 0 reply, 2 note, 8 forwarded email.
+const (
+	conversationNote      = 2
+	conversationForwarded = 8
+)
+
+// conversationMessage maps a Freshdesk conversation to a timeline message.
+// Only replies to the customer become outgoing: a forward went to a third
+// party and a public note was not an email, so both become notes that keep
+// their Freshdesk kind and recipients in origin.
 func (r *run) conversationMessage(c fdConversation) newMessage {
-	kind := "outgoing"
+	kind, originKind := "outgoing", "reply"
 	switch {
 	case c.Private:
-		kind = "note"
+		kind, originKind = "note", "private_note"
+	case c.Source == conversationForwarded && c.Incoming:
+		kind, originKind = "incoming", "forwarded_email"
+	case c.Source == conversationForwarded:
+		kind, originKind = "note", "forward"
+	case c.Source == conversationNote:
+		kind, originKind = "note", "public_note"
 	case c.Incoming:
-		kind = "incoming"
+		kind, originKind = "incoming", "incoming"
 	}
 	agentID, name := r.author(c.UserID)
-	return newMessage{kind: kind, body: messageBody(c.BodyText), html: c.Body,
+	origin := &domain.MessageOrigin{System: "freshdesk", ExternalID: strconv.FormatInt(c.ID, 10), Kind: originKind,
+		From: c.FromEmail, To: list(c.ToEmails), CC: list(c.CcEmails), BCC: list(c.BccEmails)}
+	return newMessage{origin: origin, kind: kind, body: messageBody(c.BodyText), html: c.Body,
 		authorAgentID: agentID, authorName: name, createdAt: c.CreatedAt.UTC()}
+}
+
+var ticketSources = map[int]string{1: "email", 2: "portal", 3: "phone", 7: "chat", 9: "feedback_widget", 10: "outbound_email"}
+
+func ticketOrigin(ticket fdTicket) *domain.ConversationOrigin {
+	source := "other"
+	if name, ok := ticketSources[ticket.Source]; ok {
+		source = name
+	}
+	return &domain.ConversationOrigin{System: "freshdesk", ExternalID: strconv.FormatInt(ticket.ID, 10), Type: ticket.Type,
+		Source: &source, DueAt: utcPointer(ticket.DueBy), FirstResponseDueAt: utcPointer(ticket.FrDueBy),
+		CC: list(ticket.CcEmails), ForwardedTo: list(ticket.FwdEmails)}
+}
+
+func list(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
+}
+
+func utcPointer(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	utc := value.UTC()
+	return &utc
 }
 
 // author resolves a Freshdesk user id to a CollieDesk agent (when matched by
