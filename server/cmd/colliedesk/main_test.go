@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"strings"
@@ -12,6 +15,27 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+func TestHelpAndHealthcheckDoNotRequireDatabase(t *testing.T) {
+	var help bytes.Buffer
+	if err := run(context.Background(), []string{"--help"}, &help, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(help.String(), "create-workspace") {
+		t.Fatalf("help omitted create-workspace: %q", help.String())
+	}
+
+	healthy := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
+		response.WriteHeader(http.StatusNoContent)
+	}))
+	defer healthy.Close()
+	if err := run(context.Background(), []string{"healthcheck", "--url", healthy.URL}, io.Discard, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(context.Background(), []string{"healthcheck", "--url", healthy.URL}, io.Discard, "://invalid", ""); err == nil || !strings.Contains(err.Error(), "healthcheck database") {
+		t.Fatalf("healthcheck accepted invalid database URL: %v", err)
+	}
+}
 
 func TestCreateWorkspaceAndPairPrintFreshOneTimeURLs(t *testing.T) {
 	baseURL := os.Getenv("TEST_DATABASE_URL")

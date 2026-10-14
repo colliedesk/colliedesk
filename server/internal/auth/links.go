@@ -14,10 +14,16 @@ type Redeemed struct {
 	Workspace domain.Workspace `json:"workspace"`
 }
 
-func (s *Service) createLinkTx(ctx context.Context, tx pgx.Tx, workspaceID, agentID, email, kind, ceiling string, creatorID *string) (string, string, error) {
+type createdLink struct {
+	Token string
+	URL   string
+	ID    string
+}
+
+func (s *Service) createLinkTx(ctx context.Context, tx pgx.Tx, workspaceID, agentID, email, kind, ceiling string, creatorID *string) (createdLink, error) {
 	token, hash, err := newToken()
 	if err != nil {
-		return "", "", err
+		return createdLink{}, err
 	}
 	var nullableAgent any
 	if agentID != "" {
@@ -27,9 +33,9 @@ func (s *Service) createLinkTx(ctx context.Context, tx pgx.Tx, workspaceID, agen
 	err = tx.QueryRow(ctx, `INSERT INTO pairing_links(workspace_id,agent_id,email,kind,role_ceiling,token_hash,created_by_agent_id,expires_at)
 		VALUES($1,$2,lower($3),$4,$5,$6,$7,$8) RETURNING id::text`, workspaceID, nullableAgent, email, kind, ceiling, hash, creatorID, s.now().Add(linkLifetime)).Scan(&linkID)
 	if err != nil {
-		return "", "", fmt.Errorf("create %s link: %w", kind, err)
+		return createdLink{}, fmt.Errorf("create %s link: %w", kind, err)
 	}
-	return s.redeemURL(token), linkID, nil
+	return createdLink{Token: token, URL: s.redeemURL(token), ID: linkID}, nil
 }
 
 func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string) (Redeemed, error) {

@@ -86,7 +86,11 @@ func TestMigrationAppliesUpDownAndUpAgain(t *testing.T) {
 	if !tableExists(t, pool, "workspaces") {
 		t.Fatal("workspaces table missing after first up")
 	}
-	for tableExists(t, pool, "workspaces") {
+	var applied int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM schema_migrations`).Scan(&applied); err != nil {
+		t.Fatal(err)
+	}
+	for range applied {
 		if err := rollbackLatest(ctx, pool); err != nil {
 			t.Fatalf("down: %v", err)
 		}

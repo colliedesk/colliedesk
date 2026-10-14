@@ -32,18 +32,16 @@ you have everything you need to run it yourself or fork it.
 Requirements: Docker with Compose v2.
 
 ```sh
-docker compose up -d --build
-docker compose exec server /app/colliedesk create-workspace \
-  --name "Example Support" \
-  --admin-email "admin@example.com"
+curl -fsSL https://raw.githubusercontent.com/colliedesk/colliedesk/main/install.sh | sh -s -- \
+  --name "My Support Desk" --email "admin@example.com"
 ```
 
-Open the one-time URL printed by the command. CollieDesk does not use passwords. A one-command
-installer is in progress; see the [roadmap](ROADMAP.md).
+The installer starts CollieDesk and PostgreSQL, keeps your secrets in a local `.env`, and prints a
+one-time sign-in URL. CollieDesk does not use passwords. Details: [docs/user/install.md](docs/user/install.md).
 
 ## What works today
 
-- Passwordless sign-in with one-time pairing and invite links, revocable sessions.
+- Passwordless sign-in with one-time pairing and invite links, optional cloud sign-in, and revocable sessions.
 - Shared inbox: reply, private notes, status, assignee, tags, search, pagination.
 - Workspaces fully isolated from each other.
 - Per-workspace timezone with per-agent override.

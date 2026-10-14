@@ -7,9 +7,11 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/webui"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -32,7 +34,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	}
 	server := &http.Server{
 		Addr:              *address,
-		Handler:           webui.Handler(httpapi.New(pool, httpapi.Config{Origin: origin, Attachments: storage})),
+		Handler:           webui.Handler(httpapi.New(pool, httpapi.Config{Origin: origin, CloudAuth: cloudAuthConfig(), Attachments: storage})),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	done := make(chan error, 1)
@@ -61,4 +63,14 @@ func attachmentStorage() (*attachments.LocalDisk, error) {
 		dir = "data/attachments"
 	}
 	return attachments.NewLocalDisk(dir)
+}
+
+func cloudAuthConfig() cloudauth.Config {
+	return cloudauth.Config{
+		Issuer:            os.Getenv("CLOUD_AUTH_ISSUER"),
+		JWKSURL:           os.Getenv("CLOUD_AUTH_JWKS_URL"),
+		AuthorizedParties: strings.Split(os.Getenv("CLOUD_AUTH_AUTHORIZED_PARTIES"), ","),
+		PublishableKey:    os.Getenv("CLERK_PUBLISHABLE_KEY"),
+		EmailClaim:        os.Getenv("CLOUD_AUTH_EMAIL_CLAIM"),
+	}
 }

@@ -54,7 +54,7 @@ jobs:
         run: corepack pnpm install --frozen-lockfile
       - name: Typecheck, test, and build
         working-directory: web
-        run: corepack pnpm typecheck && corepack pnpm test && corepack pnpm build
+        run: corepack pnpm typecheck && corepack pnpm test && corepack pnpm build && corepack pnpm bundle:check
   e2e:
     runs-on: ubuntu-latest
     services:

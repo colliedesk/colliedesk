@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
@@ -13,7 +15,14 @@ import (
 
 func run(ctx context.Context, args []string, output io.Writer, databaseURL, origin string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("expected subcommand: serve, migrate, create-workspace, or pair")
+		return fmt.Errorf("expected subcommand: serve, migrate, create-workspace, pair, or healthcheck")
+	}
+	if args[0] == "--help" || args[0] == "help" {
+		_, err := fmt.Fprintln(output, "Usage: colliedesk <serve|migrate|create-workspace|pair|healthcheck>")
+		return err
+	}
+	if args[0] == "healthcheck" {
+		return healthcheck(ctx, args[1:], databaseURL)
 	}
 	if databaseURL == "" {
 		return fmt.Errorf("DATABASE_URL is required")
@@ -43,6 +52,43 @@ func run(ctx context.Context, args []string, output io.Writer, databaseURL, orig
 	default:
 		return fmt.Errorf("unknown subcommand %q", args[0])
 	}
+}
+
+func healthcheck(ctx context.Context, args []string, databaseURL string) error {
+	flags := flag.NewFlagSet("healthcheck", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	endpoint := flags.String("url", "http://127.0.0.1:8080/", "server URL")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() != 0 {
+		return fmt.Errorf("healthcheck accepts no positional arguments")
+	}
+	if databaseURL != "" {
+		pool, err := pgxpool.New(ctx, databaseURL)
+		if err != nil {
+			return fmt.Errorf("open healthcheck database: %w", err)
+		}
+		defer pool.Close()
+		pingCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		if err := pool.Ping(pingCtx); err != nil {
+			return fmt.Errorf("ping healthcheck database: %w", err)
+		}
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, *endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("create healthcheck request: %w", err)
+	}
+	response, err := (&http.Client{Timeout: 3 * time.Second}).Do(request)
+	if err != nil {
+		return fmt.Errorf("server is not healthy: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 400 {
+		return fmt.Errorf("server is not healthy: HTTP %d", response.StatusCode)
+	}
+	return nil
 }
 
 func createWorkspace(ctx context.Context, pool *pgxpool.Pool, origin string, args []string, output io.Writer) error {

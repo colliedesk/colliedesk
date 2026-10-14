@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS conversations_workspace_status_updated_idx;
