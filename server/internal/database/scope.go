@@ -76,9 +76,12 @@ func (d *DB) Privileged(ctx context.Context, reason Privilege, fn func(pgx.Tx) e
 	return finish(ctx, tx, fn)
 }
 
+// finish runs fn and commits. The deferred rollback (a no-op after a commit) also runs when fn
+// panics, so the connection returns to the pool and its row and advisory locks are released
+// before the panic continues.
 func finish(ctx context.Context, tx pgx.Tx, fn func(pgx.Tx) error) error {
+	defer tx.Rollback(context.WithoutCancel(ctx)) //nolint:errcheck
 	if err := fn(tx); err != nil {
-		_ = tx.Rollback(ctx)
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {

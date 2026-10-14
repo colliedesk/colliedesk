@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -364,6 +365,49 @@ func rollbackThrough(ctx context.Context, pool *pgxpool.Pool, name string) error
 		}
 		if latest == name || strings.Compare(latest, name) < 0 {
 			return nil
+		}
+	}
+}
+
+func TestPanickingCallbackReleasesConnectionAndLocks(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+	ids := seedTwoWorkspaces(t, pool)
+	single := singleConnection(t, pool)
+	db := New(single)
+	lockAndPanic := func(tx pgx.Tx) error {
+		var id string
+		if err := tx.QueryRow(ctx, `SELECT id::text FROM conversations WHERE workspace_id=$1 FOR UPDATE`, ids.a).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		panic("callback failed")
+	}
+	for name, run := range map[string]func(){
+		"InWorkspace": func() { _ = db.InWorkspace(ctx, ids.a, lockAndPanic) },
+		"Privileged":  func() { _ = db.Privileged(ctx, PrivilegeWorkspaceBySlug, lockAndPanic) },
+	} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Fatalf("%s swallowed the panic", name)
+				}
+			}()
+			run()
+		}()
+		if acquired := single.Stat().AcquiredConns(); acquired != 0 {
+			t.Fatalf("%s: %d connection(s) still checked out after the panic", name, acquired)
+		}
+		bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
+		err := New(pool).InWorkspace(bounded, ids.a, func(tx pgx.Tx) error {
+			_, err := tx.Exec(bounded, `SELECT id FROM conversations WHERE workspace_id=$1 FOR UPDATE NOWAIT`, ids.a)
+			return err
+		})
+		cancel()
+		if err != nil {
+			t.Fatalf("%s: row lock survived the panic: %v", name, err)
 		}
 	}
 }

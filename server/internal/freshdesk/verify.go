@@ -15,6 +15,7 @@ func (r *run) verifyAttachments(ctx context.Context, report *Report, ticketIDs, 
 	if err != nil {
 		return fmt.Errorf("reconcile attachments: %w", err)
 	}
+	defer tx.Rollback(ctx) //nolint:errcheck // also covers a panic; a second rollback is a no-op
 	rows, err := tx.Query(ctx, `SELECT i.source_id,i.parent_source_id,a.size,a.sha256,a.storage_key FROM import_items i
 		JOIN attachments a ON a.workspace_id=i.workspace_id AND a.id=i.target_id
 		WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='attachment' AND i.status='done' AND i.parent_source_id=ANY($3)`,

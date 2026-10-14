@@ -17,6 +17,7 @@ func (r *run) loadAgents(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("list CollieDesk agents: %w", err)
 	}
+	defer tx.Rollback(ctx) //nolint:errcheck // also covers a panic; a second rollback is a no-op
 	rows, err := tx.Query(ctx, `SELECT id::text,lower(email) FROM agents WHERE workspace_id=$1`, r.workspaceID)
 	if err != nil {
 		_ = tx.Rollback(ctx)
