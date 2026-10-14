@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { appNavigationWith } from './support/browser';
 import { createWorkspace, servers, uniqueSuffix } from './support/cli';
 import { IdentityProvider, identity, otherKey } from './support/identity-provider';
 
@@ -40,6 +41,14 @@ test('cloud sign-in: a verified identity of an existing agent gets a CollieDesk 
   expect((await exchange(provider.token({ email }), 'https://evil.example')).status(), 'foreign origin').toBe(403);
   expect((await page.request.get(`${baseURL}/api/v1/auth/me`)).status()).toBe(401);
 
+  // A visitor whose cloud session ended gets a way back in, not a self-host pairing hint.
+  const visitor = await page.context().browser()!.newPage();
+  await visitor.goto(baseURL);
+  await expect(visitor.getByRole('alert')).toContainText('You are signed out');
+  await expect(visitor.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/redeem?token=');
+  await expect(visitor.getByText(/colliedesk pair/)).toHaveCount(0);
+  await visitor.close();
+
   const accepted = await exchange(provider.token({ email: email.toUpperCase() }));
   expect(accepted.status()).toBe(200);
   const body = await accepted.json() as { token?: string; agent: { email: string; role: string } };
@@ -48,7 +57,7 @@ test('cloud sign-in: a verified identity of an existing agent gets a CollieDesk 
 
   // The CollieDesk session is an ordinary browser session: the inbox opens and the device is listed.
   await page.goto(baseURL);
-  await expect(page.getByRole('navigation', { name: 'Main' })).toContainText(`Cloud Desk ${suffix}`);
+  await expect(appNavigationWith(page, `Cloud Desk ${suffix}`)).toHaveCount(1);
   await page.goto(`${baseURL}/settings`);
   await expect(page.getByRole('region', { name: 'Sessions' })).toContainText('Cloud sign-in');
 });

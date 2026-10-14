@@ -4,7 +4,8 @@ The inbox has three panes: the **conversation list** on the left, the **timeline
 with the composer below it, and **conversation details** on the right.
 
 A new workspace has no conversations yet. The list then links to the next steps: **Connect your
-support email**, **Import from Freshdesk** and **Invite your team**.
+support email**, **Import from Freshdesk** and **Invite your team** (admins see all three). If the list
+cannot be loaded, it says so with **Try again** instead.
 
 **Find conversations**
 - Filter by **Status** (Open, Pending, Resolved, Closed), **Assignee** (Anyone, Assigned to me,

@@ -167,7 +167,7 @@ test('shows where an imported conversation came from', () => {
 });
 
 test('an empty new workspace explains the next steps instead of a filter message', () => {
-  render(<InboxPage conversations={[]} />);
+  render(<InboxPage conversations={[]} canManage />);
   const start = screen.getByRole('region', { name: /get started/i });
   expect(start).toHaveTextContent('No conversations yet');
   expect(within(start).getByRole('link', { name: 'Connect your support email' })).toHaveAttribute('href', '/settings');
@@ -179,4 +179,27 @@ test('an empty filtered list says no conversation matches', () => {
   render(<InboxPage conversations={[]} filtered />);
   expect(screen.queryByRole('region', { name: /get started/i })).not.toBeInTheDocument();
   expect(screen.getByText('No conversations match these filters.')).toBeInTheDocument();
+});
+
+test('a list that failed to load says so and offers a retry, never "Get started"', () => {
+  const onRetry = vi.fn();
+  render(<InboxPage conversations={[]} failed onRetry={onRetry} />);
+  expect(screen.queryByRole('region', { name: /get started/i })).not.toBeInTheDocument();
+  expect(screen.queryByText('No conversations match these filters.')).not.toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent('Conversations could not be loaded.');
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  expect(onRetry).toHaveBeenCalled();
+});
+
+test('get-started links open Settings inside the app and hide admin-only steps from agents', () => {
+  const onOpenSettings = vi.fn();
+  const { rerender } = render(<InboxPage conversations={[]} canManage onOpenSettings={onOpenSettings} />);
+  const link = screen.getByRole('link', { name: 'Connect your support email' });
+  expect(fireEvent.click(link)).toBe(false); // default navigation (full page load) prevented
+  expect(onOpenSettings).toHaveBeenCalled();
+  rerender(<InboxPage conversations={[]} canManage={false} onOpenSettings={onOpenSettings} />);
+  const start = screen.getByRole('region', { name: /get started/i });
+  expect(within(start).queryByRole('link', { name: 'Invite your team' })).not.toBeInTheDocument();
+  expect(within(start).queryByRole('link', { name: 'Connect your support email' })).not.toBeInTheDocument();
+  expect(within(start).getByRole('link', { name: 'Import from Freshdesk' })).toBeInTheDocument();
 });

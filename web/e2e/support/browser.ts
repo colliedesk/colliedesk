@@ -15,3 +15,9 @@ export async function expectReadablePage(page: Page): Promise<void> {
   expect(text).not.toMatch(/^\s*[{[]/);
   expect(text).not.toMatch(/"(code|message|error)"\s*:/);
 }
+
+// appNavigationWith finds a navigation landmark showing the text (workspace name, signed-in address).
+// It does not depend on the landmark's label, which the design may change.
+export function appNavigationWith(page: Page, text: string) {
+  return page.getByRole('navigation').filter({ hasText: text });
+}

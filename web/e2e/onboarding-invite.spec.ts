@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { createWorkspace, servers, uniqueSuffix } from './support/cli';
-import { expectReadablePage, redeemLink } from './support/browser';
+import { appNavigationWith, expectReadablePage, redeemLink } from './support/browser';
 
 // Journey 2: docs/user/invites.md and docs/user/sessions.md with two real browsers.
 const baseURL = servers.main;
@@ -31,7 +31,7 @@ test('invite teammate: admin invites, teammate joins under the agent ceiling, ad
   });
   expect(escalate.status()).toBe(401);
   await redeemLink(teammate, inviteURL);
-  await expect(teammate.getByRole('navigation', { name: 'Main' })).toContainText(teammateEmail.toLowerCase());
+  await expect(appNavigationWith(teammate, teammateEmail.toLowerCase())).toHaveCount(1);
   const me = await (await teammate.request.get(`${baseURL}/api/v1/auth/me`)).json() as { agent: { role: string; email: string } };
   expect(me.agent).toMatchObject({ role: 'agent', email: teammateEmail.toLowerCase() });
 
@@ -61,6 +61,9 @@ test('invite teammate: admin invites, teammate joins under the agent ceiling, ad
   await expect(teammateSession.getByRole('button', { name: 'Revoke' })).toHaveCount(0);
 
   expect((await teammate.request.get(`${baseURL}/api/v1/auth/me`)).status()).toBe(401);
+  // Still on the page, the teammate keeps working: the first refused request signs the app out.
+  await teammate.getByRole('link', { name: 'Inbox' }).click();
+  await expect(teammate.getByRole('alert')).toContainText('You are signed out');
   await teammate.goto(baseURL);
   await expect(teammate.getByRole('alert')).toContainText('You are signed out');
   await expect(teammate.getByRole('alert')).toContainText('Ask your workspace admin for a new link');

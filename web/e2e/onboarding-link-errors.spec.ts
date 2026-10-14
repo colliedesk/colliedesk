@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { createWorkspace, psql, servers, uniqueSuffix } from './support/cli';
-import { expectReadablePage, redeemLink } from './support/browser';
+import { appNavigationWith, expectReadablePage, redeemLink } from './support/browser';
 
 // Journey 6: the link problems a new customer actually hits, each answered with a sentence and a next step.
 const baseURL = servers.main;
@@ -54,7 +54,7 @@ test('link errors: expired, reused, revoked, mistyped, missing and another works
   const alpha = await browser.newContext();
   const alphaPage = await alpha.newPage();
   await redeemLink(alphaPage, createWorkspace(`Alpha Desk ${suffix}`, `alpha-${suffix}@example.com`));
-  await expect(alphaPage.getByRole('navigation', { name: 'Main' })).toContainText(`Alpha Desk ${suffix}`);
+  await expect(appNavigationWith(alphaPage, `Alpha Desk ${suffix}`)).toHaveCount(1);
   const alphaContact = await (await alphaPage.request.post(`${baseURL}/api/v1/contacts`, { headers: { Origin: baseURL }, data: { name: 'Alpha customer', email: `alpha-customer-${suffix}@example.com` } })).json() as { id: string };
   await alphaPage.request.post(`${baseURL}/api/v1/conversations`, { headers: { Origin: baseURL }, data: { contact_id: alphaContact.id, subject: `Alpha only ${suffix}` } });
   await alphaPage.reload();
@@ -62,9 +62,9 @@ test('link errors: expired, reused, revoked, mistyped, missing and another works
   await expect(alphaPage.getByRole('option', { name: `alpha-${suffix}@example.com` })).toHaveCount(1);
   await openAndContinue(alphaPage, createWorkspace(`Beta Desk ${suffix}`, `beta-${suffix}@example.com`));
   await expect(alphaPage).toHaveURL(`${baseURL}/`);
-  await expect(alphaPage.getByRole('navigation', { name: 'Main' })).toContainText(`Beta Desk ${suffix}`);
-  await expect(alphaPage.getByRole('navigation', { name: 'Main' })).toContainText(`beta-${suffix}@example.com`);
-  await expect(alphaPage.getByRole('navigation', { name: 'Main' })).not.toContainText(`Alpha Desk ${suffix}`);
+  await expect(appNavigationWith(alphaPage, `Beta Desk ${suffix}`)).toHaveCount(1);
+  await expect(appNavigationWith(alphaPage, `beta-${suffix}@example.com`)).toHaveCount(1);
+  await expect(appNavigationWith(alphaPage, `Alpha Desk ${suffix}`)).toHaveCount(0);
   // Nothing cached from workspace A may show inside B: not its conversations, not its agents.
   await expect(alphaPage.getByRole('button', { name: new RegExp(`Alpha only ${suffix}`) })).toHaveCount(0);
   await expect(alphaPage.getByRole('option', { name: `beta-${suffix}@example.com` })).toHaveCount(1);
@@ -76,6 +76,8 @@ test('link errors: expired, reused, revoked, mistyped, missing and another works
   await expect(stranger.getByRole('alert')).toContainText('You are signed out');
   await expect(stranger.getByRole('alert')).toContainText(nextStep);
   await expect(stranger.getByRole('button', { name: 'Send reply' })).toHaveCount(0);
+  await expect(stranger.getByText(/colliedesk pair --workspace/)).toBeVisible();
+  await expect(stranger.getByRole('link', { name: 'Sign in' })).toHaveCount(0);
   await expectReadablePage(stranger);
   await stranger.goto(`${baseURL}/settings`);
   await expect(stranger.getByRole('alert')).toContainText('You are signed out');

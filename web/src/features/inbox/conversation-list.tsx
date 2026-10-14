@@ -12,10 +12,22 @@ interface ConversationListProps {
   onPage?: (page: number) => void;
   filtered?: boolean;
   loading?: boolean;
+  failed?: boolean;
+  onRetry?: () => void;
+  canManage?: boolean;
+  onOpenSettings?: () => void;
 }
 
-export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, loading = false }: ConversationListProps) {
-  const brandNew = items.length === 0 && !filtered && !loading && page === 1;
+export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, loading = false,
+  failed = false, onRetry, canManage = false, onOpenSettings }: ConversationListProps) {
+  // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
+  const settled = !loading && !failed;
+  const brandNew = items.length === 0 && !filtered && settled && page === 1;
+  const settingsLink = (label: string) => <a href="/settings" onClick={(event) => {
+    if (!onOpenSettings) return;
+    event.preventDefault();
+    onOpenSettings();
+  }}>{label}</a>;
   return (
     <section className="conversation-list" aria-label={messages.conversationList}>
       <header><h1>{messages.inbox}</h1><span>{items.length}</span></header>
@@ -23,12 +35,14 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
         <h2>{messages.noConversationsYet}</h2>
         <p className="muted-copy">{messages.getStartedExplanation}</p>
         <ul>
-          <li><a href="/settings">{messages.connectEmail}</a></li>
+          {canManage && <li>{settingsLink(messages.connectEmail)}</li>}
           <li><a href={messages.importFreshdeskURL} target="_blank" rel="noreferrer">{messages.importFreshdesk}</a></li>
-          <li><a href="/settings">{messages.inviteTeam}</a></li>
+          {canManage && <li>{settingsLink(messages.inviteTeam)}</li>}
         </ul>
       </section>}
-      {items.length === 0 && !brandNew && !loading && <p className="empty-copy">{messages.noConversations}</p>}
+      {failed && <div className="empty-copy"><p role="alert" className="error-copy">{messages.conversationsFailed}</p>
+        <button type="button" onClick={() => onRetry?.()}>{messages.tryAgain}</button></div>}
+      {items.length === 0 && !brandNew && settled && <p className="empty-copy">{messages.noConversations}</p>}
       {items.map((item) => (
         <button className="conversation-row" data-selected={item.id === selectedId} key={item.id} onClick={() => onSelect?.(item.id)}>
           <span className="conversation-subject">{item.subject}</span>

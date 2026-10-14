@@ -10,7 +10,11 @@ import { messages } from './messages';
 function AppLayout() {
   const onRedeem = useRouterState({ select: (state) => state.location.pathname === '/redeem' });
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: !onRedeem });
-  return <AppShell me={onRedeem ? undefined : me.data} signedOut={!onRedeem && me.error instanceof UnauthorizedError}
+  const signedOut = !onRedeem && me.error instanceof UnauthorizedError;
+  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config, enabled: signedOut });
+  // On an instance with cloud sign-in the way back in is the sign-in page, not a new pairing link.
+  const signIn = config.data?.cloud_sign_in.enabled ? <Link to="/redeem" search={{ token: '' }}>{messages.signIn}</Link> : undefined;
+  return <AppShell me={onRedeem ? undefined : me.data} signedOut={signedOut} signIn={signIn}
     brand={<Link to="/" className="wordmark">{messages.brand}</Link>}
     links={<><Link to="/">{messages.inbox}</Link><Link to="/settings">{messages.settings}</Link></>}>
     <Outlet />

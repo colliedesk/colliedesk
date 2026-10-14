@@ -3,7 +3,7 @@
 .app-nav a:hover { color: var(--signal-100); transform: translateY(-1px); }
 .app-nav .wordmark { font-size: var(--text-lg); font-weight: 760; letter-spacing: -0.02em; padding-left: 0; }
 .nav-identity { display: grid; margin-right: auto; padding-left: var(--space-4); min-width: 0; font-size: var(--text-sm); line-height: 1.2; }
-.nav-identity span { color: var(--ink-200); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-identity strong, .nav-identity span { color: var(--ink-200); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inbox-shell { height: calc(100dvh - 4rem); min-height: 36rem; display: grid; grid-template-rows: auto minmax(0, 1fr); }
 .inbox-filters { display: grid; grid-template-columns: minmax(16rem, 1fr) repeat(3, minmax(9rem, 0.35fr)); gap: var(--space-2); border-bottom: 1px solid var(--ink-200); padding: var(--space-3) var(--space-4); background: var(--fog-50); }
 .inbox-filters label { display: grid; gap: var(--space-1); }
