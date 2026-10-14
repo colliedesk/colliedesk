@@ -57,6 +57,6 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
 
 ## Clean room
 
-Do not open, copy, translate or paraphrase the source code of other helpdesks (in particular
-Libredesk, AGPL). Product ideas come from public descriptions only. Code copied from
+Do not open, copy, translate or paraphrase the source code of other helpdesks, especially
+copyleft-licensed ones. Product ideas come from public descriptions only. Code copied from
 MIT-licensed projects needs its notice in `THIRD-PARTY-NOTICES.md`.

@@ -23,9 +23,8 @@ International from day one. Target customers are in the US, EU, UK and Australia
 ## Clean-room rule
 
 Feature ideas may come from public product descriptions of other helpdesks (Freshdesk, Zendesk,
-Help Scout, Libredesk, Zammad). Code must not. Nobody working on this repository may open, copy,
-translate or paraphrase the source code of another helpdesk, in particular Libredesk
-(AGPL-3.0, github.com/abhinavxd/libredesk). Everything here is written from this spec.
+Help Scout). Code must not. Nobody working on this repository may open, copy, translate or
+paraphrase the source code of another helpdesk, especially a copyleft-licensed one. Everything here is written from this spec.
 
 ## Authentication (modelled on T3 Code's environment auth)
 
