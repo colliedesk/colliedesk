@@ -8,6 +8,8 @@ test:
 	cd server && TEST_DATABASE_URL='$(TEST_DATABASE_URL)' $(GO_ENV) go test ./...
 	cd web && corepack pnpm typecheck
 	cd web && corepack pnpm test
+	cd web && corepack pnpm build
+	cd web && corepack pnpm bundle:check
 
 build:
 	cd web && corepack pnpm build

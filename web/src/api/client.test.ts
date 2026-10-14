@@ -1,5 +1,5 @@
 import { afterEach, expect, expectTypeOf, test, vi } from 'vitest';
-import { api, type UpdateConversationRequest } from './client';
+import { api, CloudWorkspaceChoiceError, type UpdateConversationRequest } from './client';
 import type { operations } from './generated';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -14,4 +14,17 @@ test('conversation updates use the generated OpenAPI request body type', () => {
   type Generated = operations['updateConversation']['requestBody']['content']['application/json'];
   expectTypeOf<UpdateConversationRequest>().toEqualTypeOf<Generated>();
   expectTypeOf(api.updateConversation).parameter(1).toEqualTypeOf<Generated>();
+});
+
+test('cloud exchange exposes workspace choices from a conflict response', async () => {
+	vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+		ok: false,
+		status: 409,
+		json: vi.fn().mockResolvedValue({ workspaces: [{ slug: 'alpha', name: 'Alpha' }, { slug: 'beta', name: 'Beta' }] }),
+	}));
+
+	await expect(api.exchangeCloudSession('clerk-session')).rejects.toEqual(expect.objectContaining({
+		name: CloudWorkspaceChoiceError.name,
+		workspaces: [{ slug: 'alpha', name: 'Alpha' }, { slug: 'beta', name: 'Beta' }],
+	}));
 });

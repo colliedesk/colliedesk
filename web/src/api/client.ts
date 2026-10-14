@@ -2,9 +2,11 @@ import type { z } from 'zod';
 import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactDetailSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema,
+  cloudWorkspaceChoicesSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, messageListSchema, messageSchema,
-  redeemedSchema, sessionListSchema, tagListSchema, tagSchema, workspaceSchema,
+  publicConfigSchema, redeemedSchema, sessionListSchema, tagListSchema, tagSchema, workspaceSchema,
 } from './schemas';
+import type { WorkspaceChoice } from './schemas';
 
 async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -27,7 +29,33 @@ export type UpdateConversationRequest = RequestBody<'updateConversation'>;
 
 const json = <Operation extends keyof operations>(value: RequestBody<Operation>): string => JSON.stringify(value);
 
+export class CloudWorkspaceChoiceError extends Error {
+  readonly workspaces: WorkspaceChoice[];
+
+  constructor(workspaces: WorkspaceChoice[]) {
+    super('Choose a workspace');
+    this.name = 'CloudWorkspaceChoiceError';
+    this.workspaces = workspaces;
+  }
+}
+
+async function exchangeCloudSession(token: string, workspaceSlug?: string) {
+  const body: RequestBody<'exchangeCloudSession'> = workspaceSlug ? { workspace_slug: workspaceSlug } : {};
+  const response = await fetch('/api/v1/auth/cloud/exchange', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  if (response.status === 409) {
+    throw new CloudWorkspaceChoiceError(cloudWorkspaceChoicesSchema.parse(await response.json()).workspaces);
+  }
+  if (!response.ok) throw new Error(`API ${response.status}`);
+  return redeemedSchema.parse(await response.json());
+}
+
 export const api = {
+  config: () => request('/api/v1/config', publicConfigSchema),
+  exchangeCloudSession,
   redeem: (token: string, label: string) => request('/api/v1/auth/redeem', redeemedSchema, {
     method: 'POST', body: json<'redeemLink'>({ token, label, session_type: 'cookie' }),
   }),

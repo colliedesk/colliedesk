@@ -97,6 +97,8 @@ func TestCookieWriteRoutesReturnContractValidForbidden(t *testing.T) {
 func successfulContractCases(f contractFixture) map[string]contractCase {
 	admin := f.adminToken
 	return map[string]contractCase{
+		"GET /api/v1/config":                             {"/api/v1/config", nil, "", 200},
+		"POST /api/v1/auth/cloud/exchange":               {"/api/v1/auth/cloud/exchange", map[string]any{}, "disabled-cloud-token", 404},
 		"POST /api/v1/auth/redeem":                       {"/api/v1/auth/redeem", map[string]any{"token": f.redeemToken}, "", 200},
 		"POST /api/v1/auth/logout":                       {"/api/v1/auth/logout", nil, f.logoutToken, 204},
 		"GET /api/v1/auth/me":                            {"/api/v1/auth/me", nil, admin, 200},

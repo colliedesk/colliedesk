@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -13,7 +14,8 @@ import (
 const sessionCookie = "colliedesk_session"
 
 type Config struct {
-	Origin string
+	Origin    string
+	CloudAuth cloudauth.Config
 }
 
 type Route struct {
@@ -25,6 +27,7 @@ type Route struct {
 type API struct {
 	config Config
 	auth   *auth.Service
+	cloud  *cloudauth.Verifier
 	store  *store.Store
 }
 
@@ -38,6 +41,9 @@ type principalKey struct{}
 func New(pool *pgxpool.Pool, config Config) http.Handler {
 	config.Origin = strings.TrimRight(config.Origin, "/")
 	api := &API{config: config, auth: auth.New(pool, config.Origin), store: store.New(pool)}
+	if config.CloudAuth.Enabled() {
+		api.cloud = cloudauth.New(config.CloudAuth)
+	}
 	mux := http.NewServeMux()
 	for _, route := range api.routeSpecs() {
 		mux.Handle(route.Method+" "+route.Pattern, api.authorize(route.Permission, route.handler))
@@ -47,6 +53,8 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 
 func Routes() []Route {
 	return []Route{
+		{http.MethodGet, "/api/v1/config", auth.PermissionPublic},
+		{http.MethodPost, "/api/v1/auth/cloud/exchange", auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/auth/redeem", auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/auth/logout", auth.PermissionAuthenticated},
 		{http.MethodGet, "/api/v1/auth/me", auth.PermissionAuthenticated},
