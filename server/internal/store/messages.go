@@ -68,10 +68,18 @@ func (s *Store) ListMessages(ctx context.Context, workspaceID, conversationID st
 	return messages, s.attachConversationFiles(ctx, workspaceID, conversationID, messages)
 }
 
-func getMessage(ctx context.Context, query Querier, workspaceID, messageID string) (domain.Message, error) {
+type messageQuerier interface {
+	Querier
+	rowsQuerier
+}
+
+func getMessage(ctx context.Context, query messageQuerier, workspaceID, messageID string) (domain.Message, error) {
 	message, err := scanMessage(query.QueryRow(ctx, messageSelect+` WHERE m.workspace_id=$1 AND m.id=$2`, workspaceID, messageID))
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("get message: %w", err)
+	}
+	if err := attachMessageFiles(ctx, query, workspaceID, &message); err != nil {
+		return domain.Message{}, err
 	}
 	return message, nil
 }

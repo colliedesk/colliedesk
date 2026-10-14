@@ -4,6 +4,9 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
 func TestTimelineListsAttachmentsAndDownloadStreamsRecordedBytes(t *testing.T) {
@@ -107,5 +110,28 @@ func TestDownloadRefusesAStorageKeyOfAnotherWorkspace(t *testing.T) {
 	response := request(t, api, http.MethodGet, "/api/v1/attachments/"+rowA, nil, tokenA, nil)
 	if response.Code != http.StatusNotFound || strings.Contains(response.Body.String(), "workspace-b-bytes") {
 		t.Fatalf("download of another workspace's stored key: status=%d body=%q", response.Code, response.Body.String())
+	}
+}
+
+func TestSingleMessageResponsesIncludeTheirAttachments(t *testing.T) {
+	storage, err := attachments.NewLocalDisk(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.Attachments = storage })
+	token := createSession(t, api, service, "Single Message", "admin@single.example.com")
+	contactID := create(t, api, token, "/api/v1/contacts", map[string]any{"name": "S", "email": "s@single.example.com"})
+	conversationID := create(t, api, token, "/api/v1/conversations", map[string]any{"contact_id": contactID, "subject": "Retry"})
+	api, _, replyID := withFailedEmailReply(t, api, pool, token, conversationID)
+	attachmentID := seedAttachment(t, pool, storage, token, api, replyID, "report.pdf", "pdf bytes")
+	response := request(t, api, http.MethodPost, "/api/v1/conversations/"+conversationID+"/messages/"+replyID+"/retry", nil, token, nil)
+	var message struct {
+		Attachments []struct {
+			ID string `json:"id"`
+		} `json:"attachments"`
+	}
+	decode(t, response, &message)
+	if response.Code != http.StatusOK || len(message.Attachments) != 1 || message.Attachments[0].ID != attachmentID {
+		t.Fatalf("retry response status=%d body=%s", response.Code, response.Body.String())
 	}
 }

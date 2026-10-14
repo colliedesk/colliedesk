@@ -23,8 +23,22 @@ const (
 
 var errBlockedAddress = errors.New("refusing to connect to a private, loopback or link-local address")
 
-// carrierGradeNAT is 100.64.0.0/10, which net.IP.IsPrivate does not cover.
-var carrierGradeNAT = &net.IPNet{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)}
+// reservedNetworks are special-purpose ranges that net.IP methods do not
+// cover: CGNAT, benchmarking, IETF protocol assignments, the former class E,
+// NAT64 (which can embed any IPv4 address, including private ones), 6to4,
+// Teredo and documentation prefixes.
+var reservedNetworks = func() []*net.IPNet {
+	var networks []*net.IPNet
+	for _, cidr := range []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15", "240.0.0.0/4",
+		"64:ff9b::/96", "64:ff9b:1::/48", "2002::/16", "2001::/32", "2001:db8::/32"} {
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			panic(err)
+		}
+		networks = append(networks, network)
+	}
+	return networks
+}()
 
 // newTransport dials only public addresses, so a URL or redirect from the
 // source system can never reach the host's own network or metadata service.
@@ -60,9 +74,16 @@ func guardAddress(allow map[string]bool) func(string, string, syscall.RawConn) e
 }
 
 func blockedIP(ip net.IP) bool {
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() || ip.IsInterfaceLocalMulticast() || ip.IsMulticast() ||
-		carrierGradeNAT.Contains(ip) || (ip.To4() != nil && ip.To4()[0] == 0)
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsInterfaceLocalMulticast() || ip.IsMulticast() {
+		return true
+	}
+	for _, network := range reservedNetworks {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // newHTTPClients returns the API client (short timeout, no redirect off the

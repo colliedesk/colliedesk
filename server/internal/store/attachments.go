@@ -62,10 +62,29 @@ func (s *Store) GetAttachment(ctx context.Context, workspaceID, id string) (doma
 	return item, key, nil
 }
 
+// rowsQuerier is satisfied by a pool and by a transaction.
+type rowsQuerier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
 func (s *Store) attachConversationFiles(ctx context.Context, workspaceID, conversationID string, messages []domain.Message) error {
-	rows, err := s.pool.Query(ctx, `SELECT a.id::text,a.message_id::text,a.filename,a.content_type,a.size,a.sha256,a.created_at
+	return attachFiles(ctx, s.pool, messages, `SELECT a.id::text,a.message_id::text,a.filename,a.content_type,a.size,a.sha256,a.created_at
 		FROM attachments a JOIN messages m ON m.workspace_id=a.workspace_id AND m.id=a.message_id
 		WHERE a.workspace_id=$1 AND m.conversation_id=$2 ORDER BY a.created_at,a.id`, workspaceID, conversationID)
+}
+
+func attachMessageFiles(ctx context.Context, q rowsQuerier, workspaceID string, message *domain.Message) error {
+	messages := []domain.Message{*message}
+	if err := attachFiles(ctx, q, messages, `SELECT id::text,message_id::text,filename,content_type,size,sha256,created_at
+		FROM attachments WHERE workspace_id=$1 AND message_id=$2 ORDER BY created_at,id`, workspaceID, message.ID); err != nil {
+		return err
+	}
+	message.Attachments = messages[0].Attachments
+	return nil
+}
+
+func attachFiles(ctx context.Context, q rowsQuerier, messages []domain.Message, sql string, args ...any) error {
+	rows, err := q.Query(ctx, sql, args...)
 	if err != nil {
 		return fmt.Errorf("list attachments: %w", err)
 	}
