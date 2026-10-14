@@ -175,28 +175,25 @@ func TestPrivilegedPathSeesEveryWorkspace(t *testing.T) {
 	}
 }
 
-// TestEveryWorkspaceTableEnforcesRowLevelSecurity is the gate for future tables: a table with a
-// workspace_id column must enable and force row-level security and carry the workspace policy.
-func TestEveryWorkspaceTableEnforcesRowLevelSecurity(t *testing.T) {
-	pool := testPool(t)
-	if err := Migrate(context.Background(), pool); err != nil {
-		t.Fatal(err)
-	}
+// securityGaps lists every table of the current schema that needs row-level security and lacks
+// ENABLE, FORCE or the workspace_isolation policy for the app role.
+func securityGaps(t *testing.T, pool *pgxpool.Pool) (checked, gaps []string) {
+	t.Helper()
 	rows, err := pool.Query(context.Background(), `
 		SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity,
 			EXISTS (SELECT 1 FROM pg_policies p WHERE p.schemaname = n.nspname AND p.tablename = c.relname
-				AND p.policyname = 'workspace_isolation' AND p.cmd = 'ALL' AND p.roles = ARRAY['colliedesk_app']::name[]
+				AND p.policyname = 'workspace_isolation' AND p.cmd = 'ALL' AND p.roles = ARRAY[$1]::name[]
 				AND p.qual LIKE '%app.workspace_id%' AND p.with_check LIKE '%app.workspace_id%')
 		FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 		WHERE n.nspname = current_schema() AND c.relkind IN ('r', 'p')
-			AND (c.relname = 'workspaces' OR EXISTS (SELECT 1 FROM pg_attribute a
-				WHERE a.attrelid = c.oid AND a.attname = 'workspace_id' AND NOT a.attisdropped))
-		ORDER BY c.relname`)
+			AND (c.relname = 'workspaces'
+				OR EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'workspace_id' AND NOT a.attisdropped)
+				OR has_table_privilege($1, c.oid, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER'))
+		ORDER BY c.relname`, AppRole)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	var checked []string
 	for rows.Next() {
 		var name string
 		var enabled, forced, policy bool
@@ -205,15 +202,45 @@ func TestEveryWorkspaceTableEnforcesRowLevelSecurity(t *testing.T) {
 		}
 		checked = append(checked, name)
 		if !enabled || !forced || !policy {
-			t.Errorf("table %s: row level security enabled=%v forced=%v workspace_isolation policy=%v; "+
-				"add ENABLE, FORCE and the policy in its migration (docs/internals/workspace-isolation.md)", name, enabled, forced, policy)
+			gaps = append(gaps, fmt.Sprintf("%s (enabled=%v forced=%v workspace_isolation policy=%v)", name, enabled, forced, policy))
 		}
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
+	return checked, gaps
+}
+
+// TestEveryWorkspaceTableEnforcesRowLevelSecurity is the gate for future tables: a table with a
+// workspace_id column, or any table the app role can reach, must enable and force row-level
+// security and carry the workspace policy.
+func TestEveryWorkspaceTableEnforcesRowLevelSecurity(t *testing.T) {
+	pool := testPool(t)
+	if err := Migrate(context.Background(), pool); err != nil {
+		t.Fatal(err)
+	}
+	checked, gaps := securityGaps(t, pool)
+	for _, gap := range gaps {
+		t.Errorf("table %s; add ENABLE, FORCE and the policy in its migration, or revoke the app role "+
+			"(docs/internals/workspace-isolation.md)", gap)
+	}
 	if len(checked) < 14 {
 		t.Fatalf("checked only %v", checked)
+	}
+}
+
+func TestSecurityGuardFlagsAnyTableTheAppRoleCanReach(t *testing.T) {
+	pool := testPool(t)
+	if err := Migrate(context.Background(), pool); err != nil {
+		t.Fatal(err)
+	}
+	// Keyed only by a conversation, with no workspace_id: default privileges still grant it to the app role.
+	if _, err := pool.Exec(context.Background(), `CREATE TABLE guard_probe (conversation_id uuid)`); err != nil {
+		t.Fatal(err)
+	}
+	_, gaps := securityGaps(t, pool)
+	if len(gaps) != 1 || !strings.HasPrefix(gaps[0], "guard_probe ") {
+		t.Fatalf("gaps = %v, want only guard_probe", gaps)
 	}
 }
 
