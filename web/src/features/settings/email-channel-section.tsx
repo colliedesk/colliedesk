@@ -11,9 +11,10 @@ interface EmailChannelSectionProps {
   onSave?: (address: string) => void;
   onRotate?: () => void;
   onDisconnect?: () => void;
+  onVerifyDomain?: () => void;
 }
 
-export function EmailChannelSection({ settings, timezone, canManage, createdSecret, onSave, onRotate, onDisconnect }: EmailChannelSectionProps) {
+export function EmailChannelSection({ settings, timezone, canManage, createdSecret, onSave, onRotate, onDisconnect, onVerifyDomain }: EmailChannelSectionProps) {
   const channel = settings?.channel ?? null;
   const [address, setAddress] = useState(channel?.support_address ?? '');
   useEffect(() => setAddress(channel?.support_address ?? ''), [channel?.support_address]);
@@ -38,6 +39,16 @@ export function EmailChannelSection({ settings, timezone, canManage, createdSecr
           <button type="button" onClick={() => onRotate?.()}>{channel.secret_set ? messages.rotateInboundSecret : messages.createInboundSecret}</button>
           <button type="button" className="danger-action" onClick={() => onDisconnect?.()}>{messages.disconnectEmail}</button>
         </span>}
+        {channel && (channel.domain_verified_at
+          ? <p className="muted-copy">{messages.domainVerified(channel.domain, formatDate(channel.domain_verified_at, timezone))}</p>
+          : <div className="email-channel-dns"><p className="muted-copy">{messages.domainVerificationHelp}</p>
+              <label className="invite-link"><span>{messages.dnsRecordName}</span><input readOnly value={channel.dns_record_name} /></label>
+              <label className="invite-link"><span>{messages.dnsRecordValue}</span><input readOnly value={channel.dns_record_value} /></label>
+              {canManage && <span className="button-row"><button type="button" onClick={() => onVerifyDomain?.()}>{messages.verifyDomain}</button></span>}
+            </div>)}
+        {channel && (settings?.sending_from
+          ? <p className="muted-copy">{messages.sendingFrom(settings.sending_from)}</p>
+          : <p role="status" className="error-copy">{messages.cannotSend}</p>)}
         {smtp && <p className="muted-copy"><strong>{messages.outgoingEmail}: </strong>
           {smtp.configured ? messages.smtpConfigured(smtp.host, smtp.port, smtp.starttls, smtp.authenticated) : messages.smtpNotConfigured}</p>}
       </div>

@@ -5,7 +5,7 @@ const baseURL = 'http://localhost:18080';
 const databaseURL = process.env.TEST_DATABASE_URL
   ?? 'postgres://colliedesk:colliedesk@127.0.0.1:55441/colliedesk_test?sslmode=disable';
 
-test('connects email, receives a customer email and queues the reply', async ({ page }) => {
+test('connects email, receives a customer email and shows why the reply is not emailed', async ({ page }) => {
   const suffix = `${Date.now()}-${process.pid}`;
   const pairingURL = execFileSync('go', [
     'run', './cmd/colliedesk', 'create-workspace',
@@ -28,6 +28,8 @@ test('connects email, receives a customer email and queues the reply', async ({ 
   const secret = await page.getByRole('textbox', { name: /Inbound secret/ }).inputValue();
   expect(secret).toContain('.');
   await expect(page.getByText(/Outgoing email is not configured/)).toBeVisible();
+  await expect(page.getByText(/Replies cannot be emailed yet/)).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'TXT record name' })).toHaveValue(`_colliedesk.example.com`);
 
   const raw = [
     `From: Erin Customer <erin-${suffix}@customer.example>`,
@@ -49,9 +51,11 @@ test('connects email, receives a customer email and queues the reply', async ({ 
   await expect(page.getByText('My order never arrived.')).toBeVisible();
   await expect(page.getByText(`erin-${suffix}@customer.example`)).toBeVisible();
   await expect(page.getByText('Failed sender verification')).toBeVisible();
+  await expect(page.getByRole('status')).toHaveText(/Outgoing email is not configured on this server/);
 
   await page.getByLabel('Message body').last().fill('We are on it.');
   await page.getByRole('button', { name: 'Send reply' }).click();
   await expect(page.getByText('We are on it.')).toBeVisible();
-  await expect(page.getByText('Queued')).toBeVisible();
+  await expect(page.getByText('Delivery failed')).toBeVisible();
+  await expect(page.getByText('Delivery failed')).toHaveAttribute('title', /not configured/);
 });

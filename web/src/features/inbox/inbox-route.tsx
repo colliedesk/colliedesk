@@ -4,6 +4,7 @@ import { useNavigate, useParams } from '@tanstack/react-router';
 import { api } from '../../api/client';
 import type { UpdateConversationRequest } from '../../api/client';
 import { InboxPage } from './inbox-page';
+import { messages } from '../../messages';
 
 export function InboxRoute() {
   const client = useQueryClient();
@@ -22,6 +23,10 @@ export function InboxRoute() {
   const conversations = useQuery({ queryKey: ['conversations', query], queryFn: () => api.conversations(query) });
   const agents = useQuery({ queryKey: ['agents'], queryFn: api.agents });
   const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags });
+  const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
+  const outbound = emailChannel.data;
+  const outboundNotice = outbound?.channel && outbound.sending_from === null
+    ? (outbound.smtp.configured ? messages.outboundNeedsVerification : messages.outboundNotConfigured) : undefined;
   const activeID = selectedId ?? params.conversationId;
   const selected = conversations.data?.items.find((item) => item.id === activeID) ?? conversations.data?.items[0];
   const timeline = useQuery({ queryKey: ['messages', selected?.id], queryFn: () => api.messages(selected!.id), enabled: Boolean(selected),
@@ -47,6 +52,7 @@ export function InboxRoute() {
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body) => message.mutate({ kind, body })}
+    outboundNotice={outboundNotice}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })} />;
 }

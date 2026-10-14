@@ -59,3 +59,22 @@ test('agents see the channel read-only', () => {
   expect(screen.queryByRole('button', { name: /rotate inbound secret/i })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /disconnect email/i })).not.toBeInTheDocument();
 });
+
+test('shows the DNS record to verify the domain and the current sender', () => {
+  const onVerifyDomain = vi.fn();
+  const { rerender } = render(<EmailChannelSection settings={connected} timezone="UTC" canManage onVerifyDomain={onVerifyDomain} />);
+  expect(screen.getByRole('textbox', { name: /txt record name/i })).toHaveValue('_colliedesk.example.com');
+  expect(screen.getByRole('textbox', { name: /txt record value/i })).toHaveValue('colliedesk-verification=abc123');
+  expect(screen.getByText(/replies are sent from reply\+…@mail\.colliedesk\.example/i)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /verify domain/i }));
+  expect(onVerifyDomain).toHaveBeenCalled();
+  const verified = { ...connected, sending_from: 'support@example.com', channel: { ...connected.channel!, domain_verified_at: '2026-10-14T10:00:00Z' } };
+  rerender(<EmailChannelSection settings={verified} timezone="UTC" canManage onVerifyDomain={onVerifyDomain} />);
+  expect(screen.getByText(/example\.com verified/i)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /verify domain/i })).not.toBeInTheDocument();
+});
+
+test('warns when replies cannot be emailed', () => {
+  render(<EmailChannelSection settings={{ ...connected, sending_from: null }} timezone="UTC" canManage />);
+  expect(screen.getByRole('status')).toHaveTextContent(/replies cannot be emailed yet/i);
+});

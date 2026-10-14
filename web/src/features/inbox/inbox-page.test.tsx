@@ -62,12 +62,17 @@ test('renders message Markdown in the timeline', () => {
     id: '44444444-4444-4444-8444-444444444444',
     conversation_id: conversation.id,
     author_agent_id: null,
-    kind: 'incoming',
+    kind: 'outgoing',
     body: 'Use the **secure link**.',
     created_at: '2026-10-14T00:00:00Z',
     delivery: null,
     email: null,
   }]} />);
   expect(screen.getByText('secure link').tagName).toBe('STRONG');
-  expect(screen.getByText('Incoming')).toBeInTheDocument();
+  expect(screen.getByRole('article')).toHaveTextContent('Reply');
+});
+
+test('tells the agent when replies will not be emailed', () => {
+  render(<InboxPage selected={conversation} conversations={[conversation]} outboundNotice="Outgoing email is not configured on this server." />);
+  expect(screen.getByRole('status')).toHaveTextContent('Outgoing email is not configured on this server.');
 });

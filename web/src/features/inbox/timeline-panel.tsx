@@ -2,6 +2,7 @@ import Markdown from 'react-markdown';
 import type { Conversation, Message } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { PlainTextBody } from './plain-text-body';
 
 interface TimelinePanelProps {
   conversation?: Conversation;
@@ -52,7 +53,7 @@ export function TimelinePanel({ conversation, items, timezone, onRetryDelivery }
             <div className="message-meta"><strong>{kindLabel(item.kind)}</strong>
               <time dateTime={item.created_at}>{formatDate(item.created_at, timezone)}</time></div>
             {item.email && <EmailEnvelope email={item.email} />}
-            <div className="markdown-body"><Markdown>{item.body}</Markdown></div>
+            <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} /> : <Markdown>{item.body}</Markdown>}</div>
             <DeliveryStatus item={item} onRetry={onRetryDelivery} />
           </article>
         ))}

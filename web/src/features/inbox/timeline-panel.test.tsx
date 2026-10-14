@@ -34,3 +34,21 @@ test('shows delivery status and retries a failed reply', () => {
   expect(within(queuedItem).queryByRole('button', { name: /retry delivery/i })).not.toBeInTheDocument();
   expect(within(noteItem).queryByText(/queued|sent|failed/i)).not.toBeInTheDocument();
 });
+
+test('renders customer email as plain text without remote images or disguised links', () => {
+  const hostile: Message = {
+    ...base, id: '66666666-6666-4666-8666-666666666666', kind: 'incoming',
+    email: { from: 'x@customer.example', authentication: 'none', attachments: [] },
+    body: '# Not a heading\n![](https://tracker.example/pixel.png?id=agent)\n[https://bank.example](https://evil.example/login)\nSee https://docs.example.com/help.',
+  };
+  const { container } = render(<TimelinePanel items={[hostile]} timezone="UTC" />);
+  expect(container.querySelector('img')).toBeNull();
+  expect(container.querySelector('h1')).toBeNull();
+  expect(screen.getByText(/# Not a heading/)).toBeInTheDocument();
+  const links = screen.getAllByRole('link');
+  for (const link of links) {
+    expect(link.textContent).toBe(link.getAttribute('href'));
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer nofollow');
+  }
+  expect(links.map((link) => link.getAttribute('href'))).toContain('https://docs.example.com/help');
+});

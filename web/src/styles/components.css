@@ -46,3 +46,6 @@
 .email-channel .invite-link { margin: 0; }
 .email-channel .button-row button:not(.danger-action) { border: 1px solid var(--ink-200); border-radius: var(--radius); background: transparent; padding: var(--space-2) var(--space-3); }
 .email-channel .button-row button:not(.danger-action):hover { border-color: var(--signal-700); color: var(--signal-700); transform: translateY(-1px); }
+.plain-text-body { line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.composer-notice { border-top: 1px solid var(--ink-200); background: var(--note-100); color: var(--ink-800); font-size: var(--text-sm); padding: var(--space-2) var(--space-4); }
+.email-channel-dns { display: grid; gap: var(--space-3); }
