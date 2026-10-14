@@ -62,7 +62,9 @@ composite foreign keys keep working across the scoped tables.
 | `DATABASE_REQUEST_URL` login (optional, `colliedesk_request` in installs) | Opens the request pool | Nothing by itself; it can only `SET ROLE` to the app role |
 
 - **App role.** `NOLOGIN NOSUPERUSER NOBYPASSRLS`, one per database. The name is
-  `colliedesk_app_` plus the database name; past 63 bytes it is shortened with an md5 suffix. Two
+  `colliedesk_app_` plus the database name. Past 63 bytes (bytes, not characters) it is cut on a
+  character boundary and gets an md5 suffix of the database name
+  (`TestLongNonASCIIDatabaseNamesGetDistinctAppRolesWithinSixtyThreeBytes`). Two
   installs on one cluster therefore never share a role, and the owner of one cannot act in the
   other's database (`TestAppRoleOfOneDatabaseCannotReachAnother`). It has
   `SELECT, INSERT, UPDATE, DELETE` on the schema's tables, also future tables through default
@@ -70,7 +72,11 @@ composite foreign keys keep working across the scoped tables.
   the owner. The server reads the name back from the `workspace_isolation` policy, so the
   migration is the only place that defines it.
 - **Request login.** `colliedesk migrate` creates it when `DATABASE_REQUEST_URL` is set
-  (`database.EnsureRequestLogin`). The user and password come from that URL. It is granted the app
+  (`database.EnsureRequestLogin`). The user and password come from that URL. Go computes the
+  SCRAM-SHA-256 verifier (4096 iterations, random 16-byte salt). Only the verifier is sent in
+  `CREATE ROLE`, so server logs, `log_statement` and `pg_stat_statements` never see the plaintext
+  (`TestEnsureRequestLoginNeverSendsThePlaintextPassword`). The password must be printable ASCII,
+  because the verifier skips SASLprep; generated passwords are hex. It is granted the app
   role `WITH INHERIT FALSE, SET TRUE`. The owner needs `CREATEROLE` for this. The installer's owner
   has it; PostgreSQL 16+ limits it to roles that the owner created.
 - **Fresh installs** (`install.sh`):
@@ -195,5 +201,18 @@ The Freshdesk importer and undo resolve the slug once, then run every read and w
   non-superuser owner stops with "query would be affected by row-level security policy". Before
   you restore into a new cluster, create the app role:
   `CREATE ROLE colliedesk_app_<db> NOLOGIN; GRANT colliedesk_app_<db> TO <owner>;`.
-- **Password logging.** The request login's password is sent once, in a `CREATE ROLE` statement.
-  Keep `log_statement` below `ddl` on that server.
+- **Passwords.**
+  - The request login's password never reaches PostgreSQL; only its SCRAM verifier does.
+  - The installer's owner password reaches `psql` through its environment (`\getenv`), not argv.
+  - psql still expands the owner password into the one-time `CREATE ROLE` that initdb runs. If that
+    statement failed, the log of the fresh volume would hold it.
+- **Dropping a database.** Roles are cluster-wide, so dropping a CollieDesk database leaves its app
+  role, and the request login if there is one.
+  1. Before the drop, read the app role's name in that database:
+     `SELECT roles[1] FROM pg_policies WHERE tablename='workspaces' AND policyname='workspace_isolation';`
+  2. Drop the database.
+  3. As a superuser, run `DROP ROLE <app role>;` and `DROP ROLE colliedesk_request;` if no other
+     database uses them.
+
+  Tests that create databases or roles drop them in cleanup. The shared test database keeps its
+  own `colliedesk_app_<db>` while it exists.

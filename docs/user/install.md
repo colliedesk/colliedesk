@@ -68,6 +68,14 @@ add the request user to such an install:
    ```
 2. Run `docker compose up -d`. The server creates the user on start.
 
+When you remove an install from a shared PostgreSQL server, also remove its two users. Dropping
+the database does not remove them. As a superuser, after dropping the database:
+
+```sql
+DROP ROLE colliedesk_app_colliedesk;
+DROP ROLE colliedesk_request;
+```
+
 Details: [workspace isolation](../internals/workspace-isolation.md).
 
 To receive and answer customer email, set up the [email channel](email-channel.md).
