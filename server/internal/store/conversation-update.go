@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/jackc/pgx/v5"
 )
 
 type ConversationUpdate struct {
@@ -15,11 +16,12 @@ type ConversationUpdate struct {
 }
 
 func (s *Store) UpdateConversation(ctx context.Context, workspaceID, id string, update ConversationUpdate) (domain.Conversation, error) {
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return domain.Conversation{}, fmt.Errorf("begin conversation update: %w", err)
-	}
-	defer tx.Rollback(ctx) //nolint:errcheck
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Conversation, error) {
+		return updateConversation(ctx, tx, workspaceID, id, update)
+	})
+}
+
+func updateConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string, update ConversationUpdate) (domain.Conversation, error) {
 	if update.TagIDs != nil {
 		seen := make(map[string]bool, len(*update.TagIDs))
 		for _, tagID := range *update.TagIDs {
@@ -57,10 +59,7 @@ func (s *Store) UpdateConversation(ctx context.Context, workspaceID, id string, 
 			}
 		}
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Conversation{}, fmt.Errorf("commit conversation update: %w", err)
-	}
-	return s.GetConversation(ctx, workspaceID, id)
+	return getConversation(ctx, tx, workspaceID, id)
 }
 
 func nullableString(value **string) any {

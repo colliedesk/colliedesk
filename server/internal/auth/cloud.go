@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/jackc/pgx/v5"
 )
 
 var ErrCloudAgentNotFound = errors.New("cloud identity is not an existing agent")
@@ -51,24 +54,33 @@ func (s *Service) ExchangeCloud(ctx context.Context, email, workspaceSlug, label
 			return Redeemed{}, nil, ErrCloudAgentNotFound
 		}
 	}
-	tx, err := s.pool.Begin(ctx)
+	var link createdLink
+	err = s.db.InWorkspace(ctx, selected.WorkspaceID, func(tx pgx.Tx) error {
+		var err error
+		link, err = s.createLinkTx(ctx, tx, selected.WorkspaceID, selected.AgentID, selected.Email, "pairing", selected.Role, nil)
+		return err
+	})
 	if err != nil {
-		return Redeemed{}, nil, fmt.Errorf("begin cloud pairing: %w", err)
-	}
-	defer tx.Rollback(ctx) //nolint:errcheck
-	link, err := s.createLinkTx(ctx, tx, selected.WorkspaceID, selected.AgentID, selected.Email, "pairing", selected.Role, nil)
-	if err != nil {
-		return Redeemed{}, nil, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return Redeemed{}, nil, fmt.Errorf("commit cloud pairing: %w", err)
+		return Redeemed{}, nil, fmt.Errorf("cloud pairing: %w", err)
 	}
 	redeemed, err := s.Redeem(ctx, link.Token, "", label)
 	return redeemed, nil, err
 }
 
+// cloudAgents lists every workspace where the verified cloud email is an agent, so the person can
+// choose one; this is the only lookup by email across workspaces.
 func (s *Service) cloudAgents(ctx context.Context, email string) ([]cloudAgent, error) {
-	rows, err := s.pool.Query(ctx, `SELECT w.id::text,w.slug,w.name,a.id::text,a.email,a.role
+	var agents []cloudAgent
+	err := s.db.Privileged(ctx, database.PrivilegeCloudIdentity, func(tx pgx.Tx) error {
+		var err error
+		agents, err = listCloudAgents(ctx, tx, email)
+		return err
+	})
+	return agents, err
+}
+
+func listCloudAgents(ctx context.Context, tx pgx.Tx, email string) ([]cloudAgent, error) {
+	rows, err := tx.Query(ctx, `SELECT w.id::text,w.slug,w.name,a.id::text,a.email,a.role
 		FROM agents a JOIN workspaces w ON w.id=a.workspace_id
 		WHERE lower(a.email)=lower($1) ORDER BY w.slug`, strings.TrimSpace(email))
 	if err != nil {

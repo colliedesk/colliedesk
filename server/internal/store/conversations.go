@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/jackc/pgx/v5"
 )
 
 type ConversationFilter struct {
@@ -25,25 +26,33 @@ type ConversationPage struct {
 }
 
 func (s *Store) CreateConversation(ctx context.Context, workspaceID, contactID, subject string) (domain.Conversation, error) {
-	var id string
-	err := s.pool.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject)
-		SELECT $1,c.id,$3 FROM contacts c WHERE c.workspace_id=$1 AND c.id=$2 RETURNING id::text`, workspaceID, contactID, subject).Scan(&id)
-	if err != nil {
-		return domain.Conversation{}, fmt.Errorf("create conversation: %w", err)
-	}
-	return s.GetConversation(ctx, workspaceID, id)
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Conversation, error) {
+		var id string
+		err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject)
+			SELECT $1,c.id,$3 FROM contacts c WHERE c.workspace_id=$1 AND c.id=$2 RETURNING id::text`, workspaceID, contactID, subject).Scan(&id)
+		if err != nil {
+			return domain.Conversation{}, fmt.Errorf("create conversation: %w", err)
+		}
+		return getConversation(ctx, tx, workspaceID, id)
+	})
 }
 
 func (s *Store) GetConversation(ctx context.Context, workspaceID, id string) (domain.Conversation, error) {
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Conversation, error) {
+		return getConversation(ctx, tx, workspaceID, id)
+	})
+}
+
+func getConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.Conversation, error) {
 	var item domain.Conversation
-	err := s.pool.QueryRow(ctx, `SELECT id::text,contact_id::text,subject,status,priority,assignee_id::text,origin,created_at,updated_at
+	err := tx.QueryRow(ctx, `SELECT id::text,contact_id::text,subject,status,priority,assignee_id::text,origin,created_at,updated_at
 		FROM conversations WHERE workspace_id=$1 AND id=$2`, workspaceID, id).
 		Scan(&item.ID, &item.ContactID, &item.Subject, &item.Status, &item.Priority, &item.AssigneeID, &item.Origin, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return domain.Conversation{}, fmt.Errorf("get conversation: %w", err)
 	}
 	item.CreatedAt, item.UpdatedAt = domain.UTC(item.CreatedAt), domain.UTC(item.UpdatedAt)
-	tags, err := s.conversationTags(ctx, workspaceID, id)
+	tags, err := conversationTags(ctx, tx, workspaceID, id)
 	if err != nil {
 		return domain.Conversation{}, err
 	}
@@ -52,7 +61,13 @@ func (s *Store) GetConversation(ctx context.Context, workspaceID, id string) (do
 }
 
 func (s *Store) ListConversations(ctx context.Context, workspaceID string, filter ConversationFilter) (ConversationPage, error) {
-	idRows, err := s.pool.Query(ctx, `SELECT c.id::text FROM conversations c
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (ConversationPage, error) {
+		return listConversations(ctx, tx, workspaceID, filter)
+	})
+}
+
+func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filter ConversationFilter) (ConversationPage, error) {
+	idRows, err := tx.Query(ctx, `SELECT c.id::text FROM conversations c
 		LEFT JOIN messages m ON m.workspace_id=c.workspace_id AND m.conversation_id=c.id
 		WHERE c.workspace_id=$1 AND ($2='' OR c.status=$2)
 		AND ($3='' OR ($3='unassigned' AND c.assignee_id IS NULL) OR ($3='me' AND c.assignee_id=$6) OR ($3='anyone' AND c.assignee_id IS NOT NULL))
@@ -80,7 +95,7 @@ func (s *Store) ListConversations(ctx context.Context, workspaceID string, filte
 		return ConversationPage{Items: []domain.Conversation{}, Page: filter.Page, Size: filter.PageSize}, nil
 	}
 
-	rows, err := s.pool.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,
+	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,
 		c.assignee_id::text,c.origin,c.created_at,c.updated_at,COALESCE(tag_data.tags,'[]'::jsonb)
 		FROM conversations c
 		LEFT JOIN LATERAL (
@@ -114,8 +129,8 @@ func (s *Store) ListConversations(ctx context.Context, workspaceID string, filte
 	return ConversationPage{Items: items, Page: filter.Page, Size: filter.PageSize}, nil
 }
 
-func (s *Store) conversationTags(ctx context.Context, workspaceID, conversationID string) ([]domain.Tag, error) {
-	rows, err := s.pool.Query(ctx, `SELECT t.id::text,t.name,t.color FROM conversation_tags ct JOIN tags t ON t.id=ct.tag_id AND t.workspace_id=ct.workspace_id
+func conversationTags(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) ([]domain.Tag, error) {
+	rows, err := tx.Query(ctx, `SELECT t.id::text,t.name,t.color FROM conversation_tags ct JOIN tags t ON t.id=ct.tag_id AND t.workspace_id=ct.workspace_id
 		WHERE ct.workspace_id=$1 AND ct.conversation_id=$2 ORDER BY t.name`, workspaceID, conversationID)
 	if err != nil {
 		return nil, fmt.Errorf("list conversation tags: %w", err)

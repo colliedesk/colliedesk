@@ -54,7 +54,7 @@ func (r *run) importAttachment(ctx context.Context, ticketKey, messageID string,
 		name = "attachment-" + key
 	}
 	input := store.NewAttachment{MessageID: messageID, Filename: name, ContentType: file.ContentType, Object: object}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := r.begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin attachment import: %w", err)
 	}

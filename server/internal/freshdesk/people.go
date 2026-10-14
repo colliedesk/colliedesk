@@ -13,19 +13,27 @@ import (
 
 func (r *run) loadAgents(ctx context.Context) error {
 	local := map[string]string{}
-	rows, err := r.pool.Query(ctx, `SELECT id::text,lower(email) FROM agents WHERE workspace_id=$1`, r.workspaceID)
+	tx, err := r.begin(ctx)
 	if err != nil {
+		return fmt.Errorf("list CollieDesk agents: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // also covers a panic; a second rollback is a no-op
+	rows, err := tx.Query(ctx, `SELECT id::text,lower(email) FROM agents WHERE workspace_id=$1`, r.workspaceID)
+	if err != nil {
+		_ = tx.Rollback(ctx)
 		return fmt.Errorf("list CollieDesk agents: %w", err)
 	}
 	for rows.Next() {
 		var id, email string
 		if err := rows.Scan(&id, &email); err != nil {
 			rows.Close()
+			_ = tx.Rollback(ctx)
 			return fmt.Errorf("scan CollieDesk agent: %w", err)
 		}
 		local[email] = id
 	}
 	rows.Close()
+	_ = tx.Rollback(ctx) // read only; end it before the Freshdesk calls below
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("list CollieDesk agents: %w", err)
 	}
@@ -85,7 +93,10 @@ func (r *run) requesterContact(ctx context.Context, freshdeskID int64) (string, 
 		if ok && r.contactNames[freshdeskID] == "" {
 			// Keep the author name for new messages from a contact the list does not return.
 			var name string
-			if err := r.pool.QueryRow(ctx, `SELECT name FROM contacts WHERE workspace_id=$1 AND id=$2`, r.workspaceID, id).Scan(&name); err == nil {
+			err := r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
+				return tx.QueryRow(ctx, `SELECT name FROM contacts WHERE workspace_id=$1 AND id=$2`, r.workspaceID, id).Scan(&name)
+			})
+			if err == nil {
 				r.contactNames[freshdeskID] = name
 			}
 		}
@@ -150,7 +161,7 @@ func (r *run) importContact(ctx context.Context, contact fdContact) (string, err
 }
 
 func (r *run) writeContact(ctx context.Context, key, name, email string, organization *string, created, updated time.Time) (string, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := r.begin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("begin contact import: %w", err)
 	}

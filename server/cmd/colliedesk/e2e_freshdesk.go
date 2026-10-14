@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // End-to-end builds point the importer at a local fake Freshdesk API. The fake
@@ -26,8 +25,13 @@ func init() {
 		return
 	}
 	freshdeskBaseURL = func(string) string { return base }
-	next := importRun
-	importRun = func(ctx context.Context, pool *pgxpool.Pool, options freshdesk.Options) (*freshdesk.Report, error) {
+	importRun = withE2ENetwork(importRun)
+}
+
+// withE2ENetwork wraps the importer entry point; the pool passes through untouched (its type is
+// inferred, so this file never handles a raw database pool).
+func withE2ENetwork[Pool any](next func(context.Context, Pool, freshdesk.Options) (*freshdesk.Report, error)) func(context.Context, Pool, freshdesk.Options) (*freshdesk.Report, error) {
+	return func(ctx context.Context, pool Pool, options freshdesk.Options) (*freshdesk.Report, error) {
 		pem, err := os.ReadFile(os.Getenv("COLLIEDESK_E2E_FRESHDESK_CA"))
 		if err != nil {
 			return nil, fmt.Errorf("read e2e Freshdesk CA: %w", err)

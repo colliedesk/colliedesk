@@ -28,7 +28,7 @@ func (r *run) writeConversation(ctx context.Context, ticket fdTicket, contactID 
 			assignee = &id
 		}
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := r.begin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("begin conversation import: %w", err)
 	}
@@ -95,7 +95,7 @@ func (r *run) importMessage(ctx context.Context, ticketKey, conversationID, enti
 }
 
 func (r *run) insertMessage(ctx context.Context, ticketKey, conversationID, entity, sourceID string, m newMessage) (string, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := r.begin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("begin message import: %w", err)
 	}
@@ -142,7 +142,7 @@ func (r *run) writeTimeEntry(ctx context.Context, ticketKey, conversationID, key
 	if entry.ExecutedAt != nil {
 		executed = entry.ExecutedAt.UTC()
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := r.begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin time entry import: %w", err)
 	}

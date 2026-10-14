@@ -52,13 +52,23 @@ fi
 mkdir -p "$TARGET_DIR"
 
 if [ ! -f "$TARGET_DIR/.env" ]; then
+  # The superuser only creates the database. CollieDesk connects as the non-superuser owner
+  # (DATABASE_URL) and serves requests as a separate login that can only take the app role
+  # (DATABASE_REQUEST_URL), so SQL that leaves the row-level security role gains nothing.
   POSTGRES_PASSWORD=$("$OPENSSL" rand -hex 32)
+  OWNER_PASSWORD=$("$OPENSSL" rand -hex 32)
+  REQUEST_PASSWORD=$("$OPENSSL" rand -hex 32)
   APP_SECRET=$("$OPENSSL" rand -hex 32)
-  [ -n "$POSTGRES_PASSWORD" ] && [ -n "$APP_SECRET" ] || fail 'Secret generation failed.'
+  [ -n "$POSTGRES_PASSWORD" ] && [ -n "$OWNER_PASSWORD" ] && [ -n "$REQUEST_PASSWORD" ] && [ -n "$APP_SECRET" ] ||
+    fail 'Secret generation failed.'
   (
     umask 077
     {
+      printf 'POSTGRES_USER=postgres\n'
       printf 'POSTGRES_PASSWORD=%s\n' "$POSTGRES_PASSWORD"
+      printf 'COLLIEDESK_OWNER_PASSWORD=%s\n' "$OWNER_PASSWORD"
+      printf 'DATABASE_URL=postgres://colliedesk:%s@postgres:5432/colliedesk?sslmode=disable\n' "$OWNER_PASSWORD"
+      printf 'DATABASE_REQUEST_URL=postgres://colliedesk_request:%s@postgres:5432/colliedesk?sslmode=disable\n' "$REQUEST_PASSWORD"
       printf 'APP_SECRET=%s\n' "$APP_SECRET"
       printf 'COLLIE_DESK_IMAGE=%s\n' "${COLLIE_DESK_IMAGE:-ghcr.io/colliedesk/colliedesk:edge}"
       printf 'COLLIE_DESK_PORT=%s\n' "${COLLIE_DESK_PORT:-8080}"
@@ -66,6 +76,23 @@ if [ ! -f "$TARGET_DIR/.env" ]; then
     } >"$TARGET_DIR/.env"
   )
 fi
+
+mkdir -p "$TARGET_DIR/initdb"
+# Runs once, when PostgreSQL creates its volume. Installs from before the request login have no
+# COLLIEDESK_OWNER_PASSWORD and keep their existing volume, so nothing changes for them.
+cat >"$TARGET_DIR/initdb/10-colliedesk-owner.sh" <<'INITDB'
+#!/bin/sh
+set -e
+if [ -n "${COLLIEDESK_OWNER_PASSWORD:-}" ]; then
+  # psql reads the password from its environment, so it never appears in a process list.
+  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres <<'SQL'
+\getenv owner_password COLLIEDESK_OWNER_PASSWORD
+CREATE ROLE colliedesk LOGIN CREATEROLE PASSWORD :'owner_password';
+ALTER DATABASE colliedesk OWNER TO colliedesk;
+SQL
+fi
+INITDB
+chmod 755 "$TARGET_DIR/initdb/10-colliedesk-owner.sh"
 
 cat >"$TARGET_DIR/compose.yaml" <<'COMPOSE'
 name: colliedesk
@@ -75,10 +102,12 @@ services:
     image: postgres:17-bookworm
     environment:
       POSTGRES_DB: colliedesk
-      POSTGRES_USER: colliedesk
+      POSTGRES_USER: ${POSTGRES_USER:-colliedesk}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      COLLIEDESK_OWNER_PASSWORD: ${COLLIEDESK_OWNER_PASSWORD:-}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U colliedesk -d colliedesk"]
       interval: 3s
@@ -87,7 +116,8 @@ services:
   server:
     image: ${COLLIE_DESK_IMAGE}
     environment:
-      DATABASE_URL: postgres://colliedesk:${POSTGRES_PASSWORD}@postgres:5432/colliedesk?sslmode=disable
+      DATABASE_URL: ${DATABASE_URL:-postgres://colliedesk:${POSTGRES_PASSWORD}@postgres:5432/colliedesk?sslmode=disable}
+      DATABASE_REQUEST_URL: ${DATABASE_REQUEST_URL:-}
       APP_ORIGIN: ${APP_ORIGIN}
       APP_SECRET: ${APP_SECRET}
       LISTEN_ADDR: :8080

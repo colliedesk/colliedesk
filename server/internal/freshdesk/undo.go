@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -44,31 +45,25 @@ const targetExists = `CASE i.entity
 // message after the import is kept with its ledger rows, so work done in
 // CollieDesk is never lost and a later import does not duplicate it.
 func Undo(ctx context.Context, pool *pgxpool.Pool, storage attachments.Storage, options UndoOptions) (UndoResult, error) {
-	var workspaceID string
-	if err := pool.QueryRow(ctx, `SELECT id::text FROM workspaces WHERE slug=$1`, options.WorkspaceSlug).Scan(&workspaceID); err != nil {
-		return UndoResult{}, fmt.Errorf("find workspace %q: %w", options.WorkspaceSlug, err)
+	db := database.New(pool)
+	workspaceID, err := db.WorkspaceIDBySlug(ctx, options.WorkspaceSlug)
+	if err != nil {
+		return UndoResult{}, err
 	}
-	release, err := acquireRunLock(ctx, pool, workspaceID)
+	release, err := acquireRunLock(ctx, db, workspaceID)
 	if err != nil {
 		return UndoResult{}, err
 	}
 	defer release()
-	source, err := undoSource(ctx, pool, workspaceID, options.Source)
-	if err != nil {
-		return UndoResult{}, err
-	}
-	// Undo usually follows an import within minutes, before autovacuum has analyzed the rows it
-	// wrote. With stale statistics the planner runs the keep query as nested loops: 34 s for 300
-	// tickets in the end-to-end test, far worse on a real account. Fresh statistics take ~0.1 s.
-	// A role that does not own the tables gets a warning from Postgres and the undo still runs.
-	if _, err := pool.Exec(ctx, `ANALYZE import_items, conversations, messages, attachments, contacts, tags, conversation_tags, time_entries`); err != nil {
-		return UndoResult{}, fmt.Errorf("refresh table statistics: %w", err)
-	}
-	tx, err := pool.Begin(ctx)
+	tx, err := db.BeginWorkspace(ctx, workspaceID)
 	if err != nil {
 		return UndoResult{}, fmt.Errorf("begin undo: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+	source, err := undoSource(ctx, tx, workspaceID, options.Source)
+	if err != nil {
+		return UndoResult{}, err
+	}
 	result, orphans, err := undoRows(ctx, tx, workspaceID, source)
 	if err != nil {
 		return UndoResult{}, err
@@ -88,8 +83,8 @@ func Undo(ctx context.Context, pool *pgxpool.Pool, storage attachments.Storage, 
 	return result, nil
 }
 
-func undoSource(ctx context.Context, pool *pgxpool.Pool, workspaceID, requested string) (string, error) {
-	rows, err := pool.Query(ctx, `SELECT DISTINCT source FROM import_items WHERE workspace_id=$1 AND source LIKE 'freshdesk:%' ORDER BY 1`, workspaceID)
+func undoSource(ctx context.Context, tx pgx.Tx, workspaceID, requested string) (string, error) {
+	rows, err := tx.Query(ctx, `SELECT DISTINCT source FROM import_items WHERE workspace_id=$1 AND source LIKE 'freshdesk:%' ORDER BY 1`, workspaceID)
 	if err != nil {
 		return "", fmt.Errorf("list imports: %w", err)
 	}

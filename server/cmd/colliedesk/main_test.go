@@ -74,6 +74,50 @@ func TestCreateWorkspaceAndPairPrintFreshOneTimeURLs(t *testing.T) {
 	}
 }
 
+func TestMigrateCreatesTheRequestLoginFromDatabaseRequestURL(t *testing.T) {
+	baseURL := os.Getenv("TEST_DATABASE_URL")
+	if baseURL == "" {
+		t.Skip("TEST_DATABASE_URL is unset; skipping real PostgreSQL CLI test")
+	}
+	ctx := context.Background()
+	databaseURL := isolatedDatabaseURL(t, baseURL)
+	user := fmt.Sprintf("colliedesk_test_cli_request_%d", time.Now().UnixNano())
+	parsed, err := url.Parse(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed.User = url.UserPassword(user, "cli-request-secret")
+	requestURL := parsed.String()
+	t.Setenv("DATABASE_REQUEST_URL", requestURL)
+	t.Cleanup(func() {
+		admin, err := pgxpool.New(context.Background(), baseURL)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer admin.Close()
+		if _, err := admin.Exec(context.Background(), `DROP ROLE IF EXISTS `+user); err != nil {
+			t.Errorf("drop role %s: %v", user, err)
+		}
+	})
+	if err := run(ctx, []string{"migrate"}, io.Discard, databaseURL, ""); err != nil {
+		t.Fatal(err)
+	}
+	request, err := pgxpool.New(ctx, requestURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer request.Close()
+	var sessionUser string
+	var super bool
+	if err := request.QueryRow(ctx, `SELECT session_user, rolsuper FROM pg_roles WHERE rolname=session_user`).Scan(&sessionUser, &super); err != nil {
+		t.Fatalf("connect as the request login: %v", err)
+	}
+	if sessionUser != user || super {
+		t.Fatalf("request login = %q superuser=%v", sessionUser, super)
+	}
+}
+
 func isolatedDatabaseURL(t *testing.T, baseURL string) string {
 	t.Helper()
 	ctx := context.Background()
