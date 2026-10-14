@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
@@ -40,6 +41,11 @@ func run(ctx context.Context, args []string, output io.Writer, databaseURL, orig
 		}
 		if err := database.Migrate(ctx, pool); err != nil {
 			return err
+		}
+		if requestURL := os.Getenv("DATABASE_REQUEST_URL"); requestURL != "" {
+			if err := database.EnsureRequestLogin(ctx, pool, requestURL); err != nil {
+				return err
+			}
 		}
 		_, err := fmt.Fprintln(output, "migrations applied")
 		return err

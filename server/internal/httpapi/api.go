@@ -9,6 +9,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,6 +22,9 @@ type Config struct {
 	CloudAuth   cloudauth.Config
 	Email       email.Config
 	Attachments attachments.Storage
+	// RequestPool, when set, runs workspace-scoped queries as a separate request login
+	// (DATABASE_REQUEST_URL); nil runs them on the owner pool.
+	RequestPool *pgxpool.Pool
 	// LookupTXT resolves DNS TXT records for domain verification; nil uses the system resolver.
 	LookupTXT func(ctx context.Context, name string) ([]string, error)
 }
@@ -55,7 +59,12 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 		RequireVerifiedDomain: config.Email.FromPolicy != email.FromPolicyAny,
 		FallbackDomain:        config.Email.MailFromDomain,
 	}
-	api := &API{config: config, auth: auth.New(pool, config.Origin), store: store.New(pool).WithOutbound(outbound)}
+	requestPool := config.RequestPool
+	if requestPool == nil {
+		requestPool = pool
+	}
+	db := database.NewSplit(pool, requestPool)
+	api := &API{config: config, auth: auth.NewWithDB(db, config.Origin), store: store.NewWithDB(db).WithOutbound(outbound)}
 	if config.CloudAuth.Enabled() {
 		api.cloud = cloudauth.New(config.CloudAuth)
 	}

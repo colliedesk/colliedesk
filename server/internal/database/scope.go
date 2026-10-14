@@ -19,16 +19,25 @@ var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]
 // DB runs every query in a transaction that is either scoped to one workspace (InWorkspace) or
 // declared privileged with a reviewed reason (Privileged). There is no third way to query.
 type DB struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool // owner: migrations, privileged lookups, locks
+	request *pgxpool.Pool // workspace-scoped transactions
 
 	mu      sync.Mutex
 	appRole string
 }
 
-// New wraps the connection pool. The pool connects as the schema owner; scoping happens per
-// transaction, so existing DATABASE_URL settings keep working.
+// New wraps one pool that connects as the schema owner (single-login mode). Scoping happens per
+// transaction, so existing DATABASE_URL settings keep working. SQL that runs RESET ROLE inside a
+// scoped transaction returns to the owner; use NewSplit to close that.
 func New(pool *pgxpool.Pool) *DB {
-	return &DB{pool: pool}
+	return NewSplit(pool, pool)
+}
+
+// NewSplit runs workspace-scoped transactions on request, a pool connected as the request login
+// (see EnsureRequestLogin), and everything else on owner. The request login can only switch to the
+// app role, so leaving the role inside a transaction leaves it with no rights at all.
+func NewSplit(owner, request *pgxpool.Pool) *DB {
+	return &DB{pool: owner, request: request}
 }
 
 // AppRole returns the role every workspace-scoped transaction switches to. The migration creates it
@@ -65,7 +74,7 @@ func (d *DB) BeginWorkspace(ctx context.Context, workspaceID string) (pgx.Tx, er
 	if err != nil {
 		return nil, err
 	}
-	tx, err := d.pool.Begin(ctx)
+	tx, err := d.request.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin workspace transaction: %w", err)
 	}
@@ -155,15 +164,15 @@ func (d *DB) TryAdvisoryLock(ctx context.Context, key string) (func(), error) {
 }
 
 // Verify refuses to serve when row-level security could be skipped: the app role must exist, must
-// not be a superuser or BYPASSRLS, and the connecting role must be able to switch to it.
+// not be a superuser or BYPASSRLS, and the request connection must be able to switch to it. With a
+// separate request login, that login must not be a superuser, BYPASSRLS or a member of the owner.
 func (d *DB) Verify(ctx context.Context) error {
 	role, err := d.AppRole(ctx)
 	if err != nil {
 		return err
 	}
-	var super, bypass, canSet bool
-	err = d.pool.QueryRow(ctx, `SELECT rolsuper,rolbypassrls,pg_has_role(current_user,oid,'SET') FROM pg_roles WHERE rolname=$1`, role).
-		Scan(&super, &bypass, &canSet)
+	var super, bypass bool
+	err = d.pool.QueryRow(ctx, `SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=$1`, role).Scan(&super, &bypass)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("database role %s is missing; run `colliedesk migrate` first", role)
 	}
@@ -173,8 +182,71 @@ func (d *DB) Verify(ctx context.Context) error {
 	if super || bypass {
 		return fmt.Errorf("database role %s must not be SUPERUSER or BYPASSRLS; row-level security would be skipped", role)
 	}
+	var owner string
+	if err := d.pool.QueryRow(ctx, `SELECT current_user`).Scan(&owner); err != nil {
+		return fmt.Errorf("read the owner role: %w", err)
+	}
+	var user string
+	var canSet, loginSuper, loginBypass, isOwner bool
+	err = d.request.QueryRow(ctx, `SELECT session_user, pg_has_role(session_user,$1,'SET'), r.rolsuper, r.rolbypassrls,
+		pg_has_role(session_user,$2,'MEMBER') FROM pg_roles r WHERE r.rolname=session_user`, role, owner).
+		Scan(&user, &canSet, &loginSuper, &loginBypass, &isOwner)
+	if err != nil {
+		return fmt.Errorf("check the request login: %w", err)
+	}
 	if !canSet {
-		return fmt.Errorf("the DATABASE_URL role cannot SET ROLE %s; run `GRANT %s TO <that role>` as a superuser", role, role)
+		return fmt.Errorf("database role %s cannot SET ROLE %s; run `GRANT %s TO %s` as a superuser", user, role, role, user)
+	}
+	if d.request != d.pool && (loginSuper || loginBypass || isOwner) {
+		return fmt.Errorf("the request login %s must not be a superuser, BYPASSRLS or a member of the owner %s", user, owner)
 	}
 	return nil
+}
+
+// EnsureRequestLogin creates the login role named in requestURL, with the password in it, when the
+// role does not exist, and lets it switch to the app role without inheriting its rights. The owner
+// pool needs CREATEROLE (or superuser) to create it. The password is sent once, in a CREATE ROLE
+// statement; keep log_statement below 'ddl' on that server.
+func EnsureRequestLogin(ctx context.Context, owner *pgxpool.Pool, requestURL string) error {
+	config, err := pgx.ParseConfig(requestURL)
+	if err != nil {
+		return fmt.Errorf("parse DATABASE_REQUEST_URL: %w", err)
+	}
+	user := config.User
+	var ownerName string
+	if err := owner.QueryRow(ctx, `SELECT current_user`).Scan(&ownerName); err != nil {
+		return fmt.Errorf("read the owner role: %w", err)
+	}
+	if user == "" || user == ownerName {
+		return fmt.Errorf("DATABASE_REQUEST_URL must name its own user, not the DATABASE_URL owner %q", ownerName)
+	}
+	role, err := New(owner).AppRole(ctx)
+	if err != nil {
+		return err
+	}
+	return New(owner).Privileged(ctx, PrivilegeRequestLogin, func(tx pgx.Tx) error {
+		var exists, member bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=$1),
+			EXISTS(SELECT 1 FROM pg_auth_members m JOIN pg_roles g ON g.oid=m.roleid JOIN pg_roles u ON u.oid=m.member
+				WHERE g.rolname=$2 AND u.rolname=$1)`, user, role).Scan(&exists, &member); err != nil {
+			return fmt.Errorf("check request login %s: %w", user, err)
+		}
+		if !exists {
+			var statement string
+			if err := tx.QueryRow(ctx, `SELECT format('CREATE ROLE %I LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE PASSWORD %L',
+				$1::text, $2::text)`, user, config.Password).Scan(&statement); err != nil {
+				return fmt.Errorf("prepare request login %s: %w", user, err)
+			}
+			if _, err := tx.Exec(ctx, statement); err != nil {
+				return fmt.Errorf("create request login %s (the DATABASE_URL role needs CREATEROLE): %w", user, err)
+			}
+		}
+		if !member {
+			grant := fmt.Sprintf(`GRANT %s TO %s WITH INHERIT FALSE, SET TRUE`, pgx.Identifier{role}.Sanitize(), pgx.Identifier{user}.Sanitize())
+			if _, err := tx.Exec(ctx, grant); err != nil {
+				return fmt.Errorf("let %s switch to %s (as a superuser run: %s): %w", user, role, grant, err)
+			}
+		}
+		return nil
+	})
 }

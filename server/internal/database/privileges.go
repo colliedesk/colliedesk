@@ -23,6 +23,8 @@ const (
 	PrivilegeReplyToken Privilege = "reply-token"
 	// PrivilegeInboundSecret resolves the workspace that owns an inbound email secret.
 	PrivilegeInboundSecret Privilege = "inbound-secret"
+	// PrivilegeRequestLogin creates the request login role and lets it switch to the app role.
+	PrivilegeRequestLogin Privilege = "request-login"
 	// PrivilegeOutboxClaim leases due outbox rows of every workspace for the email worker.
 	PrivilegeOutboxClaim Privilege = "outbox-claim"
 )

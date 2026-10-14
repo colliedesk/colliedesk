@@ -493,6 +493,98 @@ func TestAppRoleOfOneDatabaseCannotReachAnother(t *testing.T) {
 	}
 }
 
+// requestLogin creates the request login role for the test schema and returns a pool connected as it.
+func requestLogin(t *testing.T, pool *pgxpool.Pool) *pgxpool.Pool {
+	t.Helper()
+	ctx := context.Background()
+	user := fmt.Sprintf("colliedesk_test_request_%d", time.Now().UnixNano())
+	config := pool.Config().Copy()
+	config.ConnConfig.User = user
+	config.ConnConfig.Password = fmt.Sprintf("pw-%d", time.Now().UnixNano())
+	requestURL := fmt.Sprintf("postgres://%s:%s@%s:%d/%s", user, config.ConnConfig.Password,
+		config.ConnConfig.Host, config.ConnConfig.Port, config.ConnConfig.Database)
+	if err := EnsureRequestLogin(ctx, pool, requestURL); err != nil {
+		t.Fatalf("EnsureRequestLogin: %v", err)
+	}
+	t.Cleanup(func() {
+		if _, err := pool.Exec(context.Background(), `DROP ROLE `+user); err != nil {
+			t.Errorf("drop role %s: %v", user, err)
+		}
+	})
+	if err := EnsureRequestLogin(ctx, pool, requestURL); err != nil { // idempotent on every migrate
+		t.Fatalf("EnsureRequestLogin again: %v", err)
+	}
+	request, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(request.Close)
+	return request
+}
+
+func countWorkspacesAfter(t *testing.T, db *DB, workspaceID, escape string, args ...any) (int, error) {
+	t.Helper()
+	var count int
+	err := db.InWorkspace(context.Background(), workspaceID, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(context.Background(), escape, args...); err != nil {
+			return err
+		}
+		return tx.QueryRow(context.Background(), `SELECT count(*) FROM workspaces`).Scan(&count)
+	})
+	return count, err
+}
+
+// TestRequestLoginCannotLeaveTheWorkspaceScope pins what row-level security does against SQL that
+// tries to drop the scope: with the owner as session user (single DATABASE_URL) RESET ROLE escapes;
+// with a separate request login it leaves a role that can read nothing.
+func TestRequestLoginCannotLeaveTheWorkspaceScope(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatal(err)
+	}
+	ids := seedTwoWorkspaces(t, pool)
+	if count, err := countWorkspacesAfter(t, New(pool), ids.a, `RESET ROLE`); err != nil || count != 2 {
+		t.Fatalf("single-login mode: RESET ROLE saw %d workspaces (%v); the documented limit is that it escapes", count, err)
+	}
+
+	split := NewSplit(pool, requestLogin(t, pool))
+	if err := split.Verify(ctx); err != nil {
+		t.Fatalf("Verify with a request login: %v", err)
+	}
+	if got := subjects(t, split, ids.a); !slices.Equal(got, []string{"alpha ticket"}) {
+		t.Fatalf("scoped query through the request login: %v", got)
+	}
+	var owner string
+	if err := pool.QueryRow(ctx, `SELECT current_user`).Scan(&owner); err != nil {
+		t.Fatal(err)
+	}
+	for name, escape := range map[string][]any{
+		"reset role":      {`RESET ROLE`},
+		"switch to owner": {`SELECT set_config('role',$1,true)`, owner},
+		"privileged flag": {`RESET ROLE; SELECT set_config('app.privileged','on',true)`},
+	} {
+		count, err := countWorkspacesAfter(t, split, ids.a, escape[0].(string), escape[1:]...)
+		var pgErr *pgconn.PgError
+		// 42501: no privilege on the table; 42P01: no USAGE on the schema, so the table is invisible.
+		if !errors.As(err, &pgErr) || (pgErr.Code != "42501" && pgErr.Code != "42P01") {
+			t.Errorf("%s: request login saw %d workspace(s) (err=%v), want no access", name, count, err)
+		}
+	}
+}
+
+func TestEnsureRequestLoginRefusesTheOwner(t *testing.T) {
+	pool := testPool(t)
+	if err := Migrate(context.Background(), pool); err != nil {
+		t.Fatal(err)
+	}
+	config := pool.Config().ConnConfig
+	ownerURL := fmt.Sprintf("postgres://%s:%s@%s:%d/%s", config.User, config.Password, config.Host, config.Port, config.Database)
+	if err := EnsureRequestLogin(context.Background(), pool, ownerURL); err == nil {
+		t.Fatal("the owner was accepted as the request login")
+	}
+}
+
 func TestPanickingCallbackReleasesConnectionAndLocks(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()

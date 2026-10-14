@@ -69,6 +69,17 @@ fresh=$TMP/fresh
 output=$(sh "$ROOT/install.sh" --dir "$fresh" --name Desk --email admin@example.com </dev/null)
 [ "$(stat -c %a "$fresh/.env")" = 600 ]
 grep -F "image: \${COLLIE_DESK_IMAGE}" "$fresh/compose.yaml" >/dev/null
+# Fresh installs: superuser only for initdb, a non-superuser owner, and a separate request login.
+grep -Fx 'POSTGRES_USER=postgres' "$fresh/.env" >/dev/null
+grep -E '^DATABASE_URL=postgres://colliedesk:[0-9a-f]{64}@postgres:5432/colliedesk\?sslmode=disable$' "$fresh/.env" >/dev/null
+grep -E '^DATABASE_REQUEST_URL=postgres://colliedesk_request:[0-9a-f]{64}@postgres:5432/colliedesk\?sslmode=disable$' "$fresh/.env" >/dev/null
+grep -E '^COLLIEDESK_OWNER_PASSWORD=[0-9a-f]{64}$' "$fresh/.env" >/dev/null
+[ -f "$fresh/initdb/10-colliedesk-owner.sh" ]
+grep -F './initdb:/docker-entrypoint-initdb.d:ro' "$fresh/compose.yaml" >/dev/null
+grep -F 'DATABASE_REQUEST_URL: ${DATABASE_REQUEST_URL:-}' "$fresh/compose.yaml" >/dev/null
+# Installs whose .env predates the request login keep connecting as before.
+grep -F 'DATABASE_URL: ${DATABASE_URL:-postgres://colliedesk:${POSTGRES_PASSWORD}@postgres:5432/colliedesk?sslmode=disable}' "$existing/compose.yaml" >/dev/null
+grep -F 'POSTGRES_USER: ${POSTGRES_USER:-colliedesk}' "$existing/compose.yaml" >/dev/null
 printf '%s' "$output" | grep -F 'http://localhost:8080/redeem?token=pairing-token' >/dev/null
 if printf '%s' "$output" | grep -F 0123456789abcdef >/dev/null; then
   printf '%s\n' 'installer printed a generated secret' >&2

@@ -23,6 +23,7 @@ var privilegedCallSites = []string{
 	"internal/auth/service.go: PrivilegeCreateWorkspace",
 	"internal/auth/sessions.go: PrivilegeSessionToken",
 	"internal/database/migrate.go: PrivilegeMigrate",
+	"internal/database/scope.go: PrivilegeRequestLogin",
 	"internal/database/scope.go: PrivilegeWorkspaceBySlug",
 	"internal/store/email-channels.go: PrivilegeInboundSecret",
 	"internal/store/email-inbound.go: PrivilegeReplyToken",

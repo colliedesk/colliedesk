@@ -16,7 +16,12 @@ type Store struct {
 }
 
 func New(pool *pgxpool.Pool) *Store {
-	return &Store{db: database.New(pool)}
+	return NewWithDB(database.New(pool))
+}
+
+// NewWithDB uses db as is, for example one built with database.NewSplit.
+func NewWithDB(db *database.DB) *Store {
+	return &Store{db: db}
 }
 
 // scoped runs fn in one transaction scoped to the workspace and returns its result.

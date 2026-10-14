@@ -31,7 +31,12 @@ type Principal struct {
 }
 
 func New(pool *pgxpool.Pool, origin string) *Service {
-	return &Service{db: database.New(pool), origin: strings.TrimRight(origin, "/"), now: func() time.Time { return time.Now().UTC() }}
+	return NewWithDB(database.New(pool), origin)
+}
+
+// NewWithDB uses db as is, for example one built with database.NewSplit.
+func NewWithDB(db *database.DB, origin string) *Service {
+	return &Service{db: db, origin: strings.TrimRight(origin, "/"), now: func() time.Time { return time.Now().UTC() }}
 }
 
 func (s *Service) CreateWorkspace(ctx context.Context, name, email string) (domain.Workspace, string, error) {
