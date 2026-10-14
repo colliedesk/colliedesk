@@ -1,0 +1,12 @@
+.cache/
+server/.cache/
+server/internal/webui/static/build/
+web/node_modules/
+web/dist/
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+coverage/
+*.log

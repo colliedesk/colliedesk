@@ -1,0 +1,589 @@
+openapi: 3.1.0
+info:
+  title: CollieDesk API
+  version: 0.1.0
+  description: Passwordless, workspace-scoped helpdesk API.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+  - sessionCookie: []
+paths:
+  /api/v1/auth/redeem:
+    post:
+      operationId: redeemLink
+      security: []
+      x-permission: public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: {type: string, minLength: 1}
+                requested_role: {$ref: '#/components/schemas/Role'}
+                label: {type: string}
+                session_type: {type: string, enum: [cookie, bearer], default: bearer}
+      responses:
+        '200': {$ref: '#/components/responses/Redeemed'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      x-permission: authenticated
+      responses:
+        '204': {description: Session revoked}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/auth/me:
+    get:
+      operationId: getMe
+      x-permission: authenticated
+      responses:
+        '200':
+          description: Current identity
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Me'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/auth/sessions:
+    get:
+      operationId: listSessions
+      x-permission: access:read
+      responses:
+        '200':
+          description: Visible sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Session'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/auth/sessions/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    delete:
+      operationId: revokeSession
+      x-permission: access:read
+      responses:
+        '204': {description: Session revoked}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/auth/invites:
+    get:
+      operationId: listInvites
+      x-permission: access:read
+      responses:
+        '200':
+          description: Invite metadata without secrets
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Invite'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createInvite
+      x-permission: access:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role_ceiling]
+              properties:
+                email: {type: string, format: email}
+                role_ceiling: {$ref: '#/components/schemas/Role'}
+      responses:
+        '201':
+          description: Invite and one-time URL
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invite, url]
+                properties:
+                  invite: {$ref: '#/components/schemas/Invite'}
+                  url: {type: string, format: uri}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/auth/invites/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    delete:
+      operationId: revokeInvite
+      x-permission: access:write
+      responses:
+        '204': {description: Invite revoked}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/conversations:
+    get:
+      operationId: listConversations
+      x-permission: conversations:read
+      parameters:
+        - {name: status, in: query, schema: {$ref: '#/components/schemas/ConversationStatus'}}
+        - {name: assignee, in: query, schema: {type: string, enum: [me, unassigned, anyone]}}
+        - {name: tag, in: query, schema: {type: string, format: uuid}}
+        - {name: search, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+      responses:
+        '200':
+          description: Filtered inbox page
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConversationPage'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createConversation
+      x-permission: conversations:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contact_id, subject]
+              properties:
+                contact_id: {type: string, format: uuid}
+                subject: {type: string, minLength: 1}
+      responses:
+        '201': {$ref: '#/components/responses/Conversation'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/conversations/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getConversation
+      x-permission: conversations:read
+      responses:
+        '200': {$ref: '#/components/responses/Conversation'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      operationId: updateConversation
+      x-permission: conversations:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: {$ref: '#/components/schemas/ConversationStatus'}
+                priority: {$ref: '#/components/schemas/Priority'}
+                assignee_id: {type: [string, 'null'], format: uuid}
+                tag_ids: {type: array, items: {type: string, format: uuid}}
+      responses:
+        '200': {$ref: '#/components/responses/Conversation'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/conversations/{id}/tags/{tagId}:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - name: tagId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    put:
+      operationId: addConversationTag
+      x-permission: conversations:write
+      responses:
+        '200': {$ref: '#/components/responses/Conversation'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: removeConversationTag
+      x-permission: conversations:write
+      responses:
+        '200': {$ref: '#/components/responses/Conversation'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/conversations/{id}/messages:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: listMessages
+      x-permission: conversations:read
+      responses:
+        '200':
+          description: Ordered conversation timeline
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Message'}}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createMessage
+      x-permission: conversations:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, body]
+              properties:
+                kind: {type: string, enum: [outgoing, note]}
+                body: {type: string, minLength: 1, description: Markdown source}
+      responses:
+        '201':
+          description: Created reply or private note
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Message'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/contacts:
+    get:
+      operationId: listContacts
+      x-permission: contacts:read
+      parameters:
+        - {name: search, in: query, schema: {type: string}}
+      responses:
+        '200':
+          description: Workspace contacts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Contact'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createContact
+      x-permission: contacts:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email]
+              properties:
+                name: {type: string, minLength: 1}
+                email: {type: string, format: email}
+      responses:
+        '201':
+          description: Created contact
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Contact'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/contacts/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getContact
+      x-permission: contacts:read
+      responses:
+        '200':
+          description: Contact with conversation history
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ContactDetail'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/agents:
+    get:
+      operationId: listAgents
+      x-permission: access:read
+      responses:
+        '200':
+          description: Workspace agents
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Agent'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/workspace/timezone:
+    patch:
+      operationId: updateWorkspaceTimezone
+      x-permission: access:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [timezone]
+              properties:
+                timezone: {type: string, minLength: 1}
+      responses:
+        '200':
+          description: Updated workspace timezone
+          content: {application/json: {schema: {$ref: '#/components/schemas/Workspace'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/agents/me/timezone:
+    patch:
+      operationId: updateAgentTimezone
+      x-permission: authenticated
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [timezone]
+              properties:
+                timezone: {type: [string, 'null']}
+      responses:
+        '200':
+          description: Updated agent timezone override
+          content: {application/json: {schema: {$ref: '#/components/schemas/Agent'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/tags:
+    get:
+      operationId: listTags
+      x-permission: conversations:read
+      responses:
+        '200':
+          description: Workspace tags
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Tag'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createTag
+      x-permission: conversations:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string, minLength: 1}
+                color: {type: string, default: '#64748b'}
+      responses:
+        '201':
+          description: Created tag
+          content: {application/json: {schema: {$ref: '#/components/schemas/Tag'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/tags/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    patch:
+      operationId: updateTag
+      x-permission: conversations:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string, minLength: 1}
+      responses:
+        '200':
+          description: Renamed tag
+          content: {application/json: {schema: {$ref: '#/components/schemas/Tag'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: deleteTag
+      x-permission: conversations:write
+      responses:
+        '204': {description: Tag deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+    sessionCookie: {type: apiKey, in: cookie, name: colliedesk_session}
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+  responses:
+    Redeemed:
+      description: Session created from a one-time link
+      headers:
+        Set-Cookie: {schema: {type: string}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Redeemed'}
+    Conversation:
+      description: Workspace conversation
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Conversation'}
+    BadRequest: {$ref: '#/components/responses/Error400'}
+    Unauthorized: {$ref: '#/components/responses/Error401'}
+    Forbidden: {$ref: '#/components/responses/Error403'}
+    NotFound: {$ref: '#/components/responses/Error404'}
+    Error400:
+      description: Invalid request
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Error401:
+      description: Authentication failed
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Error403:
+      description: Permission or CSRF check failed
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Error404:
+      description: Resource not found in this workspace
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  schemas:
+    Role: {type: string, enum: [admin, agent]}
+    ConversationStatus: {type: string, enum: [open, pending, resolved, closed]}
+    Priority: {type: string, enum: [low, normal, high, urgent]}
+    Workspace:
+      type: object
+      required: [id, slug, name, timezone]
+      properties:
+        id: {type: string, format: uuid}
+        slug: {type: string}
+        name: {type: string}
+        timezone: {type: string, default: UTC}
+    Agent:
+      type: object
+      required: [id, email, display_name, role, timezone_override]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string, format: email}
+        display_name: {type: string}
+        role: {$ref: '#/components/schemas/Role'}
+        timezone_override: {type: [string, 'null']}
+    Redeemed:
+      type: object
+      required: [agent, workspace]
+      properties:
+        token: {type: string}
+        agent: {$ref: '#/components/schemas/Agent'}
+        workspace: {$ref: '#/components/schemas/Workspace'}
+    Me:
+      type: object
+      required: [agent, workspace, timezone]
+      properties:
+        agent: {$ref: '#/components/schemas/Agent'}
+        workspace: {$ref: '#/components/schemas/Workspace'}
+        timezone: {type: string}
+    Session:
+      type: object
+      required: [id, agent_id, agent_email, label, created_at, last_seen_at, expires_at, revoked_at]
+      properties:
+        id: {type: string, format: uuid}
+        agent_id: {type: string, format: uuid}
+        agent_email: {type: string, format: email}
+        label: {type: string}
+        created_at: {type: string, format: date-time}
+        last_seen_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        revoked_at: {type: [string, 'null'], format: date-time}
+    Invite:
+      type: object
+      required: [id, email, role_ceiling, created_by_email, created_at, expires_at, used_at, revoked_at]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string, format: email}
+        role_ceiling: {$ref: '#/components/schemas/Role'}
+        created_by_email: {type: string, format: email}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        used_at: {type: [string, 'null'], format: date-time}
+        revoked_at: {type: [string, 'null'], format: date-time}
+    Contact:
+      type: object
+      required: [id, name, email, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        email: {type: string, format: email}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ContactDetail:
+      allOf:
+        - {$ref: '#/components/schemas/Contact'}
+        - type: object
+          required: [conversations]
+          properties:
+            conversations: {type: array, items: {$ref: '#/components/schemas/Conversation'}}
+    Tag:
+      type: object
+      required: [id, name, color]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        color: {type: string}
+    Conversation:
+      type: object
+      required: [id, contact_id, subject, status, priority, assignee_id, tags, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        contact_id: {type: string, format: uuid}
+        subject: {type: string}
+        status: {$ref: '#/components/schemas/ConversationStatus'}
+        priority: {$ref: '#/components/schemas/Priority'}
+        assignee_id: {type: [string, 'null'], format: uuid}
+        tags: {type: array, items: {$ref: '#/components/schemas/Tag'}}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ConversationPage:
+      type: object
+      required: [items, page, page_size]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Conversation'}}
+        page: {type: integer, minimum: 1}
+        page_size: {type: integer, minimum: 1}
+    Message:
+      type: object
+      required: [id, conversation_id, author_agent_id, kind, body, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        conversation_id: {type: string, format: uuid}
+        author_agent_id: {type: [string, 'null'], format: uuid}
+        kind: {type: string, enum: [incoming, outgoing, note]}
+        body: {type: string}
+        created_at: {type: string, format: date-time}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}

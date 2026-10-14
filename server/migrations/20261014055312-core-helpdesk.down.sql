@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS conversation_tags;
+DROP TABLE IF EXISTS tags;
+DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS conversations;
+DROP TABLE IF EXISTS contacts;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS pairing_links;
+DROP TABLE IF EXISTS agents;
+DROP TABLE IF EXISTS workspaces;

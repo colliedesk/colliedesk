@@ -1,0 +1,36 @@
+name: colliedesk
+
+services:
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: colliedesk
+      POSTGRES_USER: colliedesk
+      POSTGRES_PASSWORD: colliedesk
+    ports:
+      - "127.0.0.1:55441:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/init-databases.sql:/docker-entrypoint-initdb.d/10-test-database.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U colliedesk -d colliedesk"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    environment:
+      DATABASE_URL: postgres://colliedesk:colliedesk@postgres:5432/colliedesk?sslmode=disable
+      APP_ORIGIN: http://localhost:8080
+      LISTEN_ADDR: :8080
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["sh", "-c", "/app/colliedesk migrate && exec /app/colliedesk serve"]
+
+volumes:
+  postgres-data:

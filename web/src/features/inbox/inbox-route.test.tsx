@@ -1,0 +1,45 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { expect, test, vi } from 'vitest';
+import { InboxRoute } from './inbox-route';
+
+const api = vi.hoisted(() => ({
+  me: vi.fn(), conversations: vi.fn(), agents: vi.fn(), tags: vi.fn(), messages: vi.fn(),
+  updateConversation: vi.fn(), createMessage: vi.fn(), createTag: vi.fn(),
+  addConversationTag: vi.fn(), removeConversationTag: vi.fn(),
+}));
+
+vi.mock('../../api/client', () => ({ api }));
+vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn(), useParams: () => ({}) }));
+
+const conversation = (id: string, subject: string) => ({
+  id, contact_id: '22222222-2222-4222-8222-222222222222', subject,
+  status: 'open' as const, priority: 'normal' as const, assignee_id: null, tags: [],
+  created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z',
+});
+
+test('inline tag creation stays bound to the conversation selected at call time', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
+  const tag = { id: '44444444-4444-4444-8444-444444444444', name: 'Escalated', color: '#64748b' };
+  let resolveTag!: (value: typeof tag) => void;
+  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.conversations.mockResolvedValue({ items: [alpha, beta], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.createTag.mockReturnValue(new Promise((resolve) => { resolveTag = resolve; }));
+  api.addConversationTag.mockResolvedValue({ ...alpha, tags: [tag] });
+
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await screen.findByRole('button', { name: /alpha conversation/i });
+  fireEvent.change(screen.getByRole('textbox', { name: /new tag name/i }), { target: { value: tag.name } });
+  fireEvent.click(screen.getByRole('button', { name: /create tag/i }));
+  fireEvent.click(screen.getByRole('button', { name: /beta conversation/i }));
+  resolveTag(tag);
+
+  await waitFor(() => expect(api.addConversationTag).toHaveBeenCalledWith(alpha.id, tag.id));
+  expect(api.addConversationTag).not.toHaveBeenCalledWith(beta.id, tag.id);
+  expect(api.updateConversation).not.toHaveBeenCalledWith(beta.id, expect.objectContaining({ tag_ids: expect.anything() }));
+});
