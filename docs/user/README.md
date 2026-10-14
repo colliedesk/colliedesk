@@ -9,3 +9,4 @@ One page per feature. Each page says what the feature does, how to use it, and i
 - [Tags](tags.md)
 - [Timezones](timezones.md)
 - [Sessions and devices](sessions.md)
+- [Import from Freshdesk](import-freshdesk.md)
