@@ -57,6 +57,13 @@ func Undo(ctx context.Context, pool *pgxpool.Pool, storage attachments.Storage, 
 	if err != nil {
 		return UndoResult{}, err
 	}
+	// Undo usually follows an import within minutes, before autovacuum has analyzed the rows it
+	// wrote. With stale statistics the planner runs the keep query as nested loops: 34 s for 300
+	// tickets in the end-to-end test, far worse on a real account. Fresh statistics take ~0.1 s.
+	// A role that does not own the tables gets a warning from Postgres and the undo still runs.
+	if _, err := pool.Exec(ctx, `ANALYZE import_items, conversations, messages, attachments, contacts, tags, conversation_tags, time_entries`); err != nil {
+		return UndoResult{}, fmt.Errorf("refresh table statistics: %w", err)
+	}
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return UndoResult{}, fmt.Errorf("begin undo: %w", err)
