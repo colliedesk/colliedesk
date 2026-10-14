@@ -7,10 +7,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// acquireRunLock holds a PostgreSQL advisory lock for one workspace and one
-// Freshdesk account for the whole run, so two runs never insert the same item.
-func acquireRunLock(ctx context.Context, pool *pgxpool.Pool, workspaceID, source string) (func(), error) {
-	key := "colliedesk-import|" + workspaceID + "|" + source
+// acquireRunLock holds a PostgreSQL advisory lock on the workspace for a whole
+// import or undo. It is per workspace, not per source: imports of different
+// accounts share content-addressed files, so an undo deleting unreferenced
+// files must never overlap another import into the same workspace.
+func acquireRunLock(ctx context.Context, pool *pgxpool.Pool, workspaceID string) (func(), error) {
+	key := "colliedesk-import|" + workspaceID
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("take import lock: %w", err)

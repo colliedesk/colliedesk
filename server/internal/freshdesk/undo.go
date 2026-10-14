@@ -48,15 +48,15 @@ func Undo(ctx context.Context, pool *pgxpool.Pool, storage attachments.Storage, 
 	if err := pool.QueryRow(ctx, `SELECT id::text FROM workspaces WHERE slug=$1`, options.WorkspaceSlug).Scan(&workspaceID); err != nil {
 		return UndoResult{}, fmt.Errorf("find workspace %q: %w", options.WorkspaceSlug, err)
 	}
-	source, err := undoSource(ctx, pool, workspaceID, options.Source)
-	if err != nil {
-		return UndoResult{}, err
-	}
-	release, err := acquireRunLock(ctx, pool, workspaceID, source)
+	release, err := acquireRunLock(ctx, pool, workspaceID)
 	if err != nil {
 		return UndoResult{}, err
 	}
 	defer release()
+	source, err := undoSource(ctx, pool, workspaceID, options.Source)
+	if err != nil {
+		return UndoResult{}, err
+	}
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return UndoResult{}, fmt.Errorf("begin undo: %w", err)

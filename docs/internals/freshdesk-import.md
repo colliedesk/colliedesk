@@ -29,8 +29,10 @@ endpoints the importer reads:
    (listed, in the ledger, or `--last-ticket-id`) that the list did not return is looked up:
    `/tickets/archived/{id}`, then `/tickets/{id}`. Each id becomes listed, archived, trashed, spam,
    absent, or failed. Probing continues above that bound until 200 ids in a row are absent. Absent
-   ids below the highest existing id are stored as `skipped/absent`; trailing absent ids are not,
-   because Freshdesk may give them to new tickets. Four lookups run at a time.
+   ids below the highest existing id are stored as `skipped/absent` with `archive_checked`; trailing
+   absent ids are not, because Freshdesk may give them to new tickets. While the archive endpoint is
+   refused, no absent verdict is stored (the id may be archived); an absent verdict without
+   `archive_checked` is probed again. Four lookups run at a time.
 2. **Cross-check:** `search/tickets?query="created_at:>'2000-01-01'"` must not report more
    non-archived tickets than were found (listed + unchanged + trashed + spam); contacts
    `active:true` + `active:false` must not exceed the contact list.
@@ -44,8 +46,10 @@ endpoints the importer reads:
   Freshdesk subdomain does not import again. Each row is written in the same transaction as the
   row it describes. A ticket's row is `failed` ("incomplete") from the moment its conversation is
   created until every child succeeded, so an interruption at any point resumes correctly.
-- **One run at a time.** `pg_try_advisory_lock` on workspace + source, held for the whole run on a
-  dedicated connection. A second run (or an undo) fails fast with `ErrImportRunning`.
+- **One run at a time per workspace.** `pg_try_advisory_lock` on the workspace, held for the whole
+  import or undo on a dedicated connection. A second import (any source) or an undo fails fast with
+  `ErrImportRunning`. Per-workspace, not per-source: imports share content-addressed files, so an
+  undo deleting unreferenced files must not overlap another import.
 - **Re-run rule.** A ticket is skipped when its ledger row is `done` and the listed `updated_at` is
   not newer. A newer ticket is processed again: new children are added, existing ones are skipped
   by id, and subject, status, priority, assignee, `origin` and `updated_at` are overwritten. Tags

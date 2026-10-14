@@ -79,8 +79,8 @@ Run the same command again. Items that were imported are skipped, an interrupted
 where it stopped, and failed items are tried again. Nothing is duplicated. A file that is lost or
 damaged on disk after the import is detected by the next run and downloaded again.
 
-Only one import per workspace and Freshdesk account runs at a time. A second one stops at once
-with "already running".
+Only one import or undo runs in a workspace at a time. A second one stops at once with
+"already running".
 
 ## How completeness is checked
 
@@ -107,7 +107,8 @@ An import into the wrong workspace can be removed:
 Undo removes the conversations the import created, with their messages, attachments and time
 entries, and the contacts and tags it created that nothing else uses. A conversation where your
 team wrote a message after the import is kept. Contacts and tags that existed before the import
-are kept. Run the import again afterwards if you want the data back.
+are kept. Changes without a new message (status, assignee or tags changed in CollieDesk) are
+removed together with their conversation. Run the import again afterwards if you want the data back.
 
 ## Read the report
 

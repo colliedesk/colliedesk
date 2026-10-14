@@ -45,6 +45,7 @@ type fakeFreshdesk struct {
 	archiveError         string
 	stallPath            string
 	extraReplyOnTicket6  bool
+	accountID            int
 	fileBody             map[string]string
 	fileLength           map[string]string
 	onRequest            func(path string)
@@ -108,7 +109,13 @@ func (f *fakeFreshdesk) serveAPI(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v2/"), "/")
 	switch {
 	case r.URL.Path == "/api/v2/account":
-		f.object(w, "account.json")
+		f.mu.Lock()
+		id := f.accountID
+		f.mu.Unlock()
+		if id == 0 {
+			id = 777
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"account_id": id, "account_name": "Acme", "account_domain": "acme.freshdesk.com"})
 	case r.URL.Path == "/api/v2/search/tickets" || r.URL.Path == "/api/v2/search/contacts":
 		f.search(w, r)
 	case r.URL.Path == "/api/v2/agents":

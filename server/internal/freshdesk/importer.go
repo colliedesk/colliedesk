@@ -67,7 +67,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 		return nil, err
 	}
 	if !options.DryRun {
-		release, err := acquireRunLock(ctx, pool, r.workspaceID, r.ledger.source)
+		release, err := acquireRunLock(ctx, pool, r.workspaceID)
 		if err != nil {
 			return nil, err
 		}
@@ -183,9 +183,8 @@ func numericLess(a, b string) bool {
 	return a < b
 }
 
-// ErrImportRunning means another import into the same workspace from the same
-// Freshdesk account holds the run lock.
-var ErrImportRunning = errors.New("an import from this Freshdesk account into this workspace is already running")
+// ErrImportRunning means another import or undo holds the workspace lock.
+var ErrImportRunning = errors.New("an import or undo is already running in this workspace")
 
 // ErrNoImport means the workspace holds no import from the requested source.
 var ErrNoImport = errors.New("no Freshdesk import found in this workspace")
