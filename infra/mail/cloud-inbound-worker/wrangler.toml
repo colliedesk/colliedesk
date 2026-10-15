@@ -1,0 +1,9 @@
+# Deploy once for the whole hosted cloud: `wrangler deploy` from this directory, then
+# `wrangler secret put INBOUND_URL` and `wrangler secret put INBOUND_SECRET`.
+name = "colliedesk-cloud-inbound"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+# A verified Email Routing destination address that keeps mail the server could not take.
+FALLBACK_ADDRESS = ""

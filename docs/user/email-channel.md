@@ -8,6 +8,32 @@ CollieDesk does not run a mail server. A forwarder you already use (Cloudflare E
 Postmark, Amazon SES, or your own MTA) posts each raw message to CollieDesk. Replies leave through
 an SMTP relay.
 
+## CollieDesk Cloud: forward to your address
+
+On CollieDesk Cloud every workspace has a ready-made address, `support@<workspace>.colliedesk.com`.
+You do not run a forwarder or a Worker. Change where your mailbox forwards and you are done.
+
+1. Open **Settings → Email channel** and enter your **Support address**, for example
+   `support@example.com`. Select **Save support address**. Mail is accepted only after this step.
+2. Copy the **Forwarding address** (select **Copy forwarding address**).
+3. In your mailbox, forward all mail for the support address to the forwarding address:
+   - **Gmail:** Settings → See all settings → Forwarding and POP/IMAP → Add a forwarding address.
+     Gmail sends a confirmation message to the forwarding address. It appears as a new conversation
+     in CollieDesk; open it and select the confirmation link. Then choose **Forward a copy of
+     incoming mail** and save.
+   - **Outlook:** Settings → Mail → Forwarding, enter the address and select **Start forwarding**.
+4. Send a test message to your support address. It opens a conversation.
+
+Forwarded mail keeps its original sender, so the conversation is with your customer, not with your
+mailbox. Replies leave as described in step 3 below (domain verification).
+
+An admin can change the part before `.colliedesk.com` under **Workspace address name**. The old
+address stops receiving mail at once, so change the forwarding in your mailbox at the same time.
+A name is 1 to 63 lowercase letters, digits or hyphens; names such as `app`, `www` and `mail` are
+reserved. Do not set the Support address to a `colliedesk.com` address of another workspace.
+
+The sections below describe self-hosting.
+
 ## 1. Configure the server
 
 Set these variables on the server, then restart it. With the installer, add them to `.env` and
@@ -23,6 +49,7 @@ run `docker compose up -d`.
 | `EMAIL_FROM_POLICY` | `verified` | `verified`: send as the support address only after its domain is verified (step 3). `any`: always send as the support address. |
 | `MAIL_FROM_DOMAIN` | empty | Domain used to send for workspaces whose domain is not verified, for example `mail.example.com`. |
 | `MAIL_FROM_INBOUND_SECRET` | empty | Secret (32+ characters) for the forwarder of `MAIL_FROM_DOMAIN` (step 5). |
+| `HOSTED_MAIL_DOMAIN` | empty | Hosted cloud only. Turns on `support@<workspace slug>.<this domain>` for every workspace. Needs `MAIL_FROM_INBOUND_SECRET`. Leave empty when you self-host. |
 | `EMAIL_TRUSTED_AUTHSERV_ID` | empty | Name of the receiving mail server whose SPF/DKIM/DMARC result you trust (step 4). Empty: no result is trusted. |
 
 **Self-hosted with your own relay:** set `EMAIL_FROM_POLICY=any`. You own the relay, so every

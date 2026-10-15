@@ -78,6 +78,58 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   `reply+<token>@MAIL_FROM_DOMAIN` recipient (tokens are unique and 128-bit). Only that domain
   counts; a token on another domain does not route.
 
+## Hosted cloud addresses (`HOSTED_MAIL_DOMAIN`)
+
+`support@<slug>.<HOSTED_MAIL_DOMAIN>` is an inbound transport only. Workspace and domain logic are
+unchanged; the workspace's Support address stays the identity customers see.
+
+- **One endpoint, one secret.** The shared forwarder posts to the normal inbound endpoint with
+  `MAIL_FROM_INBOUND_SECRET`. No new route, no per-workspace secret. The per-workspace URL and
+  secret keep working for self-host and ignore hosted routing: a workspace secret always files
+  into its own workspace.
+- **Only the envelope recipient routes.** The forwarder writes the envelope RCPT TO as the topmost
+  `X-Original-To`; `email.Inbound.EnvelopeTo` reads only that line. To, Cc and lower `X-Original-To`
+  lines are sender-controlled and never route (test:
+  `TestHostedAddressMailReachesOnlyItsOwnWorkspace`). The shipped Worker and the Postfix `pipe`
+  `flags=O` both put it first.
+- **Reject, not drop.** A recipient under the hosted domain with no matching workspace, or whose
+  workspace has no connected email channel, is `404 unknown_recipient`, so the forwarder bounces it.
+  Everything else on the platform secret keeps the old behaviour (`200 dropped`).
+- **Slug as subdomain.** The workspace slug is the subdomain. `email.ValidateHostedSlug` allows one DNS
+  label (1-63 of `a-z0-9-`, no edge hyphen, no `xn--`) and blocks a reserved list. A workspace whose
+  slug fails has no hosted address and no route until an admin picks another. Renaming is a one-way
+  door for the old address; the UI warns. A workspace cannot set its Support address to another
+  workspace's hosted address.
+- **Forwarded mail trust model.** A forward keeps the original `From`, so the conversation and
+  contact belong to the real customer. Authentication comes from `Authentication-Results` of the
+  trusted server only (`EMAIL_TRUSTED_AUTHSERV_ID`, set to the Cloudflare name on the hosted cloud).
+  After a Gmail forward SPF refers to Gmail's IP, not the original domain, so a good verdict
+  comes from DMARC (DKIM survives forwarding); a missing or failing verdict is shown as
+  **Sender not verified** or **Failed sender verification**, never used to reject. ARC headers are
+  ignored: they are written by the forwarder, not by a server we trust. Self-host behaviour and
+  anti-spoofing are not changed. Gmail's forwarding confirmation (from `forwarding-noreply@google.com`)
+  is ordinary mail and becomes a conversation (test: `TestGmailForwardingConfirmationBecomesAVisibleConversation`).
+
+### Receiving mail for `*.HOSTED_MAIL_DOMAIN`: checked against Cloudflare docs, 2026-10-15
+
+- Email Routing is enabled per domain. A subdomain is added from the apex domain's Settings
+  (Subdomains), and Cloudflare then writes its DNS records. API: `POST /zones/{zone_id}/email/routing/dns`
+  with `name`, and `GET` with `?subdomain=`. The docs do not describe a wildcard MX for Email Routing.
+- **Catch-all rules exist only for the apex domain** ("Catch-all rules are only available for the apex
+  domain", email-routing/setup/subdomains), and **a zone has at most 30 domains** for Email Routing
+  and Email Sending together, apex included.
+- So per-workspace Cloudflare subdomains stop at about 28 workspaces, and a catch-all cannot serve
+  `*.colliedesk.com`. A "mail domain provisioner" calling the API would hit the 30 limit, so the
+  server has none.
+- The server design does not care which receiver feeds it. Two receivers work with the same
+  endpoint: (a) up to ~28 subdomains on Cloudflare Email Routing with explicit rules to the shared
+  Worker `infra/mail/cloud-inbound-worker`; (b) for unbounded workspaces, a wildcard
+  `*.colliedesk.com` MX at an MTA run by us, piping each message through
+  `infra/mail/colliedesk-inbound-pipe.sh` with `X-Original-To` added (Postfix
+  `virtual_mailbox_domains` via `pcre` and a `pipe` transport with `flags=O`). A wildcard MX does
+  not apply to names that already have records (`app`, `www`, `api`, the MTA host), which is why
+  those slugs are reserved.
+
 ## Open
 
 - **Filtered mail is not stored.** Dropped automatic mail is reported only in the 200 response.

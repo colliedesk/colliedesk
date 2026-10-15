@@ -130,7 +130,7 @@ transaction only resolves the workspace; the work after that runs in `InWorkspac
 | `PrivilegeMigrate` | `database/migrate.go` | Schema changes and data migrations |
 | `PrivilegeRequestLogin` | `database/scope.go` (`EnsureRequestLogin`) | Creates the request login and grants it the app role (`colliedesk migrate`) |
 | `PrivilegeCreateWorkspace` | `auth/service.go` | Inserts the workspace, its first admin and pairing link (CLI `create-workspace`) |
-| `PrivilegeWorkspaceBySlug` | `database/scope.go` (`WorkspaceIDBySlug`) | CLI `pair`, `import freshdesk`, `import undo` name a workspace by slug |
+| `PrivilegeWorkspaceBySlug` | `database/scope.go` (`WorkspaceIDBySlug`) | CLI `pair`, `import freshdesk`, `import undo` name a workspace by slug; hosted mail routing (`store.WorkspaceForMailSlug`) finds the workspace of `support@<slug>.<HOSTED_MAIL_DOMAIN>` from the envelope recipient, then continues only if its email channel is connected |
 | `PrivilegeSessionToken` | `auth/sessions.go` | Session token hash → workspace; session checks then run scoped |
 | `PrivilegeLinkToken` | `auth/links.go` | Pairing/invite link token hash → workspace; redemption then runs scoped |
 | `PrivilegeCloudIdentity` | `auth/cloud.go` | Lists the workspaces where a verified cloud email is an agent |
