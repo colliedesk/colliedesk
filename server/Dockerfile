@@ -14,7 +14,8 @@ COPY server/go.mod server/go.sum ./
 RUN go mod download
 COPY server ./
 COPY --from=web /src/server/internal/webui/static/build ./internal/webui/static/build
-RUN CGO_ENABLED=0 go build -trimpath -o /out/colliedesk ./cmd/colliedesk
+ARG VERSION=dev
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-X main.version=${VERSION}" -o /out/colliedesk ./cmd/colliedesk
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
