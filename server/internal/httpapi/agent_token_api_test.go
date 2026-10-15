@@ -61,8 +61,8 @@ func TestAgentTokenIsShownOnceListedWithScopeAndRevocable(t *testing.T) {
 	if err := pool.QueryRow(context.Background(), `SELECT token_hash FROM sessions WHERE id=$1`, issued.Session.ID).Scan(&stored); err != nil {
 		t.Fatal(err)
 	}
-	if want := sha256.Sum256([]byte(issued.Token)); !bytes.Equal(stored, want[:]) {
-		t.Fatalf("stored hash %x is not the SHA-256 of the raw token", stored)
+	if want := sha256.Sum256([]byte("colliedesk-agent-token\x00" + issued.Token)); !bytes.Equal(stored, want[:]) {
+		t.Fatalf("stored hash %x is not the domain-separated SHA-256 of the raw token", stored)
 	}
 
 	listed := request(t, api, http.MethodGet, "/api/v1/auth/sessions", nil, admin, nil)

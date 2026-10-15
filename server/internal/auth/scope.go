@@ -1,6 +1,9 @@
 package auth
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 // Tiers of an agent token. Each tier includes everything below it.
 const (
@@ -8,6 +11,10 @@ const (
 	ScopeDraft = "draft"
 	ScopeSend  = "send"
 )
+
+// agentTokenMaxAge is how long after its creation an agent token stops working, however often it is
+// used. Every use slides the expiry by the session lifetime, but never past this limit.
+const agentTokenMaxAge = 365 * 24 * time.Hour
 
 var scopeRank = map[string]int{ScopeRead: 1, ScopeDraft: 2, ScopeSend: 3}
 

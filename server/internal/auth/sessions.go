@@ -16,7 +16,7 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 		return Principal{}, fmt.Errorf("missing credential")
 	}
 	now := s.now()
-	hash := tokenHash(raw)
+	hash := credentialHash(raw)
 	// Only the token-to-workspace lookup crosses workspaces; the session checks run scoped.
 	var workspaceID string
 	err := s.db.Privileged(ctx, database.PrivilegeSessionToken, func(tx pgx.Tx) error {
@@ -26,16 +26,16 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 		return Principal{}, fmt.Errorf("authenticate session: %w", err)
 	}
 	principal := Principal{ViaCookie: viaCookie}
-	var trialEndsAt time.Time
+	var trialEndsAt, createdAt time.Time
 	var trialExtended bool
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		err := tx.QueryRow(ctx, `SELECT w.id::text,w.slug,w.name,w.timezone,a.id::text,a.email,a.display_name,
-			CASE WHEN a.role='agent' OR s.role_ceiling='agent' THEN 'agent' ELSE 'admin' END,a.timezone_override,s.id::text,w.trial_ends_at,COALESCE(s.scope,''),w.trial_extended_at IS NOT NULL
+			CASE WHEN a.role='agent' OR s.role_ceiling='agent' THEN 'agent' ELSE 'admin' END,a.timezone_override,s.id::text,w.trial_ends_at,COALESCE(s.scope,''),w.trial_extended_at IS NOT NULL,s.created_at
 			FROM sessions s JOIN agents a ON a.id=s.agent_id AND a.workspace_id=s.workspace_id JOIN workspaces w ON w.id=s.workspace_id
 			WHERE s.workspace_id=$3 AND s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>$2`, hash, now, workspaceID).
 			Scan(&principal.Workspace.ID, &principal.Workspace.Slug, &principal.Workspace.Name, &principal.Workspace.Timezone,
 				&principal.Agent.ID, &principal.Agent.Email, &principal.Agent.DisplayName, &principal.Agent.Role,
-				&principal.Agent.TimezoneOverride, &principal.SessionID, &trialEndsAt, &principal.Scope, &trialExtended)
+				&principal.Agent.TimezoneOverride, &principal.SessionID, &trialEndsAt, &principal.Scope, &trialExtended, &createdAt)
 		if err != nil {
 			return fmt.Errorf("authenticate session: %w", err)
 		}
@@ -43,8 +43,19 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 		if viaCookie && principal.Scope != "" {
 			return fmt.Errorf("authenticate session: agent tokens are not accepted as cookies")
 		}
+		expires := now.Add(sessionLifetime)
+		if principal.Scope != "" {
+			// A token that is used every day still ends one year after its creation.
+			limit := createdAt.Add(agentTokenMaxAge)
+			if !now.Before(limit) {
+				return fmt.Errorf("authenticate session: agent token is older than its maximum age")
+			}
+			if limit.Before(expires) {
+				expires = limit
+			}
+		}
 		if _, err := tx.Exec(ctx, `UPDATE sessions SET last_seen_at=$2,expires_at=$3 WHERE id=$1 AND workspace_id=$4`,
-			principal.SessionID, now, now.Add(sessionLifetime), workspaceID); err != nil {
+			principal.SessionID, now, expires, workspaceID); err != nil {
 			return fmt.Errorf("refresh session: %w", err)
 		}
 		if s.planLimits {

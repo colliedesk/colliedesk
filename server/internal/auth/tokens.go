@@ -60,15 +60,17 @@ func (s *Service) IssueAgentToken(ctx context.Context, workspaceSlug, email, lab
 }
 
 func (s *Service) insertAgentToken(ctx context.Context, tx pgx.Tx, workspaceID, agentID, label, scope string) (AgentToken, error) {
-	raw, hash, err := newToken()
+	raw, hash, err := newAgentToken()
 	if err != nil {
 		return AgentToken{}, err
 	}
+	// created_at comes from the service clock: the one-year limit is counted from it.
+	now := s.now()
 	session, err := scanSession(tx.QueryRow(ctx, `WITH s AS (
-			INSERT INTO sessions(workspace_id,agent_id,token_hash,role_ceiling,scope,label,expires_at)
-			VALUES($1,$2,$3,'agent',$4,$5,$6) RETURNING *)
+			INSERT INTO sessions(workspace_id,agent_id,token_hash,role_ceiling,scope,label,created_at,last_seen_at,expires_at)
+			VALUES($1,$2,$3,'agent',$4,$5,$6,$6,$7) RETURNING *)
 		SELECT `+sessionColumns+` FROM s JOIN agents a ON a.id=s.agent_id AND a.workspace_id=s.workspace_id`,
-		workspaceID, agentID, hash, scope, label, s.now().Add(sessionLifetime)))
+		workspaceID, agentID, hash, scope, label, now, now.Add(sessionLifetime)))
 	if err != nil {
 		return AgentToken{}, fmt.Errorf("create agent token: %w", err)
 	}
