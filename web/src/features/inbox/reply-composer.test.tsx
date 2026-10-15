@@ -105,3 +105,18 @@ test('the text clears and the reason goes away once a send succeeds', async () =
   await waitFor(() => expect(body).toHaveValue(''));
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
+
+test('text typed while the previous message is still sending is kept when it lands', async () => {
+  let accept: () => void = () => {};
+  const onSubmit = vi.fn(() => new Promise<void>((resolve) => { accept = resolve; }));
+  render(<ReplyComposer onSubmit={onSubmit} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Public reply' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Reply', pressed: true }).closest('.composer')!.querySelector('.primary-action')!);
+  fireEvent.click(screen.getByRole('button', { name: 'Private note' }));
+  fireEvent.change(body, { target: { value: 'Private note typed meanwhile' } });
+  accept();
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledWith('outgoing', 'Public reply'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(body).toHaveValue('Private note typed meanwhile');
+});
