@@ -42,6 +42,7 @@ test('a screen reader hears which conversation is open, and only that one', () =
   render(<ConversationList items={[row('2026-10-15T09:05:00Z'), other]} selectedId={other.id} timezone="UTC" page={1} hasNextPage={false} />);
   expect(screen.getByRole('button', { name: /other request/i })).toHaveAttribute('aria-current', 'true');
   expect(screen.getByRole('button', { name: /example request/i })).not.toHaveAttribute('aria-current');
+});
 
 test('the first load shows a loading status, never "No conversations" or the get-started guide', () => {
   render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} loading />);
