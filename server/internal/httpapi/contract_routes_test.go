@@ -19,6 +19,9 @@ type contractCase struct {
 // contractRequest builds the request for a case; raw cases carry an RFC 5322 message and the inbound secret.
 func contractRequest(t *testing.T, method string, item contractCase, token, secret string, cookie *http.Cookie) *http.Request {
 	t.Helper()
+	if item.path == webhookPath {
+		return signedWebhookRequest("msg_contract_"+method, []byte(item.raw))
+	}
 	if item.raw != "" {
 		return inboundRequest(t, item.raw, secret)
 	}
@@ -149,6 +152,10 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/channels/email/inbound": {path: inboundPath, status: 200, raw: mail([]string{
 			"From: Contract Customer <contract@customer.example>", "Subject: Contract mail", "Message-ID: <contract@customer.example>",
 		}, "Contract inbound.")},
+		"GET /api/v1/billing":                         {path: "/api/v1/billing", token: admin, status: 200},
+		"POST /api/v1/billing/checkout":               {path: "/api/v1/billing/checkout", body: map[string]any{"plan": "team_monthly"}, token: admin, status: 200},
+		"POST /api/v1/billing/portal":                 {path: "/api/v1/billing/portal", token: f.portalToken, status: 200},
+		"POST " + webhookPath:                         {path: webhookPath, raw: f.webhookBody, status: 200},
 		"GET /api/v1/conversations/{id}/time-entries": {path: "/api/v1/conversations/" + f.conversationID + "/time-entries", token: admin, status: 200},
 		"GET /api/v1/attachments/{id}":                {path: "/api/v1/attachments/" + f.attachmentID, token: admin, status: 200},
 	}

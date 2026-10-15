@@ -465,6 +465,74 @@ export interface paths {
         patch: operations["updateTag"];
         trace?: never;
     };
+    "/api/v1/billing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The workspace plan, subscription state, the limits of that plan and current usage. Only present when billing is configured (the hosted cloud); self-hosted instances answer 404. */
+        get: operations["getBilling"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/checkout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Start a hosted checkout for the signed-in workspace. The workspace is taken from the session, never from the body. A workspace that already has a paid plan gets 409; it changes or cancels its plan in the portal. */
+        post: operations["createBillingCheckout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/portal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Open the billing portal, where the customer changes the card, downloads invoices or cancels. 404 until the workspace has had a subscription. The portal stays available after one ends. */
+        post: operations["createBillingPortal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/polar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Receives Polar events. Authenticated by the Standard Webhooks signature (`webhook-id`, `webhook-timestamp`, `webhook-signature`), not by a session; a missing, wrong or stale signature is 401 and nothing is stored. A `subscription.*` event updates the workspace named by `customer.external_id`. Every understood event is 200 so Polar stops retrying; `status` says whether it was applied, was a redelivery, was older than the stored state, or was ignored (unknown workspace or product, other event types). Only present when billing is configured. */
+        post: operations["receivePolarWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -473,6 +541,41 @@ export interface components {
             cloud_sign_in: {
                 enabled: boolean;
                 publishable_key: string | null;
+            };
+            billing: {
+                /** @description False on self-hosted instances; the billing routes answer 404. */
+                enabled: boolean;
+            };
+        };
+        /** @enum {string} */
+        CheckoutPlan: "team_monthly" | "team_yearly" | "founding";
+        WebhookResult: {
+            /** @enum {string} */
+            status: "applied" | "duplicate" | "stale" | "ignored";
+        };
+        Billing: {
+            /**
+             * @description The plan in effect now.
+             * @enum {string}
+             */
+            plan: "free" | "team" | "founding";
+            /**
+             * @description The latest subscription status from the provider, `none` when there never was one. `past_due` keeps the paid plan while the provider retries the card; `canceled` keeps it until `current_period_end`.
+             * @enum {string}
+             */
+            status: "none" | "incomplete" | "incomplete_expired" | "trialing" | "active" | "past_due" | "canceled" | "unpaid" | "paused";
+            /** Format: date-time */
+            current_period_end: string | null;
+            cancel_at_period_end: boolean;
+            limits: {
+                agents: number;
+                /** @description Null means no cap. */
+                conversations_per_month: number | null;
+            };
+            usage: {
+                agents: number;
+                /** @description Conversations created since the start of the current UTC month. */
+                conversations_this_month: number;
             };
         };
         WorkspaceChoice: {
@@ -803,6 +906,27 @@ export interface components {
         };
         /** @description Temporary server failure; the message was not stored and the forwarder should retry */
         InternalError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description A single-use URL on the billing provider */
+        BillingLink: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    /** Format: uri */
+                    url: string;
+                };
+            };
+        };
+        /** @description The billing provider failed or could not be reached; nothing changed, try again */
+        BadGateway: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1810,6 +1934,100 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getBilling: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Plan, subscription state, limits and usage */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Billing"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createBillingCheckout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    plan: components["schemas"]["CheckoutPlan"];
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["BillingLink"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    createBillingPortal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["BillingLink"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    receivePolarWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Event understood */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
         };
     };
 }

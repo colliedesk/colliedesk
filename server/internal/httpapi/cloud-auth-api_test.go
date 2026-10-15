@@ -13,7 +13,7 @@ import (
 func TestCloudAuthDisabled(t *testing.T) {
 	api, _ := testAPI(t)
 	config := request(t, api, http.MethodGet, "/api/v1/config", nil, "", nil)
-	if config.Code != http.StatusOK || config.Body.String() != "{\"cloud_sign_in\":{\"enabled\":false,\"publishable_key\":null}}\n" {
+	if config.Code != http.StatusOK || config.Body.String() != "{\"billing\":{\"enabled\":false},\"cloud_sign_in\":{\"enabled\":false,\"publishable_key\":null}}\n" {
 		t.Fatalf("config status=%d body=%s", config.Code, config.Body.String())
 	}
 	exchanged := exchange(t, api, "not-a-token", "", testOrigin)
@@ -29,7 +29,7 @@ func TestCloudAuthValidTokenCreatesOrdinarySession(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := request(t, fixture.api, http.MethodGet, "/api/v1/config", nil, "", nil)
-	if config.Code != http.StatusOK || config.Body.String() != "{\"cloud_sign_in\":{\"enabled\":true,\"publishable_key\":\"pk_test_example\"}}\n" {
+	if config.Code != http.StatusOK || config.Body.String() != "{\"billing\":{\"enabled\":false},\"cloud_sign_in\":{\"enabled\":true,\"publishable_key\":\"pk_test_example\"}}\n" {
 		t.Fatalf("config status=%d body=%s", config.Code, config.Body.String())
 	}
 	response := exchange(t, fixture.api, fixture.token(t, nil), "", testOrigin)

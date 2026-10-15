@@ -9,6 +9,8 @@ const (
 	PermissionContactsWrite      = "contacts:write"
 	PermissionAccessRead         = "access:read"
 	PermissionAccessWrite        = "access:write"
+	// PermissionBillingManage covers plan, checkout and the billing portal; admins only.
+	PermissionBillingManage = "billing:manage"
 	// PermissionChannelInbound marks routes authenticated by a channel secret instead of a session.
 	PermissionChannelInbound = "channels:inbound"
 )
