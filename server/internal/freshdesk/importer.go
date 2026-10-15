@@ -76,6 +76,9 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 			return nil, err
 		}
 		defer release()
+		if err := r.guardFoundingStorage(ctx); err != nil {
+			return nil, err
+		}
 	}
 	type step struct {
 		name string
@@ -96,8 +99,11 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 		return nil, r.internalErr
 	}
 	report, err = r.reconcile(ctx, report)
-	if err != nil || options.DryRun {
+	if err != nil {
 		return report, err
+	}
+	if options.DryRun {
+		return report, r.checkDryRunStorage(ctx, report)
 	}
 	// The import is already committed; a failed extension must not hide its report. A rerun retries.
 	extendedTo, err := r.extendTrial(ctx)

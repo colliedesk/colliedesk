@@ -60,6 +60,12 @@ func newLimitsFixture(t *testing.T, billingEnabled bool) limitsFixture {
 // newLimitsFixtureTraced is newLimitsFixture on a pool whose queries a tracer sees.
 func newLimitsFixtureTraced(t *testing.T, billingEnabled bool, tracer pgx.QueryTracer) limitsFixture {
 	t.Helper()
+	return newLimitsFixtureConfigured(t, billingEnabled, tracer, nil)
+}
+
+// newLimitsFixtureConfigured is newLimitsFixtureTraced with a change to the server configuration.
+func newLimitsFixtureConfigured(t *testing.T, billingEnabled bool, tracer pgx.QueryTracer, configure func(*httpapi.Config)) limitsFixture {
+	t.Helper()
 	clock := &testClock{now: trialStart}
 	fake := newFakePolarAPI(t)
 	api, service, pool, _ := testAPIOnPool(t, testPoolTraced(t, tracer), func(config *httpapi.Config) {
@@ -67,6 +73,9 @@ func newLimitsFixtureTraced(t *testing.T, billingEnabled bool, tracer pgx.QueryT
 		hostedConfig(config)
 		if billingEnabled {
 			config.Billing = fake.config()
+		}
+		if configure != nil {
+			configure(config)
 		}
 	})
 	service = service.WithClock(clock.Now)

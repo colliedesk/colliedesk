@@ -50,6 +50,10 @@ type fakeFreshdesk struct {
 	fileBody             map[string]string
 	fileLength           map[string]string
 	onRequest            func(path string)
+	// failPathTimes makes the next N API requests to a path answer 500.
+	failPathTimes map[string]int
+	// failPathStatus makes every API request to a path answer with the given status.
+	failPathStatus map[string]int
 }
 
 func newFakeFreshdesk(t *testing.T) *fakeFreshdesk {
@@ -99,6 +103,21 @@ func (f *fakeFreshdesk) serveAPI(w http.ResponseWriter, r *http.Request) {
 	want := "Basic " + base64.StdEncoding.EncodeToString([]byte(testAPIKey+":X"))
 	if r.Header.Get("Authorization") != want {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "invalid_credentials", "message": "You have to be logged in to perform this action."})
+		return
+	}
+	f.mu.Lock()
+	if status := f.failPathStatus[r.URL.Path]; status != 0 {
+		f.mu.Unlock()
+		http.Error(w, "refused", status)
+		return
+	}
+	failing := f.failPathTimes[r.URL.Path] > 0
+	if failing {
+		f.failPathTimes[r.URL.Path]--
+	}
+	f.mu.Unlock()
+	if failing {
+		http.Error(w, "boom", http.StatusInternalServerError)
 		return
 	}
 	if f.stallPath == r.URL.Path {

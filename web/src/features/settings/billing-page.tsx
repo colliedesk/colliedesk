@@ -24,11 +24,23 @@ function periodNote(billing: Billing, timezone: string): string | null {
   return billing.cancel_at_period_end || billing.status === 'canceled' ? messages.cancelsOn(when) : messages.renewsOn(when);
 }
 
+// StorageFull says what the cap does once it is reached, which differs by plan: on Founding customer
+// email is always stored, on the trial and when locked it is refused. Below the cap the 80% warning
+// of the page applies.
+function StorageFull({ billing }: { billing: Billing }) {
+  const limit = billing.limits.storage_bytes;
+  if (limit === null || billing.usage.storage_bytes < limit) return null;
+  const founding = billing.plan === 'founding';
+  const upgrade = founding ? messages.storageUpgradeFounding : messages.storageUpgradeTrial;
+  return <p role="alert" aria-label="Attachment storage" className="error-copy">
+    {founding ? messages.storageFullFounding(upgrade) : messages.storageFullTrial(upgrade)}</p>;
+}
+
 export function BillingPage({ billing, timezone, checkoutReturned = false, failed = false, onCheckout, onManage }: BillingPageProps) {
   const note = periodNote(billing, timezone);
   const storageLimit = billing.limits.storage_bytes;
   const warnAt = billing.limits.storage_warn_bytes;
-  const storageNearlyFull = warnAt !== null && billing.usage.storage_bytes >= warnAt;
+  const storageNearlyFull = warnAt !== null && billing.usage.storage_bytes >= warnAt && !(storageLimit !== null && billing.usage.storage_bytes >= storageLimit);
   return (
     <main className="settings-page">
       <header><h1>{messages.billingHeading}</h1><p>{messages.billingDescription}</p></header>
@@ -43,12 +55,13 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
           : messages.plans[billing.plan]}</strong></p>
         {note && <p className="muted-copy">{note}</p>}
         {storageNearlyFull && storageLimit !== null && <p role="status" className="error-copy">
-          {messages.storageWarning(Math.floor((billing.usage.storage_bytes / storageLimit) * 100), formatBytes(billing.usage.storage_bytes), formatBytes(storageLimit))}</p>}
+          {(billing.plan === 'founding' ? messages.storageWarningFounding : messages.storageWarning)(Math.floor((billing.usage.storage_bytes / storageLimit) * 100), formatBytes(billing.usage.storage_bytes), formatBytes(storageLimit))}</p>}
         <ul className="muted-copy">
           <li>{messages.agentsUsage(billing.usage.agents, billing.limits.agents, billing.usage.pending_invites)}</li>
-          {storageLimit !== null && <li>{messages.storageUsage(formatBytes(billing.usage.storage_bytes), formatBytes(storageLimit))}</li>}
+          {storageLimit !== null && <li>{messages.storageUsage(formatBytes(billing.usage.storage_bytes, 'down'), formatBytes(storageLimit))}</li>}
           {billing.limits.replies_per_24h !== null && <li>{messages.repliesUsage(billing.usage.replies_last_24h, billing.limits.replies_per_24h)}</li>}
         </ul>
+        <StorageFull billing={billing} />
       </section>
       {(billing.plan === 'trial' || billing.plan === 'none') && <section aria-labelledby="upgrade-heading">
         <div className="section-heading"><div><h2 id="upgrade-heading">{messages.upgradeHeading}</h2></div></div>

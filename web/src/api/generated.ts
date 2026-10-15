@@ -748,7 +748,7 @@ export interface components {
                 replies_per_24h: number | null;
                 /**
                  * Format: int64
-                 * @description Attachment storage cap in bytes (2 GiB) on the trial and when locked; null on paid plans and self-hosted, which have none.
+                 * @description Attachment storage cap in bytes, 2 GiB on the trial and when locked (imported files do not count), 20 GiB on the Founding plan (imported files count); null on Team and on self-hosted, which have none.
                  */
                 storage_bytes: number | null;
                 /**
@@ -761,7 +761,7 @@ export interface components {
                 agents: number;
                 /**
                  * Format: int64
-                 * @description Attachment bytes counted against `limits.storage_bytes`; files of imported messages are not counted.
+                 * @description Attachment bytes counted against `limits.storage_bytes`. On the trial files of imported messages are not counted; on the Founding plan every file is, imported ones included.
                  */
                 storage_bytes: number;
                 /** @description Emailed replies of the last 24 hours that count against the trial cap of 200; 0 on other plans. */
@@ -1247,7 +1247,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description The workspace no longer accepts this mail. Error code `mailbox_closed`: the workspace is locked. Error code `storage_limit_reached`: a trial or locked workspace would pass its 2 GiB attachment storage limit (imported files do not count). Both are permanent for the sender: the forwarder bounces the message instead of retrying, and nothing was stored. */
+        /** @description The workspace no longer accepts this mail. Error code `mailbox_closed`: the workspace is locked. Error code `storage_limit_reached`: a trial or locked workspace would pass its 2 GiB attachment storage limit (imported files do not count). Both are permanent for the sender: the forwarder bounces the message instead of retrying, and nothing was stored. A Founding workspace never gets the storage answer for mail: its 20 GiB limit (imported files count) applies to uploads and imports only, and mail over it is stored in full. Nothing is deleted, and reading, replying without new attachments and export keep working. */
         MailboxClosed: {
             headers: {
                 [name: string]: unknown;
