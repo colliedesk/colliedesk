@@ -5,7 +5,7 @@ import { PRICES_READ, REPO } from '../site.mjs';
 const BARS = [
   { name: 'Freshdesk Pro + Freddy AI Copilot', usd: 420, math: '5 × ($55 + $29)', href: '/vs/freshdesk' },
   { name: 'Help Scout Plus', usd: 225, math: '5 × $45, + $0.75 per AI resolution', href: '/vs/help-scout' },
-  { name: 'CollieDesk Cloud', usd: 10, math: 'one workspace, + AI usage at cost +30%', href: '/pricing', ours: true },
+  { name: 'CollieDesk Cloud', usd: 49, math: 'one workspace, + AI usage at cost +30%', href: '/pricing', ours: true },
 ];
 const MAX = Math.max(...BARS.map((b) => b.usd));
 
@@ -24,7 +24,7 @@ export const homeSections = `
     <p class="section-lede">No enterprise edition with the good parts held back. Every feature is in the open-source code.</p>
   </div>
   <ol class="sell-list">
-    <li><h3>CollieDesk Cloud</h3><p>We run it for you. One flat price per workspace, not per agent: <strong>$10 a month</strong> or $100 a year.</p></li>
+    <li><h3>CollieDesk Cloud</h3><p>We run it for you. One flat price per workspace, not per agent: <strong>$49 a month</strong> or $490 a year.</p></li>
     <li><h3>Migration</h3><p>We move your Freshdesk history (tickets, replies, attachments, tags) and give you a reconcile report that proves nothing was lost.</p></li>
   </ol>
 </div></section>
@@ -39,7 +39,7 @@ export const homeSections = `
       <p>Drafts and triage from your own past replies and knowledge base, auto-answer for repetitive tickets with a human in the loop. Pay model cost +30%, or bring your own key.</p>
       <p><span class="badge badge-coming">Coming v0.3</span> <a href="/roadmap">See the roadmap</a></p></article>
     <article class="pillar"><p class="pillar-k">03 · Flat price</p><h3>No per-agent fees</h3>
-      <p>Hire a fifth agent, or a tenth, and the bill stays $10 a month for the workspace. Self-host and it stays $0.</p>
+      <p>Hire a fifth agent, or a tenth, and the bill stays $49 a month for the workspace. Self-host and it stays $0.</p>
       <p><span class="badge badge-shipped">Price published</span> <a href="/pricing">See pricing</a></p></article>
   </div>
 </div></section>
@@ -87,7 +87,7 @@ export const homeSections = `
     <div>
       <p class="eyebrow">Founding offer</p>
       <h2 id="founding-title">$100 a year. Locked for life.</h2>
-      <p class="section-lede">For small teams planning to leave Freshdesk. Same price as Cloud's yearly plan today; it never goes up for you, and we migrate your Freshdesk data for free.</p>
+      <p class="section-lede">For small teams planning to leave Freshdesk. Cloud Team lists at $490 a year. Your price never goes up, and we migrate your Freshdesk data for free.</p>
     </div>
     <ul class="check-list">
       <li>$100 per workspace per year, locked for life</li>
@@ -108,14 +108,14 @@ export const homeSectionsMd = `## Wait, what are you selling me?
 
 Self-hosting is free, forever, with every feature. We sell two things:
 
-1. **CollieDesk Cloud**: we run it for you. $10 per workspace per month or $100 per year, not per agent.
+1. **CollieDesk Cloud**: we run it for you. $49 per workspace per month or $490 per year, not per agent.
 2. **Migration**: we move your Freshdesk history (tickets, replies, attachments, tags) and give you a reconcile report that proves nothing was lost.
 
 ## Why teams switch
 
 - **Leave Freshdesk with all your data** (importer coming v0.2): tickets, replies, notes, checksummed attachments, tags and contacts, with a reconcile report. [Migration guide](/migrate/freshdesk).
 - **AI that answers tickets, included** (coming v0.3): drafts, triage and auto-answer with a human in the loop. Model cost +30%, or bring your own key.
-- **Flat price**: $10 per workspace per month, no per-agent fees. Self-host for $0.
+- **Flat price**: $49 per workspace per month, no per-agent fees. Self-host for $0.
 
 ## The bill for five agents
 

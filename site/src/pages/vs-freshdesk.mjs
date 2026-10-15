@@ -5,7 +5,7 @@ import { collieFacts as c, statusTable } from './collie-status.mjs';
 const faq = [
   {
     q: 'What is the best open-source alternative to Freshdesk?',
-    a: 'CollieDesk is an open-source (AGPL-3.0) helpdesk built for small teams leaving Freshdesk: flat $10 per workspace per month, AI included at cost, and a Freshdesk importer (coming v0.2). It is pre-alpha today, so check the status table before you switch.',
+    a: 'CollieDesk is an open-source (AGPL-3.0) helpdesk built for small teams leaving Freshdesk: flat $49 per workspace per month, AI included at cost, and a Freshdesk importer (coming v0.2). It is pre-alpha today, so check the status table before you switch.',
   },
   {
     q: 'How much does Freshdesk cost for 5 agents with AI?',
@@ -42,8 +42,8 @@ Freshdesk prices are per agent per month, billed annually, as published on ${PRI
 
 | Team | Freshdesk Pro + Copilot | CollieDesk Cloud |
 |---|---|---|
-| 5 agents | 5 × ($55 + $29) = **$420 per month** | $10 per month + AI usage |
-| 10 agents | 10 × ($55 + $29) = **$840 per month** | $10 per month + AI usage |
+| 5 agents | 5 × ($55 + $29) = **$420 per month** | $49 per month + AI usage |
+| 10 agents | 10 × ($55 + $29) = **$840 per month** | $49 per month + AI usage |
 
 List prices before tax. AI usage on CollieDesk depends on ticket volume and the model you pick; with your own key it is billed by your provider.
 
@@ -72,10 +72,10 @@ Read on ${PRICES_READ}. Prices change; check the vendor page before you decide.
 const page = {
   path: '/vs/freshdesk',
   section: 'Compare',
-  title: 'CollieDesk vs Freshdesk: flat $10 per workspace vs $19–89 per agent',
+  title: 'CollieDesk vs Freshdesk: flat $49 per workspace vs $19–89 per agent',
   description:
     'An honest comparison of CollieDesk and Freshdesk: published prices, AI add-on costs, export limits and what CollieDesk can and cannot do yet. Prices read 14 October 2026.',
-  summary: 'Freshdesk $19–89 per agent plus $29 Copilot vs CollieDesk $10 per workspace; export limits; honest status',
+  summary: 'Freshdesk $19–89 per agent plus $29 Copilot vs CollieDesk $49 per workspace; export limits; honest status',
   eyebrow: 'Compare · Freshdesk alternative',
   h1: 'CollieDesk vs Freshdesk',
   lede: 'Freshdesk is a mature, broad helpdesk. CollieDesk is a young open-source one with a flat price. Here is the honest difference, with sources.',

@@ -12,7 +12,7 @@ const faq = [
   },
   {
     q: 'Is CollieDesk free?',
-    a: 'Self-hosting is free, forever, with every feature. CollieDesk Cloud costs $10 per workspace per month or $100 per year, with no per-agent fees. See [pricing](/pricing).',
+    a: 'Self-hosting is free, forever, with every feature. CollieDesk Cloud costs $49 per workspace per month or $490 per year, with no per-agent fees. See [pricing](/pricing).',
   },
   {
     q: 'Is CollieDesk ready to use?',
@@ -49,7 +49,7 @@ const html = `<section class="home-hero"><div class="wrap hero-grid">
     <h1>${TAGLINE.replace('alternative to', 'alternative to<br class="br-lg">')}</h1>
     <p class="lede">${POSITIONING}</p>
     ${ctaButtons('btn-lg')}
-    <p class="hero-note">$10 per workspace per month. Self-host for $0. <a href="/pricing">See pricing</a></p>
+    <p class="hero-note">$49 per workspace per month. Self-host for $0. <a href="/pricing">See pricing</a></p>
   </div>
   ${terminal}
 </div></section>
@@ -58,7 +58,7 @@ ${homeSections.replace('<!--STATUS-->', statusHtml)}
 
 const md = `${POSITIONING}
 
-Status: pre-alpha (v0.1). Self-host free: ${REPO}. Cloud: $10 per workspace per month or $100 per year.
+Status: pre-alpha (v0.1). Self-host free: ${REPO}. Cloud: $49 per workspace per month or $490 per year.
 
 ${homeSectionsMd}
 
@@ -73,7 +73,7 @@ export default {
   section: 'Product',
   title: 'CollieDesk: the open-source alternative to Freshdesk, Zendesk and Help Scout',
   description:
-    'CollieDesk is an open-source helpdesk for small support teams. Leave Freshdesk with all your data. AI included, not an add-on. $10 per workspace, no per-agent fees.',
+    'CollieDesk is an open-source helpdesk for small support teams. Leave Freshdesk with all your data. AI included, not an add-on. $49 per workspace, no per-agent fees.',
   summary: `What CollieDesk is, what we sell, status, founding offer; competitor prices read ${PRICES_READ}`,
   h1: TAGLINE,
   lede: POSITIONING,

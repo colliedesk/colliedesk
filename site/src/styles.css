@@ -170,7 +170,7 @@ td:first-child { font-weight: 600; }
 .edit-source { margin-top: 2.5rem; font-size: .92rem; color: var(--ink-3); }
 
 /* Plans */
-.plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; padding-top: 2.5rem; align-items: stretch; }
+.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1.25rem; padding-top: 2.5rem; align-items: stretch; }
 .plan { border: 1px solid var(--line); border-radius: var(--radius); padding: 1.6rem; display: flex; flex-direction: column; background: var(--paper); }
 .plan ul { padding-left: 1.1rem; color: var(--ink-2); margin: 0 0 1.5rem; }
 .plan li { margin: .3rem 0; }

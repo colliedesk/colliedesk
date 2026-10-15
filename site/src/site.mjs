@@ -11,8 +11,8 @@ export const POSITIONING =
 
 export const FOUNDING_HREF = '/#founding';
 export const PRICE = {
-  monthly: '$10',
-  yearly: '$100',
+  monthly: '$49',
+  yearly: '$490',
   founding: '$100 per year, locked for life, with free Freshdesk migration',
   ai: 'LLM cost +30%, or bring your own key',
 };
