@@ -203,3 +203,31 @@ test('get-started links open Settings inside the app and hide admin-only steps f
   expect(within(start).queryByRole('link', { name: 'Connect your support email' })).not.toBeInTheDocument();
   expect(within(start).getByRole('link', { name: 'Import from Freshdesk' })).toBeInTheDocument();
 });
+
+test('details drawer takes focus when opened and returns it on Escape', () => {
+  render(<InboxPage selected={conversation} conversations={[conversation]} />);
+  const toggle = screen.getByRole('button', { name: /show details/i });
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByRole('button', { name: /hide details/i })).toHaveFocus();
+  fireEvent.keyDown(screen.getByRole('complementary', { name: /conversation details/i }), { key: 'Escape' });
+  expect(screen.queryByRole('button', { name: /hide details/i })).not.toBeInTheDocument();
+  expect(toggle).toHaveFocus();
+});
+
+test('groups the list under Today and Earlier headings, only for groups that have rows', () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-14T15:00:00Z'));
+  try {
+    const older = { ...conversation, id: '44444444-4444-4444-8444-444444444444', subject: 'Older request', updated_at: '2026-10-10T09:00:00Z' };
+    const { rerender } = render(<InboxPage conversations={[conversation, older]} />);
+    const list = screen.getByRole('region', { name: /conversation list/i });
+    const headings = within(list).getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent);
+    expect(headings).toEqual(['Today', 'Earlier']);
+    rerender(<InboxPage conversations={[conversation]} />);
+    expect(screen.queryByRole('heading', { name: 'Earlier' })).not.toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
+});

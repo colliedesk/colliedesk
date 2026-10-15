@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { WorkspaceChoice } from '../../api/schemas';
 import { messages } from '../../messages';
+import { LogoMark } from '../../ui/logo';
 
 interface RedeemPageProps {
   token: string;
@@ -19,7 +20,7 @@ export function RedeemPage({
   return (
     <main className="redeem-page">
       <section className="redeem-panel">
-        <div className="brand-mark" aria-hidden="true">{messages.brandInitial}</div>
+        <div className="brand-lockup"><LogoMark size={36} /><span>{messages.brand}</span></div>
         <h1>{messages.openSecureLink}</h1>
         <p>{messages.redeemExplanation}</p>
         {!token && !cloudEnabled && <p className="muted-copy">{messages.requestLink}</p>}
@@ -27,7 +28,7 @@ export function RedeemPage({
           {workspaces.length > 0 ? <>
             <h2>{messages.chooseWorkspace}</h2>
             <div className="workspace-choices">
-              {workspaces.map((workspace) => <button className="secondary-action" type="button" key={workspace.slug}
+              {workspaces.map((workspace) => <button type="button" key={workspace.slug}
                 onClick={() => onSelectWorkspace?.(workspace.slug)} disabled={pending}>{workspace.name}</button>)}
             </div>
           </> : cloudSignIn}
