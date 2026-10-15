@@ -134,18 +134,23 @@ type StorageLimitError struct {
 func (e *StorageLimitError) Error() string {
 	limit := FormatBytes(e.Limit)
 	if e.Plan == PlanFounding {
-		return fmt.Sprintf("This workspace has reached the %s attachment storage limit of the Founding plan. Nothing is deleted, customer email is still stored, and you can still read, reply and export. Uploads and imports are refused until then. Upgrade to the Team plan under Billing > Manage billing to remove the limit, or export your data.", limit)
+		return fmt.Sprintf("This workspace has reached the %s attachment storage limit of the Founding plan. Nothing is deleted, customer email is still stored, and you can still read, reply and export. Uploads and imports are refused. Upgrade to the Team plan under Billing > Manage billing to remove the limit, or export your data.", limit)
 	}
 	return fmt.Sprintf("This workspace has reached its %s attachment storage limit. Subscribe to remove the limit, or export your data.", limit)
 }
 
-// FormatBytes writes a byte count for a person: whole GiB or MiB when exact, otherwise bytes.
+// FormatBytes writes a byte count for a person: "20 GiB" when it is a whole number of GiB or MiB,
+// otherwise a figure with one decimal and the exact bytes in brackets, such as "1.5 GiB (1610612736 bytes)".
 func FormatBytes(n int64) string {
 	switch {
 	case n >= 1<<30 && n%(1<<30) == 0:
 		return fmt.Sprintf("%d GiB", n>>30)
 	case n >= 1<<20 && n%(1<<20) == 0:
 		return fmt.Sprintf("%d MiB", n>>20)
+	case n >= 1<<30:
+		return fmt.Sprintf("%.1f GiB (%d bytes)", float64(n)/(1<<30), n)
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1f MiB (%d bytes)", float64(n)/(1<<20), n)
 	}
 	return fmt.Sprintf("%d bytes", n)
 }

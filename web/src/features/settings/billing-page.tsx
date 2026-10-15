@@ -35,7 +35,9 @@ function StorageNotice({ billing }: { billing: Billing }) {
   const used = billing.usage.storage_bytes;
   if (limit === null || warn === null || used < warn) return null;
   const upgrade = billing.plan === 'founding' ? messages.storageUpgradeFounding : messages.storageUpgradeTrial;
-  if (used >= limit) return <p role="alert" aria-label="Attachment storage" className="error-copy">{messages.storageFull(upgrade)}</p>;
+  // On the Founding plan customer email is always stored; on the trial and when locked it is refused at the cap.
+  const full = billing.plan === 'founding' ? messages.storageFullFounding(upgrade) : messages.storageFullTrial(upgrade);
+  if (used >= limit) return <p role="alert" aria-label="Attachment storage" className="error-copy">{full}</p>;
   return <p role="status" aria-label="Attachment storage" className="muted-copy">{messages.storageWarning(Math.floor(used * 100 / limit), upgrade)}</p>;
 }
 
@@ -56,7 +58,7 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
         {note && <p className="muted-copy">{note}</p>}
         <ul className="muted-copy">
           <li>{messages.agentsUsage(billing.usage.agents, billing.limits.agents, billing.usage.pending_invites)}</li>
-          {billing.limits.storage_bytes !== null && <li>{messages.storageUsage(formatStorage(billing.usage.storage_bytes), formatStorage(billing.limits.storage_bytes))}</li>}
+          {billing.limits.storage_bytes !== null && <li>{messages.storageUsage(formatStorage(billing.usage.storage_bytes, 'down'), formatStorage(billing.limits.storage_bytes))}</li>}
         </ul>
         <StorageNotice billing={billing} />
       </section>

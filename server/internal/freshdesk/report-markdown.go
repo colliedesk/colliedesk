@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 const markdownListLimit = 50
@@ -18,6 +20,13 @@ func (r *Report) Markdown() string {
 	}
 	if r.DryRun {
 		b.WriteString("- Dry run: nothing was written. Message, attachment and time entry counts are known only after an import.\n")
+	}
+	if c := r.StorageCap; c != nil {
+		if c.WouldRefuse {
+			fmt.Fprintf(&b, "- storage: this import would be refused: it needs %s of attachments and %s is free under the %s cap of the Founding plan\n", domain.FormatBytes(c.NeededBytes), domain.FormatBytes(c.FreeBytes), domain.FormatBytes(c.LimitBytes))
+		} else {
+			fmt.Fprintf(&b, "- storage: fits the Founding plan cap (needs %s, %s free of %s)\n", domain.FormatBytes(c.NeededBytes), domain.FormatBytes(c.FreeBytes), domain.FormatBytes(c.LimitBytes))
+		}
 	}
 	if r.TrialExtendedTo != nil {
 		fmt.Fprintf(&b, "- trial: extended to %s\n", r.TrialExtendedTo.UTC().Format(time.RFC3339))

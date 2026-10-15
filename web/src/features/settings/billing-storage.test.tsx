@@ -49,3 +49,26 @@ test('a team workspace has no storage line and no warning', () => {
   expect(screen.queryByText(/attachment storage/i)).not.toBeInTheDocument();
   expect(screen.queryByRole('status', { name: /storage/i })).not.toBeInTheDocument();
 });
+
+test('a full trial says incoming email with attachments is refused, not stored', () => {
+  const trial: Billing = { ...founding(2 * GiB), plan: 'trial', status: 'none', current_period_end: null, active_subscriptions: 0,
+    limits: { agents: 10, storage_bytes: 2 * GiB, storage_warn_bytes: Math.floor(1.6 * GiB) } };
+  show(trial);
+  const warning = screen.getByRole('alert', { name: /storage/i });
+  expect(warning).toHaveTextContent(/incoming email with attachments/i);
+  expect(warning).toHaveTextContent(/refused/i);
+  expect(warning).toHaveTextContent(/imported files do not count/i);
+  expect(warning).not.toHaveTextContent(/customer email is still stored/i);
+});
+
+test('a locked workspace at the cap gets the trial wording too', () => {
+  show({ ...founding(2 * GiB), plan: 'none', locked: true, status: 'canceled',
+    limits: { agents: 0, storage_bytes: 2 * GiB, storage_warn_bytes: Math.floor(1.6 * GiB) } });
+  expect(screen.getByRole('alert', { name: /storage/i })).toHaveTextContent(/incoming email with attachments/i);
+});
+
+test('usage just under the limit never reads as full', () => {
+  show({ ...founding(2147000000), plan: 'trial', status: 'none', current_period_end: null, active_subscriptions: 0,
+    limits: { agents: 10, storage_bytes: 2 * GiB, storage_warn_bytes: Math.floor(1.6 * GiB) } });
+  expect(screen.getByText('1.9 GiB of 2 GiB attachment storage used')).toBeInTheDocument();
+});

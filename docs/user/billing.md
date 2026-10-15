@@ -33,7 +33,8 @@ so **Billing** shows the usage over the limit. What the limit stops is files you
 upload, an attachment on a reply, and a Freshdesk import that would pass it (the import does not
 start; see [Import from Freshdesk](import-freshdesk.md)). Each refusal names the limit. To lift the
 limit, switch to the Team plan under **Manage billing**, or export your data. The trial is
-different: its 2 GiB limit also applies to incoming email.
+different: its 2 GiB limit also applies to incoming email, and files brought in by an import do not
+count. A file counts each time it is attached, so the same file on two messages counts twice.
 
 ## What happens at the limits (Free plan)
 

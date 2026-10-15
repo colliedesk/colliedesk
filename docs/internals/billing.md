@@ -219,15 +219,23 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
   team's own customers and looks like an outage; the cost is bounded by real mail). The cap still refuses
   what an agent or an import supplies (`Store.CheckStorage`, the importer's guard). Reading, replies
   without new files and export are untouched. The trial and a locked workspace still refuse inbound mail.
-- **Import on Founding stops before any write.** The ticket list does not carry attachment sizes, so
-  `freshdesk.guardFoundingStorage` runs a read-only pass first: the dry-run listing and id probing, then
-  one read of each ticket and its conversations, and adds up the reported sizes of attachments the ledger
-  does not hold yet. If `used + needed` passes the cap it returns `*freshdesk.StorageCapError` (bytes
-  needed, bytes free, the cap) and writes nothing. It costs a second round of API calls, once, for Founding
-  workspaces only. `importAttachment` also checks the room before each download, for a file that appeared
-  at the source after the pass; that is the only way a Founding import can stop partway, and a rerun after
-  upgrading resumes it. `import undo` deletes the files, and the triggers release the bytes.
-  `Options.FoundingStorageBytes` and `Store.WithFoundingStorageBytes` shrink the cap in tests.
+- **Import on Founding: one check, before any write; then admitted.** The ticket list does not carry
+  attachment sizes, so `freshdesk.guardFoundingStorage` runs a read-only pass first: the dry-run
+  listing and id probing (`listTickets`, `classifyTickets`, which the real run then repeats), then a
+  read of each ticket and of its conversations (paged, so at least two calls per ticket), adding up
+  the reported sizes of attachments the ledger does not hold yet. It then re-reads the room (the pass
+  can take hours) and, if `used + needed` passes the cap, returns `*freshdesk.StorageCapError` (human
+  sizes) and writes nothing. A ticket whose read fails is tried `sizingAttempts` times, each with the
+  client's own retry and backoff; a persistent failure stops the run before any write. **No cap check
+  after that:** an admitted import is never stopped by the cap, so bytes that arrive meanwhile (inbound
+  mail is exempt; uploads and a file added at the source after the pass) may take usage a little past
+  20 GiB, which is accepted, and there is no partial-import path from the cap (only a full disk still
+  stops a run, as before). `--dry-run` reports the same comparison in `Report.StorageCap` without
+  refusing. The counter counts logical rows: a file attached twice counts twice although the local
+  disk stores it once, which is safe for cost. `import undo` deletes the files, and the triggers
+  release the bytes. `Options.FoundingStorageBytes` and `Store.WithFoundingStorageBytes` are test-only
+  seams that shrink the cap (kept as options because an unexported hook would mean threading a
+  package-private value through the `store` and `freshdesk` packages).
 - `GET /billing` reports (for every plan) `usage.storage_bytes`, `limits.storage_bytes` (null when uncapped) and
   `limits.storage_warn_bytes` (80%: 1717986918 on the trial, 17179869184 on Founding), the usage at which the web app
   warns. On Founding `usage.storage_bytes` is the stored counter, imports included.

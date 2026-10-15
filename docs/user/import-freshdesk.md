@@ -94,10 +94,25 @@ limit. Before it writes anything, the import adds up the size of the attachments
 and compares it with the room left. If they do not fit, it stops with a message that gives the bytes
 needed, the bytes free and the limit, and nothing is imported: no contact, ticket or file. Switch to
 the Team plan under **Billing > Manage billing** and run it again, or import a smaller slice with
-`--since`. This check reads each ticket from Freshdesk once more, so a large account makes extra API
-calls before the import starts. If a file appears in Freshdesk after the check and would pass the
-limit, that file fails and the report is not `OK`; run the command again after you upgrade.
-`import undo` removes the imported files and gives the space back.
+`--since`.
+
+The check is the only place the limit applies to an import. An import that passes it is admitted and
+runs to the end: customer email that arrives meanwhile, or a file added in Freshdesk after the check,
+can take usage a little past 20 GiB, and the import is not stopped for that. There is no partial
+import because of the storage limit. A file counts each time it is attached, so the same file on two
+messages counts twice.
+
+To do this the import has to know the sizes first. Freshdesk's ticket list does not carry them, so
+before it writes anything the import lists the tickets and probes the ticket numbers (the same calls as
+the real run, and as `--dry-run`), then reads every ticket and its conversations (conversations come
+in pages, so that is at least two calls per ticket). The real run repeats all of it. Expect about
+twice the API calls and time of an import without the check, once, on a Founding workspace only. A
+ticket that cannot be read is tried three times (each try retries the usual way); if it still fails,
+the import stops before writing anything and names the ticket. Run the same command again.
+
+`--dry-run` on a Founding workspace tells you in advance: the report says whether the import
+**would be refused**, with the bytes it needs and the bytes free. `import undo` removes the imported
+files and gives the space back.
 
 Only one import or undo runs in a workspace at a time. A second one stops at once with
 "already running".

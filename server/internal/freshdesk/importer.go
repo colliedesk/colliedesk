@@ -55,8 +55,6 @@ type run struct {
 	archiveUnavailable atomic.Bool
 	verification       Verifications
 	progress           *progress
-	// founding is true when the workspace is on the Founding plan, whose storage cap counts imports.
-	founding bool
 }
 
 // Run imports (or, with DryRun, only counts) a Freshdesk account. Item-level
@@ -101,8 +99,11 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 		return nil, r.internalErr
 	}
 	report, err = r.reconcile(ctx, report)
-	if err != nil || options.DryRun {
+	if err != nil {
 		return report, err
+	}
+	if options.DryRun {
+		return report, r.checkDryRunStorage(ctx, report)
 	}
 	// The import is already committed; a failed extension must not hide its report. A rerun retries.
 	extendedTo, err := r.extendTrial(ctx)
