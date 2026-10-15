@@ -610,6 +610,13 @@ export interface components {
             cancel_at_period_end: boolean;
             /** @description Subscriptions that grant a paid plan now. More than one means the workspace pays twice; cancel the extra one in the billing portal. */
             active_subscriptions: number;
+            /** @description True when the plan in effect was granted by HC Labs instead of bought. Such a workspace has no billing account: checkout answers 409 and the portal is not available. */
+            complimentary: boolean;
+            /**
+             * Format: date-time
+             * @description When a complimentary plan ends; null when it has no end or the plan is not complimentary.
+             */
+            complimentary_until: string | null;
             limits: {
                 /** @description Seats of the plan; 0 when locked. */
                 agents: number;

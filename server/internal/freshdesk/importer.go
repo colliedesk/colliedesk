@@ -5,6 +5,7 @@ package freshdesk
 import (
 	"context"
 	"errors"
+	"log"
 	"net/url"
 	"sort"
 	"strings"
@@ -98,8 +99,16 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 	if err != nil || options.DryRun {
 		return report, err
 	}
-	if report.TrialExtendedTo, err = r.extendTrial(ctx); err != nil {
-		return nil, err
+	// The import is already committed; a failed extension must not hide its report. A rerun retries.
+	extendedTo, err := r.extendTrial(ctx)
+	switch {
+	case err != nil:
+		log.Printf("freshdesk import: trial extension failed for workspace %s: %v", options.WorkspaceSlug, err)
+		if options.Cloud {
+			report.TrialExtensionError = err.Error()
+		}
+	case options.Cloud:
+		report.TrialExtendedTo = extendedTo
 	}
 	return report, nil
 }

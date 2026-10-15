@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,6 +25,7 @@ type trialEnv struct {
 func newTrialEnv(t *testing.T, name string) *trialEnv {
 	t.Helper()
 	databaseURL := cliDatabase(t)
+	t.Setenv("USER", "ops")
 	pool, err := openPool(context.Background(), databaseURL)
 	if err != nil {
 		t.Fatal(err)
@@ -215,5 +218,129 @@ func TestCompPlanRejectsBadInputAndStaysWithinOneWorkspace(t *testing.T) {
 	env.mustRun("plan", "grant", "--workspace", "comp-bad", "--plan", "team", "--until", "forever", "--by", "chinh")
 	if plan, locked := other.access("2026-10-21T00:00:00Z"); plan != "none" || !locked {
 		t.Fatalf("other workspace: plan=%s locked=%v", plan, locked)
+	}
+}
+
+func TestTrialSetRecordsWhoChangedWhatAndWhen(t *testing.T) {
+	env := newTrialEnv(t, "Trial Audit")
+	setClock(t, "2026-10-16T08:00:00Z")
+	env.mustRun("trial", "set", "--workspace", "trial-audit", "--ends", "2026-10-15T09:00:00Z", "--by", "chinh")
+	env.mustRun("trial", "set", "--workspace", "trial-audit", "--ends", "2026-12-01T00:00:00Z")
+	rows, err := env.pool.Query(context.Background(), `SELECT changed_by, changed_at, new_ends_at FROM workspace_trial_changes WHERE workspace_id=$1 ORDER BY changed_at, new_ends_at`, env.workspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	type change struct {
+		by       string
+		at, ends time.Time
+	}
+	var got []change
+	for rows.Next() {
+		var c change
+		if err := rows.Scan(&c.by, &c.at, &c.ends); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, c)
+	}
+	if len(got) != 2 || got[0].by != "chinh" || got[1].by != "ops" ||
+		!got[0].at.Equal(mustTime(t, "2026-10-16T08:00:00Z")) || !got[1].ends.Equal(mustTime(t, "2026-12-01T00:00:00Z")) {
+		t.Fatalf("trial changes = %+v, want chinh then the default operator ops", got)
+	}
+	var previous time.Time
+	if err := env.pool.QueryRow(context.Background(), `SELECT previous_ends_at FROM workspace_trial_changes WHERE workspace_id=$1 AND new_ends_at=$2`,
+		env.workspaceID, mustTime(t, "2026-12-01T00:00:00Z")).Scan(&previous); err != nil || !previous.Equal(mustTime(t, "2026-10-15T09:00:00Z")) {
+		t.Fatalf("previous end = %s, %v; want 2026-10-15T09:00:00Z", previous, err)
+	}
+}
+
+func TestPlanRevokeRejectsGrantFlags(t *testing.T) {
+	env := newTrialEnv(t, "Revoke Flags")
+	setClock(t, "2026-10-20T09:00:00Z")
+	env.mustRun("plan", "grant", "--workspace", "revoke-flags", "--plan", "team", "--until", "forever", "--by", "chinh")
+	for _, flag := range [][]string{{"--plan", "team"}, {"--until", "forever"}} {
+		args := append([]string{"plan", "revoke", "--workspace", "revoke-flags"}, flag...)
+		if _, err := env.run(args...); err == nil {
+			t.Errorf("revoke accepted %v", flag)
+		}
+	}
+	if plan, _ := env.access("2026-10-21T00:00:00Z"); plan != "team" {
+		t.Fatalf("a rejected revoke still changed the plan: %s", plan)
+	}
+}
+
+func TestExpiredGrantIsRecordedAsExpiredNotReplaced(t *testing.T) {
+	env := newTrialEnv(t, "Comp Expired")
+	setClock(t, "2026-10-20T09:00:00Z")
+	env.mustRun("plan", "grant", "--workspace", "comp-expired", "--plan", "team", "--until", "2026-11-01T00:00:00Z", "--by", "chinh")
+	setClock(t, "2026-12-01T00:00:00Z")
+	output := env.mustRun("plan", "grant", "--workspace", "comp-expired", "--plan", "team", "--until", "forever", "--by", "long")
+	if !strings.Contains(output, "expired") || strings.Contains(output, "Replaced") {
+		t.Fatalf("grant output should say the previous grant had expired:\n%s", output)
+	}
+	var reason, by string
+	var at time.Time
+	if err := env.pool.QueryRow(context.Background(), `SELECT revoke_reason, revoked_by, revoked_at FROM workspace_comp_plans WHERE workspace_id=$1 AND granted_by='chinh'`, env.workspaceID).Scan(&reason, &by, &at); err != nil {
+		t.Fatal(err)
+	}
+	if reason != "expired" || by == "long" || !at.Equal(mustTime(t, "2026-11-01T00:00:00Z")) {
+		t.Fatalf("expired row: reason=%q revoked_by=%q revoked_at=%s", reason, by, at)
+	}
+
+	setClock(t, "2026-12-02T00:00:00Z")
+	output = env.mustRun("plan", "grant", "--workspace", "comp-expired", "--plan", "team", "--until", "2027-06-01T00:00:00Z", "--by", "chinh")
+	if !strings.Contains(output, "Replaced") || !strings.Contains(output, "long") {
+		t.Fatalf("grant output should name the grant it replaced:\n%s", output)
+	}
+	if err := env.pool.QueryRow(context.Background(), `SELECT revoke_reason, revoked_by FROM workspace_comp_plans WHERE workspace_id=$1 AND granted_by='long'`, env.workspaceID).Scan(&reason, &by); err != nil || reason != "replaced" || by != "chinh" {
+		t.Fatalf("replaced row: reason=%q revoked_by=%q err=%v", reason, by, err)
+	}
+}
+
+func TestRevokingOnlyAnExpiredGrantSaysItExpired(t *testing.T) {
+	env := newTrialEnv(t, "Revoke Expired")
+	setClock(t, "2026-10-20T09:00:00Z")
+	env.mustRun("plan", "grant", "--workspace", "revoke-expired", "--plan", "team", "--until", "2026-11-01T00:00:00Z", "--by", "chinh")
+	setClock(t, "2026-12-01T00:00:00Z")
+	_, err := env.run("plan", "revoke", "--workspace", "revoke-expired", "--by", "long")
+	if err == nil || !strings.Contains(err.Error(), "expired") {
+		t.Fatalf("revoke of an expired grant: %v, want an error that says it expired", err)
+	}
+	var reason string
+	if err := env.pool.QueryRow(context.Background(), `SELECT revoke_reason FROM workspace_comp_plans WHERE workspace_id=$1`, env.workspaceID).Scan(&reason); err != nil || reason != "expired" {
+		t.Fatalf("revoke_reason=%q err=%v, want expired", reason, err)
+	}
+}
+
+func TestConcurrentGrantsFailWithAClearErrorNeverARawConstraintViolation(t *testing.T) {
+	env := newTrialEnv(t, "Comp Race")
+	setClock(t, "2026-10-20T09:00:00Z")
+	const workers = 8
+	errs := make([]error, workers)
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := range errs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, errs[i] = env.run("plan", "grant", "--workspace", "comp-race", "--plan", "team", "--until", "forever", "--by", "chinh")
+		}()
+	}
+	close(start)
+	wg.Wait()
+	succeeded := 0
+	for _, err := range errs {
+		switch {
+		case err == nil:
+			succeeded++
+		case errors.Is(err, store.ErrCompGrantConflict) && !strings.Contains(err.Error(), "SQLSTATE"):
+		default:
+			t.Errorf("concurrent grant failed with %v, want success or ErrCompGrantConflict", err)
+		}
+	}
+	var inForce int
+	if err := env.pool.QueryRow(context.Background(), `SELECT count(*) FROM workspace_comp_plans WHERE workspace_id=$1 AND revoked_at IS NULL`, env.workspaceID).Scan(&inForce); err != nil || inForce != 1 || succeeded == 0 {
+		t.Fatalf("in force=%d succeeded=%d err=%v, want exactly one grant in force", inForce, succeeded, err)
 	}
 }

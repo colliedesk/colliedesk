@@ -195,8 +195,9 @@ instead of sleeping. The webhook signature check keeps the real clock.
 
 Run on the server shell (`docker compose exec server /app/colliedesk ...`).
 
-- `colliedesk trial set --workspace <slug> --ends <RFC3339>` sets `trial_ends_at` and prints the old
-  and new value. It never touches `trial_extended_at`. Undo a mistake by running it again.
+- `colliedesk trial set --workspace <slug> --ends <RFC3339>` sets `trial_ends_at`, prints the old
+  and new value and records who changed it, when, and from what to what in `workspace_trial_changes`
+  (`--by`, default the OS user). It never touches `trial_extended_at`. Undo a mistake by running it again.
 - `colliedesk plan grant --workspace <slug> --plan team --until <RFC3339|forever> [--by <name>]` puts
   a workspace on a complimentary Team plan: no payment, no trial clock. `plan revoke --workspace <slug>`
   ends it, and the workspace is locked again once its trial is over.
@@ -205,4 +206,11 @@ Run on the server shell (`docker compose exec server /app/colliedesk ...`).
   (`comp:<id>`; `active` when forever, `canceled` with the end as period end otherwise), so
   `domain.NewAccess` treats it as paid. It is not a Polar customer: do not use checkout or the portal
   for such a workspace. Images older than this table ignore it, so a rollback past it drops the plan.
+- `plan grant` reports what happened to the grant in force: replaced (still running) or expired (past
+  its end). `workspace_comp_plans.revoke_reason` keeps `revoked`, `replaced` or `expired`. Two grants at
+  the same moment: one wins, the other fails with a clear message. `plan revoke` takes no `--plan` or
+  `--until`.
+- `GET /api/v1/billing` returns `complimentary` and `complimentary_until` for such a workspace. The web
+  billing page shows "Complimentary Team plan (until ...)" and hides Manage billing; checkout answers
+  409 `already_subscribed` without a portal hint.
 

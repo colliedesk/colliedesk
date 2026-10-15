@@ -262,7 +262,10 @@ type billingView struct {
 	// ActiveSubscriptions counts subscriptions that grant a paid plan now; more than one is a duplicate.
 	ActiveSubscriptions int  `json:"active_subscriptions"`
 	Locked              bool `json:"locked"`
-	Limits              struct {
+	Complimentary       bool `json:"complimentary"`
+	// ComplimentaryUntil is when a complimentary plan ends; nil means forever.
+	ComplimentaryUntil *time.Time `json:"complimentary_until"`
+	Limits             struct {
 		Agents int `json:"agents"`
 	} `json:"limits"`
 	Usage struct {

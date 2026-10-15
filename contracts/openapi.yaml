@@ -906,7 +906,7 @@ components:
         status: {type: string, enum: [applied, duplicate, stale, ignored]}
     Billing:
       type: object
-      required: [plan, trial_ends_at, locked, status, current_period_end, cancel_at_period_end, active_subscriptions, limits, usage]
+      required: [plan, trial_ends_at, locked, status, current_period_end, cancel_at_period_end, active_subscriptions, complimentary, complimentary_until, limits, usage]
       properties:
         plan:
           type: string
@@ -929,6 +929,15 @@ components:
           description: >
             Subscriptions that grant a paid plan now. More than one means the workspace pays twice;
             cancel the extra one in the billing portal.
+        complimentary:
+          type: boolean
+          description: >
+            True when the plan in effect was granted by HC Labs instead of bought. Such a workspace
+            has no billing account: checkout answers 409 and the portal is not available.
+        complimentary_until:
+          type: [string, 'null']
+          format: date-time
+          description: 'When a complimentary plan ends; null when it has no end or the plan is not complimentary.'
         limits:
           type: object
           required: [agents]

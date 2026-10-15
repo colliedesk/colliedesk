@@ -35,6 +35,9 @@ func planCommand(ctx context.Context, pool *pgxpool.Pool, args []string, output 
 	if err := flags.Parse(args[1:]); err != nil || flags.NArg() != 0 || *slug == "" {
 		return errors.New(planUsage)
 	}
+	if verb == "revoke" && (*plan != "" || *until != "") {
+		return errors.New("plan revoke takes only --workspace and --by\n" + planUsage)
+	}
 	operator, err := operatorName(*by)
 	if err != nil {
 		return err
@@ -69,11 +72,14 @@ func planCommand(ctx context.Context, pool *pgxpool.Pool, args []string, output 
 		parsed = parsed.UTC()
 		end, endText = &parsed, parsed.Format(time.RFC3339)
 	}
-	if err := data.GrantCompPlan(ctx, workspaceID, *plan, operator, end, now); err != nil {
+	previous, err := data.GrantCompPlan(ctx, workspaceID, *plan, operator, end, now)
+	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(output, "Granted the complimentary %s plan to %s until %s by %s at %s\n", *plan, *slug, endText, operator, now.Format(time.RFC3339))
-	return err
+	if _, err := fmt.Fprintf(output, "Granted the complimentary %s plan to %s until %s by %s at %s\n", *plan, *slug, endText, operator, now.Format(time.RFC3339)); err != nil {
+		return err
+	}
+	return describePrevious(output, previous)
 }
 
 // operatorName is the person recorded in the audit trail: --by, else the operating system user.
@@ -89,4 +95,21 @@ func operatorName(flagValue string) (string, error) {
 		return "", errors.New("cannot tell who you are; pass --by <name>")
 	}
 	return current.Username, nil
+}
+
+// describePrevious tells the operator what happened to the grant that was in force.
+func describePrevious(output io.Writer, previous *store.PreviousGrant) error {
+	if previous == nil {
+		return nil
+	}
+	until := "forever"
+	if previous.Until != nil {
+		until = previous.Until.UTC().Format(time.RFC3339)
+	}
+	if previous.Expired {
+		_, err := fmt.Fprintf(output, "The previous grant (by %s) had expired on %s.\n", previous.GrantedBy, until)
+		return err
+	}
+	_, err := fmt.Fprintf(output, "Replaced the grant by %s that ran until %s.\n", previous.GrantedBy, until)
+	return err
 }

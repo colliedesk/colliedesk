@@ -4,11 +4,11 @@ import type { Billing } from '../../api/schemas';
 import { BillingPage } from './billing-page';
 
 const free: Billing = {
-  plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0,
+  plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, complimentary: false, complimentary_until: null,
   limits: { agents: 10 }, usage: { agents: 2, pending_invites: 0, replies_last_24h: 0 },
 };
 const team: Billing = {
-  plan: 'team', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'active', current_period_end: '2026-11-15T09:30:00Z', cancel_at_period_end: false, active_subscriptions: 1,
+  plan: 'team', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'active', current_period_end: '2026-11-15T09:30:00Z', cancel_at_period_end: false, active_subscriptions: 1, complimentary: false, complimentary_until: null,
   limits: { agents: 10 }, usage: { agents: 6, pending_invites: 0, replies_last_24h: 0 },
 };
 
@@ -77,3 +77,18 @@ test('pending invites are shown because they hold a seat against the cap', () =>
   expect(screen.getByText(/1 of 10 agents, plus 2 pending invites/i)).toBeInTheDocument();
 });
 
+
+test('a complimentary workspace says so, shows its end and offers no billing portal or checkout', () => {
+  const comp: Billing = { ...team, status: 'canceled', current_period_end: '2027-01-01T00:00:00Z', complimentary: true, complimentary_until: '2027-01-01T00:00:00Z', active_subscriptions: 1 };
+  render(<BillingPage billing={comp} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.getByText(/complimentary team plan \(until jan 1, 2027/i)).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /manage billing/i })).not.toBeInTheDocument();
+  expect(screen.queryByText(/cancels|renews/i)).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /\$49/ })).not.toBeInTheDocument();
+});
+
+test('a complimentary plan with no end says it has none', () => {
+  const comp: Billing = { ...team, status: 'active', current_period_end: null, complimentary: true, complimentary_until: null };
+  render(<BillingPage billing={comp} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.getByText(/^complimentary team plan$/i)).toBeInTheDocument();
+});
