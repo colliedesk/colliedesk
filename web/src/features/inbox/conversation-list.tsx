@@ -15,6 +15,8 @@ interface ConversationListProps {
   hasNextPage: boolean;
   onPage?: (page: number) => void;
   filtered?: boolean;
+  // The Open view is empty but the workspace has conversations: caught up, not new.
+  nothingOpen?: boolean;
   loading?: boolean;
   failed?: boolean;
   onRetry?: () => void;
@@ -25,12 +27,12 @@ interface ConversationListProps {
 
 const visibleTags = 2;
 
-export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, loading = false,
+export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false,
   failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings }: ConversationListProps) {
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
   const now = useNow(timezone);
   const settled = !loading && !failed;
-  const brandNew = items.length === 0 && !filtered && settled && page === 1;
+  const brandNew = items.length === 0 && !filtered && !nothingOpen && settled && page === 1;
   const settingsLink = (label: string) => <a href="/settings" onClick={(event) => {
     if (!onOpenSettings) return;
     event.preventDefault();
@@ -49,7 +51,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
       </section>}
       {failed && <div className="empty-copy"><p role="alert" className="error-copy">{messages.conversationsFailed}</p>
         <button type="button" onClick={() => onRetry?.()}>{messages.tryAgain}</button></div>}
-      {items.length === 0 && !brandNew && settled && <div className="empty-copy"><p>{messages.noConversations}</p>
+      {items.length === 0 && !brandNew && settled && <div className="empty-copy"><p>{nothingOpen ? messages.noOpenConversations : messages.noConversations}</p>
         {filtered && onClearFilters && <button type="button" onClick={onClearFilters}>{messages.clearFilters}</button>}</div>}
       {items.map((item, index) => {
         const group = dayGroup(item.updated_at, timezone, now);

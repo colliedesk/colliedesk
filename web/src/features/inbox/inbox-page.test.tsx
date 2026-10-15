@@ -181,15 +181,15 @@ test('an empty filtered list says no conversation matches', () => {
   expect(screen.getByText('No conversations match these filters.')).toBeInTheDocument();
 });
 
-test('an empty filtered list offers a way out that clears every filter', () => {
+test('an empty filtered list offers a way out that clears every filter back to the Open view', () => {
   const onFilters = vi.fn();
   render(<InboxPage conversations={[]} filtered onFilters={onFilters} />);
   fireEvent.change(screen.getByRole('searchbox', { name: /search conversations/i }), { target: { value: 'refund' } });
   fireEvent.click(screen.getByRole('radio', { name: 'Pending' }));
   fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
-  expect(onFilters).toHaveBeenLastCalledWith({});
+  expect(onFilters).toHaveBeenLastCalledWith({ status: 'open' });
   expect(screen.getByRole('searchbox', { name: /search conversations/i })).toHaveValue('');
-  expect(screen.getByRole('radio', { name: 'All' })).toBeChecked();
+  expect(screen.getByRole('radio', { name: 'Open' })).toBeChecked();
   expect(screen.getByRole('searchbox', { name: /search conversations/i })).toHaveFocus();
 });
 

@@ -9,6 +9,9 @@ interface InboxFiltersProps {
   focusSearch?: boolean;
 }
 
+// The inbox starts on what still needs an answer; a Freshdesk import brings years of closed tickets.
+export const defaultInboxFilters: Record<string, string> = { status: 'open' };
+
 const statusTabs = [['', messages.allConversations], ...Object.entries(messages.statuses)] as const;
 
 // Search and the Filter menu sit above the status tabs, in the same order on screen and for Tab.
@@ -17,9 +20,16 @@ const statusTabs = [['', messages.allConversations], ...Object.entries(messages.
 export function InboxFilters({ tags, onChange, focusSearch = false }: InboxFiltersProps) {
   const [active, setActive] = useState(0);
   const menu = useRef<HTMLDetailsElement>(null);
+  const pickedStatus = useRef(false);
   const update = (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const form = event.currentTarget.form;
     if (!form) return;
+    if (event.currentTarget.name === 'status') pickedStatus.current = true;
+    // Search looks through every status unless the agent chose one: an imported ticket is usually closed.
+    if (event.currentTarget.name === 'search' && event.currentTarget.value && !pickedStatus.current) {
+      const all = form.querySelector<HTMLInputElement>('input[name="status"][value=""]');
+      if (all) all.checked = true;
+    }
     const values = Object.fromEntries(new FormData(form).entries()) as Record<string, string>;
     setActive([values.assignee, values.tag].filter(Boolean).length);
     onChange?.(values);
@@ -61,7 +71,7 @@ export function InboxFilters({ tags, onChange, focusSearch = false }: InboxFilte
       </div>
       <div className="status-tabs" role="radiogroup" aria-label={messages.status}>
         {statusTabs.map(([value, label]) => (
-          <label key={value}><input type="radio" name="status" value={value} defaultChecked={value === ''} onChange={update} /><span>{label}</span></label>
+          <label key={value}><input type="radio" name="status" value={value} defaultChecked={value === defaultInboxFilters.status} onChange={update} /><span>{label}</span></label>
         ))}
       </div>
     </form>

@@ -9,12 +9,18 @@ support email**, **Import from Freshdesk** and **Invite your team** (admins see 
 cannot be loaded, it says so with **Try again** instead.
 
 **Find conversations**
-- Filter by **Status** (Open, Pending, Resolved, Closed), **Assignee** (Any assignee, Assigned to me,
+- The inbox opens on **Open** conversations, the ones that still need an answer. **All** shows every
+  status. When nothing is open but the workspace has conversations, the list says so instead of
+  showing the new-workspace steps.
+- Filter by **Status** (All, Open, Pending, Resolved, Closed), **Assignee** (Any assignee, Assigned to me,
   Unassigned) and **Tag**.
-- **Search conversations** matches subject and message text. Characters such as `%` and `_`
-  are matched literally.
-- When nothing matches, **Clear filters** below the message resets search, status, assignee and
-  tag in one step.
+- **Search conversations** matches subject and message text, in every status unless you picked a
+  status tab first, so imported closed tickets are found. Characters such as `%` and `_` are matched
+  literally.
+- A conversation you opened stays on screen after you resolve or close it, although it leaves the
+  Open list.
+- When nothing matches, **Clear filters** below the message resets search, assignee and tag, and
+  returns to **Open**, in one step.
 - The list is ordered by latest activity and grouped under **Today** and **Earlier**. Use **Previous page** and **Next page** below the list to move; they appear only when there is more than one page.
 - Dates from an earlier year show the year, for example imported history.
 - The list loads again each time you open the inbox, so mail that arrived meanwhile is there.

@@ -55,6 +55,7 @@ export const messages = {
   filter: 'Filter',
   filtersActive: (count: number) => `${count} filter${count === 1 ? '' : 's'} active`,
   noConversations: 'No conversations match these filters.',
+  noOpenConversations: 'No open conversations. Every customer has an answer.',
   clearFilters: 'Clear filters',
   previousPage: 'Previous page',
   nextPage: 'Next page',

@@ -3,7 +3,7 @@ import type { Agent, Conversation, Message, Tag, TimeEntry } from '../../api/sch
 import type { UpdateConversationRequest } from '../../api/client';
 import { ConversationList } from './conversation-list';
 import { DetailsPanel } from './details-panel';
-import { InboxFilters } from './inbox-filters';
+import { InboxFilters, defaultInboxFilters } from './inbox-filters';
 import { ReplyComposer } from './reply-composer';
 import { TimelinePanel } from './timeline-panel';
 import { messages } from '../../messages';
@@ -31,6 +31,7 @@ interface InboxPageProps {
   // deliveryNotice explains a refused retry of a failed delivery.
   deliveryNotice?: string;
   filtered?: boolean;
+  nothingOpen?: boolean;
   loading?: boolean;
   failed?: boolean;
   onRetry?: () => void;
@@ -38,12 +39,12 @@ interface InboxPageProps {
   onOpenSettings?: () => void;
 }
 
-export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, loading, failed, onRetry, canManage, onOpenSettings }: InboxPageProps) {
+export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, failed, onRetry, canManage, onOpenSettings }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Filters are an uncontrolled form; clearing remounts it so every field returns to its default.
   const [filterGeneration, setFilterGeneration] = useState(0);
-  const clearFilters = () => { setFilterGeneration((current) => current + 1); onFilters?.({}); };
+  const clearFilters = () => { setFilterGeneration((current) => current + 1); onFilters?.({ ...defaultInboxFilters }); };
   const detailsToggle = useRef<HTMLButtonElement>(null);
   const listPane = useRef<HTMLElement>(null);
   const closeDetails = () => { setDetailsOpen(false); (detailsToggle.current ?? listPane.current)?.focus(); };
@@ -70,7 +71,7 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
           <InboxFilters key={filterGeneration} tags={tags} onChange={onFilters} focusSearch={filterGeneration > 0} />
         </header>
         <ConversationList items={conversations} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
-          page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} loading={loading}
+          page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} nothingOpen={nothingOpen} loading={loading}
           failed={failed} onRetry={onRetry} onClearFilters={clearFilters} canManage={canManage} onOpenSettings={onOpenSettings} />
       </section>
       <div className="conversation-center panel">
