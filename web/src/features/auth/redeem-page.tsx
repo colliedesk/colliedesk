@@ -30,8 +30,9 @@ export function RedeemPage({
       </div>
       <section className="redeem-panel">
         <div className="brand-lockup"><LogoMark size={36} /><span>{messages.brand}</span></div>
-        <h1>{messages.openSecureLink}</h1>
-        <p>{messages.redeemExplanation}</p>
+        {/* Without a link in hand, cloud sign-in is an emailed code, so the page is titled as a sign-in. */}
+        <h1>{!token && cloudEnabled ? messages.cloudSignInTitle : messages.openSecureLink}</h1>
+        <p>{!token && cloudEnabled ? messages.cloudSignInExplanation : messages.redeemExplanation}</p>
         {!token && !cloudEnabled && <p className="muted-copy">{messages.requestLink}</p>}
         {!token && cloudEnabled && <div className="cloud-sign-in">
           {workspaces.length > 0 ? <>
