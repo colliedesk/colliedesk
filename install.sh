@@ -109,7 +109,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U colliedesk -d colliedesk"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U colliedesk -d colliedesk"]
       interval: 3s
       timeout: 3s
       retries: 20

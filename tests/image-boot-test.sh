@@ -34,8 +34,9 @@ fi
   -e POSTGRES_DB=colliedesk -e POSTGRES_USER=colliedesk -e POSTGRES_PASSWORD="$PASSWORD" \
   postgres:17-bookworm >/dev/null
 
+# Over TCP: during init the entrypoint runs a socket-only server that is about to restart.
 attempt=0
-until "$DOCKER" exec "$NAME-postgres" pg_isready -U colliedesk -d colliedesk >/dev/null 2>&1; do
+until "$DOCKER" exec "$NAME-postgres" pg_isready -h 127.0.0.1 -U colliedesk -d colliedesk >/dev/null 2>&1; do
   attempt=$((attempt + 1))
   if [ "$attempt" -ge 60 ]; then
     echo "postgres did not become ready" >&2
