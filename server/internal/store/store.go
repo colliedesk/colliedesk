@@ -17,6 +17,8 @@ type Store struct {
 	// limits turns on the trial, lock and agent cap of the hosted cloud; the zero value (self-hosted) has none.
 	limits bool
 	clock  func() time.Time
+	// foundingStorage replaces the Founding plan's storage cap when above zero; tests use a small one.
+	foundingStorage int64
 }
 
 func New(pool *pgxpool.Pool) *Store {
@@ -48,6 +50,14 @@ func scoped[T any](ctx context.Context, s *Store, workspaceID string, fn func(pg
 func (s *Store) WithPlanLimits(enabled bool) *Store {
 	copy := *s
 	copy.limits = enabled
+	return &copy
+}
+
+// WithFoundingStorageBytes returns a store that applies cap instead of the Founding plan's 20 GiB.
+// Zero keeps the default.
+func (s *Store) WithFoundingStorageBytes(cap int64) *Store {
+	copy := *s
+	copy.foundingStorage = cap
 	return &copy
 }
 

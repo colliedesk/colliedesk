@@ -245,8 +245,43 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
 - Any path that stores a new attachment must call `CheckStorage` in its transaction before writing the
   bytes and map the error through `writeStoreError` (it answers 403 with the same code). Web reply
   attachments, when they land, are one such path.
+- **Founding plan: 20 GiB, imports included.** `domain.FoundingStorageBytes` (21474836480). Founding is
+  $100 once a year for life and attachments are the one cost that grows without bound (break-even is
+  roughly 41-56 GB), so it has a cap. Unlike the trial, imported files count: the number is
+  `workspaces.stored_storage_bytes`, the sum of every attachment, kept by the same triggers (migration
+  `founding-storage-counter`, additive; the three trigger functions now update both counters). Team has
+  no cap. Over the cap nothing is deleted. Inbound customer mail is exempt (`Store.CheckInboundStorage` lets Founding
+  through, so it is stored in full and its bytes still count: a bounced customer email hurts the paying
+  team's own customers and looks like an outage; the cost is bounded by real mail). The cap still refuses
+  what an agent or an import supplies (`Store.CheckStorage`, the importer's guard). There is no agent
+  upload or reply-attachment endpoint yet: `CheckStorage` has one production caller, `CheckInboundStorage`,
+  and its tests (`TestCheckStorage...`) prove the store function, not an upload route. **Any future
+  upload route must call `CheckStorage` before writing and get a test of its own.** Reading, replies
+  without new files and export are untouched. The trial and a locked workspace still refuse inbound mail.
+- **Import on Founding: one check, before any write; then admitted.** The ticket list does not carry
+  attachment sizes, so `freshdesk.guardFoundingStorage` runs a read-only pass first: the dry-run
+  listing and id probing (`listTickets`, `classifyTickets`, which the real run then repeats), then a
+  read of each ticket and of its conversations (paged, so at least two calls per ticket), adding up
+  the reported sizes of attachments the ledger does not hold yet. It then re-reads the room (the pass
+  can take hours) and, if `used + needed` passes the cap, returns `*freshdesk.StorageCapError` (human
+  sizes) and writes nothing. A ticket whose read fails is tried `sizingAttempts` times, each with the
+  client's own retry and backoff; a persistent failure stops the run before any write. A ticket that
+  is gone (404) or forbidden (403) is not retried: it is skipped and listed, as the real import fails
+  that ticket and goes on (`Report.StorageCap.SkippedTickets` in a dry run). **No cap check
+  after that:** an admitted import is never stopped by the cap, so bytes that arrive meanwhile (inbound
+  mail is exempt; uploads and a file added at the source after the pass) may take usage past
+  20 GiB, by whatever arrives while the import runs (the real run lists the tickets again, so tickets
+  created at the source during the sizing window are imported without being sized; on a busy account that
+  is not small), which is accepted, and there is no partial-import path from the cap (only a full disk still
+  stops a run, as before). `--dry-run` reports the same comparison in `Report.StorageCap` without
+  refusing. The counter counts logical rows: a file attached twice counts twice although the local
+  disk stores it once, which is safe for cost. `import undo` deletes the files, and the triggers
+  release the bytes. `Options.FoundingStorageBytes` and `Store.WithFoundingStorageBytes` are test-only
+  seams that shrink the cap (kept as options because an unexported hook would mean threading a
+  package-private value through the `store` and `freshdesk` packages).
 - `GET /billing` reports (for every plan) `usage.storage_bytes`, `limits.storage_bytes` (null when uncapped) and
-  `limits.storage_warn_bytes` (80%, 1717986918), the usage at which the web app should warn.
+  `limits.storage_warn_bytes` (80%: 1717986918 on the trial, 17179869184 on Founding), the usage at which the web app
+  warns. On Founding `usage.storage_bytes` is the stored counter, imports included.
 
 ### Clock
 
