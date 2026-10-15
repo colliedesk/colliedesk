@@ -31,6 +31,7 @@ var privilegedCallSites = []string{
 	"internal/store/email-channels.go: PrivilegeInboundSecret",
 	"internal/store/email-inbound.go: PrivilegeReplyToken",
 	"internal/store/email-outbox.go: PrivilegeOutboxClaim",
+	"internal/telemetry/usage.go: PrivilegeTelemetry",
 }
 
 // poolFiles may import pgxpool. Outside the database package they only open a pool or hand it to a
