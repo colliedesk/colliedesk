@@ -38,7 +38,7 @@ seams=$(docker run --rm --entrypoint grep "$COLLIE_DESK_IMAGE" -c -e COLLIEDESK_
 
 output=$(sh "$ROOT/install.sh" --dir "$TMP" --name "Smoke Desk" --email Admin@Smoke.example </dev/null 2>&1) || fail "installer failed: $output"
 printf '%s\n' "$output"
-url=$(printf '%s\n' "$output" | grep -E "^http://localhost:$PORT/redeem\?token=[A-Za-z0-9_-]+$" | tail -n 1)
+url=$(printf '%s\n' "$output" | grep -E "^http://localhost:$PORT/sign-in\?token=[A-Za-z0-9_-]+$" | tail -n 1)
 [ -n "$url" ] || fail "installer printed no pairing URL for port $PORT"
 printf '%s' "$output" | grep -F 'collie pair --workspace smoke-desk --email admin@smoke.example' >/dev/null ||
   fail 'installer output does not say how to print a new link'

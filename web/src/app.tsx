@@ -14,14 +14,14 @@ import { LogoMark } from './ui/logo';
 
 function AppLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
-  const onRedeem = path === '/redeem';
-  const me = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: !onRedeem });
-  const signedOut = !onRedeem && me.error instanceof UnauthorizedError;
-  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config, enabled: !onRedeem });
+  const onSignIn = path === '/sign-in';
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: !onSignIn });
+  const signedOut = !onSignIn && me.error instanceof UnauthorizedError;
+  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config, enabled: !onSignIn });
   // On an instance with cloud sign-in the way back in is the sign-in page, not a new pairing link.
-  const signIn = config.data?.cloud_sign_in.enabled ? <Link to="/redeem" search={{ token: '' }}>{messages.signIn}</Link> : undefined;
+  const signIn = config.data?.cloud_sign_in.enabled ? <Link to="/sign-in">{messages.signIn}</Link> : undefined;
   // Sign-in pages have nowhere to navigate to yet.
-  if (onRedeem) return <div className="app-main"><Outlet /></div>;
+  if (onSignIn) return <div className="app-main"><Outlet /></div>;
   // Billing exists only on the hosted cloud and only admins manage it.
   const showBilling = config.data?.billing.enabled === true && me.data?.agent.role === 'admin';
   const inBilling = path.startsWith('/settings/billing');
@@ -49,14 +49,14 @@ const billingRoute = createRoute({
   validateSearch: (search: Record<string, unknown>) => ({ checkout: search.checkout === 'success' ? 'success' : '' }),
   component: () => <BillingRoute checkoutReturned={billingRoute.useSearch().checkout === 'success'} />,
 });
-const redeemRoute = createRoute({
+const signInRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/redeem',
-  validateSearch: (search: Record<string, unknown>) => ({ token: typeof search.token === 'string' ? search.token : '' }),
-  component: () => <RedeemRoute token={redeemRoute.useSearch().token} />,
+  path: '/sign-in',
+  validateSearch: (search: Record<string, unknown>): { token?: string } => (typeof search.token === 'string' ? { token: search.token } : {}),
+  component: () => <RedeemRoute token={signInRoute.useSearch().token ?? ''} />,
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, settingsRoute, billingRoute, redeemRoute]);
+export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, settingsRoute, billingRoute, signInRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

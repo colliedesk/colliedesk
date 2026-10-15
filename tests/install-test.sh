@@ -27,7 +27,7 @@ fi
 if [ "${1:-}" = compose ] && [ "${2:-}" = exec ]; then
   # Real `docker compose exec` forwards stdin even with -T; consume it the same way.
   cat >/dev/null || :
-  printf '%s\n' 'http://localhost:8080/redeem?token=pairing-token'
+  printf '%s\n' 'http://localhost:8080/sign-in?token=pairing-token'
   exit
 fi
 exit 0
@@ -63,7 +63,7 @@ mkdir -p "$existing"
 printf '%s\n' 'KEEP=unchanged' >"$existing/.env"
 output=$(sh "$ROOT/install.sh" --dir "$existing" --name Desk --email admin@example.com </dev/null)
 [ "$(cat "$existing/.env")" = 'KEEP=unchanged' ]
-printf '%s' "$output" | grep -F 'http://localhost:8080/redeem?token=pairing-token' >/dev/null
+printf '%s' "$output" | grep -F 'http://localhost:8080/sign-in?token=pairing-token' >/dev/null
 
 fresh=$TMP/fresh
 output=$(sh "$ROOT/install.sh" --dir "$fresh" --name Desk --email admin@example.com </dev/null)
@@ -89,7 +89,7 @@ grep -F 'DO_NOT_TRACK: ${DO_NOT_TRACK:-}' "$fresh/compose.yaml" >/dev/null
 # Installs whose .env predates the request login keep connecting as before.
 grep -F 'DATABASE_URL: ${DATABASE_URL:-postgres://colliedesk:${POSTGRES_PASSWORD}@postgres:5432/colliedesk?sslmode=disable}' "$existing/compose.yaml" >/dev/null
 grep -F 'POSTGRES_USER: ${POSTGRES_USER:-colliedesk}' "$existing/compose.yaml" >/dev/null
-printf '%s' "$output" | grep -F 'http://localhost:8080/redeem?token=pairing-token' >/dev/null
+printf '%s' "$output" | grep -F 'http://localhost:8080/sign-in?token=pairing-token' >/dev/null
 if printf '%s' "$output" | grep -F 0123456789abcdef >/dev/null; then
   printf '%s\n' 'installer printed a generated secret' >&2
   exit 1
@@ -98,7 +98,7 @@ fi
 piped=$TMP/piped
 # Feed the script line by line, like `curl | sh` over a network, so sh cannot buffer all of it.
 output=$(while IFS= read -r line || [ -n "$line" ]; do printf '%s\n' "$line"; sleep 0.01; done <"$ROOT/install.sh" | sh -s -- --dir "$piped" --name Desk --email admin@example.com 2>&1)
-printf '%s' "$output" | grep -F 'http://localhost:8080/redeem?token=pairing-token' >/dev/null || {
+printf '%s' "$output" | grep -F 'http://localhost:8080/sign-in?token=pairing-token' >/dev/null || {
   printf 'piped install did not print the pairing URL:\n%s\n' "$output" >&2
   exit 1
 }

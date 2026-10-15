@@ -31,7 +31,7 @@ test('self-host first run: fresh database, create-workspace, pairing link, empty
   expect(created.status, created.stderr).toBe(0);
   // stdout carries only the link (install.sh captures it); the next-step hint goes to stderr.
   const pairingURL = created.stdout.trim();
-  expect(pairingURL).toMatch(new RegExp(`^${origin}/redeem\\?token=[A-Za-z0-9_-]{32,}$`));
+  expect(pairingURL).toMatch(new RegExp(`^${origin}/sign-in\\?token=[A-Za-z0-9_-]{32,}$`));
 
   await redeemLink(page, pairingURL);
   await expect(appNavigationWith(page, 'Acme Support')).toHaveCount(1);
@@ -69,5 +69,5 @@ test('self-host first run: fresh database, create-workspace, pairing link, empty
   expect(hint, `create-workspace stderr: ${created.stderr}`).not.toBeNull();
   expect(hint?.[2]).toBe(`owner-${suffix}@example.com`);
   const repaired = mustColliedesk(['pair', '--workspace', hint?.[1] ?? '', '--email', hint?.[2] ?? ''], { databaseURL: freshURL, origin });
-  expect(repaired).toMatch(new RegExp(`^${origin}/redeem\\?token=`));
+  expect(repaired).toMatch(new RegExp(`^${origin}/sign-in\\?token=`));
 });

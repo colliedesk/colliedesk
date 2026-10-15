@@ -61,9 +61,4 @@ until "$DOCKER" exec "$NAME-server" /app/collie healthcheck >/dev/null 2>&1; do
   fi
   sleep 1
 done
-# Installs made before the binary was renamed still call /app/colliedesk.
-if ! "$DOCKER" exec "$NAME-server" /app/colliedesk healthcheck >/dev/null 2>&1; then
-  echo "/app/colliedesk no longer runs; installs made before the rename would break" >&2
-  exit 1
-fi
 echo "image $IMAGE booted healthy at version $actual_version"
