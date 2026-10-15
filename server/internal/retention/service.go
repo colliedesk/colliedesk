@@ -246,6 +246,9 @@ func (s *Service) Run(ctx context.Context) (Result, error) {
 			break
 		}
 		outcome, err := s.process(ctx, id, now)
+		if errors.Is(err, pgx.ErrNoRows) {
+			continue // another instance deleted it after the list was read
+		}
 		if err != nil {
 			s.config.Logger.Error("retention", "workspace_id", id, "slug", outcome.slug, "action", outcome.action, "error", err)
 			failures = append(failures, fmt.Errorf("workspace %s (%s): %s: %w", id, outcome.slug, outcome.action, err))
@@ -328,8 +331,9 @@ func (s *Service) process(ctx context.Context, id string, now time.Time) (out ou
 // is there.
 func (s *Service) restoreUnlessDeleted(ctx context.Context, workspaceID string, undo func() error) error {
 	var exists bool
-	err := s.config.DB.Privileged(context.WithoutCancel(ctx), database.PrivilegeRetention, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=$1)`, workspaceID).Scan(&exists)
+	detached := context.WithoutCancel(ctx) // a stop signal must not leave the files in the trash
+	err := s.config.DB.Privileged(detached, database.PrivilegeRetention, func(tx pgx.Tx) error {
+		return tx.QueryRow(detached, `SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=$1)`, workspaceID).Scan(&exists)
 	})
 	switch {
 	case err != nil:
@@ -341,8 +345,10 @@ func (s *Service) restoreUnlessDeleted(ctx context.Context, workspaceID string, 
 	return undo()
 }
 
-// reconcileAfter is how old a trash entry must be before it can belong to a crashed delete rather
-// than one still running in another process.
+// reconcileAfter is how old a trash entry must be before it is treated as left by a crashed delete.
+// The real guard against undoing a delete that is still running is the workspace row lock: a pass
+// waits for it before it reaches the trash. The hour only covers a delete that has renamed the
+// files but not yet taken its lock.
 const reconcileAfter = time.Hour
 
 // maintainTrash puts back the files of a workspace that still exists (a delete that crashed after

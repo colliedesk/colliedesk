@@ -837,3 +837,44 @@ func TestAWorkspaceWithoutAttachmentsDeletesEvenIfItHasNoDirectory(t *testing.T)
 		t.Fatalf("workspace with no files: %+v", got)
 	}
 }
+
+// hookedDisk runs hook inside Trash, that is while the delete holds the workspace row lock.
+type hookedDisk struct {
+	*attachments.LocalDisk
+	hook func()
+}
+
+func (d *hookedDisk) Trash(ctx context.Context, workspaceID string, now time.Time) (func() error, bool, error) {
+	d.hook()
+	return d.LocalDisk.Trash(ctx, workspaceID, now)
+}
+
+func TestASecondInstanceFindingTheWorkspaceAlreadyDeletedIsNotAnError(t *testing.T) {
+	e := newEnv(t)
+	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
+	e.run(t, "2027-10-02T00:00:00Z")
+	e.now = at("2027-11-01T00:00:00Z")
+	second := make(chan error, 1)
+	instanceB := e.serviceWith(nil)
+	disk := &hookedDisk{LocalDisk: e.disk}
+	disk.hook = func() {
+		// Instance B read the same candidate list and now waits for the row lock instance A holds.
+		go func() { _, err := instanceB.Run(context.Background()); second <- err }()
+		time.Sleep(500 * time.Millisecond)
+	}
+	instanceA := e.serviceWith(func(c *retention.Config) { c.Storage = disk })
+	if got, err := instanceA.Run(context.Background()); err != nil || got.Deleted != 1 {
+		t.Fatalf("instance A: %+v, %v", got, err)
+	}
+	select {
+	case err := <-second:
+		if err != nil {
+			t.Fatalf("instance B reported %v for a workspace instance A deleted; want no error", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("instance B did not finish")
+	}
+	if e.exists(t, a.ID) {
+		t.Fatal("workspace still exists")
+	}
+}

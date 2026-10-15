@@ -266,7 +266,11 @@ never deletes.
   database and failed on the way back leaves the files in the trash to be purged). A workspace that lists
   attachments in the database but has no directory in the storage (wrong `ATTACHMENTS_DIR`) is not deleted.
   After a crash between the rename and the commit, each pass moves a trash entry older than one hour back
-  when its workspace row still exists, and never purges such an entry. Each pass purges trash entries older than 30 days, so an operator can undo a
+  when its workspace row still exists, and never purges such an entry.
+  Runbook: if the log says a trash entry "could not be restored", the workspace directory already exists
+  (the customer paid and uploaded files after the crash). Merge the two by hand
+  (`cp -an .trash/<id>-<unix>/. <id>/`, then remove the trash entry); the entry stays and the error repeats
+  hourly until you do. Each pass purges trash entries older than 30 days, so an operator can undo a
   deletion for 30 days by renaming the directory back and restoring the database rows from a backup.
 - Deleted data stays in the nightly database dumps and the attachment volume backup until they expire
   (collie-01 backup retention). Restoring one workspace from a full dump is a manual job.
