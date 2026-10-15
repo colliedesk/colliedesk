@@ -196,12 +196,13 @@ func TestHeartbeatSendsInstanceCountsAndNoPersonalData(t *testing.T) {
 	}
 
 	// The fields are exactly the ones docs/user/telemetry.md lists; a new one needs the docs first.
-	if got, want := keys(first.Properties), "$set,agents_active_30d,arch,domain,email_channel,freshdesk_import,os,realm,replies_30d,version,web_form,workspaces"; got != want {
+	if got, want := keys(first.Properties), "$process_person_profile,agents_active_30d,arch,domain,email_channel,freshdesk_import,os,realm,replies_30d,version,web_form,workspaces"; got != want {
 		t.Errorf("property keys = %s, want %s", got, want)
 	}
-	set, _ := first.Properties["$set"].(map[string]any)
-	if got, want := keys(set), "domain,realm,version"; got != want {
-		t.Errorf("$set keys = %s, want %s", got, want)
+	// An install is not a person: the report must not create one next to the people who use the
+	// website and the cloud app in the same PostHog project.
+	if first.Properties["$process_person_profile"] != false {
+		t.Errorf("$process_person_profile = %#v, want false", first.Properties["$process_person_profile"])
 	}
 
 	// Nothing that names a person, a customer or what they wrote leaves the instance.

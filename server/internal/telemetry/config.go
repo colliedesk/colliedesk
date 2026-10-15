@@ -15,7 +15,7 @@ const endpoint = "https://us.i.posthog.com"
 // projectKey is the public PostHog project key of Colliedesk usage reports. It can add events
 // (anyone can, so the reports are treated as untrusted) but cannot read them. Empty means this
 // build sends nothing.
-const projectKey = ""
+const projectKey = "phc_zDJPtLCpaVyUQg2BbFoLMrzmfQBsfLg6vEJfsTtjyQ3N"
 
 // Config says where the report goes and what describes this install.
 type Config struct {

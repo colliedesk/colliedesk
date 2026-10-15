@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"maps"
 	"net/http"
 	"runtime"
 	"time"
@@ -87,8 +86,10 @@ func (r *Reporter) SendOnce(ctx context.Context) error {
 	if !claimed {
 		return nil
 	}
-	install := map[string]any{"version": r.config.Version, "realm": r.config.Realm, "domain": r.config.Domain}
 	properties := map[string]any{
+		"version":           r.config.Version,
+		"realm":             r.config.Realm,
+		"domain":            r.config.Domain,
 		"os":                runtime.GOOS,
 		"arch":              runtime.GOARCH,
 		"workspaces":        u.workspaces,
@@ -97,9 +98,10 @@ func (r *Reporter) SendOnce(ctx context.Context) error {
 		"email_channel":     u.emailChannel,
 		"web_form":          u.webForm,
 		"freshdesk_import":  u.freshdeskImport,
-		"$set":              install,
+		// An install is not a person; the PostHog project also counts the people who use the
+		// website and the cloud app, so the report must not create a person profile.
+		"$process_person_profile": false,
 	}
-	maps.Copy(properties, install)
 	body, err := json.Marshal(map[string]any{
 		"api_key":     r.config.ProjectKey,
 		"event":       "instance heartbeat",
