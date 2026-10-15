@@ -19,7 +19,8 @@ It works the same on self-hosted installs and on Colliedesk Cloud.
    `https://example.com`. An origin is scheme, host and optional port, exactly as the browser shows
    it. No path, no trailing slash, no wildcard. `https://example.com` and `https://www.example.com`
    are two origins. At most 20.
-3. Select **Accept web form submissions** and **Save web form**.
+3. Select **Accept web form submissions** and **Save web form**. The button reads "Saving…" and
+   stays disabled until the save ends. Then "Saved" appears next to it, or the reason the save failed.
 
 The form is **off** until you do this. Clear the checkbox and save to turn it off again; your
 origins stay saved. While it is off, the form answers `404`, the same as a workspace that does not

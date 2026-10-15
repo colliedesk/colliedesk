@@ -23,9 +23,17 @@ func (r *run) writeConversation(ctx context.Context, ticket fdTicket, contactID 
 		r.warn("unknown_priority_mapped", "Ticket has an unknown Freshdesk priority; it was imported as normal.", key)
 	}
 	var assignee *string
+	// keepAssignee leaves the assignee of an existing conversation alone: a deactivated agent keeps
+	// the resolved and closed work they did, and an import must not erase that.
+	keepAssignee := false
 	if ticket.ResponderID != nil {
 		if id, matched := r.agentTargets[*ticket.ResponderID]; matched {
-			assignee = &id
+			if r.deactivatedAgents[*ticket.ResponderID] {
+				keepAssignee = true
+				r.warn("assignee_deactivated", "Ticket's Freshdesk responder is a deactivated Colliedesk agent, so the conversation was not assigned to them. Reactivate the agent and re-run to assign it.", key)
+			} else {
+				assignee = &id
+			}
 		}
 	}
 	tx, err := r.begin(ctx)
@@ -35,11 +43,12 @@ func (r *run) writeConversation(ctx context.Context, ticket fdTicket, contactID 
 	defer tx.Rollback(ctx) //nolint:errcheck
 	var id string
 	if existing != nil {
-		err = tx.QueryRow(ctx, `UPDATE conversations SET subject=$3,status=$4,priority=$5,assignee_id=$6,updated_at=$7,origin=$8,
-			assigned_at=CASE WHEN assignee_id IS DISTINCT FROM $6::uuid THEN NULL ELSE assigned_at END,
-			assigned_by_agent_id=CASE WHEN assignee_id IS DISTINCT FROM $6::uuid THEN NULL ELSE assigned_by_agent_id END
+		err = tx.QueryRow(ctx, `UPDATE conversations SET subject=$3,status=$4,priority=$5,
+			assigned_at=CASE WHEN NOT $9 AND assignee_id IS DISTINCT FROM $6::uuid THEN NULL ELSE assigned_at END,
+			assigned_by_agent_id=CASE WHEN NOT $9 AND assignee_id IS DISTINCT FROM $6::uuid THEN NULL ELSE assigned_by_agent_id END,
+			assignee_id=CASE WHEN $9 THEN assignee_id ELSE $6::uuid END,updated_at=$7,origin=$8
 			WHERE workspace_id=$1 AND id=$2 RETURNING id::text`, r.workspaceID, *existing,
-			subjectOrDefault(ticket.Subject), status, priority, assignee, ticket.UpdatedAt.UTC(), ticketOrigin(ticket)).Scan(&id)
+			subjectOrDefault(ticket.Subject), status, priority, assignee, ticket.UpdatedAt.UTC(), ticketOrigin(ticket), keepAssignee).Scan(&id)
 	}
 	if existing == nil || errors.Is(err, pgx.ErrNoRows) {
 		err = tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,status,priority,assignee_id,created_at,updated_at,origin)

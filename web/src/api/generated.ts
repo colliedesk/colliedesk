@@ -444,6 +444,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description Every agent of the workspace, deactivated ones included (old conversations and messages still name them). Clients hide deactivated agents from assignee pickers. */
         get: operations["listAgents"];
         put?: never;
         post?: never;
@@ -451,6 +452,25 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Change an agent's role or active state; send at least one of `role` and `active`. Deactivating an agent, in one transaction: sets `deactivated_at`, revokes the agent's sessions and unused sign-in links and invites, and moves the agent's open and pending conversations to `reassign_to` (to Unassigned when it is absent). Resolved and closed conversations keep their assignee. A deactivated agent cannot sign in and holds no seat. Reactivating clears `deactivated_at`, takes a seat again and does not restore assignments; the agent signs in through a new link. Sending the state an agent already has changes nothing. */
+        patch: operations["updateAgent"];
         trace?: never;
     };
     "/api/v1/workspace/timezone": {
@@ -816,6 +836,27 @@ export interface components {
             display_name: string;
             role: components["schemas"]["Role"];
             timezone_override: string | null;
+        };
+        TeamMember: {
+            /** Format: uuid */
+            id: string;
+            /** Format: email */
+            email: string;
+            display_name: string;
+            role: components["schemas"]["Role"];
+            timezone_override: string | null;
+            /**
+             * Format: date-time
+             * @description Null for an active agent.
+             */
+            deactivated_at: string | null;
+            /**
+             * Format: date-time
+             * @description The last time a session of the agent was used; null when none ever was.
+             */
+            last_active_at: string | null;
+            /** @description Open and pending conversations assigned to the agent; a deactivation moves them. */
+            open_conversations: number;
         };
         Redeemed: {
             token?: string;
@@ -1603,6 +1644,15 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["PlanLimitReached"];
             403: components["responses"]["Forbidden"];
+            /** @description The address belongs to a deactivated agent (error code `agent_deactivated`). Reactivate the agent in the team list instead of inviting them again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     revokeInvite: {
@@ -2179,18 +2229,66 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Workspace agents */
+            /** @description Workspace team */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        items: components["schemas"]["Agent"][];
+                        items: components["schemas"]["TeamMember"][];
                     };
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    updateAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    role?: components["schemas"]["Role"];
+                    active?: boolean;
+                    /**
+                     * Format: uuid
+                     * @description Only with `active: false`. An active agent of this workspace other than the one being deactivated; an invalid target is `invalid_reassign_target` and nothing changes.
+                     */
+                    reassign_to?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description The agent after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamMember"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PlanLimitReached"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The change would leave the workspace without an active admin (error code `last_admin`). Make another agent an admin first. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     updateWorkspaceTimezone: {

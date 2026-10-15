@@ -94,6 +94,30 @@ and billing are both configured, so a self-hosted server never offers it. Code:
   `xn--`); every candidate is checked as a hosted label; if it is taken, reserved for mail (`support`, `help`) or empty it
   becomes `<base>-<4 hex>`, tried up to twice more, then 409 `slug_unavailable`.
 
+### Deactivated agents
+
+`agents.deactivated_at` (null = active) turns off every way in at the point where an agent is looked up, so
+no path depends on remembering the flag: `Authenticate` joins on it (an old session of a deactivated agent
+fails like a revoked one), `Redeem` refuses a pairing link of a deactivated agent and an invite whose address
+belongs to one, `Pair` and the cloud sign-in lookup skip them. Deactivating also sets `revoked_at` on the
+agent's sessions and unused links, so the data says the same thing as the checks. Reactivation does not
+revive either; the agent signs in with a new link. Redeem takes `FOR SHARE` on the agent row, so a redeem
+and a deactivation never interleave: whichever starts first finishes first, and a later redeem sees the flag.
+The deactivation revokes links before it takes any other lock, because a redeem in flight holds its link and
+then waits for the seat lock or the agent row; the other order deadlocks. Code: `store/agents.go`, `auth/links.go`.
+
+Demoting an admin to agent also revokes the unused admin-ceiling invites sent to that address, so a pending
+invite cannot hand the role back. Inviting an existing agent still changes their role on redeem, as before.
+
+Lock order for anything that assigns conversations: the agent row (`store.ValidateAssignee`, `FOR SHARE`;
+deactivation uses `FOR UPDATE`), then the conversations in id order (`FOR NO KEY UPDATE`), then
+`conversation_tags`. A bulk path must follow the same order.
+
+The last-admin rule (409 `last_admin`) counts other active admins inside the transaction, under the
+agent-seats advisory lock, so two admins demoting each other at once cannot both succeed. A role change takes
+effect for new requests at once, but an existing session keeps the role ceiling its link gave it; the person
+signs in again to use a higher role.
+
 ### Verification traps
 
 - Customize the Clerk session token (Clerk Dashboard, Sessions, Customize session token) with

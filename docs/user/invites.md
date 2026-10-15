@@ -11,8 +11,7 @@ The role ceiling is a maximum: an invite can never give more access than its cei
 the person already has a higher role. Revoke an unused invite with **Revoke** in the invite list.
 
 Each invite shows its state: **Pending** (not used yet), **Accepted**, **Revoked** or **Expired**.
-Only a pending invite can be revoked. To remove a teammate who already joined, revoke their
-devices in [Sessions and devices](sessions.md).
+Only a pending invite can be revoked. To end a teammate's access after they joined, deactivate them in [Manage your team](team.md).
 
 Roles:
 
@@ -23,7 +22,7 @@ Roles:
 
 ## Agent limit on the hosted cloud
 
-On the hosted cloud, during the trial and on the Team and Founding plans, an agent and a pending
-invite each take one of 10 seats. Creating an eleventh fails with a message that names the limit.
+On the hosted cloud, during the trial and on the Team and Founding plans, an active agent and a pending
+invite each take one of 10 seats; a [deactivated](team.md) agent takes none. Creating an eleventh fails with a message that names the limit.
 Revoke an invite you no longer need. See [Plan and billing](billing.md). A locked workspace (trial or
 subscription ended) cannot create or accept invites until it has a plan.

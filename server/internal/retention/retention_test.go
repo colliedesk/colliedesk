@@ -878,3 +878,24 @@ func TestASecondInstanceFindingTheWorkspaceAlreadyDeletedIsNotAnError(t *testing
 		t.Fatal("workspace still exists")
 	}
 }
+
+func TestDeactivatedAdminsAreNotNoticedAndNeverCountAsReached(t *testing.T) {
+	e := newEnv(t)
+	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example", "bob@alpha.example")
+	e.exec(t, `UPDATE agents SET deactivated_at=now() WHERE workspace_id=$1 AND email='bob@alpha.example'`, a.ID)
+	e.mailer.fail = func(to string) error {
+		if to == "ann@alpha.example" {
+			return &textproto.Error{Code: 550, Msg: "no such user"}
+		}
+		return nil
+	}
+	got := e.run(t, "2027-10-02T00:00:00Z")
+	for _, sent := range e.mailer.sent {
+		if sent.To == "bob@alpha.example" {
+			t.Fatalf("a notice was mailed to a deactivated admin: %+v", e.mailer.sent)
+		}
+	}
+	if got.Noticed != 0 || e.noticeSentAt(t, a.ID) != nil {
+		t.Fatalf("the only deliverable mailbox belongs to a deactivated admin, yet the notice counts as sent: %+v", got)
+	}
+}

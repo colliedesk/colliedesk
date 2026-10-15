@@ -4,6 +4,8 @@ import type { Invite, Session } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { AppearanceSection } from './appearance-section';
+import { useSaveFeedback } from './save-feedback';
+import type { SaveState } from './save-feedback';
 
 interface SettingsPageProps {
   sessions: Session[];
@@ -21,8 +23,12 @@ interface SettingsPageProps {
   onSetAgentTimezone?: (timezone: string | null) => void;
   loading?: boolean;
   error?: string;
+  workspaceTimezoneSave?: SaveState;
+  personalTimezoneSave?: SaveState;
   // inviteError explains a refused invite, for example a full agent cap.
   inviteError?: string;
+  // teamSection lists the agents; it comes before sessions and invites, which belong to the same people.
+  teamSection?: ReactNode;
   emailSection?: ReactNode;
   // exportSection is the admin's whole-workspace export.
   exportSection?: ReactNode;
@@ -43,13 +49,15 @@ function inviteState(invite: Invite): keyof typeof messages.inviteStates {
 
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
   workspaceTimezone = 'UTC', timezoneOverride = null, createdInviteUrl, onCreateInvite, onRevokeInvite,
-  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, inviteError, emailSection, webFormSection, exportSection }: SettingsPageProps) {
+  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, emailSection, webFormSection, exportSection }: SettingsPageProps) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'admin' | 'agent'>('agent');
   const [workspaceZone, setWorkspaceZone] = useState(workspaceTimezone);
   const [agentZone, setAgentZone] = useState(timezoneOverride ?? '');
   useEffect(() => setWorkspaceZone(workspaceTimezone), [workspaceTimezone]);
   useEffect(() => setAgentZone(timezoneOverride ?? ''), [timezoneOverride]);
+  const workspaceFeedback = useSaveFeedback(workspaceTimezoneSave);
+  const personalFeedback = useSaveFeedback(personalTimezoneSave);
   return (
     <main className="settings-page panel">
       <header><h1>{messages.settings}</h1><p>{messages.workspaceSettings}</p></header>
@@ -57,13 +65,14 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
       {error && <p role="alert" className="error-copy">{error}</p>}
       <section className="settings-card"><div className="section-heading"><h2>{messages.timezoneSettings}</h2><p>{messages.timezoneDescription}</p></div>
         <div className="settings-body">
-          {canManageWorkspace && <label className="field"><span>{messages.workspaceTimezone}</span><span className="input-with-actions"><input value={workspaceZone} onChange={(event) => setWorkspaceZone(event.target.value)} />
-            <button type="button" onClick={() => onSetWorkspaceTimezone?.(workspaceZone)}>{messages.saveWorkspaceTimezone}</button></span></label>}
-          <label className="field"><span>{messages.personalTimezoneOverride}</span><span className="input-with-actions"><input value={agentZone} placeholder={workspaceTimezone} onChange={(event) => setAgentZone(event.target.value)} />
-            <button type="button" onClick={() => onSetAgentTimezone?.(agentZone)}>{messages.savePersonalTimezone}</button>
-              <button type="button" onClick={() => { setAgentZone(''); onSetAgentTimezone?.(null); }}>{messages.clearPersonalTimezone}</button></span></label>
+          {canManageWorkspace && <label className="field"><span>{messages.workspaceTimezone}</span><span className="input-with-actions"><input value={workspaceZone} onChange={(event) => { workspaceFeedback.touch(); setWorkspaceZone(event.target.value); }} />
+            <button type="button" disabled={workspaceFeedback.pending} onClick={() => { if (!workspaceFeedback.pending) onSetWorkspaceTimezone?.(workspaceZone); }}>{workspaceFeedback.saveLabel(messages.saveWorkspaceTimezone)}</button>{workspaceFeedback.status}</span></label>}
+          <label className="field"><span>{messages.personalTimezoneOverride}</span><span className="input-with-actions"><input value={agentZone} placeholder={workspaceTimezone} onChange={(event) => { personalFeedback.touch(); setAgentZone(event.target.value); }} />
+            <button type="button" disabled={personalFeedback.pending} onClick={() => { if (!personalFeedback.pending) onSetAgentTimezone?.(agentZone); }}>{personalFeedback.saveLabel(messages.savePersonalTimezone)}</button>
+              <button type="button" disabled={personalFeedback.pending} onClick={() => { if (personalFeedback.pending) return; setAgentZone(''); onSetAgentTimezone?.(null); }}>{messages.clearPersonalTimezone}</button>{personalFeedback.status}</span></label>
         </div>
       </section>
+      {teamSection}
       {emailSection}
       {webFormSection}
       <AppearanceSection />
