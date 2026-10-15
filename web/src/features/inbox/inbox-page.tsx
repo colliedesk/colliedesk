@@ -43,6 +43,9 @@ interface InboxPageProps {
 export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, loading, refreshing, timelineLoading, failed, onRetry, canManage, onOpenSettings }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // Filters are an uncontrolled form; clearing remounts it so every field returns to its default.
+  const [filterGeneration, setFilterGeneration] = useState(0);
+  const clearFilters = () => { setFilterGeneration((current) => current + 1); onFilters?.({}); };
   const detailsToggle = useRef<HTMLButtonElement>(null);
   const listPane = useRef<HTMLElement>(null);
   const closeDetails = () => { setDetailsOpen(false); (detailsToggle.current ?? listPane.current)?.focus(); };
@@ -66,11 +69,11 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
       <section className="list-pane panel" ref={listPane} tabIndex={-1} aria-label={messages.conversationList}>
         <header>
           <div className="list-title"><h1>{messages.inbox}</h1><span>{conversations.length}</span></div>
-          <InboxFilters tags={tags} onChange={onFilters} />
+          <InboxFilters key={filterGeneration} tags={tags} onChange={onFilters} focusSearch={filterGeneration > 0} />
         </header>
         <ConversationList items={conversations} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
           page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} loading={loading} refreshing={refreshing}
-          failed={failed} onRetry={onRetry} canManage={canManage} onOpenSettings={onOpenSettings} />
+          failed={failed} onRetry={onRetry} onClearFilters={clearFilters} canManage={canManage} onOpenSettings={onOpenSettings} />
       </section>
       <div className="conversation-center panel">
         <TimelinePanel conversation={selected} items={timeline} timeEntries={timeEntries} loading={timelineLoading} timezone={timezone} onRetryDelivery={onRetryDelivery}

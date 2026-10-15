@@ -66,11 +66,11 @@ func TestCreateWorkspaceAndPairPrintFreshOneTimeURLs(t *testing.T) {
 		t.Fatalf("stdout must hold only the link (install.sh captures it): %q", first.String())
 	}
 	// A self-hoster whose link expired cannot sign in to look up the slug, so creation tells them.
-	if want := "colliedesk pair --workspace cli-desk --email admin@cli.example.com"; !strings.Contains(hint.String(), want) {
+	if want := "collie pair --workspace cli-desk --email admin@cli.example.com"; !strings.Contains(hint.String(), want) {
 		t.Fatalf("create-workspace hint %q does not contain %q", hint.String(), want)
 	}
 	parsed, err := url.Parse(firstURL)
-	if err != nil || parsed.Query().Get("token") == "" || parsed.Path != "/redeem" {
+	if err != nil || parsed.Query().Get("token") == "" || parsed.Path != "/sign-in" {
 		t.Fatalf("invalid pairing URL %q: %v", firstURL, err)
 	}
 

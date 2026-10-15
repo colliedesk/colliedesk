@@ -28,12 +28,12 @@ const binDir = join(scratchDir, 'bin');
 const built = new Set<string>();
 
 // binary builds the real CLI from source once per test worker; tags 'e2e' adds only the
-// fake-Freshdesk network seam (cmd/colliedesk/e2e_freshdesk.go).
+// fake-Freshdesk network seam (cmd/collie/e2e_freshdesk.go).
 export function binary(tags = ''): string {
   const path = `${binDir}/colliedesk${tags ? `-${tags}` : ''}`;
   if (!built.has(path)) {
     mkdirSync(binDir, { recursive: true });
-    const result = spawnSync('go', ['build', ...(tags ? ['-tags', tags] : []), '-o', path, './cmd/colliedesk'], {
+    const result = spawnSync('go', ['build', ...(tags ? ['-tags', tags] : []), '-o', path, './cmd/collie'], {
       cwd: '../server', encoding: 'utf8', env: { ...process.env, ...goEnv },
     });
     if (result.status !== 0) throw new Error(`go build failed: ${result.stderr}`);
@@ -97,7 +97,7 @@ export function withDatabase(url: string, database: string): string {
   return parsed.toString();
 }
 
-// startServer runs `colliedesk serve` on its own port and resolves once it answers.
+// startServer runs `collie serve` on its own port and resolves once it answers.
 export async function startServer(port: number, env: Record<string, string>): Promise<ChildProcess> {
   const child = spawn(binary(), ['serve', '--listen', `127.0.0.1:${port}`], {
     stdio: ['ignore', 'inherit', 'inherit'],
@@ -105,7 +105,7 @@ export async function startServer(port: number, env: Record<string, string>): Pr
   });
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
-    if (child.exitCode !== null) throw new Error(`colliedesk serve exited with ${child.exitCode}`);
+    if (child.exitCode !== null) throw new Error(`collie serve exited with ${child.exitCode}`);
     try {
       const response = await fetch(`http://localhost:${port}/`);
       if (response.ok) return child;
@@ -113,7 +113,7 @@ export async function startServer(port: number, env: Record<string, string>): Pr
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   child.kill('SIGTERM');
-  throw new Error(`colliedesk serve on ${port} did not start`);
+  throw new Error(`collie serve on ${port} did not start`);
 }
 
 export async function stopServer(child: ChildProcess | undefined): Promise<void> {
