@@ -14,6 +14,13 @@ dark is an opt-in. The app and the colliedesk.com site share one set of tokens.
   URLs and keycaps.
 - List header: status tabs (All, Open, Pending, Resolved, Closed), then search beside one
   **Filter** menu for assignee and tag with a count of active filters.
+- Bulk actions: a checkbox at the left of each row and a **Select all on this page** row. Once a row
+  is ticked, the action bar (`role="group"`, named "Bulk actions") replaces the title and filters; the filters stay
+  mounted (hidden) so their state survives. Each choice is a button in a `<details>` menu, never a
+  `<select>`: a select fires on every arrow key in some browsers and one stray key would rewrite
+  fifty conversations. Success clears the selection and writes `role="status"`; failure writes
+  `role="alert"` and keeps the selection. Focus follows the change: after success or Clear it goes to
+  **Select all on this page** (the list pane when no rows remain); after a failure it stays on the menu used.
 - Rows: bold subject and time, then one meta line (status dot and word, priority, `#tags`).
 - Thread: incoming messages on `--surface-2`, replies on `--accent-soft`, private notes amber.
   Composer: a raised card with Reply / Private note tabs (keys **R** and **N**) and
