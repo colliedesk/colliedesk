@@ -33,8 +33,8 @@ jobs:
     env:
       TEST_DATABASE_URL: postgres://colliedesk:colliedesk@127.0.0.1:5432/colliedesk_test?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.26.x'
           cache: false
@@ -51,11 +51,11 @@ jobs:
   web:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: web/package.json
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '22.x'
           package-manager-cache: false
@@ -83,15 +83,15 @@ jobs:
     env:
       TEST_DATABASE_URL: postgres://colliedesk:colliedesk@127.0.0.1:5432/colliedesk_test?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.26.x'
           cache: false
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: web/package.json
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '22.x'
           package-manager-cache: false
@@ -128,15 +128,15 @@ jobs:
       MAILPIT_SMTP_PORT: '1025'
       MAILPIT_API_URL: http://127.0.0.1:8025
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.26.x'
           cache: false
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: web/package.json
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '22.x'
           package-manager-cache: false
@@ -156,12 +156,12 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: version
         run: echo "value=edge-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - name: Build image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: server/Dockerfile
@@ -178,7 +178,7 @@ jobs:
         env:
           COLLIE_DESK_IMAGE: colliedesk:ci
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -186,7 +186,7 @@ jobs:
       # Same builder and inputs as the loaded image, so this pushes the layers that just booted.
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         name: Push tested image as sha-<commit>
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: server/Dockerfile
@@ -199,7 +199,7 @@ jobs:
   compose-smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Start the stack from compose.yaml and reach the server
         run: sh tests/compose-smoke.sh
 
@@ -209,7 +209,7 @@ jobs:
     needs: [go, web, e2e, onboarding, image, compose-smoke]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: ci-ok waits for every job
         run: sh tests/ci-ok-needs-test.sh
       - name: Every job passed or was skipped
@@ -231,7 +231,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: head
         run: |
           head=$(git ls-remote origin refs/heads/main | cut -f1)
@@ -240,13 +240,13 @@ jobs:
             echo "current=false" >> "$GITHUB_OUTPUT"
           fi
       - if: steps.head.outputs.current == 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - if: steps.head.outputs.current == 'true'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       - if: steps.head.outputs.current == 'true'
         name: Point edge at the tested digest
         run: docker buildx imagetools create -t ghcr.io/colliedesk/colliedesk:edge "ghcr.io/colliedesk/colliedesk:sha-$GITHUB_SHA"

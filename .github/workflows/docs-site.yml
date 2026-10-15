@@ -17,21 +17,21 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           path: product
           sparse-checkout: |
             docs/user
             ROADMAP.md
           sparse-checkout-cone-mode: false
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           repository: colliedesk/colliedesk.com
           path: site
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: site/package.json
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '22.x'
           package-manager-cache: false
