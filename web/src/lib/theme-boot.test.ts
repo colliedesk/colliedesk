@@ -28,3 +28,20 @@ test('nothing stored leaves the page light', () => {
   run();
   expect(document.documentElement.dataset.theme).not.toBe('dark');
 });
+
+test('a stored dark choice also paints the browser chrome dark', () => {
+  const meta = document.createElement('meta');
+  meta.name = 'theme-color';
+  meta.content = '#f5f7fa';
+  document.head.append(meta);
+  localStorage.setItem(themeStorageKey, 'dark');
+  run();
+  expect(meta.content).toBe('#0b0f15');
+  meta.remove();
+});
+
+test('the theme-color tag is parsed before the boot script that rewrites it', () => {
+  const tag = page.head.querySelector('meta[name="theme-color"]');
+  expect(tag).not.toBeNull();
+  expect(tag!.compareDocumentPosition(bootElement!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});

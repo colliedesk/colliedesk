@@ -165,7 +165,7 @@ func cloudAuthConfig() cloudauth.Config {
 
 // lockedScreenShipped says the web app shows a locked workspace (trial over, nothing paid) instead
 // of a broken inbox. Billing locks workspaces, so it stays off in production until this is true.
-const lockedScreenShipped = false
+const lockedScreenShipped = true
 
 // requireLockedScreen refuses to start with billing on while the web app cannot show the lock.
 func requireLockedScreen(billing polar.Config, shipped bool) error {

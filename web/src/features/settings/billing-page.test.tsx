@@ -92,3 +92,20 @@ test('a complimentary plan with no end says it has none', () => {
   render(<BillingPage billing={comp} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
   expect(screen.getByText(/^complimentary team plan$/i)).toBeInTheDocument();
 });
+
+test('a trial shows its attachment storage and replies, and warns from 80 percent', () => {
+  const GiB = 1024 ** 3;
+  const withStorage = (bytes: number): Billing => ({ ...free, usage: { ...free.usage, storage_bytes: bytes, replies_last_24h: 12 } });
+  const { rerender } = render(<BillingPage billing={withStorage(1.7 * GiB)} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.getByText(/storage: 1\.7 GB of 2\.0 GB/i)).toBeInTheDocument();
+  expect(screen.getByText(/12 of 200 replies in the last 24 hours/i)).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent(/storage is 85% full/i);
+  rerender(<BillingPage billing={withStorage(1.5 * GiB)} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+});
+
+test('a paid plan shows no storage cap and no reply cap', () => {
+  render(<BillingPage billing={team} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.queryByText(/storage:/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/replies in the last 24 hours/i)).not.toBeInTheDocument();
+});

@@ -18,6 +18,7 @@ export const cloudWorkspaceChoicesSchema = z.object({ workspaces: z.array(worksp
 export const publicConfigSchema = z.object({
   cloud_sign_in: z.object({ enabled: z.boolean(), publishable_key: z.string().nullable() }),
   billing: z.object({ enabled: z.boolean() }),
+  signup: z.object({ enabled: z.boolean() }),
 }) satisfies z.ZodType<Generated<'PublicConfig'>>;
 export const checkoutPlanSchema = z.enum(['team_monthly', 'team_yearly', 'founding']);
 export const planSchema = z.enum(['trial', 'team', 'founding', 'none']);

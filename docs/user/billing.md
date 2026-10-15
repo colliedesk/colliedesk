@@ -1,50 +1,71 @@
 # Plan and billing
 
 Billing exists only on the hosted Colliedesk Cloud. A self-hosted instance has no billing page, no
-plan and no limits; nothing here applies to it.
+trial, no plan and no limits; nothing here applies to it.
 
-Only workspace admins see **Billing** (top bar). Agents do not.
+Only workspace admins see **Billing** (left rail). Agents see how many days of the trial are left in
+the banner at the top, and nothing else about billing.
+
+## The free trial
+
+Every new cloud workspace starts a 14-day free trial of the full Team plan. No card is needed.
+
+- A banner under the workspace name shows "Trial: N days left". Admins get a **Choose a plan**
+  button in it.
+- A workspace that imports its history from Freshdesk gets a longer trial: 30 days in total, once.
+  The banner then says the trial is longer than the standard 14 days.
+- One trial per email address. Writing the address with capitals, a `+tag` or (for Gmail) dots does
+  not make a new one. If you sign up again with the same address you are told to sign in instead.
+- Sign-up is limited to 3 new workspaces per network address per day.
+
+### Limits during the trial
+
+- **Agents.** Up to 10. An agent and a pending invite each take one seat. Creating an invite when all
+  seats are taken fails with a message that names the limit. Revoke an invite you no longer need and
+  try again. Sending a second invite to the same address, or inviting someone who already is an
+  agent, does not take another seat.
+- **Replies by email.** Up to 200 replies in any 24 hours. The next reply is refused with the time to
+  wait, and your text stays in the composer. Retrying a failed delivery counts again.
+- **Who you can write to.** During the trial a reply goes only to customers who wrote to you first
+  (mail that came in through your Colliedesk address, or imported history). To write to anyone,
+  verify your sending domain in **Settings**, or choose a plan.
+- **Attachments.** 2 GiB in total. Files that came in with a Freshdesk import do not count. At 80%
+  the banner and **Billing** warn you. At the limit, mail with a larger attachment is refused by
+  the mail system and bounces to the sender; nothing is dropped silently.
+
+Nothing else is limited. Conversations, contacts, tags, notes and search work as on a paid plan.
 
 ## Plans
 
-| Plan | Price | Agents | New conversations |
-|---|---|---|---|
-| Free | $0 | up to 3 | up to 100 per UTC calendar month |
-| Team | $49 per month or $490 per year, per workspace | up to 10 (contact us for more) | no limit |
-| Founding | $100 per year, for life | up to 10 | no limit |
+| Plan | Price | Agents |
+|---|---|---|
+| Team | $49 per month or $490 per year, per workspace | up to 10 (contact us for more) |
+| Founding | $100 per year, for life | up to 10 |
 
-The plan belongs to the workspace, not to a person. The page shows how much of each limit you have
-used. Conversations are counted by the UTC month in which they were received.
+The plan belongs to the workspace, not to a person. Paid plans have no reply cap, no recipient rule
+and no storage cap. Prices are in US dollars.
 
-## What happens at the limits (Free plan)
+## When the trial or the subscription ends
 
-- **Agents.** An agent and a pending invite each take one of the 3 seats. When all seats are taken,
-  creating an invite for another person fails with "The Free plan allows 3 agents". Sending a second invite to the same address, or inviting someone who already is an agent, does not use another seat. Revoke a pending invite, or
-  upgrade, and try again. If the workspace is over the limit after a downgrade, nobody is removed;
-  an unused invite cannot be accepted until a seat is free or the workspace upgrades. The invite
-  stays valid until it expires, so the person can use it again after the upgrade.
-- **New conversations.** The 101st new conversation of a UTC month, and every one after it, is
-  **held**. A held conversation is stored in full, with its messages and attachments. Nothing is
-  dropped and no sender gets a bounce. It is hidden from the inbox list and from search. A banner on
-  the inbox and a count on **Billing** show how many are held.
-- Held conversations appear on their own as soon as the workspace upgrades, or when the month in
-  which they arrived ends. A new month starts with a new quota of 100.
-- **Replies always work.** A customer replying to an existing conversation, and an agent replying or
-  adding a note, are never blocked. Only new conversations count. A reply to a held conversation
-  stays with it.
-- Conversations you create yourself in Colliedesk (not received by email) count toward the 100 but
-  are never held. You see them at once.
-- Conversations brought in by a Freshdesk import are history, not new mail. They do not count toward
-  the quota and are never held, however many there are.
-- Going back from a paid plan to Free hides and deletes nothing. Only conversations that arrive
-  over the quota afterwards are held.
+The workspace is **locked**. Nothing is deleted. Everyone who signs in sees a page that says the
+trial (or the subscription) has ended, instead of the inbox.
+
+- **Admins** can choose a plan, **Export all data**, or sign out. Choosing a plan and paying opens
+  the workspace again within a few moments of the provider confirming the payment.
+- **Agents** are told to ask a workspace admin to choose a plan, and can sign out.
+- Customers who write to a locked workspace get a bounce. Nothing is stored, so nothing is lost
+  that you did not already have.
+- In the app only paying, exporting and signing out work until the workspace has a plan.
+- A locked workspace is kept for 12 months. Its admins get an email 30 days before anything is
+  deleted. Export your data before then. See [Export all data](export.md).
 
 ## Upgrade
 
-1. Open **Billing** and select a plan under **Upgrade**.
-2. Pay on the page that opens. It is hosted by our payment provider, Polar; Colliedesk never sees
+1. Open **Billing** (or select **Choose a plan** in the banner or on the locked page).
+2. Select a plan under **Upgrade**.
+3. Pay on the page that opens. It is hosted by our payment provider, Polar; Colliedesk never sees
    your card.
-3. You return to **Billing**. The plan updates within a few moments, once the provider confirms
+4. You return to **Billing**. The plan updates within a few moments, once the provider confirms
    the payment.
 
 A workspace that already pays cannot start a second checkout. Change or cancel in the portal.
@@ -59,15 +80,20 @@ card, download invoices and cancel there. The button stays available after a sub
 ## What the status means
 
 - **Renews**: the plan continues on the date shown.
-- **Cancels**: you cancelled. You keep the plan until the date shown, then the workspace is Free.
+- **Cancels**: you cancelled. You keep the plan until the date shown, then the workspace is locked.
 - **Last payment failed**: the plan stays active while the provider retries the card. Update the
   card in the portal.
-- A subscription that ended, was unpaid or never completed leaves the workspace on Free. Nothing
-  is deleted: conversations, contacts and attachments stay.
+- A subscription that ended, was unpaid or never completed locks the workspace once the trial is
+  over. Nothing is deleted: conversations, contacts and attachments stay until the retention period
+  above ends.
+
+## What the Billing page shows
+
+The current plan and when the trial or subscription ends or renews, agents used (with pending
+invites), attachment storage against the 2 GiB trial limit, and replies sent in the last 24 hours
+during the trial.
 
 ## Limits
 
 - Billing is per workspace. Moving a subscription to another workspace is not supported yet.
 - Prices are in US dollars.
-- The page shows the limits and your usage: agents (with pending invites), conversations received
-  this month, and how many are held.

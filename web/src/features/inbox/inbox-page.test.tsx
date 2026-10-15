@@ -275,3 +275,21 @@ test('widening the window past the drawer breakpoint closes the drawer instead o
     vi.unstubAllGlobals();
   }
 });
+
+test('a refusal shown for one conversation does not follow the agent to the next', async () => {
+  const other = { ...conversation, id: '99999999-9999-4999-8999-999999999999', subject: 'Other request' };
+  const onMessage = vi.fn().mockRejectedValue(new Error('refused'));
+  const { rerender } = render(<InboxPage selected={conversation} conversations={[conversation, other]} onMessage={onMessage} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'For the first customer' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  expect(await screen.findByRole('alert')).toHaveTextContent(/could not be sent/i);
+  rerender(<InboxPage selected={other} conversations={[conversation, other]} onMessage={onMessage} />);
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Message body')).toHaveValue('');
+});
+
+test('a delivery notice from a retry is shown above the composer', () => {
+  render(<InboxPage selected={conversation} conversations={[conversation]} deliveryNotice="Try again later." />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Try again later.');
+});

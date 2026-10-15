@@ -11,13 +11,15 @@ interface RedeemPageProps {
   planLimited?: boolean;
   onRedeem?: () => void;
   cloudEnabled?: boolean;
+  // signupEnabled adds the line that tells a new customer the same sign-in creates a workspace.
+  signupEnabled?: boolean;
   cloudSignIn?: ReactNode;
   workspaces?: WorkspaceChoice[];
   onSelectWorkspace?: (slug: string) => void;
 }
 
 export function RedeemPage({
-  token, pending, failed, planLimited = false, onRedeem, cloudEnabled = false, cloudSignIn, workspaces = [], onSelectWorkspace,
+  token, pending, failed, planLimited = false, onRedeem, cloudEnabled = false, signupEnabled = false, cloudSignIn, workspaces = [], onSelectWorkspace,
 }: RedeemPageProps) {
   return (
     <main className="redeem-page signin-split">
@@ -39,6 +41,7 @@ export function RedeemPage({
                 onClick={() => onSelectWorkspace?.(workspace.slug)} disabled={pending}>{workspace.name}</button>)}
             </div>
           </> : cloudSignIn}
+          {signupEnabled && workspaces.length === 0 && <p className="muted-copy">{messages.cloudNewHere}</p>}
           <p className="muted-copy">{messages.oneTimeLinkInstead}</p>
         </div>}
         {failed && workspaces.length === 0 && <p role="alert" className="error-copy">

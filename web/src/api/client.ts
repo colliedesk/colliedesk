@@ -1,5 +1,7 @@
 import type { z } from 'zod';
+import { NotAnAgentError, signUpCloud } from './cloud-signup';
 import { OutboundRefusedError } from './outbound-error';
+import { exportWorkspace } from './workspace-export';
 import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactDetailSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema,
@@ -26,14 +28,26 @@ export class PlanLimitError extends Error {
   }
 }
 
+// WorkspaceLockedError is the 402 `workspace_locked` answer: the trial or subscription ended, so the
+// app shows the locked screen instead of the view that asked.
+export class WorkspaceLockedError extends PlanLimitError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'WorkspaceLockedError';
+  }
+}
+
 function failure(status: number): Error {
   return status === 401 ? new UnauthorizedError() : new Error(`API ${status}`);
 }
 
 async function planLimitFailure(response: Response): Promise<PlanLimitError> {
   try {
-    const body = await response.json() as { error?: { message?: unknown } };
-    if (typeof body.error?.message === 'string' && body.error.message) return new PlanLimitError(body.error.message);
+    const body = await response.json() as { error?: { code?: unknown; message?: unknown } };
+    if (typeof body.error?.message === 'string' && body.error.message) {
+      return body.error.code === 'workspace_locked' ? new WorkspaceLockedError(body.error.message) : new PlanLimitError(body.error.message);
+    }
+    if (body.error?.code === 'workspace_locked') return new WorkspaceLockedError('This workspace is locked.');
   } catch {
     // An unreadable body still means the plan refused the action.
   }
@@ -96,8 +110,17 @@ async function exchangeCloudSession(token: string, workspaceSlug?: string) {
   if (response.status === 409) {
     throw new CloudWorkspaceChoiceError(cloudWorkspaceChoicesSchema.parse(await response.json()).workspaces);
   }
+  if (response.status === 403 && (await errorCode(response)) === 'forbidden') throw new NotAnAgentError();
   if (!response.ok) throw new Error(`API ${response.status}`);
   return redeemedSchema.parse(await response.json());
+}
+
+async function errorCode(response: Response): Promise<unknown> {
+  try {
+    return ((await response.json()) as { error?: { code?: unknown } }).error?.code;
+  } catch {
+    return undefined;
+  }
 }
 
 export const api = {
@@ -112,6 +135,9 @@ export const api = {
   startCheckout: (plan: RequestBody<'createBillingCheckout'>['plan']) => request('/api/v1/billing/checkout', billingLinkSchema, { method: 'POST', body: json<'createBillingCheckout'>({ plan }) }),
   openBillingPortal: () => request('/api/v1/billing/portal', billingLinkSchema, { method: 'POST' }),
   exchangeCloudSession,
+  signUpCloud,
+  exportWorkspace,
+  logout: () => requestNoContent('/api/v1/auth/logout', { method: 'POST' }),
   redeem: (token: string, label: string) => request('/api/v1/auth/redeem', redeemedSchema, {
     method: 'POST', body: json<'redeemLink'>({ token, label, session_type: 'cookie' }),
   }),

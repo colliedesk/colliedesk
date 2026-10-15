@@ -1,10 +1,15 @@
-import { ClerkProvider, SignIn, useAuth } from '@clerk/clerk-react';
+import { ClerkProvider, SignIn, useAuth, useClerk } from '@clerk/clerk-react';
 import { useEffect, useRef, useState } from 'react';
+import { NotAnAgentError } from '../../api/cloud-signup';
 import { messages } from '../../messages';
+import { CloudSignup } from './cloud-signup';
 
 interface CloudSignInProps {
   publishableKey: string;
+  // onSessionToken rejects with NotAnAgentError when the verified email belongs to no workspace.
   onSessionToken: (token: string) => Promise<void>;
+  // onSignUp creates a trial workspace; present only where the server offers sign-up.
+  onSignUp?: (token: string, workspaceName: string) => Promise<void>;
 }
 
 // Clerk draws its own form; it reads the brand tokens of the active theme so it matches the app.
@@ -20,30 +25,52 @@ function clerkAppearance() {
   };
 }
 
-function CloudSession({ onSessionToken }: Pick<CloudSignInProps, 'onSessionToken'>) {
+function CloudSession({ onSessionToken, onSignUp }: Pick<CloudSignInProps, 'onSessionToken' | 'onSignUp'>) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
+  const clerk = useClerk();
   const exchanged = useRef(false);
   const [failed, setFailed] = useState(false);
+  const [noWorkspace, setNoWorkspace] = useState(false);
 
   useEffect(() => {
-	if (!isLoaded || !isSignedIn || exchanged.current || failed) return;
+    if (!isLoaded || !isSignedIn || exchanged.current || failed || noWorkspace) return;
     exchanged.current = true;
     void getToken().then((token) => {
       if (!token) throw new Error('Clerk did not return a session token');
-		return onSessionToken(token);
-	}).catch(() => {
-		exchanged.current = false;
-		setFailed(true);
-	});
-  }, [failed, getToken, isLoaded, isSignedIn, onSessionToken]);
+      return onSessionToken(token);
+    }).catch((error: unknown) => {
+      exchanged.current = false;
+      if (error instanceof NotAnAgentError) setNoWorkspace(true);
+      else setFailed(true);
+    });
+  }, [failed, getToken, isLoaded, isSignedIn, noWorkspace, onSessionToken]);
 
+  // Leaving the sign-up form means signing the identity provider session out, or the next sign-in
+  // would be the same person again.
+  const leave = async () => {
+    await clerk.signOut();
+    setNoWorkspace(false);
+  };
+  if (noWorkspace && onSignUp) {
+    // Clerk session tokens live for about a minute, so the token is fetched when the form is sent.
+    const create = async (name: string) => {
+      const token = await getToken();
+      if (!token) throw new Error('Clerk did not return a session token');
+      await onSignUp(token, name);
+    };
+    return <CloudSignup onCreate={create} onSignIn={leave} onUseAnotherAccount={leave} />;
+  }
+  if (noWorkspace) return <div className="cloud-signup">
+    <p role="alert" className="error-copy">{messages.noWorkspaceForEmail}</p>
+    <button type="button" onClick={leave}>{messages.useAnotherAccount}</button>
+  </div>;
   if (failed) return <button type="button" onClick={() => setFailed(false)}>{messages.retryCloudSignIn}</button>;
   if (!isLoaded || isSignedIn) return <p>{messages.cloudSigningIn}</p>;
-  return <SignIn routing="hash" appearance={clerkAppearance()} />;
+  return <SignIn routing="hash" withSignUp appearance={clerkAppearance()} />;
 }
 
-export function CloudSignIn({ publishableKey, onSessionToken }: CloudSignInProps) {
+export function CloudSignIn({ publishableKey, onSessionToken, onSignUp }: CloudSignInProps) {
   return <ClerkProvider publishableKey={publishableKey}>
-    <CloudSession onSessionToken={onSessionToken} />
+    <CloudSession onSessionToken={onSessionToken} onSignUp={onSignUp} />
   </ClerkProvider>;
 }

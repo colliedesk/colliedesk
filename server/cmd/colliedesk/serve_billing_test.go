@@ -39,8 +39,8 @@ func TestServeRefusesPartialBillingConfiguration(t *testing.T) {
 	}
 }
 
-// Billing locks a workspace after its trial. Until the web app can show that state, switching it on
-// would leave customers with a broken inbox and no reason.
+// Billing locks a workspace after its trial. A build whose web app cannot show that state must not
+// start with billing on: customers would get a broken inbox and no reason.
 func TestBillingNeedsTheLockedScreen(t *testing.T) {
 	enabled := polar.Config{AccessToken: "t", WebhookSecret: "s", Products: polar.Products{TeamMonthly: "a", TeamYearly: "b", Founding: "c"}}
 	if err := requireLockedScreen(enabled, false); err == nil || !strings.Contains(err.Error(), "locked screen") {
@@ -54,18 +54,17 @@ func TestBillingNeedsTheLockedScreen(t *testing.T) {
 	}
 }
 
-func TestServeRefusesBillingWhileTheLockedScreenIsMissing(t *testing.T) {
-	if lockedScreenShipped {
-		t.Skip("the web app ships the locked screen")
-	}
+// The web app shows the locked state, so a server with billing on gets past the locked-screen
+// guard; here it then fails on the unreachable database, not on the guard.
+func TestServeWithBillingOnPassesTheLockedScreenGuard(t *testing.T) {
 	for key, value := range map[string]string{"POLAR_ACCESS_TOKEN": "t", "POLAR_WEBHOOK_SECRET": "s",
 		"POLAR_PRODUCT_TEAM_MONTHLY": "a", "POLAR_PRODUCT_TEAM_YEARLY": "b", "POLAR_PRODUCT_FOUNDING": "c"} {
 		t.Setenv(key, value)
 	}
 	err := run(context.Background(), []string{"serve", "--listen", "127.0.0.1:0"}, io.Discard,
 		"postgres://nobody:nobody@127.0.0.1:1/none?sslmode=disable", "http://localhost:8080")
-	if err == nil || !strings.Contains(err.Error(), "locked screen") {
-		t.Fatalf("serve with billing on and no locked screen: err=%v", err)
+	if err == nil || strings.Contains(err.Error(), "locked screen") {
+		t.Fatalf("serve with billing on: err=%v, want a failure other than the locked-screen guard", err)
 	}
 }
 

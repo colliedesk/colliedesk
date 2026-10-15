@@ -19,10 +19,27 @@ revoke every signed-in device in [Sessions and devices](sessions.md).
 Some hosted Colliedesk instances show **Sign in** on the same page. Use it to authenticate with the
 identity methods enabled by the instance owner, such as Google, Microsoft, email, or MFA.
 
-Cloud sign-in does not create a Colliedesk agent. Your verified primary email must already belong to
-an agent in at least one workspace. If it belongs to several workspaces, choose the workspace after
+Signing in does not by itself add you to a workspace. Your verified primary email must belong to an
+agent in at least one workspace. If it belongs to several workspaces, choose the workspace after
 authentication. Colliedesk then creates its own ordinary browser session; the identity provider does
 not receive or manage that Colliedesk session.
+
+## Create a workspace (hosted cloud)
+
+New to Colliedesk Cloud? On the same sign-in page continue with email, Google or Microsoft. When the
+verified email is not an agent of any workspace, the page asks you to name a workspace and starts a
+14-day free trial with you as its admin. No card is needed. See [Plan and billing](billing.md).
+
+- **This email already started a trial.** Each mailbox gets one trial. Sign in to that workspace
+  instead (**Sign in to your workspace**), or ask us for help.
+- **Too many workspaces from this network.** At most 3 a day per network address. Try again tomorrow.
+- **This name is not available.** Some names of well-known brands are reserved. Choose another
+  name, or contact us if it is your own brand.
+- **The name must be 2 to 60 characters.**
+- **Use another account** signs the identity out so you can pick a different email.
+
+On an instance without sign-up, an email that is not an agent is told to ask a workspace admin for
+an invite link.
 
 Self-hosted instances without cloud configuration behave exactly as before and do not load the cloud
 sign-in code. One-time pairing and invite links remain available when cloud sign-in is enabled.

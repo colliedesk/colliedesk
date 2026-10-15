@@ -211,3 +211,37 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .status-tabs label:has(input:checked), .segmented label:has(input:checked) { outline: 2px solid Highlight; }
   .tag-check:has(input:checked) { border: 2px solid Highlight; }
 }
+
+/* Row time: the short form for a mouse, the full stamp for a screen reader, keyboard focus (tooltip over the time) and touch. */
+.conversation-row[data-tip]::after { left: auto; right: var(--space-3); top: var(--space-1); translate: 0 0; }
+.conversation-row .time-full { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (hover: none) {
+  .conversation-row[data-tip]::after { display: none; }
+  .conversation-row .time-short { display: none; }
+  .conversation-row .time-full { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+}
+
+/* Plan notices: the trial banner under the identity bar. */
+.plan-banner {
+  flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4);
+  margin: 0 var(--space-2) var(--space-2) 0; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--accent-soft);
+  padding: var(--space-2) var(--space-4); font-size: var(--fs-small);
+}
+.plan-banner p { margin: 0; min-width: 0; color: var(--text-1); }
+.plan-banner p span { color: var(--text-2); }
+.plan-banner .plan-banner-warning { flex-basis: 100%; order: 3; border-left: 3px solid var(--warn); background: var(--warn-soft); padding: var(--space-1) var(--space-3); border-radius: var(--radius-sm); }
+.plan-banner button { margin-left: auto; }
+
+/* Locked workspace and export. */
+.locked-screen .settings-body p { margin: 0; color: var(--text-2); }
+.export-action { display: grid; gap: var(--space-2); }
+.export-action p { margin: 0; }
+.cloud-signup { display: grid; gap: var(--space-3); }
+.cloud-signup h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+.cloud-signup .primary-action { --control: 44px; }
+@media (max-width: 44rem) {
+  .plan-banner { margin-right: var(--space-2); padding-inline: var(--space-3); }
+  .plan-banner button { margin-left: 0; width: 100%; --control: var(--touch); }
+  .locked-screen { padding: var(--space-6) var(--space-4); }
+  .locked-screen .button-row button { flex: 1 1 100%; --control: var(--touch); }
+}

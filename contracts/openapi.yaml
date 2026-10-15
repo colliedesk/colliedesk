@@ -960,7 +960,7 @@ components:
   schemas:
     PublicConfig:
       type: object
-      required: [cloud_sign_in, billing]
+      required: [cloud_sign_in, billing, signup]
       properties:
         cloud_sign_in:
           type: object
@@ -973,6 +973,11 @@ components:
           required: [enabled]
           properties:
             enabled: {type: boolean, description: False on self-hosted instances; the billing routes answer 404.}
+        signup:
+          type: object
+          required: [enabled]
+          properties:
+            enabled: {type: boolean, description: True only where `POST /api/v1/auth/cloud/signup` exists (cloud sign-in and billing both configured).}
     CheckoutPlan: {type: string, enum: [team_monthly, team_yearly, founding]}
     WebhookResult:
       type: object

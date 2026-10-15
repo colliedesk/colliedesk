@@ -617,6 +617,10 @@ export interface components {
                 /** @description False on self-hosted instances; the billing routes answer 404. */
                 enabled: boolean;
             };
+            signup: {
+                /** @description True only where `POST /api/v1/auth/cloud/signup` exists (cloud sign-in and billing both configured). */
+                enabled: boolean;
+            };
         };
         /** @enum {string} */
         CheckoutPlan: "team_monthly" | "team_yearly" | "founding";

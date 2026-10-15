@@ -338,3 +338,14 @@ func TestSlugRenameRefusesBrandsOnTheCloudOnly(t *testing.T) {
 	selfHosted := newLimitsFixture(t, false)
 	wantResponse(t, request(t, selfHosted.api, http.MethodPatch, "/api/v1/workspace/slug", map[string]any{"slug": "paypal-help"}, selfHosted.adminA, nil), http.StatusOK, "")
 }
+
+// The web app offers "Create a workspace" only where the server would accept it: cloud sign-in and
+// billing both configured.
+func TestConfigAdvertisesSignupOnlyWhereItExists(t *testing.T) {
+	hosted := newSignupFixture(t, nil)
+	got := request(t, hosted.api, http.MethodGet, "/api/v1/config", nil, "", nil)
+	want := "{\"billing\":{\"enabled\":true},\"cloud_sign_in\":{\"enabled\":true,\"publishable_key\":\"pk_test_example\"},\"signup\":{\"enabled\":true}}\n"
+	if got.Code != http.StatusOK || got.Body.String() != want {
+		t.Fatalf("hosted config status=%d body=%s, want %s", got.Code, got.Body.String(), want)
+	}
+}
