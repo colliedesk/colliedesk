@@ -139,6 +139,13 @@ func (s *Store) insertMessageFiles(ctx context.Context, tx pgx.Tx, workspaceID, 
 	if err := s.CheckStorage(ctx, tx, workspaceID, total, s.now()); err != nil {
 		return err
 	}
+	keys := make([]string, 0, len(files))
+	for _, file := range files {
+		keys = append(keys, file.Object.Key)
+	}
+	if err := VerifyObjects(ctx, tx, s.objects, keys...); err != nil {
+		return err
+	}
 	for _, file := range files {
 		file.MessageID = messageID
 		if _, err := InsertAttachment(ctx, tx, workspaceID, file); err != nil {

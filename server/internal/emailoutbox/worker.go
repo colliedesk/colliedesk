@@ -3,6 +3,8 @@ package emailoutbox
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -182,7 +184,8 @@ func (w *Worker) deliver(ctx context.Context, item store.Delivery) error {
 	}
 }
 
-var errFileMissing = errors.New("attached file is missing")
+// errFileMissing marks a file that is gone or no longer matches its checksum: permanent for the delivery.
+var errFileMissing = errors.New("attached file is unusable")
 
 // loadFiles reads the reply's files from storage. A file that is gone is permanent: sending the reply
 // without it would reach the customer as a text-only message the agent did not write.
@@ -198,6 +201,10 @@ func (w *Worker) loadFiles(ctx context.Context, item store.Delivery) ([]email.Fi
 			return nil, fmt.Errorf("%w: %q is no longer in attachment storage, so the reply was not sent", errFileMissing, stored.Filename)
 		case err != nil:
 			return nil, fmt.Errorf("read attachment %q: %w", stored.Filename, err)
+		}
+		sum := sha256.Sum256(data)
+		if hex.EncodeToString(sum[:]) != stored.SHA256 {
+			return nil, fmt.Errorf("%w: %q in attachment storage does not match what was uploaded, so the reply was not sent", errFileMissing, stored.Filename)
 		}
 		files = append(files, email.File{Filename: stored.Filename, ContentType: stored.ContentType, Data: data})
 	}

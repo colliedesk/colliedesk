@@ -32,7 +32,7 @@ type Delivery struct {
 
 // DeliveryFile is a file attached to the reply, kept in attachment storage under StorageKey.
 type DeliveryFile struct {
-	Filename, ContentType, StorageKey string
+	Filename, ContentType, StorageKey, SHA256 string
 }
 
 // ClaimDueDeliveries leases due rows, counts the attempt and stamps a claim token that every finish
@@ -123,14 +123,14 @@ func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
 	if len(item.References) > maxReplyReferences {
 		item.References = item.References[len(item.References)-maxReplyReferences:]
 	}
-	fileRows, err := tx.Query(ctx, `SELECT filename,content_type,storage_key FROM attachments
+	fileRows, err := tx.Query(ctx, `SELECT filename,content_type,storage_key,sha256 FROM attachments
 		WHERE workspace_id=$1 AND message_id=$2 ORDER BY created_at,id`, item.WorkspaceID, item.MessageID)
 	if err != nil {
 		return fmt.Errorf("load reply files: %w", err)
 	}
 	item.Files, err = pgx.CollectRows(fileRows, func(row pgx.CollectableRow) (DeliveryFile, error) {
 		var file DeliveryFile
-		err := row.Scan(&file.Filename, &file.ContentType, &file.StorageKey)
+		err := row.Scan(&file.Filename, &file.ContentType, &file.StorageKey, &file.SHA256)
 		return file, err
 	})
 	if err != nil {

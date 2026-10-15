@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { api, ConflictError, PlanLimitError, WorkspaceLockedError } from './client';
-import { AttachmentsTooLargeError } from './attachments-error';
+import { AttachmentsTooLargeError, AttachmentStorageError } from './attachments-error';
 import { NotAnAgentError, SignupError } from './cloud-signup';
 import { ExportRefusedError } from './workspace-export';
 
@@ -130,4 +130,20 @@ test('413 on a message becomes an error carrying the server reason', async () =>
   const error = await api.createMessage('11111111-1111-4111-8111-111111111111', 'outgoing', 'Hi', [new File(['x'], 'x')]).catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(AttachmentsTooLargeError);
   expect((error as Error).message).toMatch(/at most 10 MiB/);
+});
+
+test.each([
+  [403, 'storage_limit_reached', 'This workspace has reached its 2 GiB attachment storage limit.'],
+  [507, 'storage_full', 'The server is low on disk space for attachments. Nothing was sent or stored.'],
+])('%i %s on a message becomes an error carrying the server reason', async (status, code, message) => {
+  fetchMock.mockResolvedValue(reply(status, apiError(code, message)));
+  const error = await api.createMessage('11111111-1111-4111-8111-111111111111', 'outgoing', 'Hi', [new File(['x'], 'x')]).catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(AttachmentStorageError);
+  expect((error as Error).message).toBe(message);
+});
+
+test('a trial refusal on a message is still an outbound refusal, not a storage error', async () => {
+  fetchMock.mockResolvedValue(reply(403, apiError('trial_outbound_restricted', 'Verify your domain.')));
+  const error = await api.createMessage('11111111-1111-4111-8111-111111111111', 'outgoing', 'Hi').catch((caught: unknown) => caught);
+  expect(error).not.toBeInstanceOf(AttachmentStorageError);
 });

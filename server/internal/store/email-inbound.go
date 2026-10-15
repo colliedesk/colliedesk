@@ -212,7 +212,7 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 		VALUES($1,$2,'incoming',$3,NULLIF($4,''),$5,$6) RETURNING id::text`, workspaceID, conversationID, body, in.BodyHTML, in.MessageID, meta).Scan(&messageID); err != nil {
 		return result, fmt.Errorf("store inbound message: %w", err)
 	}
-	if err := linkFiles(ctx, tx, workspaceID, messageID, files); err != nil {
+	if err := linkFiles(ctx, tx, s.objects, workspaceID, messageID, files); err != nil {
 		return result, err
 	}
 	if err := tx.Commit(ctx); err != nil {

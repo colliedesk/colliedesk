@@ -6,3 +6,12 @@ export class AttachmentsTooLargeError extends Error {
     this.name = 'AttachmentsTooLargeError';
   }
 }
+
+// AttachmentStorageError is the refusal of a message's files for lack of room: the plan's storage
+// cap (403 storage_limit_reached) or a full server disk (507). Its message is the server's reason.
+export class AttachmentStorageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AttachmentStorageError';
+  }
+}

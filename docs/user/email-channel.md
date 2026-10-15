@@ -247,6 +247,8 @@ conversation contact.
   encoding). The limit is also in `GET /api/v1/config` as `limits.outgoing_attachments_bytes` and
   `limits.outgoing_attachments_files`. More answers `413` with the reason, and nothing is stored
   or sent. Make sure your mail relay accepts a message of about 14 MiB; email encoding adds a third.
+  Some recipient servers cap incoming mail at about 10 MB, so a large reply can bounce; it then shows
+  **Delivery failed** with **Retry delivery**.
 - If a stored file is gone when the reply is sent, the reply shows **Delivery failed** and names the
   file. Colliedesk never sends the reply without it.
 - A message may be up to 25 MiB with at most 100 attachments. Larger mail gets `413` and nothing

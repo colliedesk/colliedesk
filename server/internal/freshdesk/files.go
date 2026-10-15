@@ -59,6 +59,9 @@ func (r *run) importAttachment(ctx context.Context, ticketKey, messageID string,
 		return fmt.Errorf("begin attachment import: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := store.VerifyObjects(ctx, tx, r.opts.Storage, object.Key); err != nil {
+		return err
+	}
 	var targetID string
 	replaced := false
 	if found && entry.TargetID != nil {

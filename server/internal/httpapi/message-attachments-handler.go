@@ -9,7 +9,9 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
@@ -24,6 +26,8 @@ const (
 	// diskReserve is kept free on the attachments volume after a message's files are written.
 	diskReserve     = 64 << 20
 	maxFilenameRune = 255
+	// defaultUploadTimeout is how long a message with files may take to arrive.
+	defaultUploadTimeout = 3 * time.Minute
 )
 
 var errOutgoingTooLarge = errors.New("outgoing attachments exceed the size limit")
@@ -36,6 +40,13 @@ var (
 // messageFields are the text fields of a multipart message request.
 type messageFields struct{ kind, body string }
 
+func (f messageFields) validate() error {
+	if (f.kind != "outgoing" && f.kind != "note") || strings.TrimSpace(f.body) == "" {
+		return &uploadError{http.StatusBadRequest, "invalid_request", "A reply or note body is required."}
+	}
+	return nil
+}
+
 // createMessageWithFiles handles POST .../messages as multipart/form-data: fields kind and body plus
 // repeated files. Each file streams to attachment storage; the message and its attachment rows are
 // then written in one transaction. Whatever fails, nothing is left behind.
@@ -47,6 +58,12 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 		writeStoreError(response, err)
 		return
 	}
+	// A slow or stalled client cannot hold the request, and the files it already sent, open forever.
+	timeout := a.config.UploadTimeout
+	if timeout <= 0 {
+		timeout = defaultUploadTimeout
+	}
+	_ = http.NewResponseController(response).SetReadDeadline(time.Now().Add(timeout)) //nolint:errcheck // unsupported writers have no deadline to set
 	request.Body = http.MaxBytesReader(response, request.Body, attachments.MaxOutgoingBytes+multipartOverhead)
 	reader, err := request.MultipartReader()
 	if err != nil {
@@ -55,16 +72,20 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 	}
 	var stored []store.NewAttachment
 	defer func() { a.discardUnreferenced(context.WithoutCancel(request.Context()), workspaceID, stored) }()
-	fields, files, err := a.readMessageParts(request.Context(), reader, workspaceID, &stored)
+	fields, files, err := a.readMessageParts(request.Context(), reader, workspaceID, conversationID, &stored)
 	if err != nil {
 		a.writeUploadError(response, err)
 		return
 	}
-	if (fields.kind != "outgoing" && fields.kind != "note") || strings.TrimSpace(fields.body) == "" {
-		writeError(response, http.StatusBadRequest, "invalid_request", "A reply or note body is required.")
+	if err := fields.validate(); err != nil {
+		a.writeUploadError(response, err)
 		return
 	}
 	item, err := a.store.CreateMessage(request.Context(), workspaceID, conversationID, identity.Agent.ID, fields.kind, fields.body, files...)
+	if errors.Is(err, store.ErrObjectMissing) {
+		writeError(response, http.StatusInternalServerError, "internal_error", "A file was lost while the message was saved. Nothing was sent; try again.")
+		return
+	}
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -88,8 +109,11 @@ func (a *API) writeUploadError(response http.ResponseWriter, err error) {
 		writeError(response, upload.status, upload.code, upload.message)
 	case errors.Is(err, errOutgoingTooLarge), errors.As(err, &tooLarge):
 		writeError(response, http.StatusRequestEntityTooLarge, "attachments_too_large", tooLargeMessage)
+	case errors.Is(err, os.ErrDeadlineExceeded):
+		writeError(response, http.StatusRequestTimeout, "upload_timeout", "The upload took too long. Nothing was sent or stored.")
 	case errors.Is(err, context.Canceled):
 		writeError(response, http.StatusBadRequest, "invalid_request", "The upload was interrupted.")
+	case writePlanLimit(response, err):
 	default:
 		slog.Error("store message attachment", "error", err)
 		writeError(response, http.StatusInternalServerError, "internal_error", "The files could not be stored. Nothing was sent.")
@@ -98,9 +122,10 @@ func (a *API) writeUploadError(response http.ResponseWriter, err error) {
 
 // readMessageParts reads the fields and streams every file to storage, recording each stored object
 // in stored as soon as it exists so the caller can clean up after any later failure.
-func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, workspaceID string, stored *[]store.NewAttachment) (messageFields, []store.NewAttachment, error) {
+func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, workspaceID, conversationID string, stored *[]store.NewAttachment) (messageFields, []store.NewAttachment, error) {
 	var fields messageFields
 	remaining := int64(attachments.MaxOutgoingBytes)
+	admitted := false
 	for {
 		part, err := reader.NextPart()
 		if errors.Is(err, io.EOF) {
@@ -121,6 +146,16 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 				fields.body = text
 			}
 		case name == "files" && part.FileName() != "":
+			// Fields come first, so a refusal that does not depend on the bytes is given before reading any.
+			if !admitted {
+				if err := fields.validate(); err != nil {
+					return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "Send kind and body before the files."}
+				}
+				if err := a.store.CheckAttachmentAdmission(ctx, workspaceID, conversationID, fields.kind); err != nil {
+					return fields, nil, err
+				}
+				admitted = true
+			}
 			if len(*stored) >= attachments.MaxOutgoingFiles {
 				return fields, nil, &uploadError{http.StatusRequestEntityTooLarge, "attachments_too_many", tooManyFilesMessage}
 			}
@@ -173,9 +208,9 @@ func (a *API) checkDiskSpace() error {
 	return nil
 }
 
-// discardUnreferenced deletes stored objects no attachment row points at. Objects are content-
-// addressed, so bytes another message already references stay. An error keeps the object: a stray
-// file costs space, a deleted shared file loses a customer's data.
+// discardUnreferenced deletes stored objects no attachment row points at; bytes another message
+// already references stay. An error keeps the object: a stray file costs space, a deleted shared
+// file loses a customer's data.
 func (a *API) discardUnreferenced(ctx context.Context, workspaceID string, stored []store.NewAttachment) {
 	seen := map[string]bool{}
 	for _, file := range stored {
@@ -184,16 +219,8 @@ func (a *API) discardUnreferenced(ctx context.Context, workspaceID string, store
 			continue
 		}
 		seen[key] = true
-		used, err := a.store.AttachmentKeyInUse(ctx, workspaceID, key)
-		if err != nil {
-			slog.Error("keep attachment after failed upload", "error", err)
-			continue
-		}
-		if used {
-			continue
-		}
-		if err := a.config.Attachments.Delete(ctx, key); err != nil {
-			slog.Error("delete attachment after failed upload", "error", err)
+		if err := a.store.DiscardObject(ctx, workspaceID, key); err != nil {
+			slog.Error("discard attachment after failed upload", "error", err)
 		}
 	}
 }
@@ -231,7 +258,7 @@ func cleanFilename(name string) string {
 
 func cleanContentType(value string) string {
 	parsed, _, err := mime.ParseMediaType(value)
-	if err != nil {
+	if err != nil || strings.HasPrefix(parsed, "multipart/") || strings.HasPrefix(parsed, "message/") {
 		return "application/octet-stream"
 	}
 	return parsed

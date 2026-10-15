@@ -137,3 +137,62 @@ func decodeTransfer(t *testing.T, encoding string, data []byte) []byte {
 	}
 	return decoded
 }
+
+func TestComposeKeepsALongNonASCIIFilenameWithinLineLimitsAndReadsItBack(t *testing.T) {
+	name := strings.Repeat("Báo cáo doanh thu quý ", 20) + "tổng hợp.pdf"
+	if len(name) < 300 {
+		t.Fatalf("fixture is only %d bytes", len(name))
+	}
+	got, err := email.Compose(outgoing(email.File{Filename: name, ContentType: "application/pdf", Data: []byte("%PDF")}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(got), "\r\n") {
+		if len(line) > 200 {
+			t.Fatalf("header or body line of %d bytes: %.80s…", len(line), line)
+		}
+	}
+	parsed, err := mail.ReadMessage(bytes.NewReader(got))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, params, _ := mime.ParseMediaType(parsed.Header.Get("Content-Type"))
+	reader := multipart.NewReader(parsed.Body, params["boundary"])
+	if _, err := reader.NextPart(); err != nil {
+		t.Fatal(err)
+	}
+	part, err := reader.NextPart()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if part.FileName() != name {
+		t.Fatalf("filename read back as %q", part.FileName())
+	}
+	_, typeParams, err := mime.ParseMediaType(part.Header.Get("Content-Type"))
+	if err != nil || typeParams["name"] != name {
+		t.Fatalf("Content-Type name = %q (%v)", typeParams["name"], err)
+	}
+	if !strings.Contains(string(got), `name="=?UTF-8?B?`) {
+		t.Fatalf("no RFC 2047 name fallback for clients that ignore RFC 2231:\n%s", got)
+	}
+}
+
+func TestComposeSendsAForwardedMessageTypeAsOpaqueBytes(t *testing.T) {
+	got, err := email.Compose(outgoing(email.File{Filename: "fwd.eml", ContentType: "message/rfc822", Data: []byte("Subject: x\r\n\r\ny")}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), "message/rfc822") || !strings.Contains(string(got), "application/octet-stream") {
+		t.Fatalf("a message/* part would be parsed as mail by the recipient:\n%s", got)
+	}
+}
+
+func TestComposeEscapesQuotesAndBackslashesInAShortFilename(t *testing.T) {
+	got, err := email.Compose(outgoing(email.File{Filename: `a"b\c.txt`, ContentType: "text/plain", Data: []byte("x")}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), `filename="a\"b\\c.txt"`) {
+		t.Fatalf("filename not escaped:\n%s", got)
+	}
+}

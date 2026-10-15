@@ -106,12 +106,17 @@ func writeFilePart(buffer *bytes.Buffer, boundary string, file File) {
 		name = "attachment"
 	}
 	contentType := "application/octet-stream"
-	if parsed, _, err := mime.ParseMediaType(file.ContentType); err == nil && !strings.HasPrefix(parsed, "multipart/") {
+	// A part typed multipart/* or message/* would be parsed as mail by the recipient; the file is opaque bytes.
+	if parsed, _, err := mime.ParseMediaType(file.ContentType); err == nil && !strings.HasPrefix(parsed, "multipart/") && !strings.HasPrefix(parsed, "message/") {
 		contentType = parsed
 	}
+	typeParams := []string{contentType, parameter("name", name)}
+	if fallback := encodedWordParameter("name", name); fallback != "" {
+		typeParams = append(typeParams, fallback)
+	}
 	buffer.WriteString("\r\n--" + boundary + "\r\n")
-	fmt.Fprintf(buffer, "Content-Type: %s\r\n", mime.FormatMediaType(contentType, map[string]string{"name": name}))
-	fmt.Fprintf(buffer, "Content-Disposition: %s\r\n", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
+	fmt.Fprintf(buffer, "Content-Type: %s\r\n", strings.Join(typeParams, foldedSeparator))
+	fmt.Fprintf(buffer, "Content-Disposition: attachment%s%s\r\n", foldedSeparator, parameter("filename", name))
 	buffer.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
 	encoded := base64.StdEncoding.EncodeToString(file.Data)
 	for len(encoded) > base64LineLength {

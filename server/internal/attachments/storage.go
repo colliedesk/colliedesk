@@ -145,6 +145,36 @@ func (d *LocalDisk) Open(_ context.Context, key string) (io.ReadCloser, error) {
 	return file, nil
 }
 
+// Stat returns the size of the object stored under key.
+func (d *LocalDisk) Stat(_ context.Context, key string) (int64, error) {
+	if !keyPattern.MatchString(key) {
+		return 0, errors.New("stat attachment: invalid key")
+	}
+	info, err := os.Stat(filepath.Join(d.root, filepath.FromSlash(key)))
+	if err != nil {
+		return 0, fmt.Errorf("stat attachment: %w", err)
+	}
+	return info.Size(), nil
+}
+
+// Stater is implemented by backends that can check an object without reading it.
+type Stater interface {
+	Stat(ctx context.Context, key string) (int64, error)
+}
+
+// Exists returns nil when the object is stored; a missing object wraps os.ErrNotExist.
+func Exists(ctx context.Context, storage Storage, key string) error {
+	if stater, ok := storage.(Stater); ok {
+		_, err := stater.Stat(ctx, key)
+		return err
+	}
+	body, err := storage.Open(ctx, key)
+	if err != nil {
+		return err
+	}
+	return body.Close()
+}
+
 // Checksum returns the size and hex SHA-256 of everything readable from r.
 func Checksum(r io.Reader) (int64, string, error) {
 	hash := sha256.New()

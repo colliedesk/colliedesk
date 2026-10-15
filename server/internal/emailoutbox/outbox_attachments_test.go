@@ -9,6 +9,8 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/mail"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -136,5 +138,29 @@ func TestReplyWithFilesFailsWhenTheWorkerHasNoStorage(t *testing.T) {
 	process(t, newWorker(f, server, &clock))
 	if delivery := f.delivery(t, reply.ID); delivery.Status != "failed" || len(server.mail()) != 0 {
 		t.Fatalf("delivery = %+v, mail=%d", delivery, len(server.mail()))
+	}
+}
+
+func TestReplyWhoseStoredFileWasTruncatedFailsInsteadOfSendingPartOfIt(t *testing.T) {
+	f := newFixture(t)
+	root := t.TempDir()
+	storage, err := attachments.NewLocalDisk(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := startSMTPServer(t)
+	clock := time.Now().UTC().Add(time.Second)
+	worker := newWorker(f, server, &clock, func(options *emailoutbox.Options) { options.Storage = storage })
+	reply, keys := f.replyWithFiles(t, storage, attachedFile{"report.pdf", "application/pdf", bytes.Repeat([]byte("0123456789"), 100)})
+	if err := os.Truncate(filepath.Join(root, filepath.FromSlash(keys[0])), 500); err != nil {
+		t.Fatal(err)
+	}
+	process(t, worker)
+	delivery := f.delivery(t, reply.ID)
+	if delivery.Status != "failed" || delivery.LastError == nil || !strings.Contains(*delivery.LastError, "report.pdf") {
+		t.Fatalf("delivery = %+v", delivery)
+	}
+	if len(server.mail()) != 0 {
+		t.Fatal("a truncated file must never be sent")
 	}
 }

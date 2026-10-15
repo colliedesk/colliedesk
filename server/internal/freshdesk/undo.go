@@ -3,6 +3,7 @@ package freshdesk
 import (
 	"context"
 	"fmt"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
@@ -81,7 +82,7 @@ func Undo(ctx context.Context, pool *pgxpool.Pool, storage attachments.Storage, 
 		return UndoResult{}, fmt.Errorf("commit undo: %w", err)
 	}
 	for _, key := range orphans {
-		if err := storage.Delete(ctx, key); err != nil {
+		if err := store.DiscardObject(ctx, db, storage, workspaceID, key); err != nil {
 			return result, fmt.Errorf("undo committed, but a stored file could not be removed: %w", err)
 		}
 	}

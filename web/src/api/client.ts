@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import { AttachmentsTooLargeError } from './attachments-error';
+import { AttachmentsTooLargeError, AttachmentStorageError } from './attachments-error';
 import { NotAnAgentError, signUpCloud } from './cloud-signup';
 import { OutboundRefusedError } from './outbound-error';
 import { requestExportLink } from './workspace-export';
@@ -88,6 +88,7 @@ async function outboundRefusal(response: Response): Promise<Error> {
   try {
     const body = await response.json() as { error?: { code?: unknown; message?: unknown; retry_after_seconds?: unknown } };
     const { code, message, retry_after_seconds: retry } = body.error ?? {};
+    if (code === 'storage_limit_reached' && typeof message === 'string' && message) return new AttachmentStorageError(message);
     if (code === 'trial_outbound_restricted' || code === 'trial_outbound_limit') {
       return new OutboundRefusedError(code, typeof message === 'string' ? message : '', typeof retry === 'number' ? retry : undefined);
     }
@@ -102,12 +103,18 @@ async function tooLarge(response: Response): Promise<Error> {
   return error instanceof InvalidRequestError ? new AttachmentsTooLargeError(error.message) : error;
 }
 
+async function diskFull(response: Response): Promise<Error> {
+  const error = await invalidRequest(response);
+  return error instanceof InvalidRequestError ? new AttachmentStorageError(error.message) : error;
+}
+
 async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
   // A FormData body sets its own multipart Content-Type, with the boundary.
   const headers = init?.body instanceof FormData ? init.headers : { 'Content-Type': 'application/json', ...init?.headers };
   const response = await fetch(path, { credentials: 'same-origin', ...init, headers });
   if (response.status === 402) throw await planLimitFailure(response);
   if (response.status === 413) throw await tooLarge(response);
+  if (response.status === 507) throw await diskFull(response);
   if (response.status === 400 || response.status === 409) throw await invalidRequest(response);
   if (response.status === 403 || response.status === 429) throw await outboundRefusal(response);
   if (!response.ok) throw failure(response.status);

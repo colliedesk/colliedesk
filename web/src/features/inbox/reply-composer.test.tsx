@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
-import { AttachmentsTooLargeError } from '../../api/attachments-error';
+import { AttachmentsTooLargeError, AttachmentStorageError } from '../../api/attachments-error';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { ReplyComposer } from './reply-composer';
 
@@ -182,4 +182,15 @@ test('the server refusing the files says why in the server words and keeps the t
   fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('at most 10 MiB in total');
   expect(screen.getByLabelText('Message body')).toHaveValue('Hi');
+});
+
+test('a storage refusal shows the server reason and keeps the text and files', async () => {
+  const onSubmit = vi.fn().mockRejectedValue(new AttachmentStorageError('This workspace has reached its 2 GiB attachment storage limit.'));
+  render(<ReplyComposer onSubmit={onSubmit} attachmentLimits={limits} />);
+  attach(chosen('a.bin', 1));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Hi' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('reached its 2 GiB attachment storage limit');
+  expect(screen.getByLabelText('Message body')).toHaveValue('Hi');
+  expect(screen.getByRole('list', { name: 'Files to send' })).toHaveTextContent('a.bin');
 });

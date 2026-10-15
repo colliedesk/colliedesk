@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
@@ -19,6 +20,8 @@ type Store struct {
 	clock  func() time.Time
 	// foundingStorage replaces the Founding plan's storage cap when above zero; tests use a small one.
 	foundingStorage int64
+	// objects is attachment storage, used to verify and discard objects; nil skips both.
+	objects attachments.Storage
 }
 
 func New(pool *pgxpool.Pool) *Store {

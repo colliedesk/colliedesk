@@ -67,19 +67,6 @@ func (s *Store) GetAttachment(ctx context.Context, workspaceID, id string) (doma
 	return item, key, nil
 }
 
-// AttachmentKeyInUse reports whether any attachment of the workspace still points at the storage
-// key. Objects are content-addressed, so one object can back several attachments.
-func (s *Store) AttachmentKeyInUse(ctx context.Context, workspaceID, key string) (bool, error) {
-	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
-		var used bool
-		err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM attachments WHERE workspace_id=$1 AND storage_key=$2)`, workspaceID, key).Scan(&used)
-		if err != nil {
-			return false, fmt.Errorf("check attachment key: %w", err)
-		}
-		return used, nil
-	})
-}
-
 // rowsQuerier is satisfied by a transaction.
 type rowsQuerier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
