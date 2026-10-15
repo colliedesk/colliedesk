@@ -1330,6 +1330,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description Error code `signup_unavailable`. Sign-up is off because SIGNUP_HASH_KEY or TRUSTED_PROXIES is missing on the server (logged at start). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     redeemLink: {

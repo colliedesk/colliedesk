@@ -21,6 +21,10 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 		writeError(response, http.StatusNotFound, "not_found", "Cloud sign-up is not configured.")
 		return
 	}
+	if a.config.SignupDisabled {
+		writeError(response, http.StatusServiceUnavailable, "signup_unavailable", "Sign-up is temporarily unavailable. Please try again later.")
+		return
+	}
 	if request.Header.Get("Origin") != a.config.Origin {
 		writeError(response, http.StatusForbidden, "csrf_rejected", "Origin does not match this Colliedesk instance.")
 		return

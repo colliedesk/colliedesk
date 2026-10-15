@@ -47,9 +47,11 @@ type Config struct {
 	// client address of a sign-up or of a public web form submission (TRUSTED_PROXIES). Empty trusts
 	// none: the peer address is the client.
 	TrustedProxies []netip.Prefix
-	// SignupHashKey keys the hashes of the sign-up records (SIGNUP_HASH_KEY, at least 32 bytes); sign-up
-	// answers 500 without it, and serve refuses to start with sign-up enabled and no key.
+	// SignupHashKey keys the hashes of the sign-up records (SIGNUP_HASH_KEY, at least 32 bytes).
 	SignupHashKey string
+	// SignupDisabled turns cloud sign-up off (503 signup_unavailable) while its settings are missing;
+	// serve sets it and logs why rather than refusing to start.
+	SignupDisabled bool
 	// Random is the entropy for generated workspace slug suffixes; nil uses crypto/rand.
 	Random io.Reader
 }
