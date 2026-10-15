@@ -144,8 +144,13 @@ func parseSince(value string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("--since must be YYYY-MM-DD (UTC) or an RFC 3339 time, got %q", value)
 }
 
-// billingEnabled is true where the trial exists: the instance has the hosted billing configured.
+// billingEnabled is true where the trial exists: the instance has the hosted billing configured and
+// this build serves it (the same decision serve makes at start).
 func billingEnabled() bool {
 	config, err := polar.ConfigFromEnv(os.Getenv)
-	return err == nil && config.Enabled()
+	if err != nil {
+		return false
+	}
+	config, _ = billingAtStart(config, lockedScreenShipped)
+	return config.Enabled()
 }

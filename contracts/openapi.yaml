@@ -90,6 +90,9 @@ paths:
         '429':
           description: Error code `rate_limited`. This client address already started 3 trials in the last 24 hours.
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '503':
+          description: Error code `signup_unavailable`. Sign-up is off because SIGNUP_HASH_KEY or TRUSTED_PROXIES is missing on the server (logged at start).
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/auth/redeem:
     post:
       operationId: redeemLink

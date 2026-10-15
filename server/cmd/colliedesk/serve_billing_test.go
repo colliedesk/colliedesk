@@ -66,8 +66,8 @@ func TestServeStartsWithBillingConfiguredWhileTheLockedScreenIsMissing(t *testin
 	// The database below is unreachable, so serve stops there; it must not stop earlier on billing.
 	err := run(context.Background(), []string{"serve", "--listen", "127.0.0.1:0"}, io.Discard,
 		"postgres://nobody:nobody@127.0.0.1:1/none?sslmode=disable", "http://localhost:8080")
-	if err != nil && strings.Contains(err.Error(), "locked screen") {
-		t.Fatalf("serve refused to start over billing: %v", err)
+	if err == nil || strings.Contains(err.Error(), "locked screen") || !strings.Contains(err.Error(), "127.0.0.1:1") {
+		t.Fatalf("serve must get past billing and stop only at the unreachable database: %v", err)
 	}
 }
 

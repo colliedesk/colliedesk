@@ -345,7 +345,9 @@ func TestSignupTurnedOffAtStartIsRefusedClearly(t *testing.T) {
 	f := newSignupFixture(t, func(config *httpapi.Config) { config.SignupDisabled = true })
 	response := f.signUp(t, "ana@example.com", "Northwind Help", "203.0.113.7")
 	wantResponse(t, response, http.StatusServiceUnavailable, "signup_unavailable")
-	if got := f.count(t, "workspaces"); got != "0" {
-		t.Fatalf("workspaces after a refused sign-up = %s, want 0", got)
+	for _, table := range []string{"workspaces", "agents", "cloud_signups"} {
+		if got := f.count(t, table); got != "0" {
+			t.Fatalf("%s after a refused sign-up = %s, want 0", table, got)
+		}
 	}
 }
