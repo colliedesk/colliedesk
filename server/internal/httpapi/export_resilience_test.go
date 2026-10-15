@@ -267,7 +267,26 @@ func TestClientThatTricklesIsCutOffByTheTotalDeadline(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	if got := request(t, api, http.MethodGet, "/api/v1/export", nil, slow, nil).Code; got != http.StatusOK {
-		t.Fatalf("export after the deadline: status=%d, want 200 (slot freed)", got)
+	if !exportSlotIsFree(t, api, slow) {
+		t.Fatal("export after the deadline was refused: the slot was not freed")
 	}
+}
+
+// exportSlotIsFree asks for an export and reports whether the server accepted it. A refusal
+// (409 for this workspace, 429 for the server) is answered before any work starts. An accepted
+// export may still outlive the short total deadline the test sets and then aborts its response
+// with http.ErrAbortHandler; that panic is the handler's way to cut the connection, and it proves
+// the slot was free, so the check must not depend on the export finishing in time.
+func exportSlotIsFree(t *testing.T, api http.Handler, token string) (free bool) {
+	t.Helper()
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			if recovered != http.ErrAbortHandler {
+				panic(recovered)
+			}
+			free = true
+		}
+	}()
+	code := request(t, api, http.MethodGet, "/api/v1/export", nil, token, nil).Code
+	return code != http.StatusConflict && code != http.StatusTooManyRequests
 }

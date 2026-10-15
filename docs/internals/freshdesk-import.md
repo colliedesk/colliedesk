@@ -96,7 +96,9 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
   start) and sets `trial_extended_at`, once. The update is one statement guarded by
   `trial_extended_at IS NULL AND trial_ends_at > now`, so a repeat or resumed run, or a run after the
   trial ended, changes nothing and an import never unlocks a workspace. Undo does not revoke it. The
-  report prints `trial: extended to <UTC>`. Self-hosted installs write the column and never read it.
+  report prints `trial: extended to <UTC>` on Cloud only (`Options.Cloud`, set when billing is configured);
+  self-hosted installs write the column and say nothing. If the extension fails, the report of the
+  finished import is kept, says `trial: extension failed`, and the same import run again retries it.
 - **Downloads are never rendered inline.** `GET /api/v1/attachments/{id}` answers
   `application/octet-stream`, `Content-Disposition: attachment` (RFC 5987 `filename*`) and
   `nosniff`, and refuses a row whose storage key belongs to another workspace.

@@ -36,6 +36,7 @@ func (e *importEnv) runAt(t *testing.T, now time.Time, mutate func(*freshdesk.Op
 	t.Helper()
 	return e.run(t, context.Background(), func(o *freshdesk.Options) {
 		o.Now = func() time.Time { return now }
+		o.Cloud = true
 		if mutate != nil {
 			mutate(o)
 		}
@@ -124,5 +125,60 @@ func TestImportIntoOneWorkspaceNeverChangesAnothersTrial(t *testing.T) {
 	}
 	if ends, extended := env.trial(t, other.ID); !ends.Equal(trialEnd14) || extended {
 		t.Fatalf("other workspace trial ends %s extended=%v", ends, extended)
+	}
+}
+
+func TestRealImportThatFindsNoTicketsNeverExtends(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.noTickets = true
+	env.setTrialEnd(t, env.workspaceID, trialEnd14)
+	report, err := env.runAt(t, importDay10, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if env.count(t, "conversations") != 0 {
+		t.Fatalf("fixture still imported tickets: %s", env.tableCounts(t))
+	}
+	if ends, extended := env.trial(t, env.workspaceID); !ends.Equal(trialEnd14) || extended || report.TrialExtendedTo != nil {
+		t.Fatalf("an import with 0 done tickets: trial ends %s extended=%v report=%v", ends, extended, report.TrialExtendedTo)
+	}
+}
+
+func TestSelfHostedImportKeepsTheTrialLineOutOfTheReport(t *testing.T) {
+	env := newImportEnv(t)
+	env.setTrialEnd(t, env.workspaceID, trialEnd14)
+	report, err := env.runAt(t, importDay10, func(o *freshdesk.Options) { o.Cloud = false })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.TrialExtendedTo != nil || strings.Contains(report.Markdown(), "trial:") {
+		t.Fatalf("self-hosted report mentions a trial: %v\n%s", report.TrialExtendedTo, report.Markdown())
+	}
+}
+
+func TestFailedExtensionKeepsTheReportOfTheFinishedImport(t *testing.T) {
+	env := newImportEnv(t)
+	env.setTrialEnd(t, env.workspaceID, trialEnd14)
+	ctx := context.Background()
+	for _, statement := range []string{
+		`CREATE FUNCTION refuse_trial_change() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'trial is read-only'; END $$`,
+		`CREATE TRIGGER refuse_trial_change BEFORE UPDATE OF trial_ends_at ON workspaces FOR EACH ROW EXECUTE FUNCTION refuse_trial_change()`,
+	} {
+		if _, err := env.pool.Exec(ctx, statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	report, err := env.runAt(t, importDay10, nil)
+	if err != nil {
+		t.Fatalf("the finished import was lost to the failed extension: %v", err)
+	}
+	if env.count(t, "conversations") == 0 || report.Status == "" {
+		t.Fatalf("import data or report missing: %s", env.tableCounts(t))
+	}
+	if report.TrialExtendedTo != nil || !strings.Contains(report.TrialExtensionError, "trial is read-only") {
+		t.Fatalf("report does not say the extension failed: extendedTo=%v error=%q", report.TrialExtendedTo, report.TrialExtensionError)
+	}
+	if !strings.Contains(report.Markdown(), "trial: extension failed") {
+		t.Fatalf("markdown does not say the extension failed:\n%s", report.Markdown())
 	}
 }

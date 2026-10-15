@@ -20,6 +20,7 @@ const upgrades: { plan: CheckoutPlan; label: string }[] = [
 
 // periodNote says when the paid plan renews, or when it ends if it was cancelled.
 function periodNote(billing: Billing, timezone: string): string | null {
+  if (billing.complimentary) return null;
   if (billing.plan === 'trial') return messages.trialEndsOn(formatDate(billing.trial_ends_at, timezone));
   if (billing.plan === 'none') return messages.trialEnded(formatDate(billing.trial_ends_at, timezone));
   if (!billing.current_period_end) return null;
@@ -38,7 +39,9 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
       {billing.status === 'past_due' && <p role="alert" className="error-copy">{messages.pastDueNotice}</p>}
       <section aria-labelledby="current-plan-heading">
         <div className="section-heading"><div><h2 id="current-plan-heading">{messages.currentPlan}</h2></div></div>
-        <p><strong>{messages.plans[billing.plan]}</strong></p>
+        <p><strong>{billing.complimentary
+          ? messages.complimentaryPlan(messages.plans[billing.plan], billing.complimentary_until ? formatDate(billing.complimentary_until, timezone) : null)
+          : messages.plans[billing.plan]}</strong></p>
         {note && <p className="muted-copy">{note}</p>}
         <ul className="muted-copy">
           <li>{messages.agentsUsage(billing.usage.agents, billing.limits.agents, billing.usage.pending_invites)}</li>
@@ -49,7 +52,7 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
         <div className="button-row">{upgrades.map((item) =>
           <button key={item.plan} type="button" className="primary-action" onClick={() => onCheckout(item.plan)}>{item.label}</button>)}</div>
       </section>}
-      {billing.status !== 'none' && <section aria-labelledby="manage-billing-heading">
+      {billing.status !== 'none' && !billing.complimentary && <section aria-labelledby="manage-billing-heading">
         <div className="section-heading"><div><h2 id="manage-billing-heading">{messages.manageBilling}</h2><p>{messages.manageBillingHelp}</p></div></div>
         <button type="button" onClick={onManage}>{messages.manageBilling}</button>
       </section>}

@@ -22,6 +22,9 @@ func (r *Report) Markdown() string {
 	if r.TrialExtendedTo != nil {
 		fmt.Fprintf(&b, "- trial: extended to %s\n", r.TrialExtendedTo.UTC().Format(time.RFC3339))
 	}
+	if r.TrialExtensionError != "" {
+		fmt.Fprintf(&b, "- trial: extension failed (%s); run the same import again to retry\n", r.TrialExtensionError)
+	}
 	b.WriteString("\n## Counts\n\n| Entity | In Freshdesk | In Colliedesk | Failed |\n|---|---:|---:|---:|\n")
 	for _, row := range []struct {
 		name  string

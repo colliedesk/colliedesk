@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -62,6 +63,15 @@ type Subscription struct {
 	CancelAtPeriodEnd bool
 	EndedAt           *time.Time
 	ModifiedAt        time.Time // the subscription's own modified_at, for ordering events
+}
+
+// CompSubscriptionPrefix starts the subscription id of a complimentary plan, so it is never
+// mistaken for a Polar subscription id.
+const CompSubscriptionPrefix = "comp:"
+
+// Complimentary reports whether the subscription is an operator-granted plan that nobody pays for.
+func (s Subscription) Complimentary() bool {
+	return strings.HasPrefix(s.SubscriptionID, CompSubscriptionPrefix)
 }
 
 // Entitled reports whether the subscription grants its paid plan at now.
@@ -159,9 +169,14 @@ type Billing struct {
 	CancelAtPeriodEnd bool       `json:"cancel_at_period_end"`
 	// ActiveSubscriptions counts subscriptions that grant a paid plan now; more than one is a
 	// duplicate the admin should cancel in the portal.
-	ActiveSubscriptions int          `json:"active_subscriptions"`
-	Limits              PlanLimits   `json:"limits"`
-	Usage               BillingUsage `json:"usage"`
+	ActiveSubscriptions int `json:"active_subscriptions"`
+	// Complimentary is true when the plan in effect is a grant by HC Labs, not a Polar subscription:
+	// there is no billing account, so no portal and no checkout. ComplimentaryUntil is its end, nil
+	// when it has none.
+	Complimentary      bool         `json:"complimentary"`
+	ComplimentaryUntil *time.Time   `json:"complimentary_until"`
+	Limits             PlanLimits   `json:"limits"`
+	Usage              BillingUsage `json:"usage"`
 }
 
 // NewBilling derives the plan in effect from every subscription of the workspace. The best
@@ -173,7 +188,9 @@ func NewBilling(subscriptions []Subscription, trialEndsAt time.Time, usage Billi
 	var best, latest *Subscription
 	for index := range subscriptions {
 		candidate := &subscriptions[index]
-		if latest == nil || candidate.ModifiedAt.After(latest.ModifiedAt) {
+		// A complimentary grant has no billing account behind it, so once it ran out there is
+		// nothing to explain or manage.
+		if !candidate.Complimentary() && (latest == nil || candidate.ModifiedAt.After(latest.ModifiedAt)) {
 			latest = candidate
 		}
 		if candidate.Entitled(now) {
@@ -193,6 +210,9 @@ func NewBilling(subscriptions []Subscription, trialEndsAt time.Time, usage Billi
 		billing.Status = shown.Status
 		billing.CurrentPeriodEnd = UTCOptional(shown.CurrentPeriodEnd)
 		billing.CancelAtPeriodEnd = shown.CancelAtPeriodEnd
+	}
+	if best != nil && best.Complimentary() {
+		billing.Complimentary, billing.ComplimentaryUntil = true, UTCOptional(best.CurrentPeriodEnd)
 	}
 	billing.Limits = LimitsFor(billing.Plan)
 	return billing
