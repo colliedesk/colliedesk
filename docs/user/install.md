@@ -87,6 +87,11 @@ add the request user to such an install:
    ```
 2. Run `docker compose up -d`. The server creates the user on start.
 
+The server opens at most 20 database connections per pool. To change that, add
+`pool_max_conns=N` to `DATABASE_URL` or `DATABASE_REQUEST_URL`, for example
+`...?sslmode=disable&pool_max_conns=40`. Keep it well above 2, the number of workspace exports the
+server runs at once.
+
 When you remove an install from a shared PostgreSQL server, also remove its two users. Dropping
 the database does not remove them. As a superuser, after dropping the database:
 

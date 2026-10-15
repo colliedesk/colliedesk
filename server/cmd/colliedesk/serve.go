@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -43,7 +44,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	}
 	requestPool := pool
 	if requestURL := os.Getenv("DATABASE_REQUEST_URL"); requestURL != "" {
-		opened, err := pgxpool.New(ctx, requestURL)
+		opened, err := openPool(ctx, requestURL)
 		if err != nil {
 			return fmt.Errorf("open DATABASE_REQUEST_URL: %w", err)
 		}
@@ -120,4 +121,25 @@ func requireLockedScreen(billing polar.Config, shipped bool) error {
 		return errors.New("billing is configured but this build has no locked screen yet: workspaces would lock with no explanation in the web app; unset every POLAR_* variable")
 	}
 	return nil
+}
+
+// defaultPoolConns is the pool size when the database URL has no pool_max_conns. pgx would pick
+// max(4, CPU count), which a handful of slow workspace exports could exhaust; this stays well above
+// the number of exports the server allows at once.
+const defaultPoolConns = 20
+
+// openPool connects with an explicit pool size. Put pool_max_conns=N in the URL to change it.
+func openPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
+	config, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, err
+	}
+	if parsed, err := url.Parse(databaseURL); err != nil || !parsed.Query().Has("pool_max_conns") {
+		config.MaxConns = defaultPoolConns
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("connect: %w", err)
+	}
+	return pool, nil
 }

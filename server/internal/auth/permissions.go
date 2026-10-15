@@ -11,6 +11,9 @@ const (
 	PermissionAccessWrite        = "access:write"
 	// PermissionBillingManage covers plan, checkout and the billing portal; admins only.
 	PermissionBillingManage = "billing:manage"
+	// PermissionWorkspaceExport covers the bulk export of every record of the workspace, contact
+	// details included; admins only.
+	PermissionWorkspaceExport = "workspace:export"
 	// PermissionChannelInbound marks routes authenticated by a channel secret instead of a session.
 	PermissionChannelInbound = "channels:inbound"
 )

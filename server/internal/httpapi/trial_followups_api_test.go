@@ -77,14 +77,6 @@ func TestLockedAllowlistOnlyNamesRealRoutes(t *testing.T) {
 		routes[route.Method+" "+route.Pattern] = true
 	}
 	for _, key := range httpapi.LockedAllowlist() {
-		// The export route ships in its own change. The exemption fails once the route exists,
-		// so it cannot outlive the change that makes it unnecessary.
-		if key == "GET /api/v1/export" {
-			if routes[key] {
-				t.Errorf("%q now exists in Routes(); delete the exemption in this test", key)
-			}
-			continue
-		}
 		if !routes[key] {
 			t.Errorf("allowlist entry %q matches no route in Routes(); a rename would silently lock it", key)
 		}

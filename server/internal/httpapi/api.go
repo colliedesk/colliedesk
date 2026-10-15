@@ -33,6 +33,14 @@ type Config struct {
 	Now func() time.Time
 	// LookupTXT resolves DNS TXT records for domain verification; nil uses the system resolver.
 	LookupTXT func(ctx context.Context, name string) ([]string, error)
+	// MaxConcurrentExports caps workspace exports running at once on this server (default 2);
+	// more get 429. ExportWriteTimeout is how long one write to a slow client may block
+	// (default 60 s) before the export is aborted and its database connection released.
+	MaxConcurrentExports int
+	ExportWriteTimeout   time.Duration
+	// ExportTimeout is the longest one export may run in total (default 2 h), however slowly the
+	// client keeps reading.
+	ExportTimeout time.Duration
 }
 
 type Route struct {
@@ -48,8 +56,10 @@ type API struct {
 	auth   *auth.Service
 	cloud  *cloudauth.Verifier
 	store  *store.Store
-	polar  *polar.Client
-	now    func() time.Time
+	// exports admits workspace exports; see exportLimiter.
+	exports *exportLimiter
+	polar   *polar.Client
+	now     func() time.Time
 }
 
 type routeSpec struct {
@@ -79,7 +89,7 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 		clock = func() time.Time { return time.Now().UTC() }
 	}
 	limits := config.Billing.Enabled()
-	api := &API{config: config, now: clock, limits: limits,
+	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports),
 		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits),
 		store: store.NewWithDB(db).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits)}
 	if config.CloudAuth.Enabled() {
@@ -142,6 +152,7 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/billing/checkout", auth.PermissionBillingManage},
 		{http.MethodPost, "/api/v1/billing/portal", auth.PermissionBillingManage},
 		{http.MethodPost, polarWebhookPath, auth.PermissionPublic},
+		{http.MethodGet, "/api/v1/export", auth.PermissionWorkspaceExport},
 	}
 }
 
