@@ -243,7 +243,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: ci-ok waits for every job
-        run: sh tests/ci-ok-needs-test.sh
+        run: sh tests/ci-ok-needs-test.sh && sh tests/after-ci-ok-runs-test.sh
       - name: Actions and base images are pinned
         run: sh tests/pinned-dependencies-test.sh
       - name: Pinned action archives are fetchable
@@ -261,7 +261,7 @@ jobs:
   # the current head of main: re-running an older run must not move edge backwards.
   publish-edge:
     needs: ci-ok
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: ${{ !cancelled() && needs.ci-ok.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
