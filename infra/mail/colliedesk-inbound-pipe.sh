@@ -5,7 +5,8 @@
 # Exit codes follow sysexits(3), which is what MTAs act on:
 #   0  stored, threaded, duplicate or dropped as automatic mail
 #   75 EX_TEMPFAIL: the MTA keeps the message and retries (429, 5xx, 401, network or configuration error)
-#   65 EX_DATAERR: the MTA bounces it (400 not an email, 413 larger than 25 MiB)
+#   65 EX_DATAERR: the MTA bounces it (400 not an email, 403 locked workspace that no longer takes
+#      mail, 413 larger than 25 MiB)
 set -u
 
 CURL=${CURL:-curl}
@@ -32,7 +33,7 @@ STATUS=$("$CURL" --silent --show-error --max-time 120 --output /dev/null --write
 
 case $STATUS in
   2??) exit 0 ;;
-  400 | 413)
+  400 | 403 | 413)
     echo "colliedesk-inbound-pipe: CollieDesk rejected the message (HTTP $STATUS)" >&2
     exit 65
     ;;

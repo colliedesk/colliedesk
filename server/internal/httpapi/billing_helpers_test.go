@@ -260,14 +260,13 @@ type billingView struct {
 	CurrentPeriodEnd  *time.Time `json:"current_period_end"`
 	CancelAtPeriodEnd bool       `json:"cancel_at_period_end"`
 	// ActiveSubscriptions counts subscriptions that grant a paid plan now; more than one is a duplicate.
-	ActiveSubscriptions int `json:"active_subscriptions"`
+	ActiveSubscriptions int  `json:"active_subscriptions"`
+	Locked              bool `json:"locked"`
 	Limits              struct {
-		Agents                int  `json:"agents"`
-		ConversationsPerMonth *int `json:"conversations_per_month"`
+		Agents int `json:"agents"`
 	} `json:"limits"`
 	Usage struct {
-		Agents                 int `json:"agents"`
-		ConversationsThisMonth int `json:"conversations_this_month"`
+		Agents int `json:"agents"`
 	} `json:"usage"`
 }
 

@@ -5,30 +5,30 @@ import (
 	"time"
 )
 
-// Plans a workspace can be on. A workspace with no subscription is on PlanFree.
+// Plans a workspace can be on. A new workspace is on PlanTrial; once the trial ends with no paid
+// subscription it is on PlanNone and locked.
 const (
-	PlanFree     = "free"
+	PlanTrial    = "trial"
 	PlanTeam     = "team"
 	PlanFounding = "founding"
+	PlanNone     = "none"
 )
 
 // BillingStatusNone is the status of a workspace that never had a subscription.
 const BillingStatusNone = "none"
 
-// PlanLimits are the caps of a plan. A nil ConversationsPerMonth means no cap.
+// PlanLimits are the caps of a plan.
 type PlanLimits struct {
-	Agents                int  `json:"agents"`
-	ConversationsPerMonth *int `json:"conversations_per_month"`
+	Agents int `json:"agents"`
 }
 
-// LimitsFor returns the caps of plan; an unknown plan gets the free caps.
+// LimitsFor returns the caps of plan; a locked workspace (PlanNone) holds no seats.
 func LimitsFor(plan string) PlanLimits {
 	switch plan {
-	case PlanTeam, PlanFounding:
+	case PlanTrial, PlanTeam, PlanFounding:
 		return PlanLimits{Agents: 10}
 	default:
-		monthly := 100
-		return PlanLimits{Agents: 3, ConversationsPerMonth: &monthly}
+		return PlanLimits{}
 	}
 }
 
@@ -67,18 +67,6 @@ type BillingUsage struct {
 	Agents int `json:"agents"`
 	// PendingInvites are unused, unrevoked, unexpired invites; each holds an agent seat.
 	PendingInvites int `json:"pending_invites"`
-	// ConversationsThisMonth counts conversations received since the start of the UTC month,
-	// held ones included and imported ones excluded.
-	ConversationsThisMonth int `json:"conversations_this_month"`
-	// HeldConversations are received over the quota this month and still hidden from the inbox.
-	HeldConversations int `json:"held_conversations"`
-}
-
-// MonthStart is the first instant of the UTC calendar month that contains now. The monthly
-// conversation quota resets at this instant.
-func MonthStart(now time.Time) time.Time {
-	year, month, _ := now.UTC().Date()
-	return time.Date(year, month, 1, 0, 0, 0, 0, time.UTC)
 }
 
 // PlanLimitError means an action would exceed a limit of the workspace's plan.
@@ -88,19 +76,26 @@ type PlanLimitError struct {
 }
 
 func (e *PlanLimitError) Error() string {
-	if e.Plan == PlanFree {
-		return fmt.Sprintf("The Free plan allows %d agents, pending invites included. Upgrade in Settings > Billing, or revoke a pending invite, to add another.", e.Agents)
-	}
 	name := "Team"
-	if e.Plan == PlanFounding {
+	switch e.Plan {
+	case PlanFounding:
 		name = "Founding"
+	case PlanTrial:
+		name = "trial"
+	}
+	if e.Plan == PlanTrial {
+		return fmt.Sprintf("The trial allows %d agents, pending invites included. Revoke a pending invite to free a seat, or subscribe and contact us for more than %d agents.", e.Agents, e.Agents)
 	}
 	return fmt.Sprintf("The %s plan allows %d agents, pending invites included. Revoke a pending invite to free a seat, or contact us for more than %d agents.", name, e.Agents, e.Agents)
 }
 
 // Billing is what an admin sees about their workspace's plan.
 type Billing struct {
-	Plan              string     `json:"plan"`
+	Plan string `json:"plan"`
+	// TrialEndsAt is when the workspace's free trial ends or ended; it is set whatever the plan.
+	TrialEndsAt time.Time `json:"trial_ends_at"`
+	// Locked is true when the workspace has no paid plan and its trial is over.
+	Locked            bool       `json:"locked"`
 	Status            string     `json:"status"`
 	CurrentPeriodEnd  *time.Time `json:"current_period_end"`
 	CancelAtPeriodEnd bool       `json:"cancel_at_period_end"`
@@ -115,8 +110,8 @@ type Billing struct {
 // subscription that is still paid decides the plan (founding before team, then the later period
 // end); with none paid, the most recently changed one explains the state. ActiveSubscriptions
 // counts the paid ones so a duplicate is visible.
-func NewBilling(subscriptions []Subscription, usage BillingUsage, now time.Time) Billing {
-	billing := Billing{Plan: PlanFree, Status: BillingStatusNone, Usage: usage}
+func NewBilling(subscriptions []Subscription, trialEndsAt time.Time, usage BillingUsage, now time.Time) Billing {
+	billing := Billing{Status: BillingStatusNone, Usage: usage}
 	var best, latest *Subscription
 	for index := range subscriptions {
 		candidate := &subscriptions[index]
@@ -131,11 +126,11 @@ func NewBilling(subscriptions []Subscription, usage BillingUsage, now time.Time)
 		}
 	}
 	shown := best
-	if best != nil {
-		billing.Plan = best.Plan
-	} else {
+	if best == nil {
 		shown = latest
 	}
+	access := NewAccess(subscriptions, trialEndsAt, now)
+	billing.Plan, billing.TrialEndsAt, billing.Locked = access.Plan, access.TrialEndsAt, access.Locked
 	if shown != nil {
 		billing.Status = shown.Status
 		billing.CurrentPeriodEnd = UTCOptional(shown.CurrentPeriodEnd)

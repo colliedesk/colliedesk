@@ -98,6 +98,15 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 		return result, fmt.Errorf("begin inbound email: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+	if s.limits {
+		access, err := workspaceAccess(ctx, tx, workspaceID, now)
+		if err != nil {
+			return result, err
+		}
+		if access.Locked {
+			return result, domain.ErrMailboxClosed
+		}
+	}
 	// Serialize deliveries from one sender so the rate count and duplicate check see each other.
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "email-inbound:"+workspaceID+":"+in.FromAddress); err != nil {
 		return result, fmt.Errorf("lock inbound sender: %w", err)
@@ -168,16 +177,10 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 			return result, ErrRateLimited
 		}
 		result.Status = "created"
-		// Upload before the quota lock is taken: a slow object store must not queue the workspace's
-		// other new conversations behind this one.
 		if err := upload(); err != nil {
 			return result, err
 		}
-		held, err := s.overConversationQuota(ctx, tx, workspaceID, now)
-		if err != nil {
-			return result, err
-		}
-		if conversationID, err = createEmailConversation(ctx, tx, workspaceID, in, now, held); err != nil {
+		if conversationID, err = createEmailConversation(ctx, tx, workspaceID, in, now); err != nil {
 			return result, err
 		}
 	} else {

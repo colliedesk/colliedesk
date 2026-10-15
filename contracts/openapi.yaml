@@ -2,7 +2,14 @@ openapi: 3.1.0
 info:
   title: CollieDesk API
   version: 0.2.0
-  description: Passwordless, workspace-scoped helpdesk API.
+  description: >
+    Passwordless, workspace-scoped helpdesk API.
+
+    On the hosted cloud (billing enabled) a workspace has a free trial. When the trial ends with no
+    paid subscription the workspace is locked: every authenticated route answers 402 with error code
+    `workspace_locked`, reads included, except the routes that sign in and out, show and pay the
+    plan, export the data (`GET /api/v1/export`) and disconnect the email channel. Paying unlocks the
+    workspace on the next request. Self-hosted instances have no trial and no lock.
 servers:
   - url: /
 security:
@@ -414,6 +421,7 @@ paths:
               schema: {$ref: '#/components/schemas/InboundEmailResult'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/MailboxClosed'}
         '404': {$ref: '#/components/responses/NotFound'}
         '413': {$ref: '#/components/responses/PayloadTooLarge'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
@@ -805,7 +813,18 @@ components:
       description: >
         The action would exceed a limit of the workspace's plan (error code `plan_limit_reached`):
         more agents, pending invites included, than the plan allows. Nothing was changed; the
-        action works again after an upgrade or after freeing a seat.
+        action works again after an upgrade or after freeing a seat. A locked workspace answers
+        `workspace_locked` instead.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    WorkspaceLocked:
+      description: >
+        The workspace's trial or subscription ended (error code `workspace_locked`). Nothing was read
+        or changed. Choose a plan in billing, or export the data; the same request works after payment.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    MailboxClosed:
+      description: >
+        The workspace is locked and no longer accepts new mail (error code `mailbox_closed`). This is
+        permanent for the sender: the forwarder bounces the message instead of retrying.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error401:
       description: Authentication failed
@@ -840,9 +859,14 @@ components:
         status: {type: string, enum: [applied, duplicate, stale, ignored]}
     Billing:
       type: object
-      required: [plan, status, current_period_end, cancel_at_period_end, active_subscriptions, limits, usage]
+      required: [plan, trial_ends_at, locked, status, current_period_end, cancel_at_period_end, active_subscriptions, limits, usage]
       properties:
-        plan: {type: string, enum: [free, team, founding], description: The plan in effect now.}
+        plan:
+          type: string
+          enum: [trial, team, founding, none]
+          description: The plan in effect now. `trial` is the free trial; `none` means the trial is over and nothing is paid.
+        trial_ends_at: {type: string, format: date-time, description: 'When the free trial ends or ended, whatever the plan.'}
+        locked: {type: boolean, description: 'True when `plan` is `none`; the workspace refuses every route outside the locked allowlist.'}
         status:
           type: string
           enum: [none, incomplete, incomplete_expired, trialing, active, past_due, canceled, unpaid, paused, unknown]
@@ -860,28 +884,17 @@ components:
             cancel the extra one in the billing portal.
         limits:
           type: object
-          required: [agents, conversations_per_month]
+          required: [agents]
           properties:
-            agents: {type: integer}
-            conversations_per_month: {type: [integer, 'null'], description: Null means no cap.}
+            agents: {type: integer, description: 'Seats of the plan; 0 when locked.'}
         usage:
           type: object
-          required: [agents, pending_invites, conversations_this_month, held_conversations]
+          required: [agents, pending_invites]
           properties:
             agents: {type: integer}
             pending_invites:
               type: integer
               description: Unused, unrevoked, unexpired invites. Each holds an agent seat, so agents plus pending invites is compared with `limits.agents`.
-            conversations_this_month:
-              type: integer
-              description: >
-                Conversations received since the start of the current UTC month, held ones included.
-                Conversations imported from another helpdesk never count.
-            held_conversations:
-              type: integer
-              description: >
-                Received over the monthly quota this month and hidden from the inbox and search.
-                They are stored in full and appear when the workspace upgrades or the month ends.
     WorkspaceChoice:
       type: object
       required: [slug, name]
@@ -925,11 +938,21 @@ components:
         workspace: {$ref: '#/components/schemas/Workspace'}
     Me:
       type: object
-      required: [agent, workspace, timezone]
+      required: [agent, workspace, timezone, plan]
       properties:
         agent: {$ref: '#/components/schemas/Agent'}
         workspace: {$ref: '#/components/schemas/Workspace'}
         timezone: {type: string}
+        plan:
+          description: The trial and lock state, so every agent sees it. Null on self-hosted instances.
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [plan, trial_ends_at, locked]
+              properties:
+                plan: {type: string, enum: [trial, team, founding, none]}
+                trial_ends_at: {type: string, format: date-time}
+                locked: {type: boolean}
     Session:
       type: object
       required: [id, agent_id, agent_email, label, created_at, last_seen_at, expires_at, revoked_at]
@@ -1010,17 +1033,11 @@ components:
         forwarded_to: {type: array, items: {type: string}}
     ConversationPage:
       type: object
-      required: [items, page, page_size, held_count]
+      required: [items, page, page_size]
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/Conversation'}}
         page: {type: integer, minimum: 1}
         page_size: {type: integer, minimum: 1}
-        held_count:
-          type: integer
-          minimum: 0
-          description: >
-            Conversations received over the Free plan's monthly quota and hidden from `items` and
-            from search. Always 0 on self-hosted instances and on paid plans.
     Message:
       type: object
       required: [id, conversation_id, author_agent_id, author_name, kind, body, body_html, origin, attachments, created_at, delivery, email]

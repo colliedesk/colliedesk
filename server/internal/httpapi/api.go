@@ -29,7 +29,7 @@ type Config struct {
 	RequestPool *pgxpool.Pool
 	// Billing turns on Polar billing for the hosted cloud; the zero value leaves it off.
 	Billing polar.Config
-	// Now is the clock for plan limits and the monthly quota; nil uses the system clock.
+	// Now is the clock for the trial, the lock and plan limits; nil uses the system clock.
 	Now func() time.Time
 	// LookupTXT resolves DNS TXT records for domain verification; nil uses the system resolver.
 	LookupTXT func(ctx context.Context, name string) ([]string, error)
@@ -42,6 +42,8 @@ type Route struct {
 }
 
 type API struct {
+	// limits is true on the hosted cloud, where the trial, lock and agent cap apply.
+	limits bool
 	config Config
 	auth   *auth.Service
 	cloud  *cloudauth.Verifier
@@ -77,7 +79,7 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 		clock = func() time.Time { return time.Now().UTC() }
 	}
 	limits := config.Billing.Enabled()
-	api := &API{config: config, now: clock,
+	api := &API{config: config, now: clock, limits: limits,
 		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits),
 		store: store.NewWithDB(db).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits)}
 	if config.CloudAuth.Enabled() {
@@ -91,7 +93,7 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 		if billingRoute(route.Route) && api.polar == nil {
 			continue
 		}
-		mux.Handle(route.Method+" "+route.Pattern, api.authorize(route.Permission, route.handler))
+		mux.Handle(route.Method+" "+route.Pattern, api.authorize(route.Route, route.handler))
 	}
 	return mux
 }
@@ -143,8 +145,9 @@ func Routes() []Route {
 	}
 }
 
-func (a *API) authorize(permission string, next http.HandlerFunc) http.HandlerFunc {
+func (a *API) authorize(route Route, next http.HandlerFunc) http.HandlerFunc {
 	return func(response http.ResponseWriter, request *http.Request) {
+		permission := route.Permission
 		if permission == auth.PermissionPublic || permission == auth.PermissionChannelInbound {
 			// Channel routes authenticate their own secret in the handler; sessions never grant them.
 			next(response, request)
@@ -166,6 +169,9 @@ func (a *API) authorize(permission string, next http.HandlerFunc) http.HandlerFu
 		}
 		if viaCookie && writes(request.Method) && request.Header.Get("Origin") != a.config.Origin {
 			writeError(response, http.StatusForbidden, "csrf_rejected", "Origin does not match this CollieDesk instance.")
+			return
+		}
+		if a.refuseIfLocked(response, request, route, principal) {
 			return
 		}
 		if viaCookie && request.URL.Path != "/api/v1/auth/logout" {

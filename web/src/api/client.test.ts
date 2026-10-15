@@ -37,7 +37,7 @@ test('a 401 is reported as a signed-out session, distinct from other failures', 
 });
 
 test('a 402 carries the server message so the page can say which limit was reached', async () => {
-  const message = 'The Free plan allows 3 agents, pending invites included. Upgrade in Settings > Billing, or revoke a pending invite, to add another.';
+  const message = 'The trial allows 10 agents, pending invites included. Revoke a pending invite to free a seat, or subscribe and contact us for more than 10 agents.';
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 402, json: vi.fn().mockResolvedValue({ error: { code: 'plan_limit_reached', message } }) }));
   await expect(api.createInvite('new@example.com', 'agent')).rejects.toEqual(expect.objectContaining({ name: PlanLimitError.name, message }));
 });

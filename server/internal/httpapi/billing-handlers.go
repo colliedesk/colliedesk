@@ -72,7 +72,7 @@ func (a *API) createCheckout(response http.ResponseWriter, request *http.Request
 		writeInternalError(response, err)
 		return
 	}
-	if current.Plan != domain.PlanFree {
+	if current.Plan != domain.PlanTrial && current.Plan != domain.PlanNone {
 		writeError(response, http.StatusConflict, "already_subscribed", "This workspace already has a paid plan. Change or cancel it from the billing portal.")
 		return
 	}

@@ -39,8 +39,8 @@ func TestPolarWebhookRejectsBadSignaturesAndWritesNothing(t *testing.T) {
 	if rows := rowCount(t, f.pool, "workspace_billing") + rowCount(t, f.pool, "billing_webhook_events"); rows != 0 {
 		t.Fatalf("rejected webhooks wrote %d rows", rows)
 	}
-	if got := getBilling(t, f.api, f.adminA); got.Plan != "free" {
-		t.Fatalf("plan=%q after rejected webhooks, want free", got.Plan)
+	if got := getBilling(t, f.api, f.adminA); got.Plan != "trial" {
+		t.Fatalf("plan=%q after rejected webhooks, want trial", got.Plan)
 	}
 }
 
@@ -57,8 +57,8 @@ func TestPolarWebhookActivatesTheWorkspaceNamedByExternalID(t *testing.T) {
 	if got.CurrentPeriodEnd == nil || !got.CurrentPeriodEnd.Equal(sub.PeriodEnd) {
 		t.Fatalf("period end=%v, want %v", got.CurrentPeriodEnd, sub.PeriodEnd)
 	}
-	if got.Limits.Agents != 10 || got.Limits.ConversationsPerMonth != nil {
-		t.Fatalf("limits=%+v, want 10 agents and no conversation cap", got.Limits)
+	if got.Limits.Agents != 10 {
+		t.Fatalf("limits=%+v, want 10 agents", got.Limits)
 	}
 }
 
@@ -94,12 +94,12 @@ func TestPolarWebhookStatusMapping(t *testing.T) {
 		{"trialing", "subscription.created", "trialing", future, false, nil, "team", "trialing"},
 		{"past due stays paid and is flagged", "subscription.past_due", "past_due", future, false, nil, "team", "past_due"},
 		{"cancelled keeps access until the period ends", "subscription.canceled", "canceled", future, true, nil, "team", "canceled"},
-		{"cancelled after the period ended", "subscription.canceled", "canceled", past, true, nil, "free", "canceled"},
-		{"revoked", "subscription.revoked", "canceled", future, false, &past, "free", "canceled"},
-		{"unpaid", "subscription.updated", "unpaid", future, false, nil, "free", "unpaid"},
-		{"incomplete", "subscription.created", "incomplete", future, false, nil, "free", "incomplete"},
-		{"incomplete expired", "subscription.updated", "incomplete_expired", future, false, nil, "free", "incomplete_expired"},
-		{"paused", "subscription.updated", "paused", future, false, nil, "free", "paused"},
+		{"cancelled after the period ended", "subscription.canceled", "canceled", past, true, nil, "trial", "canceled"},
+		{"revoked", "subscription.revoked", "canceled", future, false, &past, "trial", "canceled"},
+		{"unpaid", "subscription.updated", "unpaid", future, false, nil, "trial", "unpaid"},
+		{"incomplete", "subscription.created", "incomplete", future, false, nil, "trial", "incomplete"},
+		{"incomplete expired", "subscription.updated", "incomplete_expired", future, false, nil, "trial", "incomplete_expired"},
+		{"paused", "subscription.updated", "paused", future, false, nil, "trial", "paused"},
 	}
 	for _, item := range cases {
 		t.Run(item.name, func(t *testing.T) {
@@ -110,9 +110,6 @@ func TestPolarWebhookStatusMapping(t *testing.T) {
 			got := getBilling(t, f.api, f.adminA)
 			if got.Plan != item.wantPlan || got.Status != item.wantStatus || got.CancelAtPeriodEnd != item.cancelEnd {
 				t.Fatalf("billing=%+v, want plan=%s status=%s cancel_at_period_end=%v", got, item.wantPlan, item.wantStatus, item.cancelEnd)
-			}
-			if item.wantPlan == "free" && (got.Limits.Agents != 3 || got.Limits.ConversationsPerMonth == nil || *got.Limits.ConversationsPerMonth != 100) {
-				t.Fatalf("free limits=%+v, want 3 agents and 100 conversations a month", got.Limits)
 			}
 		})
 	}
@@ -143,7 +140,7 @@ func TestPolarWebhookNeverCrossesWorkspaces(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	f.mustDeliver(t, "msg_cross", activeTeam(f.workspaceA, "sub_x", now).event("subscription.active"))
 
-	if got := getBilling(t, f.api, f.adminB); got.Plan != "free" || got.Status != "none" || got.CurrentPeriodEnd != nil {
+	if got := getBilling(t, f.api, f.adminB); got.Plan != "trial" || got.Status != "none" || got.CurrentPeriodEnd != nil {
 		t.Fatalf("workspace B sees billing=%+v from an event for A", got)
 	}
 	if got := getBilling(t, f.api, f.adminA); got.Plan != "team" {
@@ -184,7 +181,7 @@ func TestPolarWebhookIgnoresUnknownProductsAndOtherEvents(t *testing.T) {
 	other.Product = "prod-not-ours"
 	f.mustDeliver(t, "msg_product", other.event("subscription.active"))
 	f.mustDeliver(t, "msg_checkout", []byte(`{"type":"checkout.created","timestamp":"2026-10-15T00:00:00Z","data":{"id":"co_1"}}`))
-	if got := getBilling(t, f.api, f.adminA); got.Plan != "free" || got.Status != "none" {
+	if got := getBilling(t, f.api, f.adminA); got.Plan != "trial" || got.Status != "none" {
 		t.Fatalf("billing=%+v, want untouched free", got)
 	}
 	if rows := rowCount(t, f.pool, "workspace_billing"); rows != 0 {

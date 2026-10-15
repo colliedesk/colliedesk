@@ -34,12 +34,9 @@ interface InboxPageProps {
   onRetry?: () => void;
   canManage?: boolean;
   onOpenSettings?: () => void;
-  // heldCount is how many conversations the Free quota holds back from the list.
-  heldCount?: number;
-  onOpenBilling?: () => void;
 }
 
-export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, filtered, loading, failed, onRetry, canManage, onOpenSettings, heldCount = 0, onOpenBilling }: InboxPageProps) {
+export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, filtered, loading, failed, onRetry, canManage, onOpenSettings }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsToggle = useRef<HTMLButtonElement>(null);
@@ -67,10 +64,6 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
           <div className="list-title"><h1>{messages.inbox}</h1><span>{conversations.length}</span></div>
           <InboxFilters tags={tags} onChange={onFilters} />
         </header>
-        {heldCount > 0 && <div role="status" aria-label={messages.heldBanner} className="list-notice">
-          <p>{messages.heldInboxNotice(heldCount)}</p>
-          {canManage ? <button type="button" onClick={onOpenBilling}>{messages.viewPlan}</button> : <p>{messages.heldAskAdmin}</p>}
-        </div>}
         <ConversationList items={conversations} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
           page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} loading={loading}
           failed={failed} onRetry={onRetry} canManage={canManage} onOpenSettings={onOpenSettings} />

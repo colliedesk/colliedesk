@@ -64,9 +64,6 @@ func (s *Store) ApplySubscription(ctx context.Context, workspaceID, webhookID, e
 		if written.RowsAffected() == 0 {
 			return SubscriptionStale, nil
 		}
-		if err := releaseHeldIfPaid(ctx, tx, workspaceID, s.now()); err != nil {
-			return "", err
-		}
 		return SubscriptionApplied, nil
 	})
 	if err != nil {
@@ -84,9 +81,7 @@ func loadSubscriptions(ctx context.Context, tx pgx.Tx, workspaceID string) ([]do
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Subscription, error) { return scanSubscription(row) })
 }
 
-// GetBilling returns the workspace's plan, state and current usage at now. Conversation usage
-// counts what was received since the start of the UTC calendar month; imported conversations are a
-// migration of history and never count.
+// GetBilling returns the workspace's plan, state and current usage at now.
 func (s *Store) GetBilling(ctx context.Context, workspaceID string, now time.Time) (domain.Billing, error) {
 	billing, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Billing, error) {
 		subscriptions, err := loadSubscriptions(ctx, tx, workspaceID)
@@ -94,17 +89,17 @@ func (s *Store) GetBilling(ctx context.Context, workspaceID string, now time.Tim
 			return domain.Billing{}, err
 		}
 		var usage domain.BillingUsage
+		var trialEndsAt time.Time
 		err = tx.QueryRow(ctx, `SELECT
 			(SELECT count(*) FROM agents WHERE workspace_id=$1),
 			(`+pendingSeatEmails+`),
-			(SELECT count(*) FROM conversations WHERE workspace_id=$1 AND origin IS NULL AND created_at >= $3),
-			(SELECT count(*) FROM conversations WHERE workspace_id=$1 AND held_at >= $3)`,
-			workspaceID, now, domain.MonthStart(now)).
-			Scan(&usage.Agents, &usage.PendingInvites, &usage.ConversationsThisMonth, &usage.HeldConversations)
+			(SELECT trial_ends_at FROM workspaces WHERE id=$1)`,
+			workspaceID, now).
+			Scan(&usage.Agents, &usage.PendingInvites, &trialEndsAt)
 		if err != nil {
 			return domain.Billing{}, err
 		}
-		return domain.NewBilling(subscriptions, usage, now), nil
+		return domain.NewBilling(subscriptions, trialEndsAt, usage, now), nil
 	})
 	if err != nil {
 		return domain.Billing{}, fmt.Errorf("get billing: %w", err)
