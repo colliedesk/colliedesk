@@ -1,6 +1,6 @@
 # Import from Freshdesk
 
-`colliedesk import freshdesk` copies a Freshdesk account into a Colliedesk workspace through the
+`collie import freshdesk` copies a Freshdesk account into a Colliedesk workspace through the
 Freshdesk API. It ends with a reconcile report that compares what Freshdesk holds with what
 Colliedesk now holds. If anything is missing, the report says **FAILED** and lists the Freshdesk
 ids. If the totals could not be confirmed, it says **UNVERIFIED**. Both end with a non-zero exit
@@ -48,12 +48,12 @@ never accepts it as a command-line argument and never prints it.
    ```
 2. Preview the import. A dry run counts contacts, companies, agents and tickets and writes nothing:
    ```sh
-   docker compose exec -e FRESHDESK_API_KEY server /app/colliedesk import freshdesk \
+   docker compose exec -e FRESHDESK_API_KEY server /app/collie import freshdesk \
      --workspace <slug> --domain <account>.freshdesk.com --dry-run --report-dir /data/import-reports
    ```
 3. Run the import:
    ```sh
-   docker compose exec -e FRESHDESK_API_KEY server /app/colliedesk import freshdesk \
+   docker compose exec -e FRESHDESK_API_KEY server /app/collie import freshdesk \
      --workspace <slug> --domain <account>.freshdesk.com --report-dir /data/import-reports
    ```
 4. Copy the reports out of the container:
@@ -137,11 +137,11 @@ An import into the wrong workspace can be removed:
 
 1. Preview what would be removed:
    ```sh
-   docker compose exec server /app/colliedesk import undo --workspace <slug> --dry-run
+   docker compose exec server /app/collie import undo --workspace <slug> --dry-run
    ```
 2. Remove it:
    ```sh
-   docker compose exec server /app/colliedesk import undo --workspace <slug>
+   docker compose exec server /app/collie import undo --workspace <slug>
    ```
 
 Undo removes the conversations the import created, with their messages, attachments and time

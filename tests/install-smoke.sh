@@ -31,14 +31,14 @@ fail() {
 }
 
 # The release image must not contain the end-to-end Freshdesk network seam (build tag e2e).
-seams=$(docker run --rm --entrypoint grep "$COLLIE_DESK_IMAGE" -c -e COLLIEDESK_E2E -e UseE2ENetwork /app/colliedesk || :)
+seams=$(docker run --rm --entrypoint grep "$COLLIE_DESK_IMAGE" -c -e COLLIEDESK_E2E -e UseE2ENetwork /app/collie || :)
 [ "$seams" = 0 ] || fail "image $COLLIE_DESK_IMAGE contains the e2e test seam ($seams matches); build without -tags e2e"
 
 output=$(sh "$ROOT/install.sh" --dir "$TMP" --name "Smoke Desk" --email Admin@Smoke.example </dev/null 2>&1) || fail "installer failed: $output"
 printf '%s\n' "$output"
-url=$(printf '%s\n' "$output" | grep -E "^http://localhost:$PORT/redeem\?token=[A-Za-z0-9_-]+$" | tail -n 1)
+url=$(printf '%s\n' "$output" | grep -E "^http://localhost:$PORT/sign-in\?token=[A-Za-z0-9_-]+$" | tail -n 1)
 [ -n "$url" ] || fail "installer printed no pairing URL for port $PORT"
-printf '%s' "$output" | grep -F 'colliedesk pair --workspace smoke-desk --email admin@smoke.example' >/dev/null ||
+printf '%s' "$output" | grep -F 'collie pair --workspace smoke-desk --email admin@smoke.example' >/dev/null ||
   fail 'installer output does not say how to print a new link'
 # Every generated secret: *_PASSWORD, APP_SECRET, and the passwords inside the DATABASE*_URL values.
 secrets=$( { sed -n 's/^[A-Z_]*_PASSWORD=//p; s/^APP_SECRET=//p' "$TMP/.env"

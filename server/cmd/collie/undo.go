@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const undoUsage = "usage: colliedesk import undo --workspace <slug> [--source freshdesk:account:<id>] [--dry-run]"
+const undoUsage = "usage: collie import undo --workspace <slug> [--source freshdesk:account:<id>] [--dry-run]"
 
 // undoCommand removes what a Freshdesk import created in a workspace.
 func undoCommand(ctx context.Context, pool *pgxpool.Pool, args []string, output io.Writer) error {

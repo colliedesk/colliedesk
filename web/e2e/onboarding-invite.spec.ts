@@ -19,7 +19,7 @@ test('invite teammate: admin invites, teammate joins under the agent ceiling, ad
   await admin.getByLabel('Role ceiling').selectOption('agent');
   await admin.getByRole('button', { name: 'Create invite' }).click();
   const inviteURL = await admin.getByRole('textbox', { name: 'One-time invite link' }).inputValue();
-  expect(inviteURL).toMatch(new RegExp(`^${baseURL}/redeem\\?token=`));
+  expect(inviteURL).toMatch(new RegExp(`^${baseURL}/sign-in\\?token=`));
   const invites = admin.getByRole('region', { name: 'Invites' });
   await expect(invites.getByRole('article').filter({ hasText: teammateEmail.toLowerCase() })).toContainText('Pending');
 
@@ -97,7 +97,7 @@ test('invite teammate: admin invites, teammate joins under the agent ceiling, ad
   await latePage.goto(lateURL);
   await latePage.getByRole('button', { name: 'Continue to Colliedesk' }).click();
   await expect(latePage.getByRole('alert')).toContainText('This link is invalid, expired, or already used.');
-  await expect(latePage).toHaveURL(/\/redeem\?token=/);
+  await expect(latePage).toHaveURL(/\/sign-in\?token=/);
 
   await Promise.all([adminContext.close(), teammateContext.close(), lateContext.close()]);
 });

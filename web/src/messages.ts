@@ -27,7 +27,7 @@ export const messages = {
   invalidLink: 'This link is invalid, expired, or already used. Ask your workspace admin for a new link.',
   mainNavigation: 'Main',
   signedOut: 'You are signed out. Ask your workspace admin for a new link.',
-  signedOutSelfHosted: 'Running your own server? Print a new link with: colliedesk pair --workspace <slug> --email <your email>',
+  signedOutSelfHosted: 'Running your own server? Print a new link with: collie pair --workspace <slug> --email <your email>',
   getStarted: 'Get started',
   conversationsFailed: 'Conversations could not be loaded.',
   tryAgain: 'Try again',

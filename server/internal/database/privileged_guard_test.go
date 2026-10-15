@@ -36,13 +36,13 @@ var privilegedCallSites = []string{
 // poolFiles may import pgxpool. Outside the database package they only open a pool or hand it to a
 // constructor that wraps it in a DB; queries never run on the raw pool.
 var poolFiles = []string{
-	"cmd/colliedesk/commands.go",
-	"cmd/colliedesk/import.go",
-	"cmd/colliedesk/plan.go",
-	"cmd/colliedesk/retention.go",
-	"cmd/colliedesk/serve.go",
-	"cmd/colliedesk/trial.go",
-	"cmd/colliedesk/undo.go",
+	"cmd/collie/commands.go",
+	"cmd/collie/import.go",
+	"cmd/collie/plan.go",
+	"cmd/collie/retention.go",
+	"cmd/collie/serve.go",
+	"cmd/collie/trial.go",
+	"cmd/collie/undo.go",
 	"internal/auth/service.go",
 	"internal/database/migrate.go",
 	"internal/database/scope.go",
