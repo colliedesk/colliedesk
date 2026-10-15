@@ -11,6 +11,11 @@ const (
 	PrivilegeMigrate Privilege = "migrate"
 	// PrivilegeCreateWorkspace inserts a new workspace with its first admin and pairing link.
 	PrivilegeCreateWorkspace Privilege = "create-workspace"
+	// PrivilegeSignupSweep clears the old client address hashes of cloud_signups.
+	PrivilegeSignupSweep Privilege = "signup-sweep"
+	// PrivilegeRetention finds locked workspaces, records and sends their deletion notice, and deletes
+	// the ones locked for a year with their attachment files.
+	PrivilegeRetention Privilege = "retention"
 	// PrivilegeWorkspaceBySlug resolves the workspace a CLI command names (pair, import, undo).
 	PrivilegeWorkspaceBySlug Privilege = "workspace-by-slug"
 	// PrivilegeSessionToken resolves the workspace of a session from its token hash.

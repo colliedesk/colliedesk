@@ -14,6 +14,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -194,4 +196,84 @@ func received(size, expected int64) string {
 		return "more"
 	}
 	return fmt.Sprint(size)
+}
+
+const trashDir = ".trash"
+
+// Trash moves every file of the workspace to <root>/.trash/<workspace id>-<unix time> in one
+// rename on the same filesystem, so it is atomic. found is false when the workspace had no
+// directory. The returned func moves the files back; call it when the deletion it belongs to did
+// not commit.
+func (d *LocalDisk) Trash(_ context.Context, workspaceID string, now time.Time) (undo func() error, found bool, err error) {
+	if !workspacePattern.MatchString(workspaceID) {
+		return nil, false, errors.New("trash workspace attachments: invalid workspace id")
+	}
+	source := filepath.Join(d.root, workspaceID)
+	if _, err := os.Stat(source); errors.Is(err, os.ErrNotExist) {
+		return func() error { return nil }, false, nil
+	} else if err != nil {
+		return nil, false, fmt.Errorf("trash workspace attachments: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Join(d.root, trashDir), 0o750); err != nil {
+		return nil, false, fmt.Errorf("trash workspace attachments: %w", err)
+	}
+	entry := TrashEntry{WorkspaceID: workspaceID, TrashedAt: now}
+	entry.Name = fmt.Sprintf("%s-%d", workspaceID, now.Unix())
+	if err := os.Rename(source, filepath.Join(d.root, trashDir, entry.Name)); err != nil {
+		return nil, false, fmt.Errorf("trash workspace attachments: %w", err)
+	}
+	return func() error { return d.RestoreTrash(context.Background(), entry) }, true, nil
+}
+
+// TrashEntry is the files of one deleted workspace waiting in the trash.
+type TrashEntry struct {
+	WorkspaceID string
+	Name        string
+	TrashedAt   time.Time
+}
+
+// ListTrash returns the trash entries; names that do not parse are ignored.
+func (d *LocalDisk) ListTrash(_ context.Context) ([]TrashEntry, error) {
+	entries, err := os.ReadDir(filepath.Join(d.root, trashDir))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list trash: %w", err)
+	}
+	var found []TrashEntry
+	for _, entry := range entries {
+		name := entry.Name()
+		cut := strings.LastIndex(name, "-")
+		if cut < 0 || !workspacePattern.MatchString(name[:cut]) {
+			continue
+		}
+		unix, parseErr := strconv.ParseInt(name[cut+1:], 10, 64)
+		if parseErr != nil {
+			continue
+		}
+		found = append(found, TrashEntry{WorkspaceID: name[:cut], Name: name, TrashedAt: time.Unix(unix, 0).UTC()})
+	}
+	return found, nil
+}
+
+// RestoreTrash moves the entry back to the workspace directory. It refuses when that directory
+// exists, so nothing is overwritten.
+func (d *LocalDisk) RestoreTrash(_ context.Context, entry TrashEntry) error {
+	target := filepath.Join(d.root, entry.WorkspaceID)
+	if _, err := os.Stat(target); err == nil {
+		return fmt.Errorf("restore trash %s: %s already exists", entry.Name, entry.WorkspaceID)
+	}
+	if err := os.Rename(filepath.Join(d.root, trashDir, entry.Name), target); err != nil {
+		return fmt.Errorf("restore trash %s: %w", entry.Name, err)
+	}
+	return nil
+}
+
+// RemoveTrash deletes one trash entry for good.
+func (d *LocalDisk) RemoveTrash(_ context.Context, entry TrashEntry) error {
+	if err := os.RemoveAll(filepath.Join(d.root, trashDir, entry.Name)); err != nil {
+		return fmt.Errorf("remove trash %s: %w", entry.Name, err)
+	}
+	return nil
 }

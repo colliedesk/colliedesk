@@ -1,6 +1,7 @@
 #!/bin/sh
-# Fails when GitHub cannot serve the archive of a pinned action commit. Runners with the action
-# cached still pass, so a bad pin otherwise fails only some jobs, some of the time.
+# Fails when GitHub cannot serve the archive of a pinned action commit (404/410). Runners with the action
+# cached still pass, so a bad pin otherwise fails only some jobs, some of the time. A network error or a
+# 5xx after retries says nothing about the pin, so it is reported and does not fail the gate.
 # Usage: tests/pinned-actions-fetchable-test.sh [repo root]
 set -eu
 
@@ -14,9 +15,14 @@ broken=
 for pin in $pins; do
   repo=${pin%@*}
   sha=${pin#*@}
-  code=$("$CURL" -s -o /dev/null -w '%{http_code}' --retry 2 "https://codeload.github.com/$repo/tar.gz/$sha" || echo 000)
-  [ "$code" = 200 ] || broken="$broken
-$repo@$sha (HTTP $code)"
+  code=$("$CURL" -s -o /dev/null -w '%{http_code}' --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
+    "https://codeload.github.com/$repo/tar.gz/$sha" || echo 000)
+  case $code in
+    200) ;;
+    404 | 410) broken="$broken
+$repo@$sha (HTTP $code)" ;;
+    *) echo "warning: could not check $repo@$sha (HTTP $code); not counted as a broken pin" >&2 ;;
+  esac
 done
 
 if [ -n "$broken" ]; then

@@ -19,6 +19,11 @@ revoke every signed-in device in [Sessions and devices](sessions.md).
 Some hosted Colliedesk instances show **Sign in** on the same page. Use it to authenticate with the
 identity methods enabled by the instance owner, such as Google, Microsoft, email, or MFA.
 
+Enter your email address, then the six-digit code Clerk sends to that address. You do not need to
+create an account first: the same form works for everyone. Colliedesk then signs you in on the same
+page. If the email does not belong to an agent in any workspace, you see "Cloud sign-in failed" and
+nothing is created; ask your admin to invite you.
+
 Cloud sign-in does not create a Colliedesk agent. Your verified primary email must already belong to
 an agent in at least one workspace. If it belongs to several workspaces, choose the workspace after
 authentication. Colliedesk then creates its own ordinary browser session; the identity provider does
