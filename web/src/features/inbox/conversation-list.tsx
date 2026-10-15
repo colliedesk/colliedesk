@@ -16,6 +16,8 @@ interface ConversationListProps {
   onPage?: (page: number) => void;
   filtered?: boolean;
   loading?: boolean;
+  // refreshing: a refetch is running while the previous rows stay on screen.
+  refreshing?: boolean;
   failed?: boolean;
   onRetry?: () => void;
   onClearFilters?: () => void;
@@ -25,7 +27,7 @@ interface ConversationListProps {
 
 const visibleTags = 2;
 
-export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, loading = false,
+export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, loading = false, refreshing = false,
   failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings }: ConversationListProps) {
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
   const now = useNow(timezone);
@@ -37,7 +39,8 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
     onOpenSettings();
   }}>{label}</a>;
   return (
-    <div className="conversation-scroll">
+    <div className="conversation-scroll" aria-busy={refreshing}>
+      {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
       {brandNew && <section className="get-started" aria-label={messages.getStarted}>
         <h2>{messages.noConversationsYet}</h2>
         <p className="muted-copy">{messages.getStartedExplanation}</p>

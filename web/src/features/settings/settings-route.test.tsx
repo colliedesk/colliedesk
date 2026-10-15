@@ -35,3 +35,10 @@ test('an agent does not see Export all data', async () => {
   await screen.findByRole('heading', { name: 'Sessions' });
   expect(screen.queryByRole('button', { name: 'Export all data' })).not.toBeInTheDocument();
 });
+
+test('Settings shows the loading status until its data arrives', async () => {
+  show('admin');
+  api.me.mockReturnValue(new Promise(() => {}));
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><SettingsRoute /></QueryClientProvider>);
+  expect(screen.getAllByRole('status')[0]).toHaveTextContent('Loading workspace…');
+});
