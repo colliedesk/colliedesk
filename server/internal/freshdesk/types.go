@@ -93,3 +93,20 @@ type fdTimeEntry struct {
 	ExecutedAt *time.Time `json:"executed_at"`
 	CreatedAt  time.Time  `json:"created_at"`
 }
+
+type fdCannedFolder struct {
+	ID             int64  `json:"id"`
+	Name           string `json:"name"`
+	Personal       bool   `json:"personal"`
+	ResponsesCount int    `json:"responses_count"`
+}
+
+// fdCannedResponse: content is Freshdesk's plain-text version, content_html the HTML one.
+type fdCannedResponse struct {
+	ID          int64          `json:"id"`
+	Title       string         `json:"title"`
+	FolderID    int64          `json:"folder_id"`
+	Content     string         `json:"content"`
+	ContentHTML string         `json:"content_html"`
+	Attachments []fdAttachment `json:"attachments"`
+}

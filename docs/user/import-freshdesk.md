@@ -19,12 +19,43 @@ code. Run the same command again to retry: finished items are never copied twice
 | Original message HTML | **Show original** on the message (shown in a locked frame that runs no scripts and loads nothing) |
 | Attachments | Files stored by Colliedesk, each with a SHA-256 checksum |
 | Time entries | Time entries (agent, minutes, note, billable, time), shown under **Time logged** on the timeline |
+| Canned responses | [Saved replies](saved-replies.md), titled `<folder name> / <title>` so the folder is still visible. See below |
 
 Status mapping: Open → Open, Pending → Pending, Resolved → Resolved, Closed → Closed. Custom
 statuses become Pending and are listed in the report. Priority: Low → Low, Medium → Normal, High → High, Urgent → Urgent. An unknown priority becomes
 Normal and is listed in the report.
 
 The report lists what is **not** imported, for example custom fields and knowledge base articles.
+
+### Canned responses
+
+Each canned response becomes a shared saved reply. The text is the plain-text version Freshdesk
+provides; when there is none, the HTML version is reduced to text. Placeholders are changed where
+Colliedesk has the same meaning:
+
+| Freshdesk | Colliedesk |
+|---|---|
+| `{{ticket.requester.name}}`, `{{ticket.from_name}}` | `{{customer.name}}` |
+| `{{ticket.agent.name}}` | `{{agent.name}}` |
+
+Every other placeholder, for example `{{ticket.url}}`, stays in the text as written and is listed in
+the report under **Freshdesk placeholders left as written**. Edit those saved replies before you use
+them.
+
+The report also lists, by Freshdesk id, what does not come over:
+
+- **Files attached to a canned response.** Saved replies hold text only. Download the files from
+  Freshdesk if you still need them.
+- **A canned response with no text.** There is nothing to import.
+- **A personal folder.** Its responses are imported and become shared with the whole workspace.
+  Delete any that should stay private.
+
+A canned response whose title is already taken by another saved reply is imported as
+`<title> (Freshdesk <id>)`. An existing reply is never changed. If the workspace would pass 500 saved
+replies, or a text is longer than 20 000 characters, that item is listed under **Failures** and the
+status is `FAILED`. Running the import again never adds a canned response twice and never overwrites
+a saved reply your team edited or deleted. The Freshdesk API key needs a plan that has canned
+responses; if Freshdesk refuses them, the report says so and the status is `UNVERIFIED`.
 
 ## Before you start
 
@@ -145,8 +176,10 @@ An import into the wrong workspace can be removed:
    ```
 
 Undo removes the conversations the import created, with their messages, attachments and time
-entries, and the contacts and tags it created that nothing else uses. A conversation where your
-team wrote a message after the import is kept. Contacts and tags that existed before the import
+entries, the saved replies it created that nobody edited since, and the contacts and tags it created
+that nothing else uses. A conversation where your
+team wrote a message after the import is kept, and so is a saved reply your team edited (the command
+lists its Freshdesk id). Contacts and tags that existed before the import
 are kept. Changes without a new message (status, assignee or tags changed in Colliedesk) are
 removed together with their conversation. Run the import again afterwards if you want the data back.
 
@@ -159,8 +192,8 @@ tools.
   something is missing; the **Failures** table lists each item with its Freshdesk id and ticket id.
   `UNVERIFIED` means nothing failed but completeness could not be proven (see **How the totals were
   verified**). `DRY_RUN` is a preview.
-- **Counts**: contacts, tickets, messages, attachments and time entries in Freshdesk and in
-  Colliedesk.
+- **Counts**: contacts, tickets, messages, attachments, time entries and saved replies in Freshdesk and in
+  Colliedesk. The saved reply total is checked against the sum Freshdesk reports for its folders.
 - **Attachment bytes**: total size reported by Freshdesk and total size stored. Every stored file
   is read again and its SHA-256 compared with the value recorded at download.
 - **Ticket ids that could not be resolved (archive unavailable)**: ticket numbers Freshdesk does

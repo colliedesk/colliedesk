@@ -1,0 +1,8 @@
+[
+  {"id": 9104, "title": "Refund", "folder_id": 802, "content": "",
+   "content_html": "<div>We <b>refunded</b> you.<br>Allow 5 days &amp; check your bank.</div>",
+   "attachments": [], "created_at": "2024-01-01T00:00:00Z", "updated_at": "2024-01-01T00:00:00Z"},
+  {"id": 9105, "title": "Chào khách", "folder_id": 802, "content": "Chào {{ticket.requester.name}} ạ, cảm ơn bạn.",
+   "content_html": "<div>Chào {{ticket.requester.name}} ạ, cảm ơn bạn.</div>", "attachments": [],
+   "created_at": "2024-01-01T00:00:00Z", "updated_at": "2024-01-01T00:00:00Z"}
+]

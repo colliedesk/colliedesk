@@ -185,6 +185,11 @@ func htmlToText(value string) string {
 	return strings.ReplaceAll(html.UnescapeString(value), " ", " ")
 }
 
+// HTMLToText reduces HTML to plain text the way inbound mail bodies are reduced.
+func HTMLToText(value string) string {
+	return normalizeText(htmlToText(value))
+}
+
 func normalizeText(value string) string {
 	value = strings.ReplaceAll(strings.ReplaceAll(value, "\r\n", "\n"), "\r", "\n")
 	value = strings.ReplaceAll(value, "\x00", "")

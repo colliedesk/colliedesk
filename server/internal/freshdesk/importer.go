@@ -57,6 +57,14 @@ type run struct {
 	archiveUnavailable atomic.Bool
 	verification       Verifications
 	progress           *progress
+
+	cannedFolders      int
+	cannedIDs          []string
+	cannedEmpty        []string
+	cannedWithFiles    []string
+	cannedAttachments  int
+	cannedUnreadable   []string
+	cannedPlaceholders map[string][]string
 }
 
 // Run imports (or, with DryRun, only counts) a Freshdesk account. Item-level
@@ -86,7 +94,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 		name string
 		run  func(context.Context) error
 	}
-	steps := []step{{"loading agents", r.loadAgents}, {"loading companies", r.loadCompanies}, {"importing contacts", r.importContacts},
+	steps := []step{{"loading agents", r.loadAgents}, {"loading companies", r.loadCompanies}, {"importing contacts", r.importContacts}, {"importing saved replies", r.importSavedReplies},
 		{"listing tickets", r.listTickets}, {"checking ticket ids", r.classifyTickets}, {"verifying totals", r.verifyTotals}}
 	if !options.DryRun {
 		steps = append(steps, step{"importing tickets", r.importTickets})
@@ -156,7 +164,7 @@ func newRun(ctx context.Context, db *database.DB, options Options) (*run, error)
 		client: httpClient,
 		ledger: ledger{db: db, workspaceID: workspaceID}, probeAhead: probeAhead(options.hooks),
 		agents: map[int64]fdAgent{}, agentTargets: map[int64]string{}, deactivatedAgents: map[int64]bool{}, companies: map[int64]string{},
-		usedCompanies: map[int64]bool{}, contactNames: map[int64]string{},
+		usedCompanies: map[int64]bool{}, contactNames: map[int64]string{}, cannedPlaceholders: map[string][]string{},
 	}, nil
 }
 

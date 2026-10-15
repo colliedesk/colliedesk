@@ -44,7 +44,11 @@ func undoCommand(ctx context.Context, pool *pgxpool.Pool, args []string, output 
 	if len(result.KeptConversationTickets) > 0 {
 		kept = strings.Join(result.KeptConversationTickets, ", ")
 	}
-	_, err = fmt.Fprintf(output, "%s from %s: %d conversations, %d contacts, %d tags, %d stored files.\nKept because they have messages written after the import (Freshdesk ticket ids): %s\n",
-		verb, result.Source, result.Conversations, result.Contacts, result.Tags, result.Files, kept)
+	keptReplies := "none"
+	if len(result.KeptSavedReplies) > 0 {
+		keptReplies = strings.Join(result.KeptSavedReplies, ", ")
+	}
+	_, err = fmt.Fprintf(output, "%s from %s: %d conversations, %d contacts, %d tags, %d saved replies, %d stored files.\nKept because they have messages written after the import (Freshdesk ticket ids): %s\nSaved replies kept because an agent edited them (Freshdesk canned response ids): %s\n",
+		verb, result.Source, result.Conversations, result.Contacts, result.Tags, result.SavedReplies, result.Files, kept, keptReplies)
 	return err
 }

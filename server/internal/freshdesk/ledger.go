@@ -22,6 +22,9 @@ const (
 	entityAttachment  = "attachment"
 	entityTimeEntry   = "time_entry"
 	entityTag         = "tag"
+	entitySavedReply  = "saved_reply"
+	// entityCannedFolder marks a canned response folder that could not be read; a later run that reads it clears the mark.
+	entityCannedFolder = "saved_reply_folder"
 
 	ledgerDone    = "done"
 	ledgerFailed  = "failed"
