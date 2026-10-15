@@ -39,8 +39,20 @@ func (a *API) checkoutProduct(plan string) (string, bool) {
 	return "", false
 }
 
+// billingEmail is the address the workspace's Polar customer is created with. Polar allows one
+// customer per email, but one person can administer several workspaces, so the address carries a
+// workspace tag after "+" (delivered to the same mailbox by providers that support subaddressing).
+// The workspace id, not this address, is the customer's identity.
+func billingEmail(email, workspaceID string) string {
+	at := strings.LastIndex(email, "@")
+	if at < 0 || len(workspaceID) < 8 {
+		return email
+	}
+	return email[:at] + "+cd" + strings.ReplaceAll(workspaceID, "-", "")[:8] + email[at:]
+}
+
 // createCheckout starts a Polar checkout for the signed-in workspace. The workspace id comes from
-// the session and becomes the Polar external customer id; nothing about the customer is read from
+// the session and is the external id of its Polar customer; nothing about the customer is read from
 // the request, so one workspace can never pay for, or be linked to, another.
 func (a *API) createCheckout(response http.ResponseWriter, request *http.Request) {
 	var input struct {
@@ -65,9 +77,13 @@ func (a *API) createCheckout(response http.ResponseWriter, request *http.Request
 		writeError(response, http.StatusConflict, "already_subscribed", "This workspace already has a paid plan. Change or cancel it from the billing portal.")
 		return
 	}
+	customerID, err := a.polar.EnsureCustomer(request.Context(), who.Workspace.ID, billingEmail(who.Agent.Email, who.Workspace.ID), who.Workspace.Name)
+	if err != nil {
+		writeBillingProviderError(response, err)
+		return
+	}
 	url, err := a.polar.CreateCheckout(request.Context(), polar.CheckoutRequest{
-		ProductID: product, ExternalCustomerID: who.Workspace.ID, CustomerEmail: who.Agent.Email,
-		SuccessURL: a.config.Origin + "/settings/billing?checkout=success",
+		ProductID: product, CustomerID: customerID, SuccessURL: a.config.Origin + "/settings/billing?checkout=success",
 	})
 	if err != nil {
 		writeBillingProviderError(response, err)

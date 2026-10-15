@@ -66,25 +66,66 @@ type BillingUsage struct {
 
 // Billing is what an admin sees about their workspace's plan.
 type Billing struct {
-	Plan              string       `json:"plan"`
-	Status            string       `json:"status"`
-	CurrentPeriodEnd  *time.Time   `json:"current_period_end"`
-	CancelAtPeriodEnd bool         `json:"cancel_at_period_end"`
-	Limits            PlanLimits   `json:"limits"`
-	Usage             BillingUsage `json:"usage"`
+	Plan              string     `json:"plan"`
+	Status            string     `json:"status"`
+	CurrentPeriodEnd  *time.Time `json:"current_period_end"`
+	CancelAtPeriodEnd bool       `json:"cancel_at_period_end"`
+	// ActiveSubscriptions counts subscriptions that grant a paid plan now; more than one is a
+	// duplicate the admin should cancel in the portal.
+	ActiveSubscriptions int          `json:"active_subscriptions"`
+	Limits              PlanLimits   `json:"limits"`
+	Usage               BillingUsage `json:"usage"`
 }
 
-// NewBilling derives the effective plan from the stored subscription (nil for none).
-func NewBilling(subscription *Subscription, usage BillingUsage, now time.Time) Billing {
+// NewBilling derives the plan in effect from every subscription of the workspace. The best
+// subscription that is still paid decides the plan (founding before team, then the later period
+// end); with none paid, the most recently changed one explains the state. ActiveSubscriptions
+// counts the paid ones so a duplicate is visible.
+func NewBilling(subscriptions []Subscription, usage BillingUsage, now time.Time) Billing {
 	billing := Billing{Plan: PlanFree, Status: BillingStatusNone, Usage: usage}
-	if subscription != nil {
-		billing.Status = subscription.Status
-		billing.CurrentPeriodEnd = UTCOptional(subscription.CurrentPeriodEnd)
-		billing.CancelAtPeriodEnd = subscription.CancelAtPeriodEnd
-		if subscription.Entitled(now) {
-			billing.Plan = subscription.Plan
+	var best, latest *Subscription
+	for index := range subscriptions {
+		candidate := &subscriptions[index]
+		if latest == nil || candidate.ModifiedAt.After(latest.ModifiedAt) {
+			latest = candidate
 		}
+		if candidate.Entitled(now) {
+			billing.ActiveSubscriptions++
+			if best == nil || betterThan(*candidate, *best) {
+				best = candidate
+			}
+		}
+	}
+	shown := best
+	if best != nil {
+		billing.Plan = best.Plan
+	} else {
+		shown = latest
+	}
+	if shown != nil {
+		billing.Status = shown.Status
+		billing.CurrentPeriodEnd = UTCOptional(shown.CurrentPeriodEnd)
+		billing.CancelAtPeriodEnd = shown.CancelAtPeriodEnd
 	}
 	billing.Limits = LimitsFor(billing.Plan)
 	return billing
 }
+
+func betterThan(a, b Subscription) bool {
+	if a.Plan != b.Plan {
+		return a.Plan == PlanFounding
+	}
+	if a.CurrentPeriodEnd == nil || b.CurrentPeriodEnd == nil {
+		return a.CurrentPeriodEnd != nil
+	}
+	return a.CurrentPeriodEnd.After(*b.CurrentPeriodEnd)
+}
+
+// KnownStatuses are the Polar subscription statuses this product understands. Anything else is
+// stored as StatusUnknown and never grants a plan.
+var KnownStatuses = map[string]bool{
+	"incomplete": true, "incomplete_expired": true, "trialing": true, "active": true,
+	"past_due": true, "canceled": true, "unpaid": true, "paused": true,
+}
+
+const StatusUnknown = "unknown"

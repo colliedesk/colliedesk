@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"io"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"time"
@@ -39,12 +40,18 @@ func (a *API) receivePolarWebhook(response http.ResponseWriter, request *http.Re
 		writeError(response, http.StatusBadRequest, "invalid_request", "The webhook body is not a Polar event.")
 		return
 	}
-	incoming, workspaceID, ok := a.subscriptionFromEvent(event)
-	if !ok {
+	if event.Subscription == nil {
 		writeJSON(response, http.StatusOK, map[string]string{"status": webhookIgnored})
 		return
 	}
-	result, err := a.store.ApplySubscription(request.Context(), workspaceID, request.Header.Get("webhook-id"), event.Type, incoming, time.Now().UTC())
+	incoming, workspaceID, reason := a.subscriptionFromEvent(event)
+	webhookID := request.Header.Get("webhook-id")
+	if reason != "" {
+		warnIgnoredSubscription(event, webhookID, reason)
+		writeJSON(response, http.StatusOK, map[string]string{"status": webhookIgnored})
+		return
+	}
+	result, err := a.store.ApplySubscription(request.Context(), workspaceID, webhookID, event.Type, incoming)
 	if err != nil {
 		// 500 makes Polar redeliver; nothing was recorded, so the retry is applied.
 		writeInternalError(response, err)
@@ -53,17 +60,28 @@ func (a *API) receivePolarWebhook(response http.ResponseWriter, request *http.Re
 	status := string(result)
 	if result == store.SubscriptionUnknownWorkspace {
 		status = webhookIgnored
+		warnIgnoredSubscription(event, webhookID, "workspace not found")
 	}
 	writeJSON(response, http.StatusOK, map[string]string{"status": status})
 }
 
+// warnIgnoredSubscription leaves a trace of a verified subscription event that changed nothing: it
+// may be a payment nobody sees. The log carries ids only, never customer data.
+func warnIgnoredSubscription(event polar.Event, webhookID, reason string) {
+	subscriptionID := ""
+	if event.Subscription != nil {
+		subscriptionID = event.Subscription.ID
+	}
+	slog.Warn("polar subscription event ignored", "reason", reason, "event", event.Type, "subscription_id", subscriptionID, "webhook_id", webhookID)
+}
+
 // subscriptionFromEvent returns the stored form of a subscription event and the workspace it
-// belongs to. ok is false for events that carry no workspace of this instance or a product that is
-// not sold here.
-func (a *API) subscriptionFromEvent(event polar.Event) (domain.Subscription, string, bool) {
+// belongs to. reason is set, and nothing else, when the event cannot be attached to a workspace of
+// this instance.
+func (a *API) subscriptionFromEvent(event polar.Event) (domain.Subscription, string, string) {
 	sub := event.Subscription
-	if sub == nil || !workspaceIDPattern.MatchString(sub.ExternalCustomerID) {
-		return domain.Subscription{}, "", false
+	if !workspaceIDPattern.MatchString(sub.ExternalCustomerID) {
+		return domain.Subscription{}, "", "customer has no workspace id as external id"
 	}
 	var plan string
 	switch products := a.config.Billing.Products; sub.ProductID {
@@ -72,10 +90,15 @@ func (a *API) subscriptionFromEvent(event polar.Event) (domain.Subscription, str
 	case products.Founding:
 		plan = domain.PlanFounding
 	default:
-		return domain.Subscription{}, "", false
+		return domain.Subscription{}, "", "product is not sold here"
+	}
+	status := sub.Status
+	if !domain.KnownStatuses[status] {
+		slog.Warn("polar subscription has an unknown status; stored as not paid", "status", status, "subscription_id", sub.ID)
+		status = domain.StatusUnknown
 	}
 	return domain.Subscription{
-		Plan: plan, SubscriptionID: sub.ID, CustomerID: sub.CustomerID, Status: sub.Status,
+		Plan: plan, SubscriptionID: sub.ID, CustomerID: sub.CustomerID, Status: status,
 		CurrentPeriodEnd: sub.CurrentPeriodEnd, CancelAtPeriodEnd: sub.CancelAtPeriodEnd, EndedAt: sub.EndedAt, ModifiedAt: sub.ModifiedAt,
-	}, sub.ExternalCustomerID, true
+	}, sub.ExternalCustomerID, ""
 }

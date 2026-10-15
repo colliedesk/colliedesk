@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -39,42 +40,101 @@ type polarCall struct {
 	Body map[string]any
 }
 
-// fakePolarAPI stands in for the Polar API, an external boundary.
+// fakePolarAPI stands in for the Polar API, an external boundary. Like Polar it keeps customers
+// unique by email and by external id (a duplicate email is 422) and refuses a checkout for a
+// customer it does not know.
 type fakePolarAPI struct {
 	server *httptest.Server
 	mu     sync.Mutex
 	calls  []polarCall
 	// status overrides the reply status for a path; zero means success.
 	status map[string]int
+	// customers maps external id to customer id.
+	customers map[string]string
+	emails    map[string]bool
 }
+
+const customerByExternalPrefix = "/v1/customers/external/"
 
 func newFakePolarAPI(t *testing.T) *fakePolarAPI {
 	t.Helper()
-	fake := &fakePolarAPI{status: map[string]int{}}
+	fake := &fakePolarAPI{status: map[string]int{}, customers: map[string]string{}, emails: map[string]bool{}}
 	fake.server = httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		var body map[string]any
 		_ = json.NewDecoder(request.Body).Decode(&body)
 		fake.mu.Lock()
+		defer fake.mu.Unlock()
 		fake.calls = append(fake.calls, polarCall{Path: request.URL.Path, Auth: request.Header.Get("Authorization"), Body: body})
-		number := len(fake.calls)
-		status := fake.status[request.URL.Path]
-		fake.mu.Unlock()
+		number := 0
+		for _, call := range fake.calls {
+			if call.Path == request.URL.Path {
+				number++
+			}
+		}
 		response.Header().Set("Content-Type", "application/json")
-		if status != 0 {
+		reply := func(status int, format string, args ...any) {
 			response.WriteHeader(status)
-			_, _ = response.Write([]byte(`{"detail":"fake failure"}`))
+			fmt.Fprintf(response, format, args...)
+		}
+		if status := fake.status[request.URL.Path]; status != 0 {
+			reply(status, `{"detail":"fake failure"}`)
 			return
 		}
-		response.WriteHeader(http.StatusCreated)
-		switch request.URL.Path {
-		case "/v1/checkouts/":
-			fmt.Fprintf(response, `{"id":"co_%d","url":"https://polar.test/checkout/%d"}`, number, number)
-		case "/v1/customer-sessions/":
-			fmt.Fprintf(response, `{"id":"cs_%d","customer_portal_url":"https://polar.test/portal/%d"}`, number, number)
+		switch {
+		case request.Method == http.MethodGet && strings.HasPrefix(request.URL.Path, customerByExternalPrefix):
+			external := strings.TrimPrefix(request.URL.Path, customerByExternalPrefix)
+			if id, ok := fake.customers[external]; ok {
+				reply(http.StatusOK, `{"id":%q,"external_id":%q}`, id, external)
+				return
+			}
+			reply(http.StatusNotFound, `{"detail":"Customer not found"}`)
+		case request.URL.Path == "/v1/customers/":
+			email, _ := body["email"].(string)
+			external, _ := body["external_id"].(string)
+			if _, taken := fake.customers[external]; taken || fake.emails[email] || email == "" || external == "" {
+				reply(http.StatusUnprocessableEntity, `{"detail":"customer exists"}`)
+				return
+			}
+			id := fmt.Sprintf("cus_fake_%d", len(fake.customers)+1)
+			fake.customers[external], fake.emails[email] = id, true
+			reply(http.StatusCreated, `{"id":%q}`, id)
+		case request.URL.Path == "/v1/checkouts/":
+			id, _ := body["customer_id"].(string)
+			known := false
+			for _, existing := range fake.customers {
+				known = known || existing == id
+			}
+			if !known {
+				reply(http.StatusUnprocessableEntity, `{"detail":"unknown customer"}`)
+				return
+			}
+			reply(http.StatusCreated, `{"id":"co_%d","url":"https://polar.test/checkout/%d"}`, number, number)
+		case request.URL.Path == "/v1/customer-sessions/":
+			reply(http.StatusCreated, `{"id":"cs_%d","customer_portal_url":"https://polar.test/portal/%d"}`, number, number)
+		default:
+			reply(http.StatusNotFound, `{}`)
 		}
 	}))
 	t.Cleanup(fake.server.Close)
 	return fake
+}
+
+// customerID returns the Polar customer the fake holds for an external id.
+func (f *fakePolarAPI) customerID(external string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.customers[external]
+}
+
+// callsTo returns the recorded requests to one path.
+func (f *fakePolarAPI) callsTo(path string) []polarCall {
+	var matched []polarCall
+	for _, call := range f.recorded() {
+		if call.Path == path {
+			matched = append(matched, call)
+		}
+	}
+	return matched
 }
 
 func (f *fakePolarAPI) recorded() []polarCall {
@@ -199,7 +259,9 @@ type billingView struct {
 	Status            string     `json:"status"`
 	CurrentPeriodEnd  *time.Time `json:"current_period_end"`
 	CancelAtPeriodEnd bool       `json:"cancel_at_period_end"`
-	Limits            struct {
+	// ActiveSubscriptions counts subscriptions that grant a paid plan now; more than one is a duplicate.
+	ActiveSubscriptions int `json:"active_subscriptions"`
+	Limits              struct {
 		Agents                int  `json:"agents"`
 		ConversationsPerMonth *int `json:"conversations_per_month"`
 	} `json:"limits"`

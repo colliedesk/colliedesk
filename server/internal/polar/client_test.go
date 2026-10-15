@@ -21,6 +21,13 @@ type fakePolar struct {
 	body   map[string]any
 	status int
 	reply  string
+	// perPath answers "METHOD path" with its own reply; other requests get status and reply.
+	perPath map[string]canned
+}
+
+type canned struct {
+	status int
+	body   string
 }
 
 func newFakePolar(t *testing.T, status int, reply string) *fakePolar {
@@ -31,8 +38,12 @@ func newFakePolar(t *testing.T, status int, reply string) *fakePolar {
 		fake.body = nil
 		_ = json.NewDecoder(request.Body).Decode(&fake.body)
 		response.Header().Set("Content-Type", "application/json")
-		response.WriteHeader(fake.status)
-		_, _ = response.Write([]byte(fake.reply))
+		answer := canned{fake.status, fake.reply}
+		if specific, ok := fake.perPath[request.Method+" "+request.URL.Path]; ok {
+			answer = specific
+		}
+		response.WriteHeader(answer.status)
+		_, _ = response.Write([]byte(answer.body))
 	}))
 	t.Cleanup(fake.server.Close)
 	return fake
@@ -45,7 +56,7 @@ func (f *fakePolar) client() *polar.Client {
 func TestCreateCheckoutSendsProductAndExternalCustomer(t *testing.T) {
 	fake := newFakePolar(t, http.StatusCreated, `{"id":"co_1","url":"https://polar.test/checkout/co_1"}`)
 	url, err := fake.client().CreateCheckout(context.Background(), polar.CheckoutRequest{
-		ProductID: "prod-1", ExternalCustomerID: "ws-1", CustomerEmail: "admin@example.com",
+		ProductID: "prod-1", CustomerID: "cus-1",
 		SuccessURL: "https://desk.example.com/settings/billing?checkout=success",
 	})
 	if err != nil || url != "https://polar.test/checkout/co_1" {
@@ -58,8 +69,7 @@ func TestCreateCheckoutSendsProductAndExternalCustomer(t *testing.T) {
 	if len(products) != 1 || products[0] != "prod-1" {
 		t.Fatalf("products=%v", fake.body["products"])
 	}
-	if fake.body["external_customer_id"] != "ws-1" || fake.body["customer_email"] != "admin@example.com" ||
-		fake.body["success_url"] != "https://desk.example.com/settings/billing?checkout=success" {
+	if fake.body["customer_id"] != "cus-1" || fake.body["success_url"] != "https://desk.example.com/settings/billing?checkout=success" {
 		t.Fatalf("body=%v", fake.body)
 	}
 }
@@ -84,9 +94,51 @@ func TestPortalSessionReportsUnknownCustomer(t *testing.T) {
 	}
 }
 
+func TestPortalReportsUnknownCustomerOn422(t *testing.T) {
+	fake := newFakePolar(t, http.StatusUnprocessableEntity, `{"detail":[{"msg":"Customer not found"}]}`)
+	if _, err := fake.client().CreatePortalSession(context.Background(), "ws-1", ""); !errors.Is(err, polar.ErrCustomerNotFound) {
+		t.Fatalf("err=%v, want ErrCustomerNotFound", err)
+	}
+}
+
+func TestEnsureCustomerCreatesWhenTheExternalIDIsUnknown(t *testing.T) {
+	fake := newFakePolar(t, http.StatusNotFound, `{}`)
+	fake.perPath = map[string]canned{
+		"GET /v1/customers/external/ws-1": {http.StatusNotFound, `{"detail":"Customer not found"}`},
+		"POST /v1/customers/":             {http.StatusCreated, `{"id":"cus-new"}`},
+	}
+	id, err := fake.client().EnsureCustomer(context.Background(), "ws-1", "admin+cd@example.com", "Beta Desk")
+	if err != nil || id != "cus-new" {
+		t.Fatalf("id=%q err=%v", id, err)
+	}
+	if fake.method != http.MethodPost || fake.body["external_id"] != "ws-1" || fake.body["email"] != "admin+cd@example.com" || fake.body["name"] != "Beta Desk" {
+		t.Fatalf("last request=%s body=%v", fake.method, fake.body)
+	}
+}
+
+func TestEnsureCustomerReusesAnExistingOne(t *testing.T) {
+	fake := newFakePolar(t, http.StatusNotFound, `{}`)
+	fake.perPath = map[string]canned{"GET /v1/customers/external/ws-1": {http.StatusOK, `{"id":"cus-old","external_id":"ws-1"}`}}
+	id, err := fake.client().EnsureCustomer(context.Background(), "ws-1", "a@example.com", "Beta Desk")
+	if err != nil || id != "cus-old" || fake.method != http.MethodGet {
+		t.Fatalf("id=%q err=%v method=%s, want the existing customer and no create", id, err, fake.method)
+	}
+}
+
+func TestEnsureCustomerFailsWhenPolarRefusesTheCreate(t *testing.T) {
+	fake := newFakePolar(t, http.StatusNotFound, `{}`)
+	fake.perPath = map[string]canned{
+		"GET /v1/customers/external/ws-1": {http.StatusNotFound, `{}`},
+		"POST /v1/customers/":             {http.StatusUnprocessableEntity, `{"detail":"email exists"}`},
+	}
+	if _, err := fake.client().EnsureCustomer(context.Background(), "ws-1", "a@example.com", "Beta Desk"); err == nil {
+		t.Fatal("want an error when the customer cannot be created")
+	}
+}
+
 func TestClientErrorsNeverCarryTheToken(t *testing.T) {
 	fake := newFakePolar(t, http.StatusUnauthorized, `{"detail":"bad token-for-test"}`)
-	_, err := fake.client().CreateCheckout(context.Background(), polar.CheckoutRequest{ProductID: "p", ExternalCustomerID: "w"})
+	_, err := fake.client().CreateCheckout(context.Background(), polar.CheckoutRequest{ProductID: "p", CustomerID: "c"})
 	if err == nil || strings.Contains(err.Error(), "token-for-test") {
 		t.Fatalf("err=%v, want a failure without the token", err)
 	}
@@ -97,7 +149,7 @@ func TestClientErrorsNeverCarryTheToken(t *testing.T) {
 
 func TestClientRejectsAReplyWithoutURL(t *testing.T) {
 	fake := newFakePolar(t, http.StatusCreated, `{"id":"co_1"}`)
-	if _, err := fake.client().CreateCheckout(context.Background(), polar.CheckoutRequest{ProductID: "p", ExternalCustomerID: "w"}); err == nil {
+	if _, err := fake.client().CreateCheckout(context.Background(), polar.CheckoutRequest{ProductID: "p", CustomerID: "c"}); err == nil {
 		t.Fatal("want an error when Polar returns no checkout url")
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -31,28 +32,54 @@ func NewClient(config Config) *Client {
 	return &Client{token: config.AccessToken, baseURL: config.APIURL, http: &http.Client{Timeout: 10 * time.Second}}
 }
 
-// CheckoutRequest creates a checkout for one product. ExternalCustomerID is how Polar events come
-// back to the workspace, so the server sets it and never the browser.
+// CheckoutRequest creates a checkout for one product, bought by an existing Polar customer.
 type CheckoutRequest struct {
-	ProductID          string
-	ExternalCustomerID string
-	CustomerEmail      string
-	SuccessURL         string
+	ProductID  string
+	CustomerID string
+	SuccessURL string
+}
+
+// EnsureCustomer returns the Polar customer whose external id is externalID, creating it when
+// there is none. The external id (the workspace id) is the identity: Polar keeps customers unique
+// by email too, so the caller passes an email that is unique to the workspace. A second call for
+// the same external id returns the same customer.
+func (c *Client) EnsureCustomer(ctx context.Context, externalID, email, name string) (string, error) {
+	var found struct {
+		ID string `json:"id"`
+	}
+	err := c.do(ctx, http.MethodGet, "/v1/customers/external/"+url.PathEscape(externalID), nil, &found)
+	var status *StatusError
+	switch {
+	case err == nil && found.ID != "":
+		return found.ID, nil
+	case err == nil:
+		return "", errors.New("find polar customer: reply has no id")
+	case !errors.As(err, &status) || status.Code != http.StatusNotFound:
+		return "", fmt.Errorf("find polar customer: %w", err)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	body := map[string]any{"external_id": externalID, "email": email, "name": name}
+	if err := c.do(ctx, http.MethodPost, "/v1/customers/", body, &created); err != nil {
+		return "", fmt.Errorf("create polar customer: %w", err)
+	}
+	if created.ID == "" {
+		return "", errors.New("create polar customer: reply has no id")
+	}
+	return created.ID, nil
 }
 
 // CreateCheckout returns the hosted checkout URL.
 func (c *Client) CreateCheckout(ctx context.Context, input CheckoutRequest) (string, error) {
-	body := map[string]any{"products": []string{input.ProductID}, "external_customer_id": input.ExternalCustomerID}
-	if input.CustomerEmail != "" {
-		body["customer_email"] = input.CustomerEmail
-	}
+	body := map[string]any{"products": []string{input.ProductID}, "customer_id": input.CustomerID}
 	if input.SuccessURL != "" {
 		body["success_url"] = input.SuccessURL
 	}
 	var reply struct {
 		URL string `json:"url"`
 	}
-	if err := c.post(ctx, "/v1/checkouts/", body, &reply); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/v1/checkouts/", body, &reply); err != nil {
 		return "", fmt.Errorf("create polar checkout: %w", err)
 	}
 	if reply.URL == "" {
@@ -71,9 +98,10 @@ func (c *Client) CreatePortalSession(ctx context.Context, externalCustomerID, re
 	var reply struct {
 		URL string `json:"customer_portal_url"`
 	}
-	if err := c.post(ctx, "/v1/customer-sessions/", body, &reply); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/v1/customer-sessions/", body, &reply); err != nil {
 		var status *StatusError
-		if errors.As(err, &status) && status.Code == http.StatusNotFound {
+		// Polar answers 404 or 422 for an external id it has never seen.
+		if errors.As(err, &status) && (status.Code == http.StatusNotFound || status.Code == http.StatusUnprocessableEntity) {
 			return "", ErrCustomerNotFound
 		}
 		return "", fmt.Errorf("create polar portal session: %w", err)
@@ -84,12 +112,16 @@ func (c *Client) CreatePortalSession(ctx context.Context, externalCustomerID, re
 	return reply.URL, nil
 }
 
-func (c *Client) post(ctx context.Context, path string, body, target any) error {
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return err
+func (c *Client) do(ctx context.Context, method, path string, body, target any) error {
+	var payload io.Reader
+	if body != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		payload = bytes.NewReader(encoded)
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(payload))
+	request, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, payload)
 	if err != nil {
 		return err
 	}

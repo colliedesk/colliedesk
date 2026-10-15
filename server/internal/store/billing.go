@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -30,9 +29,11 @@ func scanSubscription(row pgx.Row) (domain.Subscription, error) {
 
 // ApplySubscription records one Polar subscription event for the workspace in a single
 // transaction: the webhook id is stored first, so a redelivery is a no-op, and the subscription
-// row is written only when the event is not older than what is stored. A workspace that does not
-// exist (the scoped transaction cannot see it) stores nothing.
-func (s *Store) ApplySubscription(ctx context.Context, workspaceID, webhookID, eventType string, incoming domain.Subscription, now time.Time) (SubscriptionResult, error) {
+// row is written only when the event is not older than the one stored for the same subscription.
+// The upsert itself carries that condition, so two events racing for a subscription that has no row
+// yet cannot overwrite each other with the older state. A workspace that does not exist (the scoped
+// transaction cannot see it) stores nothing.
+func (s *Store) ApplySubscription(ctx context.Context, workspaceID, webhookID, eventType string, incoming domain.Subscription) (SubscriptionResult, error) {
 	result, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (SubscriptionResult, error) {
 		var exists bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=$1)`, workspaceID).Scan(&exists); err != nil {
@@ -49,22 +50,19 @@ func (s *Store) ApplySubscription(ctx context.Context, workspaceID, webhookID, e
 		if recorded.RowsAffected() == 0 {
 			return SubscriptionDuplicate, nil
 		}
-		current, err := scanSubscription(tx.QueryRow(ctx, `SELECT `+subscriptionColumns+` FROM workspace_billing WHERE workspace_id=$1 FOR UPDATE`, workspaceID))
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return "", err
-		}
-		if err == nil && keepStored(current, incoming, now) {
-			return SubscriptionStale, nil
-		}
-		_, err = tx.Exec(ctx, `INSERT INTO workspace_billing(workspace_id,`+subscriptionColumns+`) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
-			ON CONFLICT(workspace_id) DO UPDATE SET plan=EXCLUDED.plan,polar_subscription_id=EXCLUDED.polar_subscription_id,
+		written, err := tx.Exec(ctx, `INSERT INTO workspace_billing(workspace_id,`+subscriptionColumns+`) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+			ON CONFLICT(workspace_id,polar_subscription_id) DO UPDATE SET plan=EXCLUDED.plan,
 				polar_customer_id=EXCLUDED.polar_customer_id,status=EXCLUDED.status,current_period_end=EXCLUDED.current_period_end,
 				cancel_at_period_end=EXCLUDED.cancel_at_period_end,ended_at=EXCLUDED.ended_at,
-				source_modified_at=EXCLUDED.source_modified_at,updated_at=now()`,
+				source_modified_at=EXCLUDED.source_modified_at,updated_at=now()
+			WHERE workspace_billing.source_modified_at <= EXCLUDED.source_modified_at`,
 			workspaceID, incoming.Plan, incoming.SubscriptionID, incoming.CustomerID, incoming.Status, incoming.CurrentPeriodEnd,
 			incoming.CancelAtPeriodEnd, incoming.EndedAt, incoming.ModifiedAt)
 		if err != nil {
 			return "", err
+		}
+		if written.RowsAffected() == 0 {
+			return SubscriptionStale, nil
 		}
 		return SubscriptionApplied, nil
 	})
@@ -74,27 +72,16 @@ func (s *Store) ApplySubscription(ctx context.Context, workspaceID, webhookID, e
 	return result, nil
 }
 
-// keepStored decides whether the stored subscription wins over an incoming event. Events of one
-// subscription are ordered by modified_at. An event of another subscription never ends a paying
-// one (an old subscription's cancellation can arrive after the new one started).
-func keepStored(stored, incoming domain.Subscription, now time.Time) bool {
-	older := incoming.ModifiedAt.Before(stored.ModifiedAt)
-	if stored.SubscriptionID == incoming.SubscriptionID {
-		return older
-	}
-	return stored.Entitled(now) && (!incoming.Entitled(now) || older)
-}
-
 // GetBilling returns the workspace's plan, state and current usage. Usage counts agents and the
 // conversations created since the start of the current UTC calendar month.
 func (s *Store) GetBilling(ctx context.Context, workspaceID string, now time.Time) (domain.Billing, error) {
 	billing, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Billing, error) {
-		var subscription *domain.Subscription
-		stored, err := scanSubscription(tx.QueryRow(ctx, `SELECT `+subscriptionColumns+` FROM workspace_billing WHERE workspace_id=$1`, workspaceID))
-		switch {
-		case err == nil:
-			subscription = &stored
-		case !errors.Is(err, pgx.ErrNoRows):
+		rows, err := tx.Query(ctx, `SELECT `+subscriptionColumns+` FROM workspace_billing WHERE workspace_id=$1`, workspaceID)
+		if err != nil {
+			return domain.Billing{}, err
+		}
+		subscriptions, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Subscription, error) { return scanSubscription(row) })
+		if err != nil {
 			return domain.Billing{}, err
 		}
 		var usage domain.BillingUsage
@@ -106,7 +93,7 @@ func (s *Store) GetBilling(ctx context.Context, workspaceID string, now time.Tim
 		if err != nil {
 			return domain.Billing{}, err
 		}
-		return domain.NewBilling(subscription, usage, now), nil
+		return domain.NewBilling(subscriptions, usage, now), nil
 	})
 	if err != nil {
 		return domain.Billing{}, fmt.Errorf("get billing: %w", err)

@@ -801,18 +801,24 @@ components:
         status: {type: string, enum: [applied, duplicate, stale, ignored]}
     Billing:
       type: object
-      required: [plan, status, current_period_end, cancel_at_period_end, limits, usage]
+      required: [plan, status, current_period_end, cancel_at_period_end, active_subscriptions, limits, usage]
       properties:
         plan: {type: string, enum: [free, team, founding], description: The plan in effect now.}
         status:
           type: string
-          enum: [none, incomplete, incomplete_expired, trialing, active, past_due, canceled, unpaid, paused]
+          enum: [none, incomplete, incomplete_expired, trialing, active, past_due, canceled, unpaid, paused, unknown]
           description: >
             The latest subscription status from the provider, `none` when there never was one.
             `past_due` keeps the paid plan while the provider retries the card; `canceled` keeps it
-            until `current_period_end`.
+            until `current_period_end`; `unknown` is a status this version does not recognise and
+            grants nothing. With several subscriptions the one that decides the plan is shown.
         current_period_end: {type: [string, 'null'], format: date-time}
         cancel_at_period_end: {type: boolean}
+        active_subscriptions:
+          type: integer
+          description: >
+            Subscriptions that grant a paid plan now. More than one means the workspace pays twice;
+            cancel the extra one in the billing portal.
         limits:
           type: object
           required: [agents, conversations_per_month]

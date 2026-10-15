@@ -72,7 +72,7 @@ func TestBillingFromOneWorkspaceNeverShowsAnothers(t *testing.T) {
 	}
 }
 
-func TestCheckoutUsesTheSessionsWorkspaceAndThePlansProduct(t *testing.T) {
+func TestCheckoutUsesTheSessionsWorkspaceCustomerAndThePlansProduct(t *testing.T) {
 	for plan, product := range map[string]string{"team_monthly": productMonthly, "team_yearly": productYearly, "founding": productFounding} {
 		t.Run(plan, func(t *testing.T) {
 			f := newBillingFixture(t)
@@ -87,15 +87,21 @@ func TestCheckoutUsesTheSessionsWorkspaceAndThePlansProduct(t *testing.T) {
 			if reply.URL != "https://polar.test/checkout/1" {
 				t.Fatalf("url=%q, want the URL Polar returned", reply.URL)
 			}
-			calls := f.fake.recorded()
-			if len(calls) != 1 || calls[0].Path != "/v1/checkouts/" || calls[0].Auth != "Bearer polar-token-for-test" {
-				t.Fatalf("calls=%v", calls)
+			created := f.fake.callsTo("/v1/customers/")
+			if len(created) != 1 || created[0].Auth != "Bearer polar-token-for-test" || created[0].Body["external_id"] != f.workspaceA {
+				t.Fatalf("customer create calls=%v, want one for workspace A", created)
 			}
-			body := calls[0].Body
+			checkouts := f.fake.callsTo("/v1/checkouts/")
+			if len(checkouts) != 1 {
+				t.Fatalf("checkout calls=%v", checkouts)
+			}
+			body := checkouts[0].Body
 			products, _ := body["products"].([]any)
-			if len(products) != 1 || products[0] != product || body["external_customer_id"] != f.workspaceA ||
-				body["customer_email"] != "admin@billing-alpha.example.com" {
-				t.Fatalf("polar body=%v, want product %s for workspace %s", body, product, f.workspaceA)
+			if len(products) != 1 || products[0] != product || body["customer_id"] != f.fake.customerID(f.workspaceA) {
+				t.Fatalf("polar body=%v, want product %s for workspace %s's customer", body, product, f.workspaceA)
+			}
+			if _, set := body["customer_email"]; set {
+				t.Fatalf("checkout identifies the customer by email: %v", body)
 			}
 			if success, _ := body["success_url"].(string); success != testOrigin+"/settings/billing?checkout=success" {
 				t.Fatalf("success_url=%q", success)
@@ -104,13 +110,40 @@ func TestCheckoutUsesTheSessionsWorkspaceAndThePlansProduct(t *testing.T) {
 	}
 }
 
+// Polar keeps one customer per email, but one person can administer several workspaces. Each
+// workspace gets its own Polar customer, so an order is never attached to the other workspace.
+func TestCheckoutGivesEachWorkspaceItsOwnPolarCustomerEvenForTheSameAdminEmail(t *testing.T) {
+	f := newBillingFixture(t)
+	sameAdmin := createSession(t, f.api, f.service, "Billing Charlie", "admin@billing-alpha.example.com")
+	workspaceC := workspaceID(t, f.api, sameAdmin)
+	for _, token := range []string{f.adminA, sameAdmin, f.adminA} {
+		if got := request(t, f.api, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": "team_monthly"}, token, nil); got.Code != http.StatusOK {
+			t.Fatalf("checkout status=%d body=%s", got.Code, got.Body.String())
+		}
+	}
+	customerA, customerC := f.fake.customerID(f.workspaceA), f.fake.customerID(workspaceC)
+	if customerA == "" || customerC == "" || customerA == customerC {
+		t.Fatalf("customers A=%q C=%q, want two distinct customers", customerA, customerC)
+	}
+	var used []any
+	for _, call := range f.fake.callsTo("/v1/checkouts/") {
+		used = append(used, call.Body["customer_id"])
+	}
+	if len(used) != 3 || used[0] != customerA || used[1] != customerC || used[2] != customerA {
+		t.Fatalf("checkout customers=%v, want A, C, A", used)
+	}
+	if created := f.fake.callsTo("/v1/customers/"); len(created) != 2 {
+		t.Fatalf("customers created=%d, want 2: A's customer is reused on its second checkout", len(created))
+	}
+}
+
 func TestCheckoutIgnoresAnyWorkspaceOrCustomerFromTheClient(t *testing.T) {
 	f := newBillingFixture(t)
 	response := request(t, f.api, http.MethodPost, "/api/v1/billing/checkout",
 		map[string]any{"plan": "team_monthly", "workspace_id": f.workspaceB, "external_customer_id": f.workspaceB, "customer_id": "cus_other"}, f.adminA, nil)
 	if response.Code == http.StatusOK {
-		calls := f.fake.recorded()
-		if len(calls) != 1 || calls[0].Body["external_customer_id"] != f.workspaceA {
+		calls := f.fake.callsTo("/v1/checkouts/")
+		if len(calls) != 1 || calls[0].Body["customer_id"] != f.fake.customerID(f.workspaceA) || f.fake.customerID(f.workspaceB) != "" {
 			t.Fatalf("client-sent workspace changed the checkout: %v", calls)
 		}
 		return
@@ -185,6 +218,19 @@ func TestPortalWithoutAPaymentHistoryIsNotFoundAndNeverCallsPolar(t *testing.T) 
 	}
 	if calls := f.fake.recorded(); len(calls) != 0 {
 		t.Fatalf("calls=%v, want none", calls)
+	}
+}
+
+func TestPortalTreatsPolarsUnknownCustomerAnswersAsNotFound(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusUnprocessableEntity} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			f := newBillingFixture(t)
+			f.mustDeliver(t, "msg_nf", activeTeam(f.workspaceA, "sub_nf", time.Now()).event("subscription.active"))
+			f.fake.status["/v1/customer-sessions/"] = status
+			if got := request(t, f.api, http.MethodPost, "/api/v1/billing/portal", nil, f.adminA, nil).Code; got != http.StatusNotFound {
+				t.Errorf("Polar %d: status=%d, want 404", status, got)
+			}
+		})
 	}
 }
 
