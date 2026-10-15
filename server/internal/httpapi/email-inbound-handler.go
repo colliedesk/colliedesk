@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
@@ -83,6 +84,10 @@ func (a *API) receiveInboundEmail(response http.ResponseWriter, request *http.Re
 	if errors.Is(err, store.ErrRateLimited) {
 		response.Header().Set("Retry-After", strconv.Itoa(int(store.InboundRateWindow.Seconds())))
 		writeError(response, http.StatusTooManyRequests, "rate_limited", "Too many messages from this sender. Retry later.")
+		return
+	}
+	if errors.Is(err, domain.ErrMailboxClosed) {
+		writeError(response, http.StatusForbidden, "mailbox_closed", "This mailbox is not accepting new mail.")
 		return
 	}
 	if err != nil {

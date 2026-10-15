@@ -1,16 +1,12 @@
 package httpapi_test
 
 import (
-	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -33,8 +29,12 @@ func (c *testClock) set(moment time.Time) {
 	c.now = moment
 }
 
-// midMonth is a hand-picked instant in the middle of a UTC month.
-var midMonth = time.Date(2026, time.September, 15, 12, 0, 0, 0, time.UTC)
+// trialStart is the instant the fixture workspaces are created; their trial ends 14 days later, at
+// 2026-10-15T09:00:00Z.
+var trialStart = time.Date(2026, time.October, 1, 9, 0, 0, 0, time.UTC)
+
+// trialEnd is written out by hand, not computed from trialStart.
+var trialEnd = time.Date(2026, time.October, 15, 9, 0, 0, 0, time.UTC)
 
 // limitsFixture is two cloud workspaces (billing enabled) or two self-hosted ones, each with the
 // email channel connected, on a server whose clock the test controls.
@@ -53,23 +53,15 @@ type limitsFixture struct {
 
 func newLimitsFixture(t *testing.T, billingEnabled bool) limitsFixture {
 	t.Helper()
-	return newLimitsFixtureWithStorage(t, billingEnabled, nil)
-}
-
-// newLimitsFixtureWithStorage lets a test wrap attachment storage, for example to hold an upload.
-func newLimitsFixtureWithStorage(t *testing.T, billingEnabled bool, wrap func(attachments.Storage) attachments.Storage) limitsFixture {
-	t.Helper()
-	clock := &testClock{now: midMonth}
+	clock := &testClock{now: trialStart}
 	fake := newFakePolarAPI(t)
 	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
 		config.Now = clock.Now
-		if wrap != nil {
-			config.Attachments = wrap(config.Attachments)
-		}
 		if billingEnabled {
 			config.Billing = fake.config()
 		}
 	})
+	service = service.WithClock(clock.Now)
 	adminA := createSession(t, api, service, "Limits Alpha", "admin@limits-alpha.example.com")
 	adminB := createSession(t, api, service, "Limits Bravo", "admin@limits-bravo.example.com")
 	f := limitsFixture{api: api, pool: pool, clock: clock, adminA: adminA, adminB: adminB,
@@ -92,25 +84,6 @@ func (f limitsFixture) receive(t *testing.T, workspaceB bool, number int, subjec
 		fmt.Sprintf("From: customer%d@customer.example", number), "To: " + support,
 		"Subject: " + subject, fmt.Sprintf("Message-ID: <limits-%d-%t@customer.example>", number, workspaceB),
 	}, "Please help with "+subject+"."))
-}
-
-// seedConversations inserts n conversations created at moment straight into the database, standing
-// in for earlier traffic. imported marks them with the origin an importer writes.
-func (f limitsFixture) seedConversations(t *testing.T, workspace string, n int, moment time.Time, imported bool) {
-	t.Helper()
-	ctx := context.Background()
-	var contactID string
-	if err := f.pool.QueryRow(ctx, `INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Seed','seed-'||gen_random_uuid()||'@customer.example') RETURNING id::text`, workspace).Scan(&contactID); err != nil {
-		t.Fatal(err)
-	}
-	origin := any(nil)
-	if imported {
-		origin = `{"system":"freshdesk","external_id":"1","type":null,"source":"email","due_at":null,"first_response_due_at":null,"cc":[],"forwarded_to":[]}`
-	}
-	if _, err := f.pool.Exec(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,origin)
-		SELECT $1,$2,'Seed '||n,$3,$3,$4::jsonb FROM generate_series(1,$5) AS n`, workspace, contactID, moment, origin, n); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func (f limitsFixture) upgrade(t *testing.T, workspace, subscriptionID string) {
@@ -137,19 +110,6 @@ func (f limitsFixture) inboxSubjects(t *testing.T, token, query string) []string
 	return subjects
 }
 
-// listedHeldCount is the held count any agent sees on the inbox list response.
-func (f limitsFixture) listedHeldCount(t *testing.T, token string) int {
-	t.Helper()
-	var page struct {
-		HeldCount *int `json:"held_count"`
-	}
-	decode(t, request(t, f.api, http.MethodGet, "/api/v1/conversations", nil, token, nil), &page)
-	if page.HeldCount == nil {
-		t.Fatal("conversation list has no held_count")
-	}
-	return *page.HeldCount
-}
-
 func (f limitsFixture) usage(t *testing.T, token string) planUsageView {
 	t.Helper()
 	response := request(t, f.api, http.MethodGet, "/api/v1/billing", nil, token, nil)
@@ -162,12 +122,15 @@ func (f limitsFixture) usage(t *testing.T, token string) planUsageView {
 }
 
 type planUsageView struct {
-	Plan  string `json:"plan"`
+	Plan        string `json:"plan"`
+	TrialEndsAt string `json:"trial_ends_at"`
+	Locked      bool   `json:"locked"`
+	Limits      struct {
+		Agents int `json:"agents"`
+	} `json:"limits"`
 	Usage struct {
-		Agents                 int `json:"agents"`
-		PendingInvites         int `json:"pending_invites"`
-		ConversationsThisMonth int `json:"conversations_this_month"`
-		HeldConversations      int `json:"held_conversations"`
+		Agents         int `json:"agents"`
+		PendingInvites int `json:"pending_invites"`
 	} `json:"usage"`
 }
 
@@ -176,20 +139,4 @@ type apiError struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	} `json:"error"`
-}
-
-// gatedStorage holds the first upload until released, like a slow object store.
-type gatedStorage struct {
-	attachments.Storage
-	entered chan struct{}
-	release chan struct{}
-	started atomic.Bool
-}
-
-func (g *gatedStorage) Put(ctx context.Context, workspaceID string, body io.Reader, expectedSize int64) (attachments.Object, error) {
-	if g.started.CompareAndSwap(false, true) {
-		close(g.entered)
-		<-g.release
-	}
-	return g.Storage.Put(ctx, workspaceID, body, expectedSize)
 }

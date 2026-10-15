@@ -42,12 +42,17 @@ func writeStoreError(response http.ResponseWriter, err error) {
 	writeError(response, http.StatusBadRequest, "invalid_request", "The request could not be completed.")
 }
 
-// writePlanLimit answers 402 when err is a plan limit, and reports whether it did.
+// writePlanLimit answers 402 when err is a plan limit or a locked workspace, and reports whether it did.
 func writePlanLimit(response http.ResponseWriter, err error) bool {
 	var limit *domain.PlanLimitError
-	if !errors.As(err, &limit) {
+	var locked *domain.LockedError
+	switch {
+	case errors.As(err, &limit):
+		writeError(response, http.StatusPaymentRequired, "plan_limit_reached", limit.Error())
+	case errors.As(err, &locked):
+		writeLocked(response)
+	default:
 		return false
 	}
-	writeError(response, http.StatusPaymentRequired, "plan_limit_reached", limit.Error())
 	return true
 }

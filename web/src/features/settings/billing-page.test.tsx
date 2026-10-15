@@ -4,21 +4,21 @@ import type { Billing } from '../../api/schemas';
 import { BillingPage } from './billing-page';
 
 const free: Billing = {
-  plan: 'free', status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0,
-  limits: { agents: 3, conversations_per_month: 100 }, usage: { agents: 2, pending_invites: 0, conversations_this_month: 40, held_conversations: 0 },
+  plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0,
+  limits: { agents: 10 }, usage: { agents: 2, pending_invites: 0 },
 };
 const team: Billing = {
-  plan: 'team', status: 'active', current_period_end: '2026-11-15T09:30:00Z', cancel_at_period_end: false, active_subscriptions: 1,
-  limits: { agents: 10, conversations_per_month: null }, usage: { agents: 6, pending_invites: 0, conversations_this_month: 412, held_conversations: 0 },
+  plan: 'team', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'active', current_period_end: '2026-11-15T09:30:00Z', cancel_at_period_end: false, active_subscriptions: 1,
+  limits: { agents: 10 }, usage: { agents: 6, pending_invites: 0 },
 };
 
-test('a free workspace sees its usage against the limits and three ways to upgrade', () => {
+test('a trial workspace sees when the trial ends, its usage and three ways to subscribe', () => {
   const onCheckout = vi.fn();
   render(<BillingPage billing={free} timezone="UTC" onCheckout={onCheckout} onManage={vi.fn()} />);
   expect(screen.getByRole('heading', { name: /plan and billing/i })).toBeInTheDocument();
-  expect(screen.getByText('Free')).toBeInTheDocument();
-  expect(screen.getByText(/2 of 3 agents/i)).toBeInTheDocument();
-  expect(screen.getByText(/40 of 100 new conversations this month/i)).toBeInTheDocument();
+  expect(screen.getByText('Free trial')).toBeInTheDocument();
+  expect(screen.getByText(/trial ends oct 15/i)).toBeInTheDocument();
+  expect(screen.getByText(/2 of 10 agents/i)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /manage billing/i })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: /team.*\$49.*month/i }));
   fireEvent.click(screen.getByRole('button', { name: /team.*\$490.*year/i }));
@@ -32,7 +32,6 @@ test('a paying workspace sees renewal, no upgrade buttons and a way to manage bi
   expect(screen.getByText('Team')).toBeInTheDocument();
   expect(screen.getByText(/renews nov 15/i)).toBeInTheDocument();
   expect(screen.getByText(/6 of 10 agents/i)).toBeInTheDocument();
-  expect(screen.getByText(/412 new conversations this month \(no limit\)/i)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /\$49/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: /manage billing/i }));
   expect(onManage).toHaveBeenCalled();
@@ -50,9 +49,10 @@ test('a failed payment is flagged while the plan stays active', () => {
   expect(screen.getByRole('alert')).toHaveTextContent(/last payment failed/i);
 });
 
-test('after a subscription ended the workspace is free again but can still open billing', () => {
-  render(<BillingPage billing={{ ...free, status: 'canceled', current_period_end: '2026-10-01T00:00:00Z' }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
-  expect(screen.getByText('Free')).toBeInTheDocument();
+test('after the trial or a subscription ended the workspace is locked but can still pick a plan and open billing', () => {
+  render(<BillingPage billing={{ ...free, plan: 'none', locked: true, limits: { agents: 0 }, status: 'canceled', current_period_end: '2026-10-01T00:00:00Z' }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.getByText('Trial ended')).toBeInTheDocument();
+  expect(screen.getByText(/trial ended oct 15/i)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /manage billing/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /team, \$49 per month/i })).toBeInTheDocument();
 });
@@ -74,18 +74,6 @@ test('two active subscriptions are flagged so the admin cancels the extra one', 
 
 test('pending invites are shown because they hold a seat against the cap', () => {
   render(<BillingPage billing={{ ...free, usage: { ...free.usage, agents: 1, pending_invites: 2 } }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
-  expect(screen.getByText(/1 of 3 agents, plus 2 pending invites/i)).toBeInTheDocument();
+  expect(screen.getByText(/1 of 10 agents, plus 2 pending invites/i)).toBeInTheDocument();
 });
 
-test('held conversations are counted and explained with the way to release them', () => {
-  render(<BillingPage billing={{ ...free, usage: { ...free.usage, conversations_this_month: 130, held_conversations: 30 } }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
-  expect(screen.getByText(/130 of 100 new conversations this month/i)).toBeInTheDocument();
-  expect(screen.getByRole('status')).toHaveTextContent(/30 conversations are held/i);
-  expect(screen.getByRole('status')).toHaveTextContent(/stored in full/i);
-  expect(screen.getByRole('status')).toHaveTextContent(/upgrade/i);
-});
-
-test('no held notice when nothing is held', () => {
-  render(<BillingPage billing={free} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
-  expect(screen.queryByRole('status')).not.toBeInTheDocument();
-});

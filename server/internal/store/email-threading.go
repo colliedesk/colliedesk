@@ -68,9 +68,8 @@ func markBounced(ctx context.Context, tx pgx.Tx, workspaceID string, messageIDs 
 	return nil
 }
 
-// createEmailConversation stores a new conversation received at now. A held conversation is kept in
-// full but stays out of the inbox (see held_at).
-func createEmailConversation(ctx context.Context, tx pgx.Tx, workspaceID string, in email.Inbound, now time.Time, held bool) (string, error) {
+// createEmailConversation stores a new conversation received at now.
+func createEmailConversation(ctx context.Context, tx pgx.Tx, workspaceID string, in email.Inbound, now time.Time) (string, error) {
 	name := in.FromName
 	if name == "" {
 		name = in.FromAddress[:strings.LastIndex(in.FromAddress, "@")]
@@ -85,13 +84,9 @@ func createEmailConversation(ctx context.Context, tx pgx.Tx, workspaceID string,
 	if subject == "" {
 		subject = "(no subject)"
 	}
-	var heldAt *time.Time
-	if held {
-		heldAt = &now
-	}
 	var conversationID string
-	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,held_at) VALUES($1,$2,$3,$4,$4,$5) RETURNING id::text`,
-		workspaceID, contactID, subject, now, heldAt).Scan(&conversationID); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at) VALUES($1,$2,$3,$4,$4) RETURNING id::text`,
+		workspaceID, contactID, subject, now).Scan(&conversationID); err != nil {
 		return "", fmt.Errorf("create conversation: %w", err)
 	}
 	return conversationID, nil

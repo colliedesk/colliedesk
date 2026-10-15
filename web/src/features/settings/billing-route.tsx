@@ -19,7 +19,7 @@ export function BillingRoute({ checkoutReturned = false }: BillingRouteProps) {
   const enabled = config.data?.billing.enabled === true;
   const billing = useQuery({
     queryKey: ['billing'], queryFn: api.billing, enabled: isAdmin && enabled,
-    refetchInterval: (query) => (checkoutReturned && query.state.data?.plan === 'free' ? confirmPollMs : false),
+    refetchInterval: (query) => (checkoutReturned && (query.state.data?.plan === 'trial' || query.state.data?.plan === 'none') ? confirmPollMs : false),
   });
   const leave = { onSuccess: (link: { url: string }) => window.location.assign(link.url) };
   const checkout = useMutation({ mutationFn: (plan: CheckoutPlan) => api.startCheckout(plan), ...leave });
