@@ -30,6 +30,9 @@ type Options struct {
 	// RateLimitPause is the wait after a response reports zero remaining calls.
 	RateLimitPause time.Duration
 
+	// Now is the clock of the trial extension; nil means time.Now.
+	Now func() time.Time
+
 	// Progress receives one-line progress messages (the CLI passes stderr); nil is silent.
 	Progress io.Writer
 	// ProgressInterval is the minimum time between counter lines; default 30 s.

@@ -72,9 +72,12 @@ func (s *Store) ApplySubscription(ctx context.Context, workspaceID, webhookID, e
 	return result, nil
 }
 
-// LoadSubscriptions reads every subscription row of the workspace inside tx.
+// LoadSubscriptions reads every subscription of the workspace inside tx, in one statement: the Polar
+// rows, plus the complimentary plan in force, which counts as a paid subscription that no payment
+// backs (see compSubscriptionColumns).
 func LoadSubscriptions(ctx context.Context, tx pgx.Tx, workspaceID string) ([]domain.Subscription, error) {
-	rows, err := tx.Query(ctx, `SELECT `+subscriptionColumns+` FROM workspace_billing WHERE workspace_id=$1`, workspaceID)
+	rows, err := tx.Query(ctx, `SELECT `+subscriptionColumns+` FROM workspace_billing WHERE workspace_id=$1
+		UNION ALL SELECT `+compSubscriptionColumns+` FROM workspace_comp_plans WHERE workspace_id=$1 AND revoked_at IS NULL`, workspaceID)
 	if err != nil {
 		return nil, err
 	}

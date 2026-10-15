@@ -86,6 +86,9 @@ Run the same command again. Items that were imported are skipped, an interrupted
 where it stopped, and failed items are tried again. Nothing is duplicated. A file that is lost or
 damaged on disk after the import is detected by the next run and downloaded again.
 
+On Colliedesk Cloud, the first import into a workspace that is still in its trial extends the trial
+to 30 days in total from when it started.
+
 Only one import or undo runs in a workspace at a time. A second one stops at once with
 "already running".
 

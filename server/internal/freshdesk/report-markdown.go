@@ -19,6 +19,9 @@ func (r *Report) Markdown() string {
 	if r.DryRun {
 		b.WriteString("- Dry run: nothing was written. Message, attachment and time entry counts are known only after an import.\n")
 	}
+	if r.TrialExtendedTo != nil {
+		fmt.Fprintf(&b, "- trial: extended to %s\n", r.TrialExtendedTo.UTC().Format(time.RFC3339))
+	}
 	b.WriteString("\n## Counts\n\n| Entity | In Freshdesk | In Colliedesk | Failed |\n|---|---:|---:|---:|\n")
 	for _, row := range []struct {
 		name  string
