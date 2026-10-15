@@ -616,6 +616,8 @@ export interface components {
             };
             usage: {
                 agents: number;
+                /** @description Emailed replies of the last 24 hours that count against the trial cap of 200; 0 on other plans. */
+                replies_last_24h: number;
                 /** @description Unused, unrevoked, unexpired invites. Each holds an agent seat, so agents plus pending invites is compared with `limits.agents`. */
                 pending_invites: number;
             };
@@ -909,6 +911,8 @@ export interface components {
             error: {
                 code: string;
                 message: string;
+                /** @description Only on trial_outbound_limit: seconds until a reply can be sent. */
+                retry_after_seconds?: number;
             };
         };
     };
@@ -1041,6 +1045,16 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description A trial workspace already sent 200 replies in the last 24 hours (error code `trial_outbound_limit`, with `retry_after_seconds` and a `Retry-After` header: the time until the oldest counted reply leaves the window). Nothing was stored. Paid plans have no such limit. */
+        TrialOutboundLimit: {
+            headers: {
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description The workspace's trial or subscription ended (error code `workspace_locked`). Nothing was read or changed. Choose a plan in billing, or export the data; the same request works after payment. */
         WorkspaceLocked: {
             headers: {
@@ -1068,7 +1082,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Permission or CSRF check failed */
+        /** @description Permission or CSRF check failed. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain); nothing was stored. */
         Error403: {
             headers: {
                 [name: string]: unknown;
@@ -1531,8 +1545,10 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TrialOutboundLimit"];
         };
     };
     retryMessageDelivery: {

@@ -48,7 +48,8 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   every attempt (crash loop) fails without sending. Backoff 30 s doubling to 1 h, 8 attempts,
   any 5xx fails at once.
 - **Per-workspace hourly send limit (300).** Over the limit, the row is deferred 10 minutes
-  without spending the attempt.
+  without spending the attempt. Trial workspaces also have a 200 replies per 24 h cap and may
+  reply only to customers who wrote first; see "Trial outbound controls" in `billing.md`.
 - **Bounces.** A delivery report (`multipart/report`, `MAILER-DAEMON`) is still dropped, but the
   Message-IDs in its returned headers mark our matching replies `failed`.
 - **Inbound limits are a loop guard plus a ceiling.** 10 messages per sender address per 10

@@ -1,0 +1,1 @@
+DROP INDEX email_outbox_workspace_created_idx;

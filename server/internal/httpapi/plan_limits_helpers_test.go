@@ -138,6 +138,7 @@ type planUsageView struct {
 	Usage struct {
 		Agents         int `json:"agents"`
 		PendingInvites int `json:"pending_invites"`
+		RepliesLast24h int `json:"replies_last_24h"`
 	} `json:"usage"`
 }
 

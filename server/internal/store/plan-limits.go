@@ -71,3 +71,67 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 	}
 	return nil
 }
+
+// repliesInWindow counts the deliveries that use up the trial's daily cap: failed ones never left.
+const repliesInWindow = `SELECT count(*) FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND status <> 'failed'`
+
+// customerWroteFirst is true for a conversation that holds a message from the customer: an
+// imported one, or inbound mail whose authentication did not fail. Without that rule a trial user
+// could mail their own hosted address with a forged From and use the relay to write to the victim.
+// A "none" verdict passes because many small senders publish no DMARC; the daily cap bounds that.
+const customerWroteFirst = `SELECT EXISTS(SELECT 1 FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND kind='incoming'
+	AND (origin IS NOT NULL OR COALESCE(email_meta->>'authentication','none') <> 'fail'))`
+
+// checkTrialOutbound refuses a reply the trial does not allow with a *domain.TrialOutboundError.
+// It only applies to the hosted cloud on the trial plan; paid workspaces, locked ones (their
+// replies are refused earlier) and self-hosted servers are untouched. A workspace-wide advisory
+// lock makes two concurrent replies see each other's row before the cap is compared.
+func (s *Store) checkTrialOutbound(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, domainVerified bool) error {
+	if !s.limits {
+		return nil
+	}
+	now := s.now()
+	access, err := workspaceAccess(ctx, tx, workspaceID, now)
+	if err != nil {
+		return err
+	}
+	if access.Plan != domain.PlanTrial {
+		return nil
+	}
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "outbound-cap:"+workspaceID); err != nil {
+		return fmt.Errorf("lock outbound cap: %w", err)
+	}
+	if !domainVerified {
+		var wrote bool
+		if err := tx.QueryRow(ctx, customerWroteFirst, workspaceID, conversationID).Scan(&wrote); err != nil {
+			return fmt.Errorf("check first contact: %w", err)
+		}
+		if !wrote {
+			return &domain.TrialOutboundError{}
+		}
+	}
+	windowStart := now.Add(-domain.TrialReplyWindow)
+	var sent int
+	if err := tx.QueryRow(ctx, repliesInWindow, workspaceID, windowStart).Scan(&sent); err != nil {
+		return fmt.Errorf("count recent replies: %w", err)
+	}
+	if sent < domain.TrialRepliesPerDay {
+		return nil
+	}
+	// The cap-th newest counted reply is the one whose leaving the window frees a slot.
+	var frees time.Time
+	if err := tx.QueryRow(ctx, `SELECT created_at FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND status <> 'failed'
+		ORDER BY created_at DESC OFFSET $3 LIMIT 1`, workspaceID, windowStart, domain.TrialRepliesPerDay-1).Scan(&frees); err != nil {
+		return fmt.Errorf("find next free slot: %w", err)
+	}
+	return &domain.TrialOutboundError{RetryAfter: frees.Add(domain.TrialReplyWindow).Sub(now)}
+}
+
+// repliesLast24h is the trial's cap usage as the admin sees it.
+func repliesLast24h(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (int, error) {
+	var sent int
+	if err := tx.QueryRow(ctx, repliesInWindow, workspaceID, now.Add(-domain.TrialReplyWindow)).Scan(&sent); err != nil {
+		return 0, fmt.Errorf("count recent replies: %w", err)
+	}
+	return sent, nil
+}

@@ -5,11 +5,11 @@ import { BillingPage } from './billing-page';
 
 const free: Billing = {
   plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0,
-  limits: { agents: 10 }, usage: { agents: 2, pending_invites: 0 },
+  limits: { agents: 10 }, usage: { agents: 2, pending_invites: 0, replies_last_24h: 0 },
 };
 const team: Billing = {
   plan: 'team', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'active', current_period_end: '2026-11-15T09:30:00Z', cancel_at_period_end: false, active_subscriptions: 1,
-  limits: { agents: 10 }, usage: { agents: 6, pending_invites: 0 },
+  limits: { agents: 10 }, usage: { agents: 6, pending_invites: 0, replies_last_24h: 0 },
 };
 
 test('a trial workspace sees when the trial ends, its usage and three ways to subscribe', () => {
@@ -73,7 +73,7 @@ test('two active subscriptions are flagged so the admin cancels the extra one', 
 });
 
 test('pending invites are shown because they hold a seat against the cap', () => {
-  render(<BillingPage billing={{ ...free, usage: { ...free.usage, agents: 1, pending_invites: 2 } }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  render(<BillingPage billing={{ ...free, usage: { ...free.usage, agents: 1, pending_invites: 2, replies_last_24h: 0 } }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
   expect(screen.getByText(/1 of 10 agents, plus 2 pending invites/i)).toBeInTheDocument();
 });
 

@@ -56,6 +56,9 @@ func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conver
 	if err != nil {
 		return fmt.Errorf("load email channel: %w", err)
 	}
+	if err := s.checkTrialOutbound(ctx, tx, workspaceID, conversationID, verified); err != nil {
+		return err
+	}
 	emailMessageID, err := email.NewMessageID(email.Domain(supportAddress))
 	if err != nil {
 		return err
@@ -75,8 +78,8 @@ func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conver
 	if reason != "" {
 		status = "failed"
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO email_outbox(workspace_id,message_id,status,last_error) VALUES($1,$2,$3,NULLIF($4,''))`,
-		workspaceID, messageID, status, reason); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO email_outbox(workspace_id,message_id,status,last_error,created_at) VALUES($1,$2,$3,NULLIF($4,''),$5)`,
+		workspaceID, messageID, status, reason, s.now()); err != nil {
 		return fmt.Errorf("queue reply: %w", err)
 	}
 	return nil

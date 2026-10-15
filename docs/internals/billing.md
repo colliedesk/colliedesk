@@ -140,6 +140,40 @@ that is still inside its paid period keeps the paid limits. Code: `store/plan-li
 - `ConversationPage.held_count` is on the list response so that agents, who cannot read
   `/api/v1/billing`, still see the banner.
 
+### Trial outbound controls
+
+Anti-abuse for trial workspaces, so a fresh trial cannot be used as a mail relay. Only when plan
+limits are on and the plan in effect is `trial`; paid and self-hosted workspaces are untouched.
+Code: `checkTrialOutbound` in `store/plan-limits.go`, called from `enqueueReply`, the only place a
+reply enters `email_outbox` (composer, a future "start conversation", MCP send all pass it). Notes
+and workspaces without an email channel never reach it.
+
+- **Replies only to customers who wrote first**, unless the support address domain is verified
+  (`email_channels.domain_verified_at`). A conversation qualifies when it has an `incoming` message
+  that is imported history (`origin IS NOT NULL`) or inbound mail whose authentication verdict is
+  not `fail`. Refusal: HTTP 403 `trial_outbound_restricted`.
+- **Spoof-From trade-off.** A trial user can mail their own hosted address with a forged
+  `From: victim@...` and then reply to the victim through our relay. `fail` is refused. `none` is
+  allowed because many small senders publish no DMARC; refusing it would block real customers. The
+  residual risk is bounded by the 200/day cap, the hourly 300 worker limit and signup controls.
+  Requiring `pass` later is a one-line change in `customerWroteFirst`, no schema change.
+- **200 replies per rolling 24 h per workspace**, counted from `email_outbox.created_at > now-24h`
+  with `status <> 'failed'` (a failed delivery never left). A row exactly 24 h old no longer counts.
+  Refusal: HTTP 429 `trial_outbound_limit`, with `Retry-After` and `retry_after_seconds` (time until
+  the 200th newest counted reply leaves the window). The existing 300/hour worker limit stays.
+- Both checks run under `pg_advisory_xact_lock("outbound-cap:<workspace>")` inside the message
+  transaction, so two replies racing for the last slot admit exactly one, and a refusal rolls back
+  the whole message (no orphan reply in the timeline).
+- `enqueueReply` stamps `email_outbox.created_at` from the store clock, so tests that move
+  `httpapi.Config.Now` move the window with it.
+- Replies queued before a lock are still sent: the worker does not check the plan.
+- Index `email_outbox_workspace_created_idx (workspace_id, created_at)` serves the count;
+  `TestTrialCapCountStaysFastOnALargeOutbox` asserts the plan uses it and a reply takes under
+  200 ms with 200k outbox rows (measured ~12 ms).
+- `GET /billing` reports `usage.replies_last_24h` (0 off-trial).
+- There is no Cc support yet, so nothing to restrict. When reply Cc lands, it must be refused in
+  trial unless the domain is verified, with the same `trial_outbound_restricted` code.
+
 ### Clock
 
 `httpapi.Config.Now` feeds the store and the auth service. Tests move it across a month boundary

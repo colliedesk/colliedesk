@@ -139,6 +139,11 @@ func findSessionID(t *testing.T, api http.Handler, token, label string) string {
 func withFailedEmailReply(t *testing.T, api http.Handler, pool *pgxpool.Pool, admin, conversationID string) (http.Handler, string, string) {
 	t.Helper()
 	secret := connectEmail(t, api, admin, "support@contract-all.example.com")
+	// The workspace is on a trial, which replies only to customers who wrote first.
+	if _, err := pool.Exec(context.Background(), `INSERT INTO messages(workspace_id,conversation_id,kind,body)
+		SELECT workspace_id,id,'incoming','Customer question' FROM conversations WHERE id=$1`, conversationID); err != nil {
+		t.Fatal(err)
+	}
 	replyID := create(t, api, admin, "/api/v1/conversations/"+conversationID+"/messages", map[string]any{"kind": "outgoing", "body": "Contract reply"})
 	if _, err := pool.Exec(context.Background(), `UPDATE email_outbox SET status='failed', last_error='550 mailbox unavailable' WHERE message_id=$1`, replyID); err != nil {
 		t.Fatal(err)

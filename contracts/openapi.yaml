@@ -296,8 +296,10 @@ paths:
               schema: {$ref: '#/components/schemas/Message'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TrialOutboundLimit'}
   /api/v1/conversations/{id}/messages/{messageId}/retry:
     parameters:
       - {$ref: '#/components/parameters/ID'}
@@ -849,6 +851,14 @@ components:
         action works again after an upgrade or after freeing a seat. A locked workspace answers
         `workspace_locked` instead.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    TrialOutboundLimit:
+      description: >
+        A trial workspace already sent 200 replies in the last 24 hours (error code
+        `trial_outbound_limit`, with `retry_after_seconds` and a `Retry-After` header: the time until
+        the oldest counted reply leaves the window). Nothing was stored. Paid plans have no such limit.
+      headers:
+        Retry-After: {schema: {type: integer}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     WorkspaceLocked:
       description: >
         The workspace's trial or subscription ended (error code `workspace_locked`). Nothing was read
@@ -863,7 +873,10 @@ components:
       description: Authentication failed
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error403:
-      description: Permission or CSRF check failed
+      description: >
+        Permission or CSRF check failed. On `POST /conversations/{id}/messages` a trial workspace gets
+        error code `trial_outbound_restricted` for a reply to a conversation the customer did not
+        start (unless it verified its sending domain); nothing was stored.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error404:
       description: Resource not found in this workspace
@@ -922,9 +935,12 @@ components:
             agents: {type: integer, description: 'Seats of the plan; 0 when locked.'}
         usage:
           type: object
-          required: [agents, pending_invites]
+          required: [agents, pending_invites, replies_last_24h]
           properties:
             agents: {type: integer}
+            replies_last_24h:
+              type: integer
+              description: Emailed replies of the last 24 hours that count against the trial cap of 200; 0 on other plans.
             pending_invites:
               type: integer
               description: Unused, unrevoked, unexpired invites. Each holds an agent seat, so agents plus pending invites is compared with `limits.agents`.
@@ -1242,3 +1258,4 @@ components:
           properties:
             code: {type: string}
             message: {type: string}
+            retry_after_seconds: {type: integer, description: 'Only on trial_outbound_limit: seconds until a reply can be sent.'}

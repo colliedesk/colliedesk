@@ -99,7 +99,13 @@ func (s *Store) GetBilling(ctx context.Context, workspaceID string, now time.Tim
 		if err != nil {
 			return domain.Billing{}, err
 		}
-		return domain.NewBilling(subscriptions, trialEndsAt, usage, now), nil
+		billing := domain.NewBilling(subscriptions, trialEndsAt, usage, now)
+		if billing.Plan == domain.PlanTrial {
+			if billing.Usage.RepliesLast24h, err = repliesLast24h(ctx, tx, workspaceID, now); err != nil {
+				return domain.Billing{}, err
+			}
+		}
+		return billing, nil
 	})
 	if err != nil {
 		return domain.Billing{}, fmt.Errorf("get billing: %w", err)
