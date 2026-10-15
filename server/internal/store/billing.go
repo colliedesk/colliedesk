@@ -72,8 +72,8 @@ func (s *Store) ApplySubscription(ctx context.Context, workspaceID, webhookID, e
 	return result, nil
 }
 
-// loadSubscriptions reads every subscription row of the workspace.
-func loadSubscriptions(ctx context.Context, tx pgx.Tx, workspaceID string) ([]domain.Subscription, error) {
+// LoadSubscriptions reads every subscription row of the workspace inside tx.
+func LoadSubscriptions(ctx context.Context, tx pgx.Tx, workspaceID string) ([]domain.Subscription, error) {
 	rows, err := tx.Query(ctx, `SELECT `+subscriptionColumns+` FROM workspace_billing WHERE workspace_id=$1`, workspaceID)
 	if err != nil {
 		return nil, err
@@ -84,7 +84,7 @@ func loadSubscriptions(ctx context.Context, tx pgx.Tx, workspaceID string) ([]do
 // GetBilling returns the workspace's plan, state and current usage at now.
 func (s *Store) GetBilling(ctx context.Context, workspaceID string, now time.Time) (domain.Billing, error) {
 	billing, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Billing, error) {
-		subscriptions, err := loadSubscriptions(ctx, tx, workspaceID)
+		subscriptions, err := LoadSubscriptions(ctx, tx, workspaceID)
 		if err != nil {
 			return domain.Billing{}, err
 		}

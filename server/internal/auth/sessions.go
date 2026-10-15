@@ -3,9 +3,11 @@ package auth
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -24,6 +26,7 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 		return Principal{}, fmt.Errorf("authenticate session: %w", err)
 	}
 	principal := Principal{ViaCookie: viaCookie}
+	var trialEndsAt time.Time
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		err := tx.QueryRow(ctx, `SELECT w.id::text,w.slug,w.name,w.timezone,a.id::text,a.email,a.display_name,
 			CASE WHEN a.role='agent' OR s.role_ceiling='agent' THEN 'agent' ELSE 'admin' END,a.timezone_override,s.id::text,w.trial_ends_at
@@ -31,13 +34,20 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 			WHERE s.workspace_id=$3 AND s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>$2`, hash, now, workspaceID).
 			Scan(&principal.Workspace.ID, &principal.Workspace.Slug, &principal.Workspace.Name, &principal.Workspace.Timezone,
 				&principal.Agent.ID, &principal.Agent.Email, &principal.Agent.DisplayName, &principal.Agent.Role,
-				&principal.Agent.TimezoneOverride, &principal.SessionID, &principal.TrialEndsAt)
+				&principal.Agent.TimezoneOverride, &principal.SessionID, &trialEndsAt)
 		if err != nil {
 			return fmt.Errorf("authenticate session: %w", err)
 		}
 		if _, err := tx.Exec(ctx, `UPDATE sessions SET last_seen_at=$2,expires_at=$3 WHERE id=$1 AND workspace_id=$4`,
 			principal.SessionID, now, now.Add(sessionLifetime), workspaceID); err != nil {
 			return fmt.Errorf("refresh session: %w", err)
+		}
+		if s.planLimits {
+			subscriptions, err := store.LoadSubscriptions(ctx, tx, workspaceID)
+			if err != nil {
+				return fmt.Errorf("load subscriptions: %w", err)
+			}
+			principal.Access = domain.NewAccess(subscriptions, trialEndsAt, now)
 		}
 		return nil
 	})

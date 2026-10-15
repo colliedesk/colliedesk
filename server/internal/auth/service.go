@@ -30,9 +30,10 @@ type Principal struct {
 	Agent     domain.Agent
 	SessionID string
 	ViaCookie bool
-	// TrialEndsAt is when the workspace's trial ends or ended; it is read with the session so the
-	// lock check costs no query during the trial.
-	TrialEndsAt time.Time
+	// Access is the workspace's plan at the time of the request, derived inside the transaction that
+	// authenticated the session so the lock check costs no transaction of its own. The zero value
+	// (self-hosted, no plan limits) is never locked.
+	Access domain.Access
 }
 
 func New(pool *pgxpool.Pool, origin string) *Service {

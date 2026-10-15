@@ -314,3 +314,26 @@ func (f fixture) deliveryIn(t *testing.T, conversationID, messageID string) *dom
 	t.Fatalf("message %s not found", messageID)
 	return nil
 }
+
+// An agent who pressed send while the workspace was open has finished that act; the lock must not
+// strand the reply in the queue.
+func TestReplyQueuedBeforeTheLockIsStillSent(t *testing.T) {
+	f := newFixture(t)
+	server := startSMTPServer(t)
+	clock := time.Now().UTC().Add(time.Second)
+	f.store = f.store.WithPlanLimits(true)
+	worker := newWorker(f, server, &clock)
+	reply := f.write(t, "outgoing", "Sent just before the trial ended.")
+	if _, err := f.pool.Exec(context.Background(), `UPDATE workspaces SET trial_ends_at=$2 WHERE id=$1`, f.workspaceID, clock.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if process(t, worker) != 1 {
+		t.Fatal("the queued reply of a locked workspace was not attempted")
+	}
+	if delivery := f.delivery(t, reply.ID); delivery == nil || delivery.Status != "sent" {
+		t.Fatalf("delivery=%+v, want sent", delivery)
+	}
+	if received := server.mail(); len(received) != 1 || !strings.Contains(received[0].Data, "Sent just before the trial ended.") {
+		t.Fatalf("mail=%+v, want the reply delivered", received)
+	}
+}

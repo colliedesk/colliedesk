@@ -7,6 +7,7 @@ test:
 	sh tests/mail-pipe-test.sh
 	node --test infra/mail/cloud-inbound-worker/worker.test.mjs
 	sh tests/install-test.sh
+	test -z "$$(gofmt -l server)" || { gofmt -l server; echo 'gofmt: format the files above' >&2; exit 1; }
 	cd server && $(GO_ENV) go vet ./...
 	cd server && TEST_DATABASE_URL='$(TEST_DATABASE_URL)' $(GO_ENV) go test ./...
 	cd web && corepack pnpm typecheck

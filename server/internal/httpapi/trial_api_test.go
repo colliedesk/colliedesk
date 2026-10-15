@@ -92,6 +92,7 @@ func TestLockedAllowlistIsExactlyTheOpenRoutes(t *testing.T) {
 		"GET /api/v1/auth/me",
 		"GET /api/v1/auth/sessions",
 		"GET /api/v1/billing",
+		"GET /api/v1/channels/email",
 		"GET /api/v1/export",
 		"POST /api/v1/auth/logout",
 		"POST /api/v1/billing/checkout",
