@@ -22,8 +22,8 @@ export const publicConfigSchema = z.object({
 export const checkoutPlanSchema = z.enum(['team_monthly', 'team_yearly', 'founding']);
 export const billingSchema = z.object({
   plan: z.enum(['free', 'team', 'founding']),
-  status: z.enum(['none', 'incomplete', 'incomplete_expired', 'trialing', 'active', 'past_due', 'canceled', 'unpaid', 'paused']),
-  current_period_end: nullableDate, cancel_at_period_end: z.boolean(),
+  status: z.enum(['none', 'incomplete', 'incomplete_expired', 'trialing', 'active', 'past_due', 'canceled', 'unpaid', 'paused', 'unknown']),
+  current_period_end: nullableDate, cancel_at_period_end: z.boolean(), active_subscriptions: z.number().int(),
   limits: z.object({ agents: z.number().int(), conversations_per_month: z.number().int().nullable() }),
   usage: z.object({ agents: z.number().int(), conversations_this_month: z.number().int() }),
 }) satisfies z.ZodType<Generated<'Billing'>>;

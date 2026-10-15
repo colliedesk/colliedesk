@@ -25,6 +25,8 @@ used. Conversations are counted by the UTC month in which they were created.
    the payment.
 
 A workspace that already pays cannot start a second checkout. Change or cancel in the portal.
+If two checkouts ever run at once, the page warns that the workspace pays twice; cancel the extra
+subscription in the portal. The paid plan stays until the last one ends.
 
 ## Change the card, get invoices or cancel
 

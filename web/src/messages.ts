@@ -139,6 +139,7 @@ export const messages = {
   renewsOn: (when: string) => `Renews ${when}.`,
   cancelsOn: (when: string) => `Cancels ${when}. You keep the plan until then.`,
   pastDueNotice: 'Your last payment failed. The plan stays active while the payment is retried; update your card in the billing portal.',
+  duplicateSubscriptions: 'This workspace has more than one active subscription, so it is paying twice. Open Manage billing and cancel the extra one.',
   checkoutReturned: 'Payment received. Your plan updates in a few moments.',
   upgradeHeading: 'Upgrade',
   upgradeTeamMonthly: 'Team, $49 per month',

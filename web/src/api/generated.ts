@@ -560,13 +560,15 @@ export interface components {
              */
             plan: "free" | "team" | "founding";
             /**
-             * @description The latest subscription status from the provider, `none` when there never was one. `past_due` keeps the paid plan while the provider retries the card; `canceled` keeps it until `current_period_end`.
+             * @description The latest subscription status from the provider, `none` when there never was one. `past_due` keeps the paid plan while the provider retries the card; `canceled` keeps it until `current_period_end`; `unknown` is a status this version does not recognise and grants nothing. With several subscriptions the one that decides the plan is shown.
              * @enum {string}
              */
-            status: "none" | "incomplete" | "incomplete_expired" | "trialing" | "active" | "past_due" | "canceled" | "unpaid" | "paused";
+            status: "none" | "incomplete" | "incomplete_expired" | "trialing" | "active" | "past_due" | "canceled" | "unpaid" | "paused" | "unknown";
             /** Format: date-time */
             current_period_end: string | null;
             cancel_at_period_end: boolean;
+            /** @description Subscriptions that grant a paid plan now. More than one means the workspace pays twice; cancel the extra one in the billing portal. */
+            active_subscriptions: number;
             limits: {
                 agents: number;
                 /** @description Null means no cap. */

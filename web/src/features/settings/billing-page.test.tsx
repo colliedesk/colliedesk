@@ -4,11 +4,11 @@ import type { Billing } from '../../api/schemas';
 import { BillingPage } from './billing-page';
 
 const free: Billing = {
-  plan: 'free', status: 'none', current_period_end: null, cancel_at_period_end: false,
+  plan: 'free', status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0,
   limits: { agents: 3, conversations_per_month: 100 }, usage: { agents: 2, conversations_this_month: 40 },
 };
 const team: Billing = {
-  plan: 'team', status: 'active', current_period_end: '2026-11-15T09:30:00Z', cancel_at_period_end: false,
+  plan: 'team', status: 'active', current_period_end: '2026-11-15T09:30:00Z', cancel_at_period_end: false, active_subscriptions: 1,
   limits: { agents: 10, conversations_per_month: null }, usage: { agents: 6, conversations_this_month: 412 },
 };
 
@@ -62,4 +62,12 @@ test('shows a message after returning from checkout and an error when an action 
   expect(screen.getByRole('status')).toHaveTextContent(/payment received/i);
   rerender(<BillingPage billing={free} timezone="UTC" failed onCheckout={vi.fn()} onManage={vi.fn()} />);
   expect(screen.getByRole('alert')).toHaveTextContent(/billing action failed/i);
+});
+
+test('two active subscriptions are flagged so the admin cancels the extra one', () => {
+  const onManage = vi.fn();
+  render(<BillingPage billing={{ ...team, active_subscriptions: 2 }} timezone="UTC" onCheckout={vi.fn()} onManage={onManage} />);
+  expect(screen.getByRole('alert')).toHaveTextContent(/more than one active subscription/i);
+  expect(screen.getByRole('alert')).toHaveTextContent(/cancel the extra one/i);
+  expect(screen.queryByRole('alert', { name: /last payment/i })).not.toBeInTheDocument();
 });

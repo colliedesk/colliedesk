@@ -32,6 +32,7 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
       <header><h1>{messages.billingHeading}</h1><p>{messages.billingDescription}</p></header>
       {failed && <p role="alert" className="error-copy">{messages.billingActionFailed}</p>}
       {checkoutReturned && <p role="status">{messages.checkoutReturned}</p>}
+      {billing.active_subscriptions > 1 && <p role="alert" className="error-copy">{messages.duplicateSubscriptions}</p>}
       {billing.status === 'past_due' && <p role="alert" className="error-copy">{messages.pastDueNotice}</p>}
       <section aria-labelledby="current-plan-heading">
         <div className="section-heading"><div><h2 id="current-plan-heading">{messages.currentPlan}</h2></div></div>

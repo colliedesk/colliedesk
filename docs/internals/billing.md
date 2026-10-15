@@ -24,10 +24,15 @@ the API.
 
 ## Decisions
 
-- **The workspace id is the Polar external customer id.** The server sets `external_customer_id` to
-  the session's workspace id when it creates a checkout. Events come back with
-  `customer.external_id`, which names the workspace. The client sends only the plan name; any other
-  field is rejected, so a browser can neither pay for nor link to another workspace.
+- **The workspace id is the Polar external customer id.** Before a checkout the server finds or
+  creates the Polar customer with `external_id` = the session's workspace id, then creates the
+  checkout with that `customer_id`. Events come back with `customer.external_id`, which names the
+  workspace. The client sends only the plan name; any other field is rejected, so a browser can
+  neither pay for nor link to another workspace.
+- **Polar customers are unique by email too.** One person can administer several workspaces, so the
+  customer is created with the admin's email tagged `+cd<8 hex of the workspace id>` before the `@`.
+  The tag keeps the emails distinct; identity is the external id, never the email. A mail provider
+  without subaddressing would not deliver receipts to that address; the portal and the page still work.
 - **Nothing is read before the signature verifies.** The webhook route is public in the permission
   table, but the handler checks the Standard Webhooks signature first. A bad, missing or stale
   (more than 5 minutes either way) signature is 401 and touches no table.
@@ -36,12 +41,21 @@ the API.
 - **Replay and order.** The webhook id is stored in `billing_webhook_events` in the same
   transaction as the state change, so a redelivery is a no-op and a failure rolls both back (Polar
   retries a 5xx). The id is unique per workspace. Events of one subscription are ordered by the
-  subscription's `modified_at`; an older one is ignored (`stale`). An event for a different
-  subscription never ends a paying one: an old subscription's revocation can arrive after the new
-  one started.
-- **Unknown means 200.** An unknown workspace, a non-UUID or missing external id, a product we do
-  not sell and a non-subscription event all return 200 `ignored` and store nothing. Polar stops
-  retrying, and the endpoint reveals nothing about which workspaces exist.
+  subscription's `modified_at`; an older one is ignored (`stale`). The ordering check is inside the
+  upsert (`ON CONFLICT ... WHERE source_modified_at <= EXCLUDED.source_modified_at`), so two events
+  racing for a subscription with no row yet cannot overwrite each other with the older state.
+- **One row per subscription.** `workspace_billing` is keyed by (workspace, subscription). Two
+  checkouts can leave two subscriptions; the plan in effect comes from the best one that is still
+  paid, so cancelling or revoking the spare never drops the plan while the other still charges.
+  `GET /api/v1/billing` returns `active_subscriptions`, and the page tells the admin to cancel the
+  extra one when it is above 1.
+- **Unknown means 200, and a warning.** An unknown workspace, a non-UUID or missing external id, a
+  product we do not sell and a non-subscription event all return 200 `ignored` and store nothing.
+  Polar stops retrying, and the endpoint reveals nothing about which workspaces exist. A
+  subscription event that is ignored is logged at WARN with event type, subscription id and
+  webhook id (no customer data), because it may be a payment nobody sees.
+- **A new Polar status never fails the webhook.** A status outside the known list is stored as
+  `unknown` (not paid) with a WARN log. Failing would make Polar retry until it disables the endpoint.
 - **Row-level security without a privileged lookup.** The workspace id in the event is used as the
   scope of an ordinary workspace transaction. A workspace that does not exist is invisible to it,
   so no cross-workspace query is needed. Both billing tables carry the same policies as the other
@@ -57,14 +71,14 @@ the API.
 | `active`, `trialing` | paid plan |
 | `past_due` | paid plan, flagged on the page (Polar retries the card) |
 | `canceled` | paid plan until `current_period_end`, then Free |
-| `unpaid`, `incomplete`, `incomplete_expired`, `paused` | Free |
+| `unpaid`, `incomplete`, `incomplete_expired`, `paused`, `unknown` | Free |
 | any status with `ended_at` in the past (revoked) | Free |
 
 ## Traps
 
-- Polar answers 404 to a customer session for an external id it has never seen. The portal route
-  checks `workspace_billing` first and returns 404 without calling Polar, and also maps a Polar 404
-  to the same answer.
+- Polar answers 404 or 422 to a customer session for an external id it has never seen. The portal
+  route checks `workspace_billing` first and returns 404 without calling Polar, and maps both Polar
+  answers to the same 404.
 - A second checkout for a paying workspace would bill twice; the checkout route returns 409.
 - Client errors from Polar never include its response body or the token; they are logged as a
   status code only.
