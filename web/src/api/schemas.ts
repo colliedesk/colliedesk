@@ -18,6 +18,7 @@ export const cloudWorkspaceChoicesSchema = z.object({ workspaces: z.array(worksp
 export const publicConfigSchema = z.object({
   cloud_sign_in: z.object({ enabled: z.boolean(), publishable_key: z.string().nullable() }),
   billing: z.object({ enabled: z.boolean() }),
+  signup: z.object({ enabled: z.boolean() }),
 }) satisfies z.ZodType<Generated<'PublicConfig'>>;
 export const checkoutPlanSchema = z.enum(['team_monthly', 'team_yearly', 'founding']);
 export const planSchema = z.enum(['trial', 'team', 'founding', 'none']);
@@ -26,9 +27,10 @@ export const billingSchema = z.object({
   status: z.enum(['none', 'incomplete', 'incomplete_expired', 'trialing', 'active', 'past_due', 'canceled', 'unpaid', 'paused', 'unknown']),
   current_period_end: nullableDate, cancel_at_period_end: z.boolean(), active_subscriptions: z.number().int(),
   complimentary: z.boolean(), complimentary_until: nullableDate,
-  limits: z.object({ agents: z.number().int(), storage_bytes: z.number().int().nullable(), storage_warn_bytes: z.number().int().nullable() }),
+  limits: z.object({ agents: z.number().int(), replies_per_24h: z.number().int().nullable(), storage_bytes: z.number().int().nullable(), storage_warn_bytes: z.number().int().nullable() }),
   usage: z.object({ agents: z.number().int(), pending_invites: z.number().int(), replies_last_24h: z.number().int(), storage_bytes: z.number().int() }),
 }) satisfies z.ZodType<Generated<'Billing'>>;
+export const exportLinkSchema = z.object({ url: z.string().min(1), expires_in_seconds: z.number().int() }) satisfies z.ZodType<Generated<'ExportLink'>>;
 export const billingLinkSchema = z.object({ url: z.string().url() }) satisfies z.ZodType<JsonResponse<'createBillingPortal', 200>>;
 export const agentSchema = z.object({
   id: z.string().uuid(), email: z.string().email(), display_name: z.string(),
@@ -106,7 +108,7 @@ export const errorSchema = z.object({ error: z.object({ code: z.string(), messag
 export const redeemedSchema = z.object({ token: z.string().optional(), agent: agentSchema, workspace: workspaceSchema }) satisfies z.ZodType<Generated<'Redeemed'>>;
 export const meSchema = z.object({
   agent: agentSchema, workspace: workspaceSchema, timezone: z.string(),
-  plan: z.object({ plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean() }).nullable(),
+  plan: z.object({ plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(), trial_extended: z.boolean() }).nullable(),
 }) satisfies z.ZodType<Generated<'Me'>>;
 export const sessionListSchema = z.object({ items: z.array(sessionSchema) }) satisfies z.ZodType<JsonResponse<'listSessions', 200>>;
 export const inviteListSchema = z.object({ items: z.array(inviteSchema) }) satisfies z.ZodType<JsonResponse<'listInvites', 200>>;

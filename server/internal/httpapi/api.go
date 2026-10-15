@@ -70,7 +70,8 @@ type API struct {
 	cloud  *cloudauth.Verifier
 	store  *store.Store
 	// exports admits workspace exports; see exportLimiter.
-	exports *exportLimiter
+	exports     *exportLimiter
+	exportLinks *exportLinks
 	// webForms limits the public web form per client address and workspace.
 	webForms       *webFormLimiter
 	webFormClients *webFormLimiter
@@ -105,7 +106,7 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 		clock = func() time.Time { return time.Now().UTC() }
 	}
 	limits := config.Billing.Enabled()
-	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
+	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), exportLinks: newExportLinks(), webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
 		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits),
 		store: store.NewWithDB(db).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits)}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
@@ -180,6 +181,8 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/channels/web-form", auth.PermissionAccessRead},
 		{http.MethodPut, "/api/v1/channels/web-form", auth.PermissionAccessWrite},
 		{http.MethodPost, webFormSubmitPattern, auth.PermissionPublic},
+		{http.MethodPost, "/api/v1/export/link", auth.PermissionWorkspaceExport},
+		{http.MethodGet, exportLinkPath + "{token}", auth.PermissionPublic},
 	}
 }
 

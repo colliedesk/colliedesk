@@ -73,6 +73,7 @@ untag one; fix the product instead. `corepack pnpm test` fails when this list an
 - `freshdesk import: a wrong API key stops before writing anything and says why` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
 - `freshdesk import: an archive refused with 403 is reported UNVERIFIED, never OK` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
 - `cloud sign-in: a verified identity of an existing agent gets a Colliedesk session; every other token is refused` (`web/e2e/onboarding-cloud-sign-in.spec.ts`)
+- `cloud signup: a verified identity starts a trial, the same email cannot start a second one, the expired trial is locked and still exports` (`web/e2e/onboarding-cloud-signup.spec.ts`)
 - `link errors: expired, reused, revoked, mistyped, missing and another workspace's link explain themselves` (`web/e2e/onboarding-link-errors.spec.ts`)
 
 Also: `tests/install-smoke.sh` (real `install.sh` with Docker against the image built from the

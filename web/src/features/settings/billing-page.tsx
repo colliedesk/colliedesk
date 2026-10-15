@@ -1,6 +1,8 @@
 import type { Billing, CheckoutPlan } from '../../api/schemas';
+import { formatBytes } from '../../lib/format-bytes';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { planOptions } from './plan-options';
 
 interface BillingPageProps {
   billing: Billing;
@@ -11,12 +13,6 @@ interface BillingPageProps {
   onCheckout: (plan: CheckoutPlan) => void;
   onManage: () => void;
 }
-
-const upgrades: { plan: CheckoutPlan; label: string }[] = [
-  { plan: 'team_monthly', label: messages.upgradeTeamMonthly },
-  { plan: 'team_yearly', label: messages.upgradeTeamYearly },
-  { plan: 'founding', label: messages.upgradeFounding },
-];
 
 // periodNote says when the paid plan renews, or when it ends if it was cancelled.
 function periodNote(billing: Billing, timezone: string): string | null {
@@ -30,6 +26,9 @@ function periodNote(billing: Billing, timezone: string): string | null {
 
 export function BillingPage({ billing, timezone, checkoutReturned = false, failed = false, onCheckout, onManage }: BillingPageProps) {
   const note = periodNote(billing, timezone);
+  const storageLimit = billing.limits.storage_bytes;
+  const warnAt = billing.limits.storage_warn_bytes;
+  const storageNearlyFull = warnAt !== null && billing.usage.storage_bytes >= warnAt;
   return (
     <main className="settings-page">
       <header><h1>{messages.billingHeading}</h1><p>{messages.billingDescription}</p></header>
@@ -43,13 +42,17 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
           ? messages.complimentaryPlan(messages.plans[billing.plan], billing.complimentary_until ? formatDate(billing.complimentary_until, timezone) : null)
           : messages.plans[billing.plan]}</strong></p>
         {note && <p className="muted-copy">{note}</p>}
+        {storageNearlyFull && storageLimit !== null && <p role="status" className="error-copy">
+          {messages.storageWarning(Math.floor((billing.usage.storage_bytes / storageLimit) * 100), formatBytes(billing.usage.storage_bytes), formatBytes(storageLimit))}</p>}
         <ul className="muted-copy">
           <li>{messages.agentsUsage(billing.usage.agents, billing.limits.agents, billing.usage.pending_invites)}</li>
+          {storageLimit !== null && <li>{messages.storageUsage(formatBytes(billing.usage.storage_bytes), formatBytes(storageLimit))}</li>}
+          {billing.limits.replies_per_24h !== null && <li>{messages.repliesUsage(billing.usage.replies_last_24h, billing.limits.replies_per_24h)}</li>}
         </ul>
       </section>
       {(billing.plan === 'trial' || billing.plan === 'none') && <section aria-labelledby="upgrade-heading">
         <div className="section-heading"><div><h2 id="upgrade-heading">{messages.upgradeHeading}</h2></div></div>
-        <div className="button-row">{upgrades.map((item) =>
+        <div className="button-row">{planOptions.map((item) =>
           <button key={item.plan} type="button" className="primary-action" onClick={() => onCheckout(item.plan)}>{item.label}</button>)}</div>
       </section>}
       {billing.status !== 'none' && !billing.complimentary && <section aria-labelledby="manage-billing-heading">

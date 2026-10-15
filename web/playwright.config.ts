@@ -43,6 +43,11 @@ export default defineConfig({
     server(servers.cloud, {
       CLOUD_AUTH_ISSUER: identity.issuer, CLOUD_AUTH_JWKS_URL: jwksURL,
       CLOUD_AUTH_AUTHORIZED_PARTIES: identity.authorizedParty, CLERK_PUBLISHABLE_KEY: identity.publishableKey,
+      // The hosted cloud: billing on (so trials, the lock and sign-up exist) with the settings sign-up refuses to start without.
+      // The Polar values are never called; the journeys stop before checkout.
+      POLAR_ACCESS_TOKEN: 'polar_oat_e2e', POLAR_WEBHOOK_SECRET: 'whsec_e2e', POLAR_API_URL: 'http://127.0.0.1:9',
+      POLAR_PRODUCT_TEAM_MONTHLY: 'e2e-monthly', POLAR_PRODUCT_TEAM_YEARLY: 'e2e-yearly', POLAR_PRODUCT_FOUNDING: 'e2e-founding',
+      SIGNUP_HASH_KEY: 'e2e-signup-hash-key-0123456789abcdef', TRUSTED_PROXIES: '127.0.0.1/32,::1/128',
     }),
   ],
 });

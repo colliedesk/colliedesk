@@ -1,6 +1,7 @@
 import { Fragment } from 'react';
 import type { Conversation } from '../../api/schemas';
 import { dayGroup, formatDate, formatShortDate } from '../../lib/format-date';
+import { useNow } from '../../lib/use-now';
 import { messages } from '../../messages';
 import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
 import { PriorityLabel, StatusLabel } from './conversation-labels';
@@ -26,6 +27,7 @@ const visibleTags = 2;
 export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, loading = false,
   failed = false, onRetry, canManage = false, onOpenSettings }: ConversationListProps) {
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
+  const now = useNow(timezone);
   const settled = !loading && !failed;
   const brandNew = items.length === 0 && !filtered && settled && page === 1;
   const settingsLink = (label: string) => <a href="/settings" onClick={(event) => {
@@ -48,14 +50,18 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
         <button type="button" onClick={() => onRetry?.()}>{messages.tryAgain}</button></div>}
       {items.length === 0 && !brandNew && settled && <p className="empty-copy">{messages.noConversations}</p>}
       {items.map((item, index) => {
-        const group = dayGroup(item.updated_at, timezone);
-        const startsGroup = index === 0 || group !== dayGroup(items[index - 1].updated_at, timezone);
+        const group = dayGroup(item.updated_at, timezone, now);
+        const startsGroup = index === 0 || group !== dayGroup(items[index - 1].updated_at, timezone, now);
+        const full = formatDate(item.updated_at, timezone, now);
         return (
           <Fragment key={item.id}>
           {startsGroup && <h2 className="group-label">{messages.dayGroups[group]}</h2>}
-          <button className="conversation-row" data-selected={item.id === selectedId} onClick={() => onSelect?.(item.id)}>
+          <button className="conversation-row" data-selected={item.id === selectedId} data-tip={full} onClick={() => onSelect?.(item.id)}>
             <span className="conversation-subject">{item.subject}</span>
-            <time dateTime={item.updated_at} title={formatDate(item.updated_at, timezone)}>{formatShortDate(item.updated_at, timezone)}</time>
+            <time dateTime={item.updated_at}>
+              <span aria-hidden="true" className="time-short">{formatShortDate(item.updated_at, timezone, now)}</span>
+              <span className="time-full">{full}</span>
+            </time>
             <span className="conversation-meta">
               <StatusLabel status={item.status} />
               <PriorityLabel priority={item.priority} />

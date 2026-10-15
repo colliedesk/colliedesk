@@ -74,9 +74,12 @@ the API.
 |---|---|
 | `active`, `trialing` | paid plan |
 | `past_due` | paid plan, flagged on the page (Polar retries the card) |
-| `canceled` | paid plan until `current_period_end`, then Free |
-| `unpaid`, `incomplete`, `incomplete_expired`, `paused`, `unknown` | Free |
-| any status with `ended_at` in the past (revoked) | Free |
+| `canceled` | paid plan until `current_period_end`, then the trial rule below |
+| `unpaid`, `incomplete`, `incomplete_expired`, `paused`, `unknown` | the trial rule |
+| any status with `ended_at` in the past (revoked) | the trial rule |
+
+The trial rule: no paid plan and `now < workspaces.trial_ends_at` is `trial`; otherwise `none`, which is
+**locked**. There is no Free plan.
 
 ## Traps
 
@@ -88,20 +91,72 @@ the API.
   status code only.
 - The access token travels only in the `Authorization` header of server-to-Polar calls.
 
-## Free-plan limits
+## Trial and lock
 
 Enforced only when billing is enabled (`Store.WithPlanLimits`, `auth.Service.WithPlanLimits`, both set
-from `POLAR_*` in `httpapi.New`); self-hosted instances never hold or refuse anything. The plan is
-the effective plan on read (`effectivePlan` in `store/plan-limits.go`), so a canceled subscription
-that is still inside its paid period keeps the paid limits. Code: `store/plan-limits.go`,
-`auth/invites.go`, `auth/links.go`.
+from `POLAR_*` in `httpapi.New`); self-hosted instances never refuse anything. The plan is the effective
+plan on read (`domain.NewAccess`, `effectivePlan` in `store/plan-limits.go`), so a canceled subscription
+that is still inside its paid period keeps the paid limits and no timer flips a plan. A new workspace
+gets `trial_ends_at = created + 14 days` (`domain.TrialLength`); a Freshdesk import adds 16 days once
+(`workspaces.trial_extended_at`). Operators move the end or grant a complimentary plan with `colliedesk
+trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.go`, `auth/invites.go`,
+`auth/links.go`, `httpapi/locked.go`.
+
+### Locked
+
+- Expired trial with nothing paid is `plan=none`, `locked=true`. Every authenticated route answers
+  **402 `workspace_locked`**, reads included, except the literal allowlist `lockedAllowed` in
+  `httpapi/locked.go` (sign-in state, sessions, billing, checkout, portal, export, email channel read,
+  disconnect and secret rotation). A new route is locked by default; `TestLockedAllowlistOnlyNamesRealRoutes`
+  fails when an entry names no route.
+- Inbound mail to a locked workspace is refused as a permanent failure (`mailbox_closed`), so the sender
+  gets a bounce and nothing is stored.
+- `GET /api/v1/auth/me` carries `plan` (`plan`, `trial_ends_at`, `locked`) so agents, who cannot read
+  `/billing`, see the trial banner and the locked page.
+- The old Free-plan hold (`conversations.held_at`, the monthly quota, `held_count`) is gone from the code. The column
+  stays in the database until the cleanup pull request that drops it (see "Rollback of the cleanup").
+
+### Web app
+
+- The shell reads `me.plan`. Locked: `LockedRoute` replaces the view (identity bar stays) with plan choices
+  (admin: checkout; agent: "Ask a workspace admin"), Export all data (admin) and Sign out. A 402
+  `workspace_locked` from any request marks the cached `me` locked (`query-client.ts`), so a workspace that
+  locks while a tab is open changes at the next request, not at the next reload.
+- Trial: `PlanBanner` shows "Trial: N days left" (`ceil((trial_ends_at - now - 5 min) / 24 h)`, the slack keeps a browser
+  clock that runs a little behind from turning a new trial into "15 days"), an admin button, an extension note
+  from `me.plan.trial_extended` (`workspaces.trial_extended_at IS NOT NULL`, read in the same row as the session),
+  and for admins a storage warning from `limits.storage_warn_bytes`. The reply cap shown on Billing is
+  `limits.replies_per_24h` from the API.
+- The locked screen focuses its heading on mount, offers Manage billing when a subscription exists (a failed card
+  is fixed in the portal, not by a second checkout), and says retention is "at least 12 months" with "at least 30
+  days" notice: the app shows no deletion date, on purpose, because deletion is an operator switch.
+- `lockedScreenShipped` in `cmd/colliedesk/serve.go` keeps billing off (and logs why) in a build whose web app cannot show
+  the lock. It is true because this screen exists; do not set it back.
+- Cloud sign-up: `GET /api/v1/config` reports `signup.enabled` (cloud sign-in and billing both on and sign-up not turned
+  off at start, the same condition as the route; the web app maps 503 `signup_unavailable` too). After Clerk authenticates, the exchange answers 403 `forbidden` for an email that
+  belongs to no workspace; the sign-in page then shows the workspace-name form and posts to
+  `/auth/cloud/signup` with a token fetched at that moment (Clerk tokens live about a minute).
+- Export: `POST /api/v1/export/link` (admin, on the locked allowlist) runs the 409 and 429 checks and returns
+  `/api/v1/export/download/<token>`; the web app navigates the browser to it, so the ZIP streams to disk. The
+  token is random, kept as a SHA-256 in process memory, valid 60 s, single use, bound to the workspace, and a
+  new link replaces the workspace's previous one. The download route is public in the permission table because
+  the token is the credential.
+- **Links are per process: single replica.** Grants and the export limiter live in the memory of one server
+  process. A restart invalidates links (one more click). A second replica behind the same address would answer
+  `link_invalid` for links made on the other one, so exports need either one replica or shared state first.
+- A refused download is never a JSON page, because the browser is navigating: it is a `303` to
+  `/settings?export_error=<link_invalid|busy|server_busy|failed>`, and `ExportAllData` (Settings and the locked
+  screen, both render it whatever the path) shows the sentence and removes the parameter. Order on download:
+  check the token (without spending it), take the export slot, then spend the token and stream, so a busy server
+  costs a retry and not the link. HEAD answers 405 and spends nothing. The grant does not record the session:
+  revoking a session within 60 s of minting does not cancel the link.
 
 ### Agent seats
 
-- Cap: 3 on Free, 10 on Team and Founding (more than 10 is "contact us", so the paid message says
-  that instead of offering an upgrade). A seat is an agent, or a person with an unused, unrevoked,
-  unexpired invite. Pending invites count by distinct address: re-sending an invite to the same
-  address, or inviting someone who is already an agent (a role change), takes no new seat.
+- Cap: 10 on trial, Team and Founding (more than 10 is "contact us", so the message says that instead of
+  offering an upgrade). A seat is an agent, or a person with an unused, unrevoked, unexpired invite.
+  Pending invites count by distinct address: re-sending an invite to the same address, or inviting someone
+  who is already an agent (a role change), takes no new seat.
 - Checked when an invite is created and when one is redeemed. Redeem excludes the invite itself
   and skips someone who is already an agent. Redeem matters after a downgrade: the invite stays
   unused (the transaction rolls back), so it works after an upgrade.
@@ -109,38 +164,19 @@ that is still inside its paid period keeps the paid limits. Code: `store/plan-li
   each other. Existing agents are never removed.
 - Error: HTTP 402, code `plan_limit_reached`, message names the plan, the cap and the way out.
 
-### Monthly conversation quota
+### Rollback of the cleanup
 
-- 100 per UTC calendar month on Free (`domain.MonthStart`). Counted: conversations with
-  `origin IS NULL` and `created_at >= month start`, held ones included, so "received" is what the
-  billing page shows.
-- Only the inbound email pipeline holds. Held means `conversations.held_at` is set to the arrival
-  time; the row, its messages and its attachments are stored exactly like any other. The check
-  runs under `pg_advisory_xact_lock("conversation-quota:<workspace>")` so two deliveries racing
-  for the last slot cannot both pass. The lock is taken after the attachment upload and right
-  before the insert, so a slow object store never queues other new conversations. Lock order is
-  sender, then quota. Replies that thread onto an existing conversation never reach the check.
-- **API-created conversations (`POST /api/v1/conversations`) count but are never held** (they take the same quota lock for the length of the insert). An agent
-  who just created one expects to see it, and the quota exists to bound inbound volume.
-- **The Freshdesk importer is exempt on both sides.** Imported rows carry `origin`, so they are
-  not counted, and the importer never sets `held_at`, so they are never held. An import is a
-  migration of history (no data loss is the rule that wins); importing 5,000 tickets must not
-  hide the first real customer mail of the month.
-- Visibility is one predicate: `held_at IS NULL OR held_at < <start of this month>`. There is no
-  job. A conversation held in an earlier month becomes visible the instant the month turns, and
-  nothing runs on any request to release it. The predicate is applied in the inbox list and search
-  (`listConversations`) and in the contact view. Direct reads by id (`GET /conversations/{id}`) and
-  replies on a held conversation work, so a link from an email or an agent's own notes never 404s.
-- Upgrade: `ApplySubscription` clears `held_at` of the workspace in the same transaction that
-  records the paid subscription (`releaseHeldIfPaid`), so the release is as idempotent as the
-  webhook. A downgrade changes nothing already stored.
-- `held_at` has a partial index `(workspace_id, held_at) WHERE held_at IS NOT NULL`. It serves the
-  held count and the release, and is empty for a workspace that holds nothing. The list adds one
-  cheap `held_at` test per scanned row; `TestInboxListLatencyBudget` still gates the 100 ms p95.
-  The `held_count` on the list response is a count over that index, and only runs when plan limits
-  are on.
-- `ConversationPage.held_count` is on the list response so that agents, who cannot read
-  `/api/v1/billing`, still see the banner.
+Two cleanup migrations ship in their own pull request, to be merged only after no image older than the trial
+code can be rolled back to (the rollback target on 2026-10-15 was `f2d22dd`, digest `47edf4e7`, found in the
+infra pins):
+
+- `drop-conversation-holds` drops `conversations.held_at` and its index. The old image reads the column in the
+  inbox list and writes it for inbound mail, so without the column both fail.
+- `drop-trial-ends-at-default` drops the default of `workspaces.trial_ends_at`. The old image inserts workspaces
+  without it, so workspace creation fails.
+
+Fixtures that insert workspaces set `trial_ends_at`, and a test asserts an insert without it fails. Rolling back
+past either migration needs the dump taken before the migrating deploy.
 
 ### Trial outbound controls
 

@@ -55,10 +55,7 @@ func TestBillingStaysOffWithoutTheLockedScreen(t *testing.T) {
 	}
 }
 
-func TestServeStartsWithBillingConfiguredWhileTheLockedScreenIsMissing(t *testing.T) {
-	if lockedScreenShipped {
-		t.Skip("the web app ships the locked screen")
-	}
+func TestServeGetsPastBillingConfigurationAndStopsOnlyAtTheDatabase(t *testing.T) {
 	for key, value := range map[string]string{"POLAR_ACCESS_TOKEN": "t", "POLAR_WEBHOOK_SECRET": "s",
 		"POLAR_PRODUCT_TEAM_MONTHLY": "a", "POLAR_PRODUCT_TEAM_YEARLY": "b", "POLAR_PRODUCT_FOUNDING": "c"} {
 		t.Setenv(key, value)

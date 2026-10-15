@@ -32,6 +32,8 @@ type PlanLimits struct {
 	StorageBytes *int64 `json:"storage_bytes"`
 	// StorageWarnBytes is the usage at which the web app warns, nil when StorageBytes is nil.
 	StorageWarnBytes *int64 `json:"storage_warn_bytes"`
+	// RepliesPer24h is the cap on emailed replies in any 24 hours, nil when the plan has none (trial only).
+	RepliesPer24h *int `json:"replies_per_24h"`
 }
 
 // StorageCapped reports whether attachment storage is capped on plan.
@@ -45,6 +47,10 @@ func LimitsFor(plan string) PlanLimits {
 	switch plan {
 	case PlanTrial, PlanTeam, PlanFounding:
 		limits.Agents = 10
+	}
+	if plan == PlanTrial {
+		replies := TrialRepliesPerDay
+		limits.RepliesPer24h = &replies
 	}
 	if StorageCapped(plan) {
 		limit, warn := TrialStorageBytes, TrialStorageBytes*StorageWarnPercent/100
