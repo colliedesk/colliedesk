@@ -17,6 +17,22 @@ cannot be loaded, it says so with **Try again** instead.
 - Dates from an earlier year show the year, for example imported history.
 - The list loads again each time you open the inbox, so mail that arrived meanwhile is there.
 
+**Change many conversations at once**
+- Tick the box at the left of a row to select it, or tick **Select all on this page**. Ticking a box
+  does not open the conversation. With the keyboard, press Tab to reach a box and Space to tick it.
+- An action bar replaces the title and filters while at least one row is selected. It shows how many
+  rows are selected and offers **Set status**, **Assign to** (**Me**, **Unassigned** or a teammate),
+  **Add tag**, **Remove tag** and **Clear selection**. There is no bulk delete.
+- A choice applies to every selected row at once, up to 50 rows. It is all or nothing: if one change
+  cannot be made, no conversation changes, the selection stays and a message says so. Try again.
+- After a successful change the selection clears, the list reloads and a line says
+  **Updated N conversations**. Every choice has a way back: set the status again, assign again, or
+  use the other tag action.
+- Only rows on the current page stay selected. Changing the page, the filters or the search drops the
+  rows that left the list from the selection.
+- The same change is available through the API: `PATCH /api/v1/conversations` with
+  `{"ids": [...], "changes": {...}}`. See `contracts/openapi.yaml`.
+
 **Reply or take a note**
 - **Reply** sends an outgoing message on the timeline. With the [email channel](email-channel.md)
   connected, it is also emailed to the contact and shows **Queued**, **Sent** or
