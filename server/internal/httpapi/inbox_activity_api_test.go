@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"testing"
@@ -10,11 +11,10 @@ import (
 type activityBody struct {
 	Now              time.Time `json:"now"`
 	NewConversations []struct {
-		ID           string    `json:"id"`
-		Subject      string    `json:"subject"`
-		ContactName  string    `json:"contact_name"`
-		ContactEmail string    `json:"contact_email"`
-		CreatedAt    time.Time `json:"created_at"`
+		ID          string    `json:"id"`
+		Subject     string    `json:"subject"`
+		ContactName string    `json:"contact_name"`
+		CreatedAt   time.Time `json:"created_at"`
 	} `json:"new_conversations"`
 	AssignedToMe []struct {
 		ID         string    `json:"id"`
@@ -64,12 +64,83 @@ func TestInboxActivityListsNewConversationOnce(t *testing.T) {
 	if len(second.NewConversations) != 1 || second.NewConversations[0].ID != id {
 		t.Fatalf("new conversations = %+v, want only %s", second.NewConversations, id)
 	}
-	if got := second.NewConversations[0]; got.Subject != "Printer on fire" || got.ContactName != "Ada Lovelace" || got.ContactEmail != "ada@activity-new.example.com" {
+	if got := second.NewConversations[0]; got.Subject != "Printer on fire" || got.ContactName != "Ada Lovelace" {
 		t.Fatalf("activity item = %+v", got)
 	}
-	third := inboxActivity(t, api, token, second.Now)
-	if len(third.NewConversations) != 0 {
-		t.Fatalf("conversation listed again on the next cursor: %+v", third.NewConversations)
+}
+
+// A conversation can become visible after a poll already moved its cursor past created_at (its
+// transaction was still open), so the server answers with a lookback and the browser removes
+// duplicates. The lookback is bounded: older rows never come back.
+func TestInboxActivityLookbackCatchesLateCommitsAndStaysBounded(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	token := createSession(t, api, service, "Activity Late", "admin@activity-late.example.com")
+	contact := create(t, api, token, "/api/v1/contacts", map[string]any{"name": "Late", "email": "late@activity-late.example.com"})
+	ctx := context.Background()
+	workspace := workspaceID(t, api, token)
+	cursor := inboxActivity(t, api, token, time.Time{}).Now
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	var late string
+	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at)
+		VALUES($1,$2,'Late mail',now()-interval '1 second') RETURNING id::text`, workspace, contact).Scan(&late); err != nil {
+		t.Fatal(err)
+	}
+	during := inboxActivity(t, api, token, cursor)
+	if len(during.NewConversations) != 0 {
+		t.Fatalf("uncommitted conversation listed: %+v", during.NewConversations)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	after := inboxActivity(t, api, token, during.Now)
+	if len(after.NewConversations) != 1 || after.NewConversations[0].ID != late {
+		t.Fatalf("late commit missed by the next poll: %+v", after.NewConversations)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at)
+		VALUES($1,$2,'Old mail',now()-interval '10 minutes')`, workspace, contact); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range inboxActivity(t, api, token, time.Now().UTC()).NewConversations {
+		if item.Subject == "Old mail" {
+			t.Fatalf("a conversation older than the lookback was listed: %+v", item)
+		}
+	}
+}
+
+func TestInboxActivityUnassignAndReassign(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "Activity Reassign", "admin@activity-reassign.example.com")
+	_, urlX := createContractInvite(t, api, admin, "x@activity-reassign.example.com", "agent")
+	_, urlY := createContractInvite(t, api, admin, "y@activity-reassign.example.com", "agent")
+	agentX, agentY := redeemLabelled(t, api, urlX, "Agent X"), redeemLabelled(t, api, urlY, "Agent Y")
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Re", "email": "re@activity-reassign.example.com"})
+	conversation := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Moved"})
+	patch := func(assignee any) {
+		t.Helper()
+		if response := request(t, api, http.MethodPatch, "/api/v1/conversations/"+conversation, map[string]any{"assignee_id": assignee}, admin, nil); response.Code != http.StatusOK {
+			t.Fatalf("assign status=%d body=%s", response.Code, response.Body.String())
+		}
+	}
+	x, y := agentID(t, api, agentX), agentID(t, api, agentY)
+
+	patch(x)
+	patch(nil)
+	cursor := time.Now().UTC().Add(time.Second)
+	if got := inboxActivity(t, api, agentX, cursor.Add(-time.Minute)); len(got.AssignedToMe) != 0 {
+		t.Fatalf("unassigned conversation still listed for X: %+v", got.AssignedToMe)
+	}
+	patch(x)
+	patch(y)
+	if got := inboxActivity(t, api, agentX, cursor.Add(-time.Minute)); len(got.AssignedToMe) != 0 {
+		t.Fatalf("X was told about a conversation now assigned to Y: %+v", got.AssignedToMe)
+	}
+	if got := inboxActivity(t, api, agentY, cursor.Add(-time.Minute)); len(got.AssignedToMe) != 1 || got.AssignedToMe[0].ID != conversation {
+		t.Fatalf("Y activity = %+v, want the reassigned conversation", got.AssignedToMe)
 	}
 }
 
@@ -96,9 +167,6 @@ func TestInboxActivityAssignmentNotifiesOnlyTheAssignee(t *testing.T) {
 	}
 	if forAdmin := inboxActivity(t, api, admin, cursor); len(forAdmin.AssignedToMe) != 0 {
 		t.Fatalf("assigner was notified: %+v", forAdmin.AssignedToMe)
-	}
-	if again := inboxActivity(t, api, agentX, forX.Now); len(again.AssignedToMe) != 0 {
-		t.Fatalf("assignment listed again on the next cursor: %+v", again.AssignedToMe)
 	}
 }
 

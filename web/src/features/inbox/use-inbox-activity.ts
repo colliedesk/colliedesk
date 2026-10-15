@@ -8,7 +8,22 @@ const pollMilliseconds = 20_000;
 // More items than this in one poll (a laptop that slept) become one summary notification.
 const individualNotifications = 3;
 
+// Ids already announced, per kind. The server repeats items inside its lookback window, so the
+// browser removes duplicates; the cap keeps a long-lived tab from growing without bound.
+const seenLimit = 500;
+
 type Activity = Awaited<ReturnType<typeof api.inboxActivity>>;
+
+class SeenIds {
+  private readonly ids = new Set<string>();
+  // fresh reports whether the id is new and remembers it.
+  fresh(id: string): boolean {
+    if (this.ids.has(id)) return false;
+    this.ids.add(id);
+    if (this.ids.size > seenLimit) this.ids.delete(this.ids.values().next().value as string);
+    return true;
+  }
+}
 
 interface Alert { id: string; title: string; body: string }
 
@@ -30,13 +45,17 @@ function notify(items: Alert[]) {
   } catch { /* some mobile browsers only allow notifications from a service worker */ }
 }
 
-// useInboxActivity keeps an open inbox current: it polls for new and newly assigned conversations,
+// useInboxActivity keeps the signed-in app current: it polls for new and newly assigned conversations,
 // reloads the list when there is any, and, while the tab is in the background, raises a browser
 // notification (only when the agent turned them on) and shows the count in the tab title.
-export function useInboxActivity() {
+export function useInboxActivity(enabled = true) {
   const client = useQueryClient();
   const cursor = useRef<string | undefined>(undefined);
-  const unseen = useRef(0);
+  // The first answer only sets the cursor. Anything stamped before it was already in the list the
+  // agent loaded, so the lookback must not announce it.
+  const opened = useRef<number | undefined>(undefined);
+  const seen = useRef({ created: new SeenIds(), assigned: new SeenIds() });
+  const pending = useRef(0);
   const baseTitle = useRef(document.title);
   const activity = useQuery({
     queryKey: ['inbox-activity'],
@@ -45,25 +64,35 @@ export function useInboxActivity() {
       cursor.current = result.now;
       return result;
     },
-    refetchInterval: pollMilliseconds, refetchIntervalInBackground: true, staleTime: 0, gcTime: 0,
+    enabled, refetchInterval: pollMilliseconds, refetchIntervalInBackground: true, staleTime: 0, gcTime: 0,
   });
 
   useEffect(() => {
     if (!activity.data) return;
-    const items = alerts(activity.data);
+    if (opened.current === undefined) {
+      opened.current = Date.parse(activity.data.now);
+      return;
+    }
+    const after = opened.current;
+    const unseen = {
+      now: activity.data.now,
+      new_conversations: activity.data.new_conversations.filter((item) => seen.current.created.fresh(item.id) && Date.parse(item.created_at) > after),
+      assigned_to_me: activity.data.assigned_to_me.filter((item) => seen.current.assigned.fresh(item.id) && Date.parse(item.assigned_at) > after),
+    };
+    const items = alerts(unseen);
     if (items.length === 0) return;
     void client.invalidateQueries({ queryKey: ['conversations'] });
     if (document.hasFocus()) return;
-    if (unseen.current === 0) baseTitle.current = document.title;
-    unseen.current += items.length;
-    document.title = `(${unseen.current}) ${baseTitle.current}`;
+    if (pending.current === 0) baseTitle.current = document.title;
+    pending.current += items.length;
+    document.title = `(${pending.current}) ${baseTitle.current}`;
     if (currentNotificationState() === 'on') notify(items);
   }, [activity.data, client]);
 
   useEffect(() => {
     const clear = () => {
-      if (unseen.current === 0) return;
-      unseen.current = 0;
+      if (pending.current === 0) return;
+      pending.current = 0;
       document.title = baseTitle.current;
     };
     const onVisible = () => { if (document.visibilityState === 'visible') clear(); };

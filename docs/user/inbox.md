@@ -18,10 +18,10 @@ cannot be loaded, it says so with **Try again** instead.
 - The list is ordered by latest activity and grouped under **Today** and **Earlier**. Use **Previous page** and **Next page** below the list to move; they appear only when there is more than one page.
 - Dates from an earlier year show the year, for example imported history.
 - The list loads again each time you open the inbox, so mail that arrived meanwhile is there.
-  While the inbox is open it also checks for news every 20 seconds, so you do not need to reload.
+  You do not need to reload to see new mail.
 
 **Know when something new arrives**
-- An open inbox reloads the list by itself when a conversation is created or a teammate assigns one
+- Any page of Colliedesk you have open (including Settings) checks every 20 seconds; the inbox reloads the list by itself when a conversation is created or a teammate assigns one
   to you. Conversations you assign to yourself do not count.
 - When the tab is in the background, its title shows the number of new items, for example
   `(2) Colliedesk`. The count clears when you return to the tab.

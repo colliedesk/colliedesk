@@ -9,23 +9,26 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// inboxActivityLookback widens every poll backwards. A conversation's created_at is taken before its
+// transaction commits (inbound mail waits on a lock and object storage first), so a poll can move
+// its cursor past a row it could not see yet. The browser removes the repeats.
+const inboxActivityLookback = "2 minutes"
+
 // InboxActivityLimit caps each activity list; an agent who was away longer reloads the inbox.
 const InboxActivityLimit = 50
 
 type NewConversationActivity struct {
-	ID           string    `json:"id"`
-	Subject      string    `json:"subject"`
-	ContactName  string    `json:"contact_name"`
-	ContactEmail string    `json:"contact_email"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID          string    `json:"id"`
+	Subject     string    `json:"subject"`
+	ContactName string    `json:"contact_name"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type AssignedConversationActivity struct {
-	ID           string    `json:"id"`
-	Subject      string    `json:"subject"`
-	ContactName  string    `json:"contact_name"`
-	ContactEmail string    `json:"contact_email"`
-	AssignedAt   time.Time `json:"assigned_at"`
+	ID          string    `json:"id"`
+	Subject     string    `json:"subject"`
+	ContactName string    `json:"contact_name"`
+	AssignedAt  time.Time `json:"assigned_at"`
 }
 
 // InboxActivity is what happened in the inbox after a cursor. Now is the server clock and the
@@ -53,15 +56,15 @@ func (s *Store) InboxActivity(ctx context.Context, workspaceID, agentID string, 
 		// One round trip: this endpoint is polled by every open tab.
 		batch := &pgx.Batch{}
 		batch.Queue(`SELECT now()`)
-		batch.Queue(`SELECT c.id::text,c.subject,ct.name,ct.email,c.created_at
+		batch.Queue(`SELECT c.id::text,c.subject,ct.name,c.created_at
 			FROM conversations c JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
-			WHERE c.workspace_id=$1 AND c.created_at>$2 AND c.created_at<=now()
-			ORDER BY c.created_at DESC LIMIT $3`, workspaceID, *since, InboxActivityLimit)
-		batch.Queue(`SELECT c.id::text,c.subject,ct.name,ct.email,c.assigned_at
+			WHERE c.workspace_id=$1 AND c.created_at>$2::timestamptz-$4::interval AND c.created_at<=now()
+			ORDER BY c.created_at DESC LIMIT $3`, workspaceID, *since, InboxActivityLimit, inboxActivityLookback)
+		batch.Queue(`SELECT c.id::text,c.subject,ct.name,c.assigned_at
 			FROM conversations c JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
-			WHERE c.workspace_id=$1 AND c.assignee_id=$4 AND c.assigned_at>$2 AND c.assigned_at<=now()
-			AND c.assigned_by_agent_id IS DISTINCT FROM $4::uuid
-			ORDER BY c.assigned_at DESC LIMIT $3`, workspaceID, *since, InboxActivityLimit, agentID)
+			WHERE c.workspace_id=$1 AND c.assignee_id=$5 AND c.assigned_at>$2::timestamptz-$4::interval AND c.assigned_at<=now()
+			AND c.assigned_by_agent_id IS DISTINCT FROM $5::uuid
+			ORDER BY c.assigned_at DESC LIMIT $3`, workspaceID, *since, InboxActivityLimit, inboxActivityLookback, agentID)
 		results := tx.SendBatch(ctx, batch)
 		defer results.Close()
 		if err := results.QueryRow().Scan(&activity.Now); err != nil {
@@ -74,7 +77,7 @@ func (s *Store) InboxActivity(ctx context.Context, workspaceID, agentID string, 
 		}
 		for created.Next() {
 			var item NewConversationActivity
-			if err := created.Scan(&item.ID, &item.Subject, &item.ContactName, &item.ContactEmail, &item.CreatedAt); err != nil {
+			if err := created.Scan(&item.ID, &item.Subject, &item.ContactName, &item.CreatedAt); err != nil {
 				created.Close()
 				return InboxActivity{}, fmt.Errorf("scan new conversation: %w", err)
 			}
@@ -91,7 +94,7 @@ func (s *Store) InboxActivity(ctx context.Context, workspaceID, agentID string, 
 		}
 		for assigned.Next() {
 			var item AssignedConversationActivity
-			if err := assigned.Scan(&item.ID, &item.Subject, &item.ContactName, &item.ContactEmail, &item.AssignedAt); err != nil {
+			if err := assigned.Scan(&item.ID, &item.Subject, &item.ContactName, &item.AssignedAt); err != nil {
 				assigned.Close()
 				return InboxActivity{}, fmt.Errorf("scan assigned conversation: %w", err)
 			}

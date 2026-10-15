@@ -523,7 +523,7 @@ paths:
       description: >-
         What changed in the inbox after `since`: conversations created, and conversations another agent
         assigned to the caller. Each list holds at most 50 items, newest first. Send the returned `now`
-        as the next `since`. Without `since` both lists are empty and `now` is the first cursor.
+        as the next `since`. A list can repeat an item from the previous call (a short lookback covers conversations that committed late), so the client removes duplicates by id. Without `since` both lists are empty and `now` is the first cursor.
       parameters:
         - {name: since, in: query, schema: {type: string, format: date-time}}
       responses:
@@ -1404,24 +1404,22 @@ components:
           maxItems: 50
           items:
             type: object
-            required: [id, subject, contact_name, contact_email, created_at]
+            required: [id, subject, contact_name, created_at]
             properties:
               id: {type: string, format: uuid}
               subject: {type: string}
               contact_name: {type: string}
-              contact_email: {type: string}
               created_at: {type: string, format: date-time}
         assigned_to_me:
           type: array
           maxItems: 50
           items:
             type: object
-            required: [id, subject, contact_name, contact_email, assigned_at]
+            required: [id, subject, contact_name, assigned_at]
             properties:
               id: {type: string, format: uuid}
               subject: {type: string}
               contact_name: {type: string}
-              contact_email: {type: string}
               assigned_at: {type: string, format: date-time}
     Message:
       type: object

@@ -13,9 +13,9 @@ class FakeNotification {
   constructor(title: string, options?: NotificationOptions) { notifications.push({ title, options }); }
 }
 
-const item = (id: string, subject: string) => ({ id, subject, contact_name: 'Ada', contact_email: 'ada@example.com' });
-const created = (id: string, subject: string) => ({ ...item(id, subject), created_at: '2026-10-15T10:00:00Z' });
-const assigned = (id: string, subject: string) => ({ ...item(id, subject), assigned_at: '2026-10-15T10:00:00Z' });
+const item = (id: string, subject: string) => ({ id, subject, contact_name: 'Ada' });
+const created = (id: string, subject: string) => ({ ...item(id, subject), created_at: '2026-10-15T10:00:10Z' });
+const assigned = (id: string, subject: string) => ({ ...item(id, subject), assigned_at: '2026-10-15T10:00:10Z' });
 const idle = (now: string) => ({ now, new_conversations: [], assigned_to_me: [] });
 const id = (n: number) => `00000000-0000-4000-8000-00000000000${n}`;
 
@@ -125,4 +125,49 @@ test('a failed poll keeps the cursor so nothing is skipped', async () => {
   await tick(20_000);
   await tick(20_000);
   expect(api.inboxActivity).toHaveBeenLastCalledWith('2026-10-15T10:00:00Z');
+});
+
+test('a conversation returned by two polls is announced and counted once', async () => {
+  const again = { new_conversations: [created(id(1), 'Printer')], assigned_to_me: [] };
+  api.inboxActivity.mockResolvedValueOnce(idle('2026-10-15T10:00:00Z'))
+    .mockResolvedValueOnce({ now: '2026-10-15T10:00:20Z', ...again })
+    .mockResolvedValueOnce({ now: '2026-10-15T10:00:40Z', ...again });
+  const invalidate = vi.spyOn(client, 'invalidateQueries');
+  renderHook(() => useInboxActivity(), { wrapper });
+  await tick(0);
+  await tick(20_000);
+  await tick(20_000);
+  expect(notifications).toHaveLength(1);
+  expect(document.title).toBe('(1) Colliedesk');
+  expect(invalidate).toHaveBeenCalledTimes(1);
+});
+
+test('the same conversation is announced again when it is later assigned to me', async () => {
+  api.inboxActivity.mockResolvedValueOnce(idle('2026-10-15T10:00:00Z'))
+    .mockResolvedValueOnce({ now: '2026-10-15T10:00:20Z', new_conversations: [created(id(1), 'Printer')], assigned_to_me: [] })
+    .mockResolvedValueOnce({ now: '2026-10-15T10:00:40Z', new_conversations: [], assigned_to_me: [assigned(id(1), 'Printer')] });
+  renderHook(() => useInboxActivity(), { wrapper });
+  await tick(0);
+  await tick(20_000);
+  await tick(20_000);
+  expect(notifications.map((entry) => entry.title)).toEqual(['New conversation', 'Assigned to you']);
+});
+
+test('conversations that already existed when the inbox opened are not announced', async () => {
+  api.inboxActivity.mockResolvedValueOnce(idle('2026-10-15T10:00:00Z')).mockResolvedValueOnce({
+    now: '2026-10-15T10:00:20Z', new_conversations: [{ ...created(id(1), 'Seen already'), created_at: '2026-10-15T09:59:00Z' }], assigned_to_me: [],
+  });
+  const invalidate = vi.spyOn(client, 'invalidateQueries');
+  renderHook(() => useInboxActivity(), { wrapper });
+  await tick(0);
+  await tick(20_000);
+  expect(notifications).toHaveLength(0);
+  expect(invalidate).not.toHaveBeenCalled();
+  expect(document.title).toBe('Colliedesk');
+});
+
+test('does not poll while disabled', async () => {
+  renderHook(() => useInboxActivity(false), { wrapper });
+  await tick(60_000);
+  expect(api.inboxActivity).not.toHaveBeenCalled();
 });

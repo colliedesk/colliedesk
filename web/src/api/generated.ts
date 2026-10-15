@@ -374,7 +374,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description What changed in the inbox after `since`: conversations created, and conversations another agent assigned to the caller. Each list holds at most 50 items, newest first. Send the returned `now` as the next `since`. Without `since` both lists are empty and `now` is the first cursor. */
+        /** @description What changed in the inbox after `since`: conversations created, and conversations another agent assigned to the caller. Each list holds at most 50 items, newest first. Send the returned `now` as the next `since`. A list can repeat an item from the previous call (a short lookback covers conversations that committed late), so the client removes duplicates by id. Without `since` both lists are empty and `now` is the first cursor. */
         get: operations["getInboxActivity"];
         put?: never;
         post?: never;
@@ -940,7 +940,6 @@ export interface components {
                 id: string;
                 subject: string;
                 contact_name: string;
-                contact_email: string;
                 /** Format: date-time */
                 created_at: string;
             }[];
@@ -949,7 +948,6 @@ export interface components {
                 id: string;
                 subject: string;
                 contact_name: string;
-                contact_email: string;
                 /** Format: date-time */
                 assigned_at: string;
             }[];
