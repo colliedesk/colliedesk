@@ -23,6 +23,7 @@ interface SettingsPageProps {
   // inviteError explains a refused invite, for example a full agent cap.
   inviteError?: string;
   emailSection?: ReactNode;
+  webFormSection?: ReactNode;
 }
 
 function sessionState(session: Session): keyof typeof messages.sessionStates {
@@ -39,7 +40,7 @@ function inviteState(invite: Invite): keyof typeof messages.inviteStates {
 
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
   workspaceTimezone = 'UTC', timezoneOverride = null, createdInviteUrl, onCreateInvite, onRevokeInvite,
-  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, error, inviteError, emailSection }: SettingsPageProps) {
+  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, error, inviteError, emailSection, webFormSection }: SettingsPageProps) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'admin' | 'agent'>('agent');
   const [workspaceZone, setWorkspaceZone] = useState(workspaceTimezone);
@@ -60,6 +61,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
         </div>
       </section>
       {emailSection}
+      {webFormSection}
       <AppearanceSection />
       <section className="settings-card" aria-labelledby="sessions-heading"><div className="section-heading"><h2 id="sessions-heading">{messages.sessions}</h2><p>{messages.sessionsDescription}</p></div>
         <div className="settings-body"><div className="data-list">{sessions.map((session) => {
