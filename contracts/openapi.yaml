@@ -579,6 +579,10 @@ paths:
       x-permission: contacts:read
       parameters:
         - {name: search, in: query, schema: {type: string}}
+        - name: ids
+          in: query
+          description: Comma-separated contact ids (at most 100). Only these contacts of the workspace are returned, in name order; an unknown id is skipped. Combines with search.
+          schema: {type: string}
       responses:
         '200':
           description: Workspace contacts
@@ -589,6 +593,7 @@ paths:
                 required: [items]
                 properties:
                   items: {type: array, items: {$ref: '#/components/schemas/Contact'}}
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
     post:
       operationId: createContact
@@ -1239,11 +1244,16 @@ components:
         workspace: {$ref: '#/components/schemas/Workspace'}
     Me:
       type: object
-      required: [agent, workspace, timezone, plan]
+      required: [agent, workspace, timezone, scope, plan]
       properties:
         agent: {$ref: '#/components/schemas/Agent'}
         workspace: {$ref: '#/components/schemas/Workspace'}
         timezone: {type: string}
+        scope:
+          description: The tier of the agent token making the call (read, draft or send); null for a person's own session.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/TokenScope'}
         plan:
           description: The trial and lock state, so every agent sees it. Null on self-hosted instances.
           oneOf:

@@ -69,8 +69,13 @@ func (a *API) me(response http.ResponseWriter, request *http.Request) {
 	if a.limits {
 		plan = &identity.Access
 	}
+	// scope is the tier of an agent token and null for a person's session.
+	var scope *string
+	if identity.Scope != "" {
+		scope = &identity.Scope
+	}
 	writeJSON(response, http.StatusOK, map[string]any{
-		"agent": identity.Agent, "workspace": identity.Workspace, "timezone": effectiveTimezone, "plan": plan,
+		"agent": identity.Agent, "workspace": identity.Workspace, "timezone": effectiveTimezone, "scope": scope, "plan": plan,
 	})
 }
 

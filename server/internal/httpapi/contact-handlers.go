@@ -2,7 +2,10 @@ package httpapi
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
 func (a *API) createContact(response http.ResponseWriter, request *http.Request) {
@@ -31,11 +34,40 @@ func (a *API) getContact(response http.ResponseWriter, request *http.Request) {
 	writeJSON(response, http.StatusOK, contact)
 }
 
+// maxContactIDs bounds the ids= filter of the contact list.
+const maxContactIDs = 100
+
+var contactIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
 func (a *API) listContacts(response http.ResponseWriter, request *http.Request) {
-	contacts, err := a.store.ListContacts(request.Context(), principal(request).Workspace.ID, request.URL.Query().Get("search"))
+	query := request.URL.Query()
+	filter := store.ContactFilter{Search: query.Get("search")}
+	if query.Has("ids") {
+		ids, ok := parseContactIDs(query.Get("ids"))
+		if !ok {
+			writeError(response, http.StatusBadRequest, "invalid_request", "ids must be 1 to 100 contact ids separated by commas.")
+			return
+		}
+		filter.IDs = ids
+	}
+	contacts, err := a.store.ListContacts(request.Context(), principal(request).Workspace.ID, filter)
 	if err != nil {
 		writeStoreError(response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"items": contacts})
+}
+
+// parseContactIDs splits a comma-separated id list; a bad or empty entry makes the whole list invalid.
+func parseContactIDs(raw string) ([]string, bool) {
+	ids := strings.Split(strings.ToLower(raw), ",")
+	if len(ids) > maxContactIDs {
+		return nil, false
+	}
+	for _, id := range ids {
+		if !contactIDPattern.MatchString(id) {
+			return nil, false
+		}
+	}
+	return ids, true
 }

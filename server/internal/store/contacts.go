@@ -44,15 +44,23 @@ func getContact(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.
 	return contact, nil
 }
 
-func (s *Store) ListContacts(ctx context.Context, workspaceID, search string) ([]domain.Contact, error) {
+// ContactFilter narrows a contact list. IDs, when not nil, keeps only those contacts; an id that
+// names no contact of the workspace is skipped.
+type ContactFilter struct {
+	Search string
+	IDs    []string
+}
+
+func (s *Store) ListContacts(ctx context.Context, workspaceID string, filter ContactFilter) ([]domain.Contact, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.Contact, error) {
-		return listContacts(ctx, tx, workspaceID, search)
+		return listContacts(ctx, tx, workspaceID, filter)
 	})
 }
 
-func listContacts(ctx context.Context, tx pgx.Tx, workspaceID, search string) ([]domain.Contact, error) {
+func listContacts(ctx context.Context, tx pgx.Tx, workspaceID string, filter ContactFilter) ([]domain.Contact, error) {
 	rows, err := tx.Query(ctx, `SELECT id::text,name,email,organization,created_at,updated_at FROM contacts
-		WHERE workspace_id=$1 AND ($2='' OR name ILIKE '%'||$2||'%' ESCAPE '\' OR email ILIKE '%'||$2||'%' ESCAPE '\') ORDER BY name`, workspaceID, escapeLikePattern(search))
+		WHERE workspace_id=$1 AND ($2='' OR name ILIKE '%'||$2||'%' ESCAPE '\' OR email ILIKE '%'||$2||'%' ESCAPE '\')
+		AND ($3::text[] IS NULL OR id::text=ANY($3::text[])) ORDER BY name,id`, workspaceID, escapeLikePattern(filter.Search), filter.IDs)
 	if err != nil {
 		return nil, fmt.Errorf("list contacts: %w", err)
 	}

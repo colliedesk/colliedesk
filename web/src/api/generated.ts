@@ -775,6 +775,8 @@ export interface components {
             agent: components["schemas"]["Agent"];
             workspace: components["schemas"]["Workspace"];
             timezone: string;
+            /** @description The tier of the agent token making the call (read, draft or send); null for a person's own session. */
+            scope: null | components["schemas"]["TokenScope"];
             /** @description The trial and lock state, so every agent sees it. Null on self-hosted instances. */
             plan: null | {
                 /** @enum {string} */
@@ -2041,6 +2043,8 @@ export interface operations {
         parameters: {
             query?: {
                 search?: string;
+                /** @description Comma-separated contact ids (at most 100). Only these contacts of the workspace are returned, in name order; an unknown id is skipped. Combines with search. */
+                ids?: string;
             };
             header?: never;
             path?: never;
@@ -2059,6 +2063,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };
