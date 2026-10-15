@@ -23,3 +23,12 @@ from automated scanners without a working proof.
 ## Supported versions
 
 Security fixes go to the latest release and to `edge`. Upgrade to the latest release to receive them.
+
+## Verifying an image
+
+Every image published from `main` and every release carries a signed build provenance
+attestation and an SBOM. To check that an image was built by this repository's workflows:
+
+```sh
+gh attestation verify oci://ghcr.io/colliedesk/colliedesk:latest -R colliedesk/colliedesk
+```
