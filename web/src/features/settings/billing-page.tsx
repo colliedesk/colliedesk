@@ -1,4 +1,5 @@
 import type { Billing, CheckoutPlan } from '../../api/schemas';
+import { formatStorage } from '../../lib/format-storage';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 
@@ -28,6 +29,16 @@ function periodNote(billing: Billing, timezone: string): string | null {
   return billing.cancel_at_period_end || billing.status === 'canceled' ? messages.cancelsOn(when) : messages.renewsOn(when);
 }
 
+// StorageNotice warns at 80% of the attachment storage cap and says what happens at the cap.
+function StorageNotice({ billing }: { billing: Billing }) {
+  const { storage_bytes: limit, storage_warn_bytes: warn } = billing.limits;
+  const used = billing.usage.storage_bytes;
+  if (limit === null || warn === null || used < warn) return null;
+  const upgrade = billing.plan === 'founding' ? messages.storageUpgradeFounding : messages.storageUpgradeTrial;
+  if (used >= limit) return <p role="alert" aria-label="Attachment storage" className="error-copy">{messages.storageFull(upgrade)}</p>;
+  return <p role="status" aria-label="Attachment storage" className="muted-copy">{messages.storageWarning(Math.floor(used * 100 / limit), upgrade)}</p>;
+}
+
 export function BillingPage({ billing, timezone, checkoutReturned = false, failed = false, onCheckout, onManage }: BillingPageProps) {
   const note = periodNote(billing, timezone);
   return (
@@ -45,7 +56,9 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
         {note && <p className="muted-copy">{note}</p>}
         <ul className="muted-copy">
           <li>{messages.agentsUsage(billing.usage.agents, billing.limits.agents, billing.usage.pending_invites)}</li>
+          {billing.limits.storage_bytes !== null && <li>{messages.storageUsage(formatStorage(billing.usage.storage_bytes), formatStorage(billing.limits.storage_bytes))}</li>}
         </ul>
+        <StorageNotice billing={billing} />
       </section>
       {(billing.plan === 'trial' || billing.plan === 'none') && <section aria-labelledby="upgrade-heading">
         <div className="section-heading"><div><h2 id="upgrade-heading">{messages.upgradeHeading}</h2></div></div>

@@ -89,6 +89,16 @@ damaged on disk after the import is detected by the next run and downloaded agai
 On Colliedesk Cloud, the first import into a workspace that is still in its trial extends the trial
 to 30 days in total from when it started.
 
+On a Colliedesk Cloud **Founding** workspace, imported attachments count toward the 20 GiB storage
+limit. Before it writes anything, the import adds up the size of the attachments it would bring in
+and compares it with the room left. If they do not fit, it stops with a message that gives the bytes
+needed, the bytes free and the limit, and nothing is imported: no contact, ticket or file. Switch to
+the Team plan under **Billing > Manage billing** and run it again, or import a smaller slice with
+`--since`. This check reads each ticket from Freshdesk once more, so a large account makes extra API
+calls before the import starts. If a file appears in Freshdesk after the check and would pass the
+limit, that file fails and the report is not `OK`; run the command again after you upgrade.
+`import undo` removes the imported files and gives the space back.
+
 Only one import or undo runs in a workspace at a time. A second one stops at once with
 "already running".
 

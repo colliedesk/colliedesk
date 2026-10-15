@@ -209,8 +209,25 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
 - Any path that stores a new attachment must call `CheckStorage` in its transaction before writing the
   bytes and map the error through `writeStoreError` (it answers 403 with the same code). Web reply
   attachments, when they land, are one such path.
+- **Founding plan: 20 GiB, imports included.** `domain.FoundingStorageBytes` (21474836480). Founding is
+  $100 once a year for life and attachments are the one cost that grows without bound (break-even is
+  roughly 41-56 GB), so it has a cap. Unlike the trial, imported files count: the number is
+  `workspaces.stored_storage_bytes`, the sum of every attachment, kept by the same triggers (migration
+  `founding-storage-counter`, additive; the three trigger functions now update both counters). Team has
+  no cap. Over the cap nothing is deleted; only new inbound attachments (403 `storage_limit_reached`) and
+  new imports are refused. Reading, replies without new files and export are untouched.
+- **Import on Founding stops before any write.** The ticket list does not carry attachment sizes, so
+  `freshdesk.guardFoundingStorage` runs a read-only pass first: the dry-run listing and id probing, then
+  one read of each ticket and its conversations, and adds up the reported sizes of attachments the ledger
+  does not hold yet. If `used + needed` passes the cap it returns `*freshdesk.StorageCapError` (bytes
+  needed, bytes free, the cap) and writes nothing. It costs a second round of API calls, once, for Founding
+  workspaces only. `importAttachment` also checks the room before each download, for a file that appeared
+  at the source after the pass; that is the only way a Founding import can stop partway, and a rerun after
+  upgrading resumes it. `import undo` deletes the files, and the triggers release the bytes.
+  `Options.FoundingStorageBytes` and `Store.WithFoundingStorageBytes` shrink the cap in tests.
 - `GET /billing` reports (for every plan) `usage.storage_bytes`, `limits.storage_bytes` (null when uncapped) and
-  `limits.storage_warn_bytes` (80%, 1717986918), the usage at which the web app should warn.
+  `limits.storage_warn_bytes` (80%: 1717986918 on the trial, 17179869184 on Founding), the usage at which the web app
+  warns. On Founding `usage.storage_bytes` is the stored counter, imports included.
 
 ### Clock
 

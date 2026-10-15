@@ -29,6 +29,9 @@ func (r *run) importAttachment(ctx context.Context, ticketKey, messageID string,
 	if err := r.checkDiskSpace(file.reportedSize()); err != nil {
 		return err
 	}
+	if err := r.checkFoundingRoom(ctx, file.reportedSize()); err != nil {
+		return err
+	}
 	body, length, err := r.client.download(ctx, file.AttachmentURL)
 	if errors.Is(err, errURLExpired) {
 		fresh, refreshErr := refresh(ctx, file.ID)

@@ -16,6 +16,22 @@ Only workspace admins see **Billing** (top bar). Agents do not.
 The plan belongs to the workspace, not to a person. The page shows how much of each limit you have
 used. Conversations are counted by the UTC month in which they were received.
 
+## Attachment storage
+
+| Plan | Attachment storage |
+|---|---|
+| Free trial | 2 GiB. Files brought in by an import do not count. |
+| Team | no limit |
+| Founding | 20 GiB. Files brought in by an import count. |
+
+**Billing** shows the attachments you have used, and warns at 80% of the limit.
+
+On Founding, at the limit nothing is deleted. You can still read everything, reply without adding
+files, and export all your data. Only new attachments are refused: an email whose files would pass
+the limit bounces with a message that names the limit, and a Freshdesk import that would pass it
+does not start (see [Import from Freshdesk](import-freshdesk.md)). To lift the limit, switch to the
+Team plan under **Manage billing**, or export your data.
+
 ## What happens at the limits (Free plan)
 
 - **Agents.** An agent and a pending invite each take one of the 3 seats. When all seats are taken,

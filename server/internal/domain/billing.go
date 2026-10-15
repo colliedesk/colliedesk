@@ -18,11 +18,13 @@ const (
 // BillingStatusNone is the status of a workspace that never had a subscription.
 const BillingStatusNone = "none"
 
-// Storage cap of the plans without a payment behind them (trial and locked): 2 GiB of attachment
-// bytes, imported files excluded. StorageWarnPercent is where the web app starts to warn.
+// Storage caps. The trial (and a locked workspace) gets 2 GiB of attachment bytes, imported files
+// excluded. The Founding plan gets 20 GiB with imported files included. Team has none.
+// StorageWarnPercent is where the web app starts to warn.
 const (
-	TrialStorageBytes  int64 = 2 << 30
-	StorageWarnPercent       = 80
+	TrialStorageBytes    int64 = 2 << 30
+	FoundingStorageBytes int64 = 20 << 30
+	StorageWarnPercent         = 80
 )
 
 // PlanLimits are the caps of a plan.
@@ -34,20 +36,38 @@ type PlanLimits struct {
 	StorageWarnBytes *int64 `json:"storage_warn_bytes"`
 }
 
-// StorageCapped reports whether attachment storage is capped on plan.
-func StorageCapped(plan string) bool {
-	return plan == PlanTrial || plan == PlanNone
+// StorageCap returns the attachment storage cap of plan in bytes, or 0 when the plan has none.
+func StorageCap(plan string) int64 {
+	switch plan {
+	case PlanTrial, PlanNone:
+		return TrialStorageBytes
+	case PlanFounding:
+		return FoundingStorageBytes
+	}
+	return 0
 }
+
+// StorageCapped reports whether attachment storage is capped on plan.
+func StorageCapped(plan string) bool { return StorageCap(plan) > 0 }
+
+// StorageCountsImports reports whether imported files count toward the cap of plan.
+func StorageCountsImports(plan string) bool { return plan == PlanFounding }
 
 // LimitsFor returns the caps of plan; a locked workspace (PlanNone) holds no seats.
 func LimitsFor(plan string) PlanLimits {
+	return LimitsForStorage(plan, StorageCap(plan))
+}
+
+// LimitsForStorage is LimitsFor with an explicit storage cap (0 for none), for a server or test
+// that changes the Founding cap.
+func LimitsForStorage(plan string, storageCap int64) PlanLimits {
 	var limits PlanLimits
 	switch plan {
 	case PlanTrial, PlanTeam, PlanFounding:
 		limits.Agents = 10
 	}
-	if StorageCapped(plan) {
-		limit, warn := TrialStorageBytes, TrialStorageBytes*StorageWarnPercent/100
+	if storageCap > 0 {
+		limit, warn := storageCap, storageCap*StorageWarnPercent/100
 		limits.StorageBytes, limits.StorageWarnBytes = &limit, &warn
 	}
 	return limits
@@ -100,17 +120,34 @@ type BillingUsage struct {
 	// RepliesLast24h counts the emailed replies of the last 24 hours that count against the
 	// trial's daily cap; it is 0 on every other plan.
 	RepliesLast24h int `json:"replies_last_24h"`
-	// StorageBytes is the attachment bytes the storage cap counts: every file except imported ones.
+	// StorageBytes is the attachment bytes the storage cap counts: every file except imported ones,
+	// or every file including imported ones on the Founding plan.
 	StorageBytes int64 `json:"storage_bytes"`
 }
 
 // StorageLimitError means storing the new files would pass the plan's storage cap. Nothing was stored.
 type StorageLimitError struct {
+	Plan                string
 	Used, Adding, Limit int64
 }
 
 func (e *StorageLimitError) Error() string {
-	return "This workspace has reached its 2 GiB attachment storage limit. Subscribe to remove the limit, or export your data."
+	limit := FormatBytes(e.Limit)
+	if e.Plan == PlanFounding {
+		return fmt.Sprintf("This workspace has reached the %s attachment storage limit of the Founding plan. Nothing is deleted, and you can still read, reply and export. Upgrade to the Team plan under Billing > Manage billing to remove the limit, or export your data.", limit)
+	}
+	return fmt.Sprintf("This workspace has reached its %s attachment storage limit. Subscribe to remove the limit, or export your data.", limit)
+}
+
+// FormatBytes writes a byte count for a person: whole GiB or MiB when exact, otherwise bytes.
+func FormatBytes(n int64) string {
+	switch {
+	case n >= 1<<30 && n%(1<<30) == 0:
+		return fmt.Sprintf("%d GiB", n>>30)
+	case n >= 1<<20 && n%(1<<20) == 0:
+		return fmt.Sprintf("%d MiB", n>>20)
+	}
+	return fmt.Sprintf("%d bytes", n)
 }
 
 // PlanLimitError means an action would exceed a limit of the workspace's plan.
