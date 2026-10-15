@@ -57,7 +57,9 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
   instant, however often the token is used. `insertAgentToken` takes `created_at` from the service
   clock, so tests move one clock. After the limit the owner creates a new token.
 - **Attribution.** A message written with a token carries `messages.agent_token_id` (composite FK to
-  `sessions(workspace_id,id)`, so a message names only a token of its own workspace) and the API
+  `sessions(workspace_id,id)`, so a message names only a token of its own workspace; added `NOT VALID`
+  and validated by the next migration, because one migration is one transaction and `VALIDATE
+  CONSTRAINT` only stops blocking writes in a transaction of its own) and the API
   returns it as `agent_token` (`id`, `label`, `scope`, `agent_name`). The web shows "by Ada via
   Claude Code". The column stays after the token is revoked, so what a revoked token wrote can still
   be told from what a person wrote. **Known limit:** only notes and replies are attributed. Status,
