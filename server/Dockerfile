@@ -8,7 +8,7 @@ COPY web ./
 COPY server/internal/webui/static /src/server/internal/webui/static
 RUN corepack pnpm build
 
-FROM golang:1.26-bookworm AS go
+FROM golang:1.27-bookworm AS go
 WORKDIR /src/server
 COPY server/go.mod server/go.sum ./
 RUN go mod download
