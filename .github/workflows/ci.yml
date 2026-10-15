@@ -216,9 +216,22 @@ jobs:
         run: sh tests/compose-smoke.sh
 
   # The one check to watch: adding or splitting jobs above never renames it.
+  # Fails a PR that brings in a dependency version with a known vulnerability (OSV database).
+  # Compares the PR against its base, so an advisory published later for an existing
+  # dependency does not block unrelated PRs; Scorecard reports those weekly.
+  osv-scan:
+    if: github.event_name == 'pull_request'
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+    with:
+      upload-sarif: false
+
   ci-ok:
     if: ${{ !cancelled() }}
-    needs: [go, web, e2e, onboarding, image, compose-smoke]
+    needs: [go, web, e2e, onboarding, image, compose-smoke, osv-scan]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
