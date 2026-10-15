@@ -148,7 +148,17 @@ export const messages = {
   billingDescription: 'Your plan, what it includes and what you have used.',
   currentPlan: 'Current plan',
   plans: { free: 'Free', team: 'Team', founding: 'Founding' },
-  agentsUsage: (used: number, limit: number) => `${used} of ${limit} agents`,
+  agentsUsage: (used: number, limit: number, pending = 0) =>
+    `${used} of ${limit} agents${pending > 0 ? `, plus ${pending} pending ${pending === 1 ? 'invite' : 'invites'}` : ''}`,
+  heldConversations: (count: number) => `${count} ${count === 1 ? 'conversation is' : 'conversations are'} held`,
+  heldBillingNotice: (count: number) =>
+    `${count} ${count === 1 ? 'conversation is' : 'conversations are'} held because this month is over the Free quota. They are stored in full and appear when you upgrade or when the month ends. Replies on existing conversations keep working.`,
+  heldInboxNotice: (count: number) =>
+    `${count} ${count === 1 ? 'conversation is' : 'conversations are'} held because this month is over the Free quota. ${count === 1 ? 'It is' : 'They are'} stored in full and hidden from this list until the workspace upgrades or the month ends.`,
+  linkPlanLimited: 'This workspace has reached the agent limit of its plan, so the link cannot add you yet. Ask a workspace admin to upgrade, then use this link again before it expires, or ask for a new link.',
+  heldAskAdmin: 'Ask a workspace admin to upgrade.',
+  heldBanner: 'Held conversations',
+  viewPlan: 'View plan',
   conversationsUsage: (used: number, limit: number | null) =>
     limit === null ? `${used} new conversations this month (no limit)` : `${used} of ${limit} new conversations this month`,
   renewsOn: (when: string) => `Renews ${when}.`,

@@ -11,7 +11,6 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -75,7 +74,7 @@ func (a *API) receiveInboundEmail(response http.ResponseWriter, request *http.Re
 		writeInternalError(response, errors.New("attachment storage is not configured; inbound mail cannot be kept"))
 		return
 	}
-	result, err := a.store.IngestEmail(request.Context(), workspaceID, parsed, time.Now().UTC(), a.stashEmail(workspaceID, raw, parsed.Files))
+	result, err := a.store.IngestEmail(request.Context(), workspaceID, parsed, a.now(), a.stashEmail(workspaceID, raw, parsed.Files))
 	if errors.Is(err, store.ErrRateLimited) {
 		response.Header().Set("Retry-After", strconv.Itoa(int(store.InboundRateWindow.Seconds())))
 		writeError(response, http.StatusTooManyRequests, "rate_limited", "Too many messages from this sender. Retry later.")

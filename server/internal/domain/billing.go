@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Plans a workspace can be on. A workspace with no subscription is on PlanFree.
 const (
@@ -59,9 +62,40 @@ func (s Subscription) Entitled(now time.Time) bool {
 	}
 }
 
+// BillingUsage is what a workspace has used of its plan limits now.
 type BillingUsage struct {
-	Agents                 int `json:"agents"`
+	Agents int `json:"agents"`
+	// PendingInvites are unused, unrevoked, unexpired invites; each holds an agent seat.
+	PendingInvites int `json:"pending_invites"`
+	// ConversationsThisMonth counts conversations received since the start of the UTC month,
+	// held ones included and imported ones excluded.
 	ConversationsThisMonth int `json:"conversations_this_month"`
+	// HeldConversations are received over the quota this month and still hidden from the inbox.
+	HeldConversations int `json:"held_conversations"`
+}
+
+// MonthStart is the first instant of the UTC calendar month that contains now. The monthly
+// conversation quota resets at this instant.
+func MonthStart(now time.Time) time.Time {
+	year, month, _ := now.UTC().Date()
+	return time.Date(year, month, 1, 0, 0, 0, 0, time.UTC)
+}
+
+// PlanLimitError means an action would exceed a limit of the workspace's plan.
+type PlanLimitError struct {
+	Plan   string
+	Agents int // the agent cap of the plan
+}
+
+func (e *PlanLimitError) Error() string {
+	if e.Plan == PlanFree {
+		return fmt.Sprintf("The Free plan allows %d agents, pending invites included. Upgrade in Settings > Billing, or revoke a pending invite, to add another.", e.Agents)
+	}
+	name := "Team"
+	if e.Plan == PlanFounding {
+		name = "Founding"
+	}
+	return fmt.Sprintf("The %s plan allows %d agents, pending invites included. Revoke a pending invite to free a seat, or contact us for more than %d agents.", name, e.Agents, e.Agents)
 }
 
 // Billing is what an admin sees about their workspace's plan.

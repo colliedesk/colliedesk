@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -18,6 +19,11 @@ func (s *Service) CreateInvite(ctx context.Context, principal Principal, email, 
 		return domain.Invite{}, "", fmt.Errorf("begin invite: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+	if s.planLimits {
+		if err := store.CheckAgentSeat(ctx, tx, principal.Workspace.ID, s.now(), strings.ToLower(email), ""); err != nil {
+			return domain.Invite{}, "", err
+		}
+	}
 	link, err := s.createLinkTx(ctx, tx, principal.Workspace.ID, "", strings.ToLower(email), "invite", ceiling, &principal.Agent.ID)
 	if err != nil {
 		return domain.Invite{}, "", err

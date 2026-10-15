@@ -576,8 +576,12 @@ export interface components {
             };
             usage: {
                 agents: number;
-                /** @description Conversations created since the start of the current UTC month. */
+                /** @description Unused, unrevoked, unexpired invites. Each holds an agent seat, so agents plus pending invites is compared with `limits.agents`. */
+                pending_invites: number;
+                /** @description Conversations received since the start of the current UTC month, held ones included. Conversations imported from another helpdesk never count. */
                 conversations_this_month: number;
+                /** @description Received over the monthly quota this month and hidden from the inbox and search. They are stored in full and appear when the workspace upgrades or the month ends. */
+                held_conversations: number;
             };
         };
         WorkspaceChoice: {
@@ -714,6 +718,8 @@ export interface components {
             items: components["schemas"]["Conversation"][];
             page: number;
             page_size: number;
+            /** @description Conversations received over the Free plan's monthly quota and hidden from `items` and from search. Always 0 on self-hosted instances and on paid plans. */
+            held_count: number;
         };
         Message: {
             /** Format: uuid */
@@ -982,6 +988,15 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description The action would exceed a limit of the workspace's plan (error code `plan_limit_reached`): more agents, pending invites included, than the plan allows. Nothing was changed; the action works again after an upgrade or after freeing a seat. */
+        PlanLimitReached: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description Authentication failed */
         Error401: {
             headers: {
@@ -1094,6 +1109,7 @@ export interface operations {
             200: components["responses"]["Redeemed"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PlanLimitReached"];
         };
     };
     logout: {
@@ -1238,6 +1254,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PlanLimitReached"];
             403: components["responses"]["Forbidden"];
         };
     };

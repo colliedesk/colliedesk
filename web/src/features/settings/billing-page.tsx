@@ -39,9 +39,10 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
         <p><strong>{messages.plans[billing.plan]}</strong></p>
         {note && <p className="muted-copy">{note}</p>}
         <ul className="muted-copy">
-          <li>{messages.agentsUsage(billing.usage.agents, billing.limits.agents)}</li>
+          <li>{messages.agentsUsage(billing.usage.agents, billing.limits.agents, billing.usage.pending_invites)}</li>
           <li>{messages.conversationsUsage(billing.usage.conversations_this_month, billing.limits.conversations_per_month)}</li>
         </ul>
+        {billing.usage.held_conversations > 0 && <p role="status" className="muted-copy">{messages.heldBillingNotice(billing.usage.held_conversations)}</p>}
       </section>
       {billing.plan === 'free' && <section aria-labelledby="upgrade-heading">
         <div className="section-heading"><div><h2 id="upgrade-heading">{messages.upgradeHeading}</h2></div></div>

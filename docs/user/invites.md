@@ -20,3 +20,9 @@ Roles:
 |---|---|
 | Agent | Work conversations, contacts and tags; manage own sessions and timezone |
 | Admin | Everything an agent can, plus invites, all sessions and the workspace timezone |
+
+## Agent limit on the Free plan
+
+On the hosted Free plan an agent and a pending invite each take one of 3 seats. Creating a fourth
+fails with a message that names the limit. Revoke an invite you no longer need, or upgrade under
+**Billing**. See [Plan and billing](billing.md).

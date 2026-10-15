@@ -65,6 +65,7 @@ paths:
         '200': {$ref: '#/components/responses/Redeemed'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/PlanLimitReached'}
   /api/v1/auth/logout:
     post:
       operationId: logout
@@ -150,6 +151,7 @@ paths:
                   url: {type: string, format: uri}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/PlanLimitReached'}
         '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/auth/invites/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
@@ -768,6 +770,12 @@ components:
     Error400:
       description: Invalid request
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    PlanLimitReached:
+      description: >
+        The action would exceed a limit of the workspace's plan (error code `plan_limit_reached`):
+        more agents, pending invites included, than the plan allows. Nothing was changed; the
+        action works again after an upgrade or after freeing a seat.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error401:
       description: Authentication failed
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
@@ -827,10 +835,22 @@ components:
             conversations_per_month: {type: [integer, 'null'], description: Null means no cap.}
         usage:
           type: object
-          required: [agents, conversations_this_month]
+          required: [agents, pending_invites, conversations_this_month, held_conversations]
           properties:
             agents: {type: integer}
-            conversations_this_month: {type: integer, description: Conversations created since the start of the current UTC month.}
+            pending_invites:
+              type: integer
+              description: Unused, unrevoked, unexpired invites. Each holds an agent seat, so agents plus pending invites is compared with `limits.agents`.
+            conversations_this_month:
+              type: integer
+              description: >
+                Conversations received since the start of the current UTC month, held ones included.
+                Conversations imported from another helpdesk never count.
+            held_conversations:
+              type: integer
+              description: >
+                Received over the monthly quota this month and hidden from the inbox and search.
+                They are stored in full and appear when the workspace upgrades or the month ends.
     WorkspaceChoice:
       type: object
       required: [slug, name]
@@ -959,11 +979,17 @@ components:
         forwarded_to: {type: array, items: {type: string}}
     ConversationPage:
       type: object
-      required: [items, page, page_size]
+      required: [items, page, page_size, held_count]
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/Conversation'}}
         page: {type: integer, minimum: 1}
         page_size: {type: integer, minimum: 1}
+        held_count:
+          type: integer
+          minimum: 0
+          description: >
+            Conversations received over the Free plan's monthly quota and hidden from `items` and
+            from search. Always 0 on self-hosted instances and on paid plans.
     Message:
       type: object
       required: [id, conversation_id, author_agent_id, author_name, kind, body, body_html, origin, attachments, created_at, delivery, email]

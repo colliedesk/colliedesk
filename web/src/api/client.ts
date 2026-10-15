@@ -16,8 +16,27 @@ export class UnauthorizedError extends Error {
   }
 }
 
+// PlanLimitError means the workspace's plan does not allow the action (HTTP 402). Its message is
+// the server's explanation, written for the person who sees it.
+export class PlanLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PlanLimitError';
+  }
+}
+
 function failure(status: number): Error {
   return status === 401 ? new UnauthorizedError() : new Error(`API ${status}`);
+}
+
+async function planLimitFailure(response: Response): Promise<PlanLimitError> {
+  try {
+    const body = await response.json() as { error?: { message?: unknown } };
+    if (typeof body.error?.message === 'string' && body.error.message) return new PlanLimitError(body.error.message);
+  } catch {
+    // An unreadable body still means the plan refused the action.
+  }
+  return new PlanLimitError('This action is not included in your plan.');
 }
 
 async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
@@ -26,6 +45,7 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
     headers: { 'Content-Type': 'application/json', ...init?.headers },
     ...init,
   });
+  if (response.status === 402) throw await planLimitFailure(response);
   if (!response.ok) throw failure(response.status);
   return schema.parse(await response.json());
 }

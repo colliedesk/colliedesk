@@ -31,3 +31,6 @@ cannot be loaded, it says so with **Try again** instead.
 - **Priority**: Low, Normal, High, Urgent.
 - **Assignee**: assign to a teammate or set back to unassigned.
 - **Tags**: see [Tags](tags.md).
+
+**Held conversations** (hosted Free plan only)
+When a month goes over the Free quota, a banner above the list says how many conversations are held. They are stored in full but hidden from the list and search until the workspace upgrades or the month ends. See [Plan and billing](billing.md).

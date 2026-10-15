@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
@@ -28,6 +29,8 @@ type Config struct {
 	RequestPool *pgxpool.Pool
 	// Billing turns on Polar billing for the hosted cloud; the zero value leaves it off.
 	Billing polar.Config
+	// Now is the clock for plan limits and the monthly quota; nil uses the system clock.
+	Now func() time.Time
 	// LookupTXT resolves DNS TXT records for domain verification; nil uses the system resolver.
 	LookupTXT func(ctx context.Context, name string) ([]string, error)
 }
@@ -44,6 +47,7 @@ type API struct {
 	cloud  *cloudauth.Verifier
 	store  *store.Store
 	polar  *polar.Client
+	now    func() time.Time
 }
 
 type routeSpec struct {
@@ -68,7 +72,14 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 		requestPool = pool
 	}
 	db := database.NewSplit(pool, requestPool)
-	api := &API{config: config, auth: auth.NewWithDB(db, config.Origin), store: store.NewWithDB(db).WithOutbound(outbound)}
+	clock := config.Now
+	if clock == nil {
+		clock = func() time.Time { return time.Now().UTC() }
+	}
+	limits := config.Billing.Enabled()
+	api := &API{config: config, now: clock,
+		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits),
+		store: store.NewWithDB(db).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits)}
 	if config.CloudAuth.Enabled() {
 		api.cloud = cloudauth.New(config.CloudAuth)
 	}

@@ -134,6 +134,17 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 	if err != nil {
 		return result, err
 	}
+	var files []EmailFile
+	upload := func() error {
+		if stash == nil {
+			return nil
+		}
+		var err error
+		if files, err = stash(ctx); err != nil {
+			return fmt.Errorf("store inbound files: %w", err)
+		}
+		return nil
+	}
 	result.Status = "threaded"
 	if conversationID == "" {
 		var created int
@@ -145,12 +156,26 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 			return result, ErrRateLimited
 		}
 		result.Status = "created"
-		if conversationID, err = createEmailConversation(ctx, tx, workspaceID, in); err != nil {
+		// Upload before the quota lock is taken: a slow object store must not queue the workspace's
+		// other new conversations behind this one.
+		if err := upload(); err != nil {
 			return result, err
 		}
-	} else if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN status IN ('resolved','closed') THEN 'open' ELSE status END,
-		updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID); err != nil {
-		return result, fmt.Errorf("reopen conversation: %w", err)
+		held, err := s.overConversationQuota(ctx, tx, workspaceID, now)
+		if err != nil {
+			return result, err
+		}
+		if conversationID, err = createEmailConversation(ctx, tx, workspaceID, in, now, held); err != nil {
+			return result, err
+		}
+	} else {
+		if err := upload(); err != nil {
+			return result, err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN status IN ('resolved','closed') THEN 'open' ELSE status END,
+			updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID); err != nil {
+			return result, fmt.Errorf("reopen conversation: %w", err)
+		}
 	}
 
 	meta, err := json.Marshal(domain.IncomingEmail{From: in.FromAddress, Authentication: in.Authentication, Attachments: in.Attachments})
@@ -160,12 +185,6 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 	body := in.Body
 	if strings.TrimSpace(body) == "" {
 		body = "(no text content)"
-	}
-	var files []EmailFile
-	if stash != nil {
-		if files, err = stash(ctx); err != nil {
-			return result, fmt.Errorf("store inbound files: %w", err)
-		}
 	}
 	var messageID string
 	if err := tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,body_html,email_message_id,email_meta)

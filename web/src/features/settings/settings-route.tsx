@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../api/client';
+import { api, PlanLimitError } from '../../api/client';
 import { EmailChannelSection } from './email-channel-section';
 import { SettingsPage } from './settings-page';
 import { messages } from '../../messages';
@@ -29,6 +29,7 @@ export function SettingsRoute() {
     emailSection={<EmailChannelSection settings={emailChannel.data} timezone={me.data?.timezone ?? 'UTC'} canManage={isAdmin}
       createdSecret={rotateSecret.data?.inbound_secret} onSave={(address) => saveEmail.mutate(address)}
       onRotate={() => rotateSecret.mutate()} onVerifyDomain={() => verifyDomain.mutate()} onDisconnect={() => disconnectEmail.mutate()} />}
+    inviteError={createInvite.error instanceof PlanLimitError ? createInvite.error.message : createInvite.isError ? messages.settingsActionFailed : undefined}
     createdInviteUrl={createInvite.data?.url}
     onCreateInvite={(email, role) => createInvite.mutate({ email, role })}
     onRevokeInvite={(id) => revokeInvite.mutate(id)} onRevokeSession={(id) => revokeSession.mutate(id)}

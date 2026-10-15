@@ -6,6 +6,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -74,6 +75,11 @@ func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string
 		role = requestedRole
 	}
 	if kind == "invite" {
+		if s.planLimits {
+			if err := store.CheckAgentSeat(ctx, tx, workspaceID, now, email, linkID); err != nil {
+				return Redeemed{}, err
+			}
+		}
 		var created string
 		if err := tx.QueryRow(ctx, `INSERT INTO agents(workspace_id,email,role) VALUES($1,lower($2),$3)
 			ON CONFLICT(workspace_id,email) DO UPDATE SET role=CASE WHEN agents.role='admin' THEN agents.role ELSE EXCLUDED.role END

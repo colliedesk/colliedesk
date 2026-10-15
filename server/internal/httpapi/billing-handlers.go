@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
@@ -17,7 +16,7 @@ func billingRoute(route Route) bool {
 }
 
 func (a *API) getBilling(response http.ResponseWriter, request *http.Request) {
-	billing, err := a.store.GetBilling(request.Context(), principal(request).Workspace.ID, time.Now().UTC())
+	billing, err := a.store.GetBilling(request.Context(), principal(request).Workspace.ID, a.now())
 	if err != nil {
 		writeInternalError(response, err)
 		return
@@ -68,7 +67,7 @@ func (a *API) createCheckout(response http.ResponseWriter, request *http.Request
 		return
 	}
 	who := principal(request)
-	current, err := a.store.GetBilling(request.Context(), who.Workspace.ID, time.Now().UTC())
+	current, err := a.store.GetBilling(request.Context(), who.Workspace.ID, a.now())
 	if err != nil {
 		writeInternalError(response, err)
 		return
