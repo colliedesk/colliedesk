@@ -1,0 +1,76 @@
+package auth
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/jackc/pgx/v5"
+)
+
+// AgentToken is a created token. Token is the raw bearer value; it exists only in this result.
+type AgentToken struct {
+	Token   string         `json:"token"`
+	Session domain.Session `json:"session"`
+}
+
+// CreateAgentToken gives the signed-in agent a token of the given tier. The token carries the agent
+// role ceiling whatever the creator's role is, so it never reaches admin-only permissions.
+func (s *Service) CreateAgentToken(ctx context.Context, principal Principal, label, scope string) (AgentToken, error) {
+	label, err := checkTokenRequest(label, scope)
+	if err != nil {
+		return AgentToken{}, err
+	}
+	var created AgentToken
+	err = s.db.InWorkspace(ctx, principal.Workspace.ID, func(tx pgx.Tx) error {
+		var err error
+		created, err = s.insertAgentToken(ctx, tx, principal.Workspace.ID, principal.Agent.ID, label, scope)
+		return err
+	})
+	return created, err
+}
+
+// IssueAgentToken is the operator path of CreateAgentToken: it names the workspace by slug and the
+// agent by email, for installs where nobody can sign in yet.
+func (s *Service) IssueAgentToken(ctx context.Context, workspaceSlug, email, label, scope string) (AgentToken, error) {
+	label, err := checkTokenRequest(label, scope)
+	if err != nil {
+		return AgentToken{}, err
+	}
+	workspaceID, err := s.db.WorkspaceIDBySlug(ctx, workspaceSlug)
+	if err != nil {
+		return AgentToken{}, err
+	}
+	var created AgentToken
+	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		var agentID string
+		err := tx.QueryRow(ctx, `SELECT id::text FROM agents WHERE workspace_id=$1 AND email=lower($2)`, workspaceID, strings.TrimSpace(email)).Scan(&agentID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("no agent %q in workspace %q", email, workspaceSlug)
+		}
+		if err != nil {
+			return fmt.Errorf("find agent: %w", err)
+		}
+		created, err = s.insertAgentToken(ctx, tx, workspaceID, agentID, label, scope)
+		return err
+	})
+	return created, err
+}
+
+func (s *Service) insertAgentToken(ctx context.Context, tx pgx.Tx, workspaceID, agentID, label, scope string) (AgentToken, error) {
+	raw, hash, err := newToken()
+	if err != nil {
+		return AgentToken{}, err
+	}
+	session, err := scanSession(tx.QueryRow(ctx, `WITH s AS (
+			INSERT INTO sessions(workspace_id,agent_id,token_hash,role_ceiling,scope,label,expires_at)
+			VALUES($1,$2,$3,'agent',$4,$5,$6) RETURNING *)
+		SELECT `+sessionColumns+` FROM s JOIN agents a ON a.id=s.agent_id AND a.workspace_id=s.workspace_id`,
+		workspaceID, agentID, hash, scope, label, s.now().Add(sessionLifetime)))
+	if err != nil {
+		return AgentToken{}, fmt.Errorf("create agent token: %w", err)
+	}
+	return AgentToken{Token: raw, Session: session}, nil
+}

@@ -138,6 +138,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Creates a bearer token for an AI agent that acts as the signed-in agent. The token has the agent role whatever the creator's role is, so it never reaches administration. A token cannot create tokens. It appears in `GET /api/v1/auth/sessions` with its label and scope, and `DELETE /api/v1/auth/sessions/{id}` revokes it. */
+        post: operations["createAgentToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/invites": {
         parameters: {
             query?: never;
@@ -767,6 +784,16 @@ export interface components {
                 locked: boolean;
             };
         };
+        /**
+         * @description Tier of an agent token. `read`: read what an agent may read. `draft`: also change status, priority, assignee and tags of a conversation and add private notes. `send`: also send replies and create contacts, conversations and tags.
+         * @enum {string}
+         */
+        TokenScope: "read" | "draft" | "send";
+        AgentToken: {
+            /** @description Raw bearer value; Colliedesk stores only its SHA-256 and never shows it again */
+            token: string;
+            session: components["schemas"]["Session"];
+        };
         Session: {
             /** Format: uuid */
             id: string;
@@ -775,6 +802,8 @@ export interface components {
             /** Format: email */
             agent_email: string;
             label: string;
+            /** @description The tier of an agent token; null for a person's session, which has no tier. */
+            scope: null | components["schemas"]["TokenScope"];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1212,7 +1241,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Permission or CSRF check failed. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain); nothing was stored. */
+        /** @description Permission or CSRF check failed. An agent token outside its tier gets error code `scope_insufficient`; the message names the tier the action needs. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain); nothing was stored. */
         Error403: {
             headers: {
                 [name: string]: unknown;
@@ -1454,6 +1483,38 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    createAgentToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Name shown in the session list, for example the agent host */
+                    label: string;
+                    scope: components["schemas"]["TokenScope"];
+                };
+            };
+        };
+        responses: {
+            /** @description The token and its session. The raw token is in this response only. */
+            201: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentToken"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     listInvites: {

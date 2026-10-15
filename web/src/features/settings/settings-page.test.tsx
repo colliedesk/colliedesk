@@ -72,7 +72,7 @@ test('shows the state of every invite and offers revoke only while it is pending
 });
 
 test('a revoked or expired session is shown as such and cannot be revoked again', () => {
-  const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', label: 'Chrome', created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z' };
+  const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', label: 'Chrome', scope: null, created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z' };
   const future = new Date(Date.now() + 600_000).toISOString();
   render(<SettingsPage invites={[]} timezone="UTC" sessions={[
     { ...base, id: '11111111-1111-4111-8111-111111111111', label: 'Active device', expires_at: future, revoked_at: null },

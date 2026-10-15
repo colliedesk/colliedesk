@@ -3,6 +3,8 @@ package httpapi
 import (
 	"net/http"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 )
 
 func (a *API) listMessages(response http.ResponseWriter, request *http.Request) {
@@ -30,6 +32,14 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	identity := principal(request)
+	need := auth.ScopeDraft
+	if input.Kind == "outgoing" {
+		need = auth.ScopeSend
+	}
+	if !auth.ScopeAllows(identity.Scope, need) {
+		writeScopeInsufficient(response, identity.Scope, need)
+		return
+	}
 	item, err := a.store.CreateMessage(request.Context(), identity.Workspace.ID, request.PathValue("id"), identity.Agent.ID, input.Kind, input.Body)
 	if err != nil {
 		writeStoreError(response, err)

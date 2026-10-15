@@ -12,6 +12,35 @@ useful token prefix: an attacker must still guess the complete random token, whi
 transport security remain separate controls. Constant-time comparison is required if a future auth
 path compares raw secrets or low-entropy values in application memory.
 
+## Agent tokens
+
+An agent token is a `sessions` row with a non-null `scope` (`read`, `draft`, `send`); a null scope is
+a person's full session. It reuses the session machinery on purpose: SHA-256 lookup, `label`,
+`last_seen_at` (the "last used" time, refreshed by every call, which also slides the 30-day expiry),
+revoke. Code: `auth/scope.go`, `auth/tokens.go`, `httpapi/token-scope.go`.
+
+- **Role.** A token always has `role_ceiling='agent'`, whoever creates it; a CHECK constraint
+  enforces it. No tier can reach an admin-only permission.
+- **Tiers are a route table.** `tokenTiers` maps `"METHOD pattern"` to the lowest tier allowed. A route
+  missing from it is closed to every token, so a new route stays out of reach until someone lists
+  it. `TestEveryRouteIsOpenToTokensOnlyFromItsTier` keeps its own hand-written copy of the table and
+  fails until both agree. Posting a message is gated by the handler: a note needs `draft`, an
+  outgoing reply needs `send`, and the 403 names that tier.
+- **Order of checks.** Authenticate (a token presented as a cookie is a 401) → `refuseToken` → role
+  permission → CSRF → locked workspace. The tier check runs before the role check so a closed route
+  answers `scope_insufficient`, not a bare `forbidden`.
+- **What `draft` means.** Status, priority, assignee, applying and removing an existing tag, and
+  notes. Every other write needs `send`, including creating a tag, a contact or a conversation.
+  Changing it is one edit to `tokenTiers`.
+- **Closed for every tier:** revoking sessions (a token could sign its owner out), creating tokens (a
+  `read` token could mint a `send` token) and invites.
+- **Rollback trap.** Code older than the migration ignores `scope`, so a token would act as a full
+  agent session. The down migration revokes every token first. When you roll back the image only,
+  run this before starting the old image:
+  `UPDATE sessions SET revoked_at = now() WHERE scope IS NOT NULL AND revoked_at IS NULL;`
+- The CLI (`colliedesk token create`) resolves the workspace by slug through
+  `PrivilegeWorkspaceBySlug`, like `pair`.
+
 ## Optional cloud sign-in
 
 Cloud sign-in is an OIDC-style bridge, not a second Colliedesk session system. The browser obtains

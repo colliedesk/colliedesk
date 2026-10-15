@@ -29,14 +29,18 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 	var trialEndsAt time.Time
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		err := tx.QueryRow(ctx, `SELECT w.id::text,w.slug,w.name,w.timezone,a.id::text,a.email,a.display_name,
-			CASE WHEN a.role='agent' OR s.role_ceiling='agent' THEN 'agent' ELSE 'admin' END,a.timezone_override,s.id::text,w.trial_ends_at
+			CASE WHEN a.role='agent' OR s.role_ceiling='agent' THEN 'agent' ELSE 'admin' END,a.timezone_override,s.id::text,w.trial_ends_at,COALESCE(s.scope,'')
 			FROM sessions s JOIN agents a ON a.id=s.agent_id AND a.workspace_id=s.workspace_id JOIN workspaces w ON w.id=s.workspace_id
 			WHERE s.workspace_id=$3 AND s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>$2`, hash, now, workspaceID).
 			Scan(&principal.Workspace.ID, &principal.Workspace.Slug, &principal.Workspace.Name, &principal.Workspace.Timezone,
 				&principal.Agent.ID, &principal.Agent.Email, &principal.Agent.DisplayName, &principal.Agent.Role,
-				&principal.Agent.TimezoneOverride, &principal.SessionID, &trialEndsAt)
+				&principal.Agent.TimezoneOverride, &principal.SessionID, &trialEndsAt, &principal.Scope)
 		if err != nil {
 			return fmt.Errorf("authenticate session: %w", err)
+		}
+		// A browser attaches cookies by itself; an agent token is only ever sent on purpose, as a bearer.
+		if viaCookie && principal.Scope != "" {
+			return fmt.Errorf("authenticate session: agent tokens are not accepted as cookies")
 		}
 		if _, err := tx.Exec(ctx, `UPDATE sessions SET last_seen_at=$2,expires_at=$3 WHERE id=$1 AND workspace_id=$4`,
 			principal.SessionID, now, now.Add(sessionLifetime), workspaceID); err != nil {
@@ -58,7 +62,7 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 }
 
 func (s *Service) ListSessions(ctx context.Context, principal Principal) ([]domain.Session, error) {
-	query := `SELECT s.id::text,s.agent_id::text,a.email,s.label,s.created_at,s.last_seen_at,s.expires_at,s.revoked_at
+	query := `SELECT ` + sessionColumns + `
 		FROM sessions s JOIN agents a ON a.id=s.agent_id AND a.workspace_id=s.workspace_id WHERE s.workspace_id=$1`
 	args := []any{principal.Workspace.ID}
 	if principal.Agent.Role != "admin" {
@@ -75,6 +79,21 @@ func (s *Service) ListSessions(ctx context.Context, principal Principal) ([]doma
 	return sessions, err
 }
 
+// sessionColumns is the select list scanSession reads; the query joins sessions s to agents a.
+const sessionColumns = `s.id::text,s.agent_id::text,a.email,s.label,s.scope,s.created_at,s.last_seen_at,s.expires_at,s.revoked_at`
+
+func scanSession(row pgx.Row) (domain.Session, error) {
+	var session domain.Session
+	if err := row.Scan(&session.ID, &session.AgentID, &session.AgentEmail, &session.Label, &session.Scope, &session.CreatedAt, &session.LastSeenAt, &session.ExpiresAt, &session.RevokedAt); err != nil {
+		return domain.Session{}, fmt.Errorf("scan session: %w", err)
+	}
+	session.CreatedAt = domain.UTC(session.CreatedAt)
+	session.LastSeenAt = domain.UTC(session.LastSeenAt)
+	session.ExpiresAt = domain.UTC(session.ExpiresAt)
+	session.RevokedAt = domain.UTCOptional(session.RevokedAt)
+	return session, nil
+}
+
 func listSessions(ctx context.Context, tx pgx.Tx, query string, args []any) ([]domain.Session, error) {
 	rows, err := tx.Query(ctx, query, args...)
 	if err != nil {
@@ -83,14 +102,10 @@ func listSessions(ctx context.Context, tx pgx.Tx, query string, args []any) ([]d
 	defer rows.Close()
 	sessions := make([]domain.Session, 0)
 	for rows.Next() {
-		var session domain.Session
-		if err := rows.Scan(&session.ID, &session.AgentID, &session.AgentEmail, &session.Label, &session.CreatedAt, &session.LastSeenAt, &session.ExpiresAt, &session.RevokedAt); err != nil {
-			return nil, fmt.Errorf("scan session: %w", err)
+		session, err := scanSession(rows)
+		if err != nil {
+			return nil, err
 		}
-		session.CreatedAt = domain.UTC(session.CreatedAt)
-		session.LastSeenAt = domain.UTC(session.LastSeenAt)
-		session.ExpiresAt = domain.UTC(session.ExpiresAt)
-		session.RevokedAt = domain.UTCOptional(session.RevokedAt)
 		sessions = append(sessions, session)
 	}
 	if err := rows.Err(); err != nil {

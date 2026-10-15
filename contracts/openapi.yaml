@@ -10,6 +10,13 @@ info:
     `workspace_locked`, reads included, except the routes that sign in and out, show and pay the
     plan, export the data (`GET /api/v1/export`), and show or disconnect the email channel. Paying unlocks the
     workspace on the next request. Self-hosted instances have no trial and no lock.
+
+    An agent token (`POST /api/v1/auth/tokens`) is a bearer credential for an AI agent. It acts as the
+    agent who created it, limited to a tier: `read` (what an agent may read), `draft` (also changes that
+    never reach a customer: status, priority, assignee, tags, private notes) or `send` (also outgoing
+    replies and creating records). A token never reaches administration (sessions, invites, tokens,
+    workspace, channel, billing and export settings) and is refused as a cookie. A call outside the tier
+    answers 403 with error code `scope_insufficient`; the message names the tier the action needs.
 servers:
   - url: /
 security:
@@ -159,6 +166,36 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/auth/tokens:
+    post:
+      operationId: createAgentToken
+      x-permission: authenticated
+      description: >
+        Creates a bearer token for an AI agent that acts as the signed-in agent. The token has the
+        agent role whatever the creator's role is, so it never reaches administration. A token cannot
+        create tokens. It appears in `GET /api/v1/auth/sessions` with its label and scope, and
+        `DELETE /api/v1/auth/sessions/{id}` revokes it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label, scope]
+              properties:
+                label: {type: string, minLength: 1, maxLength: 80, description: 'Name shown in the session list, for example the agent host'}
+                scope: {$ref: '#/components/schemas/TokenScope'}
+      responses:
+        '201':
+          description: The token and its session. The raw token is in this response only.
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentToken'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/auth/invites:
     get:
       operationId: listInvites
@@ -1066,9 +1103,11 @@ components:
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error403:
       description: >
-        Permission or CSRF check failed. On `POST /conversations/{id}/messages` a trial workspace gets
-        error code `trial_outbound_restricted` for a reply to a conversation the customer did not
-        start (unless it verified its sending domain); nothing was stored.
+        Permission or CSRF check failed. An agent token outside its tier gets error code
+        `scope_insufficient`; the message names the tier the action needs. On
+        `POST /conversations/{id}/messages` a trial workspace gets error code
+        `trial_outbound_restricted` for a reply to a conversation the customer did not start
+        (unless it verified its sending domain); nothing was stored.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error404:
       description: Resource not found in this workspace
@@ -1215,14 +1254,32 @@ components:
                 plan: {type: string, enum: [trial, team, founding, none]}
                 trial_ends_at: {type: string, format: date-time}
                 locked: {type: boolean}
+    TokenScope:
+      type: string
+      enum: [read, draft, send]
+      description: >
+        Tier of an agent token. `read`: read what an agent may read. `draft`: also change status, priority,
+        assignee and tags of a conversation and add private notes. `send`: also send replies and create
+        contacts, conversations and tags.
+    AgentToken:
+      type: object
+      required: [token, session]
+      properties:
+        token: {type: string, description: 'Raw bearer value; Colliedesk stores only its SHA-256 and never shows it again'}
+        session: {$ref: '#/components/schemas/Session'}
     Session:
       type: object
-      required: [id, agent_id, agent_email, label, created_at, last_seen_at, expires_at, revoked_at]
+      required: [id, agent_id, agent_email, label, scope, created_at, last_seen_at, expires_at, revoked_at]
       properties:
         id: {type: string, format: uuid}
         agent_id: {type: string, format: uuid}
         agent_email: {type: string, format: email}
         label: {type: string}
+        scope:
+          description: The tier of an agent token; null for a person's session, which has no tier.
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/TokenScope'
         created_at: {type: string, format: date-time}
         last_seen_at: {type: string, format: date-time}
         expires_at: {type: string, format: date-time}

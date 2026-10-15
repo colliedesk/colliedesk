@@ -140,6 +140,7 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/auth/me", auth.PermissionAuthenticated},
 		{http.MethodGet, "/api/v1/auth/sessions", auth.PermissionAccessRead},
 		{http.MethodDelete, "/api/v1/auth/sessions/{id}", auth.PermissionAccessRead},
+		{http.MethodPost, "/api/v1/auth/tokens", auth.PermissionAuthenticated},
 		{http.MethodPost, "/api/v1/auth/invites", auth.PermissionAccessWrite},
 		{http.MethodGet, "/api/v1/auth/invites", auth.PermissionAccessRead},
 		{http.MethodDelete, "/api/v1/auth/invites/{id}", auth.PermissionAccessWrite},
@@ -199,6 +200,9 @@ func (a *API) authorize(route Route, next http.HandlerFunc) http.HandlerFunc {
 		principal, err := a.auth.Authenticate(request.Context(), raw, viaCookie)
 		if err != nil {
 			writeError(response, http.StatusUnauthorized, "unauthorized", "A valid session is required.")
+			return
+		}
+		if refuseToken(response, route, principal) {
 			return
 		}
 		if !auth.HasPermission(principal.Agent.Role, permission) {

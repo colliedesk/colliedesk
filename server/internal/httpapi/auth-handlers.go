@@ -1,9 +1,12 @@
 package httpapi
 
 import (
-	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"errors"
 	"net/http"
 	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 func (a *API) redeem(response http.ResponseWriter, request *http.Request) {
@@ -91,4 +94,28 @@ func (a *API) revokeSession(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
+}
+
+func (a *API) createAgentToken(response http.ResponseWriter, request *http.Request) {
+	var input struct {
+		Label string `json:"label"`
+		Scope string `json:"scope"`
+	}
+	if err := decodeJSON(request, &input); err != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "A label and a scope are required.")
+		return
+	}
+	created, err := a.auth.CreateAgentToken(request.Context(), principal(request), input.Label, input.Scope)
+	var invalid *auth.InvalidTokenError
+	if errors.As(err, &invalid) {
+		writeError(response, http.StatusBadRequest, "invalid_request", invalid.Reason)
+		return
+	}
+	if err != nil {
+		writeInternalError(response, err)
+		return
+	}
+	// The raw token is in the body once; no cache may keep it.
+	response.Header().Set("Cache-Control", "no-store")
+	writeJSON(response, http.StatusCreated, created)
 }

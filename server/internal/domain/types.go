@@ -17,11 +17,14 @@ type Agent struct {
 	TimezoneOverride *string `json:"timezone_override"`
 }
 
+// Session is a sign-in. Scope is the tier of an agent token (read, draft or send); nil for a
+// person's full session.
 type Session struct {
 	ID         string     `json:"id"`
 	AgentID    string     `json:"agent_id"`
 	AgentEmail string     `json:"agent_email"`
 	Label      string     `json:"label"`
+	Scope      *string    `json:"scope"`
 	CreatedAt  time.Time  `json:"created_at"`
 	LastSeenAt time.Time  `json:"last_seen_at"`
 	ExpiresAt  time.Time  `json:"expires_at"`

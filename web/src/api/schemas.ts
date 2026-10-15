@@ -96,6 +96,7 @@ export const webFormSettingsSchema = z.object({
 export const inboundSecretSchema = z.object({ inbound_secret: z.string().min(1), inbound_url: z.string().url() }) satisfies z.ZodType<JsonResponse<'rotateEmailInboundSecret', 200>>;
 export const sessionSchema = z.object({
   id: z.string().uuid(), agent_id: z.string().uuid(), agent_email: z.string().email(), label: z.string(),
+  scope: z.enum(['read', 'draft', 'send']).nullable(),
   created_at: z.string().datetime(), last_seen_at: z.string().datetime(), expires_at: z.string().datetime(), revoked_at: nullableDate,
 }) satisfies z.ZodType<Generated<'Session'>>;
 export const inviteSchema = z.object({
