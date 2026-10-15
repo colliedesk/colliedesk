@@ -15,7 +15,7 @@
     "check:api": "node scripts/check-generated-api.mjs"
   },
   "dependencies": {
-    "@clerk/clerk-react": "5.61.10",
+    "@clerk/clerk-react": "5.55.0",
     "@tanstack/react-query": "5.102.8",
     "@tanstack/react-router": "1.170.35",
     "react": "19.1.1",
