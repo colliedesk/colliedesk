@@ -16,6 +16,8 @@ interface ConversationListProps {
   onPage?: (page: number) => void;
   filtered?: boolean;
   loading?: boolean;
+  // refreshing: a refetch is running while the previous rows stay on screen.
+  refreshing?: boolean;
   failed?: boolean;
   onRetry?: () => void;
   onClearFilters?: () => void;
@@ -25,7 +27,7 @@ interface ConversationListProps {
 
 const visibleTags = 2;
 
-export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, loading = false,
+export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, loading = false, refreshing = false,
   failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings }: ConversationListProps) {
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
   const now = useNow(timezone);
@@ -37,7 +39,8 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
     onOpenSettings();
   }}>{label}</a>;
   return (
-    <div className="conversation-scroll">
+    <div className="conversation-scroll" aria-busy={refreshing}>
+      {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
       {brandNew && <section className="get-started" aria-label={messages.getStarted}>
         <h2>{messages.noConversationsYet}</h2>
         <p className="muted-copy">{messages.getStartedExplanation}</p>
@@ -58,7 +61,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
         return (
           <Fragment key={item.id}>
           {startsGroup && <h2 className="group-label">{messages.dayGroups[group]}</h2>}
-          <button className="conversation-row" data-selected={item.id === selectedId} data-tip={full} onClick={() => onSelect?.(item.id)}>
+          <button className="conversation-row" aria-current={item.id === selectedId ? true : undefined} data-tip={full} onClick={() => onSelect?.(item.id)}>
             <span className="conversation-subject">{item.subject}</span>
             <time dateTime={item.updated_at}>
               <span aria-hidden="true" className="time-short">{formatShortDate(item.updated_at, timezone, now)}</span>

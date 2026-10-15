@@ -92,3 +92,9 @@ test('shows why an invite was refused next to the invite form', () => {
     inviteError="The trial allows 10 agents, pending invites included." />);
   expect(screen.getByRole('alert')).toHaveTextContent(/trial allows 10 agents/i);
 });
+
+test('shows the loading status while settings data is pending, without the forms', () => {
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" loading canCreateInvites />);
+  expect(screen.getByRole('status')).toHaveTextContent('Loading workspace…');
+  expect(screen.queryByRole('button', { name: /create invite/i })).not.toBeInTheDocument();
+});

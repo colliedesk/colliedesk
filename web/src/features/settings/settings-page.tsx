@@ -19,6 +19,7 @@ interface SettingsPageProps {
   onRevokeInvite?: (id: string) => void;
   onSetWorkspaceTimezone?: (timezone: string) => void;
   onSetAgentTimezone?: (timezone: string | null) => void;
+  loading?: boolean;
   error?: string;
   // inviteError explains a refused invite, for example a full agent cap.
   inviteError?: string;
@@ -42,7 +43,7 @@ function inviteState(invite: Invite): keyof typeof messages.inviteStates {
 
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
   workspaceTimezone = 'UTC', timezoneOverride = null, createdInviteUrl, onCreateInvite, onRevokeInvite,
-  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, error, inviteError, emailSection, webFormSection, exportSection }: SettingsPageProps) {
+  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, inviteError, emailSection, webFormSection, exportSection }: SettingsPageProps) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'admin' | 'agent'>('agent');
   const [workspaceZone, setWorkspaceZone] = useState(workspaceTimezone);
@@ -52,6 +53,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
   return (
     <main className="settings-page panel">
       <header><h1>{messages.settings}</h1><p>{messages.workspaceSettings}</p></header>
+      {loading ? <p role="status" className="empty-copy">{messages.loading}</p> : <>
       {error && <p role="alert" className="error-copy">{error}</p>}
       <section className="settings-card"><div className="section-heading"><h2>{messages.timezoneSettings}</h2><p>{messages.timezoneDescription}</p></div>
         <div className="settings-body">
@@ -103,6 +105,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
           })}</div>}
         </div>
       </section>
+      </>}
     </main>
   );
 }
