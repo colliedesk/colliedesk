@@ -14,9 +14,10 @@ updates:
     schedule:
       interval: weekly
     ignore:
-      # GitHub cannot serve the v7.0.0 commit archive (codeload 404), so runners fail to fetch it.
+      # GitHub cannot serve these commit archives (codeload 404), so runners fail to fetch them.
+      # tests/pinned-actions-fetchable-test.sh catches any other such pin in ci-ok.
       - dependency-name: actions/setup-go
-        versions: ["7.0.0"]
+        versions: ["6.5.0", "7.0.0"]
     groups:
       actions:
         patterns: ["*"]
