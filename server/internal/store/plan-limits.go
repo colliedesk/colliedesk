@@ -15,28 +15,11 @@ func workspaceAccess(ctx context.Context, tx pgx.Tx, workspaceID string, now tim
 	if err := tx.QueryRow(ctx, `SELECT trial_ends_at FROM workspaces WHERE id=$1`, workspaceID).Scan(&trialEndsAt); err != nil {
 		return domain.Access{}, fmt.Errorf("load trial end: %w", err)
 	}
-	return accessAt(ctx, tx, workspaceID, trialEndsAt, now)
-}
-
-// accessAt is workspaceAccess for a caller that already holds the trial end.
-func accessAt(ctx context.Context, tx pgx.Tx, workspaceID string, trialEndsAt, now time.Time) (domain.Access, error) {
-	subscriptions, err := loadSubscriptions(ctx, tx, workspaceID)
+	subscriptions, err := LoadSubscriptions(ctx, tx, workspaceID)
 	if err != nil {
 		return domain.Access{}, fmt.Errorf("load subscriptions: %w", err)
 	}
 	return domain.NewAccess(subscriptions, trialEndsAt, now), nil
-}
-
-// WorkspaceAccess is the plan in effect for the workspace at now, given the trial end the caller
-// already loaded with the session. It costs one indexed query on the subscriptions.
-func (s *Store) WorkspaceAccess(ctx context.Context, workspaceID string, trialEndsAt, now time.Time) (domain.Access, error) {
-	access, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Access, error) {
-		return accessAt(ctx, tx, workspaceID, trialEndsAt, now)
-	})
-	if err != nil {
-		return domain.Access{}, fmt.Errorf("workspace access: %w", err)
-	}
-	return access, nil
 }
 
 // pendingSeatEmails counts the people who hold a seat only through an invite: distinct invited
@@ -57,19 +40,20 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "agent-seats:"+workspaceID); err != nil {
 		return fmt.Errorf("lock agent seats: %w", err)
 	}
-	var known bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE workspace_id=$1 AND email=lower($2))`, workspaceID, email).Scan(&known); err != nil {
-		return fmt.Errorf("check agent: %w", err)
-	}
-	if known {
-		return nil
-	}
+	// A locked workspace changes nothing, not even the role of someone who already has a seat.
 	access, err := workspaceAccess(ctx, tx, workspaceID, now)
 	if err != nil {
 		return err
 	}
 	if access.Locked {
 		return &domain.LockedError{}
+	}
+	var known bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE workspace_id=$1 AND email=lower($2))`, workspaceID, email).Scan(&known); err != nil {
+		return fmt.Errorf("check agent: %w", err)
+	}
+	if known {
+		return nil
 	}
 	plan := access.Plan
 	limit := domain.LimitsFor(plan).Agents

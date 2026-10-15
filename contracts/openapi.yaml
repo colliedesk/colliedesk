@@ -8,7 +8,7 @@ info:
     On the hosted cloud (billing enabled) a workspace has a free trial. When the trial ends with no
     paid subscription the workspace is locked: every authenticated route answers 402 with error code
     `workspace_locked`, reads included, except the routes that sign in and out, show and pay the
-    plan, export the data (`GET /api/v1/export`) and disconnect the email channel. Paying unlocks the
+    plan, export the data (`GET /api/v1/export`), and show or disconnect the email channel. Paying unlocks the
     workspace on the next request. Self-hosted instances have no trial and no lock.
 servers:
   - url: /

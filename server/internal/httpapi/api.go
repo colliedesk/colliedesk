@@ -179,7 +179,7 @@ func (a *API) authorize(route Route, next http.HandlerFunc) http.HandlerFunc {
 			writeError(response, http.StatusForbidden, "csrf_rejected", "Origin does not match this CollieDesk instance.")
 			return
 		}
-		if a.refuseIfLocked(response, request, route, principal) {
+		if a.refuseIfLocked(response, route, principal) {
 			return
 		}
 		if viaCookie && request.URL.Path != "/api/v1/auth/logout" {

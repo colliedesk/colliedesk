@@ -45,9 +45,12 @@ jobs:
       - name: Validate migrations
         working-directory: server
         run: go run ./cmd/migration-check --repo=..
-      - name: Vet and test
+      - name: Format, vet and test
         working-directory: server
-        run: go vet ./... && go test ./...
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then gofmt -l .; echo 'gofmt: format the files above' >&2; exit 1; fi
+          go vet ./...
+          go test ./...
   web:
     runs-on: ubuntu-latest
     steps:

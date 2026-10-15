@@ -64,12 +64,7 @@ func (a *API) me(response http.ResponseWriter, request *http.Request) {
 	// plan is null without billing (self-hosted) so the client shows no trial or lock.
 	var plan *domain.Access
 	if a.limits {
-		access, err := a.store.WorkspaceAccess(request.Context(), identity.Workspace.ID, identity.TrialEndsAt, a.now())
-		if err != nil {
-			writeInternalError(response, err)
-			return
-		}
-		plan = &access
+		plan = &identity.Access
 	}
 	writeJSON(response, http.StatusOK, map[string]any{
 		"agent": identity.Agent, "workspace": identity.Workspace, "timezone": effectiveTimezone, "plan": plan,
