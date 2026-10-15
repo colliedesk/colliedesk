@@ -62,8 +62,22 @@ card, download invoices and cancel there. The button stays available after a sub
 - **Cancels**: you cancelled. You keep the plan until the date shown, then the workspace is Free.
 - **Last payment failed**: the plan stays active while the provider retries the card. Update the
   card in the portal.
-- A subscription that ended, was unpaid or never completed leaves the workspace on Free. Nothing
-  is deleted: conversations, contacts and attachments stay.
+- A subscription that ended, was unpaid or never completed locks the workspace: you can sign in,
+  choose a plan and export your data, and nothing else.
+
+## What happens to a locked workspace
+
+1. The workspace stays locked, with all its data, while you decide. You can pick a plan in
+   **Settings > Billing** at any time, and everything is there again.
+2. About 11 months after the lock, 30 days before deletion, every admin gets an email with the exact
+   deletion date. It is sent from Colliedesk, not from your workspace's address.
+3. 12 months after the lock, the workspace is deleted for good: conversations, contacts and
+   attachments. Choosing a plan before that date cancels the deletion, and a later lock starts a new
+   12 months.
+4. To keep a copy, export all your data before the deletion date (see "Export all your data").
+   Export works while the workspace is locked.
+
+Deleted data can stay in Colliedesk's encrypted nightly backups until they expire; it is not restored on request after the deletion date.
 
 ## Limits
 

@@ -62,19 +62,16 @@ func (m *recordingMailer) count() int {
 	return len(m.sent)
 }
 
-// flakyDisk is local disk whose Delete fails from the failAt-th call on while broken is set.
-type flakyDisk struct {
-	*attachments.LocalDisk
-	broken  bool
-	deletes int
+// fakePolar stands in for the Polar API, an external boundary.
+type fakePolar struct {
+	paid map[string]bool
+	err  error
+	asks []string
 }
 
-func (d *flakyDisk) Delete(ctx context.Context, key string) error {
-	d.deletes++
-	if d.broken && d.deletes >= 2 {
-		return errors.New("disk offline")
-	}
-	return d.LocalDisk.Delete(ctx, key)
+func (f *fakePolar) HasPaidSubscription(_ context.Context, externalID string, _ time.Time) (bool, error) {
+	f.asks = append(f.asks, externalID)
+	return f.paid[externalID], f.err
 }
 
 type workspace struct {
@@ -86,7 +83,8 @@ type env struct {
 	pool    *pgxpool.Pool
 	db      *database.DB
 	store   *store.Store
-	disk    *flakyDisk
+	disk    *attachments.LocalDisk
+	polar   *fakePolar
 	root    string
 	mailer  *recordingMailer
 	now     time.Time
@@ -129,10 +127,20 @@ func newEnv(t *testing.T) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &env{pool: pool, db: database.New(pool), store: store.New(pool), disk: &flakyDisk{LocalDisk: local}, root: root, mailer: &recordingMailer{}}
-	e.service = retention.New(retention.Config{DB: e.db, Storage: e.disk, Mailer: e.mailer, From: "noreply@mail.colliedesk.example",
-		Origin: "https://app.colliedesk.example", Now: func() time.Time { return e.now }})
+	e := &env{pool: pool, db: database.New(pool), store: store.New(pool), disk: local, root: root, mailer: &recordingMailer{}, polar: &fakePolar{paid: map[string]bool{}}}
+	e.service = e.serviceWith(nil)
 	return e
+}
+
+// serviceWith builds a service with deletion on and a cap of 5 a day, then lets change adjust it.
+func (e *env) serviceWith(change func(*retention.Config)) *retention.Service {
+	config := retention.Config{DB: e.db, Storage: e.disk, Mailer: e.mailer, From: "noreply@mail.colliedesk.example",
+		Origin: "https://app.colliedesk.example", Now: func() time.Time { return e.now },
+		DeleteEnabled: true, MaxDeletionsPerDay: 5, Polar: e.polar}
+	if change != nil {
+		change(&config)
+	}
+	return retention.New(config)
 }
 
 // workspace creates a workspace with the admins given, one conversation with an attachment, and a
@@ -295,10 +303,10 @@ func TestNoticeThirtyDaysBeforeThenDeletionAfterTwelveMonths(t *testing.T) {
 		t.Fatal(err)
 	}
 	body, _ := io.ReadAll(quotedprintable.NewReader(message.Body))
-	if message.Header.Get("Subject") != "Your CollieDesk workspace Alpha will be deleted on 2027-11-01" || !strings.Contains(message.Header.Get("From"), "<noreply@mail.colliedesk.example>") {
+	if message.Header.Get("Subject") != "Your Colliedesk workspace Alpha will be deleted on 2027-11-01" || !strings.Contains(message.Header.Get("From"), "<noreply@mail.colliedesk.example>") {
 		t.Errorf("headers: subject %q from %q", message.Header.Get("Subject"), message.Header.Get("From"))
 	}
-	for _, want := range []string{"deleted on 2027-11-01 (UTC)", "https://app.colliedesk.example"} {
+	for _, want := range []string{"deleted on 2027-11-01 (UTC)", "https://app.colliedesk.example", "export all your data from Colliedesk (Settings, or GET /api/v1/export) before 2027-11-01"} {
 		if !strings.Contains(string(body), want) {
 			t.Errorf("notice lacks %q:\n%s", want, body)
 		}
@@ -417,26 +425,221 @@ func TestComplimentaryGrantKeepsTheWorkspaceAndRevokingStartsALock(t *testing.T)
 	}
 }
 
-func TestFailedBlobDeleteKeepsTheWorkspaceAndTheNextRunFinishes(t *testing.T) {
+func (e *env) failDeletes(t *testing.T, deferred bool) {
+	t.Helper()
+	timing := ""
+	if deferred {
+		timing = "DEFERRABLE INITIALLY DEFERRED"
+	}
+	e.exec(t, `CREATE FUNCTION refuse_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'delete refused'; END $$`)
+	e.exec(t, `CREATE CONSTRAINT TRIGGER refuse_delete AFTER DELETE ON workspaces `+timing+` FOR EACH ROW EXECUTE FUNCTION refuse_delete()`)
+}
+
+func TestFailedDatabaseDeleteBringsTheFilesBack(t *testing.T) {
+	for _, deferred := range []bool{false, true} {
+		t.Run(fmt.Sprint("at commit: ", deferred), func(t *testing.T) {
+			e := newEnv(t)
+			a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
+			e.run(t, "2027-10-02T00:00:00Z")
+			e.failDeletes(t, deferred)
+			e.now = at("2027-11-01T00:00:00Z")
+			if _, err := e.service.Run(context.Background()); err == nil {
+				t.Fatal("run must report the failed delete")
+			}
+			if !e.exists(t, a.ID) || len(e.rows(t, a.ID)) == 0 {
+				t.Fatal("the workspace row must stay")
+			}
+			for _, key := range a.Keys {
+				if !e.blobExists(key) {
+					t.Fatalf("blob %s was lost although the row stayed", key)
+				}
+			}
+			// A customer who pays now still has every file.
+			e.pay(t, a.ID, "sub_1", "active", nil)
+			e.exec(t, `DROP TRIGGER refuse_delete ON workspaces`)
+			if got := e.run(t, "2027-11-01T01:00:00Z"); got.Deleted != 0 || got.Reset != 1 || !e.blobExists(a.Keys[0]) {
+				t.Fatalf("after paying: %+v", got)
+			}
+		})
+	}
+}
+
+func TestDeletedFilesWaitThirtyDaysInTheTrash(t *testing.T) {
 	e := newEnv(t)
 	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
 	e.run(t, "2027-10-02T00:00:00Z")
-	e.disk.broken = true
-	e.now = at("2027-11-01T00:00:00Z")
-	if _, err := e.service.Run(context.Background()); err == nil {
-		t.Fatal("run must report the failed blob delete")
-	}
-	if !e.exists(t, a.ID) || len(e.rows(t, a.ID)) == 0 {
-		t.Fatal("the workspace row must stay while its blobs are not all gone")
-	}
-	e.disk.broken = false
-	if got := e.run(t, "2027-11-01T01:00:00Z"); got.Deleted != 1 || e.exists(t, a.ID) {
-		t.Fatalf("resume: %+v", got)
+	e.run(t, "2027-11-01T00:00:00Z")
+	trashed := filepath.Join(e.root, ".trash", a.ID+"-1825027200") // 2027-11-01T00:00:00Z
+	if _, err := os.Stat(trashed); err != nil {
+		t.Fatalf("files not in the trash: %v", err)
 	}
 	for _, key := range a.Keys {
 		if e.blobExists(key) {
-			t.Fatalf("blob %s survived the resumed delete", key)
+			t.Fatalf("%s still served from its old place", key)
 		}
+	}
+	e.run(t, "2027-12-01T00:00:00Z") // 30 days: still kept
+	if _, err := os.Stat(trashed); err != nil {
+		t.Fatalf("trash purged after exactly 30 days: %v", err)
+	}
+	e.run(t, "2027-12-01T00:00:01Z")
+	if _, err := os.Stat(trashed); !os.IsNotExist(err) {
+		t.Fatalf("trash survived 30 days: %v", err)
+	}
+}
+
+func TestBackdatedTrialEndGivesAFullTwelveMonthsFromTheChange(t *testing.T) {
+	e := newEnv(t)
+	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
+	// An operator ends the trial "in 2020" on 2027-01-01.
+	if _, err := e.store.SetTrialEnd(context.Background(), a.ID, at("2020-01-01T00:00:00Z"), "ops", at("2027-01-01T00:00:00Z")); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.run(t, "2027-02-01T00:00:00Z"); got != (retention.Result{}) || e.mailer.count() != 0 {
+		t.Fatalf("a backdated trial end made the workspace due: %+v", got)
+	}
+	if got := e.run(t, "2027-12-02T00:00:00Z"); got.Noticed != 1 {
+		t.Fatalf("notice is due 30 days before 2028-01-01: %+v", got)
+	}
+	if got := e.run(t, "2028-01-01T00:00:00Z"); got.Deleted != 1 || e.exists(t, a.ID) {
+		t.Fatalf("deletion twelve months after the change: %+v", got)
+	}
+}
+
+func TestNothingLocksBeforeTheFeatureRelease(t *testing.T) {
+	e := newEnv(t)
+	e.workspace(t, "Alpha", "2025-01-01T00:00:00Z", "ann@alpha.example")
+	if got := e.run(t, "2027-09-15T23:59:59Z"); got != (retention.Result{}) {
+		t.Fatalf("locked since 2025 but the feature shipped 2026-10-16: %+v", got)
+	}
+	if got := e.run(t, "2027-09-16T00:00:00Z"); got.Noticed != 1 {
+		t.Fatalf("notice is due 30 days before 2027-10-16: %+v", got)
+	}
+}
+
+func TestDeletionIsOffUntilSwitchedOn(t *testing.T) {
+	e := newEnv(t)
+	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
+	e.service = e.serviceWith(func(c *retention.Config) { c.DeleteEnabled = false })
+	e.run(t, "2027-10-02T00:00:00Z")
+	if got := e.run(t, "2027-11-02T00:00:00Z"); got.Deleted != 0 || got.Held != 1 || !e.exists(t, a.ID) || !e.blobExists(a.Keys[0]) {
+		t.Fatalf("deletion switch off: %+v", got)
+	}
+	e.service = e.serviceWith(nil)
+	if got := e.run(t, "2027-11-02T01:00:00Z"); got.Deleted != 1 {
+		t.Fatalf("switched on: %+v", got)
+	}
+}
+
+func TestDailyDeletionCap(t *testing.T) {
+	e := newEnv(t)
+	var ids []string
+	for _, name := range []string{"One", "Two", "Three"} {
+		ids = append(ids, e.workspace(t, name, "2026-11-01T00:00:00Z", strings.ToLower(name)+"@x.example").ID)
+	}
+	e.service = e.serviceWith(func(c *retention.Config) { c.MaxDeletionsPerDay = 2 })
+	e.run(t, "2027-10-02T00:00:00Z")
+	if got := e.run(t, "2027-11-01T00:00:00Z"); got.Deleted != 2 || got.Held != 1 {
+		t.Fatalf("cap of 2: %+v", got)
+	}
+	if got := e.run(t, "2027-11-01T23:00:00Z"); got.Deleted != 0 || got.Held != 1 {
+		t.Fatalf("same day: %+v", got)
+	}
+	if got := e.run(t, "2027-11-02T00:00:01Z"); got.Deleted != 1 {
+		t.Fatalf("next day: %+v", got)
+	}
+	e.workspace(t, "Four", "2026-11-02T00:00:00Z", "four@x.example")
+	e.service = e.serviceWith(func(c *retention.Config) { c.MaxDeletionsPerDay = 0 })
+	e.run(t, "2027-10-03T00:00:00Z")
+	if got := e.run(t, "2028-06-01T00:00:00Z"); got.Deleted != 0 || got.Held != 1 {
+		t.Fatalf("cap of 0 must delete nothing: %+v", got)
+	}
+}
+
+func TestPolarIsAskedBeforeEveryDeletion(t *testing.T) {
+	e := newEnv(t)
+	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
+	e.run(t, "2027-10-02T00:00:00Z")
+	e.polar.paid[a.ID] = true
+	e.now = at("2027-11-01T00:00:00Z")
+	got, err := e.service.Run(context.Background())
+	if err == nil || got.Deleted != 0 || !e.exists(t, a.ID) || !e.blobExists(a.Keys[0]) {
+		t.Fatalf("Polar says the workspace pays: %+v err %v; want it kept and an error logged", got, err)
+	}
+	e.polar.paid[a.ID], e.polar.err = false, errors.New("polar down")
+	if got, err := e.service.Run(context.Background()); err == nil || got.Deleted != 0 || !e.exists(t, a.ID) {
+		t.Fatalf("Polar error must hold the deletion: %+v err %v", got, err)
+	}
+	e.polar.err = nil
+	if got := e.run(t, "2027-11-01T02:00:00Z"); got.Deleted != 1 || len(e.polar.asks) == 0 || e.polar.asks[0] != a.ID {
+		t.Fatalf("asks %v result %+v; want Polar asked by workspace id, then deleted", e.polar.asks, got)
+	}
+}
+
+func TestRunRefusesWhenTheApplicationAndDatabaseClocksDisagree(t *testing.T) {
+	e := newEnv(t)
+	e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
+	skewed := e.serviceWith(func(c *retention.Config) {
+		c.Now = nil
+		c.SystemNow = func() time.Time { return time.Now().Add(6 * time.Minute) }
+	})
+	if _, err := skewed.Run(context.Background()); !errors.Is(err, retention.ErrClockSkew) {
+		t.Fatalf("Run with a 6 minute skew: %v, want ErrClockSkew", err)
+	}
+	if _, err := skewed.Plan(context.Background()); !errors.Is(err, retention.ErrClockSkew) {
+		t.Fatalf("Plan with a skew: %v, want ErrClockSkew", err)
+	}
+	healthy := e.serviceWith(func(c *retention.Config) { c.Now = nil })
+	if _, err := healthy.Run(context.Background()); err != nil {
+		t.Fatalf("Run with matching clocks: %v", err)
+	}
+}
+
+func TestPartialMailFailureDoesNotResendToAdminsAlreadyNotified(t *testing.T) {
+	e := newEnv(t)
+	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example", "bob@alpha.example")
+	e.mailer.fail = func(to string) error {
+		if to == "bob@alpha.example" {
+			return errors.New("greylisted")
+		}
+		return nil
+	}
+	e.now = at("2027-10-02T00:00:00Z")
+	if _, err := e.service.Run(context.Background()); err == nil {
+		t.Fatal("the transient failure must be reported")
+	}
+	if e.noticeSentAt(t, a.ID) != nil {
+		t.Fatal("the 30 day clock must not start until every admin is notified")
+	}
+	e.mailer.fail = nil
+	if got := e.run(t, "2027-10-02T01:00:00Z"); got.Noticed != 1 {
+		t.Fatalf("second pass: %+v", got)
+	}
+	counts := map[string]int{}
+	for _, sent := range e.mailer.sent {
+		counts[sent.To]++
+	}
+	if counts["ann@alpha.example"] != 1 || counts["bob@alpha.example"] != 1 {
+		t.Fatalf("mails per admin = %v, want one each", counts)
+	}
+	if sent := e.noticeSentAt(t, a.ID); sent == nil || !sent.Equal(at("2027-10-02T01:00:00Z")) {
+		t.Fatalf("notice_sent_at = %v, want the time the last admin was reached", sent)
+	}
+}
+
+func TestPayingWorkspacesAreNotCandidates(t *testing.T) {
+	e := newEnv(t)
+	paying := e.workspace(t, "Paying", "2026-11-01T00:00:00Z", "p@x.example")
+	comp := e.workspace(t, "Comp", "2026-11-01T00:00:00Z", "c@x.example")
+	locked := e.workspace(t, "Locked", "2026-11-01T00:00:00Z", "l@x.example")
+	e.pay(t, paying.ID, "sub_1", "active", nil)
+	if _, err := e.store.GrantCompPlan(context.Background(), comp.ID, domain.PlanTeam, "ops", nil, at("2027-01-01T00:00:00Z")); err != nil {
+		t.Fatal(err)
+	}
+	e.now = at("2028-06-01T00:00:00Z")
+	ids, err := e.service.Candidates(context.Background())
+	if err != nil || len(ids) != 1 || ids[0] != locked.ID {
+		t.Fatalf("Candidates = %v, %v; want only the locked workspace %s", ids, err, locked.ID)
 	}
 }
 

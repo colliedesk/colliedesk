@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
@@ -27,6 +28,8 @@ func TestLockedSinceIsTheLatestEndOfAnyAccess(t *testing.T) {
 			{Plan: "team", Status: "canceled", CurrentPeriodEnd: &periodEnd}}, "2027-06-01T00:00:00Z", "2027-03-01T00:00:00Z"},
 		{"still entitled", []domain.Subscription{{Plan: "team", Status: "active"}}, "2027-06-01T00:00:00Z", ""},
 		{"unpaid counts from its last change", []domain.Subscription{{Plan: "team", Status: "unpaid", ModifiedAt: instant("2027-04-04T00:00:00Z")}}, "2027-06-01T00:00:00Z", "2027-04-04T00:00:00Z"},
+		{"an access end a few seconds ahead of our clock counts as now", []domain.Subscription{{Plan: "team", Status: "unpaid", ModifiedAt: instant("2027-06-01T00:00:02Z")}}, "2027-06-01T00:00:00Z", "2027-06-01T00:00:00Z"},
+		{"a scheduled end in the future counts as now", []domain.Subscription{{Plan: "team", Status: "unpaid", EndedAt: ptr(instant("2027-07-01T00:00:00Z"))}}, "2027-06-01T00:00:00Z", "2027-06-01T00:00:00Z"},
 		{"an abandoned checkout never had access", []domain.Subscription{{Plan: "team", Status: "incomplete", ModifiedAt: instant("2027-04-04T00:00:00Z")}}, "2027-06-01T00:00:00Z", "2026-11-01T00:00:00Z"},
 	}
 	for _, c := range cases {
@@ -49,5 +52,28 @@ func TestRetentionDatesFollowTheCalendarYear(t *testing.T) {
 	notice, deletion := domain.RetentionDates(instant("2026-11-01T00:00:00Z"))
 	if !notice.Equal(instant("2027-10-02T00:00:00Z")) || !deletion.Equal(instant("2027-11-01T00:00:00Z")) {
 		t.Fatalf("notice %s deletion %s, want 2027-10-02 and 2027-11-01", notice, deletion)
+	}
+}
+
+func ptr(t time.Time) *time.Time { return &t }
+
+func TestRetentionFloorNeverPrecedesTheFeatureRelease(t *testing.T) {
+	if got := domain.RetentionReleasedAt; !got.Equal(instant("2026-10-16T00:00:00Z")) {
+		t.Fatalf("RetentionReleasedAt = %s", got)
+	}
+}
+
+func TestRetentionLockStartHonoursTheFloors(t *testing.T) {
+	cases := []struct{ name, locked, change, want string }{
+		{"normal lock after the release", "2026-11-01T00:00:00Z", "2026-10-20T00:00:00Z", "2026-11-01T00:00:00Z"},
+		{"trial end backdated to 2020 by an operator on 2027-01-05", "2020-01-01T00:00:00Z", "2027-01-05T10:00:00Z", "2027-01-05T10:00:00Z"},
+		{"old trial end, no change recorded", "2025-01-01T00:00:00Z", "0001-01-01T00:00:00Z", "2026-10-16T00:00:00Z"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := domain.RetentionLockStart(instant(c.locked), instant(c.change)); !got.Equal(instant(c.want)) {
+				t.Fatalf("RetentionLockStart = %s, want %s", got, c.want)
+			}
+		})
 	}
 }

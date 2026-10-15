@@ -14,6 +14,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -196,13 +198,57 @@ func received(size, expected int64) string {
 	return fmt.Sprint(size)
 }
 
-// DeleteWorkspace removes every object of the workspace, including files no row points to.
-func (d *LocalDisk) DeleteWorkspace(_ context.Context, workspaceID string) error {
+const trashDir = ".trash"
+
+// Trash moves every file of the workspace to <root>/.trash/<workspace id>-<unix time> in one
+// rename on the same filesystem, so it is atomic. The returned func moves them back; call it when
+// the deletion it belongs to did not commit. A workspace without files is a no-op.
+func (d *LocalDisk) Trash(_ context.Context, workspaceID string, now time.Time) (func() error, error) {
 	if !workspacePattern.MatchString(workspaceID) {
-		return errors.New("delete workspace attachments: invalid workspace id")
+		return nil, errors.New("trash workspace attachments: invalid workspace id")
 	}
-	if err := os.RemoveAll(filepath.Join(d.root, workspaceID)); err != nil {
-		return fmt.Errorf("delete workspace attachments: %w", err)
+	source := filepath.Join(d.root, workspaceID)
+	if _, err := os.Stat(source); errors.Is(err, os.ErrNotExist) {
+		return func() error { return nil }, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("trash workspace attachments: %w", err)
 	}
-	return nil
+	if err := os.MkdirAll(filepath.Join(d.root, trashDir), 0o750); err != nil {
+		return nil, fmt.Errorf("trash workspace attachments: %w", err)
+	}
+	target := filepath.Join(d.root, trashDir, fmt.Sprintf("%s-%d", workspaceID, now.Unix()))
+	if err := os.Rename(source, target); err != nil {
+		return nil, fmt.Errorf("trash workspace attachments: %w", err)
+	}
+	return func() error {
+		if err := os.Rename(target, source); err != nil {
+			return fmt.Errorf("restore workspace attachments from %s: %w", target, err)
+		}
+		return nil
+	}, nil
+}
+
+// PurgeTrash removes the trash entries made before the cutoff and returns how many.
+func (d *LocalDisk) PurgeTrash(_ context.Context, before time.Time) (int, error) {
+	entries, err := os.ReadDir(filepath.Join(d.root, trashDir))
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("purge trash: %w", err)
+	}
+	purged := 0
+	for _, entry := range entries {
+		name := entry.Name()
+		cut := strings.LastIndex(name, "-")
+		unix, parseErr := strconv.ParseInt(name[cut+1:], 10, 64)
+		if cut < 0 || parseErr != nil || time.Unix(unix, 0).After(before) || time.Unix(unix, 0).Equal(before) {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(d.root, trashDir, name)); err != nil {
+			return purged, fmt.Errorf("purge trash: %w", err)
+		}
+		purged++
+	}
+	return purged, nil
 }

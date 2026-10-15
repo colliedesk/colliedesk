@@ -84,7 +84,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		go worker.Run(ctx, 5*time.Second)
 	}
 	if billing.Enabled() {
-		retentionService, err := newRetentionService(db, origin, nil)
+		retentionService, _, err := newRetentionService(db, origin, billing)
 		if err != nil {
 			return err
 		}

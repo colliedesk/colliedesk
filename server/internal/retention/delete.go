@@ -2,22 +2,49 @@ package retention
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
 
-// workspaceRemover is implemented by storage that keeps one directory per workspace, so the delete
-// also clears files no row points to.
-type workspaceRemover interface {
-	DeleteWorkspace(ctx context.Context, workspaceID string) error
-}
-
-// remove deletes the attachment files of the workspace, then the workspace row, which cascades to
-// every table that belongs to it. It runs in one transaction under the workspace row lock: when a
-// file cannot be deleted the transaction rolls back, the row stays and the next run starts over
-// (deleting a file twice is not an error). The decision was just made under the same lock.
-func (s *Service) remove(ctx context.Context, tx pgx.Tx, st state) error {
+// remove deletes one workspace that Decide marked for deletion, under the workspace row lock. It
+// holds the deletion back, without error, when deletion is switched off or the daily cap is
+// reached; with an error when the billing provider cannot confirm that nobody pays.
+//
+// Order matters: the files are moved to the trash (one atomic rename), then the row is deleted and
+// the deletion recorded. The returned undo moves the files back; the caller runs it when this
+// transaction does not commit. The trash is purged after TrashWindow, so a mistake stays
+// recoverable for that long.
+func (s *Service) remove(ctx context.Context, tx pgx.Tx, st state, now time.Time) (done Action, held bool, undo func() error, err error) {
+	if !s.config.DeleteEnabled {
+		s.config.Logger.Warn("retention would delete this workspace; deletion is switched off (RETENTION_DELETE)", "workspace_id", st.WorkspaceID, "slug", st.Slug)
+		return ActionNone, true, nil, nil
+	}
+	// One deletion decision at a time, so the cap holds across workspaces.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('retention-delete',0))`); err != nil {
+		return ActionNone, false, nil, err
+	}
+	var today int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM retention_deletions WHERE deleted_at > $1`, now.Add(-24*time.Hour)).Scan(&today); err != nil {
+		return ActionNone, false, nil, err
+	}
+	if today >= s.config.MaxDeletionsPerDay {
+		s.config.Logger.Error("retention deletion cap reached; workspace kept", "workspace_id", st.WorkspaceID, "slug", st.Slug,
+			"deleted_last_24h", today, "max_per_day", s.config.MaxDeletionsPerDay)
+		return ActionNone, true, nil, nil
+	}
+	if s.config.Polar == nil {
+		return ActionNone, true, nil, errors.New("no billing provider configured to confirm the workspace pays nothing; workspace kept")
+	}
+	paying, err := s.config.Polar.HasPaidSubscription(ctx, st.WorkspaceID, now)
+	switch {
+	case err != nil:
+		return ActionNone, true, nil, fmt.Errorf("billing provider check failed; workspace kept: %w", err)
+	case paying:
+		return ActionNone, true, nil, errors.New("the billing provider reports a paid subscription that this database does not know; workspace kept")
+	}
 	var conversations, messages, files, agents int
 	var bytes int64
 	if err := tx.QueryRow(ctx, `SELECT
@@ -27,31 +54,19 @@ func (s *Service) remove(ctx context.Context, tx pgx.Tx, st state) error {
 		(SELECT COALESCE(sum(size),0) FROM attachments WHERE workspace_id=$1),
 		(SELECT count(*) FROM agents WHERE workspace_id=$1)`, st.WorkspaceID).
 		Scan(&conversations, &messages, &files, &bytes, &agents); err != nil {
-		return err
+		return ActionNone, false, nil, err
 	}
-	rows, err := tx.Query(ctx, `SELECT DISTINCT storage_key FROM attachments WHERE workspace_id=$1`, st.WorkspaceID)
-	if err != nil {
-		return err
-	}
-	keys, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
-		return err
-	}
-	for _, key := range keys {
-		if err := s.config.Storage.Delete(ctx, key); err != nil {
-			return fmt.Errorf("delete attachment file: %w", err)
-		}
-	}
-	if remover, ok := s.config.Storage.(workspaceRemover); ok {
-		if err := remover.DeleteWorkspace(ctx, st.WorkspaceID); err != nil {
-			return err
-		}
+	if undo, err = s.config.Storage.Trash(ctx, st.WorkspaceID, now); err != nil {
+		return ActionNone, false, nil, err
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM workspaces WHERE id=$1`, st.WorkspaceID); err != nil {
-		return err
+		return ActionNone, false, undo, err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO retention_deletions(deleted_workspace_id,slug,deleted_at) VALUES($1,$2,$3)`, st.WorkspaceID, st.Slug, now); err != nil {
+		return ActionNone, false, undo, err
 	}
 	s.config.Logger.Info("workspace deleted after 12 months locked", "workspace_id", st.WorkspaceID, "slug", st.Slug,
 		"locked_since", st.LockedSince.Format(dateLayout), "conversations", conversations, "messages", messages,
 		"attachments", files, "attachment_bytes", bytes, "agents", agents)
-	return nil
+	return ActionDelete, false, undo, nil
 }

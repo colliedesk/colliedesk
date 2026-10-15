@@ -159,3 +159,79 @@ func countFiles(t *testing.T, root string) int {
 	}
 	return count
 }
+
+func TestTrashMovesAWorkspaceAsideAndCanBeUndone(t *testing.T) {
+	root := t.TempDir()
+	disk, err := attachments.NewLocalDisk(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const workspace = "11111111-2222-3333-4444-555555555555"
+	other := "66666666-2222-3333-4444-555555555555"
+	object, err := disk.Put(context.Background(), workspace, strings.NewReader("bytes"), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherObject, err := disk.Put(context.Background(), other, strings.NewReader("keep"), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2027, 11, 1, 0, 0, 0, 0, time.UTC)
+	undo, err := disk.Trash(context.Background(), workspace, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := disk.Open(context.Background(), object.Key); err == nil {
+		t.Fatal("file still readable at its old key after Trash")
+	}
+	if _, err := os.Stat(filepath.Join(root, ".trash", workspace+"-1825027200")); err != nil {
+		t.Fatalf("trash entry missing: %v", err)
+	}
+	if _, err := disk.Open(context.Background(), otherObject.Key); err != nil {
+		t.Fatalf("another workspace was touched: %v", err)
+	}
+	if err := undo(); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := disk.Open(context.Background(), object.Key)
+	if err != nil {
+		t.Fatalf("file not back after undo: %v", err)
+	}
+	reader.Close()
+}
+
+func TestTrashOfAWorkspaceWithoutFilesIsANoOp(t *testing.T) {
+	disk, err := attachments.NewLocalDisk(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	undo, err := disk.Trash(context.Background(), "11111111-2222-3333-4444-555555555555", time.Now())
+	if err != nil || undo() != nil {
+		t.Fatalf("trash/undo of nothing: %v", err)
+	}
+}
+
+func TestPurgeTrashRemovesOnlyEntriesOlderThanTheCutoff(t *testing.T) {
+	root := t.TempDir()
+	disk, err := attachments.NewLocalDisk(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, workspace := range []string{"11111111-2222-3333-4444-555555555555", "66666666-2222-3333-4444-555555555555"} {
+		if _, err := disk.Put(context.Background(), workspace, strings.NewReader("x"), -1); err != nil {
+			t.Fatal(err)
+		}
+		// Trashed on 2027-11-01 and 2027-11-20.
+		if _, err := disk.Trash(context.Background(), workspace, time.Date(2027, 11, 1+19*index, 0, 0, 0, 0, time.UTC)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	purged, err := disk.PurgeTrash(context.Background(), time.Date(2027, 11, 10, 0, 0, 0, 0, time.UTC))
+	if err != nil || purged != 1 {
+		t.Fatalf("PurgeTrash = %d, %v; want 1 (the 11-01 entry only)", purged, err)
+	}
+	entries, _ := os.ReadDir(filepath.Join(root, ".trash"))
+	if len(entries) != 1 || !strings.HasPrefix(entries[0].Name(), "66666666") {
+		t.Fatalf("remaining trash: %v", entries)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"io"
 	"net/http"
 	"net/url"
@@ -117,6 +118,30 @@ func (c *Client) CreatePortalSession(ctx context.Context, externalCustomerID, re
 		return "", errors.New("create polar portal session: reply has no customer_portal_url")
 	}
 	return reply.URL, nil
+}
+
+// HasPaidSubscription reports whether Polar knows a subscription of the customer with this
+// external id (the workspace id) that grants a paid plan at now, by the same rule as the webhook
+// mirror. It reads the first 100 subscriptions, far more than a workspace holds.
+func (c *Client) HasPaidSubscription(ctx context.Context, externalID string, now time.Time) (bool, error) {
+	var reply struct {
+		Items []struct {
+			Status           string     `json:"status"`
+			CurrentPeriodEnd *time.Time `json:"current_period_end"`
+			EndedAt          *time.Time `json:"ended_at"`
+		} `json:"items"`
+	}
+	path := "/v1/subscriptions/?limit=100&external_customer_id=" + url.QueryEscape(externalID)
+	if err := c.do(ctx, http.MethodGet, path, nil, &reply); err != nil {
+		return false, fmt.Errorf("list polar subscriptions: %w", err)
+	}
+	for _, item := range reply.Items {
+		paid := domain.Subscription{Status: item.Status, CurrentPeriodEnd: item.CurrentPeriodEnd, EndedAt: item.EndedAt}
+		if paid.Entitled(now) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body, target any) error {

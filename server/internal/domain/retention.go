@@ -9,6 +9,11 @@ const (
 	RetentionNoticeLead = 30 * 24 * time.Hour
 )
 
+// RetentionReleasedAt is when deletion of locked workspaces shipped. No lock counts as older than
+// this, so data that existed before the release is never deleted earlier than a year after it,
+// whatever dates it carries.
+var RetentionReleasedAt = time.Date(2026, time.October, 16, 0, 0, 0, 0, time.UTC)
+
 // LockedSince returns when the workspace lost access: the latest end among its trial and every
 // subscription or complimentary grant that ever gave access. It reports false while the workspace
 // has access (NewAccess is not locked). An abandoned checkout (incomplete) never gave access, so it
@@ -22,7 +27,13 @@ func LockedSince(subscriptions []Subscription, trialEndsAt, now time.Time) (time
 		if subscription.Status == "incomplete" || subscription.Status == "incomplete_expired" {
 			continue
 		}
-		if end := subscription.accessEnd(); end.After(since) && !end.After(now) {
+		// An end ahead of our clock (Polar's clock, or one scheduled) means access is lost now, not
+		// at some older date: clamp it, never skip it.
+		end := subscription.accessEnd()
+		if end.After(now) {
+			end = now
+		}
+		if end.After(since) {
 			since = UTC(end)
 		}
 	}
@@ -41,6 +52,19 @@ func (s Subscription) accessEnd() time.Time {
 	default:
 		return s.ModifiedAt
 	}
+}
+
+// RetentionLockStart is the date the retention clock counts from: the lock start, but never before
+// the release of the feature nor the last operator change of the trial end, so a trial end moved
+// into the past (or backfilled) cannot make a workspace due for deletion at once.
+func RetentionLockStart(lockedSince, lastTrialChange time.Time) time.Time {
+	start := UTC(lockedSince)
+	for _, floor := range []time.Time{RetentionReleasedAt, lastTrialChange} {
+		if floor.After(start) {
+			start = UTC(floor)
+		}
+	}
+	return start
 }
 
 // RetentionDates returns when the deletion notice is due and when the workspace may be deleted.
