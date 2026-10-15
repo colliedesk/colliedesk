@@ -143,7 +143,7 @@ func TestManifestListsCountsAndEveryAttachmentFile(t *testing.T) {
 	if manifest.Format != "colliedesk-export" || manifest.Version != 1 || manifest.ExportedAt != "2026-10-15T06:00:00Z" {
 		t.Fatalf("manifest header = %+v", manifest)
 	}
-	want := map[string]int{"agents": 0, "contacts": 1, "tags": 0, "conversations": 1, "messages": 1, "attachments": 1, "time_entries": 0}
+	want := map[string]int{"agents": 0, "contacts": 1, "tags": 0, "saved_replies": 0, "conversations": 1, "messages": 1, "attachments": 1, "time_entries": 0}
 	for key, count := range want {
 		if manifest.Counts[key] != count {
 			t.Errorf("counts[%s] = %d, want %d", key, manifest.Counts[key], count)

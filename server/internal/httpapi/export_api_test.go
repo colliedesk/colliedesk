@@ -67,6 +67,8 @@ func newExportFixture(t *testing.T) exportFixture {
 	if response := request(t, api, http.MethodPut, "/api/v1/conversations/"+conversations[0]+"/tags/"+tag, nil, admin, nil); response.Code != http.StatusOK {
 		t.Fatalf("tag conversation status=%d", response.Code)
 	}
+	create(t, api, admin, "/api/v1/saved-replies", map[string]any{"title": "Refund steps", "body": "Hi {{customer.name}}, we refunded you."})
+	create(t, api, admin, "/api/v1/saved-replies", map[string]any{"title": "Closing", "body": "Thanks."})
 	workspace := workspaceID(t, api, admin)
 	attachmentID := seedAttachment(t, pool, storage, admin, api, firstMessage, "hello.txt", "hello")
 	seedImportDetails(t, pool, workspace, conversations[0], firstMessage)
@@ -77,6 +79,7 @@ func newExportFixture(t *testing.T) exportFixture {
 	otherConversation := create(t, api, other, "/api/v1/conversations", map[string]any{"contact_id": otherContact, "subject": "Rival secret plans"})
 	otherMessage := create(t, api, other, "/api/v1/conversations/"+otherConversation+"/messages", map[string]any{"kind": "note", "body": "rival-only body"})
 	seedAttachment(t, pool, storage, other, api, otherMessage, "rival.txt", "rival bytes")
+	create(t, api, other, "/api/v1/saved-replies", map[string]any{"title": "Rival template", "body": "rival-only reply text"})
 	return exportFixture{api: api, pool: pool, storage: storage, adminToken: admin, agentToken: agent.Token,
 		workspaceID: workspace, attachmentID: attachmentID, otherToken: other, otherWorkspace: workspaceID(t, api, other), inboundSecret: secret}
 }
@@ -150,7 +153,7 @@ func TestExportStreamsTheWholeWorkspaceAsZip(t *testing.T) {
 	if manifest.Format != "colliedesk-export" || manifest.Version != 1 || manifest.Workspace["slug"] != "export-acme" {
 		t.Fatalf("manifest header = %+v", manifest)
 	}
-	for key, want := range map[string]int{"contacts": 2, "conversations": 3, "messages": 5, "tags": 1, "attachments": 1, "agents": 2, "time_entries": 1} {
+	for key, want := range map[string]int{"contacts": 2, "conversations": 3, "messages": 5, "tags": 1, "saved_replies": 2, "attachments": 1, "agents": 2, "time_entries": 1} {
 		if manifest.Counts[key] != want {
 			t.Errorf("counts[%s]=%d, want %d", key, manifest.Counts[key], want)
 		}
@@ -168,6 +171,15 @@ func TestExportStreamsTheWholeWorkspaceAsZip(t *testing.T) {
 	}
 	if got := len(ndjsonLines(t, entries["tags.ndjson"])); got != 1 {
 		t.Errorf("tags.ndjson has %d lines", got)
+	}
+	replies := ndjsonLines(t, entries["saved-replies.ndjson"])
+	if len(replies) != 2 {
+		t.Fatalf("saved-replies.ndjson has %d lines", len(replies))
+	}
+	for _, line := range replies {
+		if line["title"] == "Refund steps" && (line["body"] != "Hi {{customer.name}}, we refunded you." || line["created_at"] == nil || line["updated_at"] == nil || line["id"] == nil || len(line) != 6) {
+			t.Errorf("saved reply record = %v", line)
+		}
 	}
 	if got := len(ndjsonLines(t, entries["agents.ndjson"])); got != 2 {
 		t.Errorf("agents.ndjson has %d lines", got)
@@ -209,7 +221,7 @@ func TestExportNeverContainsAnotherWorkspace(t *testing.T) {
 		all.WriteString(name + "\n")
 		all.Write(content)
 	}
-	for _, foreign := range []string{"b-only@example.com", "Bea Only", "Rival secret plans", "rival-only body", "rival.txt", "rival bytes", f.otherWorkspace, "export-rival", "admin@export-rival.example.com"} {
+	for _, foreign := range []string{"b-only@example.com", "Bea Only", "Rival secret plans", "rival-only body", "rival.txt", "rival bytes", "Rival template", "rival-only reply text", f.otherWorkspace, "export-rival", "admin@export-rival.example.com"} {
 		if strings.Contains(all.String(), foreign) {
 			t.Errorf("workspace A export contains %q of workspace B", foreign)
 		}
