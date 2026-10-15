@@ -13,7 +13,21 @@ test('explains passwordless access without rendering a login form', () => {
 test('shows cloud sign-in only when public config enables it', () => {
 	render(<RedeemPage token="" cloudEnabled cloudSignIn={<button type="button">Sign in</button>} />);
 	expect(screen.getByRole('button', { name: /^sign in$/i })).toBeInTheDocument();
-	expect(screen.getByText(/one-time link instead/i)).toBeInTheDocument();
+	expect(screen.getByText(/one-time link from your admin/i)).toBeInTheDocument();
+});
+
+test('cloud sign-in is titled as a sign-in with an emailed code, not as a link to open', () => {
+	render(<RedeemPage token="" cloudEnabled cloudSignIn={<div>form</div>} />);
+	expect(screen.getByRole('heading', { level: 1, name: 'Sign in to Colliedesk' })).toBeInTheDocument();
+	expect(screen.getByText('Enter your work email and we will send you a one-time code.')).toBeInTheDocument();
+	expect(screen.getByText('Got a one-time link from your admin? Open it in this browser instead.')).toBeInTheDocument();
+	expect(screen.queryByText(/open your secure link/i)).not.toBeInTheDocument();
+	expect(screen.queryByText(/one-time links instead of passwords/i)).not.toBeInTheDocument();
+});
+
+test('opening a link keeps the link wording even when cloud sign-in is on', () => {
+	render(<RedeemPage token="abc" cloudEnabled cloudSignIn={<div>form</div>} />);
+	expect(screen.getByRole('heading', { level: 1, name: /open your secure link/i })).toBeInTheDocument();
 });
 
 test('uses a cloud-specific failure message', () => {
