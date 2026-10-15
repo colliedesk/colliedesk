@@ -4,9 +4,11 @@
 
 Do not open a public issue for a security problem.
 
-1. Go to the repository's **Security** tab.
-2. Select **Report a vulnerability**.
-3. Describe the problem, the affected version and the steps to reproduce it.
+1. Open https://github.com/colliedesk/colliedesk/security/advisories/new (the repository's
+   **Security** tab, **Report a vulnerability**).
+2. Describe the problem, the affected version and the steps to reproduce it.
+
+If you cannot use GitHub, email support@colliedesk.com with "Security" in the subject.
 
 The report stays private between you and the maintainers. We reply within 3 working days
 and keep you informed until a fix is released. We credit reporters in the advisory unless
