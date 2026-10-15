@@ -48,6 +48,7 @@ func newFixture(t *testing.T) fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	parsed.Platform = true // customer mail arrives through the platform forwarder
 	result, err := st.IngestEmail(ctx, workspace.ID, parsed, time.Now().UTC(), nil)
 	if err != nil || result.ConversationID == nil {
 		t.Fatalf("ingest: %+v %v", result, err)

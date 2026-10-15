@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
+import { OutboundRefusedError } from '../../api/outbound-error';
 import { ReplyComposer } from './reply-composer';
 
 test('N starts a private note and R goes back to a reply, both focusing the message body', () => {
@@ -62,4 +63,45 @@ test('a key that ends an input method composition is not a shortcut', () => {
   render(<ReplyComposer />);
   fireEvent.keyDown(document.body, { key: 'n', isComposing: true });
   expect(screen.getByRole('button', { name: 'Reply', pressed: true })).toBeInTheDocument();
+});
+
+test('a refused reply keeps the typed text and says how to continue', async () => {
+  const onSubmit = vi.fn().mockRejectedValue(new OutboundRefusedError('trial_outbound_restricted', 'server text'));
+  render(<ReplyComposer onSubmit={onSubmit} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Hello there' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  expect(await screen.findByRole('alert')).toHaveTextContent(/wrote to you first.*verify your sending domain.*choose a plan/i);
+  expect(body).toHaveValue('Hello there');
+});
+
+test('a reply over the daily cap says when to retry and keeps the text', async () => {
+  const onSubmit = vi.fn().mockRejectedValue(new OutboundRefusedError('trial_outbound_limit', 'cap', 5400));
+  render(<ReplyComposer onSubmit={onSubmit} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Hello again' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  expect(await screen.findByRole('alert')).toHaveTextContent(/200 replies in 24 hours.*try again in about 2 hours/i);
+  expect(body).toHaveValue('Hello again');
+});
+
+test('an unexpected failure also keeps the text', async () => {
+  render(<ReplyComposer onSubmit={vi.fn().mockRejectedValue(new Error('API 500'))} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Keep me' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  expect(await screen.findByRole('alert')).toHaveTextContent(/could not be sent/i);
+  expect(body).toHaveValue('Keep me');
+});
+
+test('the text clears and the reason goes away once a send succeeds', async () => {
+  const onSubmit = vi.fn().mockRejectedValueOnce(new Error('API 500')).mockResolvedValueOnce(undefined);
+  render(<ReplyComposer onSubmit={onSubmit} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Second try' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  await screen.findByRole('alert');
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  await waitFor(() => expect(body).toHaveValue(''));
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });

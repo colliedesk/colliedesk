@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
+import { OutboundRefusedError } from '../../api/outbound-error';
 import { InboxRoute } from './inbox-route';
 
 const api = vi.hoisted(() => ({
@@ -77,4 +78,23 @@ test('coming back to the inbox shows mail that arrived meanwhile, even within th
   first.unmount(); // the agent opens Settings, the customer's email arrives
   render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
   expect(await screen.findByRole('button', { name: /alpha conversation/i })).toBeInTheDocument();
+});
+
+test('a reply the trial refuses stays in the composer with the reason', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  api.createMessage.mockRejectedValue(new OutboundRefusedError('trial_outbound_restricted', 'server text'));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await screen.findByRole('button', { name: /alpha conversation/i });
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Please read this' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  expect(await screen.findByRole('alert')).toHaveTextContent(/verify your sending domain/i);
+  expect(body).toHaveValue('Please read this');
 });

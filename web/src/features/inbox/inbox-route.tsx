@@ -53,7 +53,7 @@ export function InboxRoute() {
     onFilters={(values) => { setFilters(values); setPage(1); }} onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
-    onMessage={(kind, body) => message.mutate({ kind, body })}
+    onMessage={(kind, body) => message.mutateAsync({ kind, body })}
     outboundNotice={outboundNotice} filtered={Object.values(filters).some(Boolean)} loading={conversations.isPending}
     failed={conversations.isError} onRetry={() => void conversations.refetch()}
     canManage={me.data?.agent?.role === 'admin'} onOpenSettings={() => void navigate({ to: '/settings' })}

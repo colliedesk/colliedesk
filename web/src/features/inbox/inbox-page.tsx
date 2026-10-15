@@ -18,7 +18,7 @@ interface InboxPageProps {
   timezone?: string;
   onSelect?: (id: string) => void;
   onFilters?: (filters: Record<string, string>) => void;
-  onMessage?: (kind: 'outgoing' | 'note', body: string) => void;
+  onMessage?: (kind: 'outgoing' | 'note', body: string) => void | Promise<unknown>;
   onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void;
   onAddTag?: (conversationId: string, tagId: string) => void;
   onRemoveTag?: (conversationId: string, tagId: string) => void;

@@ -71,3 +71,83 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 	}
 	return nil
 }
+
+// repliesInWindow counts the deliveries that use up the trial's daily cap: failed ones never left.
+const repliesInWindow = `SELECT count(*) FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND status <> 'failed'`
+
+// customerWroteFirst is true for a conversation that holds a message from the customer: an
+// imported one, or inbound mail that came through the platform forwarder and whose authentication
+// did not fail. Mail posted to a workspace's own inbound endpoint never counts: its admin writes the
+// whole message, Authentication-Results included. Without these rules a trial user could mail
+// themselves with a forged From and use the relay to write to the victim.
+// A "none" verdict passes for MVP because many small senders publish no DMARC; the daily cap bounds
+// that. The real hardening, when needed, is requiring an aligned dmarc=pass, which needs the parser
+// to record the DMARC result separately (today a bare spf=pass or dkim=pass of any domain is "pass").
+const customerWroteFirst = `SELECT EXISTS(SELECT 1 FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND kind='incoming'
+	AND (origin IS NOT NULL OR (email_meta->>'via'='platform' AND COALESCE(email_meta->>'authentication','none') <> 'fail')))`
+
+// onTrial reports whether the trial outbound rules apply to the workspace now: plan limits are on
+// and the plan in effect is the trial. Paid, locked and self-hosted workspaces are untouched.
+func (s *Store) onTrial(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (bool, error) {
+	if !s.limits {
+		return false, nil
+	}
+	access, err := workspaceAccess(ctx, tx, workspaceID, now)
+	if err != nil {
+		return false, err
+	}
+	return access.Plan == domain.PlanTrial, nil
+}
+
+// checkTrialOutbound refuses a new reply the trial does not allow with a *domain.TrialOutboundError:
+// first the customer-wrote-first rule, then the daily cap.
+func (s *Store) checkTrialOutbound(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, domainVerified bool) error {
+	now := s.now()
+	if trial, err := s.onTrial(ctx, tx, workspaceID, now); err != nil || !trial {
+		return err
+	}
+	if !domainVerified {
+		var wrote bool
+		if err := tx.QueryRow(ctx, customerWroteFirst, workspaceID, conversationID).Scan(&wrote); err != nil {
+			return fmt.Errorf("check first contact: %w", err)
+		}
+		if !wrote {
+			return &domain.TrialOutboundError{}
+		}
+	}
+	return s.checkTrialCap(ctx, tx, workspaceID, now)
+}
+
+// checkTrialCap refuses with a *domain.TrialOutboundError carrying RetryAfter when the workspace
+// already has TrialRepliesPerDay deliveries in the window. Both a new reply and the retry of a
+// failed one (which counts again once queued) pass through it. A workspace-wide advisory lock makes
+// two concurrent callers see each other's row before the cap is compared.
+func (s *Store) checkTrialCap(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) error {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "outbound-cap:"+workspaceID); err != nil {
+		return fmt.Errorf("lock outbound cap: %w", err)
+	}
+	windowStart := now.Add(-domain.TrialReplyWindow)
+	var sent int
+	if err := tx.QueryRow(ctx, repliesInWindow, workspaceID, windowStart).Scan(&sent); err != nil {
+		return fmt.Errorf("count recent replies: %w", err)
+	}
+	if sent < domain.TrialRepliesPerDay {
+		return nil
+	}
+	// The cap-th newest counted reply is the one whose leaving the window frees a slot.
+	var frees time.Time
+	if err := tx.QueryRow(ctx, `SELECT created_at FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND status <> 'failed'
+		ORDER BY created_at DESC OFFSET $3 LIMIT 1`, workspaceID, windowStart, domain.TrialRepliesPerDay-1).Scan(&frees); err != nil {
+		return fmt.Errorf("find next free slot: %w", err)
+	}
+	return &domain.TrialOutboundError{RetryAfter: frees.Add(domain.TrialReplyWindow).Sub(now)}
+}
+
+// repliesLast24h is the trial's cap usage as the admin sees it.
+func repliesLast24h(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (int, error) {
+	var sent int
+	if err := tx.QueryRow(ctx, repliesInWindow, workspaceID, now.Add(-domain.TrialReplyWindow)).Scan(&sent); err != nil {
+		return 0, fmt.Errorf("count recent replies: %w", err)
+	}
+	return sent, nil
+}

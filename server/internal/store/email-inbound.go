@@ -193,7 +193,7 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 		}
 	}
 
-	meta, err := json.Marshal(domain.IncomingEmail{From: in.FromAddress, Authentication: in.Authentication, Attachments: in.Attachments})
+	meta, err := json.Marshal(domain.IncomingEmail{From: in.FromAddress, Authentication: in.Authentication, Via: inboundVia(in), Attachments: in.Attachments})
 	if err != nil {
 		return result, fmt.Errorf("encode email metadata: %w", err)
 	}
@@ -219,4 +219,14 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 func dropped(result InboundResult, reason string) InboundResult {
 	result.Status, result.Reason = "dropped", &reason
 	return result
+}
+
+// inboundVia records which door a message came through: the platform forwarder or a workspace's own
+// inbound secret. Only the first proves a customer sent it, because a workspace admin writes
+// everything that arrives through the second, headers included.
+func inboundVia(in email.Inbound) string {
+	if in.Platform {
+		return domain.ViaPlatform
+	}
+	return domain.ViaWorkspace
 }
