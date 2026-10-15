@@ -38,7 +38,7 @@
   text-align: left; font-size: var(--fs-ui); font-weight: 400; white-space: normal;
 }
 .conversation-row:hover:not(:disabled) { background: var(--surface-2); border-color: var(--line); }
-.conversation-row[data-selected="true"] { background: var(--accent-soft); box-shadow: inset 2px 0 var(--accent); }
+.conversation-row[aria-current="true"] { background: var(--accent-soft); box-shadow: inset 2px 0 var(--accent); }
 .conversation-row:focus-visible { outline-offset: -2px; }
 .conversation-subject { overflow: hidden; color: var(--text-1); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .conversation-row time { color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
@@ -208,7 +208,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 
 /* Windows High Contrast drops backgrounds and shadows; keep selection visible with system colours. */
 @media (forced-colors: active) {
-  .conversation-row[data-selected="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
+  .conversation-row[aria-current="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
   .status-tabs label:has(input:checked), .segmented label:has(input:checked) { outline: 2px solid Highlight; }
   .tag-check:has(input:checked) { border: 2px solid Highlight; }
 }

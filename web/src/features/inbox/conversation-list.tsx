@@ -61,7 +61,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
         return (
           <Fragment key={item.id}>
           {startsGroup && <h2 className="group-label">{messages.dayGroups[group]}</h2>}
-          <button className="conversation-row" data-selected={item.id === selectedId} data-tip={full} onClick={() => onSelect?.(item.id)}>
+          <button className="conversation-row" aria-current={item.id === selectedId ? true : undefined} data-tip={full} onClick={() => onSelect?.(item.id)}>
             <span className="conversation-subject">{item.subject}</span>
             <time dateTime={item.updated_at}>
               <span aria-hidden="true" className="time-short">{formatShortDate(item.updated_at, timezone, now)}</span>
