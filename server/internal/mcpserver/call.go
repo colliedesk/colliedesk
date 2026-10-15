@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -19,6 +20,8 @@ type call struct {
 
 	// notFound words a 404 of any call this tool makes, for example "No conversation <id> in this workspace."
 	notFound string
+	// wrote is set once a call of this tool has changed data, so a later failure can say so.
+	wrote bool
 
 	session *restMe
 	agents  []restAgent
@@ -30,8 +33,13 @@ func (c *call) get(path string, query url.Values, into any) error {
 	return c.refuse(c.rest.do(c.ctx, c.token, http.MethodGet, path, query, nil, into), c.notFound)
 }
 
+// send changes data as the caller; a failure comes back worded for a model, and a success is remembered.
 func (c *call) send(method, path string, body, into any) error {
-	return c.refuse(c.rest.do(c.ctx, c.token, method, path, nil, body, into), c.notFound)
+	err := c.rest.do(c.ctx, c.token, method, path, nil, body, into)
+	if err == nil {
+		c.wrote = true
+	}
+	return c.refuse(err, c.notFound)
 }
 
 // me is the caller's identity, workspace and tier.
@@ -72,18 +80,33 @@ func (c *call) tagList() ([]restTag, error) {
 	return c.tags, nil
 }
 
-// findTag finds an existing tag by name, ignoring case and surrounding spaces.
+// findTag finds an existing tag by name. REST keeps names unique by exact spelling, so "Refund" and
+// "refund" can both exist: the exact spelling wins; otherwise a name that differs only in case from
+// exactly one tag means that tag; several such tags are ambiguous and the caller must give the exact
+// name. A call never acts on a tag other than the one it named.
 func (c *call) findTag(name string) (restTag, bool, error) {
 	tags, err := c.tagList()
 	if err != nil {
 		return restTag{}, false, err
 	}
+	name = strings.TrimSpace(name)
+	var sameLetters []restTag
 	for _, tag := range tags {
-		if strings.EqualFold(tag.Name, strings.TrimSpace(name)) {
+		if tag.Name == name {
 			return tag, true, nil
 		}
+		if strings.EqualFold(tag.Name, name) {
+			sameLetters = append(sameLetters, tag)
+		}
 	}
-	return restTag{}, false, nil
+	switch len(sameLetters) {
+	case 0:
+		return restTag{}, false, nil
+	case 1:
+		return sameLetters[0], true, nil
+	}
+	return restTag{}, false, &toolError{fmt.Sprintf("Several tags match %q when case is ignored: %s. Use the exact name of the one you mean.",
+		name, strings.Join(tagNames(sameLetters), ", "))}
 }
 
 // tagByName finds an existing tag, or says which tags exist.
@@ -93,24 +116,33 @@ func (c *call) tagByName(name string) (restTag, error) {
 		return tag, err
 	}
 	tags, _ := c.tagList()
-	names := make([]string, len(tags))
-	for index, tag := range tags {
-		names[index] = tag.Name
-	}
+	names := tagNames(tags)
 	if len(names) == 0 {
 		return restTag{}, &toolError{fmt.Sprintf("No tag named %q. This workspace has no tags yet.", name)}
 	}
 	return restTag{}, &toolError{fmt.Sprintf("No tag named %q. Existing tags: %s.", name, strings.Join(names, ", "))}
 }
 
-// createTag adds a tag to the workspace and remembers it for the rest of the call.
+// createTag adds a tag to the workspace and remembers it for the rest of the call. When the create is
+// refused, another caller may have made the same tag since the list was read: it looks again and uses
+// that tag when it is there.
 func (c *call) createTag(name string) (restTag, error) {
+	name = strings.TrimSpace(name)
 	var created restTag
-	if err := c.send(http.MethodPost, "/api/v1/tags", map[string]any{"name": strings.TrimSpace(name)}, &created); err != nil {
-		return restTag{}, err
+	err := c.rest.do(c.ctx, c.token, http.MethodPost, "/api/v1/tags", nil, map[string]any{"name": name}, &created)
+	if err == nil {
+		c.wrote = true
+		c.tags = append(c.tags, created)
+		return created, nil
 	}
-	c.tags = append(c.tags, created)
-	return created, nil
+	var refused *restError
+	if errors.As(err, &refused) && refused.Status == http.StatusBadRequest {
+		c.tags = nil
+		if tag, found, lookupErr := c.findTag(name); lookupErr == nil && found {
+			return tag, nil
+		}
+	}
+	return restTag{}, c.refuse(err, c.notFound)
 }
 
 // contactsByID fetches the contacts with the given ids in one call.

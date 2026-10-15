@@ -14,7 +14,7 @@ func inboxSearchSpec() Spec {
 		Input: `{"type":"object","additionalProperties":false,"properties":{` +
 			`"status":{"type":"string","enum":["open","pending","resolved","closed"],"description":"Only conversations in this status. Leave out for every status."},` +
 			`"assignee":{"type":"string","enum":["me","unassigned","anyone"],"description":"me: assigned to the person this token acts as. unassigned: nobody. anyone: assigned to somebody."},` +
-			`"tag":{"type":"string","maxLength":100,"description":"Name of an existing tag (see colliedesk_tags_list). Case does not matter."},` +
+			`"tag":{"type":"string","maxLength":100,"description":"Name of an existing tag (see colliedesk_tags_list): its exact spelling, or any case when no other tag has the same letters."},` +
 			`"q":{"type":"string","maxLength":200,"description":"Words to find in the subject or in any message text."},` +
 			`"limit":{"type":"integer","minimum":1,"maximum":50,"default":20,"description":"Rows per page."},` +
 			`"cursor":{"type":"string","maxLength":200,"description":"The next_cursor of the previous page. Keep every other argument the same."},` +

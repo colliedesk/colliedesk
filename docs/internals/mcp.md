@@ -42,12 +42,22 @@
   `agent_token_scope_api_test.go`), or every token gets `scope_insufficient`. The tool's tier in
   the catalog is only used to word the error and to list `tools_you_can_use`; REST decides.
 - **Tags are created by name.** `colliedesk_conversation_update` creates a name in `add_tags` that no
-  tag has (case ignored), because `POST /tags` is a `draft` route and triage must not stall on a
-  missing tag. Every other check runs first (assignee, unknown `remove_tags`, a tag in both lists,
-  the conversation exists), so a refused or wrong call leaves no tag behind
+  tag has, because `POST /tags` is a `draft` route and triage must not stall on a missing tag. Every
+  other check runs first (assignee, unknown `remove_tags`, a tag in both lists, the conversation
+  exists), so a refused or wrong call leaves no tag behind
   (`TestConversationUpdateCreatesNoTagWhenTheCallIsRefusedOrInvalid`). `remove_tags` never creates:
-  an unknown name there is a typo and the error lists the real tags. Two callers that create the
-  same name at once: the second gets "rejected the request" and its repeat finds the tag.
+  an unknown name there is a typo and the error lists the real tags.
+- **Tag names follow REST uniqueness.** REST keeps `(workspace_id, name)` unique by exact spelling, so
+  `Refund` and `refund` can both exist. `findTag` takes the exact spelling first, then the one tag that
+  differs only in case, and refuses several such tags with a message that lists them; an `add_tags`
+  name with no match at all is created with the spelling given (`TestTagNamesMatchExactlyFirstAndAmbiguousCaseVariantsAreRefused`).
+  The inbox filter and `remove_tags` use the same rule. Two callers that create the same name at once:
+  the loser's create is refused, `createTag` reads the list again and uses the winner's tag
+  (`TestConversationUpdateUsesATagAnotherCallerCreatedMeanwhile`).
+- **A tool call is not atomic.** `colliedesk_conversation_update` is a few REST writes in a row (tags
+  created, then the PATCH, then each tag put or delete). `call.wrote` records the first successful
+  write; a failure after it ends with "some changes may already be applied" and, for an idempotent
+  tool, "safe to repeat" (`failureText`). `TestConversationUpdateSaysWhatMayBeAppliedWhenALaterStepFails`.
 - **Attribution is free.** A note a tool adds goes through `POST /messages` with the caller's bearer,
   so it carries the token (`TestNoteAddedThroughMCPNamesTheTokenInTheTimeline`). The known limit
   (changes other than notes are not attributed) is in `docs/internals/auth.md`.

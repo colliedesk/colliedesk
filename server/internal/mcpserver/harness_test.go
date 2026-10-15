@@ -47,7 +47,11 @@ type env struct {
 func newEnv(t *testing.T) *env { return newEnvWith(t, nil) }
 
 // newEnvWith builds the API with a change to its configuration, for example a billing setup.
-func newEnvWith(t *testing.T, mutate func(*httpapi.Config)) *env {
+func newEnvWith(t *testing.T, mutate func(*httpapi.Config)) *env { return newEnvBuilt(t, mutate, nil) }
+
+// newEnvBuilt also puts a handler in front of the REST API that the tools call (the web app and the
+// tests still reach the real one), so a test can act as a second caller in the middle of a tool call.
+func newEnvBuilt(t *testing.T, mutate func(*httpapi.Config), front func(real http.Handler) http.Handler) *env {
 	t.Helper()
 	pool := testPool(t)
 	if err := database.Migrate(context.Background(), pool); err != nil {
@@ -63,7 +67,11 @@ func newEnvWith(t *testing.T, mutate func(*httpapi.Config)) *env {
 	}
 	api := httpapi.New(pool, config)
 	service := auth.New(pool, testOrigin)
-	server := httptest.NewServer(mcpserver.Mount(mcpserver.Config{API: api, Auth: service, Version: testVersion}, api))
+	toolAPI := http.Handler(api)
+	if front != nil {
+		toolAPI = front(api)
+	}
+	server := httptest.NewServer(mcpserver.Mount(mcpserver.Config{API: toolAPI, Auth: service, Version: testVersion}, api))
 	t.Cleanup(server.Close)
 	return &env{t: t, api: api, pool: pool, service: service, server: server}
 }

@@ -8,7 +8,9 @@ func conversationUpdateSpec() Spec {
 			`It is safe to repeat: you state the result you want, so a second identical call changes nothing. ` +
 			`Give at least one change. assignee takes "me", "unassigned", or a team member's email, name or id (see colliedesk_agents_list). ` +
 			`add_tags takes tag names; a name that is not a tag yet is created first (see colliedesk_tags_list for the existing ones, and reuse them: ` +
-			`names match ignoring case). remove_tags takes names of existing tags. Both leave the other tags alone. ` +
+			`a name matches the tag with exactly that spelling, otherwise the one tag that differs only in case; if two tags differ only in case, give the exact name). ` +
+			`remove_tags takes names of existing tags, matched the same way. Both leave the other tags alone. ` +
+			`If a step fails after another has saved, the error says some changes may already be applied; repeat the same call. ` +
 			`It never sends anything to the customer and deletes nothing; every change can be undone by another call.` +
 			"\n\nTier: draft.",
 		Tier: "draft", Idempotent: true,

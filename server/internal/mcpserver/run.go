@@ -40,9 +40,10 @@ func register(server *mcp.Server, spec Spec, rest *restClient) {
 }
 
 func execute(ctx context.Context, request *mcp.CallToolRequest, spec Spec, input *jsonschema.Resolved, rest *restClient) (result *mcp.CallToolResult) {
+	c := &call{rest: rest, spec: spec}
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			result = failure(problem(spec, fmt.Errorf("panic: %v", recovered)))
+			result = failure(failureText(c, fmt.Errorf("panic: %v", recovered)))
 		}
 	}()
 	token, ok := bearerFrom(request)
@@ -55,16 +56,14 @@ func execute(ctx context.Context, request *mcp.CallToolRequest, spec Spec, input
 	}
 	ctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
-	output, err := spec.run(&call{ctx: ctx, rest: rest, token: token, spec: spec}, arguments)
+	c.ctx, c.token = ctx, token
+	output, err := spec.run(c, arguments)
 	if err != nil {
-		if planned, ok := err.(*toolError); ok {
-			return failure(planned.message)
-		}
-		return failure(problem(spec, err))
+		return failure(failureText(c, err))
 	}
 	data, err := json.Marshal(output)
 	if err != nil {
-		return failure(problem(spec, err))
+		return failure(failureText(c, err))
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(data)}}, StructuredContent: json.RawMessage(data)}
 }

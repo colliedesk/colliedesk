@@ -61,8 +61,23 @@ func (c *call) scopeText(failure *restError) string {
 		"(Settings, Sessions and devices) and connect again with it.", have, c.spec.Name, need, need)
 }
 
-// problem is what the model reads for a failure nobody planned for. The cause goes to the log.
-func problem(spec Spec, err error) string {
-	slog.Error("MCP tool failed", "tool", spec.Name, "error", err)
-	return "Colliedesk hit an internal problem while running " + spec.Name + ". Nothing is known to have changed. Try again; if it keeps failing, tell a workspace admin."
+// failureText is what the model reads when a tool failed. A tool that changed data before it failed
+// says so: the model must not believe that nothing changed, and must know whether repeating is safe.
+func failureText(c *call, err error) string {
+	message, planned := "", false
+	if toolErr, ok := err.(*toolError); ok {
+		message, planned = toolErr.message, true
+	} else {
+		slog.Error("MCP tool failed", "tool", c.spec.Name, "error", err)
+		message = "Colliedesk hit an internal problem while running " + c.spec.Name + "."
+	}
+	switch {
+	case c.wrote && c.spec.Idempotent:
+		message += " Some changes of this call may already be applied. It is safe to repeat the call: you state the result you want, so a repeat applies only what is missing."
+	case c.wrote:
+		message += " Part of this call may already be saved. Read the conversation before you call this tool again, so nothing is added twice."
+	case !planned:
+		message += " Nothing is known to have changed. Try again; if it keeps failing, tell a workspace admin."
+	}
+	return message
 }

@@ -84,9 +84,15 @@ could not do with the API directly. Another workspace is never visible.
 - A locked workspace (hosted cloud, trial over, nothing paid) answers every tool except `whoami`
   with a message that only exporting data works.
 - A conversation id from another workspace answers "No conversation <id> in this workspace".
-- Tag names are matched ignoring case. A name in `add_tags` that no tag has is created, so the agent
-  can keep triaging; a name in `remove_tags` that no tag has is an error that lists the real tags.
-  A refused or wrong call creates no tag.
+- Tag names are matched by their exact spelling first. When no tag has that spelling, the one tag
+  that differs only in case is used. If two tags differ only in case (`Refund` and `refund`) and the
+  agent gives neither spelling, the call is refused and lists both, so it never acts on the wrong
+  one. A name in `add_tags` that no tag has is created, so the agent can keep triaging; a name in
+  `remove_tags` that no tag has is an error that lists the real tags. A refused or wrong call creates
+  no tag.
+- `colliedesk_conversation_update` makes several changes one after another. If one fails after
+  another was saved, the error says that some changes may already be applied. Repeat the same call:
+  it applies only what is missing, and a tag created by the first try is reused.
 - A note an agent writes appears in the conversation as "by <team member> via <token label>", so
   you can tell it from a colleague's note. Status, priority, assignee and tag changes are not marked
   that way yet.
