@@ -185,7 +185,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Change up to 50 conversations at once
+         * @description All or nothing: one transaction. A conversation id that is missing or belongs to another workspace answers 404 and changes nothing; the response does not say which id. Status, assignee and tags follow the same rules as `PATCH /conversations/{id}`. Tags in `remove_tag_ids` are removed, then tags in `add_tag_ids` are added.
+         */
+        patch: operations["bulkUpdateConversations"];
         trace?: never;
     };
     "/api/v1/conversations/{id}": {
@@ -958,6 +962,19 @@ export interface components {
             cc: string[];
             forwarded_to: string[];
         };
+        BulkConversationUpdate: {
+            ids: string[];
+            changes: {
+                status?: components["schemas"]["ConversationStatus"];
+                /** Format: uuid */
+                assignee_id?: string | null;
+                add_tag_ids?: string[];
+                remove_tag_ids?: string[];
+            };
+        };
+        BulkConversationUpdateResult: {
+            updated: number;
+        };
         ConversationPage: {
             items: components["schemas"]["Conversation"][];
             page: number;
@@ -1706,6 +1723,35 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    bulkUpdateConversations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkConversationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Number of conversations changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkConversationUpdateResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     getConversation: {

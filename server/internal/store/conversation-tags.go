@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
@@ -23,15 +24,20 @@ func (s *Store) setConversationTag(ctx context.Context, workspaceID, conversatio
 }
 
 func setConversationTag(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, tagID string, add bool) (domain.Conversation, error) {
-	var conversationExists, tagExists bool
-	err := tx.QueryRow(ctx, `SELECT
-		EXISTS(SELECT 1 FROM conversations WHERE workspace_id=$1 AND id=$2),
-		EXISTS(SELECT 1 FROM tags WHERE workspace_id=$1 AND id=$3)`, workspaceID, conversationID, tagID).
-		Scan(&conversationExists, &tagExists)
+	// Lock order, everywhere: agents row -> conversations (ORDER BY id) -> conversation_tags.
+	var lockedConversation string
+	err := tx.QueryRow(ctx, `SELECT id FROM conversations WHERE workspace_id=$1 AND id=$2 FOR NO KEY UPDATE`, workspaceID, conversationID).Scan(&lockedConversation)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Conversation{}, fmt.Errorf("update conversation tag: not found")
+	}
 	if err != nil {
+		return domain.Conversation{}, fmt.Errorf("lock conversation for tag update: %w", err)
+	}
+	var tagExists bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM tags WHERE workspace_id=$1 AND id=$2)`, workspaceID, tagID).Scan(&tagExists); err != nil {
 		return domain.Conversation{}, fmt.Errorf("validate conversation tag update: %w", err)
 	}
-	if !conversationExists || !tagExists {
+	if !tagExists {
 		return domain.Conversation{}, fmt.Errorf("update conversation tag: not found")
 	}
 	command := `DELETE FROM conversation_tags WHERE workspace_id=$1 AND conversation_id=$2 AND tag_id=$3`

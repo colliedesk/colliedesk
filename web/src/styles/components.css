@@ -258,6 +258,31 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .locked-screen .button-row button { flex: 1 1 100%; --control: var(--touch); }
 }
 .locked-screen h1:focus { outline: none; }
+
+/* Bulk selection: a checkbox beside each row, and an action bar that replaces the list header. */
+.conversation-item { position: relative; }
+.conversation-item .conversation-row { padding-left: 2.75rem; }
+.row-check { position: absolute; z-index: 1; inset: 0 auto 0 0; width: 2.75rem; display: grid; place-items: start center; padding-top: var(--space-3); cursor: pointer; }
+.row-check input, .select-all input { width: 16px; height: 16px; min-height: 0; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.select-all { display: flex; align-items: center; gap: var(--space-3); border-bottom: 1px solid var(--line); padding: var(--space-2) var(--space-4); color: var(--text-3); font-size: var(--fs-label); cursor: pointer; }
+.select-all input { margin-inline: calc((2.75rem - 16px) / 2 - var(--space-4)); }
+.row-check:has(input:focus-visible), .select-all:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+.list-head { display: grid; gap: var(--space-3); }
+.bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding-bottom: var(--space-3); }
+.bulk-count { font-size: var(--fs-ui); font-weight: 600; font-variant-numeric: tabular-nums; }
+.bulk-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.bulk-clear { margin-left: auto; }
+.action-menu summary[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+.action-popover { left: 0; right: auto; width: max-content; min-width: 10rem; max-width: 18rem; gap: var(--space-1); }
+.action-popover button { justify-content: flex-start; border-color: transparent; box-shadow: none; }
+.bulk-message { margin: 0; padding-bottom: var(--space-3); font-size: var(--fs-small); }
+@media (max-width: 44rem) {
+  .row-check { width: var(--touch); padding-top: calc((var(--touch) - 16px) / 2); }
+  .conversation-item .conversation-row { padding-left: var(--touch); }
+  .select-all { min-height: var(--touch); }
+}
+.list-title[data-collapsed] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.bulk-message:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; padding: 0; }
 .team-list article { flex-wrap: wrap; }
 .team-list .team-person { display: grid; min-width: 0; }
 .team-list .team-person small { overflow: hidden; color: var(--text-3); text-overflow: ellipsis; white-space: nowrap; }
