@@ -11,10 +11,19 @@ interface ReplyComposerProps {
 type Kind = 'outgoing' | 'note';
 const shortcuts: Record<string, Kind> = { r: 'outgoing', n: 'note' };
 
-// Typing in any field, or holding a modifier, is text entry and never a shortcut.
+const nonTextInputs = ['radio', 'checkbox', 'button', 'submit', 'reset'];
+
+// Typing in a text field, or holding a modifier, is text entry and never a shortcut. Radios and
+// checkboxes take no text, so R and N still work after a click on a status tab.
 function isTyping(target: EventTarget | null) {
-  return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+  if (!(target instanceof HTMLElement)) return false;
+  if (target instanceof HTMLInputElement) return !nonTextInputs.includes(target.type);
+  return target.isContentEditable || ['TEXTAREA', 'SELECT'].includes(target.tagName);
 }
+
+// An input method (Vietnamese Telex/VNI on macOS, CJK) still holds marked text while it composes;
+// acting on that key would send or switch before the text is committed.
+const composing = (event: KeyboardEvent) => event.isComposing || event.keyCode === 229;
 
 export function ReplyComposer({ disabled, onSubmit }: ReplyComposerProps) {
   const [kind, setKind] = useState<Kind>('outgoing');
@@ -30,7 +39,7 @@ export function ReplyComposer({ disabled, onSubmit }: ReplyComposerProps) {
     if (disabled) return;
     const onKey = (event: KeyboardEvent) => {
       const next = shortcuts[event.key.toLowerCase()];
-      if (!next || event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
+      if (!next || composing(event) || event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
       event.preventDefault();
       setKind(next);
       field.current?.focus();
@@ -39,6 +48,7 @@ export function ReplyComposer({ disabled, onSubmit }: ReplyComposerProps) {
     return () => document.removeEventListener('keydown', onKey);
   }, [disabled]);
   const onFieldKey = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (composing(event.nativeEvent)) return;
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit(); }
   };
   return (

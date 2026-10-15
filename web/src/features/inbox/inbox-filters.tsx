@@ -10,6 +10,7 @@ interface InboxFiltersProps {
 
 const statusTabs = [['', messages.allConversations], ...Object.entries(messages.statuses)] as const;
 
+// Search and the Filter menu sit above the status tabs, in the same order on screen and for Tab.
 // Status is the view an agent switches most, so it is a row of tabs; assignee and tag are rarer and
 // share one Filter menu that shows how many are on.
 export function InboxFilters({ tags, onChange }: InboxFiltersProps) {
@@ -27,6 +28,10 @@ export function InboxFilters({ tags, onChange }: InboxFiltersProps) {
     document.addEventListener('pointerdown', close);
     return () => document.removeEventListener('pointerdown', close);
   }, []);
+  // Keyboard users leave the menu with Tab; it closes like it does on an outside click.
+  const closeOnFocusOut = (event: React.FocusEvent<HTMLDetailsElement>) => {
+    if (menu.current?.open && !menu.current.contains(event.relatedTarget as Node | null)) menu.current.open = false;
+  };
   const closeOnEscape = (event: React.KeyboardEvent<HTMLDetailsElement>) => {
     if (event.key !== 'Escape' || !menu.current?.open) return;
     menu.current.open = false;
@@ -34,15 +39,10 @@ export function InboxFilters({ tags, onChange }: InboxFiltersProps) {
   };
   return (
     <form className="inbox-filters" aria-label={messages.inbox} onSubmit={(event) => event.preventDefault()}>
-      <div className="status-tabs" role="radiogroup" aria-label={messages.status}>
-        {statusTabs.map(([value, label]) => (
-          <label key={value}><input type="radio" name="status" value={value} defaultChecked={value === ''} onChange={update} /><span>{label}</span></label>
-        ))}
-      </div>
       <div className="filter-bar">
         <label className="search-field"><SearchIcon />
           <input name="search" type="search" aria-label={messages.searchConversations} placeholder={messages.searchConversations} onChange={update} /></label>
-        <details className="filter-menu" ref={menu} onKeyDown={closeOnEscape}>
+        <details className="filter-menu" ref={menu} onKeyDown={closeOnEscape} onBlur={closeOnFocusOut}>
           <summary><FilterIcon /><span>{messages.filter}</span>
             {active > 0 && <span className="filter-count" aria-label={messages.filtersActive(active)}>{active}</span>}</summary>
           <div className="filter-popover">
@@ -57,6 +57,11 @@ export function InboxFilters({ tags, onChange }: InboxFiltersProps) {
             </select></label>
           </div>
         </details>
+      </div>
+      <div className="status-tabs" role="radiogroup" aria-label={messages.status}>
+        {statusTabs.map(([value, label]) => (
+          <label key={value}><input type="radio" name="status" value={value} defaultChecked={value === ''} onChange={update} /><span>{label}</span></label>
+        ))}
       </div>
     </form>
   );

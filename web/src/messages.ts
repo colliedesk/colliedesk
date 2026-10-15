@@ -45,7 +45,6 @@ export const messages = {
   status: 'Status',
   assignee: 'Assignee',
   tag: 'Tag',
-  allStatuses: 'All statuses',
   allAssignees: 'Any assignee',
   unassigned: 'Unassigned',
   assignedToMe: 'Assigned to me',

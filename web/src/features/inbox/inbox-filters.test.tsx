@@ -27,3 +27,26 @@ test('assignee and tag live in one Filter menu that counts what is active', () =
   expect(onChange).toHaveBeenLastCalledWith({ search: '', status: '', assignee: 'unassigned', tag: tags[0].id });
   expect(screen.getByLabelText('2 filters active')).toBeInTheDocument();
 });
+
+test('search and Filter come before the status tabs in tab order, as they do on screen', () => {
+  render(<InboxFilters tags={tags} />);
+  const search = screen.getByRole('searchbox', { name: 'Search conversations' });
+  const firstTab = screen.getByRole('radio', { name: 'All' });
+  expect(search.compareDocumentPosition(firstTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('the Filter menu closes when keyboard focus leaves it', () => {
+  render(<><InboxFilters tags={tags} /><button type="button">Elsewhere</button></>);
+  const menu = screen.getByText('Filter').closest('details')!;
+  menu.open = true;
+  fireEvent.blur(screen.getByLabelText('Tag'), { relatedTarget: screen.getByRole('button', { name: 'Elsewhere' }) });
+  expect(menu.open).toBe(false);
+});
+
+test('moving focus between controls inside the Filter menu keeps it open', () => {
+  render(<InboxFilters tags={tags} />);
+  const menu = screen.getByText('Filter').closest('details')!;
+  menu.open = true;
+  fireEvent.blur(screen.getByLabelText('Assignee'), { relatedTarget: screen.getByLabelText('Tag') });
+  expect(menu.open).toBe(true);
+});

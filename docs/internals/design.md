@@ -25,8 +25,12 @@ dark is an opt-in. The app and the colliedesk.com site share one set of tokens.
 ## Themes
 
 - Light is the default for everyone, whatever the OS preference. Dark is a per-browser choice in
-  **Settings → Appearance**, saved in `localStorage` (`colliedesk.theme`) and applied as
-  `data-theme="dark"` on `<html>` before the first render (`web/src/lib/theme.ts`).
+  **Settings → Appearance**, saved in this origin's `localStorage` (`colliedesk.theme`) and applied
+  as `data-theme="dark"` on `<html>`. A one-line inline script in the `<head>` of `web/index.html` sets it
+  while the head is parsed, before first paint, so a dark choice never paints light first; `web/src/lib/theme.ts` holds the same
+  rule for the app (`src/lib/theme-boot.test.ts` keeps the two in step).
+- The choice belongs to one origin. A self-hosted or Cloud app and colliedesk.com each keep their
+  own setting; choosing dark on one does not change the other.
 - `tokens.css` holds one light block (`:root, :root[data-theme="light"]`) and one dark block
   (`:root[data-theme="dark"]`) with the same token names. Shape, space, type and motion tokens are
   shared.

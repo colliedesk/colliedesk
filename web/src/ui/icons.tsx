@@ -19,4 +19,3 @@ export const ClockIcon = () => <Icon><circle cx="12" cy="12" r="9" /><path d="M1
 export const ArrowUpIcon = () => <Icon><path d="M12 19V5M5 12l7-7 7 7" /></Icon>;
 export const ReplyIcon = () => <Icon><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></Icon>;
 export const FilterIcon = () => <Icon><path d="M3 6h18M7 12h10M10 18h4" /></Icon>;
-export const ChevronDownIcon = () => <Icon><path d="m6 9 6 6 6-6" /></Icon>;

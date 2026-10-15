@@ -40,3 +40,26 @@ test('Ctrl or Cmd + Enter sends', () => {
   fireEvent.keyDown(body, { key: 'Enter' });
   expect(onSubmit).toHaveBeenCalledTimes(2);
 });
+
+test('Ctrl/Cmd + Enter does not send while an input method is composing text', () => {
+  const onSubmit = vi.fn();
+  render(<ReplyComposer onSubmit={onSubmit} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Cảm ơn' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true, isComposing: true });
+  fireEvent.keyDown(body, { key: 'Enter', metaKey: true, keyCode: 229 });
+  expect(onSubmit).not.toHaveBeenCalled();
+});
+
+test('R and N still work when a radio tab or checkbox has focus', () => {
+  render(<><input type="radio" aria-label="Open" /><ReplyComposer /></>);
+  fireEvent.keyDown(screen.getByRole('radio', { name: 'Open' }), { key: 'n' });
+  expect(screen.getByRole('button', { name: 'Private note', pressed: true })).toBeInTheDocument();
+  expect(screen.getByLabelText('Message body')).toHaveFocus();
+});
+
+test('a key that ends an input method composition is not a shortcut', () => {
+  render(<ReplyComposer />);
+  fireEvent.keyDown(document.body, { key: 'n', isComposing: true });
+  expect(screen.getByRole('button', { name: 'Reply', pressed: true })).toBeInTheDocument();
+});
