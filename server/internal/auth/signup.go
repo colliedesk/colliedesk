@@ -47,6 +47,9 @@ type SignUp struct {
 	Name  string
 	// ClientIP is the rate-limit key of the person's network, from the trusted proxy chain.
 	ClientIP string
+	// HostedMailDomain, when set, connects email at support@<slug>.<HostedMailDomain> in the same
+	// transaction: settings show that address as ready, so mail sent there must not be refused.
+	HostedMailDomain string
 }
 
 // SignUpCloud creates a trial workspace with Email as its admin. In one privileged transaction it
@@ -90,6 +93,9 @@ func (s *Service) SignUpCloud(ctx context.Context, in SignUp) (domain.Workspace,
 		if workspace, err = s.createUniqueWorkspaceTx(ctx, tx, name, in.Email); err != nil {
 			return err
 		}
+		if err := connectHostedEmailTx(ctx, tx, workspace, in.HostedMailDomain); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `INSERT INTO cloud_signups(email_hash,signup_workspace_id,ip_hash,created_at) VALUES($1,$2,$3,$4)`,
 			emailHash, workspace.ID, ipHash, now); err != nil {
 			return fmt.Errorf("record sign-up: %w", err)
@@ -100,6 +106,24 @@ func (s *Service) SignUpCloud(ctx context.Context, in SignUp) (domain.Workspace,
 		return domain.Workspace{}, err
 	}
 	return workspace, nil
+}
+
+// connectHostedEmailTx gives a new workspace its email channel at the hosted address; nothing when the
+// hosted address is off or the slug cannot be a mail subdomain.
+func connectHostedEmailTx(ctx context.Context, tx pgx.Tx, workspace domain.Workspace, hostedMailDomain string) error {
+	address := email.HostedAddress(workspace.Slug, hostedMailDomain)
+	if address == "" {
+		return nil
+	}
+	token, err := email.NewToken()
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token) VALUES($1,$2,$3)`,
+		workspace.ID, address, token); err != nil {
+		return fmt.Errorf("connect hosted email: %w", err)
+	}
+	return nil
 }
 
 // checkSignupAllowed refuses a mailbox that already had a trial and a client address that already

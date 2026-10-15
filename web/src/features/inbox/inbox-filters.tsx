@@ -6,6 +6,7 @@ import { FilterIcon, SearchIcon } from '../../ui/icons';
 interface InboxFiltersProps {
   tags: Tag[];
   onChange?: (filters: Record<string, string>) => void;
+  focusSearch?: boolean;
 }
 
 const statusTabs = [['', messages.allConversations], ...Object.entries(messages.statuses)] as const;
@@ -13,7 +14,7 @@ const statusTabs = [['', messages.allConversations], ...Object.entries(messages.
 // Search and the Filter menu sit above the status tabs, in the same order on screen and for Tab.
 // Status is the view an agent switches most, so it is a row of tabs; assignee and tag are rarer and
 // share one Filter menu that shows how many are on.
-export function InboxFilters({ tags, onChange }: InboxFiltersProps) {
+export function InboxFilters({ tags, onChange, focusSearch = false }: InboxFiltersProps) {
   const [active, setActive] = useState(0);
   const menu = useRef<HTMLDetailsElement>(null);
   const update = (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -41,7 +42,7 @@ export function InboxFilters({ tags, onChange }: InboxFiltersProps) {
     <form className="inbox-filters" aria-label={messages.inbox} onSubmit={(event) => event.preventDefault()}>
       <div className="filter-bar">
         <label className="search-field"><SearchIcon />
-          <input name="search" type="search" aria-label={messages.searchConversations} placeholder={messages.searchConversations} onChange={update} /></label>
+          <input name="search" type="search" aria-label={messages.searchConversations} placeholder={messages.searchConversations} autoFocus={focusSearch} onChange={update} /></label>
         <details className="filter-menu" ref={menu} onKeyDown={closeOnEscape} onBlur={closeOnFocusOut}>
           <summary><FilterIcon /><span>{messages.filter}</span>
             {active > 0 && <span className="filter-count" aria-label={messages.filtersActive(active)}>{active}</span>}</summary>
