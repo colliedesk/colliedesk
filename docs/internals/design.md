@@ -67,7 +67,7 @@ borders are at least 3:1.
 - Status is a dot plus its word. Only High and Urgent priorities get colour, with an arrow icon.
 - Private notes are amber (`--note-*`), on the timeline and in the composer while writing one.
 - Navigation is an icon rail. Each icon has a screen-reader label and a visible tooltip
-  (`data-tip`, shown on hover and keyboard focus). Other icon-only buttons follow the same pattern.
+  (`data-tip`, shown on hover and keyboard focus, dismissed with Escape). Other icon-only buttons follow the same pattern.
 - The list groups rows under Today and Earlier by the day in the agent's timezone. The list shows
   only what the API returns: there are no SLA timers or ticket numbers because the backend has none.
 - Below 75 rem the details pane becomes a drawer opened by **Show details**; below 44 rem the
@@ -75,3 +75,29 @@ borders are at least 3:1.
 - Customer email stays plain text (see `plain-text-body.tsx`); the original HTML opens in a
   sandboxed frame that keeps a white page so the customer's own styling stays readable. Avatars are
   initials, never images, so the timeline loads nothing remote.
+
+## Identity bar
+
+The workspace name and the signed-in address are always visible in a bar above every page
+(`identity-bar`, landmark "Signed in as"). It guards against acting in the wrong workspace after a
+link switched it. Never move it into a tooltip or hide it at any width. `web/e2e/identity-visible.spec.ts`
+checks opacity and position, because Playwright counts text with opacity 0 as visible.
+
+## Contrast
+
+WCAG 2.x ratios of the token pairs the app uses. Text needs 4.5:1; focus rings, state borders and
+graphics need 3:1.
+
+| Foreground | Background | Ratio |
+|---|---|---|
+| `--text-1` | `--surface-0` / `-1` / `-2` / `-3` | 16.33 / 15.28 / 13.93 / 11.96 |
+| `--text-2` | `--surface-0` / `-1` / `-2` / `-3` | 10.33 / 9.67 / 8.81 / 7.57 |
+| `--text-3` | `--surface-0` / `-1` / `-2` / `-3` | 6.83 / 6.39 / 5.82 / 5.00 |
+| `--text-3` | `--accent-soft` | 5.20 |
+| `--accent-text` | `--surface-0` / `--accent-soft` | 8.97 / 6.83 |
+| `--on-accent` | `--accent` / `--accent-hover` | 7.64 / 9.58 |
+| `--danger` on `--danger-soft`, `--warn` on `--warn-soft`, `--ok` on `--ok-soft` | | 6.10, 6.47, 8.10 |
+| `--note-text` | `--note-bg` | 10.38 |
+| `--focus` | `--surface-0` / `-3` | 10.37 / 7.60 |
+| `--line-strong` | `--surface-0` / `-1` / `-2` | 4.42 / 4.13 / 3.77 |
+| `--focus` | `--accent` | 1.36 (why the focus ring keeps a 2 px gap) |

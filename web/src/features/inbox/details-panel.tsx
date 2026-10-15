@@ -25,7 +25,7 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
   };
   return (
     <aside id="conversation-details" className="details-panel" aria-label={messages.conversationDetails}
-      onKeyDown={(event) => { if (event.key === 'Escape' && onClose) onClose(); }}>
+      onKeyDown={(event) => { if (event.key === 'Escape' && onClose && !(event.target instanceof HTMLSelectElement)) onClose(); }}>
       {onClose && <button type="button" className="drawer-close" onClick={onClose} autoFocus>{messages.hideDetails}</button>}
       <section className="details-section">
         <h2>{messages.properties}</h2>

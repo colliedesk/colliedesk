@@ -70,6 +70,9 @@ button:hover:not(:disabled) { background: var(--surface-2); }
   white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity var(--dur-fast) var(--ease);
 }
 [data-tip]:hover::after, [data-tip]:focus-visible::after { opacity: 1; }
+html[data-tips-off] [data-tip]::after { opacity: 0; }
+/* The pagination sits at the bottom of a scrolling list: open the tooltip upwards so it is not clipped. */
+.pagination [data-tip]::after { top: auto; bottom: calc(100% + var(--space-2)); }
 
 .field { display: grid; align-content: start; gap: var(--space-1); }
 .input-with-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }

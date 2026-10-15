@@ -78,6 +78,7 @@ export const messages = {
   downloadAttachment: (filename: string) => `Download ${filename}`,
   priority: 'Priority',
   properties: 'Properties',
+  signedInAs: 'Signed in as',
   dayGroups: { today: 'Today', earlier: 'Earlier' },
   showDetails: 'Show details',
   hideDetails: 'Hide details',

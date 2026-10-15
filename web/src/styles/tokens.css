@@ -1,5 +1,5 @@
 /* CollieDesk brand tokens: Blue Merle, dark theme (app + colliedesk.com).
-   Load fonts.css first. Contrast for every pair is listed in README.md. */
+   Load fonts.css first. Contrast for every pair is listed in docs/internals/design.md. */
 :root {
   color-scheme: dark;
 

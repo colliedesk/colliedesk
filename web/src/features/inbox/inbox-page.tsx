@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Agent, Conversation, Message, Tag, TimeEntry } from '../../api/schemas';
 import type { UpdateConversationRequest } from '../../api/client';
 import { ConversationList } from './conversation-list';
@@ -40,10 +40,26 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsToggle = useRef<HTMLButtonElement>(null);
-  const closeDetails = () => { setDetailsOpen(false); detailsToggle.current?.focus(); };
+  const listPane = useRef<HTMLElement>(null);
+  const closeDetails = () => { setDetailsOpen(false); (detailsToggle.current ?? listPane.current)?.focus(); };
+  // The drawer belongs to one conversation: a new selection or none closes it. Without a toggle left
+  // to return to, focus goes to the list pane instead of falling back to the page.
+  useEffect(() => {
+    if (detailsOpen && !selected) listPane.current?.focus();
+    setDetailsOpen(false);
+    // Only a change of selection closes it, so the effect lists the id and not the open state.
+  }, [selected?.id]);
+  // Past the three-pane width the drawer button is hidden, so an open drawer would strand focus.
+  useEffect(() => {
+    const wide = window.matchMedia?.('(min-width: 75rem)');
+    if (!wide) return;
+    const onChange = (event: { matches: boolean }) => { if (event.matches) setDetailsOpen(false); };
+    wide.addEventListener('change', onChange);
+    return () => wide.removeEventListener('change', onChange);
+  }, []);
   return (
     <main className="inbox-shell" data-details-open={detailsOpen}>
-      <section className="list-pane" aria-label={messages.conversationList}>
+      <section className="list-pane" ref={listPane} tabIndex={-1} aria-label={messages.conversationList}>
         <header>
           <div className="list-title"><h1>{messages.inbox}</h1><span>{conversations.length}</span></div>
           <InboxFilters tags={tags} onChange={onFilters} />

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { InboxPage } from './inbox-page';
 
@@ -229,5 +229,49 @@ test('groups the list under Today and Earlier headings, only for groups that hav
     expect(screen.queryByRole('heading', { name: 'Earlier' })).not.toBeInTheDocument();
   } finally {
     vi.useRealTimers();
+  }
+});
+
+const other = { ...conversation, id: '55555555-5555-4555-8555-555555555555', subject: 'Another request' };
+const openDrawer = () => fireEvent.click(screen.getByRole('button', { name: /show details/i }));
+
+test('the details drawer closes when another conversation is selected', () => {
+  const { rerender } = render(<InboxPage selected={conversation} conversations={[conversation, other]} />);
+  openDrawer();
+  expect(screen.getByRole('button', { name: /hide details/i })).toBeInTheDocument();
+  rerender(<InboxPage selected={other} conversations={[conversation, other]} />);
+  expect(screen.queryByRole('button', { name: /hide details/i })).not.toBeInTheDocument();
+});
+
+test('deselecting a conversation closes the drawer and keeps focus inside the list pane', () => {
+  const { rerender } = render(<InboxPage selected={conversation} conversations={[conversation]} />);
+  openDrawer();
+  rerender(<InboxPage conversations={[conversation]} />);
+  expect(screen.queryByRole('button', { name: /hide details/i })).not.toBeInTheDocument();
+  expect(screen.getByRole('region', { name: /conversation list/i })).toHaveFocus();
+});
+
+test('Escape inside a select does not close the drawer, Escape elsewhere does', () => {
+  render(<InboxPage selected={conversation} conversations={[conversation]} />);
+  openDrawer();
+  const panel = screen.getByRole('complementary', { name: /conversation details/i });
+  fireEvent.keyDown(within(panel).getByLabelText(/^status$/i), { key: 'Escape' });
+  expect(screen.getByRole('button', { name: /hide details/i })).toBeInTheDocument();
+  fireEvent.keyDown(within(panel).getByLabelText(/new tag name/i), { key: 'Escape' });
+  expect(screen.queryByRole('button', { name: /hide details/i })).not.toBeInTheDocument();
+});
+
+test('widening the window past the drawer breakpoint closes the drawer instead of stranding focus', () => {
+  let listener: ((event: { matches: boolean }) => void) | undefined;
+  vi.stubGlobal('matchMedia', () => ({
+    matches: false, addEventListener: (_: string, fn: typeof listener) => { listener = fn; }, removeEventListener: () => { listener = undefined; },
+  }));
+  try {
+    render(<InboxPage selected={conversation} conversations={[conversation]} />);
+    openDrawer();
+    act(() => listener?.({ matches: true }));
+    expect(screen.queryByRole('button', { name: /hide details/i })).not.toBeInTheDocument();
+  } finally {
+    vi.unstubAllGlobals();
   }
 });

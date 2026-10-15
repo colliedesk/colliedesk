@@ -35,3 +35,15 @@ test('groups list dates as Today or Earlier by the calendar day in the agent tim
   expect(dayGroup('2026-10-14T02:00:00Z', 'America/New_York', now)).toBe('earlier');
   expect(dayGroup('2026-10-14T13:00:00Z', 'America/New_York', now)).toBe('today');
 });
+
+test('groups by the Vietnamese calendar day, +07 with no daylight saving', () => {
+  const now = new Date('2026-10-14T03:00:00Z'); // 10:00 on the 14th in Ho Chi Minh City
+  expect(dayGroup('2026-10-13T17:30:00Z', 'Asia/Ho_Chi_Minh', now)).toBe('today'); // 00:30 on the 14th
+  expect(dayGroup('2026-10-13T16:59:00Z', 'Asia/Ho_Chi_Minh', now)).toBe('earlier'); // 23:59 on the 13th
+});
+
+test('groups correctly on the day New York leaves daylight saving', () => {
+  // 2026-11-01 is the 25-hour day: 04:30Z is 00:30 EDT, the next day at 04:30Z is 23:30 EST on the 1st.
+  expect(dayGroup('2026-11-01T04:30:00Z', 'America/New_York', new Date('2026-11-02T04:30:00Z'))).toBe('today');
+  expect(dayGroup('2026-11-01T04:30:00Z', 'America/New_York', new Date('2026-11-02T05:30:00Z'))).toBe('earlier');
+});
