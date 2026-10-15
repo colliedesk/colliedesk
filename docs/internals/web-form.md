@@ -33,9 +33,16 @@ Decisions and traps only. Code: `server/internal/store/web-form.go`,
 - **Client address.** The repo had no proxy handling. `TRUSTED_PROXY_CIDRS` lists proxies; only a
   peer inside it may supply `X-Forwarded-For`, and the rightmost entry that is not a trusted proxy
   counts, so entries a client wrote on the left are ignored. Entries may carry a port. IPv6 counts
-  by /64. The shipped compose files default it to loopback plus `172.16.0.0/12`: the server is
-  published on 127.0.0.1 and Docker delivers host connections from the bridge gateway, not from
-  loopback. An empty value logs a WARN at startup.
+  by /64. The default lives in server code (`defaultTrustedProxies`): unset means loopback plus
+  `172.16.0.0/12`, so a deployment whose compose file never heard of the variable (the hosted one)
+  still works; the shipped compose files repeat it with `${VAR-default}` (no colon, so only an unset
+  variable takes the default) and a test keeps the copies equal. Docker delivers host connections
+  from the bridge gateway, not from loopback. Set but empty means trust none and logs a WARN.
+- **Form posts do not count toward the per-sender email limit.** That limit counts messages by
+  `email_meta.from`, and anyone can post a customer's address to the form. The count skips
+  `via=web_form` (test: ten posts as a customer, then that customer's real mail is accepted).
+- **The address-ceiling 429 has no CORS headers.** It runs before the origin list is known, and the
+  server never echoes an unchecked `Origin`.
 - **Validation errors carry `error.fields`.** The shared `Error` schema gained an optional
   `fields` map; existing responses are unchanged.
 - **Settings table is separate.** `web_form_channels` (one row per workspace, RLS like the other

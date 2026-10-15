@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-var composeDefault = regexp.MustCompile(`TRUSTED_PROXY_CIDRS: \$\{TRUSTED_PROXY_CIDRS:-([^}]*)\}`)
+var composeDefault = regexp.MustCompile(`TRUSTED_PROXY_CIDRS: \$\{TRUSTED_PROXY_CIDRS-([^}]*)\}`)
 
 // The shipped compose files bind the server to 127.0.0.1, so a reverse proxy on the host always
 // sits in front. Docker delivers that proxy's connections from the bridge gateway, not from
@@ -26,7 +26,10 @@ func TestShippedComposeFilesTrustTheLocalProxyByDefault(t *testing.T) {
 		if match == nil {
 			t.Fatalf("%s sets no default for TRUSTED_PROXY_CIDRS", file)
 		}
-		proxies, err := trustedProxiesFromEnv(func(string) string { return string(match[1]) })
+		if string(match[1]) != defaultTrustedProxies {
+			t.Errorf("%s default %q differs from the server's %q", file, match[1], defaultTrustedProxies)
+		}
+		proxies, err := trustedProxiesFromEnv(func(string) (string, bool) { return string(match[1]), true })
 		if err != nil {
 			t.Fatalf("%s default %q: %v", file, match[1], err)
 		}

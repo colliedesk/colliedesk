@@ -143,8 +143,9 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 		return dropped(result, in.DropReason), nil
 	}
 	var recent int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM messages WHERE workspace_id=$1 AND kind='incoming' AND created_at>$2 AND email_meta->>'from'=$3`,
-		workspaceID, now.Add(-InboundRateWindow), in.FromAddress).Scan(&recent); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM messages WHERE workspace_id=$1 AND kind='incoming' AND created_at>$2 AND email_meta->>'from'=$3
+		AND email_meta->>'via' IS DISTINCT FROM $4`,
+		workspaceID, now.Add(-InboundRateWindow), in.FromAddress, domain.ViaWebForm).Scan(&recent); err != nil {
 		return result, fmt.Errorf("check inbound rate: %w", err)
 	}
 	if recent >= InboundRateLimit {

@@ -69,7 +69,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain})
 		go worker.Run(ctx, 5*time.Second)
 	}
-	trustedProxies, err := trustedProxiesFromEnv(os.Getenv)
+	trustedProxies, err := trustedProxiesFromEnv(os.LookupEnv)
 	if err != nil {
 		return err
 	}

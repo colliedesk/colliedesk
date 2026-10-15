@@ -15,11 +15,20 @@ func warnWithoutTrustedProxies(logger *slog.Logger, proxies []netip.Prefix) {
 	}
 }
 
+// defaultTrustedProxies is used when TRUSTED_PROXY_CIDRS is not set: a reverse proxy on the same
+// host (loopback), which Docker delivers from the bridge gateway (172.16.0.0/12).
+const defaultTrustedProxies = "127.0.0.0/8,::1/128,172.16.0.0/12"
+
 // trustedProxiesFromEnv reads TRUSTED_PROXY_CIDRS: a comma-separated list of addresses or CIDR
-// ranges of the reverse proxies in front of the server. Empty means there is none.
-func trustedProxiesFromEnv(getenv func(string) string) ([]netip.Prefix, error) {
+// ranges of the reverse proxies in front of the server. Unset means defaultTrustedProxies; set but
+// empty means none.
+func trustedProxiesFromEnv(lookup func(string) (string, bool)) ([]netip.Prefix, error) {
 	var proxies []netip.Prefix
-	for _, entry := range strings.Split(getenv("TRUSTED_PROXY_CIDRS"), ",") {
+	value, set := lookup("TRUSTED_PROXY_CIDRS")
+	if !set {
+		value = defaultTrustedProxies
+	}
+	for _, entry := range strings.Split(value, ",") {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
 			continue

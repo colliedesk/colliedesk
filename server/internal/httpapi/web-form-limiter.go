@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"container/list"
 	"net"
 	"net/http"
 	"net/netip"
@@ -24,60 +25,55 @@ const (
 // webFormLimiter allows limit attempts per key in a sliding webFormWindow. It lives in this process
 // only: a restart clears it, and several server processes each keep their own count. The
 // per-workspace ceiling on new conversations in the store bounds what rotating addresses can do.
+// Keys are kept in a least-recently-used list, so admitting a new key at capacity is O(1): the
+// limiter's lock is shared by every public form request, and a scan would let one client with many
+// addresses slow everyone down.
 type webFormLimiter struct {
 	mu      sync.Mutex
 	limit   int
 	maxKeys int
-	hits    map[string][]time.Time
+	order   *list.List // front is the most recently used key
+	index   map[string]*list.Element
+}
+
+type limiterEntry struct {
+	key  string
+	hits []time.Time
 }
 
 func newWebFormLimiter(limit, maxKeys int) *webFormLimiter {
-	return &webFormLimiter{limit: limit, maxKeys: maxKeys, hits: map[string][]time.Time{}}
+	return &webFormLimiter{limit: limit, maxKeys: maxKeys, order: list.New(), index: map[string]*list.Element{}}
 }
 
 // allow records one attempt for key at now. When refused it reports how long until a slot frees.
 func (l *webFormLimiter) allow(key string, now time.Time) (bool, time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	known := l.hits[key]
-	recent := make([]time.Time, 0, len(known)+1)
-	for _, hit := range known {
+	element, present := l.index[key]
+	if !present {
+		if len(l.index) >= l.maxKeys {
+			oldest := l.order.Back()
+			delete(l.index, oldest.Value.(*limiterEntry).key)
+			l.order.Remove(oldest)
+		}
+		element = l.order.PushFront(&limiterEntry{key: key})
+		l.index[key] = element
+	} else {
+		l.order.MoveToFront(element)
+	}
+	entry := element.Value.(*limiterEntry)
+	recent := entry.hits[:0]
+	for _, hit := range entry.hits {
 		if now.Sub(hit) < webFormWindow {
 			recent = append(recent, hit)
 		}
 	}
 	if len(recent) >= l.limit {
-		l.hits[key] = recent
+		entry.hits = recent
 		return false, webFormWindow - now.Sub(recent[0])
 	}
-	if _, present := l.hits[key]; !present && len(l.hits) >= l.maxKeys {
-		l.makeRoom(now)
-	}
-	l.hits[key] = append(recent, now)
+	entry.hits = append(recent, now)
 	return true, 0
-}
-
-// makeRoom drops keys whose attempts have all left the window; when every key is live it drops the
-// one that was used longest ago.
-func (l *webFormLimiter) makeRoom(now time.Time) {
-	var oldest string
-	var oldestSeen time.Time
-	for key, hits := range l.hits {
-		last := time.Time{}
-		if len(hits) > 0 {
-			last = hits[len(hits)-1]
-		}
-		if now.Sub(last) >= webFormWindow {
-			delete(l.hits, key)
-			continue
-		}
-		if oldest == "" || last.Before(oldestSeen) {
-			oldest, oldestSeen = key, last
-		}
-	}
-	if len(l.hits) >= l.maxKeys && oldest != "" {
-		delete(l.hits, oldest)
-	}
 }
 
 // clientAddress is the address a request counts under. It is the TCP peer unless the peer is a
