@@ -145,7 +145,11 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 			return result, ErrRateLimited
 		}
 		result.Status = "created"
-		if conversationID, err = createEmailConversation(ctx, tx, workspaceID, in); err != nil {
+		held, err := s.overConversationQuota(ctx, tx, workspaceID, now)
+		if err != nil {
+			return result, err
+		}
+		if conversationID, err = createEmailConversation(ctx, tx, workspaceID, in, now, held); err != nil {
 			return result, err
 		}
 	} else if _, err := tx.Exec(ctx, `UPDATE conversations SET status=CASE WHEN status IN ('resolved','closed') THEN 'open' ELSE status END,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
@@ -23,6 +24,8 @@ type ConversationPage struct {
 	Items []domain.Conversation `json:"items"`
 	Page  int                   `json:"page"`
 	Size  int                   `json:"page_size"`
+	// HeldCount is how many conversations are held over the Free quota and hidden from Items.
+	HeldCount int `json:"held_count"`
 }
 
 func (s *Store) CreateConversation(ctx context.Context, workspaceID, contactID, subject string) (domain.Conversation, error) {
@@ -62,18 +65,29 @@ func getConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string) (do
 
 func (s *Store) ListConversations(ctx context.Context, workspaceID string, filter ConversationFilter) (ConversationPage, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (ConversationPage, error) {
-		return listConversations(ctx, tx, workspaceID, filter)
+		monthStart := domain.MonthStart(s.now())
+		page, err := listConversations(ctx, tx, workspaceID, filter, monthStart)
+		if err != nil || !s.limits {
+			return page, err
+		}
+		// Held conversations only exist where plan limits apply; the partial index keeps this count tiny.
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM conversations WHERE workspace_id=$1 AND held_at >= $2`, workspaceID, monthStart).Scan(&page.HeldCount); err != nil {
+			return ConversationPage{}, fmt.Errorf("count held conversations: %w", err)
+		}
+		return page, nil
 	})
 }
 
-func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filter ConversationFilter) (ConversationPage, error) {
+// listConversations hides conversations held in the month starting at monthStart or later: a
+// conversation held in an earlier month is visible again.
+func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filter ConversationFilter, monthStart time.Time) (ConversationPage, error) {
 	idRows, err := tx.Query(ctx, `SELECT c.id::text FROM conversations c
 		LEFT JOIN messages m ON m.workspace_id=c.workspace_id AND m.conversation_id=c.id
-		WHERE c.workspace_id=$1 AND ($2='' OR c.status=$2)
+		WHERE c.workspace_id=$1 AND (c.held_at IS NULL OR c.held_at < $9) AND ($2='' OR c.status=$2)
 		AND ($3='' OR ($3='unassigned' AND c.assignee_id IS NULL) OR ($3='me' AND c.assignee_id=$6) OR ($3='anyone' AND c.assignee_id IS NOT NULL))
 		AND ($4='' OR EXISTS(SELECT 1 FROM conversation_tags ct WHERE ct.workspace_id=c.workspace_id AND ct.conversation_id=c.id AND ct.tag_id=$4::uuid))
 		AND ($5='' OR c.subject ILIKE '%'||$5||'%' ESCAPE '\' OR m.body ILIKE '%'||$5||'%' ESCAPE '\')
-		GROUP BY c.id ORDER BY c.updated_at DESC,c.id DESC LIMIT $7 OFFSET $8`, workspaceID, filter.Status, filter.Assignee, filter.TagID, escapeLikePattern(filter.Search), filter.AgentID, filter.PageSize, (filter.Page-1)*filter.PageSize)
+		GROUP BY c.id ORDER BY c.updated_at DESC,c.id DESC LIMIT $7 OFFSET $8`, workspaceID, filter.Status, filter.Assignee, filter.TagID, escapeLikePattern(filter.Search), filter.AgentID, filter.PageSize, (filter.Page-1)*filter.PageSize, monthStart)
 	if err != nil {
 		return ConversationPage{}, fmt.Errorf("list conversation ids: %w", err)
 	}

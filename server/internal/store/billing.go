@@ -64,6 +64,9 @@ func (s *Store) ApplySubscription(ctx context.Context, workspaceID, webhookID, e
 		if written.RowsAffected() == 0 {
 			return SubscriptionStale, nil
 		}
+		if err := releaseHeldIfPaid(ctx, tx, workspaceID, s.now()); err != nil {
+			return "", err
+		}
 		return SubscriptionApplied, nil
 	})
 	if err != nil {
@@ -72,24 +75,32 @@ func (s *Store) ApplySubscription(ctx context.Context, workspaceID, webhookID, e
 	return result, nil
 }
 
-// GetBilling returns the workspace's plan, state and current usage. Usage counts agents and the
-// conversations created since the start of the current UTC calendar month.
+// loadSubscriptions reads every subscription row of the workspace.
+func loadSubscriptions(ctx context.Context, tx pgx.Tx, workspaceID string) ([]domain.Subscription, error) {
+	rows, err := tx.Query(ctx, `SELECT `+subscriptionColumns+` FROM workspace_billing WHERE workspace_id=$1`, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Subscription, error) { return scanSubscription(row) })
+}
+
+// GetBilling returns the workspace's plan, state and current usage at now. Conversation usage
+// counts what was received since the start of the UTC calendar month; imported conversations are a
+// migration of history and never count.
 func (s *Store) GetBilling(ctx context.Context, workspaceID string, now time.Time) (domain.Billing, error) {
 	billing, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Billing, error) {
-		rows, err := tx.Query(ctx, `SELECT `+subscriptionColumns+` FROM workspace_billing WHERE workspace_id=$1`, workspaceID)
-		if err != nil {
-			return domain.Billing{}, err
-		}
-		subscriptions, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Subscription, error) { return scanSubscription(row) })
+		subscriptions, err := loadSubscriptions(ctx, tx, workspaceID)
 		if err != nil {
 			return domain.Billing{}, err
 		}
 		var usage domain.BillingUsage
 		err = tx.QueryRow(ctx, `SELECT
 			(SELECT count(*) FROM agents WHERE workspace_id=$1),
-			(SELECT count(*) FROM conversations WHERE workspace_id=$1
-				AND created_at >= date_trunc('month', $2::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')`,
-			workspaceID, now).Scan(&usage.Agents, &usage.ConversationsThisMonth)
+			(SELECT count(*) FROM pairing_links WHERE workspace_id=$1 AND `+pendingInvite+`),
+			(SELECT count(*) FROM conversations WHERE workspace_id=$1 AND origin IS NULL AND created_at >= $3),
+			(SELECT count(*) FROM conversations WHERE workspace_id=$1 AND held_at >= $3)`,
+			workspaceID, now, domain.MonthStart(now)).
+			Scan(&usage.Agents, &usage.PendingInvites, &usage.ConversationsThisMonth, &usage.HeldConversations)
 		if err != nil {
 			return domain.Billing{}, err
 		}

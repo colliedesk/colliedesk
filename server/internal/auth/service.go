@@ -21,6 +21,8 @@ type Service struct {
 	db     *database.DB
 	origin string
 	now    func() time.Time
+	// planLimits turns on the agent cap of the hosted cloud's plans; self-hosted has none.
+	planLimits bool
 }
 
 type Principal struct {
@@ -95,4 +97,18 @@ func slugify(value string) string {
 
 func (s *Service) redeemURL(token string) string {
 	return s.origin + "/redeem?token=" + url.QueryEscape(token)
+}
+
+// WithPlanLimits returns a service that refuses to add agents beyond the workspace plan's cap.
+func (s *Service) WithPlanLimits(enabled bool) *Service {
+	copy := *s
+	copy.planLimits = enabled
+	return &copy
+}
+
+// WithClock returns a service that reads now from the given clock; tests move it instead of sleeping.
+func (s *Service) WithClock(now func() time.Time) *Service {
+	copy := *s
+	copy.now = func() time.Time { return now().UTC() }
+	return &copy
 }

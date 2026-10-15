@@ -24,6 +24,9 @@ func (a *API) redeem(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 	result, err := a.auth.Redeem(request.Context(), input.Token, input.RequestedRole, input.Label)
+	if writePlanLimit(response, err) {
+		return
+	}
 	if err != nil {
 		writeError(response, http.StatusUnauthorized, "invalid_link", "This link is invalid, expired, revoked, or already used.")
 		return

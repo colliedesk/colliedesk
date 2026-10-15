@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
@@ -24,11 +25,11 @@ func (s *Store) CreateContact(ctx context.Context, workspaceID, name, email stri
 
 func (s *Store) GetContact(ctx context.Context, workspaceID, id string) (domain.ContactDetail, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.ContactDetail, error) {
-		return getContact(ctx, tx, workspaceID, id)
+		return getContact(ctx, tx, workspaceID, id, s.now())
 	})
 }
 
-func getContact(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.ContactDetail, error) {
+func getContact(ctx context.Context, tx pgx.Tx, workspaceID, id string, now time.Time) (domain.ContactDetail, error) {
 	var contact domain.ContactDetail
 	err := tx.QueryRow(ctx, `SELECT id::text,name,email,organization,created_at,updated_at FROM contacts WHERE workspace_id=$1 AND id=$2`, workspaceID, id).
 		Scan(&contact.Contact.ID, &contact.Contact.Name, &contact.Contact.Email, &contact.Contact.Organization, &contact.Contact.CreatedAt, &contact.Contact.UpdatedAt)
@@ -36,7 +37,7 @@ func getContact(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.
 		return domain.ContactDetail{}, fmt.Errorf("get contact: %w", err)
 	}
 	contact.Contact.CreatedAt, contact.Contact.UpdatedAt = domain.UTC(contact.Contact.CreatedAt), domain.UTC(contact.Contact.UpdatedAt)
-	conversations, err := contactConversations(ctx, tx, workspaceID, id)
+	conversations, err := contactConversations(ctx, tx, workspaceID, id, now)
 	if err != nil {
 		return domain.ContactDetail{}, err
 	}
@@ -72,8 +73,8 @@ func listContacts(ctx context.Context, tx pgx.Tx, workspaceID, search string) ([
 	return contacts, nil
 }
 
-func contactConversations(ctx context.Context, tx pgx.Tx, workspaceID, contactID string) ([]domain.Conversation, error) {
-	rows, err := tx.Query(ctx, `SELECT id::text FROM conversations WHERE workspace_id=$1 AND contact_id=$2 ORDER BY updated_at DESC`, workspaceID, contactID)
+func contactConversations(ctx context.Context, tx pgx.Tx, workspaceID, contactID string, now time.Time) ([]domain.Conversation, error) {
+	rows, err := tx.Query(ctx, `SELECT id::text FROM conversations WHERE workspace_id=$1 AND contact_id=$2 AND (held_at IS NULL OR held_at < $3) ORDER BY updated_at DESC`, workspaceID, contactID, domain.MonthStart(now))
 	if err != nil {
 		return nil, fmt.Errorf("list contact conversations: %w", err)
 	}

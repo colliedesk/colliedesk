@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/jackc/pgx/v5"
@@ -13,6 +14,9 @@ import (
 type Store struct {
 	db       *database.DB
 	outbound OutboundPolicy
+	// limits turns on the plan limits of the hosted cloud; the zero value (self-hosted) has none.
+	limits bool
+	clock  func() time.Time
 }
 
 func New(pool *pgxpool.Pool) *Store {
@@ -37,4 +41,26 @@ func scoped[T any](ctx context.Context, s *Store, workspaceID string, fn func(pg
 		return zero, err
 	}
 	return result, nil
+}
+
+// WithPlanLimits returns a store that enforces the Free plan's monthly conversation quota. Without
+// it (self-hosted) no conversation is ever held.
+func (s *Store) WithPlanLimits(enabled bool) *Store {
+	copy := *s
+	copy.limits = enabled
+	return &copy
+}
+
+// WithClock returns a store that reads now from the given clock; tests move it instead of sleeping.
+func (s *Store) WithClock(now func() time.Time) *Store {
+	copy := *s
+	copy.clock = now
+	return &copy
+}
+
+func (s *Store) now() time.Time {
+	if s.clock != nil {
+		return s.clock().UTC()
+	}
+	return time.Now().UTC()
 }
