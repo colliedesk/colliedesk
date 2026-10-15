@@ -22,7 +22,7 @@ Built on `main` and in the `edge` image, in testing:
 
 Still to do before v0.2 is released:
 
-- **CollieDesk Cloud** for the first founding customers: billing and outgoing email on Cloud.
+- **CollieDesk Cloud** for the first founding customers: billing switched on (the code is merged) and outgoing email on Cloud.
 - Attachments on agent replies.
 - Notifications for new and assigned tickets, and an inbox that updates without a reload.
 - Remove an agent from a workspace.
