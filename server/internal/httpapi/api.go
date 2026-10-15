@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -41,6 +42,9 @@ type Config struct {
 	// ExportTimeout is the longest one export may run in total (default 2 h), however slowly the
 	// client keeps reading.
 	ExportTimeout time.Duration
+	// TrustedProxies are the reverse proxies whose X-Forwarded-For header is believed when finding
+	// the client address of the public web form's rate limit. Empty means the TCP peer is the client.
+	TrustedProxies []netip.Prefix
 }
 
 type Route struct {
@@ -58,8 +62,10 @@ type API struct {
 	store  *store.Store
 	// exports admits workspace exports; see exportLimiter.
 	exports *exportLimiter
-	polar   *polar.Client
-	now     func() time.Time
+	// webForms limits the public web form per client address and workspace.
+	webForms *webFormLimiter
+	polar    *polar.Client
+	now      func() time.Time
 }
 
 type routeSpec struct {
@@ -89,7 +95,7 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 		clock = func() time.Time { return time.Now().UTC() }
 	}
 	limits := config.Billing.Enabled()
-	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports),
+	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), webForms: newWebFormLimiter(),
 		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits),
 		store: store.NewWithDB(db).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits)}
 	if config.CloudAuth.Enabled() {
@@ -105,6 +111,8 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 		}
 		mux.Handle(route.Method+" "+route.Pattern, api.authorize(route.Route, route.handler))
 	}
+	// The CORS preflight of the public web form is sent by the browser, never by an agent.
+	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)
 	return mux
 }
 
@@ -153,6 +161,9 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/billing/portal", auth.PermissionBillingManage},
 		{http.MethodPost, polarWebhookPath, auth.PermissionPublic},
 		{http.MethodGet, "/api/v1/export", auth.PermissionWorkspaceExport},
+		{http.MethodGet, "/api/v1/channels/web-form", auth.PermissionAccessRead},
+		{http.MethodPut, "/api/v1/channels/web-form", auth.PermissionAccessWrite},
+		{http.MethodPost, webFormSubmitPattern, auth.PermissionPublic},
 	}
 }
 

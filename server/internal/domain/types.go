@@ -166,6 +166,15 @@ type EmailChannel struct {
 	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
+// WebForm is the workspace's public website form channel. Off until an admin turns it on.
+type WebForm struct {
+	Enabled bool `json:"enabled"`
+	// AllowedOrigins are the exact origins (scheme://host[:port]) whose pages may call the form.
+	AllowedOrigins []string `json:"allowed_origins"`
+	// SubmitPath is the path a website posts to; the host is the instance's own.
+	SubmitPath string `json:"submit_path"`
+}
+
 func UTC(value time.Time) time.Time { return value.UTC() }
 
 func UTCOptional(value *time.Time) *time.Time {

@@ -130,6 +130,7 @@ services:
       MAIL_FROM_DOMAIN: ${MAIL_FROM_DOMAIN:-}
       MAIL_FROM_INBOUND_SECRET: ${MAIL_FROM_INBOUND_SECRET:-}
       EMAIL_TRUSTED_AUTHSERV_ID: ${EMAIL_TRUSTED_AUTHSERV_ID:-}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
       ATTACHMENTS_DIR: /data/attachments
     volumes:
       - attachments-data:/data/attachments

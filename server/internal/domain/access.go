@@ -47,3 +47,6 @@ func (*LockedError) Error() string {
 
 // ErrMailboxClosed means a locked workspace no longer accepts new mail.
 var ErrMailboxClosed = errors.New("mailbox closed: the workspace is locked")
+
+// ErrWebFormClosed means the public web form is off, or the workspace is locked.
+var ErrWebFormClosed = errors.New("web form closed")
