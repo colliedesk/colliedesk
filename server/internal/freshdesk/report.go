@@ -34,6 +34,10 @@ type TicketCount struct {
 	HighestID       int64    `json:"highest_existing_id"`
 	HighestProbedID int64    `json:"highest_probed_id"`
 	ProbedIDs       int      `json:"probed_ids"`
+	// UnresolvedIDs are ids below the highest existing ticket that answered 404 while the
+	// archive endpoint was refused: each may be deleted or archived, so the customer must
+	// check them in Freshdesk. Empty when the archive could be checked.
+	UnresolvedIDs []string `json:"unresolved_ids"`
 }
 
 // Verification says how an expected total was established independently of

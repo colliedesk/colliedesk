@@ -89,14 +89,16 @@ func (r *run) applyProbes(ctx context.Context, results []probeResult) []int64 {
 // recordAbsent stores ids that do not exist below the highest existing id.
 // Ids above it are not stored: Freshdesk may give them to new tickets later.
 // Nothing is stored while the archive endpoint is refused: an id missing from
-// /tickets may be an archived ticket, so it stays unknown and is probed again.
+// /tickets may be an archived ticket, so it stays unknown, is probed again and
+// is reported as unresolved.
 func (r *run) recordAbsent(ctx context.Context, ids []int64) error {
-	if r.archiveUnavailable.Load() {
-		return r.internalErr
-	}
 	for _, id := range ids {
 		if id < r.highestExisting {
 			key := strconv.FormatInt(id, 10)
+			if r.archiveUnavailable.Load() {
+				r.unresolved = append(r.unresolved, key)
+				continue
+			}
 			r.recordSkip(skipAbsent, key)
 			r.markSkip(ctx, key, skipAbsent)
 		}

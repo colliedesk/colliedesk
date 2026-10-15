@@ -62,6 +62,9 @@ func importCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 		report.TimeEntries.Imported, report.TimeEntries.Source, markdownPath, jsonPath); err != nil {
 		return err
 	}
+	if err := printUnresolved(output, report.Tickets.UnresolvedIDs); err != nil {
+		return err
+	}
 	switch report.Status {
 	case freshdesk.StatusFailed:
 		return fmt.Errorf("import FAILED: %d failure(s); see %s, fix the cause and run the same command again", len(report.Failures), markdownPath)
@@ -69,6 +72,21 @@ func importCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 		return fmt.Errorf("import UNVERIFIED: the Freshdesk totals could not confirm that everything was imported; see the verification section of %s", markdownPath)
 	}
 	return nil
+}
+
+// printUnresolved tells the operator which ticket ids to check in Freshdesk when the archive
+// endpoint was refused. It prints nothing when every id was resolved.
+func printUnresolved(output io.Writer, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	const shown = 20
+	list := strings.Join(ids[:min(len(ids), shown)], ", ")
+	if len(ids) > shown {
+		list += fmt.Sprintf(", … %d more in the report", len(ids)-shown)
+	}
+	_, err := fmt.Fprintf(output, "Unresolved ticket ids (archive unavailable, check in Freshdesk): %d: %s\n", len(ids), list)
+	return err
 }
 
 func parseImportFlags(args []string) (freshdesk.Options, string, error) {

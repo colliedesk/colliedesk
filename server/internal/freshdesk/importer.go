@@ -39,6 +39,7 @@ type run struct {
 	trashed       []string
 	spam          []string
 	absent        int
+	unresolved    []string
 	archived      int
 	warnings      []*Warning
 	internalErr   error
