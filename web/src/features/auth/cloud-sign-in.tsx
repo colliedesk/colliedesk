@@ -39,7 +39,11 @@ function CloudSession({ onSessionToken }: Pick<CloudSignInProps, 'onSessionToken
 
   if (failed) return <button type="button" onClick={() => setFailed(false)}>{messages.retryCloudSignIn}</button>;
   if (!isLoaded || isSignedIn) return <p>{messages.cloudSigningIn}</p>;
-  return <SignIn routing="hash" appearance={clerkAppearance()} />;
+  // Stay on this page after sign-in (Clerk would otherwise go to "/" and unmount this component
+  // before the exchange). withSignUp lets an agent who has no Clerk identity yet sign in with a
+  // code; the server still admits only emails that belong to an agent.
+  const here = `${window.location.pathname}${window.location.search}`;
+  return <SignIn routing="hash" withSignUp forceRedirectUrl={here} signUpForceRedirectUrl={here} appearance={clerkAppearance()} />;
 }
 
 export function CloudSignIn({ publishableKey, onSessionToken }: CloudSignInProps) {
