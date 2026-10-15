@@ -126,7 +126,7 @@ func checkSignupAllowed(ctx context.Context, tx pgx.Tx, emailHash, ipHash string
 // periodically; it does not depend on anyone signing up.
 func (s *Service) ClearSignupAddresses(ctx context.Context) (int64, error) {
 	var cleared int64
-	err := s.db.Privileged(ctx, database.PrivilegeCreateWorkspace, func(tx pgx.Tx) error {
+	err := s.db.Privileged(ctx, database.PrivilegeSignupSweep, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE cloud_signups SET ip_hash=NULL WHERE ip_hash IS NOT NULL AND created_at < $1`, s.now().Add(-signupIPRetention))
 		if err != nil {
 			return fmt.Errorf("clear old sign-up addresses: %w", err)

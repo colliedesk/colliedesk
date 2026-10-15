@@ -48,11 +48,14 @@ export function ReplyComposer({ disabled, onSubmit }: ReplyComposerProps) {
   // The text leaves the box only after the server accepted it; a refusal keeps it with the reason.
   const submit = () => {
     if (!body.trim() || sending) return;
-    const result = onSubmit?.(kind, body.trim());
+    const sent = body.trim();
+    const result = onSubmit?.(kind, sent);
     if (typeof (result as Promise<unknown> | undefined)?.then !== 'function') { setBody(''); return; }
     setSending(true);
     setProblem(undefined);
-    (result as Promise<unknown>).then(() => setBody(''), (error: unknown) => setProblem(refusalText(error))).finally(() => setSending(false));
+    // Clear only what was sent: text typed while the request was in flight (a note right after a reply) stays.
+    const clearSent = () => setBody((current) => (current.trim() === sent ? '' : current));
+    (result as Promise<unknown>).then(clearSent, (error: unknown) => setProblem(refusalText(error))).finally(() => setSending(false));
   };
   // R starts a reply and N a private note from anywhere on the page, as the keycaps on the tabs say.
   useEffect(() => {

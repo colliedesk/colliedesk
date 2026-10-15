@@ -7,14 +7,15 @@ Only workspace admins see **Billing** (top bar). Agents do not.
 
 ## Plans
 
-| Plan | Price | Agents | New conversations |
-|---|---|---|---|
-| Free | $0 | up to 3 | up to 100 per UTC calendar month |
-| Team | $49 per month or $490 per year, per workspace | up to 10 (contact us for more) | no limit |
-| Founding | $100 per year, for life | up to 10 | no limit |
+| Plan | Price | Agents |
+|---|---|---|
+| Trial | $0, 14 days from the day the workspace is created (30 days after a Freshdesk import) | up to 10 |
+| Team | $49 per month or $490 per year, per workspace | up to 10 (contact us for more) |
+| Founding | $100 per year, for life | up to 10 |
 
-The plan belongs to the workspace, not to a person. The page shows how much of each limit you have
-used. Conversations are counted by the UTC month in which they were received.
+There is no permanent free plan. A new workspace starts a trial with the full Team features. When
+the trial ends and nothing is paid, the workspace is locked (see "What happens to a locked
+workspace" below). The plan belongs to the workspace, not to a person.
 
 ## Attachment storage
 
@@ -36,28 +37,19 @@ limit, switch to the Team plan under **Manage billing**, or export your data. Th
 different: its 2 GiB limit also applies to incoming email, and files brought in by an import do not
 count. A file counts each time it is attached, so the same file on two messages counts twice.
 
-## What happens at the limits (Free plan)
+## Limits during the trial
 
-- **Agents.** An agent and a pending invite each take one of the 3 seats. When all seats are taken,
-  creating an invite for another person fails with "The Free plan allows 3 agents". Sending a second invite to the same address, or inviting someone who already is an agent, does not use another seat. Revoke a pending invite, or
-  upgrade, and try again. If the workspace is over the limit after a downgrade, nobody is removed;
-  an unused invite cannot be accepted until a seat is free or the workspace upgrades. The invite
-  stays valid until it expires, so the person can use it again after the upgrade.
-- **New conversations.** The 101st new conversation of a UTC month, and every one after it, is
-  **held**. A held conversation is stored in full, with its messages and attachments. Nothing is
-  dropped and no sender gets a bounce. It is hidden from the inbox list and from search. A banner on
-  the inbox and a count on **Billing** show how many are held.
-- Held conversations appear on their own as soon as the workspace upgrades, or when the month in
-  which they arrived ends. A new month starts with a new quota of 100.
-- **Replies always work.** A customer replying to an existing conversation, and an agent replying or
-  adding a note, are never blocked. Only new conversations count. A reply to a held conversation
-  stays with it.
-- Conversations you create yourself in Colliedesk (not received by email) count toward the 100 but
-  are never held. You see them at once.
-- Conversations brought in by a Freshdesk import are history, not new mail. They do not count toward
-  the quota and are never held, however many there are.
-- Going back from a paid plan to Free hides and deletes nothing. Only conversations that arrive
-  over the quota afterwards are held.
+- **Agents.** An agent and a pending invite each take one of the 10 seats. When all seats are taken,
+  creating an invite for another person fails. Sending a second invite to the same address, or
+  inviting someone who already is an agent, does not use another seat. Revoke a pending invite, or
+  subscribe, and try again.
+- **Replies.** Email goes only to customers who wrote to you first, until you verify your sending
+  domain in Settings or subscribe. At most 200 replies leave in any 24 hours.
+- **Attachments.** Files received by email count toward 2 GiB of storage. Files brought in by a
+  Freshdesk import do not count. A message that would pass the limit is refused, not dropped
+  silently: the sender's mail server reports it.
+- A paid plan removes the reply limits. Team removes the storage limit; Founding raises it to 20 GiB
+  (see "Attachment storage" above).
 
 ## Upgrade
 
@@ -79,15 +71,29 @@ card, download invoices and cancel there. The button stays available after a sub
 ## What the status means
 
 - **Renews**: the plan continues on the date shown.
-- **Cancels**: you cancelled. You keep the plan until the date shown, then the workspace is Free.
+- **Cancels**: you cancelled. You keep the plan until the date shown, then the workspace is locked.
 - **Last payment failed**: the plan stays active while the provider retries the card. Update the
   card in the portal.
-- A subscription that ended, was unpaid or never completed leaves the workspace on Free. Nothing
-  is deleted: conversations, contacts and attachments stay.
+- A subscription that ended, was unpaid or never completed locks the workspace: you can sign in,
+  choose a plan and export your data, and nothing else.
+
+## What happens to a locked workspace
+
+1. The workspace stays locked, with all its data, while you decide. You can pick a plan in
+   **Settings > Billing** at any time, and everything is there again.
+2. About 11 months after the lock, 30 days before deletion, every admin gets an email with the exact
+   deletion date. It is sent from Colliedesk, not from your workspace's address.
+3. 12 months after the lock, the workspace is deleted for good: conversations, contacts and
+   attachments. Choosing a plan before that date cancels the deletion, and a later lock starts a new
+   12 months.
+4. To keep a copy, export all your data before the deletion date (see "Export all your data").
+   Export works while the workspace is locked.
+
+Deleted data can stay in Colliedesk's encrypted nightly backups until they expire; it is not restored on request after the deletion date.
 
 ## Limits
 
 - Billing is per workspace. Moving a subscription to another workspace is not supported yet.
 - Prices are in US dollars.
-- The page shows the limits and your usage: agents (with pending invites), conversations received
-  this month, and how many are held.
+- The page shows the limits and your usage: agents (with pending invites), replies in the last 24
+  hours (trial) and attachment storage.
