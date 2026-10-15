@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+# A newer push to a PR cancels its older run. On main a run never cancels the running one, but
+# GitHub keeps only one pending run per group, so a burst of merges skips the middle commits.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   go:
     runs-on: ubuntu-latest
@@ -142,20 +148,97 @@ jobs:
         run: corepack pnpm exec playwright install --with-deps chromium
       - name: Run onboarding journeys
         run: make e2e E2E_ARGS='--grep @onboarding'
-  # install.sh exactly as a self-hoster runs it, against the image built from this commit.
-  install-smoke:
+  # Builds the server image once, boots it, then runs install.sh exactly as a self-hoster does.
+  # On main the tested image is pushed as sha-<commit>; publish-edge only retags that digest.
+  image:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
+      - id: version
+        run: echo "value=edge-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
-      - name: Build the image
+      - name: Build image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: server/Dockerfile
+          platforms: linux/amd64
+          build-args: VERSION=${{ steps.version.outputs.value }}
           load: true
-          tags: colliedesk:smoke
+          tags: colliedesk:ci
+          cache-from: type=gha,scope=server-image
+          cache-to: type=gha,mode=max,scope=server-image
+      - name: Boot image against Postgres
+        run: sh tests/image-boot-test.sh colliedesk:ci "${{ steps.version.outputs.value }}"
       - name: Install with install.sh and sign in with the printed link
         run: sh tests/install-smoke.sh
         env:
-          COLLIE_DESK_IMAGE: colliedesk:smoke
+          COLLIE_DESK_IMAGE: colliedesk:ci
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Same builder and inputs as the loaded image, so this pushes the layers that just booted.
+      - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        name: Push tested image as sha-<commit>
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: server/Dockerfile
+          platforms: linux/amd64
+          build-args: VERSION=${{ steps.version.outputs.value }}
+          push: true
+          tags: ghcr.io/colliedesk/colliedesk:sha-${{ github.sha }}
+
+  # The one check to watch: adding or splitting jobs above never renames it.
+  ci-ok:
+    if: ${{ !cancelled() }}
+    needs: [go, web, e2e, onboarding, image]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ci-ok waits for every job
+        run: sh tests/ci-ok-needs-test.sh
+      - name: Every job passed or was skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "job results: $RESULTS"
+          for result in $RESULTS; do
+            case "$result" in success|skipped) ;; *) exit 1 ;; esac
+          done
+
+  # Self-hosters on the edge channel pull this tag, so it moves only after ci-ok, and only for
+  # the current head of main: re-running an older run must not move edge backwards.
+  publish-edge:
+    needs: ci-ok
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - id: head
+        run: |
+          head=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$head" = "$GITHUB_SHA" ]; then echo "current=true" >> "$GITHUB_OUTPUT"; else
+            echo "::notice::main moved to $head; edge stays on the newer commit."
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.head.outputs.current == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - if: steps.head.outputs.current == 'true'
+        uses: docker/setup-buildx-action@v3
+      - if: steps.head.outputs.current == 'true'
+        name: Point edge at the tested digest
+        run: docker buildx imagetools create -t ghcr.io/colliedesk/colliedesk:edge "ghcr.io/colliedesk/colliedesk:sha-$GITHUB_SHA"
