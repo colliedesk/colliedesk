@@ -68,15 +68,15 @@ test('a failed sign-out is said aloud, not swallowed', async () => {
 });
 
 test('keeps Clerk on the current page after sign-in so the exchange still runs', async () => {
-  window.history.pushState({}, '', '/redeem?from=cloud');
+  window.history.pushState({}, '', '/sign-in?from=cloud');
   clerk.signedIn = false;
   clerk.getToken.mockResolvedValue('session-token');
   const onSessionToken = vi.fn().mockResolvedValue(undefined);
   const view = render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={onSessionToken} />);
 
   expect(clerk.signInProps).toHaveBeenLastCalledWith(expect.objectContaining({
-    forceRedirectUrl: '/redeem?from=cloud',
-    signUpForceRedirectUrl: '/redeem?from=cloud',
+    forceRedirectUrl: '/sign-in?from=cloud',
+    signUpForceRedirectUrl: '/sign-in?from=cloud',
   }));
   expect(onSessionToken).not.toHaveBeenCalled();
 

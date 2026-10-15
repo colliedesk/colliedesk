@@ -13,6 +13,8 @@ cannot be loaded, it says so with **Try again** instead.
   Unassigned) and **Tag**.
 - **Search conversations** matches subject and message text. Characters such as `%` and `_`
   are matched literally.
+- When nothing matches, **Clear filters** below the message resets search, status, assignee and
+  tag in one step.
 - The list is ordered by latest activity and grouped under **Today** and **Earlier**. Use **Previous page** and **Next page** below the list to move; they appear only when there is more than one page.
 - Dates from an earlier year show the year, for example imported history.
 - The list loads again each time you open the inbox, so mail that arrived meanwhile is there.

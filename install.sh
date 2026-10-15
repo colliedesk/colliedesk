@@ -132,6 +132,8 @@ services:
       EMAIL_TRUSTED_AUTHSERV_ID: ${EMAIL_TRUSTED_AUTHSERV_ID:-}
       TRUSTED_PROXIES: ${TRUSTED_PROXIES-127.0.0.0/8,::1/128,172.16.0.0/12}
       ATTACHMENTS_DIR: /data/attachments
+      DISABLE_TELEMETRY: ${DISABLE_TELEMETRY:-}
+      DO_NOT_TRACK: ${DO_NOT_TRACK:-}
     volumes:
       - attachments-data:/data/attachments
     ports:
@@ -140,9 +142,9 @@ services:
       postgres:
         condition: service_healthy
     entrypoint: ["/bin/sh", "-c"]
-    command: ["/app/colliedesk migrate && exec /app/colliedesk serve"]
+    command: ["/app/collie migrate && exec /app/collie serve"]
     healthcheck:
-      test: ["CMD", "/app/colliedesk", "healthcheck"]
+      test: ["CMD", "/app/collie", "healthcheck"]
       interval: 2s
       timeout: 4s
       retries: 30
@@ -175,7 +177,7 @@ if [ -f .initialized ]; then
   exit 0
 fi
 
-PAIRING_URL=$("$DOCKER" compose exec -T server /app/colliedesk create-workspace \
+PAIRING_URL=$("$DOCKER" compose exec -T server /app/collie create-workspace \
   --name "$WORKSPACE_NAME" --admin-email "$ADMIN_EMAIL" </dev/null)
 [ -n "$PAIRING_URL" ] || fail 'Workspace creation did not return a pairing URL.'
 touch .initialized

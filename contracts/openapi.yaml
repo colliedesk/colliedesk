@@ -202,6 +202,11 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '402': {$ref: '#/components/responses/PlanLimitReached'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '409':
+          description: >
+            The address belongs to a deactivated agent (error code `agent_deactivated`). Reactivate the agent
+            in the team list instead of inviting them again.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/auth/invites/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
     delete:
@@ -617,17 +622,60 @@ paths:
     get:
       operationId: listAgents
       x-permission: access:read
+      description: >
+        Every agent of the workspace, deactivated ones included (old conversations and messages still name
+        them). Clients hide deactivated agents from assignee pickers.
       responses:
         '200':
-          description: Workspace agents
+          description: Workspace team
           content:
             application/json:
               schema:
                 type: object
                 required: [items]
                 properties:
-                  items: {type: array, items: {$ref: '#/components/schemas/Agent'}}
+                  items: {type: array, items: {$ref: '#/components/schemas/TeamMember'}}
         '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/agents/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    patch:
+      operationId: updateAgent
+      x-permission: access:write
+      description: >
+        Change an agent's role or active state; send at least one of `role` and `active`. Deactivating an
+        agent, in one transaction: sets `deactivated_at`, revokes the agent's sessions and unused sign-in
+        links and invites, and moves the agent's open and pending conversations to `reassign_to` (to
+        Unassigned when it is absent). Resolved and closed conversations keep their assignee. A
+        deactivated agent cannot sign in and holds no seat. Reactivating clears `deactivated_at`, takes a
+        seat again and does not restore assignments; the agent signs in through a new link. Sending the
+        state an agent already has changes nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: {$ref: '#/components/schemas/Role'}
+                active: {type: boolean}
+                reassign_to:
+                  type: [string, 'null']
+                  format: uuid
+                  description: 'Only with `active: false`. An active agent of this workspace other than the one being deactivated; an invalid target is `invalid_reassign_target` and nothing changes.'
+      responses:
+        '200':
+          description: The agent after the change
+          content: {application/json: {schema: {$ref: '#/components/schemas/TeamMember'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/PlanLimitReached'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: >
+            The change would leave the workspace without an active admin (error code `last_admin`). Make
+            another agent an admin first.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/workspace/timezone:
     patch:
       operationId: updateWorkspaceTimezone
@@ -1291,6 +1339,26 @@ components:
         display_name: {type: string}
         role: {$ref: '#/components/schemas/Role'}
         timezone_override: {type: [string, 'null']}
+    TeamMember:
+      type: object
+      required: [id, email, display_name, role, timezone_override, deactivated_at, last_active_at, open_conversations]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string, format: email}
+        display_name: {type: string}
+        role: {$ref: '#/components/schemas/Role'}
+        timezone_override: {type: [string, 'null']}
+        deactivated_at:
+          type: [string, 'null']
+          format: date-time
+          description: Null for an active agent.
+        last_active_at:
+          type: [string, 'null']
+          format: date-time
+          description: The last time a session of the agent was used; null when none ever was.
+        open_conversations:
+          type: integer
+          description: Open and pending conversations assigned to the agent; a deactivation moves them.
     Redeemed:
       type: object
       required: [agent, workspace]

@@ -130,7 +130,7 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
 - The locked screen focuses its heading on mount, offers Manage billing when a subscription exists (a failed card
   is fixed in the portal, not by a second checkout), and says retention is "at least 12 months" with "at least 30
   days" notice: the app shows no deletion date, on purpose, because deletion is an operator switch.
-- `lockedScreenShipped` in `cmd/colliedesk/serve.go` keeps billing off (and logs why) in a build whose web app cannot show
+- `lockedScreenShipped` in `cmd/collie/serve.go` keeps billing off (and logs why) in a build whose web app cannot show
   the lock. It is true because this screen exists; do not set it back.
 - Cloud sign-up: `GET /api/v1/config` reports `signup.enabled` (cloud sign-in and billing both on and sign-up not turned
   off at start, the same condition as the route; the web app maps 503 `signup_unavailable` too). After Clerk authenticates, the exchange answers 403 `forbidden` for an email that
@@ -154,14 +154,20 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
 ### Agent seats
 
 - Cap: 10 on trial, Team and Founding (more than 10 is "contact us", so the message says that instead of
-  offering an upgrade). A seat is an agent, or a person with an unused, unrevoked, unexpired invite.
-  Pending invites count by distinct address: re-sending an invite to the same address, or inviting someone
-  who is already an agent (a role change), takes no new seat.
-- Checked when an invite is created and when one is redeemed. Redeem excludes the invite itself
-  and skips someone who is already an agent. Redeem matters after a downgrade: the invite stays
-  unused (the transaction rolls back), so it works after an upgrade.
-- Both checks take `pg_advisory_xact_lock("agent-seats:<workspace>")`, so concurrent invites see
-  each other. Existing agents are never removed.
+  offering an upgrade). A seat is an active agent, or a person with an unused, unrevoked, unexpired invite.
+  A deactivated agent holds no seat. Pending invites count by distinct address: re-sending an invite to the
+  same address, or inviting someone who is already an active agent (a role change), takes no new seat.
+- Checked when an invite is created, when one is redeemed and when a deactivated agent is reactivated.
+  Redeem excludes the invite itself and skips someone who is already an active agent. Redeem matters after a
+  downgrade: the invite stays unused (the transaction rolls back), so it works after an upgrade.
+- All three checks take `pg_advisory_xact_lock("agent-seats:<workspace>")`, so concurrent invites and
+  reactivations see each other. `PATCH /api/v1/agents/{id}` takes the same lock before its last-admin check.
+- Agents are never deleted. An admin deactivates them (`agents.deactivated_at`): the seat is freed at once,
+  sessions and unused links and invites of the agent are revoked, and the open and pending conversations move
+  to Unassigned or to another active agent in the same transaction. Reactivating takes a seat again
+  (402 `plan_limit_reached` when none is free) and does not restore assignments or sessions. An invite for the
+  address of a deactivated agent is refused with 409 `agent_deactivated`: reactivate instead. Downgrading a
+  plan still removes nobody; the admin frees seats by deactivating agents or revoking invites.
 - Error: HTTP 402, code `plan_limit_reached`, message names the plan, the cap and the way out.
 
 ### Rollback of the cleanup
@@ -292,7 +298,7 @@ instead of sleeping. The webhook signature check keeps the real clock.
 
 A workspace that stays locked (no entitled subscription or comp grant, trial over) for 12 months is
 hard-deleted, after its admins got an email at least 30 days before. Cloud only: `serve` starts the job
-when billing is configured, and `colliedesk retention plan|run` refuse without billing, so self-hosted
+when billing is configured, and `collie retention plan|run` refuse without billing, so self-hosted
 never deletes.
 
 - **Lock start** is `domain.LockedSince`: the latest end among `trial_ends_at`, each subscription that
@@ -324,7 +330,7 @@ never deletes.
     workspace and logs an error.
   - Decisions use the database clock (`SELECT now()`); a pass refuses to run when it differs from the
     application clock by more than 5 minutes (`ErrClockSkew`).
-  - `colliedesk retention run` needs `--yes`; read `retention plan` first.
+  - `collie retention run` needs `--yes`; read `retention plan` first.
 - **Settings never stop `serve`.** A bad `RETENTION_DELETE` or `RETENTION_MAX_DELETIONS_PER_DAY` is logged as an
   error (variable name, not the value) and the job runs with deletion off; the CLI is strict and refuses.
   `retention plan|run` follow the same billing decision as `serve` (`billingAtStart`): while the build has no
@@ -345,7 +351,7 @@ never deletes.
   deletion for 30 days by renaming the directory back and restoring the database rows from a backup.
 - Deleted data stays in the nightly database dumps and the attachment volume backup until they expire
   (collie-01 backup retention). Restoring one workspace from a full dump is a manual job.
-- `colliedesk retention plan` prints `action slug id locked_since notice_at delete_at` per workspace to act
+- `collie retention plan` prints `action slug id locked_since notice_at delete_at` per workspace to act
   on and changes nothing; `retention run --yes` does one pass. The job runs at start and hourly. The
   hourly list is pre-filtered in SQL: a workspace with an entitled subscription or a comp grant in force
   is not evaluated.
@@ -354,12 +360,12 @@ never deletes.
 
 ## Operator commands: trial end and complimentary plan
 
-Run on the server shell (`docker compose exec server /app/colliedesk ...`).
+Run on the server shell (`docker compose exec server /app/collie ...`).
 
-- `colliedesk trial set --workspace <slug> --ends <RFC3339>` sets `trial_ends_at`, prints the old
+- `collie trial set --workspace <slug> --ends <RFC3339>` sets `trial_ends_at`, prints the old
   and new value and records who changed it, when, and from what to what in `workspace_trial_changes`
   (`--by`, default the OS user). It never touches `trial_extended_at`. Undo a mistake by running it again.
-- `colliedesk plan grant --workspace <slug> --plan team --until <RFC3339|forever> [--by <name>]` puts
+- `collie plan grant --workspace <slug> --plan team --until <RFC3339|forever> [--by <name>]` puts
   a workspace on a complimentary Team plan: no payment, no trial clock. `plan revoke --workspace <slug>`
   ends it, and the workspace is locked again once its trial is over.
 - A grant is a row in `workspace_comp_plans` (who, when, until, who revoked and when); at most one is in

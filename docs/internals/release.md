@@ -15,7 +15,7 @@ renames it. `tests/ci-ok-needs-test.sh` fails the run when a job is missing from
 
 On `main`, `publish-edge` runs after `ci-ok` passes and retags the tested `sha-<commit>` digest as
 `edge`. It skips the retag when `main` has already moved on, so re-running an old run never moves
-`edge` backwards. The image reports `edge-<12-char sha>` from `colliedesk version`.
+`edge` backwards. The image reports `edge-<12-char sha>` from `collie version`.
 
 A newer push to a PR cancels its older run. On `main` a running run is never cancelled, but GitHub
 keeps only one pending run per group: during a burst of merges the middle commits get no CI run.

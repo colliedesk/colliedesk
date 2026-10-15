@@ -1,6 +1,6 @@
 # Freshdesk import: decisions and traps
 
-Code: `server/internal/freshdesk`. CLI: `server/cmd/colliedesk/import.go` and `undo.go`. Written
+Code: `server/internal/freshdesk`. CLI: `server/cmd/collie/import.go` and `undo.go`. Written
 from the public Freshdesk API v2 documentation (developers.freshdesk.com/api) only.
 
 ## Traps in the Freshdesk API
@@ -87,7 +87,7 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
   always stored. Contacts reuse a contact with the same email in the same workspace. A contact
   without email gets `freshdesk-contact-<id>@import.invalid` (RFC 2606). Companies become
   `contacts.organization`; companies without contacts are reported.
-- **Undo** (`colliedesk import undo`) deletes the conversations an import created and the contacts
+- **Undo** (`collie import undo`) deletes the conversations an import created and the contacts
   and tags it created (`meta.created`) that nothing else uses, then stored files no longer
   referenced. Conversations with a message not written by the import are kept with their ledger
   rows, so a later import does not duplicate them.

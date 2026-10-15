@@ -38,7 +38,7 @@
   text-align: left; font-size: var(--fs-ui); font-weight: 400; white-space: normal;
 }
 .conversation-row:hover:not(:disabled) { background: var(--surface-2); border-color: var(--line); }
-.conversation-row[data-selected="true"] { background: var(--accent-soft); box-shadow: inset 2px 0 var(--accent); }
+.conversation-row[aria-current="true"] { background: var(--accent-soft); box-shadow: inset 2px 0 var(--accent); }
 .conversation-row:focus-visible { outline-offset: -2px; }
 .conversation-subject { overflow: hidden; color: var(--text-1); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .conversation-row time { color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
@@ -184,6 +184,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .invite-form { display: grid; grid-template-columns: minmax(0, 1fr) 9rem auto; align-items: end; gap: var(--space-3); }
 .button-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .invite-link { display: grid; gap: var(--space-1); }
+.confirm-panel { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--danger); border-radius: var(--radius); }
 .invite-link small { color: var(--text-3); font-size: var(--fs-label); }
 .email-channel-dns { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-0); padding: var(--space-4); }
 .data-list { border-top: 1px solid var(--line); }
@@ -207,7 +208,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 
 /* Windows High Contrast drops backgrounds and shadows; keep selection visible with system colours. */
 @media (forced-colors: active) {
-  .conversation-row[data-selected="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
+  .conversation-row[aria-current="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
   .status-tabs label:has(input:checked), .segmented label:has(input:checked) { outline: 2px solid Highlight; }
   .tag-check:has(input:checked) { border: 2px solid Highlight; }
 }
@@ -271,3 +272,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 }
 .list-title[data-collapsed] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .bulk-message:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; padding: 0; }
+.team-list article { flex-wrap: wrap; }
+.team-list .team-person { display: grid; min-width: 0; }
+.team-list .team-person small { overflow: hidden; color: var(--text-3); text-overflow: ellipsis; white-space: nowrap; }
+.team-confirm { display: grid; flex: 1 0 100%; gap: var(--space-2); border-left: 2px solid var(--danger); padding-left: var(--space-3); }
+.team-confirm label { display: flex; align-items: center; gap: var(--space-2); }
+.team-role { display: flex; gap: var(--space-2); align-items: center; }

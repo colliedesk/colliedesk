@@ -17,8 +17,11 @@ interface ConversationListProps {
   onPage?: (page: number) => void;
   filtered?: boolean;
   loading?: boolean;
+  // refreshing: a refetch is running while the previous rows stay on screen.
+  refreshing?: boolean;
   failed?: boolean;
   onRetry?: () => void;
+  onClearFilters?: () => void;
   canManage?: boolean;
   onOpenSettings?: () => void;
   // checkedIds are the rows ticked for a bulk action; ticking never opens the conversation.
@@ -30,8 +33,8 @@ interface ConversationListProps {
 
 const visibleTags = 2;
 
-export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, loading = false,
-  failed = false, onRetry, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef }: ConversationListProps) {
+export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, loading = false, refreshing = false,
+  failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef }: ConversationListProps) {
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
   const now = useNow(timezone);
   const settled = !loading && !failed;
@@ -53,7 +56,8 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
     onOpenSettings();
   }}>{label}</a>;
   return (
-    <div className="conversation-scroll">
+    <div className="conversation-scroll" aria-busy={refreshing}>
+      {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
       {brandNew && <section className="get-started" aria-label={messages.getStarted}>
         <h2>{messages.noConversationsYet}</h2>
         <p className="muted-copy">{messages.getStartedExplanation}</p>
@@ -65,7 +69,8 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
       </section>}
       {failed && <div className="empty-copy"><p role="alert" className="error-copy">{messages.conversationsFailed}</p>
         <button type="button" onClick={() => onRetry?.()}>{messages.tryAgain}</button></div>}
-      {items.length === 0 && !brandNew && settled && <p className="empty-copy">{messages.noConversations}</p>}
+      {items.length === 0 && !brandNew && settled && <div className="empty-copy"><p>{messages.noConversations}</p>
+        {filtered && onClearFilters && <button type="button" onClick={onClearFilters}>{messages.clearFilters}</button>}</div>}
       {items.length > 0 && <label className="select-all">
         <input type="checkbox" ref={setSelectAll} checked={allChecked} onChange={(event) => onToggleAll?.(event.target.checked)} />
         <span>{messages.selectAllOnPage}</span>
@@ -81,7 +86,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
           <label className="row-check">
             <input type="checkbox" aria-label={messages.selectRow(item.subject, full)} checked={checkedIds?.has(item.id) ?? false} onChange={() => onToggle?.(item.id)} />
           </label>
-          <button className="conversation-row" data-selected={item.id === selectedId} data-tip={full} onClick={() => onSelect?.(item.id)}>
+          <button className="conversation-row" aria-current={item.id === selectedId ? true : undefined} data-tip={full} onClick={() => onSelect?.(item.id)}>
             <span className="conversation-subject">{item.subject}</span>
             <time dateTime={item.updated_at}>
               <span aria-hidden="true" className="time-short">{formatShortDate(item.updated_at, timezone, now)}</span>

@@ -5,6 +5,7 @@ One page per feature. Each page says what the feature does, how to use it, and i
 - [Install and create a workspace](install.md)
 - [Sign in without passwords](sign-in.md)
 - [Invite your team](invites.md)
+- [Manage your team](team.md)
 - [Work the inbox](inbox.md)
 - [Email channel](email-channel.md)
 - [Web form](web-form.md)
@@ -14,3 +15,4 @@ One page per feature. Each page says what the feature does, how to use it, and i
 - [Sessions and devices](sessions.md)
 - [Import from Freshdesk](import-freshdesk.md)
 - [Export all your data](export.md)
+- [Usage report (telemetry)](telemetry.md)

@@ -97,6 +97,7 @@ focus `#f0b44c`. Every text pair is at least 4.5:1; focus rings and input border
 - Focus is an amber outline, 2 px wide with a 2 px gap (`:focus-visible`). The gap is required:
   amber on `--accent` is low contrast in both themes, so the ring never touches a primary button. In the scrolling
   list the ring is inset (`outline-offset: -2px`) so the next row does not clip it.
+- Settings saves show feedback inline, never a toast: the button is disabled and reads "Saving…" while the request runs (a second submit is refused), then a "Saved" line (`role="status"`) or the error (`role="alert"`) appears beside that form. "Saved" clears when the form is edited. `features/settings/save-feedback.tsx` holds the pattern.
 - Status is a dot plus its word. Only High and Urgent priorities get colour, with an arrow icon.
 - Private notes are amber (`--note-*`), on the timeline and in the composer while writing one.
 - Navigation is an icon rail. Each icon has a screen-reader label and a visible tooltip
@@ -108,6 +109,22 @@ focus `#f0b44c`. Every text pair is at least 4.5:1; focus rings and input border
 - Customer email stays plain text (see `plain-text-body.tsx`); the original HTML opens in a
   sandboxed frame that keeps a white page so the customer's own styling stays readable. Avatars are
   initials, never images, so the timeline loads nothing remote.
+- Every empty list says which kind of empty it is and gives the next step: a new workspace gets
+  **Get started** links, a filtered list with no match gets **Clear filters**, a failed load gets
+  **Try again**.
+
+## Review checklists
+
+When a screen changes, check it against the matching lists on [checklist.design](https://www.checklist.design).
+They are a gap finder, not a spec: where a list conflicts with a rule above, the rule wins.
+
+| Surface | Checklists |
+|---|---|
+| Conversation list and filters | Empty State, Filtering items, Search Results, Data Table |
+| Timeline and composer | Comments, Submitting a form, Showing input error |
+| Settings and email channel | Settings, Integrations, Saving changes |
+| Sign-in, invites, sessions | Login, User Management |
+| Every screen | Accessibility, Loading, Toast, Drawer |
 
 ## Identity bar
 

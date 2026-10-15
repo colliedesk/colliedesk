@@ -104,7 +104,7 @@ func (s *Service) Pair(ctx context.Context, workspaceSlug, email string) (string
 	var link createdLink
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		var agentID, role string
-		if err := tx.QueryRow(ctx, `SELECT id::text,role FROM agents WHERE workspace_id=$1 AND email=lower($2)`, workspaceID, email).
+		if err := tx.QueryRow(ctx, `SELECT id::text,role FROM agents WHERE workspace_id=$1 AND email=lower($2) AND deactivated_at IS NULL`, workspaceID, email).
 			Scan(&agentID, &role); err != nil {
 			return fmt.Errorf("find agent: %w", err)
 		}
@@ -125,7 +125,7 @@ func slugify(value string) string {
 }
 
 func (s *Service) redeemURL(token string) string {
-	return s.origin + "/redeem?token=" + url.QueryEscape(token)
+	return s.origin + "/sign-in?token=" + url.QueryEscape(token)
 }
 
 // WithPlanLimits returns a service that refuses to add agents beyond the workspace plan's cap.

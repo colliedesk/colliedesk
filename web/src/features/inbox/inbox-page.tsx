@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Agent, Conversation, Message, Tag, TimeEntry } from '../../api/schemas';
+import type { Conversation, Message, TeamMember, Tag, TimeEntry } from '../../api/schemas';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import { BulkActionBar } from './bulk-action-bar';
 import { ConversationList } from './conversation-list';
@@ -14,7 +14,7 @@ interface InboxPageProps {
   selected?: Conversation;
   timeline?: Message[];
   timeEntries?: TimeEntry[];
-  agents?: Agent[];
+  agents?: TeamMember[];
   tags?: Tag[];
   timezone?: string;
   onSelect?: (id: string) => void;
@@ -33,6 +33,8 @@ interface InboxPageProps {
   deliveryNotice?: string;
   filtered?: boolean;
   loading?: boolean;
+  refreshing?: boolean;
+  timelineLoading?: boolean;
   failed?: boolean;
   onRetry?: () => void;
   canManage?: boolean;
@@ -42,9 +44,12 @@ interface InboxPageProps {
   onBulkUpdate?: (ids: string[], changes: BulkConversationChanges) => Promise<unknown>;
 }
 
-export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, loading, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate }: InboxPageProps) {
+export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, loading, refreshing, timelineLoading, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // Filters are an uncontrolled form; clearing remounts it so every field returns to its default.
+  const [filterGeneration, setFilterGeneration] = useState(0);
+  const clearFilters = () => { setFilterGeneration((current) => current + 1); onFilters?.({}); };
   const detailsToggle = useRef<HTMLButtonElement>(null);
   const listPane = useRef<HTMLElement>(null);
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
@@ -106,7 +111,7 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
           {/* The filters stay mounted while the bar replaces them, so their state survives. */}
           <div className="list-title" data-collapsed={checkedIds.length > 0 || undefined}><h1>{messages.inbox}</h1><span>{conversations.length}</span></div>
           <div className="list-head" hidden={checkedIds.length > 0}>
-            <InboxFilters tags={tags} onChange={onFilters} />
+            <InboxFilters key={filterGeneration} tags={tags} onChange={onFilters} focusSearch={filterGeneration > 0} />
           </div>
           {checkedIds.length > 0 && <BulkActionBar count={checkedIds.length} agents={agents} tags={tags} currentAgentId={currentAgentId}
             busy={bulkBusy} onApply={(changes) => void applyBulk(changes)} onClear={() => { changeSelection(new Set()); setRefocus((count) => count + 1); }} />}
@@ -114,12 +119,12 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
           <p role="status" className="bulk-message">{bulkNotice}</p>
         </header>
         <ConversationList items={conversations} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
-          page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} loading={loading}
-          failed={failed} onRetry={onRetry} canManage={canManage} onOpenSettings={onOpenSettings}
+          page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} loading={loading} refreshing={refreshing}
+          failed={failed} onRetry={onRetry} onClearFilters={clearFilters} canManage={canManage} onOpenSettings={onOpenSettings}
           checkedIds={checked} onToggle={toggle} onToggleAll={toggleAll} selectAllRef={selectAll} />
       </section>
       <div className="conversation-center panel">
-        <TimelinePanel conversation={selected} items={timeline} timeEntries={timeEntries} timezone={timezone} onRetryDelivery={onRetryDelivery}
+        <TimelinePanel conversation={selected} items={timeline} timeEntries={timeEntries} loading={timelineLoading} timezone={timezone} onRetryDelivery={onRetryDelivery}
           detailsOpen={detailsOpen} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}</p>}
         {deliveryNotice && <p role="alert" className="composer-notice">{deliveryNotice}</p>}

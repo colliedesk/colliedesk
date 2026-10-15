@@ -16,7 +16,7 @@ async function openAndContinue(page: Page, url: string) {
 async function expectLinkRefused(page: Page) {
   await expect(page.getByRole('alert')).toContainText(invalid);
   await expect(page.getByRole('alert')).toContainText(nextStep);
-  await expect(page).toHaveURL(/\/redeem\?token=/);
+  await expect(page).toHaveURL(/\/sign-in\?token=/);
   await expectReadablePage(page);
 }
 
@@ -43,9 +43,9 @@ test('link errors: expired, reused, revoked, mistyped, missing and another works
   await openAndContinue(mistypedPage, `${reusedURL.slice(0, -4)}xxxx`);
   await expectLinkRefused(mistypedPage);
 
-  // A bare /redeem (link cut off by a mail client) says what to do instead of showing an empty form.
+  // A bare /sign-in (link cut off by a mail client) says what to do instead of showing an empty form.
   const bare = await (await browser.newContext()).newPage();
-  await bare.goto(`${baseURL}/redeem`);
+  await bare.goto(`${baseURL}/sign-in`);
   await expect(bare.getByText('Ask your workspace admin for a pairing or invite link.')).toBeVisible();
   await expectReadablePage(bare);
 
@@ -76,7 +76,7 @@ test('link errors: expired, reused, revoked, mistyped, missing and another works
   await expect(stranger.getByRole('alert')).toContainText('You are signed out');
   await expect(stranger.getByRole('alert')).toContainText(nextStep);
   await expect(stranger.getByRole('button', { name: 'Send reply' })).toHaveCount(0);
-  await expect(stranger.getByText(/colliedesk pair --workspace/)).toBeVisible();
+  await expect(stranger.getByText(/collie pair --workspace/)).toBeVisible();
   await expect(stranger.getByRole('link', { name: 'Sign in' })).toHaveCount(0);
   await expectReadablePage(stranger);
   await stranger.goto(`${baseURL}/settings`);

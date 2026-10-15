@@ -13,24 +13,29 @@ import (
 
 func (r *run) loadAgents(ctx context.Context) error {
 	local := map[string]string{}
+	inactive := map[string]bool{}
 	tx, err := r.begin(ctx)
 	if err != nil {
 		return fmt.Errorf("list Colliedesk agents: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // also covers a panic; a second rollback is a no-op
-	rows, err := tx.Query(ctx, `SELECT id::text,lower(email) FROM agents WHERE workspace_id=$1`, r.workspaceID)
+	rows, err := tx.Query(ctx, `SELECT id::text,lower(email),deactivated_at IS NOT NULL FROM agents WHERE workspace_id=$1`, r.workspaceID)
 	if err != nil {
 		_ = tx.Rollback(ctx)
 		return fmt.Errorf("list Colliedesk agents: %w", err)
 	}
 	for rows.Next() {
 		var id, email string
-		if err := rows.Scan(&id, &email); err != nil {
+		var deactivated bool
+		if err := rows.Scan(&id, &email, &deactivated); err != nil {
 			rows.Close()
 			_ = tx.Rollback(ctx)
 			return fmt.Errorf("scan Colliedesk agent: %w", err)
 		}
 		local[email] = id
+		if deactivated {
+			inactive[id] = true
+		}
 	}
 	rows.Close()
 	_ = tx.Rollback(ctx) // read only; end it before the Freshdesk calls below
@@ -41,6 +46,9 @@ func (r *run) loadAgents(ctx context.Context) error {
 		r.agents[agent.ID] = agent
 		if id, ok := local[strings.ToLower(strings.TrimSpace(agent.Contact.Email))]; ok {
 			r.agentTargets[agent.ID] = id
+			if inactive[id] {
+				r.deactivatedAgents[agent.ID] = true
+			}
 		} else {
 			r.warn("agent_not_matched", "Freshdesk agent has no Colliedesk agent with the same email; their replies keep the author name only. Invite them, then re-run to keep future items linked.", strconv.FormatInt(agent.ID, 10))
 		}

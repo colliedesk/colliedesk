@@ -8,15 +8,15 @@ import { mailpit } from './e2e/support/mailpit';
 
 const localChrome = !process.env.CI && existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined;
 
-// Each server is the real `colliedesk serve` on the same database, configured only through the
+// Each server is the real `collie serve` on the same database, configured only through the
 // environment an operator sets. They differ in what is plugged in: nothing, an SMTP relay, cloud sign-in.
 // serve refuses to start until row-level security is migrated: the main server migrates first, like
 // compose does, and the others wait for it so two migrations never race on the shared database.
 function server(origin: string, env: Record<string, string> = {}) {
-  const serve = `go run ./cmd/colliedesk serve --listen 127.0.0.1:${new URL(origin).port}`;
+  const serve = `go run ./cmd/collie serve --listen 127.0.0.1:${new URL(origin).port}`;
   const first = origin === servers.main;
   return {
-    command: first ? `go run ./cmd/colliedesk migrate && ${serve}` : `node ../web/e2e/support/wait-for-url.mjs ${servers.main} && ${serve}`,
+    command: first ? `go run ./cmd/collie migrate && ${serve}` : `node ../web/e2e/support/wait-for-url.mjs ${servers.main} && ${serve}`,
     cwd: '../server',
     env: {
       ...process.env as Record<string, string>, ...goEnv,

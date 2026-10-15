@@ -39,8 +39,18 @@ func writeStoreError(response http.ResponseWriter, err error) {
 		return
 	}
 	var database *pgconn.PgError
-	if errors.As(err, &database) && (database.Code == "40P01" || database.Code == "40001") {
+	switch {
+	case errors.As(err, &database) && (database.Code == "40P01" || database.Code == "40001"):
 		writeError(response, http.StatusConflict, "conflict", "Another change was in progress on the same conversations. Nothing was changed; try again.")
+		return
+	case errors.Is(err, domain.ErrLastAdmin):
+		writeError(response, http.StatusConflict, "last_admin", domain.ErrLastAdmin.Error()+". Make another agent an admin first.")
+		return
+	case errors.Is(err, domain.ErrAgentDeactivated):
+		writeError(response, http.StatusConflict, "agent_deactivated", domain.ErrAgentDeactivated.Error()+".")
+		return
+	case errors.Is(err, domain.ErrInvalidReassignTarget):
+		writeError(response, http.StatusBadRequest, "invalid_reassign_target", domain.ErrInvalidReassignTarget.Error()+".")
 		return
 	}
 	if errors.Is(err, pgx.ErrNoRows) || strings.Contains(err.Error(), "not found") {

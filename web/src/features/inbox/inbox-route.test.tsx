@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { InboxRoute } from './inbox-route';
@@ -116,6 +116,43 @@ test('a retry the trial refuses says why instead of doing nothing', async () => 
   render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
   fireEvent.click(await screen.findByRole('button', { name: /retry delivery/i }));
   expect(await screen.findByRole('alert')).toHaveTextContent(/200 replies in 24 hours.*about 2 hours/i);
+});
+
+test('typing in search keeps the previous rows until the new response arrives', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
+  let resolveSearch!: (value: unknown) => void;
+  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValueOnce({ items: [alpha, beta], page: 1, page_size: 50 })
+    .mockReturnValue(new Promise((resolve) => { resolveSearch = resolve; }));
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+  await screen.findByRole('button', { name: /alpha conversation/i });
+  fireEvent.change(screen.getByRole('searchbox', { name: /search/i }), { target: { value: 'beta' } });
+  await waitFor(() => expect(api.conversations).toHaveBeenCalledTimes(2));
+  expect(screen.getByRole('button', { name: /alpha conversation/i })).toBeInTheDocument();
+  expect(document.querySelector('.conversation-scroll')).toHaveAttribute('aria-busy', 'true');
+  resolveSearch({ items: [beta], page: 1, page_size: 50 });
+  await waitFor(() => expect(screen.queryByRole('button', { name: /alpha conversation/i })).not.toBeInTheDocument());
+  expect(document.querySelector('.conversation-scroll')).toHaveAttribute('aria-busy', 'false');
+});
+
+test('opening a conversation shows the loading status in its timeline until the messages arrive', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockReturnValue(new Promise(() => {}));
+  api.timeEntries.mockResolvedValue({ items: [] });
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+  await screen.findByRole('button', { name: /alpha conversation/i });
+  expect(within(screen.getByRole('region', { name: /timeline/i })).getByRole('status')).toHaveTextContent('Loading workspace…');
 });
 
 test('a bulk status change sends the selected ids, then reloads the list and reports the result', async () => {

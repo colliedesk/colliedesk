@@ -9,6 +9,7 @@ interface TimelinePanelProps {
   conversation?: Conversation;
   items: Message[];
   timeEntries?: TimeEntry[];
+  loading?: boolean;
   timezone: string;
   onRetryDelivery?: (messageId: string) => void;
   detailsOpen?: boolean;
@@ -16,7 +17,7 @@ interface TimelinePanelProps {
   detailsToggleRef?: RefObject<HTMLButtonElement | null>;
 }
 
-export function TimelinePanel({ conversation, items, timeEntries = [], timezone, onRetryDelivery, detailsOpen = false, onToggleDetails, detailsToggleRef }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, items, timeEntries = [], loading = false, timezone, onRetryDelivery, detailsOpen = false, onToggleDetails, detailsToggleRef }: TimelinePanelProps) {
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
       <header className="timeline-header">
@@ -29,6 +30,7 @@ export function TimelinePanel({ conversation, items, timeEntries = [], timezone,
       </header>
       <div className="timeline-scroll">
         <div className="timeline-stack">
+          {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
           {items.map((item) => <MessageItem key={item.id} item={item} timezone={timezone} onRetryDelivery={onRetryDelivery} />)}
           {timeEntries.length > 0 && <TimeEntriesSection items={timeEntries} timezone={timezone} />}
         </div>

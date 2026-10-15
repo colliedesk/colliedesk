@@ -17,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const retentionUsage = "usage: colliedesk retention plan | colliedesk retention run --yes"
+const retentionUsage = "usage: collie retention plan | collie retention run --yes"
 
 // defaultMaxDeletionsPerDay is the cap when RETENTION_MAX_DELETIONS_PER_DAY is not set.
 const defaultMaxDeletionsPerDay = 5
@@ -70,7 +70,7 @@ func retentionCommand(ctx context.Context, pool *pgxpool.Pool, origin string, ar
 	case len(args) == 2 && args[0] == "run" && args[1] == "--yes":
 		apply = true
 	case len(args) == 1 && args[0] == "run":
-		return errors.New("retention run can delete workspaces for good: read `colliedesk retention plan` first, then pass --yes")
+		return errors.New("retention run can delete workspaces for good: read `collie retention plan` first, then pass --yes")
 	default:
 		return errors.New(retentionUsage)
 	}

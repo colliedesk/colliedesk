@@ -48,7 +48,7 @@ not match its recorded checksum, it aborts the download. You then get a broken Z
 | Path | Content |
 |---|---|
 | `manifest.json` | Format, version, export time (UTC), workspace, record counts, and every attachment file with its size and SHA-256 |
-| `agents.ndjson` | One agent per line: `id`, `email`, `display_name`, `role`, `timezone_override`, `created_at` |
+| `agents.ndjson` | One agent per line: `id`, `email`, `display_name`, `role`, `timezone_override`, `created_at`, `deactivated_at` (`null` for an active agent) |
 | `contacts.ndjson` | One contact per line: `id`, `name`, `email`, `organization`, `created_at`, `updated_at` |
 | `tags.ndjson` | One tag per line: `id`, `name`, `color`, `created_at` |
 | `conversations.ndjson` | One conversation per line, with its messages and time entries |

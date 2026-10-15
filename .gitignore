@@ -14,5 +14,5 @@ data/
 server/data/
 
 # Go build outputs
-/colliedesk
-server/cmd/colliedesk/colliedesk
+/collie
+server/cmd/collie/collie

@@ -11,10 +11,14 @@ an SMTP relay.
 ## Colliedesk Cloud: forward to your address
 
 On Colliedesk Cloud every workspace has a ready-made address, `support@<workspace>.colliedesk.com`.
-You do not run a forwarder or a Worker. Change where your mailbox forwards and you are done.
+You do not run a forwarder or a Worker. A workspace started from the sign-up page receives mail at
+that address at once: its Support address is set to it. To keep your own address for customers,
+change where your mailbox forwards:
 
 1. Open **Settings → Email channel** and enter your **Support address**, for example
-   `support@example.com`. Select **Save support address**. Mail is accepted only after this step.
+   `support@example.com`. Select **Save support address**. A workspace created another way accepts
+   mail only after this step. The button reads "Saving…" until the save ends, then "Saved" appears
+   next to it.
 2. Copy the **Forwarding address** (select **Copy forwarding address**).
 3. In your mailbox, forward all mail for the support address to the forwarding address:
    - **Gmail:** Settings → See all settings → Forwarding and POP/IMAP → Add a forwarding address.
@@ -73,8 +77,8 @@ the reason, and the composer shows a notice. Fix the cause, then select **Retry 
 4. Copy the **Inbound URL**.
 
 Rotate the secret with **Rotate inbound secret**. The old secret stops working immediately, so
-update your forwarder at the same time. **Disconnect email** stops inbound mail and outgoing
-replies. Conversations and messages stay.
+update your forwarder at the same time. **Disconnect email** asks first, then stops inbound mail and
+outgoing replies. Conversations and messages stay.
 
 ## 3. Verify the domain (when the policy is `verified`)
 

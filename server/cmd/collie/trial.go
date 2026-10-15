@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const trialUsage = "usage: colliedesk trial set --workspace <slug> --ends <RFC3339 time, for example 2026-12-01T00:00:00Z> [--by <name>]"
+const trialUsage = "usage: collie trial set --workspace <slug> --ends <RFC3339 time, for example 2026-12-01T00:00:00Z> [--by <name>]"
 
 // trialCommand lets an operator set when a workspace's trial ends.
 func trialCommand(ctx context.Context, pool *pgxpool.Pool, args []string, output io.Writer) error {

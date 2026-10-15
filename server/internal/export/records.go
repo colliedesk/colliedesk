@@ -18,6 +18,9 @@ type Agent struct {
 	Role             string    `json:"role"`
 	TimezoneOverride *string   `json:"timezone_override"`
 	CreatedAt        time.Time `json:"created_at"`
+	// DeactivatedAt is null for an active agent. A deactivated agent stays in the archive because
+	// conversations and messages still name it.
+	DeactivatedAt *time.Time `json:"deactivated_at"`
 }
 
 type Contact struct {
