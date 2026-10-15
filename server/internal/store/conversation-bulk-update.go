@@ -33,7 +33,13 @@ func bulkUpdateConversations(ctx context.Context, tx pgx.Tx, workspaceID string,
 		return 0, fmt.Errorf("bulk update conversations: too many conversations")
 	}
 	// Lock order, everywhere: agents row -> conversations (ORDER BY id) -> conversation_tags.
-	// Holding the conversation rows first also keeps a concurrent delete from making the count wrong.
+	// The assignee is checked once for the request, before any conversation row is locked.
+	if update.AssigneeID != nil && *update.AssigneeID != nil {
+		if err := ValidateAssignee(ctx, tx, workspaceID, **update.AssigneeID); err != nil {
+			return 0, err
+		}
+	}
+	// Holding the conversation rows next also keeps a concurrent delete from making the count wrong.
 	locked, err := tx.Query(ctx, `SELECT id FROM conversations WHERE workspace_id=$1 AND id=ANY($2::uuid[])
 		ORDER BY id FOR NO KEY UPDATE`, workspaceID, ids)
 	if err != nil {

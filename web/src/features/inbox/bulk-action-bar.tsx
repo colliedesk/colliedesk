@@ -1,11 +1,11 @@
 import { useRef } from 'react';
 import type { BulkConversationChanges } from '../../api/client';
-import type { Agent, Tag } from '../../api/schemas';
+import type { TeamMember, Tag } from '../../api/schemas';
 import { messages } from '../../messages';
 
 interface BulkActionBarProps {
   count: number;
-  agents: Agent[];
+  agents: TeamMember[];
   tags: Tag[];
   currentAgentId?: string;
   busy: boolean;
@@ -49,7 +49,7 @@ function ActionMenu({ label, disabled, children, onApply }: ActionMenuProps) {
 }
 
 export function BulkActionBar({ count, agents, tags, currentAgentId, busy, onApply, onClear }: BulkActionBarProps) {
-  const others = agents.filter((agent) => agent.id !== currentAgentId);
+  const others = agents.filter((agent) => agent.id !== currentAgentId && !agent.deactivated_at);
   const tagChoices = (key: 'add_tag_ids' | 'remove_tag_ids') => (apply: (changes: BulkConversationChanges) => void) => (
     tags.length === 0 ? <p className="muted-copy">{messages.noTagsToPick}</p>
       : tags.map((tag) => <button type="button" key={tag.id} onClick={() => apply({ [key]: [tag.id] })}>{tag.name}</button>)

@@ -11,7 +11,8 @@ const alpha = row('11111111-1111-4111-8111-111111111111', 'Alpha request');
 const beta = row('33333333-3333-4333-8333-333333333333', 'Beta request');
 const gamma = row('55555555-5555-4555-8555-555555555555', 'Gamma request');
 const me = '66666666-6666-4666-8666-666666666666';
-const colleague = { id: '77777777-7777-4777-8777-777777777777', email: 'sam@example.com', display_name: 'Sam Teammate', role: 'agent' as const, timezone_override: null };
+const colleague = { id: '77777777-7777-4777-8777-777777777777', email: 'sam@example.com', display_name: 'Sam Teammate', role: 'agent' as const, timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0 };
+const departed = { ...colleague, id: '99999999-9999-4999-8999-999999999990', email: 'gone@example.com', display_name: 'Gone Teammate', deactivated_at: '2026-10-10T00:00:00Z' };
 const billing = { id: '88888888-8888-4888-8888-888888888888', name: 'Billing', color: '#64748b' };
 
 function renderInbox(onBulkUpdate = vi.fn().mockResolvedValue({ updated: 2 })) {
@@ -172,4 +173,12 @@ test('after a refused change focus is on the menu that was used', async () => {
   fireEvent.click(within(within(bar()).getByRole('group', { name: 'Set status' })).getByRole('button', { name: 'Pending' }));
   await screen.findByRole('alert');
   expect(within(bar()).getByText('Set status', { selector: 'summary' })).toHaveFocus();
+});
+
+test('the assign menu lists only active agents', () => {
+  render(<InboxPage conversations={[alpha]} agents={[colleague, departed]} currentAgentId={me} onBulkUpdate={vi.fn()} />);
+  pick(/alpha request/i);
+  const assign = within(within(bar()).getByRole('group', { name: 'Assign to' }));
+  expect(assign.getByRole('button', { name: 'Sam Teammate' })).toBeInTheDocument();
+  expect(assign.queryByRole('button', { name: 'Gone Teammate' })).not.toBeInTheDocument();
 });

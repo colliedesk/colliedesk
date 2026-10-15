@@ -385,3 +385,19 @@ func TestBulkAndSingleTagAddsOnOneConversationDoNotDeadlock(t *testing.T) {
 		}
 	}
 }
+
+func TestBulkAssignToADeactivatedAgentIsRefusedAndNothingChanges(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	f := seedBulkFixture(t, api, service, 2)
+	var departed string
+	if err := pool.QueryRow(context.Background(), `INSERT INTO agents(workspace_id,email,role,deactivated_at)
+		VALUES($1,'gone@bulk-alpha.example.com','agent',now()) RETURNING id::text`, workspaceID(t, api, f.token)).Scan(&departed); err != nil {
+		t.Fatal(err)
+	}
+	before := f.snapshot(t, f.ids...)
+	code, body := f.patch(t, f.ids, map[string]any{"status": "closed", "assignee_id": departed})
+	if code < 400 || code >= 500 || code == http.StatusNotFound {
+		t.Fatalf("status=%d body=%s, want a 4xx other than 404", code, body)
+	}
+	f.assertUnchanged(t, before)
+}
