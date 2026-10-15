@@ -91,6 +91,9 @@ func TestCheckoutUsesTheSessionsWorkspaceCustomerAndThePlansProduct(t *testing.T
 			if len(created) != 1 || created[0].Auth != "Bearer polar-token-for-test" || created[0].Body["external_id"] != f.workspaceA {
 				t.Fatalf("customer create calls=%v, want one for workspace A", created)
 			}
+			if created[0].Body["email"] != "admin@billing-alpha.example.com" {
+				t.Fatalf("customer email=%v, want the admin's real address so receipts reach them", created[0].Body["email"])
+			}
 			checkouts := f.fake.callsTo("/v1/checkouts/")
 			if len(checkouts) != 1 {
 				t.Fatalf("checkout calls=%v", checkouts)
@@ -132,8 +135,15 @@ func TestCheckoutGivesEachWorkspaceItsOwnPolarCustomerEvenForTheSameAdminEmail(t
 	if len(used) != 3 || used[0] != customerA || used[1] != customerC || used[2] != customerA {
 		t.Fatalf("checkout customers=%v, want A, C, A", used)
 	}
-	if created := f.fake.callsTo("/v1/customers/"); len(created) != 2 {
-		t.Fatalf("customers created=%d, want 2: A's customer is reused on its second checkout", len(created))
+	// A takes the real address. C's first try with it is refused (Polar keeps emails unique), so C
+	// is created once more with the workspace-tagged address. A's second checkout creates nothing.
+	created := f.fake.callsTo("/v1/customers/")
+	if len(created) != 3 {
+		t.Fatalf("customer create calls=%d, want 3", len(created))
+	}
+	tagged := "admin+cd" + strings.ReplaceAll(workspaceC, "-", "")[:8] + "@billing-alpha.example.com"
+	if created[0].Body["email"] != "admin@billing-alpha.example.com" || created[1].Body["email"] != "admin@billing-alpha.example.com" || created[2].Body["email"] != tagged {
+		t.Fatalf("emails tried=%v, %v, %v; want real, real (refused), %s", created[0].Body["email"], created[1].Body["email"], created[2].Body["email"], tagged)
 	}
 }
 

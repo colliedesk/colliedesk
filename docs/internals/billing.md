@@ -29,10 +29,12 @@ the API.
   checkout with that `customer_id`. Events come back with `customer.external_id`, which names the
   workspace. The client sends only the plan name; any other field is rejected, so a browser can
   neither pay for nor link to another workspace.
-- **Polar customers are unique by email too.** One person can administer several workspaces, so the
-  customer is created with the admin's email tagged `+cd<8 hex of the workspace id>` before the `@`.
-  The tag keeps the emails distinct; identity is the external id, never the email. A mail provider
-  without subaddressing would not deliver receipts to that address; the portal and the page still work.
+- **Polar customers are unique by email too.** The customer is created with the admin's real email,
+  so receipts reach them. If Polar refuses the create (422, the email belongs to another customer:
+  the same person pays for a second workspace), the server retries once with the address tagged
+  `+cd<8 hex of the workspace id>` before the `@` and logs a WARN with the workspace id (no
+  address). Identity is the external id, never the email. A mail provider without subaddressing
+  would not deliver receipts to the tagged address; the portal and the page still work.
 - **Nothing is read before the signature verifies.** The webhook route is public in the permission
   table, but the handler checks the Standard Webhooks signature first. A bad, missing or stale
   (more than 5 minutes either way) signature is 401 and touches no table.

@@ -15,6 +15,10 @@ import (
 // ErrCustomerNotFound means Polar has no customer for the external id yet (nobody paid).
 var ErrCustomerNotFound = errors.New("polar customer not found")
 
+// ErrCustomerConflict means Polar refused to create a customer, in practice because another
+// customer already uses the email. The caller may retry with a different address.
+var ErrCustomerConflict = errors.New("polar customer conflicts with an existing one")
+
 // StatusError is a non-2xx answer from Polar. The body is dropped on purpose: it can echo input.
 type StatusError struct{ Code int }
 
@@ -62,6 +66,9 @@ func (c *Client) EnsureCustomer(ctx context.Context, externalID, email, name str
 	}
 	body := map[string]any{"external_id": externalID, "email": email, "name": name}
 	if err := c.do(ctx, http.MethodPost, "/v1/customers/", body, &created); err != nil {
+		if errors.As(err, &status) && status.Code == http.StatusUnprocessableEntity {
+			return "", fmt.Errorf("create polar customer: %w", ErrCustomerConflict)
+		}
 		return "", fmt.Errorf("create polar customer: %w", err)
 	}
 	if created.ID == "" {

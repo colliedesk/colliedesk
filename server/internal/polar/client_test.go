@@ -131,8 +131,9 @@ func TestEnsureCustomerFailsWhenPolarRefusesTheCreate(t *testing.T) {
 		"GET /v1/customers/external/ws-1": {http.StatusNotFound, `{}`},
 		"POST /v1/customers/":             {http.StatusUnprocessableEntity, `{"detail":"email exists"}`},
 	}
-	if _, err := fake.client().EnsureCustomer(context.Background(), "ws-1", "a@example.com", "Beta Desk"); err == nil {
-		t.Fatal("want an error when the customer cannot be created")
+	_, err := fake.client().EnsureCustomer(context.Background(), "ws-1", "a@example.com", "Beta Desk")
+	if !errors.Is(err, polar.ErrCustomerConflict) {
+		t.Fatalf("err=%v, want ErrCustomerConflict so the caller can try another address", err)
 	}
 }
 

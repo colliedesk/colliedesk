@@ -39,10 +39,10 @@ func (a *API) checkoutProduct(plan string) (string, bool) {
 	return "", false
 }
 
-// billingEmail is the address the workspace's Polar customer is created with. Polar allows one
-// customer per email, but one person can administer several workspaces, so the address carries a
-// workspace tag after "+" (delivered to the same mailbox by providers that support subaddressing).
-// The workspace id, not this address, is the customer's identity.
+// billingEmail is the fallback address for a workspace's Polar customer when the admin's own address
+// already belongs to another customer (Polar keeps one customer per email, and one person can
+// administer several workspaces). It carries a workspace tag after "+", which providers that support
+// subaddressing deliver to the same mailbox. The workspace id, not this address, is the identity.
 func billingEmail(email, workspaceID string) string {
 	at := strings.LastIndex(email, "@")
 	if at < 0 || len(workspaceID) < 8 {
@@ -77,7 +77,13 @@ func (a *API) createCheckout(response http.ResponseWriter, request *http.Request
 		writeError(response, http.StatusConflict, "already_subscribed", "This workspace already has a paid plan. Change or cancel it from the billing portal.")
 		return
 	}
-	customerID, err := a.polar.EnsureCustomer(request.Context(), who.Workspace.ID, billingEmail(who.Agent.Email, who.Workspace.ID), who.Workspace.Name)
+	customerID, err := a.polar.EnsureCustomer(request.Context(), who.Workspace.ID, who.Agent.Email, who.Workspace.Name)
+	if errors.Is(err, polar.ErrCustomerConflict) {
+		// The admin's address belongs to another Polar customer: the same person pays for another
+		// workspace. Receipts matter, so the real address is tried first and the tag only here.
+		slog.Warn("polar customer email already in use; retrying with a workspace-tagged address", "workspace_id", who.Workspace.ID)
+		customerID, err = a.polar.EnsureCustomer(request.Context(), who.Workspace.ID, billingEmail(who.Agent.Email, who.Workspace.ID), who.Workspace.Name)
+	}
 	if err != nil {
 		writeBillingProviderError(response, err)
 		return
