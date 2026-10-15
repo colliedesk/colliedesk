@@ -55,7 +55,7 @@ and billing are both configured, so a self-hosted server never offers it. Code:
   the HMAC-SHA256 of the client address, the time and the workspace id. The key is `SIGNUP_HASH_KEY`
   (at least 32 random characters, kept in Bitwarden, passed through the compose environment). Without
   the key a row cannot be tested against a list of addresses; a plain hash of an IPv4 address or of a
-  breached email could. `serve` refuses to start with sign-up enabled and no key. The key cannot be
+  breached email could. Without a key (or one shorter than 32 characters) `serve` keeps sign-up off, answers it with 503 `signup_unavailable` and logs why; every other route keeps working. The key cannot be
   rotated without losing the trial history (every stored hash would stop matching), so treat it like a
   database secret. The IP hash is set to NULL once the row is 30 days old by a sweep that `serve`
   runs at start and every hour (`Service.ClearSignupAddresses`), not by sign-ups. The email hash
@@ -67,8 +67,8 @@ and billing are both configured, so a self-hosted server never offers it. Code:
   IPs) of the reverse proxies whose `X-Forwarded-For` is believed; the default is empty, meaning the
   peer address is the client. When the peer is trusted, the header is read from the right and the
   first entry that is not a trusted hop is the client (entries to its left were written by the
-  client). A bad list stops `serve` at start, and so does an empty list while sign-up is enabled
-  (cloud sign-in and billing both on): without it every sign-up shares the proxy's address and the
+  client). A malformed list stops `serve` at start. An empty list while sign-up would be enabled (cloud
+  sign-in and billing both on) turns sign-up off the same way as a missing key: without it every sign-up shares the proxy's address and the
   fourth of the day is refused for everyone. IPv6 clients are bucketed by /64. On collie-01 Caddy
   runs on the host and reaches the container through Docker, so the peer is the gateway of the
   compose network that publishes `127.0.0.1:8080`. Trust exactly that address as a `/32` (read it
