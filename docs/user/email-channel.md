@@ -14,7 +14,8 @@ On Colliedesk Cloud every workspace has a ready-made address, `support@<workspac
 You do not run a forwarder or a Worker. Change where your mailbox forwards and you are done.
 
 1. Open **Settings → Email channel** and enter your **Support address**, for example
-   `support@example.com`. Select **Save support address**. Mail is accepted only after this step.
+   `support@example.com`. Select **Save support address**. Mail is accepted only after this step. The button reads "Saving…" until the save ends, then
+   "Saved" appears next to it.
 2. Copy the **Forwarding address** (select **Copy forwarding address**).
 3. In your mailbox, forward all mail for the support address to the forwarding address:
    - **Gmail:** Settings → See all settings → Forwarding and POP/IMAP → Add a forwarding address.

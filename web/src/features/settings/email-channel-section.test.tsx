@@ -116,3 +116,32 @@ test('an agent sees the forwarding address but cannot rename it', () => {
   expect(screen.getByRole('textbox', { name: /forwarding address/i })).toHaveValue('support@acme.colliedesk.com');
   expect(screen.queryByRole('textbox', { name: /workspace address name/i })).not.toBeInTheDocument();
 });
+
+test('the support address save shows Saving…, refuses a second submit, then Saved until edited', () => {
+  const onSave = vi.fn();
+  const { rerender } = render(<EmailChannelSection settings={connected} timezone="UTC" canManage onSave={onSave} addressSave={{ pending: true }} />);
+  expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+  fireEvent.submit(screen.getByRole('textbox', { name: /support address/i }));
+  expect(onSave).not.toHaveBeenCalled();
+  rerender(<EmailChannelSection settings={connected} timezone="UTC" canManage onSave={onSave} addressSave={{ saved: true }} />);
+  expect(screen.getByRole('button', { name: /save support address/i })).toBeEnabled();
+  expect(screen.getByText('Saved')).toHaveAttribute('role', 'status');
+  fireEvent.change(screen.getByRole('textbox', { name: /support address/i }), { target: { value: 'help@example.com' } });
+  expect(screen.queryByText('Saved')).not.toBeInTheDocument();
+});
+
+test('a failed support address save shows its message next to the form', () => {
+  render(<EmailChannelSection settings={connected} timezone="UTC" canManage addressSave={{ error: 'Address refused.' }} />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Address refused.');
+});
+
+test('the address name save shows Saving… and Saved separately from the support address', () => {
+  const onSaveSlug = vi.fn();
+  const { rerender } = render(<EmailChannelSection settings={hosted} timezone="UTC" canManage workspaceSlug="acme" onSaveSlug={onSaveSlug} slugSave={{ pending: true }} />);
+  expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: /save support address/i })).toBeEnabled();
+  fireEvent.submit(screen.getByRole('textbox', { name: /workspace address name/i }));
+  expect(onSaveSlug).not.toHaveBeenCalled();
+  rerender(<EmailChannelSection settings={hosted} timezone="UTC" canManage workspaceSlug="acme" slugSave={{ saved: true }} />);
+  expect(screen.getByRole('status')).toHaveTextContent('Saved');
+});
