@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef } from 'react';
+import type { Ref } from 'react';
 import type { Conversation } from '../../api/schemas';
 import { dayGroup, formatDate, formatShortDate } from '../../lib/format-date';
 import { useNow } from '../../lib/use-now';
@@ -24,19 +25,25 @@ interface ConversationListProps {
   checkedIds?: ReadonlySet<string>;
   onToggle?: (id: string) => void;
   onToggleAll?: (checked: boolean) => void;
+  selectAllRef?: Ref<HTMLInputElement>;
 }
 
 const visibleTags = 2;
 
 export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, loading = false,
-  failed = false, onRetry, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll }: ConversationListProps) {
+  failed = false, onRetry, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef }: ConversationListProps) {
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
   const now = useNow(timezone);
   const settled = !loading && !failed;
   const brandNew = items.length === 0 && !filtered && settled && page === 1;
   const checkedCount = items.filter((item) => checkedIds?.has(item.id)).length;
   const allChecked = items.length > 0 && checkedCount === items.length;
-  const selectAll = useRef<HTMLInputElement>(null);
+  const selectAll = useRef<HTMLInputElement | null>(null);
+  const setSelectAll = (node: HTMLInputElement | null) => {
+    selectAll.current = node;
+    if (typeof selectAllRef === 'function') selectAllRef(node);
+    else if (selectAllRef) selectAllRef.current = node;
+  };
   useEffect(() => {
     if (selectAll.current) selectAll.current.indeterminate = checkedCount > 0 && !allChecked;
   }, [checkedCount, allChecked]);
@@ -60,7 +67,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
         <button type="button" onClick={() => onRetry?.()}>{messages.tryAgain}</button></div>}
       {items.length === 0 && !brandNew && settled && <p className="empty-copy">{messages.noConversations}</p>}
       {items.length > 0 && <label className="select-all">
-        <input type="checkbox" ref={selectAll} checked={allChecked} onChange={(event) => onToggleAll?.(event.target.checked)} />
+        <input type="checkbox" ref={setSelectAll} checked={allChecked} onChange={(event) => onToggleAll?.(event.target.checked)} />
         <span>{messages.selectAllOnPage}</span>
       </label>}
       {items.map((item, index) => {
@@ -72,7 +79,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
           {startsGroup && <h2 className="group-label">{messages.dayGroups[group]}</h2>}
           <div className="conversation-item">
           <label className="row-check">
-            <input type="checkbox" aria-label={messages.selectRow(item.subject)} checked={checkedIds?.has(item.id) ?? false} onChange={() => onToggle?.(item.id)} />
+            <input type="checkbox" aria-label={messages.selectRow(item.subject, full)} checked={checkedIds?.has(item.id) ?? false} onChange={() => onToggle?.(item.id)} />
           </label>
           <button className="conversation-row" data-selected={item.id === selectedId} data-tip={full} onClick={() => onSelect?.(item.id)}>
             <span className="conversation-subject">{item.subject}</span>

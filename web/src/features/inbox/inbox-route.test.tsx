@@ -140,7 +140,27 @@ test('a bulk status change sends the selected ids, then reloads the list and rep
   fireEvent.click(screen.getByRole('button', { name: 'Resolved' }));
 
   await waitFor(() => expect(api.bulkUpdateConversations).toHaveBeenCalledWith([alpha.id, gamma.id], { status: 'resolved' }));
-  expect(await screen.findByRole('status')).toHaveTextContent('Updated 2 conversations');
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Updated 2 conversations'));
   await waitFor(() => expect(api.conversations.mock.calls.length).toBeGreaterThan(loadsBefore));
-  expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('group', { name: /bulk actions/i })).not.toBeInTheDocument();
+});
+
+test('a refused bulk change reloads the list, so a conversation that is gone stops being selectable', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', role: 'agent' } });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  api.bulkUpdateConversations.mockRejectedValue(new Error('API 404'));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await screen.findByRole('button', { name: /alpha conversation/i });
+  fireEvent.click(screen.getByRole('checkbox', { name: /alpha conversation/i }));
+  const loadsBefore = api.conversations.mock.calls.length;
+  fireEvent.click(screen.getByRole('button', { name: 'Closed' }));
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  await waitFor(() => expect(api.conversations.mock.calls.length).toBeGreaterThan(loadsBefore));
 });

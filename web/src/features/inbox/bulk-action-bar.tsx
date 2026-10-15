@@ -25,7 +25,11 @@ interface ActionMenuProps {
 function ActionMenu({ label, disabled, children, onApply }: ActionMenuProps) {
   const menu = useRef<HTMLDetailsElement>(null);
   const apply = (changes: BulkConversationChanges) => {
-    if (menu.current) menu.current.open = false;
+    if (menu.current) {
+      menu.current.open = false;
+      // The pressed button is about to be hidden; keep focus on the menu that opened it.
+      menu.current.querySelector('summary')?.focus();
+    }
     onApply(changes);
   };
   const closeOnEscape = (event: React.KeyboardEvent<HTMLDetailsElement>) => {
@@ -51,7 +55,7 @@ export function BulkActionBar({ count, agents, tags, currentAgentId, busy, onApp
       : tags.map((tag) => <button type="button" key={tag.id} onClick={() => apply({ [key]: [tag.id] })}>{tag.name}</button>)
   );
   return (
-    <div className="bulk-bar" role="toolbar" aria-label={messages.bulkActions}>
+    <div className="bulk-bar" role="group" aria-label={messages.bulkActions}>
       <strong className="bulk-count">{messages.selectedCount(count)}</strong>
       <div className="bulk-actions">
         <ActionMenu label={messages.setStatus} disabled={busy} onApply={onApply}>

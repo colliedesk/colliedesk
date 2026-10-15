@@ -33,16 +33,24 @@ test('selects conversations with the keyboard and resolves them in one action', 
   const statusOf = async (id: string) => ((await (await page.request.get(`${baseURL}/api/v1/conversations/${id}`)).json()) as { status: string }).status;
 
   await page.reload();
-  await page.getByRole('checkbox', { name: 'Select Bulk first' }).focus();
+  // Whole flow from the keyboard: Space ticks a row, Enter opens the menu, Tab and Enter choose.
+  await page.getByRole('checkbox', { name: /^Select Bulk first/ }).focus();
   await page.keyboard.press('Space');
-  await page.getByRole('checkbox', { name: 'Select Bulk third' }).check();
-  const bar = page.getByRole('toolbar', { name: 'Bulk actions' });
+  await page.getByRole('checkbox', { name: /^Select Bulk third/ }).focus();
+  await page.keyboard.press('Space');
+  const bar = page.getByRole('group', { name: 'Bulk actions' });
   await expect(bar.getByText('2 selected')).toBeVisible();
-  await bar.getByText('Set status').click();
-  await bar.getByRole('group', { name: 'Set status' }).getByRole('button', { name: 'Resolved' }).click();
+  await bar.getByText('Set status', { exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Tab'); // Open
+  await page.keyboard.press('Tab'); // Pending
+  await page.keyboard.press('Tab'); // Resolved
+  await expect(bar.getByRole('button', { name: 'Resolved' })).toBeFocused();
+  await page.keyboard.press('Enter');
 
   await expect(page.getByRole('status').filter({ hasText: 'Updated 2 conversations' })).toBeVisible();
   await expect(bar).toBeHidden();
+  await expect(page.getByRole('checkbox', { name: 'Select all on this page' })).toBeFocused();
   const byStatus = await Promise.all(ids.map(statusOf));
   expect(byStatus).toEqual(['resolved', 'open', 'resolved']);
 });

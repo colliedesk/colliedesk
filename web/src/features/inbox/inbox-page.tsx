@@ -51,6 +51,12 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkFailed, setBulkFailed] = useState(false);
   const [bulkNotice, setBulkNotice] = useState('');
+  const selectAll = useRef<HTMLInputElement | null>(null);
+  // The bar unmounts when the selection clears, so focus returns to the list once it has rendered.
+  const [refocus, setRefocus] = useState(0);
+  useEffect(() => {
+    if (refocus > 0) (selectAll.current ?? listPane.current)?.focus();
+  }, [refocus]);
   // Only rows still on the page count: a filter, a page change or a refetch can remove ticked rows.
   const checkedIds = conversations.filter((item) => checked.has(item.id)).map((item) => item.id);
   const changeSelection = (next: Set<string>) => { setChecked(next); setBulkFailed(false); setBulkNotice(''); };
@@ -70,6 +76,7 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
       await onBulkUpdate(ids, changes);
       setChecked(new Set());
       setBulkNotice(messages.bulkUpdated(ids.length));
+      setRefocus((count) => count + 1);
     } catch {
       setBulkFailed(true);
     } finally {
@@ -97,19 +104,19 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
       <section className="list-pane panel" ref={listPane} tabIndex={-1} aria-label={messages.conversationList}>
         <header>
           {/* The filters stay mounted while the bar replaces them, so their state survives. */}
+          <div className="list-title" data-collapsed={checkedIds.length > 0 || undefined}><h1>{messages.inbox}</h1><span>{conversations.length}</span></div>
           <div className="list-head" hidden={checkedIds.length > 0}>
-            <div className="list-title"><h1>{messages.inbox}</h1><span>{conversations.length}</span></div>
             <InboxFilters tags={tags} onChange={onFilters} />
           </div>
           {checkedIds.length > 0 && <BulkActionBar count={checkedIds.length} agents={agents} tags={tags} currentAgentId={currentAgentId}
-            busy={bulkBusy} onApply={(changes) => void applyBulk(changes)} onClear={() => changeSelection(new Set())} />}
+            busy={bulkBusy} onApply={(changes) => void applyBulk(changes)} onClear={() => { changeSelection(new Set()); setRefocus((count) => count + 1); }} />}
           {bulkFailed && <p role="alert" className="error-copy bulk-message">{messages.bulkUpdateFailed}</p>}
-          {bulkNotice && <p role="status" className="bulk-message">{bulkNotice}</p>}
+          <p role="status" className="bulk-message">{bulkNotice}</p>
         </header>
         <ConversationList items={conversations} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
           page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} loading={loading}
           failed={failed} onRetry={onRetry} canManage={canManage} onOpenSettings={onOpenSettings}
-          checkedIds={checked} onToggle={toggle} onToggleAll={toggleAll} />
+          checkedIds={checked} onToggle={toggle} onToggleAll={toggleAll} selectAllRef={selectAll} />
       </section>
       <div className="conversation-center panel">
         <TimelinePanel conversation={selected} items={timeline} timeEntries={timeEntries} timezone={timezone} onRetryDelivery={onRetryDelivery}

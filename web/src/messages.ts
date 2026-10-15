@@ -58,7 +58,7 @@ export const messages = {
   bulkActions: 'Bulk actions',
   selectedCount: (count: number) => `${count} selected`,
   selectAllOnPage: 'Select all on this page',
-  selectRow: (subject: string) => `Select ${subject}`,
+  selectRow: (subject: string, when: string) => `Select ${subject}, ${when}`,
   setStatus: 'Set status',
   assignTo: 'Assign to',
   assignToMe: 'Me',

@@ -19,11 +19,11 @@ function renderInbox(onBulkUpdate = vi.fn().mockResolvedValue({ updated: 2 })) {
   return onBulkUpdate;
 }
 const pick = (subject: RegExp) => fireEvent.click(screen.getByRole('checkbox', { name: subject }));
-const bar = () => screen.getByRole('toolbar', { name: /bulk actions/i });
+const bar = () => screen.getByRole('group', { name: /bulk actions/i });
 
 test('shows no action bar until a row is selected', () => {
   renderInbox();
-  expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('group', { name: /bulk actions/i })).not.toBeInTheDocument();
   pick(/alpha request/i);
   expect(within(bar()).getByText('1 selected')).toBeInTheDocument();
 });
@@ -44,7 +44,7 @@ test('select all on this page selects every row, and clear selection removes the
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select all on this page' }));
   expect(within(bar()).getByText('3 selected')).toBeInTheDocument();
   fireEvent.click(within(bar()).getByRole('button', { name: 'Clear selection' }));
-  expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).not.toBeInTheDocument();
+  expect(screen.queryByRole('group', { name: /bulk actions/i })).not.toBeInTheDocument();
   expect(screen.getByRole('checkbox', { name: /alpha request/i })).not.toBeChecked();
 });
 
@@ -55,8 +55,8 @@ test('set status sends the selected ids once, then clears the selection and anno
   fireEvent.click(within(within(bar()).getByRole('group', { name: 'Set status' })).getByRole('button', { name: 'Resolved' }));
   expect(onBulkUpdate).toHaveBeenCalledTimes(1);
   expect(onBulkUpdate).toHaveBeenCalledWith([alpha.id, beta.id], { status: 'resolved' });
-  expect(await screen.findByRole('status')).toHaveTextContent('Updated 2 conversations');
-  expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).not.toBeInTheDocument();
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Updated 2 conversations'));
+  expect(screen.queryByRole('group', { name: /bulk actions/i })).not.toBeInTheDocument();
   expect(screen.getByRole('checkbox', { name: /alpha request/i })).not.toBeChecked();
 });
 
@@ -64,7 +64,7 @@ test('says "1 conversation" for a single row', async () => {
   renderInbox(vi.fn().mockResolvedValue({ updated: 1 }));
   pick(/gamma request/i);
   fireEvent.click(within(within(bar()).getByRole('group', { name: 'Set status' })).getByRole('button', { name: 'Closed' }));
-  expect(await screen.findByRole('status')).toHaveTextContent('Updated 1 conversation');
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Updated 1 conversation'));
 });
 
 test('assign to me, to a teammate and to nobody', async () => {
@@ -122,4 +122,54 @@ test('rows that leave the list drop out of the selection', () => {
   pick(/beta request/i);
   rerender(<InboxPage conversations={[beta]} onBulkUpdate={onBulkUpdate} />);
   expect(within(bar()).getByText('1 selected')).toBeInTheDocument();
+});
+
+test('the status line exists before any result, so a screen reader announces the first one', () => {
+  renderInbox();
+  expect(screen.getByRole('status')).toBeEmptyDOMElement();
+});
+
+test('the inbox heading stays in the page while rows are selected', () => {
+  renderInbox();
+  pick(/alpha request/i);
+  expect(screen.getByRole('heading', { level: 1, name: 'Inbox' })).toBeInTheDocument();
+});
+
+test('rows with the same subject still have different checkbox names', () => {
+  const later = { ...row('99999999-9999-4999-8999-999999999999', 'Alpha request'), updated_at: '2026-10-14T05:30:00Z' };
+  render(<InboxPage conversations={[alpha, later]} />);
+  const names = screen.getAllByRole('checkbox', { name: /^select alpha request/i }).map((box) => box.getAttribute('aria-label'));
+  expect(new Set(names).size).toBe(2);
+});
+
+test('after a successful change focus moves to select all on this page', async () => {
+  renderInbox();
+  pick(/alpha request/i);
+  fireEvent.click(within(within(bar()).getByRole('group', { name: 'Set status' })).getByRole('button', { name: 'Resolved' }));
+  await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Select all on this page' })).toHaveFocus());
+});
+
+test('after clear selection focus moves to select all on this page', () => {
+  renderInbox();
+  pick(/alpha request/i);
+  fireEvent.click(within(bar()).getByRole('button', { name: 'Clear selection' }));
+  expect(screen.getByRole('checkbox', { name: 'Select all on this page' })).toHaveFocus();
+});
+
+test('with no rows left after a change, focus moves to the list pane', async () => {
+  let rerenderInbox!: (conversations: Conversation[]) => void;
+  const onBulkUpdate = vi.fn(async () => { rerenderInbox([]); });
+  const view = render(<InboxPage conversations={[alpha]} onBulkUpdate={onBulkUpdate} />);
+  rerenderInbox = (conversations) => view.rerender(<InboxPage conversations={conversations} onBulkUpdate={onBulkUpdate} />);
+  pick(/alpha request/i);
+  fireEvent.click(within(within(bar()).getByRole('group', { name: 'Set status' })).getByRole('button', { name: 'Closed' }));
+  await waitFor(() => expect(screen.getByRole('region', { name: /conversation list/i })).toHaveFocus());
+});
+
+test('after a refused change focus is on the menu that was used', async () => {
+  renderInbox(vi.fn().mockRejectedValue(new Error('refused')));
+  pick(/alpha request/i);
+  fireEvent.click(within(within(bar()).getByRole('group', { name: 'Set status' })).getByRole('button', { name: 'Pending' }));
+  await screen.findByRole('alert');
+  expect(within(bar()).getByText('Set status', { selector: 'summary' })).toHaveFocus();
 });

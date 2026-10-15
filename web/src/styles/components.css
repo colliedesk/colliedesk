@@ -269,3 +269,5 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .conversation-item .conversation-row { padding-left: var(--touch); }
   .select-all { min-height: var(--touch); }
 }
+.list-title[data-collapsed] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.bulk-message:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; padding: 0; }
