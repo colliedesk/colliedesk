@@ -33,11 +33,13 @@ Decisions and traps only. Code: `server/internal/store/web-form.go`,
 - **Client address.** The repo had no proxy handling. `TRUSTED_PROXIES` lists proxies; only a
   peer inside it may supply `X-Forwarded-For`, and the rightmost entry that is not a trusted proxy
   counts, so entries a client wrote on the left are ignored. Entries may carry a port. IPv6 counts
-  by /64. The default lives in server code (`defaultTrustedProxies`): unset means loopback plus
-  `172.16.0.0/12`, so a deployment whose compose file never heard of the variable (the hosted one)
-  still works; the shipped compose files repeat it with `${VAR-default}` (no colon, so only an unset
-  variable takes the default) and a test keeps the copies equal. Docker delivers host connections
-  from the bridge gateway, not from loopback. Set but empty means trust none and logs a WARN.
+  by /64. The variable is `TRUSTED_PROXIES`, shared with sign-up and parsed by
+  `httpapi.ParseTrustedProxies`. Unset and empty both trust none (fail closed) and log a WARN at
+  startup; there is no default in server code, because `requireSignupConfig` must keep refusing the
+  hosted cloud when the operator forgot it. Only the self-host compose files default it, to loopback
+  plus `172.16.0.0/12` with `${VAR-default}` (no colon, so only an unset variable takes the default):
+  Docker delivers host connections from the bridge gateway, not from loopback. A test checks those
+  defaults trust the gateway and no public address.
 - **Form posts do not count toward the per-sender email limit.** That limit counts messages by
   `email_meta.from`, and anyone can post a customer's address to the form. The count skips
   `via=web_form` (test: ten posts as a customer, then that customer's real mail is accepted).

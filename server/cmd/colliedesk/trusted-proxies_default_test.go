@@ -9,7 +9,23 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
+
+// The server trusts no proxy unless TRUSTED_PROXIES names one, exactly as sign-up requires. Unset
+// and empty are the same, and the web form's startup warning covers both.
+func TestUnsetTrustedProxiesTrustNobodyAndWarn(t *testing.T) {
+	proxies, err := httpapi.ParseTrustedProxies("")
+	if err != nil || len(proxies) != 0 {
+		t.Fatalf("empty = %v, %v; want no proxies", proxies, err)
+	}
+	var out bytes.Buffer
+	warnWithoutTrustedProxies(slog.New(slog.NewTextHandler(&out, nil)), proxies)
+	if !strings.Contains(out.String(), "level=WARN") {
+		t.Fatalf("log = %q, want the WARN", out.String())
+	}
+}
 
 var composeDefault = regexp.MustCompile(`TRUSTED_PROXIES: \$\{TRUSTED_PROXIES-([^}]*)\}`)
 
@@ -26,10 +42,7 @@ func TestShippedComposeFilesTrustTheLocalProxyByDefault(t *testing.T) {
 		if match == nil {
 			t.Fatalf("%s sets no default for TRUSTED_PROXIES", file)
 		}
-		if string(match[1]) != defaultTrustedProxies {
-			t.Errorf("%s default %q differs from the server's %q", file, match[1], defaultTrustedProxies)
-		}
-		proxies, err := trustedProxiesFromEnv(func(string) (string, bool) { return string(match[1]), true })
+		proxies, err := httpapi.ParseTrustedProxies(string(match[1]))
 		if err != nil {
 			t.Fatalf("%s default %q: %v", file, match[1], err)
 		}

@@ -58,7 +58,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err := db.Verify(ctx); err != nil {
 		return err
 	}
-	trustedProxies, err := trustedProxiesFromEnv(os.LookupEnv)
+	trustedProxies, err := httpapi.ParseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
 	if err != nil {
 		return err
 	}
