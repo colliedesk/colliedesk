@@ -15,7 +15,7 @@
     "check:api": "node scripts/check-generated-api.mjs"
   },
   "dependencies": {
-    "@clerk/clerk-react": "5.55.0",
+    "@clerk/clerk-react": "5.61.10",
     "@tanstack/react-query": "5.102.8",
     "@tanstack/react-router": "1.170.35",
     "react": "19.1.1",
@@ -36,7 +36,7 @@
     "openapi-typescript": "7.10.1",
     "tailwindcss": "4.1.14",
     "typescript": "5.9.3",
-    "vite": "7.1.12",
-    "vitest": "4.0.7"
+    "vite": "7.3.7",
+    "vitest": "4.1.11"
   }
 }
