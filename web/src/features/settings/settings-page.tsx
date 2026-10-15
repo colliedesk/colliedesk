@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { Invite, Session } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { AppearanceSection } from './appearance-section';
 
 interface SettingsPageProps {
   sessions: Session[];
@@ -44,7 +45,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
   useEffect(() => setWorkspaceZone(workspaceTimezone), [workspaceTimezone]);
   useEffect(() => setAgentZone(timezoneOverride ?? ''), [timezoneOverride]);
   return (
-    <main className="settings-page">
+    <main className="settings-page panel">
       <header><h1>{messages.settings}</h1><p>{messages.workspaceSettings}</p></header>
       {error && <p role="alert" className="error-copy">{error}</p>}
       <section className="settings-card"><div className="section-heading"><h2>{messages.timezoneSettings}</h2><p>{messages.timezoneDescription}</p></div>
@@ -57,6 +58,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
         </div>
       </section>
       {emailSection}
+      <AppearanceSection />
       <section className="settings-card" aria-labelledby="sessions-heading"><div className="section-heading"><h2 id="sessions-heading">{messages.sessions}</h2><p>{messages.sessionsDescription}</p></div>
         <div className="settings-body"><div className="data-list">{sessions.map((session) => {
           const state = sessionState(session);

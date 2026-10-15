@@ -17,3 +17,6 @@ export const PaperclipIcon = () => <Icon><path d="m21.4 11-9.2 9.2a6 6 0 0 1-8.5
 export const LockIcon = () => <Icon><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></Icon>;
 export const ClockIcon = () => <Icon><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></Icon>;
 export const ArrowUpIcon = () => <Icon><path d="M12 19V5M5 12l7-7 7 7" /></Icon>;
+export const ReplyIcon = () => <Icon><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></Icon>;
+export const FilterIcon = () => <Icon><path d="M3 6h18M7 12h10M10 18h4" /></Icon>;
+export const ChevronDownIcon = () => <Icon><path d="m6 9 6 6 6-6" /></Icon>;

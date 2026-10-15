@@ -59,7 +59,7 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
   }, []);
   return (
     <main className="inbox-shell" data-details-open={detailsOpen}>
-      <section className="list-pane" ref={listPane} tabIndex={-1} aria-label={messages.conversationList}>
+      <section className="list-pane panel" ref={listPane} tabIndex={-1} aria-label={messages.conversationList}>
         <header>
           <div className="list-title"><h1>{messages.inbox}</h1><span>{conversations.length}</span></div>
           <InboxFilters tags={tags} onChange={onFilters} />
@@ -68,7 +68,7 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
           page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} loading={loading}
           failed={failed} onRetry={onRetry} canManage={canManage} onOpenSettings={onOpenSettings} />
       </section>
-      <div className="conversation-center">
+      <div className="conversation-center panel">
         <TimelinePanel conversation={selected} items={timeline} timeEntries={timeEntries} timezone={timezone} onRetryDelivery={onRetryDelivery}
           detailsOpen={detailsOpen} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}</p>}
