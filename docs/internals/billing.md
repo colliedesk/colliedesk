@@ -85,5 +85,59 @@ the API.
 - Client errors from Polar never include its response body or the token; they are logged as a
   status code only.
 - The access token travels only in the `Authorization` header of server-to-Polar calls.
-- Limits (3 agents, 100 conversations a month on Free) are reported by `GET /api/v1/billing`. They
-  are not enforced yet.
+
+## Free-plan limits
+
+Enforced only when billing is enabled (`Store.WithPlanLimits`, `auth.Service.WithPlanLimits`, both set
+from `POLAR_*` in `httpapi.New`); self-hosted instances never hold or refuse anything. The plan is
+the effective plan on read (`effectivePlan` in `store/plan-limits.go`), so a canceled subscription
+that is still inside its paid period keeps the paid limits. Code: `store/plan-limits.go`,
+`auth/invites.go`, `auth/links.go`.
+
+### Agent seats
+
+- Cap: 3 on Free, 10 on Team and Founding. A seat is an agent or an unused, unrevoked, unexpired
+  invite. Counting invites stops a burst of invites from passing the cap.
+- Checked when an invite is created and when one is redeemed. Redeem excludes the invite itself
+  and skips someone who is already an agent. Redeem matters after a downgrade: the invite stays
+  unused (the transaction rolls back), so it works after an upgrade.
+- Both checks take `pg_advisory_xact_lock("agent-seats:<workspace>")`, so concurrent invites see
+  each other. Existing agents are never removed.
+- Error: HTTP 402, code `plan_limit_reached`, message names the plan, the cap and the way out.
+
+### Monthly conversation quota
+
+- 100 per UTC calendar month on Free (`domain.MonthStart`). Counted: conversations with
+  `origin IS NULL` and `created_at >= month start`, held ones included, so "received" is what the
+  billing page shows.
+- Only the inbound email pipeline holds. Held means `conversations.held_at` is set to the arrival
+  time; the row, its messages and its attachments are stored exactly like any other. The check
+  runs under `pg_advisory_xact_lock("conversation-quota:<workspace>")` so two deliveries racing
+  for the last slot cannot both pass. Replies that thread onto an existing conversation never
+  reach the check.
+- **API-created conversations (`POST /api/v1/conversations`) count but are never held.** An agent
+  who just created one expects to see it, and the quota exists to bound inbound volume.
+- **The Freshdesk importer is exempt on both sides.** Imported rows carry `origin`, so they are
+  not counted, and the importer never sets `held_at`, so they are never held. An import is a
+  migration of history (no data loss is the rule that wins); importing 5,000 tickets must not
+  hide the first real customer mail of the month.
+- Visibility is one predicate: `held_at IS NULL OR held_at < <start of this month>`. There is no
+  job. A conversation held in an earlier month becomes visible the instant the month turns, and
+  nothing runs on any request to release it. The predicate is applied in the inbox list and search
+  (`listConversations`) and in the contact view. Direct reads by id (`GET /conversations/{id}`) and
+  replies on a held conversation work, so a link from an email or an agent's own notes never 404s.
+- Upgrade: `ApplySubscription` clears `held_at` of the workspace in the same transaction that
+  records the paid subscription (`releaseHeldIfPaid`), so the release is as idempotent as the
+  webhook. A downgrade changes nothing already stored.
+- `held_at` has a partial index `(workspace_id, held_at) WHERE held_at IS NOT NULL`. It serves the
+  held count and the release, and is empty for a workspace that holds nothing. The list adds one
+  cheap `held_at` test per scanned row; `TestInboxListLatencyBudget` still gates the 100 ms p95.
+  The `held_count` on the list response is a count over that index, and only runs when plan limits
+  are on.
+- `ConversationPage.held_count` is on the list response so that agents, who cannot read
+  `/api/v1/billing`, still see the banner.
+
+### Clock
+
+`httpapi.Config.Now` feeds the store and the auth service. Tests move it across a month boundary
+instead of sleeping. The webhook signature check keeps the real clock.
