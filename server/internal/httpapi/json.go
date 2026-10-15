@@ -37,6 +37,17 @@ func writeStoreError(response http.ResponseWriter, err error) {
 	if writePlanLimit(response, err) {
 		return
 	}
+	switch {
+	case errors.Is(err, domain.ErrLastAdmin):
+		writeError(response, http.StatusConflict, "last_admin", domain.ErrLastAdmin.Error()+". Make another agent an admin first.")
+		return
+	case errors.Is(err, domain.ErrAgentDeactivated):
+		writeError(response, http.StatusConflict, "agent_deactivated", domain.ErrAgentDeactivated.Error()+".")
+		return
+	case errors.Is(err, domain.ErrInvalidReassignTarget):
+		writeError(response, http.StatusBadRequest, "invalid_reassign_target", domain.ErrInvalidReassignTarget.Error()+".")
+		return
+	}
 	if errors.Is(err, pgx.ErrNoRows) || strings.Contains(err.Error(), "not found") {
 		writeError(response, http.StatusNotFound, "not_found", "The requested resource was not found.")
 		return

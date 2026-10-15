@@ -247,3 +247,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .locked-screen .button-row button { flex: 1 1 100%; --control: var(--touch); }
 }
 .locked-screen h1:focus { outline: none; }
+.team-list article { flex-wrap: wrap; }
+.team-list .team-person { display: grid; min-width: 0; }
+.team-list .team-person small { overflow: hidden; color: var(--text-3); text-overflow: ellipsis; white-space: nowrap; }
+.team-confirm { display: grid; flex: 1 0 100%; gap: var(--space-2); border-left: 2px solid var(--danger); padding-left: var(--space-3); }
+.team-confirm label { display: flex; align-items: center; gap: var(--space-2); }
+.team-role { display: flex; gap: var(--space-2); align-items: center; }

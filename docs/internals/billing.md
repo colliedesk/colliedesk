@@ -154,14 +154,20 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
 ### Agent seats
 
 - Cap: 10 on trial, Team and Founding (more than 10 is "contact us", so the message says that instead of
-  offering an upgrade). A seat is an agent, or a person with an unused, unrevoked, unexpired invite.
-  Pending invites count by distinct address: re-sending an invite to the same address, or inviting someone
-  who is already an agent (a role change), takes no new seat.
-- Checked when an invite is created and when one is redeemed. Redeem excludes the invite itself
-  and skips someone who is already an agent. Redeem matters after a downgrade: the invite stays
-  unused (the transaction rolls back), so it works after an upgrade.
-- Both checks take `pg_advisory_xact_lock("agent-seats:<workspace>")`, so concurrent invites see
-  each other. Existing agents are never removed.
+  offering an upgrade). A seat is an active agent, or a person with an unused, unrevoked, unexpired invite.
+  A deactivated agent holds no seat. Pending invites count by distinct address: re-sending an invite to the
+  same address, or inviting someone who is already an active agent (a role change), takes no new seat.
+- Checked when an invite is created, when one is redeemed and when a deactivated agent is reactivated.
+  Redeem excludes the invite itself and skips someone who is already an active agent. Redeem matters after a
+  downgrade: the invite stays unused (the transaction rolls back), so it works after an upgrade.
+- All three checks take `pg_advisory_xact_lock("agent-seats:<workspace>")`, so concurrent invites and
+  reactivations see each other. `PATCH /api/v1/agents/{id}` takes the same lock before its last-admin check.
+- Agents are never deleted. An admin deactivates them (`agents.deactivated_at`): the seat is freed at once,
+  sessions and unused links and invites of the agent are revoked, and the open and pending conversations move
+  to Unassigned or to another active agent in the same transaction. Reactivating takes a seat again
+  (402 `plan_limit_reached` when none is free) and does not restore assignments or sessions. An invite for the
+  address of a deactivated agent is refused with 409 `agent_deactivated`: reactivate instead. Downgrading a
+  plan still removes nobody; the admin frees seats by deactivating agents or revoking invites.
 - Error: HTTP 402, code `plan_limit_reached`, message names the plan, the cap and the way out.
 
 ### Rollback of the cleanup
