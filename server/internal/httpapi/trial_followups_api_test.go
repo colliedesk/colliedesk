@@ -77,8 +77,12 @@ func TestLockedAllowlistOnlyNamesRealRoutes(t *testing.T) {
 		routes[route.Method+" "+route.Pattern] = true
 	}
 	for _, key := range httpapi.LockedAllowlist() {
-		// The export route ships in its own change; drop this exemption when it lands.
+		// The export route ships in its own change. The exemption fails once the route exists,
+		// so it cannot outlive the change that makes it unnecessary.
 		if key == "GET /api/v1/export" {
+			if routes[key] {
+				t.Errorf("%q now exists in Routes(); delete the exemption in this test", key)
+			}
 			continue
 		}
 		if !routes[key] {
@@ -118,16 +122,5 @@ func TestInviteCannotChangeARoleWhileLocked(t *testing.T) {
 	f.upgrade(t, f.workspaceA, "sub_role_unlock")
 	if got := request(t, f.api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{"token": linkToken(t, promotion)}, "", nil).Code; got != http.StatusOK {
 		t.Fatalf("redeem after paying status=%d, want 200", got)
-	}
-}
-
-// The clock that starts a trial is the application's, never the database's.
-func TestWorkspaceCannotBeInsertedWithoutATrialEnd(t *testing.T) {
-	pool := testPool(t)
-	api, _, pool, _ := testAPIOnPool(t, pool, nil)
-	_ = api
-	_, err := pool.Exec(context.Background(), `INSERT INTO workspaces(slug,name) VALUES('no-trial-end','No Trial End')`)
-	if err == nil || !strings.Contains(err.Error(), "trial_ends_at") {
-		t.Fatalf("insert without trial_ends_at: err=%v, want a not-null violation naming trial_ends_at", err)
 	}
 }

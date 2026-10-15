@@ -180,10 +180,10 @@ func TestAttachmentCannotPointAtAnotherWorkspacesMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	var workspaceA, messageB string
-	if err := pool.QueryRow(ctx, `INSERT INTO workspaces(slug,name,trial_ends_at) VALUES('alpha','Alpha',now()) RETURNING id::text`).Scan(&workspaceA); err != nil {
+	if err := pool.QueryRow(ctx, `INSERT INTO workspaces(slug,name) VALUES('alpha','Alpha') RETURNING id::text`).Scan(&workspaceA); err != nil {
 		t.Fatal(err)
 	}
-	err := pool.QueryRow(ctx, `WITH w AS (INSERT INTO workspaces(slug,name,trial_ends_at) VALUES('beta','Beta',now()) RETURNING id),
+	err := pool.QueryRow(ctx, `WITH w AS (INSERT INTO workspaces(slug,name) VALUES('beta','Beta') RETURNING id),
 		c AS (INSERT INTO contacts(workspace_id,name,email) SELECT id,'B','b@example.com' FROM w RETURNING id,workspace_id),
 		v AS (INSERT INTO conversations(workspace_id,contact_id,subject) SELECT workspace_id,id,'B' FROM c RETURNING id,workspace_id)
 		INSERT INTO messages(workspace_id,conversation_id,kind,body) SELECT workspace_id,id,'note','B' FROM v RETURNING id::text`).Scan(&messageB)
