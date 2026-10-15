@@ -12,7 +12,7 @@ var hostedLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 // reservedSlugs are names a platform needs for its own hosts or that read as official mail senders.
 var reservedSlugs = map[string]bool{
 	"abuse": true, "account": true, "accounts": true, "admin": true, "api": true, "app": true, "autoconfig": true,
-	"autodiscover": true, "billing": true, "blog": true, "cdn": true, "dashboard": true, "dkim": true, "dmarc": true,
+	"autodiscover": true, "billing": true, "bounce": true, "bounces": true, "em": true, "resend": true, "rsend": true, "send": true, "blog": true, "cdn": true, "dashboard": true, "dkim": true, "dmarc": true,
 	"docs": true, "ftp": true, "help": true, "hostmaster": true, "imap": true, "in": true, "inbound": true, "login": true,
 	"mail": true, "mx": true, "ns": true, "ns1": true, "ns2": true, "postmaster": true, "root": true, "security": true,
 	"sales": true, "signin": true, "smtp": true, "spf": true, "static": true, "status": true, "support": true, "test": true,

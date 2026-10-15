@@ -311,6 +311,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channels/email/inbound/recipient": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Asked by the hosted-cloud MTA before it accepts RCPT TO, with the server-wide MAIL_FROM_INBOUND_SECRET (a workspace secret is refused). 204 when `POST /api/v1/channels/email/inbound` would route mail for this address to a workspace with a connected email channel, 404 otherwise. Refusing in the SMTP session means an address nobody owns is never bounced afterwards to a sender that may be forged. */
+        post: operations["checkInboundRecipient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversations/{id}/time-entries": {
         parameters: {
             query?: never;
@@ -1715,6 +1732,35 @@ export interface operations {
             404: components["responses"]["NotFound"];
             413: components["responses"]["PayloadTooLarge"];
             429: components["responses"]["TooManyRequests"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    checkInboundRecipient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Envelope recipient (RCPT TO) address */
+                    recipient: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Mail for this address would be accepted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
     };

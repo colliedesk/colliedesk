@@ -93,6 +93,11 @@ unchanged; the workspace's Support address stays the identity customers see.
   lines are sender-controlled and never route (test:
   `TestHostedAddressMailReachesOnlyItsOwnWorkspace`). The shipped Worker and the Postfix `pipe`
   `flags=O` both put it first.
+- **Refuse at RCPT on our own MTA.** The hosted cloud runs Postfix for `*.HOSTED_MAIL_DOMAIN` (owner
+  decision 2026-10-15). Before it accepts `RCPT TO` it asks `POST /api/v1/channels/email/inbound/recipient`
+  with the server-wide secret: 204 accept, 404 refuse with 550. The answer comes from the same lookup as
+  inbound routing, so the two cannot disagree. Refusing in the session avoids backscatter: a bounce sent
+  after `250` goes to the envelope sender, which spam forges. The pipe maps a late 404 to `EX_NOUSER` (67).
 - **Reject, not drop.** A recipient under the hosted domain with no matching workspace, or whose
   workspace has no connected email channel, is `404 unknown_recipient`, so the forwarder bounces it.
   Everything else on the platform secret keeps the old behaviour (`200 dropped`).
