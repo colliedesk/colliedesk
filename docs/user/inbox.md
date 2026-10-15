@@ -25,6 +25,7 @@ cannot be loaded, it says so with **Try again** instead.
   **Delivery failed** (with **Retry delivery**).
 - **Private note** is visible only to your team.
 - Messages support Markdown.
+- **Insert saved reply** (or `/`) puts a [saved reply](saved-replies.md) into the box, with the customer's name and yours filled in. You can edit it before you send.
 - **Add attachment** (the paperclip under the message box) attaches files to a reply or a private
   note. A message carries at most 10 files and 10 MiB in total. Each chosen file is listed with its
   size; select the **x** next to it to remove it before you send. Over the limit, Colliedesk says so,

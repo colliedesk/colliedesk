@@ -11,6 +11,7 @@ One page per feature. Each page says what the feature does, how to use it, and i
 - [Web form](web-form.md)
 - [Plan and billing](billing.md) (hosted cloud only)
 - [Tags](tags.md)
+- [Saved replies](saved-replies.md)
 - [Timezones](timezones.md)
 - [Sessions and devices](sessions.md)
 - [Import from Freshdesk](import-freshdesk.md)
