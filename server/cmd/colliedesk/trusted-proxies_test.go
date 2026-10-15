@@ -8,7 +8,7 @@ import (
 // lookup stands in for os.LookupEnv; set false means the variable is not in the environment at all.
 func lookup(t *testing.T, value string, set bool) func(string) (string, bool) {
 	return func(key string) (string, bool) {
-		if key != "TRUSTED_PROXY_CIDRS" {
+		if key != "TRUSTED_PROXIES" {
 			t.Fatalf("read unexpected variable %q", key)
 		}
 		return value, set

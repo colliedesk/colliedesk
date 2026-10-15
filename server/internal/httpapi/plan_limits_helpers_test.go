@@ -145,12 +145,15 @@ type planUsageView struct {
 	TrialEndsAt string `json:"trial_ends_at"`
 	Locked      bool   `json:"locked"`
 	Limits      struct {
-		Agents int `json:"agents"`
+		Agents           int    `json:"agents"`
+		StorageBytes     *int64 `json:"storage_bytes"`
+		StorageWarnBytes *int64 `json:"storage_warn_bytes"`
 	} `json:"limits"`
 	Usage struct {
-		Agents         int `json:"agents"`
-		PendingInvites int `json:"pending_invites"`
-		RepliesLast24h int `json:"replies_last_24h"`
+		Agents         int   `json:"agents"`
+		PendingInvites int   `json:"pending_invites"`
+		RepliesLast24h int   `json:"replies_last_24h"`
+		StorageBytes   int64 `json:"storage_bytes"`
 	} `json:"usage"`
 }
 

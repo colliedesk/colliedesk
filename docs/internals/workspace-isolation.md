@@ -129,7 +129,7 @@ transaction only resolves the workspace; the work after that runs in `InWorkspac
 |---|---|---|
 | `PrivilegeMigrate` | `database/migrate.go` | Schema changes and data migrations |
 | `PrivilegeRequestLogin` | `database/scope.go` (`EnsureRequestLogin`) | Creates the request login and grants it the app role (`colliedesk migrate`) |
-| `PrivilegeCreateWorkspace` | `auth/service.go` | Inserts the workspace, its first admin and pairing link (CLI `create-workspace`) |
+| `PrivilegeCreateWorkspace` | `auth/service.go`, `auth/signup.go` | Inserts the workspace, its first admin and pairing link (CLI `create-workspace`). `signup.go` (`POST /auth/cloud/signup`) also reads and writes `cloud_signups`, the platform-level table of trials already given: it has no `workspace_id`, no workspace policy and no grant to the app role, only the `privileged_access` policy, so only this transaction can touch it |
 | `PrivilegeWorkspaceBySlug` | `database/scope.go` (`WorkspaceIDBySlug`) | CLI `pair`, `import freshdesk`, `import undo`, `trial set`, `plan grant`, `plan revoke` name a workspace by slug; hosted mail routing (`store.WorkspaceForMailSlug`) finds the workspace of `support@<slug>.<HOSTED_MAIL_DOMAIN>` from the envelope recipient, then continues only if its email channel is connected; the public web form (`store.OpenWebForm`) finds the workspace of `POST /api/v1/public/forms/{slug}`, then reads and writes only inside that workspace's scope |
 | `PrivilegeSessionToken` | `auth/sessions.go` | Session token hash → workspace; session checks then run scoped |
 | `PrivilegeLinkToken` | `auth/links.go` | Pairing/invite link token hash → workspace; redemption then runs scoped |

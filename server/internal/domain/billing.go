@@ -18,19 +18,39 @@ const (
 // BillingStatusNone is the status of a workspace that never had a subscription.
 const BillingStatusNone = "none"
 
+// Storage cap of the plans without a payment behind them (trial and locked): 2 GiB of attachment
+// bytes, imported files excluded. StorageWarnPercent is where the web app starts to warn.
+const (
+	TrialStorageBytes  int64 = 2 << 30
+	StorageWarnPercent       = 80
+)
+
 // PlanLimits are the caps of a plan.
 type PlanLimits struct {
 	Agents int `json:"agents"`
+	// StorageBytes is the attachment storage cap, nil when the plan has none.
+	StorageBytes *int64 `json:"storage_bytes"`
+	// StorageWarnBytes is the usage at which the web app warns, nil when StorageBytes is nil.
+	StorageWarnBytes *int64 `json:"storage_warn_bytes"`
+}
+
+// StorageCapped reports whether attachment storage is capped on plan.
+func StorageCapped(plan string) bool {
+	return plan == PlanTrial || plan == PlanNone
 }
 
 // LimitsFor returns the caps of plan; a locked workspace (PlanNone) holds no seats.
 func LimitsFor(plan string) PlanLimits {
+	var limits PlanLimits
 	switch plan {
 	case PlanTrial, PlanTeam, PlanFounding:
-		return PlanLimits{Agents: 10}
-	default:
-		return PlanLimits{}
+		limits.Agents = 10
 	}
+	if StorageCapped(plan) {
+		limit, warn := TrialStorageBytes, TrialStorageBytes*StorageWarnPercent/100
+		limits.StorageBytes, limits.StorageWarnBytes = &limit, &warn
+	}
+	return limits
 }
 
 // Subscription mirrors the latest Polar subscription event of a workspace.
@@ -80,6 +100,17 @@ type BillingUsage struct {
 	// RepliesLast24h counts the emailed replies of the last 24 hours that count against the
 	// trial's daily cap; it is 0 on every other plan.
 	RepliesLast24h int `json:"replies_last_24h"`
+	// StorageBytes is the attachment bytes the storage cap counts: every file except imported ones.
+	StorageBytes int64 `json:"storage_bytes"`
+}
+
+// StorageLimitError means storing the new files would pass the plan's storage cap. Nothing was stored.
+type StorageLimitError struct {
+	Used, Adding, Limit int64
+}
+
+func (e *StorageLimitError) Error() string {
+	return "This workspace has reached its 2 GiB attachment storage limit. Subscribe to remove the limit, or export your data."
 }
 
 // PlanLimitError means an action would exceed a limit of the workspace's plan.

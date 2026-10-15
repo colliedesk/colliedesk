@@ -96,9 +96,10 @@ func (s *Store) GetBilling(ctx context.Context, workspaceID string, now time.Tim
 		err = tx.QueryRow(ctx, `SELECT
 			(SELECT count(*) FROM agents WHERE workspace_id=$1),
 			(`+pendingSeatEmails+`),
-			(SELECT trial_ends_at FROM workspaces WHERE id=$1)`,
+			(SELECT trial_ends_at FROM workspaces WHERE id=$1),
+			(`+ownStorageBytes+`)`,
 			workspaceID, now).
-			Scan(&usage.Agents, &usage.PendingInvites, &trialEndsAt)
+			Scan(&usage.Agents, &usage.PendingInvites, &trialEndsAt, &usage.StorageBytes)
 		if err != nil {
 			return domain.Billing{}, err
 		}

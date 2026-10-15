@@ -121,12 +121,3 @@ func forwardedAddress(entry string) (netip.Addr, bool) {
 	address, err := netip.ParseAddr(strings.Trim(entry, "[]"))
 	return address, err == nil
 }
-
-func isTrusted(address netip.Addr, trusted []netip.Prefix) bool {
-	for _, prefix := range trusted {
-		if prefix.Contains(address) {
-			return true
-		}
-	}
-	return false
-}

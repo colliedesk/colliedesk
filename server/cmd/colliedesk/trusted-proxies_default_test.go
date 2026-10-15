@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-var composeDefault = regexp.MustCompile(`TRUSTED_PROXY_CIDRS: \$\{TRUSTED_PROXY_CIDRS-([^}]*)\}`)
+var composeDefault = regexp.MustCompile(`TRUSTED_PROXIES: \$\{TRUSTED_PROXIES-([^}]*)\}`)
 
 // The shipped compose files bind the server to 127.0.0.1, so a reverse proxy on the host always
 // sits in front. Docker delivers that proxy's connections from the bridge gateway, not from
@@ -24,7 +24,7 @@ func TestShippedComposeFilesTrustTheLocalProxyByDefault(t *testing.T) {
 		}
 		match := composeDefault.FindSubmatch(raw)
 		if match == nil {
-			t.Fatalf("%s sets no default for TRUSTED_PROXY_CIDRS", file)
+			t.Fatalf("%s sets no default for TRUSTED_PROXIES", file)
 		}
 		if string(match[1]) != defaultTrustedProxies {
 			t.Errorf("%s default %q differs from the server's %q", file, match[1], defaultTrustedProxies)
@@ -59,8 +59,8 @@ func TestServerWarnsOnceAtStartupWhenNoProxyIsTrusted(t *testing.T) {
 	var out bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&out, nil))
 	warnWithoutTrustedProxies(logger, nil)
-	if !strings.Contains(out.String(), "level=WARN") || !strings.Contains(out.String(), "TRUSTED_PROXY_CIDRS") {
-		t.Fatalf("log = %q, want a WARN naming TRUSTED_PROXY_CIDRS", out.String())
+	if !strings.Contains(out.String(), "level=WARN") || !strings.Contains(out.String(), "TRUSTED_PROXIES") {
+		t.Fatalf("log = %q, want a WARN naming TRUSTED_PROXIES", out.String())
 	}
 	out.Reset()
 	warnWithoutTrustedProxies(logger, []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")})

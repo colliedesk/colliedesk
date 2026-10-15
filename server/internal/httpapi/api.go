@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"net/netip"
@@ -42,9 +43,15 @@ type Config struct {
 	// ExportTimeout is the longest one export may run in total (default 2 h), however slowly the
 	// client keeps reading.
 	ExportTimeout time.Duration
-	// TrustedProxies are the reverse proxies whose X-Forwarded-For header is believed when finding
-	// the client address of the public web form's rate limit. Empty means the TCP peer is the client.
+	// TrustedProxies are the reverse proxies whose X-Forwarded-For is believed when finding the
+	// client address of a sign-up or of a public web form submission (TRUSTED_PROXIES). Empty trusts
+	// none: the peer address is the client.
 	TrustedProxies []netip.Prefix
+	// SignupHashKey keys the hashes of the sign-up records (SIGNUP_HASH_KEY, at least 32 bytes); sign-up
+	// answers 500 without it, and serve refuses to start with sign-up enabled and no key.
+	SignupHashKey string
+	// Random is the entropy for generated workspace slug suffixes; nil uses crypto/rand.
+	Random io.Reader
 }
 
 type Route struct {
@@ -99,6 +106,10 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
 		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits),
 		store: store.NewWithDB(db).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits)}
+	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
+	if config.Random != nil {
+		api.auth = api.auth.WithRandom(config.Random)
+	}
 	if config.CloudAuth.Enabled() {
 		api.cloud = cloudauth.New(config.CloudAuth)
 	}
@@ -121,6 +132,7 @@ func Routes() []Route {
 	return []Route{
 		{http.MethodGet, "/api/v1/config", auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/auth/cloud/exchange", auth.PermissionPublic},
+		{http.MethodPost, cloudSignupPath, auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/auth/redeem", auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/auth/logout", auth.PermissionAuthenticated},
 		{http.MethodGet, "/api/v1/auth/me", auth.PermissionAuthenticated},

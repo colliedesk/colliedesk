@@ -52,6 +52,9 @@ type Inbound struct {
 	Files []File
 	// BodyHTML is the HTML part with inline images embedded; empty when the message has no HTML.
 	BodyHTML string
+	// RawBytes is the size of the raw message Parse read, which the storage cap counts together
+	// with the decoded files.
+	RawBytes int
 	// EnvelopeTo is the topmost X-Original-To value, lowercased: the recipient the trusted forwarder saw.
 	// Unlike Recipients it ignores To, Cc and lower X-Original-To lines, which a sender controls.
 	EnvelopeTo string
@@ -82,6 +85,7 @@ func Parse(raw []byte, trustedAuthServID string) (Inbound, error) {
 		FromName:    cleanLine(from.Name),
 		Recipients:  recipients(header),
 		EnvelopeTo:  envelopeTo(header),
+		RawBytes:    len(raw),
 		Subject:     cleanLine(decodeHeader(header.Get("Subject"))),
 	}
 	if parsed.MessageID == "" {

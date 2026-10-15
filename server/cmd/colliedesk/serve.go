@@ -8,12 +8,14 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/email"
@@ -56,6 +58,18 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err := db.Verify(ctx); err != nil {
 		return err
 	}
+	trustedProxies, err := trustedProxiesFromEnv(os.LookupEnv)
+	if err != nil {
+		return err
+	}
+	signupKey := os.Getenv("SIGNUP_HASH_KEY")
+	cloudAuth := cloudAuthConfig()
+	if err := requireSignupConfig(cloudAuth.Enabled(), billing.Enabled(), trustedProxies, signupKey); err != nil {
+		return err
+	}
+	if cloudAuth.Enabled() && billing.Enabled() {
+		go sweepSignupAddresses(ctx, auth.NewWithDB(db, origin))
+	}
 	storage, err := attachmentStorage()
 	if err != nil {
 		return err
@@ -69,14 +83,10 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain})
 		go worker.Run(ctx, 5*time.Second)
 	}
-	trustedProxies, err := trustedProxiesFromEnv(os.LookupEnv)
-	if err != nil {
-		return err
-	}
 	warnWithoutTrustedProxies(slog.Default(), trustedProxies)
 	server := &http.Server{
 		Addr:              *address,
-		Handler:           webui.Handler(httpapi.New(pool, httpapi.Config{Origin: origin, CloudAuth: cloudAuthConfig(), Email: emailConfig, Attachments: storage, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies})),
+		Handler:           webui.Handler(httpapi.New(pool, httpapi.Config{Origin: origin, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey})),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	done := make(chan error, 1)
@@ -94,6 +104,43 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			return fmt.Errorf("shutdown HTTP server: %w", err)
 		}
 		return nil
+	}
+}
+
+// minSignupKeyBytes is the shortest SIGNUP_HASH_KEY accepted.
+const minSignupKeyBytes = 32
+
+// requireSignupConfig refuses to start the hosted cloud (cloud sign-in and billing both on, which
+// is when public sign-up exists) without the two settings its abuse controls rest on: the key of the
+// sign-up record hashes, and the trusted proxies that reveal the client address. Without the second,
+// every client shares the proxy's address and the fourth sign-up of the day is refused for everyone.
+// Error text names variables, never values.
+func requireSignupConfig(cloudSignIn, billing bool, trustedProxies []netip.Prefix, key string) error {
+	if !cloudSignIn || !billing {
+		return nil
+	}
+	if len(key) < minSignupKeyBytes {
+		return fmt.Errorf("cloud sign-up is enabled: set SIGNUP_HASH_KEY to at least %d random characters (keeps the trial records pseudonymous; changing it later forgets who had a trial)", minSignupKeyBytes)
+	}
+	if len(trustedProxies) == 0 {
+		return errors.New("cloud sign-up is enabled: set TRUSTED_PROXIES to the address of the reverse proxy as the server sees it (for example the Docker gateway, 172.18.0.1/32); without it every sign-up shares one client address")
+	}
+	return nil
+}
+
+// sweepSignupAddresses clears old client-address hashes at start and then every hour until ctx ends.
+func sweepSignupAddresses(ctx context.Context, service *auth.Service) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		if _, err := service.ClearSignupAddresses(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("clear old sign-up addresses", "error", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 	}
 }
 

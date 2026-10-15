@@ -30,7 +30,7 @@ Decisions and traps only. Code: `server/internal/store/web-form.go`,
 - **Slug secrecy is not claimed.** Unknown, off and locked answer one 404, but the paths do
   different work, so timing can still tell them apart, and hosted mail addresses already contain
   the slug. The per-address ceiling makes such probing slow, not impossible.
-- **Client address.** The repo had no proxy handling. `TRUSTED_PROXY_CIDRS` lists proxies; only a
+- **Client address.** The repo had no proxy handling. `TRUSTED_PROXIES` lists proxies; only a
   peer inside it may supply `X-Forwarded-For`, and the rightmost entry that is not a trusted proxy
   counts, so entries a client wrote on the left are ignored. Entries may carry a port. IPv6 counts
   by /64. The default lives in server code (`defaultTrustedProxies`): unset means loopback plus
