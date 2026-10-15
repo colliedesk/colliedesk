@@ -24,8 +24,17 @@ type twoWorkspaces struct{ a, b string }
 func seedTwoWorkspaces(t *testing.T, pool *pgxpool.Pool) twoWorkspaces {
 	t.Helper()
 	var ids twoWorkspaces
+	// Some tests seed a schema from before workspaces had a trial end; on a newer schema the column has no default.
+	workspaceColumns, trialValue := "slug,name", ""
+	var hasTrial bool
+	if err := pool.QueryRow(context.Background(), `SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='workspaces' AND column_name='trial_ends_at')`).Scan(&hasTrial); err != nil {
+		t.Fatal(err)
+	}
+	if hasTrial {
+		workspaceColumns, trialValue = "slug,name,trial_ends_at", ",now()+interval '14 days'"
+	}
 	for slug, target := range map[string]*string{"alpha": &ids.a, "beta": &ids.b} {
-		err := pool.QueryRow(context.Background(), `WITH w AS (INSERT INTO workspaces(slug,name) VALUES($1,$1) RETURNING id),
+		err := pool.QueryRow(context.Background(), `WITH w AS (INSERT INTO workspaces(`+workspaceColumns+`) VALUES($1,$1`+trialValue+`) RETURNING id),
 			c AS (INSERT INTO contacts(workspace_id,name,email) SELECT id,$1,$1||'@example.com' FROM w RETURNING id,workspace_id),
 			v AS (INSERT INTO conversations(workspace_id,contact_id,subject) SELECT workspace_id,id,$1||' ticket' FROM c RETURNING id,workspace_id),
 			m AS (INSERT INTO messages(workspace_id,conversation_id,kind,body) SELECT workspace_id,id,'note',$1||' note' FROM v RETURNING 1),
@@ -371,7 +380,7 @@ func TestNonSuperuserOwnerIsAlsoFailClosed(t *testing.T) {
 	db := New(pool)
 	var a string
 	err := db.Privileged(ctx, PrivilegeCreateWorkspace, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `WITH w AS (INSERT INTO workspaces(slug,name) VALUES('alpha','Alpha') RETURNING id),
+		return tx.QueryRow(ctx, `WITH w AS (INSERT INTO workspaces(slug,name,trial_ends_at) VALUES('alpha','Alpha',now()+interval '14 days') RETURNING id),
 			c AS (INSERT INTO contacts(workspace_id,name,email) SELECT id,'A','a@example.com' FROM w RETURNING id,workspace_id),
 			v AS (INSERT INTO conversations(workspace_id,contact_id,subject) SELECT workspace_id,id,'alpha ticket' FROM c RETURNING 1)
 			SELECT id::text FROM w`).Scan(&a)
