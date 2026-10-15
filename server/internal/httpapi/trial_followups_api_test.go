@@ -34,6 +34,11 @@ func (*queryCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEnd
 // measure runs one request and returns the statements and transactions it cost.
 func (c *queryCounter) measure(t *testing.T, f limitsFixture, path, token string) (statements, begins int) {
 	t.Helper()
+	// A session used in the last minute skips its last-seen write. Make the write due, so that every
+	// measurement takes the same path whatever clock the fixture runs on.
+	if _, err := f.pool.Exec(context.Background(), `UPDATE sessions SET last_seen_at=timestamptz '2000-01-01'`); err != nil {
+		t.Fatal(err)
+	}
 	c.mu.Lock()
 	c.statements, c.begins = 0, 0
 	c.mu.Unlock()
