@@ -247,7 +247,7 @@ jobs:
       - name: Actions and base images are pinned
         run: sh tests/pinned-dependencies-test.sh
       - name: Pinned action archives are fetchable
-        run: sh tests/pinned-actions-fetchable-test.sh
+        run: sh tests/pinned-actions-fetchable-test.test.sh && sh tests/pinned-actions-fetchable-test.sh
       - name: Every job passed or was skipped
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
