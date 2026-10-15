@@ -12,11 +12,20 @@ Feature details live in [docs/feature-spec.md](docs/feature-spec.md).
 
 ## Next: v0.2 — usable by a real team
 
-- **Email channel**: inbound and outbound, threading, spoof and loop protection.
-- **Freshdesk importer**: tickets, replies, notes, attachments (checksummed), tags, contacts,
-  with a reconcile report.
+Built on `main` and in the `edge` image, in testing:
+
+- **Email channel**: inbound and outbound, threading, spoof and loop protection. Replies are
+  plain text and go to the contact only (no CC) for now.
+- **Freshdesk importer**: tickets (including archived), replies, notes, attachments
+  (checksummed), tags, contacts, companies and time entries, with a reconcile report.
 - **One-command install** and a published container image.
-- **CollieDesk Cloud** for the first founding customers.
+
+Still to do before v0.2 is released:
+
+- **CollieDesk Cloud** for the first founding customers: billing and outgoing email on Cloud.
+- Attachments on agent replies.
+- Notifications for new and assigned tickets, and an inbox that updates without a reload.
+- Remove an agent from a workspace.
 
 ## Then: v0.3 — AI included
 
@@ -28,7 +37,7 @@ Feature details live in [docs/feature-spec.md](docs/feature-spec.md).
 
 ## Later
 
-- Automations, macros, SLA and business hours, time tracking (v0.4).
+- Automations, macros (canned replies), SLA and business hours, logging new time entries (v0.4).
 - CSAT and reports (v0.5).
 - Importers for Zendesk and Help Scout.
 - MCP server and Agent Skills so your AI agent can work the queue (read / draft only / send).
