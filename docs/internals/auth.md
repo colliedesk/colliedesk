@@ -16,7 +16,7 @@ path compares raw secrets or low-entropy values in application memory.
 
 An agent token is a `sessions` row with a non-null `scope` (`read`, `draft`, `send`); a null scope is
 a person's full session. It reuses the session machinery on purpose: `label`, `last_seen_at` (the
-"last used" time, refreshed by every call), revoke. Code: `auth/token.go`, `auth/scope.go`,
+"last used" time, written at most once a minute), revoke. Code: `auth/token.go`, `auth/scope.go`,
 `auth/tokens.go`, `httpapi/token-scope.go`.
 
 - **Own prefix and hash domain.** The raw token is `cdk_agent_` plus 32 random bytes in base64url.
@@ -28,6 +28,11 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
   pins it. The down migration still revokes every token, as a second line of defence. The prefix also
   lets a secret scanner (gitleaks custom rule, GitHub push protection) catch a token pasted into an
   agent config: the pattern is `cdk_agent_[A-Za-z0-9_-]{43}`.
+- **Last use is written once a minute.** One MCP tool call authenticates about five times in a moment
+  (its own gate plus each in-process REST call), and each used to `UPDATE` the same `sessions` row.
+  `Authenticate` skips the write while the stored `last_seen_at` is under 60 seconds old; later, the
+  write moves `last_seen_at` and slides `expires_at` as before, so the expiry can lag the true last use
+  by at most a minute (`TestSessionLastUseIsRecordedAtMostOncePerMinuteAndStillSlidesTheExpiry`).
 - **Role.** A token always has `role_ceiling='agent'`, whoever creates it; a CHECK constraint
   enforces it. No tier can reach an admin-only permission.
 - **Tiers are a route table.** `tokenTiers` maps `"METHOD pattern"` to the lowest tier allowed. A route
