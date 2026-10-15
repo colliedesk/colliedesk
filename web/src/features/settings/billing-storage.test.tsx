@@ -17,13 +17,13 @@ function show(billing: Billing) {
 
 test('a founding workspace sees its attachment usage against the 20 GiB cap', () => {
   show(founding(5 * GiB));
-  expect(screen.getByText('Attachment storage: 5.0 GB of 20.0 GB')).toBeInTheDocument();
+  expect(screen.getByText('Attachment storage: 5.0 GiB of 20.0 GiB')).toBeInTheDocument();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
 test('at 80% of the cap the page warns, and at the cap the warning gives way to the full notice', () => {
   show(founding(16 * GiB));
-  expect(screen.getByRole('status')).toHaveTextContent(/storage is 80% full/i);
+  expect(screen.getByRole('status')).toHaveTextContent(/80% full/i);
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
@@ -45,7 +45,7 @@ test('over the cap the page says uploads and imports are refused, mail is still 
 test('a trial workspace is warned at 80% of its 2 GiB too', () => {
   show({ ...founding(1.7 * GiB), plan: 'trial', status: 'none', current_period_end: null, active_subscriptions: 0,
     limits: { agents: 10, replies_per_24h: null, storage_bytes: 2 * GiB, storage_warn_bytes: Math.floor(1.6 * GiB) } });
-  expect(screen.getByText(/Attachment storage: 1\.7 GB of 2\.0 GB/)).toBeInTheDocument();
+  expect(screen.getByText(/Attachment storage: 1\.7 GiB of 2\.0 GiB/)).toBeInTheDocument();
   expect(screen.getByRole('status')).toBeInTheDocument();
 });
 
@@ -60,20 +60,40 @@ test('a full trial says incoming email with attachments is refused, not stored',
     limits: { agents: 10, replies_per_24h: null, storage_bytes: 2 * GiB, storage_warn_bytes: Math.floor(1.6 * GiB) } };
   show(trial);
   const warning = screen.getByRole('alert', { name: /storage/i });
-  expect(warning).toHaveTextContent(/incoming email with attachments/i);
-  expect(warning).toHaveTextContent(/refused/i);
+  expect(warning).toHaveTextContent(/all incoming email is refused/i);
+  expect(warning).toHaveTextContent(/upgrade to keep receiving email/i);
   expect(warning).toHaveTextContent(/imported files do not count/i);
   expect(warning).not.toHaveTextContent(/customer email is still stored/i);
+  // There is no way to delete an attachment, so the page must not tell the admin to free space.
+  expect(warning).not.toHaveTextContent(/free space/i);
 });
 
 test('a locked workspace at the cap gets the trial wording too', () => {
   show({ ...founding(2 * GiB), plan: 'none', locked: true, status: 'canceled',
     limits: { agents: 0, replies_per_24h: null, storage_bytes: 2 * GiB, storage_warn_bytes: Math.floor(1.6 * GiB) } });
-  expect(screen.getByRole('alert', { name: /storage/i })).toHaveTextContent(/incoming email with attachments/i);
+  expect(screen.getByRole('alert', { name: /storage/i })).toHaveTextContent(/all incoming email is refused/i);
 });
 
 test('usage just under the limit never reads as full', () => {
   show({ ...founding(2147000000), plan: 'trial', status: 'none', current_period_end: null, active_subscriptions: 0,
     limits: { agents: 10, replies_per_24h: null, storage_bytes: 2 * GiB, storage_warn_bytes: Math.floor(1.6 * GiB) } });
-  expect(screen.getByText('Attachment storage: 1.9 GB of 2.0 GB')).toBeInTheDocument();
+  expect(screen.getByText('Attachment storage: 1.9 GiB of 2.0 GiB')).toBeInTheDocument();
+});
+
+test('a founding workspace nearing the limit is told its mail is safe and how to remove the limit', () => {
+  show(founding(17 * GiB));
+  const warning = screen.getByRole('status');
+  expect(warning).toHaveTextContent(/nearing/i);
+  expect(warning).toHaveTextContent(/20\.0 GiB/);
+  expect(warning).toHaveTextContent(/customer email is always kept/i);
+  expect(warning).toHaveTextContent(/uploads and new imports stop/i);
+  expect(warning).toHaveTextContent(/upgrade to team under manage billing/i);
+  // A paying workspace is never told to choose a plan.
+  expect(warning).not.toHaveTextContent(/choose a plan/i);
+});
+
+test('a trial nearing the limit keeps the plan-choosing advice', () => {
+  show({ ...founding(1.7 * GiB), plan: 'trial', status: 'none', current_period_end: null, active_subscriptions: 0,
+    limits: { agents: 10, replies_per_24h: null, storage_bytes: 2 * GiB, storage_warn_bytes: Math.floor(1.6 * GiB) } });
+  expect(screen.getByRole('status')).toHaveTextContent(/choose a plan/i);
 });

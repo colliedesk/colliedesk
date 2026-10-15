@@ -253,7 +253,10 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
   no cap. Over the cap nothing is deleted. Inbound customer mail is exempt (`Store.CheckInboundStorage` lets Founding
   through, so it is stored in full and its bytes still count: a bounced customer email hurts the paying
   team's own customers and looks like an outage; the cost is bounded by real mail). The cap still refuses
-  what an agent or an import supplies (`Store.CheckStorage`, the importer's guard). Reading, replies
+  what an agent or an import supplies (`Store.CheckStorage`, the importer's guard). There is no agent
+  upload or reply-attachment endpoint yet: `CheckStorage` has one production caller, `CheckInboundStorage`,
+  and its tests (`TestCheckStorage...`) prove the store function, not an upload route. **Any future
+  upload route must call `CheckStorage` before writing and get a test of its own.** Reading, replies
   without new files and export are untouched. The trial and a locked workspace still refuse inbound mail.
 - **Import on Founding: one check, before any write; then admitted.** The ticket list does not carry
   attachment sizes, so `freshdesk.guardFoundingStorage` runs a read-only pass first: the dry-run
@@ -262,10 +265,14 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
   the reported sizes of attachments the ledger does not hold yet. It then re-reads the room (the pass
   can take hours) and, if `used + needed` passes the cap, returns `*freshdesk.StorageCapError` (human
   sizes) and writes nothing. A ticket whose read fails is tried `sizingAttempts` times, each with the
-  client's own retry and backoff; a persistent failure stops the run before any write. **No cap check
+  client's own retry and backoff; a persistent failure stops the run before any write. A ticket that
+  is gone (404) or forbidden (403) is not retried: it is skipped and listed, as the real import fails
+  that ticket and goes on (`Report.StorageCap.SkippedTickets` in a dry run). **No cap check
   after that:** an admitted import is never stopped by the cap, so bytes that arrive meanwhile (inbound
-  mail is exempt; uploads and a file added at the source after the pass) may take usage a little past
-  20 GiB, which is accepted, and there is no partial-import path from the cap (only a full disk still
+  mail is exempt; uploads and a file added at the source after the pass) may take usage past
+  20 GiB, by whatever arrives while the import runs (the real run lists the tickets again, so tickets
+  created at the source during the sizing window are imported without being sized; on a busy account that
+  is not small), which is accepted, and there is no partial-import path from the cap (only a full disk still
   stops a run, as before). `--dry-run` reports the same comparison in `Report.StorageCap` without
   refusing. The counter counts logical rows: a file attached twice counts twice although the local
   disk stores it once, which is safe for cost. `import undo` deletes the files, and the triggers

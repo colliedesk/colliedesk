@@ -213,10 +213,12 @@ export const messages = {
   plans: { trial: 'Free trial', none: 'Trial ended', team: 'Team', founding: 'Founding' },
   trialEndsOn: (when: string) => `Your free trial ends ${when}. Choose a plan before then to keep the workspace open.`,
   trialEnded: (when: string) => `Your free trial ended ${when}. Choose a plan to unlock the workspace.`,
+  storageWarningFounding: (percent: number, used: string, limit: string) =>
+    `Nearing the attachment limit: ${percent}% full (${used} of ${limit}). Customer email is always kept; at the limit only your own uploads and new imports stop. To remove the limit, upgrade to Team under Manage billing.`,
   storageFullFounding: (upgrade: string) => `Attachment storage is full. New uploads and imports are refused. Nothing is deleted, customer email is still stored, and you can still read, reply and export. ${upgrade}`,
-  storageFullTrial: (upgrade: string) => `Attachment storage is full. Incoming email with attachments and new uploads are refused until you free space. Nothing is deleted, imported files do not count, and you can still read, reply and export. ${upgrade}`,
+  storageFullTrial: (upgrade: string) => `Attachment storage is full. All incoming email is refused while the workspace is full, because the size of the whole message counts, not only its attachments. Nothing is deleted, imported files do not count, and you can still read, reply and export. ${upgrade}`,
   storageUpgradeFounding: 'Upgrade to the Team plan under Manage billing to remove the limit.',
-  storageUpgradeTrial: 'Subscribe above to remove the limit.',
+  storageUpgradeTrial: 'Upgrade to keep receiving email: choose a plan above.',
   storageUsage: (used: string, limit: string) => `Attachment storage: ${used} of ${limit}`,
   repliesUsage: (count: number, limit: number) => `${count} of ${limit} replies in the last 24 hours`,
   agentsUsage: (used: number, limit: number, pending = 0) =>

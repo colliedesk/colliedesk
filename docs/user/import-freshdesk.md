@@ -98,8 +98,10 @@ the Team plan under **Billing > Manage billing** and run it again, or import a s
 
 The check is the only place the limit applies to an import. An import that passes it is admitted and
 runs to the end: customer email that arrives meanwhile, or a file added in Freshdesk after the check,
-can take usage a little past 20 GiB, and the import is not stopped for that. There is no partial
-import because of the storage limit. A file counts each time it is attached, so the same file on two
+can take usage past 20 GiB, and the import is not stopped for that. The overshoot is whatever
+arrives while the import runs. Tickets created in Freshdesk during the check are imported without
+being counted beforehand, so on a busy account it can be more than a few files. That is accepted.
+There is no partial import because of the storage limit. A file counts each time it is attached, so the same file on two
 messages counts twice.
 
 To do this the import has to know the sizes first. Freshdesk's ticket list does not carry them, so

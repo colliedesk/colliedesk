@@ -134,6 +134,8 @@ type StorageCapCheck struct {
 	NeededBytes int64 `json:"needed_bytes"`
 	FreeBytes   int64 `json:"free_bytes"`
 	WouldRefuse bool  `json:"would_refuse"`
+	// SkippedTickets are tickets the sizing could not read (deleted or forbidden) and so did not count.
+	SkippedTickets []string `json:"skipped_tickets,omitempty"`
 }
 
 // notImported lists Freshdesk data this importer does not carry over, so the

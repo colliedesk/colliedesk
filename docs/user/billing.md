@@ -60,10 +60,13 @@ files, and export all your data. **Email from your customers is never refused.**
 full, attachments included, even when that takes the workspace past 20 GiB; those bytes still count,
 so **Billing** shows the usage over the limit. What the limit stops is files you add yourself: an
 upload, an attachment on a reply, and a Freshdesk import that would pass it (the import does not
-start; see [Import from Freshdesk](import-freshdesk.md)). Each refusal names the limit. To lift the
+start; see [Import from Freshdesk](import-freshdesk.md)). Colliedesk has no screen yet for uploading a
+file or attaching one to a reply; the limit applies to those the day they exist. Each refusal names
+the limit. To lift the
 limit, switch to the Team plan under **Manage billing**, or export your data. The trial is
-different: its 2 GiB limit also applies to incoming email, and files brought in by an import do not
-count. A file counts each time it is attached, so the same file on two messages counts twice.
+different: at its 2 GiB limit **all** incoming email is refused, because the size of the whole
+message counts, not only its attachments. There is no way to delete an attachment, so the way to
+keep receiving email is to upgrade. Files brought in by an import do not count on the trial. A file counts each time it is attached, so the same file on two messages counts twice.
 
 ## When the trial or the subscription ends
 

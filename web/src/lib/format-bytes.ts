@@ -1,7 +1,7 @@
-const units = ['KB', 'MB', 'GB'];
+const units = ['KiB', 'MiB', 'GiB'];
 
 // formatBytes writes a size in binary units. Usage is written with 'down' so a workspace under its
-// limit never reads as at it ("2.0 GB of 2.0 GB" while 2147000000 bytes are used).
+// limit never reads as at it ("2.0 GiB of 2.0 GiB" while 2147000000 bytes are used).
 export function formatBytes(size: number, rounding: 'nearest' | 'down' = 'nearest'): string {
   if (size < 1024) return `${size} B`;
   let value = size / 1024;

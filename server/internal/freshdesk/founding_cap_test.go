@@ -258,3 +258,39 @@ func TestStorageCapErrorUsesReadableSizes(t *testing.T) {
 		t.Fatalf("error %q shows raw bytes", message)
 	}
 }
+
+// A ticket whose conversations cannot be read (deleted between the two reads, or forbidden) cannot be
+// sized and cannot be retried into success. The real import marks such a ticket failed and goes on,
+// so the sizing skips it and counts it; it does not stop the whole import.
+func TestSizingSkipsATicketWhoseConversationsAreGoneOrForbidden(t *testing.T) {
+	for _, status := range []int{404, 403} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			env := newImportEnv(t)
+			env.setPlan(t, env.workspaceID, "founding")
+			const path = "/api/v2/tickets/6/conversations"
+			env.fake.failPathStatus = map[string]int{path: status}
+
+			dry, err := env.run(t, context.Background(), func(o *freshdesk.Options) {
+				o.DryRun, o.Cloud, o.FoundingStorageBytes = true, true, 1000
+			})
+			if err != nil || dry.StorageCap == nil {
+				t.Fatalf("status %d: dry run err=%v check=%+v, want a storage check", status, err, dry.StorageCap)
+			}
+			if got := strings.Join(dry.StorageCap.SkippedTickets, ","); got != "6" {
+				t.Fatalf("status %d: skipped tickets = %q, want 6", status, got)
+			}
+			// One read by the dry run, not three: nothing that cannot succeed is retried.
+			if hits := env.fake.count(path); hits != 1 {
+				t.Fatalf("status %d: conversations of ticket 6 read %d times by the dry run, want 1", status, hits)
+			}
+
+			report, err := env.runCapped(t, 1000)
+			if err != nil {
+				t.Fatalf("status %d: the import stopped at sizing: %v", status, err)
+			}
+			if report.Status == "OK" || env.count(t, "conversations") == 0 {
+				t.Fatalf("status %d: report=%s conversations=%d, want the other tickets imported and ticket 6 reported failed", status, report.Status, env.count(t, "conversations"))
+			}
+		})
+	}
+}

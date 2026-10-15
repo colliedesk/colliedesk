@@ -109,7 +109,7 @@ test('shows the author name and attachment download links on a timeline message'
   const link = screen.getByRole('link', { name: /server\.log/ });
   expect(link).toHaveAttribute('href', '/api/v1/attachments/66666666-6666-4666-8666-666666666666');
   expect(link).toHaveAttribute('download');
-  expect(screen.getByText('2.0 KB')).toBeInTheDocument();
+  expect(screen.getByText('2.0 KiB')).toBeInTheDocument();
 });
 
 const imported = {

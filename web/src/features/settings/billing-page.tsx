@@ -55,7 +55,7 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
           : messages.plans[billing.plan]}</strong></p>
         {note && <p className="muted-copy">{note}</p>}
         {storageNearlyFull && storageLimit !== null && <p role="status" className="error-copy">
-          {messages.storageWarning(Math.floor((billing.usage.storage_bytes / storageLimit) * 100), formatBytes(billing.usage.storage_bytes), formatBytes(storageLimit))}</p>}
+          {(billing.plan === 'founding' ? messages.storageWarningFounding : messages.storageWarning)(Math.floor((billing.usage.storage_bytes / storageLimit) * 100), formatBytes(billing.usage.storage_bytes), formatBytes(storageLimit))}</p>}
         <ul className="muted-copy">
           <li>{messages.agentsUsage(billing.usage.agents, billing.limits.agents, billing.usage.pending_invites)}</li>
           {storageLimit !== null && <li>{messages.storageUsage(formatBytes(billing.usage.storage_bytes, 'down'), formatBytes(storageLimit))}</li>}

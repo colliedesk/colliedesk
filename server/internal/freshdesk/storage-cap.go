@@ -83,12 +83,12 @@ func (r *run) checkDryRunStorage(ctx context.Context, report *Report) error {
 		return err
 	}
 	r.progress.phase("sizing attachments")
-	needed, err := r.sizeRefs(ctx)
+	needed, skipped, err := r.sizeRefs(ctx)
 	if err != nil {
 		return err
 	}
 	free := max(room.Limit-room.Used, 0)
-	report.StorageCap = &StorageCapCheck{LimitBytes: room.Limit, UsedBytes: room.Used, NeededBytes: needed, FreeBytes: free, WouldRefuse: needed > free}
+	report.StorageCap = &StorageCapCheck{LimitBytes: room.Limit, UsedBytes: room.Used, NeededBytes: needed, FreeBytes: free, WouldRefuse: needed > free, SkippedTickets: skipped}
 	return nil
 }
 
@@ -108,70 +108,81 @@ func (r *run) sizeIncomingAttachments(ctx context.Context) (int64, error) {
 	if err := probe.classifyTickets(ctx); err != nil {
 		return 0, err
 	}
-	return probe.sizeRefs(ctx)
+	needed, _, err := probe.sizeRefs(ctx)
+	return needed, err
 }
 
 // sizeRefs adds up the attachment bytes this run would download: every attachment of a listed ticket
-// it would import that the ledger does not already hold as done. It writes nothing.
-func (r *run) sizeRefs(ctx context.Context) (int64, error) {
-	var needed int64
+// it would import that the ledger does not already hold as done. It writes nothing. A ticket that
+// cannot be read is skipped and listed, as the real import does: it fails that ticket and goes on.
+func (r *run) sizeRefs(ctx context.Context) (needed int64, skipped []string, err error) {
 	for _, ref := range r.refs {
 		key := strconv.FormatInt(ref.id, 10)
 		entry, found, err := r.ledger.get(ctx, entityTicket, key)
 		if err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 		if found && entry.Status == ledgerDone && entry.SourceUpdatedAt != nil && !ref.updatedAt.After(*entry.SourceUpdatedAt) {
 			continue
 		}
-		files, err := r.ticketFilesWithRetry(ctx, ref, key)
+		files, readable, err := r.ticketFilesWithRetry(ctx, ref, key)
 		if err != nil {
-			return 0, err
+			return 0, nil, err
+		}
+		if !readable {
+			skipped = append(skipped, key)
+			continue
 		}
 		for _, file := range files {
 			held, err := r.attachmentDone(ctx, file)
 			if err != nil {
-				return 0, err
+				return 0, nil, err
 			}
 			if !held {
 				needed += file.reportedSize()
 			}
 		}
 	}
-	return needed, nil
+	return needed, skipped, nil
 }
 
 // ticketFilesWithRetry reads a ticket and its conversations and returns their attachments. A
-// ticket deleted at the source has none. A failing read is tried sizingAttempts times; a ticket that
-// still cannot be read stops the sizing with a reason, because an unknown size cannot be proven to fit.
-func (r *run) ticketFilesWithRetry(ctx context.Context, ref ticketRef, key string) ([]fdAttachment, error) {
+// ticket or conversation list that is gone (404) or forbidden (403) cannot succeed on a retry: the
+// ticket is reported unreadable, readable false, and the real import will fail it and go on. Any other
+// failing read is tried sizingAttempts times; a ticket that still cannot be read stops the sizing with
+// a reason, because an unknown size cannot be proven to fit.
+func (r *run) ticketFilesWithRetry(ctx context.Context, ref ticketRef, key string) (files []fdAttachment, readable bool, err error) {
 	var last error
 	for attempt := 1; attempt <= sizingAttempts; attempt++ {
 		if attempt > 1 {
 			if err := r.client.wait(ctx, backoff(attempt-1)); err != nil {
-				return nil, err
+				return nil, false, err
 			}
 		}
 		ticket, err := r.fetchTicket(ctx, ref)
 		if errors.Is(err, errNotFound) {
-			return nil, nil
+			// Deleted at the source: the real import skips it as deleted, so it is neither sized nor unreadable.
+			return nil, true, nil
 		}
+		var conversations []fdConversation
 		if err == nil {
-			var conversations []fdConversation
-			if conversations, err = r.fetchConversations(ctx, ref); err == nil {
-				files := append([]fdAttachment{}, ticket.Attachments...)
-				for _, conversation := range conversations {
-					files = append(files, conversation.Attachments...)
-				}
-				return files, nil
-			}
+			conversations, err = r.fetchConversations(ctx, ref)
 		}
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
+		switch {
+		case err == nil:
+			files := append([]fdAttachment{}, ticket.Attachments...)
+			for _, conversation := range conversations {
+				files = append(files, conversation.Attachments...)
+			}
+			return files, true, nil
+		case errors.Is(err, errNotFound), errors.Is(err, errForbidden):
+			return nil, false, nil
+		case ctx.Err() != nil:
+			return nil, false, ctx.Err()
 		}
 		last = err
 	}
-	return nil, fmt.Errorf("could not size the import: ticket %s could not be read after %d attempts (%w). Nothing was imported; run the same command again", key, sizingAttempts, last)
+	return nil, false, fmt.Errorf("could not size the import: ticket %s could not be read after %d attempts (%w). Nothing was imported; run the same command again", key, sizingAttempts, last)
 }
 
 func (r *run) attachmentDone(ctx context.Context, file fdAttachment) (bool, error) {

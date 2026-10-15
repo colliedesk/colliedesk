@@ -34,8 +34,9 @@ func (f limitsFixture) storedStorage(t *testing.T, workspace string) int64 {
 	return stored
 }
 
-// checkUpload asks the storage cap whether the workspace may store addBytes more. Agent uploads,
-// reply attachments and imports go through this check; inbound mail does not.
+// checkUpload calls store.CheckStorage, the check any upload path must call. There is no agent upload
+// or reply-attachment endpoint yet, so these tests prove the store function, not an HTTP route; the
+// first upload route has to call it and get a test of its own. Inbound mail does not use it.
 func (f limitsFixture) checkUpload(t *testing.T, workspace string, addBytes int64) error {
 	t.Helper()
 	ctx := context.Background()
@@ -47,7 +48,7 @@ func (f limitsFixture) checkUpload(t *testing.T, workspace string, addBytes int6
 	return store.New(f.pool).WithPlanLimits(true).WithClock(f.clock.Now).CheckStorage(ctx, tx, workspace, addBytes, f.clock.Now())
 }
 
-func TestFoundingUploadCapBoundaryIsExact(t *testing.T) {
+func TestCheckStorageFoundingBoundaryIsExact(t *testing.T) {
 	f := newLimitsFixture(t, true)
 	f.receive(t, false, 1, "First")
 	f.makeFounding(t, f.workspaceA)
@@ -68,7 +69,7 @@ func TestFoundingUploadCapBoundaryIsExact(t *testing.T) {
 	}
 }
 
-func TestAgentUploadOverTheFoundingCapIsRefusedAndTrialAndTeamAreNot(t *testing.T) {
+func TestCheckStorageRefusesFoundingAtTheCapAndNotTeam(t *testing.T) {
 	f := newLimitsFixture(t, true)
 	f.receive(t, false, 1, "First A")
 	f.receive(t, true, 2, "First B")
