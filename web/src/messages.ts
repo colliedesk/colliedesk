@@ -186,6 +186,7 @@ export const messages = {
   exportServerBusy: (wait: string) => `The server is busy with other exports. Try again in about ${wait}.`,
   exportServerBusyNoWait: 'The server is busy with other exports. Try again in a few minutes.',
   exportForbidden: 'Only workspace admins can export all data.',
+  exportLinkInvalid: 'This download link was already used or has expired. Start the export again.',
   exportFailed: 'The export could not be started. Try again.',
   cloudNewHere: 'New to Colliedesk Cloud? Continue with email, Google or Microsoft to start a 14-day free trial. No card needed.',
   signupHeading: 'Create your workspace',

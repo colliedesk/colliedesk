@@ -671,7 +671,7 @@ export interface paths {
         };
         /**
          * Download the export a one-time link was made for
-         * @description The token is the credential: it was made by `POST /api/v1/export/link`, works once and expires quickly. Streams the same archive as `GET /api/v1/export`. An unknown, used or expired token is 404. 409 and 429 mean the same as for the export route (another export started in between).
+         * @description The token is the credential: it was made by `POST /api/v1/export/link`, works once and expires quickly. Streams the same archive as `GET /api/v1/export`. This route is meant to be opened by a browser navigation, so a refusal is never a JSON error page: it is a 303 to `/settings?export_error=<reason>` where the app explains it. Reasons: `link_invalid` (unknown, used, expired or lost in a restart), `busy` (another export of this workspace is running), `server_busy` (the server is at its export limit) and `failed` (the export could not start). The export slot is taken before the token is spent, so `busy` and `server_busy` leave the link usable until it expires. HEAD and other methods answer 405 without spending the token.
          */
         get: operations["downloadExport"];
         put?: never;
@@ -2647,19 +2647,24 @@ export interface operations {
                     "application/zip": string;
                 };
             };
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            /** @description The server is already running as many exports as it allows; retry later */
-            429: {
+            /** @description The download was refused; the app explains why. */
+            303: {
                 headers: {
-                    "Retry-After"?: number;
+                    /** @description The path /settings?export_error=link_invalid|busy|server_busy|failed. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not GET. The token is not spent. */
+            405: {
+                headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            500: components["responses"]["InternalError"];
         };
     };
 }

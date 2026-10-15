@@ -51,3 +51,23 @@ test('409 and a failed request each get their own sentence', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Export all data' }));
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/could not be started/i));
 });
+
+test.each([
+  ['link_invalid', /already used or has expired/i],
+  ['busy', /already running/i],
+  ['server_busy', /server is busy with other exports/i],
+  ['failed', /could not be started/i],
+])('coming back from a refused download (%s) explains it and cleans the address', (reason, words) => {
+  window.history.replaceState(null, '', `/settings?export_error=${reason}`);
+  Object.defineProperty(window, 'location', { configurable: true, value: { assign, search: `?export_error=${reason}`, pathname: '/settings' } });
+  const replace = vi.spyOn(window.history, 'replaceState');
+  show();
+  expect(screen.getByRole('alert')).toHaveTextContent(words);
+  expect(replace).toHaveBeenLastCalledWith(null, '', '/settings');
+});
+
+test('an unknown reason in the address is ignored', () => {
+  Object.defineProperty(window, 'location', { configurable: true, value: { assign, search: '?export_error=<script>', pathname: '/settings' } });
+  show();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});

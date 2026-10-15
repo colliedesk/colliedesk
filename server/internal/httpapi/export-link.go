@@ -55,6 +55,14 @@ func (l *exportLinks) issue(workspaceID, slug string, now time.Time) (string, er
 	return token, nil
 }
 
+// peek returns the grant a token would redeem, without spending it.
+func (l *exportLinks) peek(token string, now time.Time) (exportGrant, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	grant, found := l.grants[tokenKey(token)]
+	return grant, found && now.Before(grant.expires)
+}
+
 // redeem spends the token: it answers once, and only before it expires.
 func (l *exportLinks) redeem(token string, now time.Time) (exportGrant, bool) {
 	key := tokenKey(token)
@@ -82,12 +90,51 @@ func (a *API) createExportLink(response http.ResponseWriter, request *http.Reque
 	writeJSON(response, http.StatusCreated, map[string]any{"url": exportLinkPath + token, "expires_in_seconds": int(exportLinkTTL / time.Second)})
 }
 
-// downloadExport streams the export a link was made for. The token is the credential.
+// exportErrorPath is where a refused download sends the browser: the app, which says why. A download
+// is a navigation, so a JSON error body would replace the whole app with raw text. The reason is a
+// short code the settings page and the locked screen both understand.
+func exportErrorPath(reason string) string { return "/settings?export_error=" + reason }
+
+func redirectExportError(response http.ResponseWriter, request *http.Request, reason string) {
+	http.Redirect(response, request, exportErrorPath(reason), http.StatusSeeOther)
+}
+
+// downloadExport streams the export a link was made for. The token is the credential. Order matters:
+// the slot is taken before the token is spent, so a busy server costs the person a retry, not the link.
 func (a *API) downloadExport(response http.ResponseWriter, request *http.Request) {
-	grant, ok := a.exportLinks.redeem(request.PathValue("token"), a.now())
-	if !ok {
-		writeError(response, http.StatusNotFound, "not_found", "This download link is invalid, already used or expired. Start the export again.")
+	// HEAD would match this route and spend the link on a request that has no body to receive it.
+	if request.Method != http.MethodGet {
+		response.Header().Set("Allow", http.MethodGet)
+		writeError(response, http.StatusMethodNotAllowed, "method_not_allowed", "Open this link with GET.")
 		return
 	}
-	a.streamExport(response, request, grant.workspaceID, grant.slug)
+	token := request.PathValue("token")
+	peeked, ok := a.exportLinks.peek(token, a.now())
+	if !ok {
+		redirectExportError(response, request, "link_invalid")
+		return
+	}
+	release, admission := a.exports.acquire(peeked.workspaceID)
+	switch admission {
+	case exportWorkspaceBusy:
+		redirectExportError(response, request, "busy")
+		return
+	case exportServerBusy:
+		redirectExportError(response, request, "server_busy")
+		return
+	}
+	defer release()
+	grant, ok := a.exportLinks.redeem(token, a.now())
+	if !ok {
+		// Another request spent the link between the check and now.
+		redirectExportError(response, request, "link_invalid")
+		return
+	}
+	a.streamExport(response, request, grant.workspaceID, grant.slug, func(response http.ResponseWriter, status int, _, _ string) {
+		if status == http.StatusConflict {
+			redirectExportError(response, request, "busy")
+			return
+		}
+		redirectExportError(response, request, "failed")
+	})
 }

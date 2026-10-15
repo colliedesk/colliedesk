@@ -139,8 +139,17 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
 - Export: `POST /api/v1/export/link` (admin, on the locked allowlist) runs the 409 and 429 checks and returns
   `/api/v1/export/download/<token>`; the web app navigates the browser to it, so the ZIP streams to disk. The
   token is random, kept as a SHA-256 in process memory, valid 60 s, single use, bound to the workspace, and a
-  new link replaces the workspace's previous one. A server restart invalidates links. The download route is
-  public in the permission table because the token is the credential.
+  new link replaces the workspace's previous one. The download route is public in the permission table because
+  the token is the credential.
+- **Links are per process: single replica.** Grants and the export limiter live in the memory of one server
+  process. A restart invalidates links (one more click). A second replica behind the same address would answer
+  `link_invalid` for links made on the other one, so exports need either one replica or shared state first.
+- A refused download is never a JSON page, because the browser is navigating: it is a `303` to
+  `/settings?export_error=<link_invalid|busy|server_busy|failed>`, and `ExportAllData` (Settings and the locked
+  screen, both render it whatever the path) shows the sentence and removes the parameter. Order on download:
+  check the token (without spending it), take the export slot, then spend the token and stream, so a busy server
+  costs a retry and not the link. HEAD answers 405 and spends nothing. The grant does not record the session:
+  revoking a session within 60 s of minting does not cancel the link.
 
 ### Agent seats
 

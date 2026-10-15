@@ -85,8 +85,14 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   const { url } = await made.json() as { url: string };
   const bare = await playwrightRequest.newContext();
   expect((await bare.get(`${baseURL}${url}`)).status(), 'first use, no cookie').toBe(200);
-  expect((await bare.get(`${baseURL}${url}`)).status(), 'second use').toBe(404);
+  const second = await bare.get(`${baseURL}${url}`, { maxRedirects: 0 });
+  expect(second.status(), 'second use').toBe(303);
+  expect(second.headers().location).toBe('/settings?export_error=link_invalid');
   await bare.dispose();
+  // A browser that opens the spent link lands back in the app with the reason, never on a JSON page.
+  await page.goto(`${baseURL}${url}`);
+  await expect(page.getByRole('alert')).toContainText('already used or has expired');
+  await expect(page.getByRole('heading', { level: 1, name: 'Your free trial has ended' })).toBeVisible();
 
   // Signing out ends the session.
   await page.getByRole('button', { name: 'Sign out' }).click();
