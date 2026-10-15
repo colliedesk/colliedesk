@@ -80,7 +80,7 @@ test('renders message Markdown in the timeline', () => {
 
 test('tells the agent when replies will not be emailed', () => {
   render(<InboxPage selected={conversation} conversations={[conversation]} outboundNotice="Outgoing email is not configured on this server." />);
-  expect(screen.getByRole('status')).toHaveTextContent('Outgoing email is not configured on this server.');
+  expect(screen.getByText('Outgoing email is not configured on this server.')).toHaveAttribute('role', 'status');
 });
 
 test('shows the author name and attachment download links on a timeline message', () => {

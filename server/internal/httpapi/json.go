@@ -12,6 +12,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func decodeJSON(request *http.Request, target any) error {
@@ -37,7 +38,11 @@ func writeStoreError(response http.ResponseWriter, err error) {
 	if writePlanLimit(response, err) {
 		return
 	}
+	var database *pgconn.PgError
 	switch {
+	case errors.As(err, &database) && (database.Code == "40P01" || database.Code == "40001"):
+		writeError(response, http.StatusConflict, "conflict", "Another change was in progress on the same conversations. Nothing was changed; try again.")
+		return
 	case errors.Is(err, domain.ErrLastAdmin):
 		writeError(response, http.StatusConflict, "last_admin", domain.ErrLastAdmin.Error()+". Make another agent an admin first.")
 		return

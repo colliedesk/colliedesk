@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { api } from '../../api/client';
-import type { UpdateConversationRequest } from '../../api/client';
+import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import { InboxPage } from './inbox-page';
 import { messages } from '../../messages';
 import { retryRefusalText } from './refusal-text';
@@ -43,6 +43,9 @@ export function InboxRoute() {
   const timeEntries = useQuery({ queryKey: ['time-entries', selected?.id], queryFn: () => api.timeEntries(selected!.id), enabled: Boolean(selected) });
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes), onSuccess: refresh });
+  const bulkUpdate = useMutation({ mutationFn: ({ ids, changes }: { ids: string[]; changes: BulkConversationChanges }) => api.bulkUpdateConversations(ids, changes),
+    // A refusal usually means a row is gone or changed under the agent; reload so the list shows it.
+    onSettled: refresh });
   const addTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.addConversationTag(conversationId, tagId), onSuccess: refresh });
   const removeTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.removeConversationTag(conversationId, tagId), onSuccess: refresh });
   const createTag = useMutation({ mutationFn: ({ name }: { conversationId: string; name: string }) => api.createTag(name), onSuccess: (tag, variables) => {
@@ -71,6 +74,7 @@ export function InboxRoute() {
     outboundNotice={outboundNotice} deliveryNotice={retryError ? retryRefusalText(retryError) : undefined} filtered={Object.values(filters).some(Boolean)} loading={conversations.isPending} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}
     failed={conversations.isError} onRetry={() => void conversations.refetch()}
+    currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
     canManage={me.data?.agent?.role === 'admin'} onOpenSettings={() => void navigate({ to: '/settings' })}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })} />;
