@@ -14,6 +14,13 @@ dark is an opt-in. The app and the colliedesk.com site share one set of tokens.
   URLs and keycaps.
 - List header: status tabs (All, Open, Pending, Resolved, Closed), then search beside one
   **Filter** menu for assignee and tag with a count of active filters.
+- Bulk actions: a checkbox at the left of each row and a **Select all on this page** row. Once a row
+  is ticked, the action bar (`role="group"`, named "Bulk actions") replaces the title and filters; the filters stay
+  mounted (hidden) so their state survives. Each choice is a button in a `<details>` menu, never a
+  `<select>`: a select fires on every arrow key in some browsers and one stray key would rewrite
+  fifty conversations. Success clears the selection and writes `role="status"`; failure writes
+  `role="alert"` and keeps the selection. Focus follows the change: after success or Clear it goes to
+  **Select all on this page** (the list pane when no rows remain); after a failure it stays on the menu used.
 - Rows: bold subject and time, then one meta line (status dot and word, priority, `#tags`).
 - Thread: incoming messages on `--surface-2`, replies on `--accent-soft`, private notes amber.
   Composer: a raised card with Reply / Private note tabs (keys **R** and **N**) and
@@ -90,6 +97,7 @@ focus `#f0b44c`. Every text pair is at least 4.5:1; focus rings and input border
 - Focus is an amber outline, 2 px wide with a 2 px gap (`:focus-visible`). The gap is required:
   amber on `--accent` is low contrast in both themes, so the ring never touches a primary button. In the scrolling
   list the ring is inset (`outline-offset: -2px`) so the next row does not clip it.
+- Settings saves show feedback inline, never a toast: the button is disabled and reads "Saving…" while the request runs (a second submit is refused), then a "Saved" line (`role="status"`) or the error (`role="alert"`) appears beside that form. "Saved" clears when the form is edited. `features/settings/save-feedback.tsx` holds the pattern.
 - Status is a dot plus its word. Only High and Urgent priorities get colour, with an arrow icon.
 - Private notes are amber (`--note-*`), on the timeline and in the composer while writing one.
 - Navigation is an icon rail. Each icon has a screen-reader label and a visible tooltip

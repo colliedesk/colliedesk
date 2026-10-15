@@ -199,3 +199,33 @@ func hasSleep(sleeps []time.Duration, want time.Duration) bool {
 	}
 	return false
 }
+
+func TestTicketsOfADeactivatedAgentStayUnassignedAndAreReported(t *testing.T) {
+	env := newImportEnv(t)
+	if _, err := env.pool.Exec(context.Background(), `UPDATE agents SET deactivated_at=now() WHERE workspace_id=$1 AND email='alice@acme.example'`, env.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	report := env.mustRun(t)
+	if report.Status != "OK" {
+		t.Fatalf("status=%s missing=%v failures=%+v", report.Status, report.Missing, report.Failures)
+	}
+	var assigned int
+	if err := env.pool.QueryRow(context.Background(), `SELECT count(*) FROM conversations WHERE workspace_id=$1 AND assignee_id IS NOT NULL`, env.workspaceID).Scan(&assigned); err != nil {
+		t.Fatal(err)
+	}
+	if assigned != 0 {
+		t.Fatalf("%d conversations assigned; a deactivated agent must not receive any", assigned)
+	}
+	if got := env.count(t, "conversations"); got != 5 {
+		t.Fatalf("conversations=%d, want all 5 imported", got)
+	}
+	var found *freshdesk.Warning
+	for index := range report.Warnings {
+		if report.Warnings[index].Code == "assignee_deactivated" {
+			found = &report.Warnings[index]
+		}
+	}
+	if found == nil || len(found.FreshdeskIDs) == 0 {
+		t.Fatalf("no assignee_deactivated warning listing the tickets in %+v", report.Warnings)
+	}
+}

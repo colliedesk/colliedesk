@@ -24,26 +24,28 @@ type ticketRef struct {
 }
 
 type run struct {
-	opts          Options
-	db            *database.DB
-	client        *client
-	ledger        ledger
-	workspaceID   string
-	agents        map[int64]fdAgent
-	agentTargets  map[int64]string
-	companies     map[int64]string
-	usedCompanies map[int64]bool
-	contactNames  map[int64]string
-	contactIDs    []string
-	refs          []ticketRef
-	deleted       []string
-	trashed       []string
-	spam          []string
-	absent        int
-	unresolved    []string
-	archived      int
-	warnings      []*Warning
-	internalErr   error
+	opts         Options
+	db           *database.DB
+	client       *client
+	ledger       ledger
+	workspaceID  string
+	agents       map[int64]fdAgent
+	agentTargets map[int64]string
+	// deactivatedAgents are the Freshdesk agents matched to a deactivated Colliedesk agent.
+	deactivatedAgents map[int64]bool
+	companies         map[int64]string
+	usedCompanies     map[int64]bool
+	contactNames      map[int64]string
+	contactIDs        []string
+	refs              []ticketRef
+	deleted           []string
+	trashed           []string
+	spam              []string
+	absent            int
+	unresolved        []string
+	archived          int
+	warnings          []*Warning
+	internalErr       error
 
 	listedContacts     int
 	probeAhead         int
@@ -153,7 +155,7 @@ func newRun(ctx context.Context, db *database.DB, options Options) (*run, error)
 		opts: options, db: db, workspaceID: workspaceID, progress: progress,
 		client: httpClient,
 		ledger: ledger{db: db, workspaceID: workspaceID}, probeAhead: probeAhead(options.hooks),
-		agents: map[int64]fdAgent{}, agentTargets: map[int64]string{}, companies: map[int64]string{},
+		agents: map[int64]fdAgent{}, agentTargets: map[int64]string{}, deactivatedAgents: map[int64]bool{}, companies: map[int64]string{},
 		usedCompanies: map[int64]bool{}, contactNames: map[int64]string{},
 	}, nil
 }

@@ -40,3 +40,20 @@ test('agents see the state read-only', () => {
   expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /save web form/i })).not.toBeInTheDocument();
 });
+
+test('the save shows Saving…, refuses a second submit, then Saved until edited', () => {
+  const onSave = vi.fn();
+  const { rerender } = render(<WebFormSection settings={off} canManage onSave={onSave} save={{ pending: true }} />);
+  expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+  fireEvent.submit(screen.getByRole('textbox', { name: /allowed origins/i }));
+  expect(onSave).not.toHaveBeenCalled();
+  rerender(<WebFormSection settings={off} canManage onSave={onSave} save={{ saved: true }} />);
+  expect(screen.getByText('Saved')).toHaveAttribute('role', 'status');
+  fireEvent.click(screen.getByRole('checkbox', { name: /accept web form submissions/i }));
+  expect(screen.queryByText('Saved')).not.toBeInTheDocument();
+});
+
+test('a refused save shows the message', () => {
+  render(<WebFormSection settings={off} canManage save={{ error: 'Invalid origin.' }} />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Invalid origin.');
+});

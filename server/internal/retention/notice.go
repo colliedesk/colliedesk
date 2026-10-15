@@ -32,7 +32,7 @@ func (s *Service) notify(ctx context.Context, tx pgx.Tx, st state, now time.Time
 	if _, err := tx.Exec(ctx, `DELETE FROM workspace_retention_notices WHERE workspace_id=$1 AND sent_at < $2`, st.WorkspaceID, st.LockedSince); err != nil {
 		return ActionNone, nil, err
 	}
-	rows, err := tx.Query(ctx, `SELECT a.id::text, a.email FROM agents a WHERE a.workspace_id=$1 AND a.role='admin'
+	rows, err := tx.Query(ctx, `SELECT a.id::text, a.email FROM agents a WHERE a.workspace_id=$1 AND a.role='admin' AND a.deactivated_at IS NULL
 		AND NOT EXISTS (SELECT 1 FROM workspace_retention_notices n WHERE n.workspace_id=a.workspace_id AND n.agent_id=a.id)
 		ORDER BY a.email`, st.WorkspaceID)
 	if err != nil {

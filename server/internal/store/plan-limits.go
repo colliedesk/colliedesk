@@ -31,8 +31,9 @@ const pendingSeatEmails = `SELECT count(DISTINCT p.email) FROM pairing_links p
 
 // CheckAgentSeat returns a *domain.PlanLimitError when giving email an agent seat would exceed the
 // cap of the workspace's plan. A seat is an agent or a person with a pending invite, so a burst of
-// invites cannot pass the cap. Someone who is already an agent, or who already holds a seat through
-// another pending invite, needs no new seat. A workspace-wide advisory lock makes two concurrent
+// invites cannot pass the cap. Someone who is already an active agent, or who already holds a seat
+// through another pending invite, needs no new seat; a deactivated agent holds none, so reactivating
+// one takes a seat like a new invite does. A workspace-wide advisory lock makes two concurrent
 // invites see each other. The caller runs it only where plan limits apply (the hosted cloud).
 // ignoreInvite names an invite that is being redeemed, which is about to become the agent it
 // already reserved.
@@ -49,7 +50,7 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 		return &domain.LockedError{}
 	}
 	var known bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE workspace_id=$1 AND email=lower($2))`, workspaceID, email).Scan(&known); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE workspace_id=$1 AND email=lower($2) AND deactivated_at IS NULL)`, workspaceID, email).Scan(&known); err != nil {
 		return fmt.Errorf("check agent: %w", err)
 	}
 	if known {
@@ -58,7 +59,7 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 	plan := access.Plan
 	limit := domain.LimitsFor(plan).Agents
 	var seats int
-	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM agents WHERE workspace_id=$1) +
+	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM agents WHERE workspace_id=$1 AND deactivated_at IS NULL) +
 		(SELECT count(DISTINCT p.email) FROM pairing_links p
 			WHERE p.workspace_id=$1 AND p.kind='invite' AND p.used_at IS NULL AND p.revoked_at IS NULL AND p.expires_at > $2
 			AND p.id::text<>$3 AND p.email<>lower($4)

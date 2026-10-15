@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { api } from '../../api/client';
-import type { UpdateConversationRequest } from '../../api/client';
+import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
 import { defaultInboxFilters } from './inbox-filters';
@@ -24,7 +24,9 @@ export function InboxRoute() {
   }, [filters, page]);
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   // Always refetch when the inbox opens: mail may have arrived while the agent was in Settings.
-  const conversations = useQuery({ queryKey: ['conversations', query], queryFn: () => api.conversations(query), refetchOnMount: 'always' });
+  const conversations = useQuery({ queryKey: ['conversations', query], queryFn: () => api.conversations(query), refetchOnMount: 'always',
+    // A new search or filter keeps the old rows on screen until its response arrives.
+    placeholderData: keepPreviousData });
   const agents = useQuery({ queryKey: ['agents'], queryFn: api.agents });
   const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags });
   const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
@@ -52,6 +54,9 @@ export function InboxRoute() {
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
   const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes), onSuccess: keepOpened });
+  const bulkUpdate = useMutation({ mutationFn: ({ ids, changes }: { ids: string[]; changes: BulkConversationChanges }) => api.bulkUpdateConversations(ids, changes),
+    // A refusal usually means a row is gone or changed under the agent; reload so the list shows it.
+    onSettled: refresh });
   const addTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.addConversationTag(conversationId, tagId), onSuccess: keepOpened });
   const removeTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.removeConversationTag(conversationId, tagId), onSuccess: keepOpened });
   const createTag = useMutation({ mutationFn: ({ name }: { conversationId: string; name: string }) => api.createTag(name), onSuccess: (tag, variables) => {
@@ -72,8 +77,10 @@ export function InboxRoute() {
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body) => message.mutateAsync({ kind, body })}
-    outboundNotice={outboundNotice} deliveryNotice={retryError ? retryRefusalText(retryError) : undefined} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)}
+    outboundNotice={outboundNotice} deliveryNotice={retryError ? retryRefusalText(retryError) : undefined} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
+    timelineLoading={Boolean(selected) && timeline.isPending}
     failed={conversations.isError} onRetry={() => void conversations.refetch()}
+    currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
     canManage={me.data?.agent?.role === 'admin'} onOpenSettings={() => void navigate({ to: '/settings' })}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })} />;

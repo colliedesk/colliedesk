@@ -36,6 +36,11 @@ export const agentSchema = z.object({
   id: z.string().uuid(), email: z.string().email(), display_name: z.string(),
   role: roleSchema, timezone_override: z.string().nullable(),
 }) satisfies z.ZodType<Generated<'Agent'>>;
+export const teamMemberSchema = z.object({
+  id: z.string().uuid(), email: z.string().email(), display_name: z.string(),
+  role: roleSchema, timezone_override: z.string().nullable(),
+  deactivated_at: z.string().datetime().nullable(), last_active_at: z.string().datetime().nullable(), open_conversations: z.number().int(),
+}) satisfies z.ZodType<Generated<'TeamMember'>>;
 export const tagSchema = z.object({ id: z.string().uuid(), name: z.string(), color: z.string() }) satisfies z.ZodType<Generated<'Tag'>>;
 export const contactSchema = z.object({
   id: z.string().uuid(), name: z.string(), email: z.string().email(), organization: z.string().nullable(),
@@ -116,11 +121,13 @@ export const inviteCreatedSchema = z.object({ invite: inviteSchema, url: z.strin
 export const conversationPageSchema = z.object({ items: z.array(conversationSchema), page: z.number(), page_size: z.number() }) satisfies z.ZodType<Generated<'ConversationPage'>>;
 export const messageListSchema = z.object({ items: z.array(messageSchema) }) satisfies z.ZodType<JsonResponse<'listMessages', 200>>;
 export const contactListSchema = z.object({ items: z.array(contactSchema) }) satisfies z.ZodType<JsonResponse<'listContacts', 200>>;
-export const agentListSchema = z.object({ items: z.array(agentSchema) }) satisfies z.ZodType<JsonResponse<'listAgents', 200>>;
+export const agentListSchema = z.object({ items: z.array(teamMemberSchema) }) satisfies z.ZodType<JsonResponse<'listAgents', 200>>;
 export const timeEntryListSchema = z.object({ items: z.array(timeEntrySchema) }) satisfies z.ZodType<JsonResponse<'listTimeEntries', 200>>;
+export const bulkUpdateResultSchema = z.object({ updated: z.number().int() }) satisfies z.ZodType<JsonResponse<'bulkUpdateConversations', 200>>;
 export const tagListSchema = z.object({ items: z.array(tagSchema) }) satisfies z.ZodType<JsonResponse<'listTags', 200>>;
 
 export type Agent = Generated<'Agent'>;
+export type TeamMember = Generated<'TeamMember'>;
 export type Billing = Generated<'Billing'>;
 export type CheckoutPlan = Generated<'CheckoutPlan'>;
 export type Me = Generated<'Me'>;

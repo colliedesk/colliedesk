@@ -87,3 +87,5 @@ kbd {
 .error-copy { color: var(--danger); }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; } }
+.save-status { align-self: center; font-size: var(--fs-small); color: var(--text-2); }
+.save-status.error-copy { color: var(--danger); }

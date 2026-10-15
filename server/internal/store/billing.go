@@ -95,7 +95,7 @@ func (s *Store) GetBilling(ctx context.Context, workspaceID string, now time.Tim
 		var trialEndsAt time.Time
 		var storedBytes int64
 		err = tx.QueryRow(ctx, `SELECT
-			(SELECT count(*) FROM agents WHERE workspace_id=$1),
+			(SELECT count(*) FROM agents WHERE workspace_id=$1 AND deactivated_at IS NULL),
 			(`+pendingSeatEmails+`),
 			(SELECT trial_ends_at FROM workspaces WHERE id=$1),
 			(`+ownStorageBytes+`),

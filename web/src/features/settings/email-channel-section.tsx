@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { EmailChannelSettings } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { useSaveFeedback } from './save-feedback';
+import type { SaveState } from './save-feedback';
 
 interface EmailChannelSectionProps {
   settings?: EmailChannelSettings;
@@ -9,6 +11,8 @@ interface EmailChannelSectionProps {
   canManage: boolean;
   workspaceSlug?: string;
   createdSecret?: string;
+  addressSave?: SaveState;
+  slugSave?: SaveState;
   onSave?: (address: string) => void;
   onSaveSlug?: (slug: string) => void;
   onRotate?: () => void;
@@ -16,13 +20,25 @@ interface EmailChannelSectionProps {
   onVerifyDomain?: () => void;
 }
 
-export function EmailChannelSection({ settings, timezone, canManage, workspaceSlug, createdSecret, onSave, onSaveSlug, onRotate, onDisconnect, onVerifyDomain }: EmailChannelSectionProps) {
+export function EmailChannelSection({ settings, timezone, canManage, workspaceSlug, createdSecret, addressSave, slugSave, onSave, onSaveSlug, onRotate, onDisconnect, onVerifyDomain }: EmailChannelSectionProps) {
   const channel = settings?.channel ?? null;
   const [address, setAddress] = useState(channel?.support_address ?? '');
   useEffect(() => setAddress(channel?.support_address ?? ''), [channel?.support_address]);
   const [slug, setSlug] = useState(workspaceSlug ?? '');
   useEffect(() => setSlug(workspaceSlug ?? ''), [workspaceSlug]);
+  const addressFeedback = useSaveFeedback(addressSave);
+  const slugFeedback = useSaveFeedback(slugSave);
   const [copied, setCopied] = useState(false);
+  // Disconnecting stops inbound mail for everyone, so it asks first; Cancel is the focused default.
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
+  const disconnectButton = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef(false);
+  const cancelDisconnect = () => { returnFocus.current = true; setConfirmingDisconnect(false); };
+  useEffect(() => {
+    if (confirmingDisconnect || !returnFocus.current) return;
+    returnFocus.current = false;
+    disconnectButton.current?.focus();
+  }, [confirmingDisconnect]);
   const smtp = settings?.smtp;
   const hostedAddress = settings?.hosted_address ?? null;
   const copyAddress = () => {
@@ -33,9 +49,10 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
       <div className="section-heading"><h2 id="email-channel-heading">{messages.emailChannel}</h2><p>{messages.emailChannelDescription}</p></div>
       <div className="settings-body">
         {canManage
-          ? <form className="form-row" onSubmit={(event) => { event.preventDefault(); onSave?.(address.trim()); }}>
-              <label className="field"><span>{messages.supportAddress}</span><input type="email" value={address} onChange={(event) => setAddress(event.target.value)} required /></label>
-              <button className="primary-action" type="submit">{messages.saveSupportAddress}</button>
+          ? <form className="form-row" onSubmit={(event) => { event.preventDefault(); if (!addressFeedback.pending) onSave?.(address.trim()); }}>
+              <label className="field"><span>{messages.supportAddress}</span><input type="email" value={address} onChange={(event) => { addressFeedback.touch(); setAddress(event.target.value); }} required /></label>
+              <button className="primary-action" type="submit" disabled={addressFeedback.pending}>{addressFeedback.saveLabel(messages.saveSupportAddress)}</button>
+              {addressFeedback.status}
             </form>
           : <p><strong>{messages.supportAddress}: </strong><span>{channel ? channel.support_address : messages.emailNotConnected}</span></p>}
         {hostedAddress && <div className="email-channel-forwarding">
@@ -43,9 +60,10 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
           <span className="button-row"><button type="button" onClick={copyAddress}>{messages.copyForwardingAddress}</button>{copied && <span role="status">{messages.addressCopied}</span>}</span>
           <p className="muted-copy">{messages.forwardingHelp}</p>
           <ul className="muted-copy"><li>{messages.forwardingGmail}</li><li>{messages.forwardingOutlook}</li></ul>
-          {canManage && <form className="form-row" onSubmit={(event) => { event.preventDefault(); onSaveSlug?.(slug.trim()); }}>
-            <label className="field"><span>{messages.workspaceAddressName}</span><input value={slug} onChange={(event) => setSlug(event.target.value)} required /></label>
-            <button type="submit">{messages.saveAddressName}</button>
+          {canManage && <form className="form-row" onSubmit={(event) => { event.preventDefault(); if (!slugFeedback.pending) onSaveSlug?.(slug.trim()); }}>
+            <label className="field"><span>{messages.workspaceAddressName}</span><input value={slug} onChange={(event) => { slugFeedback.touch(); setSlug(event.target.value); }} required /></label>
+            <button type="submit" disabled={slugFeedback.pending}>{slugFeedback.saveLabel(messages.saveAddressName)}</button>
+            {slugFeedback.status}
             <small>{messages.addressNameWarning}</small>
           </form>}
         </div>}
@@ -56,8 +74,15 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
           <input readOnly value={createdSecret} /><small>{messages.inboundSecretNotice}</small></label>}
         {canManage && channel && <span className="button-row">
           {!hostedAddress && <button type="button" onClick={() => onRotate?.()}>{channel.secret_set ? messages.rotateInboundSecret : messages.createInboundSecret}</button>}
-          <button type="button" className="danger-action" onClick={() => onDisconnect?.()}>{messages.disconnectEmail}</button>
+          {!confirmingDisconnect && <button type="button" className="danger-action" ref={disconnectButton} onClick={() => setConfirmingDisconnect(true)}>{messages.disconnectEmail}</button>}
         </span>}
+        {canManage && channel && confirmingDisconnect && <div className="confirm-panel" role="group" aria-labelledby="disconnect-email-question">
+          <p><strong id="disconnect-email-question">{messages.disconnectEmailQuestion}</strong> {messages.disconnectEmailConsequence(channel.support_address)}</p>
+          <span className="button-row">
+            <button type="button" className="danger-action" onClick={() => { setConfirmingDisconnect(false); onDisconnect?.(); }}>{messages.confirmDisconnectEmail}</button>
+            <button type="button" autoFocus onClick={cancelDisconnect}>{messages.cancel}</button>
+          </span>
+        </div>}
         {channel && (channel.domain_verified_at
           ? <p className="muted-copy">{messages.domainVerified(channel.domain, formatDate(channel.domain_verified_at, timezone))}</p>
           : <div className="email-channel-dns"><p className="muted-copy">{messages.domainVerificationHelp}</p>
