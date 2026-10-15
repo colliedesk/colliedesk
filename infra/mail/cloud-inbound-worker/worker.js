@@ -7,9 +7,14 @@
 // take), RETRY_DELAY_MS (default 500).
 
 const ATTEMPTS = 3;
-// The server answers these when retrying cannot help: not an email with a sender, no workspace at
-// that address, larger than 25 MiB.
-const PERMANENT = new Set([400, 404, 413]);
+// The server answers these when retrying cannot help: not an email with a sender, a locked
+// workspace that no longer takes mail, no workspace at that address, larger than 25 MiB.
+const PERMANENT = new Set([400, 403, 404, 413]);
+
+const REJECT_TEXT = {
+  403: 'This mailbox is not accepting new mail.',
+  413: 'The message is too large.',
+};
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -50,7 +55,7 @@ export default {
       const status = await post(env, body);
       if (status >= 200 && status < 300) return;
       if (PERMANENT.has(status)) {
-        message.setReject(status === 413 ? 'The message is too large.' : 'There is no mailbox at this address.');
+        message.setReject(REJECT_TEXT[status] ?? 'There is no mailbox at this address.');
         return;
       }
       if (attempt < ATTEMPTS) await sleep(delay * attempt);

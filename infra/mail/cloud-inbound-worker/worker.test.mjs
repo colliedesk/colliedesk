@@ -44,7 +44,7 @@ test('posts the raw message with the envelope recipient on top and the server se
 });
 
 test('rejects permanently when the server says the address or message is unacceptable', async () => {
-  for (const status of [400, 404, 413]) {
+  for (const status of [400, 403, 404, 413]) {
     const requests = stubFetch(status);
     const mail = message('support@nobody.colliedesk.com');
     await worker.email(mail, { ...env, FALLBACK_ADDRESS: 'owner@example.test' });
@@ -52,6 +52,14 @@ test('rejects permanently when the server says the address or message is unaccep
     assert.equal(mail.calls.rejected.length, 1, `status ${status} must reject`);
     assert.deepEqual(mail.calls.forwarded, []);
   }
+});
+
+test('tells the sender plainly when the workspace is locked', async () => {
+  stubFetch(403);
+  const mail = message('support@locked.colliedesk.com');
+  await worker.email(mail, { ...env, FALLBACK_ADDRESS: 'owner@example.test' });
+  assert.deepEqual(mail.calls.rejected, ['This mailbox is not accepting new mail.']);
+  assert.deepEqual(mail.calls.forwarded, []);
 });
 
 test('retries a temporary failure, then succeeds without rejecting', async () => {
