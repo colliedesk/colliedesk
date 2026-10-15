@@ -215,6 +215,32 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
 `httpapi.Config.Now` feeds the store and the auth service. Tests move it across a month boundary
 instead of sleeping. The webhook signature check keeps the real clock.
 
+## Retention of locked workspaces
+
+A workspace that stays locked (no entitled subscription or comp grant, trial over) for 12 months is
+hard-deleted, after its admins got an email at least 30 days before. Cloud only: `serve` starts the job
+when billing is configured, and `colliedesk retention plan|run` refuse without billing, so self-hosted
+never deletes.
+
+- Lock start is `domain.LockedSince`: the latest end among `trial_ends_at`, each subscription that ever
+  gave access (`ended_at`, canceled period end, or last change for unpaid states; abandoned checkouts do
+  not count) and each ended comp grant (`until`, or `revoked_at`). `store.LoadAccessHistory` supplies the
+  ended grants.
+- `retention.Decide` is the one decision: notice from lock start + 12 months - 30 days; delete from lock
+  start + 12 months and only when `workspaces.retention_notice_sent_at` is at least 30 days old and not
+  older than the lock. A job that was down sends the notice late and the delete waits 30 days after it.
+  Gaining access again clears the notice; a notice from an earlier lock is cleared or replaced.
+- The notice goes to every admin from `noreply@MAIL_FROM_DOMAIN` through `SMTP_*`, never through the
+  workspace's email channel. It is recorded only when at least one admin received it; a 5xx for one
+  address skips it, any other failure retries on the next pass. Without SMTP or `MAIL_FROM_DOMAIN`
+  nothing is sent and so nothing is ever deleted (logged as an error each pass).
+- Delete runs in one transaction under the workspace row lock: attachment files first (and the
+  workspace directory), then `DELETE FROM workspaces`, which cascades. A failed file delete rolls back and
+  the next hourly pass retries. The log line carries workspace id, slug and counts, no addresses.
+- `colliedesk retention plan` prints `action slug id locked_since notice_at delete_at` per workspace to act
+  on and changes nothing; `retention run` does one pass. The job runs at start and hourly.
+- Platform-level reads and the delete use `PrivilegeRetention`.
+
 ## Operator commands: trial end and complimentary plan
 
 Run on the server shell (`docker compose exec server /app/colliedesk ...`).

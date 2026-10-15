@@ -83,6 +83,13 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain})
 		go worker.Run(ctx, 5*time.Second)
 	}
+	if billing.Enabled() {
+		retentionService, err := newRetentionService(db, origin, nil)
+		if err != nil {
+			return err
+		}
+		go sweepRetention(ctx, retentionService)
+	}
 	server := &http.Server{
 		Addr:              *address,
 		Handler:           webui.Handler(httpapi.New(pool, httpapi.Config{Origin: origin, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey})),

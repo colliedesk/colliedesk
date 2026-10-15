@@ -195,3 +195,14 @@ func received(size, expected int64) string {
 	}
 	return fmt.Sprint(size)
 }
+
+// DeleteWorkspace removes every object of the workspace, including files no row points to.
+func (d *LocalDisk) DeleteWorkspace(_ context.Context, workspaceID string) error {
+	if !workspacePattern.MatchString(workspaceID) {
+		return errors.New("delete workspace attachments: invalid workspace id")
+	}
+	if err := os.RemoveAll(filepath.Join(d.root, workspaceID)); err != nil {
+		return fmt.Errorf("delete workspace attachments: %w", err)
+	}
+	return nil
+}
