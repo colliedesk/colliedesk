@@ -7,7 +7,7 @@ const baseURL = servers.main;
 test('selects conversations with the keyboard and resolves them in one action', async ({ page }) => {
   const suffix = `${Date.now()}-${process.pid}`;
   const pairingURL = execFileSync('go', [
-    'run', './cmd/colliedesk', 'create-workspace',
+    'run', './cmd/collie', 'create-workspace',
     '--name', `Bulk Desk ${suffix}`, '--admin-email', `admin-${suffix}@example.com`,
   ], {
     cwd: '../server', encoding: 'utf8',
@@ -48,7 +48,7 @@ test('selects conversations with the keyboard and resolves them in one action', 
   await expect(bar.getByRole('button', { name: 'Resolved' })).toBeFocused();
   await page.keyboard.press('Enter');
 
-  await expect(page.getByRole('status').filter({ hasText: 'Updated 2 conversations' })).toBeVisible();
+  await expect(page.getByText('Updated 2 conversations')).toBeVisible();
   await expect(bar).toBeHidden();
   await expect(page.getByRole('checkbox', { name: 'Select all on this page' })).toBeFocused();
   const byStatus = await Promise.all(ids.map(statusOf));

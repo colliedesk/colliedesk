@@ -56,7 +56,7 @@ test('set status sends the selected ids once, then clears the selection and anno
   fireEvent.click(within(within(bar()).getByRole('group', { name: 'Set status' })).getByRole('button', { name: 'Resolved' }));
   expect(onBulkUpdate).toHaveBeenCalledTimes(1);
   expect(onBulkUpdate).toHaveBeenCalledWith([alpha.id, beta.id], { status: 'resolved' });
-  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Updated 2 conversations'));
+  expect(await screen.findByText('Updated 2 conversations')).toHaveAttribute('aria-live', 'polite');
   expect(screen.queryByRole('group', { name: /bulk actions/i })).not.toBeInTheDocument();
   expect(screen.getByRole('checkbox', { name: /alpha request/i })).not.toBeChecked();
 });
@@ -65,7 +65,7 @@ test('says "1 conversation" for a single row', async () => {
   renderInbox(vi.fn().mockResolvedValue({ updated: 1 }));
   pick(/gamma request/i);
   fireEvent.click(within(within(bar()).getByRole('group', { name: 'Set status' })).getByRole('button', { name: 'Closed' }));
-  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Updated 1 conversation'));
+  expect(await screen.findByText('Updated 1 conversation')).toHaveAttribute('aria-live', 'polite');
 });
 
 test('assign to me, to a teammate and to nobody', async () => {
@@ -125,9 +125,10 @@ test('rows that leave the list drop out of the selection', () => {
   expect(within(bar()).getByText('1 selected')).toBeInTheDocument();
 });
 
-test('the status line exists before any result, so a screen reader announces the first one', () => {
+test('the bulk result line is a live region from the start, yet an idle inbox shows no status', () => {
   renderInbox();
-  expect(screen.getByRole('status')).toBeEmptyDOMElement();
+  expect(document.querySelector('.bulk-message[aria-live="polite"]')).toBeEmptyDOMElement();
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
 });
 
 test('the inbox heading stays in the page while rows are selected', () => {

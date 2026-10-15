@@ -116,7 +116,9 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
           {checkedIds.length > 0 && <BulkActionBar count={checkedIds.length} agents={agents} tags={tags} currentAgentId={currentAgentId}
             busy={bulkBusy} onApply={(changes) => void applyBulk(changes)} onClear={() => { changeSelection(new Set()); setRefocus((count) => count + 1); }} />}
           {bulkFailed && <p role="alert" className="error-copy bulk-message">{messages.bulkUpdateFailed}</p>}
-          <p role="status" className="bulk-message">{bulkNotice}</p>
+          {/* A live region without role="status": it is mounted before the first result so screen readers
+              announce it, while an idle inbox still exposes no status. */}
+          <p aria-live="polite" className="bulk-message">{bulkNotice}</p>
         </header>
         <ConversationList items={conversations} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
           page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} loading={loading} refreshing={refreshing}

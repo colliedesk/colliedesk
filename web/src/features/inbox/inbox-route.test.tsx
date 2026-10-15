@@ -177,7 +177,7 @@ test('a bulk status change sends the selected ids, then reloads the list and rep
   fireEvent.click(screen.getByRole('button', { name: 'Resolved' }));
 
   await waitFor(() => expect(api.bulkUpdateConversations).toHaveBeenCalledWith([alpha.id, gamma.id], { status: 'resolved' }));
-  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Updated 2 conversations'));
+  expect(await screen.findByText('Updated 2 conversations')).toHaveAttribute('aria-live', 'polite');
   await waitFor(() => expect(api.conversations.mock.calls.length).toBeGreaterThan(loadsBefore));
   expect(screen.queryByRole('group', { name: /bulk actions/i })).not.toBeInTheDocument();
 });
