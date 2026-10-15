@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: colliedesk
       POSTGRES_PASSWORD: colliedesk
     ports:
-      - "127.0.0.1:55441:5432"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-55441}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./infra/init-databases.sql:/docker-entrypoint-initdb.d/10-test-database.sql:ro
@@ -17,6 +17,20 @@ services:
       interval: 3s
       timeout: 3s
       retries: 15
+  # One-shot: applies migrations before the server starts. The image entrypoint is the binary,
+  # so `command` holds only the subcommand.
+  migrate:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    environment:
+      DATABASE_URL: postgres://colliedesk:colliedesk@postgres:5432/colliedesk?sslmode=disable
+      DATABASE_REQUEST_URL: postgres://colliedesk_request:colliedesk@postgres:5432/colliedesk?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["migrate"]
+    restart: "no"
   server:
     build:
       context: .
@@ -25,7 +39,7 @@ services:
       DATABASE_URL: postgres://colliedesk:colliedesk@postgres:5432/colliedesk?sslmode=disable
       # Requests run as a login that can only take the row-level security role; migrate creates it.
       DATABASE_REQUEST_URL: postgres://colliedesk_request:colliedesk@postgres:5432/colliedesk?sslmode=disable
-      APP_ORIGIN: http://localhost:8080
+      APP_ORIGIN: http://localhost:${COLLIE_DESK_PORT:-8080}
       LISTEN_ADDR: :8080
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
@@ -38,13 +52,15 @@ services:
       EMAIL_TRUSTED_AUTHSERV_ID: ${EMAIL_TRUSTED_AUTHSERV_ID:-}
       ATTACHMENTS_DIR: /data/attachments
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${COLLIE_DESK_PORT:-8080}:8080"
     volumes:
       - attachments-data:/data/attachments
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["sh", "-c", "/app/colliedesk migrate && exec /app/colliedesk serve"]
+      migrate:
+        condition: service_completed_successfully
+    command: ["serve"]
 
   # SMTP sink for the end-to-end tests (make e2e): docker compose --profile test up -d mailpit
   mailpit:

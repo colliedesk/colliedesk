@@ -159,3 +159,10 @@ jobs:
         run: sh tests/install-smoke.sh
         env:
           COLLIE_DESK_IMAGE: colliedesk:smoke
+  # compose.yaml as a contributor or "From a clone" self-hoster runs it.
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the stack from compose.yaml and reach the server
+        run: sh tests/compose-smoke.sh
