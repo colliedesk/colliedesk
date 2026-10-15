@@ -144,3 +144,19 @@ that is still inside its paid period keeps the paid limits. Code: `store/plan-li
 
 `httpapi.Config.Now` feeds the store and the auth service. Tests move it across a month boundary
 instead of sleeping. The webhook signature check keeps the real clock.
+
+## Operator commands: trial end and complimentary plan
+
+Run on the server shell (`docker compose exec server /app/colliedesk ...`).
+
+- `colliedesk trial set --workspace <slug> --ends <RFC3339>` sets `trial_ends_at` and prints the old
+  and new value. It never touches `trial_extended_at`. Undo a mistake by running it again.
+- `colliedesk plan grant --workspace <slug> --plan team --until <RFC3339|forever> [--by <name>]` puts
+  a workspace on a complimentary Team plan: no payment, no trial clock. `plan revoke --workspace <slug>`
+  ends it, and the workspace is locked again once its trial is over.
+- A grant is a row in `workspace_comp_plans` (who, when, until, who revoked and when); at most one is in
+  force, and a new grant replaces it. `store.LoadSubscriptions` returns it as a subscription
+  (`comp:<id>`; `active` when forever, `canceled` with the end as period end otherwise), so
+  `domain.NewAccess` treats it as paid. It is not a Polar customer: do not use checkout or the portal
+  for such a workspace. Images older than this table ignore it, so a rollback past it drops the plan.
+

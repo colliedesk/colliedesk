@@ -94,7 +94,14 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 	if r.internalErr != nil {
 		return nil, r.internalErr
 	}
-	return r.reconcile(ctx, report)
+	report, err = r.reconcile(ctx, report)
+	if err != nil || options.DryRun {
+		return report, err
+	}
+	if report.TrialExtendedTo, err = r.extendTrial(ctx); err != nil {
+		return nil, err
+	}
+	return report, nil
 }
 
 func newRun(ctx context.Context, db *database.DB, options Options) (*run, error) {

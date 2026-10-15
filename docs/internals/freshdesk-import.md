@@ -91,6 +91,12 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
   and tags it created (`meta.created`) that nothing else uses, then stored files no longer
   referenced. Conversations with a message not written by the import are kept with their ledger
   rows, so a later import does not duplicate them.
+- **Trial extension.** On Colliedesk Cloud, a real (not dry) run that leaves at least one ticket `done`
+  in the ledger moves `workspaces.trial_ends_at` forward by 16 days (14 + 16 = 30 days from the trial
+  start) and sets `trial_extended_at`, once. The update is one statement guarded by
+  `trial_extended_at IS NULL AND trial_ends_at > now`, so a repeat or resumed run, or a run after the
+  trial ended, changes nothing and an import never unlocks a workspace. Undo does not revoke it. The
+  report prints `trial: extended to <UTC>`. Self-hosted installs write the column and never read it.
 - **Downloads are never rendered inline.** `GET /api/v1/attachments/{id}` answers
   `application/octet-stream`, `Content-Disposition: attachment` (RFC 5987 `filename*`) and
   `nosniff`, and refuses a row whose storage key belongs to another workspace.
