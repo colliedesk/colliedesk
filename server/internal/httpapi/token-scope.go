@@ -15,16 +15,15 @@ const gatedByHandler = "handler"
 // as listed in Routes(). A route missing here is closed to every token, so a route added later
 // stays out of their reach until someone classifies it on purpose.
 //
-// read: what the agent role may read. draft: changes that never reach a customer (status, priority,
-// assignee, tags on a conversation, private notes). send: everything else an agent may do, such as
-// replying and creating records. Closed on purpose: revoking sessions, creating tokens and invites,
-// and every workspace, channel, billing and export setting. Posting a message is gated by the handler:
-// a note needs draft, an outgoing reply needs send.
+// read: what triage needs to look at (conversations, messages, contacts, tags, the team list).
+// draft: changes that never reach a customer (status, priority, assignee, tags on a conversation,
+// creating a tag, private notes). send: everything else an agent may do, such as replying and creating
+// contacts and conversations. Closed on purpose: sessions, tokens and invites (including listing
+// them), and every workspace, channel, billing and export setting. Posting a message is gated by the
+// handler: a note needs draft, an outgoing reply needs send.
 var tokenTiers = map[string]string{
 	"POST /api/v1/auth/logout":                                   auth.ScopeRead,
 	"GET /api/v1/auth/me":                                        auth.ScopeRead,
-	"GET /api/v1/auth/sessions":                                  auth.ScopeRead,
-	"GET /api/v1/auth/invites":                                   auth.ScopeRead,
 	"GET /api/v1/conversations":                                  auth.ScopeRead,
 	"POST /api/v1/conversations":                                 auth.ScopeSend,
 	"GET /api/v1/conversations/{id}":                             auth.ScopeRead,
@@ -41,11 +40,9 @@ var tokenTiers = map[string]string{
 	"GET /api/v1/contacts/{id}":                                  auth.ScopeRead,
 	"GET /api/v1/agents":                                         auth.ScopeRead,
 	"GET /api/v1/tags":                                           auth.ScopeRead,
-	"POST /api/v1/tags":                                          auth.ScopeSend,
+	"POST /api/v1/tags":                                          auth.ScopeDraft,
 	"PATCH /api/v1/tags/{id}":                                    auth.ScopeSend,
 	"DELETE /api/v1/tags/{id}":                                   auth.ScopeSend,
-	"GET /api/v1/channels/email":                                 auth.ScopeRead,
-	"GET /api/v1/channels/web-form":                              auth.ScopeRead,
 }
 
 // refuseToken answers 403 scope_insufficient and reports true when who is an agent token and the

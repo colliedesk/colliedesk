@@ -15,11 +15,11 @@ var tierRank = map[string]int{"read": 1, "draft": 2, "send": 3}
 var routeTiers = map[string]string{
 	"POST /api/v1/auth/logout":                                   "read",
 	"GET /api/v1/auth/me":                                        "read",
-	"GET /api/v1/auth/sessions":                                  "read",
+	"GET /api/v1/auth/sessions":                                  "closed",
 	"DELETE /api/v1/auth/sessions/{id}":                          "closed",
 	"POST /api/v1/auth/tokens":                                   "closed",
 	"POST /api/v1/auth/invites":                                  "closed",
-	"GET /api/v1/auth/invites":                                   "read",
+	"GET /api/v1/auth/invites":                                   "closed",
 	"DELETE /api/v1/auth/invites/{id}":                           "closed",
 	"GET /api/v1/conversations":                                  "read",
 	"POST /api/v1/conversations":                                 "send",
@@ -40,10 +40,10 @@ var routeTiers = map[string]string{
 	"PATCH /api/v1/workspace/slug":                               "closed",
 	"PATCH /api/v1/agents/me/timezone":                           "closed",
 	"GET /api/v1/tags":                                           "read",
-	"POST /api/v1/tags":                                          "send",
+	"POST /api/v1/tags":                                          "draft",
 	"PATCH /api/v1/tags/{id}":                                    "send",
 	"DELETE /api/v1/tags/{id}":                                   "send",
-	"GET /api/v1/channels/email":                                 "read",
+	"GET /api/v1/channels/email":                                 "closed",
 	"PUT /api/v1/channels/email":                                 "closed",
 	"DELETE /api/v1/channels/email":                              "closed",
 	"POST /api/v1/channels/email/domain-verification":            "closed",
@@ -53,7 +53,7 @@ var routeTiers = map[string]string{
 	"POST /api/v1/billing/portal":                                "closed",
 	"GET /api/v1/export":                                         "closed",
 	"POST /api/v1/export/link":                                   "closed",
-	"GET /api/v1/channels/web-form":                              "read",
+	"GET /api/v1/channels/web-form":                              "closed",
 	"PUT /api/v1/channels/web-form":                              "closed",
 }
 
@@ -73,10 +73,18 @@ func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
 		item := cases[key]
 		for _, tier := range []string{"read", "draft", "send"} {
 			token := issueToken(t, fixture.api, fixture.adminToken, "matrix "+tier, tier).Token
-			response := request(t, fixture.api, route.Method, item.path, item.body, token, nil)
+			body := item.body
+			if key == "POST /api/v1/tags" { // two tiers may create, and a tag name is unique
+				body = map[string]any{"name": "matrix tag " + tier}
+			}
+			response := request(t, fixture.api, route.Method, item.path, body, token, nil)
 			refused, _ := scopeRefused(t, response)
-			if wantRefused := want == "closed" || tierRank[tier] < tierRank[want]; refused != wantRefused {
+			wantRefused := want == "closed" || tierRank[tier] < tierRank[want]
+			if refused != wantRefused {
 				t.Errorf("%s with a %s token: refused=%v, want %v (status=%d body=%s)", key, tier, refused, wantRefused, response.Code, response.Body.String())
+			}
+			if !wantRefused && response.Code != item.status {
+				t.Errorf("%s with a %s token: status=%d body=%s, want the success status %d", key, tier, response.Code, response.Body.String(), item.status)
 			}
 		}
 	}
@@ -138,7 +146,10 @@ func TestTokenTiersGateWhatAnAgentMayChange(t *testing.T) {
 	step("draft untags", draft, http.MethodDelete, tagPath, nil, 200, "")
 	step("draft adds a note", draft, http.MethodPost, path+"/messages", note, 201, "")
 	step("draft replies", draft, http.MethodPost, path+"/messages", reply, 0, "send")
-	step("draft creates a tag", draft, http.MethodPost, "/api/v1/tags", map[string]any{"name": "new"}, 0, "send")
+	step("read creates a tag", read, http.MethodPost, "/api/v1/tags", map[string]any{"name": "from read"}, 0, "draft")
+	step("draft creates a tag", draft, http.MethodPost, "/api/v1/tags", map[string]any{"name": "from draft"}, 201, "")
+	step("draft renames a tag", draft, http.MethodPatch, "/api/v1/tags/"+tag, map[string]any{"name": "renamed"}, 0, "send")
+	step("draft deletes a tag", draft, http.MethodDelete, "/api/v1/tags/"+tag, nil, 0, "send")
 
 	var messages struct {
 		Items []struct {
@@ -152,7 +163,41 @@ func TestTokenTiersGateWhatAnAgentMayChange(t *testing.T) {
 
 	step("send replies", send, http.MethodPost, path+"/messages", reply, 201, "")
 	step("send changes status", send, http.MethodPatch, path, map[string]any{"status": "resolved"}, 200, "")
-	step("send creates a tag", send, http.MethodPost, "/api/v1/tags", map[string]any{"name": "new"}, 201, "")
+	step("send creates a tag", send, http.MethodPost, "/api/v1/tags", map[string]any{"name": "from send"}, 201, "")
+	step("send renames a tag", send, http.MethodPatch, "/api/v1/tags/"+tag, map[string]any{"name": "renamed"}, 200, "")
+	step("send deletes a tag", send, http.MethodDelete, "/api/v1/tags/"+tag, nil, 204, "")
+}
+
+// Triage needs conversations, contacts, tags and the team list. Who is invited and where the mail
+// comes in are administration: an agent that was talked into pasting them somewhere must not have them.
+func TestTokensCannotReadInvitesSessionsOrChannelSettings(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "Closed Reads", "admin@closed-reads.example.com")
+	_, _ = createContractInvite(t, api, admin, "invitee@closed-reads.example.com", "agent")
+	closed := []string{"/api/v1/auth/invites", "/api/v1/auth/sessions", "/api/v1/channels/email", "/api/v1/channels/web-form"}
+	open := []string{"/api/v1/agents", "/api/v1/tags", "/api/v1/conversations", "/api/v1/contacts", "/api/v1/auth/me"}
+	for _, tier := range []string{"read", "draft", "send"} {
+		token := issueToken(t, api, admin, tier+" token", tier).Token
+		for _, path := range closed {
+			response := request(t, api, http.MethodGet, path, nil, token, nil)
+			if refused, _ := scopeRefused(t, response); !refused {
+				t.Errorf("%s token GET %s: status=%d body=%s, want 403 scope_insufficient", tier, path, response.Code, response.Body.String())
+			}
+			if strings.Contains(response.Body.String(), "invitee@closed-reads.example.com") {
+				t.Errorf("%s token GET %s leaked an invitee address", tier, path)
+			}
+		}
+		for _, path := range open {
+			if response := request(t, api, http.MethodGet, path, nil, token, nil); response.Code != http.StatusOK {
+				t.Errorf("%s token GET %s: status=%d, want 200", tier, path, response.Code)
+			}
+		}
+	}
+	for _, path := range closed {
+		if response := request(t, api, http.MethodGet, path, nil, admin, nil); response.Code != http.StatusOK {
+			t.Errorf("a person GET %s: status=%d, want 200", path, response.Code)
+		}
+	}
 }
 
 func TestTokenOfOneWorkspaceCannotReachAnotherWorkspace(t *testing.T) {

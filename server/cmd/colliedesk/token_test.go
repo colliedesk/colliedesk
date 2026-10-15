@@ -34,7 +34,7 @@ func TestTokenCreatePrintsATokenThatAuthenticatesWithItsScope(t *testing.T) {
 
 	printed := env.mustRun("token", "create", "--workspace", "token-desk", "--email", "Admin@TokenDesk.example.com", "--scope", "draft", "--label", "Claude Code")
 	token := strings.TrimSpace(printed)
-	if token == "" || strings.Count(printed, "\n") != 1 || strings.ContainsAny(token, " \t") {
+	if !strings.HasPrefix(token, "cdk_agent_") || strings.Count(printed, "\n") != 1 || strings.ContainsAny(token, " \t") {
 		t.Fatalf("stdout must hold only the token: %q", printed)
 	}
 	if !strings.Contains(hint.String(), "once") {
@@ -47,18 +47,21 @@ func TestTokenCreatePrintsATokenThatAuthenticatesWithItsScope(t *testing.T) {
 			Email string `json:"email"`
 			Role  string `json:"role"`
 		} `json:"agent"`
+		Scope string `json:"scope"`
 	}
 	if err := json.Unmarshal(me.Body.Bytes(), &identity); err != nil || me.Code != http.StatusOK ||
-		identity.Agent.Email != "admin@tokendesk.example.com" || identity.Agent.Role != "agent" {
-		t.Fatalf("token does not authenticate as the agent role: status=%d body=%s", me.Code, me.Body.String())
+		identity.Agent.Email != "admin@tokendesk.example.com" || identity.Agent.Role != "agent" || identity.Scope != "draft" {
+		t.Fatalf("token does not authenticate as the agent role with the draft scope: status=%d body=%s", me.Code, me.Body.String())
 	}
-	if list := tokenAPICall(t, env, http.MethodGet, "/api/v1/auth/sessions", token, ""); !strings.Contains(list.Body.String(), `"label":"Claude Code"`) ||
-		!strings.Contains(list.Body.String(), `"scope":"draft"`) {
-		t.Fatalf("session list lacks the token: %s", list.Body.String())
+	var label string
+	if err := env.pool.QueryRow(context.Background(), `SELECT label FROM sessions WHERE scope='draft'`).Scan(&label); err != nil || label != "Claude Code" {
+		t.Fatalf("stored token label = %q (err=%v), want Claude Code", label, err)
 	}
-	tag := tokenAPICall(t, env, http.MethodPost, "/api/v1/tags", token, `{"name":"x"}`)
-	if tag.Code != http.StatusForbidden || !strings.Contains(tag.Body.String(), "scope_insufficient") {
-		t.Fatalf("a draft token created a tag: status=%d body=%s", tag.Code, tag.Body.String())
+	if created := tokenAPICall(t, env, http.MethodPost, "/api/v1/tags", token, `{"name":"x"}`); created.Code != http.StatusCreated {
+		t.Fatalf("a draft token could not create a tag: status=%d body=%s", created.Code, created.Body.String())
+	}
+	if sent := tokenAPICall(t, env, http.MethodPost, "/api/v1/conversations", token, `{"contact_id":"00000000-0000-4000-8000-000000000000","subject":"x"}`); sent.Code != http.StatusForbidden || !strings.Contains(sent.Body.String(), "scope_insufficient") {
+		t.Fatalf("a draft token created a conversation: status=%d body=%s", sent.Code, sent.Body.String())
 	}
 }
 
