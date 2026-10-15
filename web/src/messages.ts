@@ -113,6 +113,8 @@ export const messages = {
   copied: 'Link copied',
   loading: 'Loading workspace…',
   error: 'Colliedesk could not load this view.',
+  saving: 'Saving…',
+  saved: 'Saved',
   settingsActionFailed: 'The settings action failed. Try again.',
   emailChannel: 'Email channel',
   emailChannelDescription: 'Forward your support address to the inbound URL. Replies go out through the server SMTP relay.',
