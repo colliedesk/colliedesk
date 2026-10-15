@@ -23,7 +23,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: Output of `colliedesk version`, or the image tag you run (for example 0.2.0 or edge).
+      description: Output of `collie version`, or the image tag you run (for example 0.2.0 or edge).
     validations:
       required: true
   - type: dropdown

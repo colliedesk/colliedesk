@@ -22,7 +22,7 @@ every agent.
 Create a token with the command line on your own server:
 
 ```sh
-docker compose exec server /app/colliedesk token create \
+docker compose exec server /app/collie token create \
   --workspace <slug> --email you@example.com --scope draft --label "Claude Code"
 ```
 

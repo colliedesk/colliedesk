@@ -90,7 +90,7 @@ func TestTokenCreateRefusesBadInputAndCreatesNothing(t *testing.T) {
 			}
 		})
 	}
-	if _, err := env.run("token"); err == nil || !strings.Contains(err.Error(), "usage: colliedesk token create") {
+	if _, err := env.run("token"); err == nil || !strings.Contains(err.Error(), "usage: collie token create") {
 		t.Fatalf("token without a subcommand: %v", err)
 	}
 	var count int

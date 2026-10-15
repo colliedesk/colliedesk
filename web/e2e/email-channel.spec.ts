@@ -7,7 +7,7 @@ const baseURL = servers.main;
 test('connects email, receives a customer email and shows why the reply is not emailed', async ({ page }) => {
   const suffix = `${Date.now()}-${process.pid}`;
   const pairingURL = execFileSync('go', [
-    'run', './cmd/colliedesk', 'create-workspace',
+    'run', './cmd/collie', 'create-workspace',
     '--name', `E2E Mail ${suffix}`, '--admin-email', `admin-${suffix}@example.com`,
   ], {
     cwd: '../server', encoding: 'utf8',

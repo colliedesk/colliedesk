@@ -17,7 +17,7 @@ func main() {
 		origin = "http://localhost:8080"
 	}
 	if err := run(ctx, os.Args[1:], os.Stdout, databaseURL, origin); err != nil {
-		fmt.Fprintf(os.Stderr, "colliedesk: %v\n", err)
+		fmt.Fprintf(os.Stderr, "collie: %v\n", err)
 		os.Exit(1)
 	}
 }

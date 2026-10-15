@@ -71,7 +71,7 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
 - **MCP.** `/mcp` accepts a bearer only, authenticated by the same `Authenticate`, and each tool call
   runs through the REST handler with that bearer, so these tiers bind MCP tools without a second
   check (`docs/internals/mcp.md`). A new route a tool uses needs a `tokenTiers` row first.
-- The CLI (`colliedesk token create`) resolves the workspace by slug through
+- The CLI (`collie token create`) resolves the workspace by slug through
   `PrivilegeWorkspaceBySlug`, like `pair`.
 
 ## Optional cloud sign-in

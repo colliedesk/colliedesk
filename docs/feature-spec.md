@@ -33,8 +33,8 @@ Reference: T3 Code (MIT, github.com/pingdotgg/t3code), `docs/internals/environme
 it must keep its MIT notice in `THIRD-PARTY-NOTICES.md`.
 
 1. **No passwords.** Nobody sets or types a password in Colliedesk.
-2. **Bootstrap like `t3 pair`.** `colliedesk create-workspace --name <n> --admin-email <e>` prints a
-   one-time pairing URL. `colliedesk pair --workspace <slug> --email <e>` prints a fresh one for an
+2. **Bootstrap like `t3 pair`.** `collie create-workspace --name <n> --admin-email <e>` prints a
+   one-time pairing URL. `collie pair --workspace <slug> --email <e>` prints a fresh one for an
    existing agent (new device or lost session). Links are single use, expire after 15 minutes and
    are stored only as a SHA-256 hash; the raw link is shown once, at creation.
 3. **Invites carry a role ceiling.** An admin creates an invite link for `agent` or `admin` in the UI.

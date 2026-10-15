@@ -7,7 +7,7 @@ const baseURL = servers.main;
 test('redeems a CLI pairing link and completes the inbox workflow', async ({ page }) => {
   const suffix = `${Date.now()}-${process.pid}`;
   const pairingURL = execFileSync('go', [
-    'run', './cmd/colliedesk', 'create-workspace',
+    'run', './cmd/collie', 'create-workspace',
     '--name', `E2E Desk ${suffix}`, '--admin-email', `admin-${suffix}@example.com`,
   ], {
     cwd: '../server', encoding: 'utf8',
