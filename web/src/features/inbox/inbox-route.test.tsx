@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   me: vi.fn(), conversations: vi.fn(), agents: vi.fn(), tags: vi.fn(), messages: vi.fn(), timeEntries: vi.fn(),
   updateConversation: vi.fn(), createMessage: vi.fn(), createTag: vi.fn(), config: vi.fn(),
   addConversationTag: vi.fn(), removeConversationTag: vi.fn(), retryDelivery: vi.fn(),
+  savedReplies: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })), contact: vi.fn(),
   emailChannel: vi.fn(async () => ({ channel: null, inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null })),
 }));
 
@@ -175,4 +176,25 @@ test('the server limit from the config warns about oversized files before anythi
   expect(await screen.findByRole('alert')).toHaveTextContent('1.0 KiB');
   fireEvent.keyDown(screen.getByLabelText('Message body'), { key: 'Enter', ctrlKey: true });
   expect(api.createMessage).not.toHaveBeenCalled();
+});
+
+test('a saved reply is inserted with the selected customer and the signed-in agent filled in', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', display_name: 'Chinh', role: 'agent' } });
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  api.contact.mockResolvedValue({ id: alpha.contact_id, name: 'Mai Linh', email: 'mai@example.com', organization: null,
+    created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z', conversations: [] });
+  api.savedReplies.mockResolvedValue({ items: [{ id: '77777777-7777-4777-8777-777777777777', title: 'Greeting', body: 'Hi {{customer.name}}, {{agent.name}} here.',
+    created_by_agent_id: null, created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z' }] });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await waitFor(() => expect(api.contact).toHaveBeenCalledWith(alpha.contact_id));
+  await waitFor(() => expect(api.savedReplies).toHaveBeenCalled());
+  fireEvent.click(await screen.findByRole('button', { name: 'Insert saved reply' }));
+  fireEvent.click(await screen.findByRole('option', { name: 'Greeting' }));
+  expect(screen.getByLabelText('Message body')).toHaveValue('Hi Mai Linh, Chinh here.');
 });

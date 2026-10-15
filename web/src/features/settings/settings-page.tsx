@@ -30,6 +30,8 @@ interface SettingsPageProps {
   // teamSection lists the agents; it comes before sessions and invites, which belong to the same people.
   teamSection?: ReactNode;
   emailSection?: ReactNode;
+  // savedRepliesSection is for every agent, not only admins.
+  savedRepliesSection?: ReactNode;
   // exportSection is the admin's whole-workspace export.
   exportSection?: ReactNode;
   webFormSection?: ReactNode;
@@ -49,7 +51,7 @@ function inviteState(invite: Invite): keyof typeof messages.inviteStates {
 
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
   workspaceTimezone = 'UTC', timezoneOverride = null, createdInviteUrl, onCreateInvite, onRevokeInvite,
-  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, emailSection, webFormSection, exportSection }: SettingsPageProps) {
+  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, emailSection, savedRepliesSection, webFormSection, exportSection }: SettingsPageProps) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'admin' | 'agent'>('agent');
   const [workspaceZone, setWorkspaceZone] = useState(workspaceTimezone);
@@ -73,6 +75,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
         </div>
       </section>
       {teamSection}
+      {savedRepliesSection}
       {emailSection}
       {webFormSection}
       <AppearanceSection />

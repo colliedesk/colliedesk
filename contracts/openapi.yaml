@@ -805,6 +805,77 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/saved-replies:
+    get:
+      operationId: listSavedReplies
+      x-permission: conversations:read
+      description: >
+        The saved replies every agent in the workspace shares, ordered by title ignoring case. The
+        body may hold the variables `{{customer.name}}` and `{{agent.name}}`; the web app fills them
+        in when an agent inserts the reply. The API returns the text as stored.
+      responses:
+        '200':
+          description: Workspace saved replies
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/SavedReply'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createSavedReply
+      x-permission: conversations:write
+      description: >
+        Any agent may create one. The title is unique in the workspace ignoring case (409
+        `duplicate_title`). A workspace holds at most 500 (409 `saved_reply_limit`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SavedReplyInput'}
+      responses:
+        '201':
+          description: Created saved reply
+          content: {application/json: {schema: {$ref: '#/components/schemas/SavedReply'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/saved-replies/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    patch:
+      operationId: updateSavedReply
+      x-permission: conversations:write
+      description: Change the title, the body or both. Any agent may edit a shared reply.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                title: {type: string, minLength: 1, maxLength: 200}
+                body: {type: string, minLength: 1, maxLength: 20000}
+      responses:
+        '200':
+          description: Updated saved reply
+          content: {application/json: {schema: {$ref: '#/components/schemas/SavedReply'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: deleteSavedReply
+      x-permission: conversations:write
+      responses:
+        '204': {description: Saved reply deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/billing:
     get:
       operationId: getBilling
@@ -1439,6 +1510,22 @@ components:
         id: {type: string, format: uuid}
         name: {type: string}
         color: {type: string}
+    SavedReplyInput:
+      type: object
+      required: [title, body]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 200}
+        body: {type: string, minLength: 1, maxLength: 20000}
+    SavedReply:
+      type: object
+      required: [id, title, body, created_by_agent_id, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string}
+        body: {type: string}
+        created_by_agent_id: {type: [string, 'null'], format: uuid}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
     Conversation:
       type: object
       required: [id, contact_id, subject, status, priority, assignee_id, tags, origin, created_at, updated_at]

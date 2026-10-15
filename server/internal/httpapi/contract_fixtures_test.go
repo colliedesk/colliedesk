@@ -12,18 +12,19 @@ import (
 )
 
 type contractFixture struct {
-	api                       http.Handler
-	adminToken, agentToken    string
-	agentID                   string
-	contactID, conversationID string
-	inviteID, sessionID       string
-	updateTagID, deleteTagID  string
-	attachmentID              string
-	redeemToken, logoutToken  string
-	inboundSecret             string
-	failedReplyID             string
-	deleteChannelToken        string
-	portalToken, webhookBody  string
+	api                          http.Handler
+	adminToken, agentToken       string
+	agentID                      string
+	contactID, conversationID    string
+	inviteID, sessionID          string
+	updateTagID, deleteTagID     string
+	updateReplyID, deleteReplyID string
+	attachmentID                 string
+	redeemToken, logoutToken     string
+	inboundSecret                string
+	failedReplyID                string
+	deleteChannelToken           string
+	portalToken, webhookBody     string
 }
 
 func newContractFixture(t *testing.T) contractFixture {
@@ -52,6 +53,8 @@ func newContractFixture(t *testing.T) contractFixture {
 	seedImportDetails(t, pool, workspaceID(t, api, adminToken), conversationID, noteID)
 	updateTagID := create(t, api, adminToken, "/api/v1/tags", map[string]any{"name": "Update contract tag"})
 	deleteTagID := create(t, api, adminToken, "/api/v1/tags", map[string]any{"name": "Delete contract tag"})
+	updateReplyID := create(t, api, adminToken, "/api/v1/saved-replies", map[string]any{"title": "Update contract reply", "body": "Hello {{customer.name}}"})
+	deleteReplyID := create(t, api, adminToken, "/api/v1/saved-replies", map[string]any{"title": "Delete contract reply", "body": "Bye"})
 
 	inviteID, agentURL := createContractInvite(t, api, adminToken, "agent@contract-all.example.com", "agent")
 	agentRedeem := request(t, api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{"token": linkToken(t, agentURL)}, "", nil)
@@ -107,7 +110,7 @@ func newContractFixture(t *testing.T) contractFixture {
 	agentID := memberIDByEmail(t, api, adminToken, "agent@contract-all.example.com")
 	return contractFixture{agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, inviteID: inviteID, sessionID: sessionID,
-		updateTagID: updateTagID, deleteTagID: deleteTagID, attachmentID: attachmentID, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token}
+		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, deleteReplyID: deleteReplyID, attachmentID: attachmentID, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token}
 }
 
 func createContractInvite(t *testing.T, api http.Handler, token, email, role string) (string, string) {

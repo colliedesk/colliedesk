@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, InvalidRequestError, PlanLimitError } from '../../api/client';
 import { ExportAllData } from './export-all-data';
 import { EmailChannelSection } from './email-channel-section';
+import { SavedRepliesSection } from './saved-replies-section';
 import { TeamSection } from './team-section';
 import { WebFormSection } from './web-form-section';
 import { SettingsPage } from './settings-page';
@@ -37,6 +38,11 @@ export function SettingsRoute() {
   const disconnectEmail = useMutation({ mutationFn: api.disconnectEmailChannel, onSuccess: () => { rotateSecret.reset(); void refresh('email-channel'); } });
   const webForm = useQuery({ queryKey: ['web-form'], queryFn: api.webForm });
   const saveWebForm = useMutation({ mutationFn: ({ enabled, origins }: { enabled: boolean; origins: string[] }) => api.saveWebForm(enabled, origins), onSuccess: () => refresh('web-form') });
+  const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
+  const refreshSavedReplies = () => refresh('saved-replies');
+  const createSavedReply = useMutation({ mutationFn: ({ title, body }: { title: string; body: string }) => api.createSavedReply(title, body), onSuccess: refreshSavedReplies });
+  const updateSavedReply = useMutation({ mutationFn: ({ id, ...change }: { id: string; title: string; body: string }) => api.updateSavedReply(id, change), onSuccess: refreshSavedReplies });
+  const deleteSavedReply = useMutation({ mutationFn: (id: string) => api.deleteSavedReply(id), onSuccess: refreshSavedReplies });
   const isAdmin = me.data?.agent.role === 'admin';
   const emailFailed = rotateSecret.isError || disconnectEmail.isError || verifyDomain.isError;
   return <SettingsPage loading={me.isPending || sessions.isPending || invites.isPending} sessions={sessions.data?.items ?? []} invites={invites.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'}
@@ -49,6 +55,10 @@ export function SettingsRoute() {
       onChangeRole={(id, role) => updateAgent.mutate({ id, role })}
       onDeactivate={(id, reassignTo) => updateAgent.mutate({ id, active: false, ...(reassignTo ? { reassign_to: reassignTo } : {}) })}
       onReactivate={(id) => updateAgent.mutate({ id, active: true })} />}
+    savedRepliesSection={<SavedRepliesSection replies={savedReplies.data?.items ?? []}
+      onCreate={(title, body) => createSavedReply.mutateAsync({ title, body })}
+      onUpdate={(id, change) => updateSavedReply.mutateAsync({ id, ...change })}
+      onDelete={(id) => deleteSavedReply.mutateAsync(id)} />}
     emailSection={<EmailChannelSection settings={emailChannel.data} timezone={me.data?.timezone ?? 'UTC'} canManage={isAdmin} workspaceSlug={me.data?.workspace.slug} addressSave={saveState(saveEmail)} slugSave={saveState(workspaceSlug)}
       onSaveSlug={(slug) => workspaceSlug.mutate(slug)} createdSecret={rotateSecret.data?.inbound_secret} onSave={(address) => saveEmail.mutate(address)}
       onRotate={() => rotateSecret.mutate()} onVerifyDomain={() => verifyDomain.mutate()} onDisconnect={() => disconnectEmail.mutate()} />}
