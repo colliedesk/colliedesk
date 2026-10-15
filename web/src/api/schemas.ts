@@ -17,7 +17,17 @@ export const workspaceChoiceSchema = z.object({ slug: z.string(), name: z.string
 export const cloudWorkspaceChoicesSchema = z.object({ workspaces: z.array(workspaceChoiceSchema).min(2) }) satisfies z.ZodType<Generated<'CloudWorkspaceChoices'>>;
 export const publicConfigSchema = z.object({
   cloud_sign_in: z.object({ enabled: z.boolean(), publishable_key: z.string().nullable() }),
+  billing: z.object({ enabled: z.boolean() }),
 }) satisfies z.ZodType<Generated<'PublicConfig'>>;
+export const checkoutPlanSchema = z.enum(['team_monthly', 'team_yearly', 'founding']);
+export const billingSchema = z.object({
+  plan: z.enum(['free', 'team', 'founding']),
+  status: z.enum(['none', 'incomplete', 'incomplete_expired', 'trialing', 'active', 'past_due', 'canceled', 'unpaid', 'paused']),
+  current_period_end: nullableDate, cancel_at_period_end: z.boolean(),
+  limits: z.object({ agents: z.number().int(), conversations_per_month: z.number().int().nullable() }),
+  usage: z.object({ agents: z.number().int(), conversations_this_month: z.number().int() }),
+}) satisfies z.ZodType<Generated<'Billing'>>;
+export const billingLinkSchema = z.object({ url: z.string().url() }) satisfies z.ZodType<JsonResponse<'createBillingPortal', 200>>;
 export const agentSchema = z.object({
   id: z.string().uuid(), email: z.string().email(), display_name: z.string(),
   role: roleSchema, timezone_override: z.string().nullable(),
@@ -101,6 +111,8 @@ export const timeEntryListSchema = z.object({ items: z.array(timeEntrySchema) })
 export const tagListSchema = z.object({ items: z.array(tagSchema) }) satisfies z.ZodType<JsonResponse<'listTags', 200>>;
 
 export type Agent = Generated<'Agent'>;
+export type Billing = Generated<'Billing'>;
+export type CheckoutPlan = Generated<'CheckoutPlan'>;
 export type Me = Generated<'Me'>;
 export type Attachment = Generated<'Attachment'>;
 export type ConversationOrigin = Generated<'ConversationOrigin'>;

@@ -4,7 +4,7 @@ import {
   agentListSchema, agentSchema, contactDetailSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema,
   cloudWorkspaceChoicesSchema, emailChannelSettingsSchema, inboundSecretSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, messageListSchema, messageSchema, timeEntryListSchema,
-  publicConfigSchema, redeemedSchema, sessionListSchema, tagListSchema, tagSchema, workspaceSchema,
+  billingLinkSchema, billingSchema, publicConfigSchema, redeemedSchema, sessionListSchema, tagListSchema, tagSchema, workspaceSchema,
 } from './schemas';
 import type { WorkspaceChoice } from './schemas';
 
@@ -73,6 +73,9 @@ export const api = {
   rotateEmailSecret: () => request('/api/v1/channels/email/secret', inboundSecretSchema, { method: 'POST' }),
   retryDelivery: (conversationId: string, messageId: string) => request(`/api/v1/conversations/${conversationId}/messages/${messageId}/retry`, messageSchema, { method: 'POST' }),
   config: () => request('/api/v1/config', publicConfigSchema),
+  billing: () => request('/api/v1/billing', billingSchema),
+  startCheckout: (plan: RequestBody<'createBillingCheckout'>['plan']) => request('/api/v1/billing/checkout', billingLinkSchema, { method: 'POST', body: json<'createBillingCheckout'>({ plan }) }),
+  openBillingPortal: () => request('/api/v1/billing/portal', billingLinkSchema, { method: 'POST' }),
   exchangeCloudSession,
   redeem: (token: string, label: string) => request('/api/v1/auth/redeem', redeemedSchema, {
     method: 'POST', body: json<'redeemLink'>({ token, label, session_type: 'cookie' }),
