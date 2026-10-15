@@ -98,6 +98,7 @@ func TestLockedAllowlistIsExactlyTheOpenRoutes(t *testing.T) {
 		"POST /api/v1/billing/checkout",
 		"POST /api/v1/billing/portal",
 		"POST /api/v1/channels/email/secret",
+		"POST /api/v1/export/link",
 	}
 	got := httpapi.LockedAllowlist()
 	sort.Strings(got)
@@ -248,5 +249,53 @@ func TestOneWorkspaceLockingNeverAffectsAnother(t *testing.T) {
 	}
 	if view := f.usage(t, f.adminB); view.Plan != "trial" || view.Locked {
 		t.Fatalf("workspace B billing=%+v, want trial", view)
+	}
+}
+
+// The banner says a trial was extended only when the server recorded an extension, whatever the
+// length of the trial or the clock of the browser.
+func TestMePlanSaysWhetherTheTrialWasExtended(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	extended := func() bool {
+		var me struct {
+			Plan struct {
+				TrialExtended *bool `json:"trial_extended"`
+			} `json:"plan"`
+		}
+		decode(t, request(t, f.api, http.MethodGet, "/api/v1/auth/me", nil, f.adminA, nil), &me)
+		if me.Plan.TrialExtended == nil {
+			t.Fatal("me.plan has no trial_extended")
+		}
+		return *me.Plan.TrialExtended
+	}
+	if extended() {
+		t.Fatal("a fresh trial is reported as extended")
+	}
+	if _, err := f.pool.Exec(context.Background(), `UPDATE workspaces SET trial_extended_at=now() WHERE id=$1`, f.workspaceA); err != nil {
+		t.Fatal(err)
+	}
+	if !extended() {
+		t.Fatal("a trial with trial_extended_at set is not reported as extended")
+	}
+}
+
+// The reply cap is the server's number: the billing page shows what the API says, not a copy of it.
+func TestBillingReportsTheTrialReplyCap(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	replyCap := func() *int {
+		var view struct {
+			Limits struct {
+				RepliesPer24h *int `json:"replies_per_24h"`
+			} `json:"limits"`
+		}
+		decode(t, request(t, f.api, http.MethodGet, "/api/v1/billing", nil, f.adminA, nil), &view)
+		return view.Limits.RepliesPer24h
+	}
+	if got := replyCap(); got == nil || *got != 200 {
+		t.Fatalf("trial replies_per_24h=%v, want 200", got)
+	}
+	f.upgrade(t, f.workspaceA, "sub_cap_check")
+	if got := replyCap(); got != nil {
+		t.Fatalf("paid replies_per_24h=%d, want null", *got)
 	}
 }

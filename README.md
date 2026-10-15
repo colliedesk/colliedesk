@@ -14,7 +14,9 @@ stable release. See the [roadmap](ROADMAP.md).
 
 Self-hosting Colliedesk is free, forever, with every feature. We sell two things:
 
-1. **Colliedesk Cloud**: we run it for you. One flat price per workspace, not per agent.
+1. **Colliedesk Cloud**: we run it for you. One flat price per workspace, not per agent. Every new
+   workspace starts with a 14-day free trial, no card needed; there is no permanent free plan. When
+   the trial ends the workspace is locked, never deleted, and you can always export all your data.
 2. **Migration**: we move your Freshdesk history (tickets, replies, attachments, tags) and give
    you a reconcile report that proves nothing was lost.
 

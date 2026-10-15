@@ -23,6 +23,8 @@ interface SettingsPageProps {
   // inviteError explains a refused invite, for example a full agent cap.
   inviteError?: string;
   emailSection?: ReactNode;
+  // exportSection is the admin's whole-workspace export.
+  exportSection?: ReactNode;
   webFormSection?: ReactNode;
 }
 
@@ -40,7 +42,7 @@ function inviteState(invite: Invite): keyof typeof messages.inviteStates {
 
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
   workspaceTimezone = 'UTC', timezoneOverride = null, createdInviteUrl, onCreateInvite, onRevokeInvite,
-  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, error, inviteError, emailSection, webFormSection }: SettingsPageProps) {
+  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, error, inviteError, emailSection, webFormSection, exportSection }: SettingsPageProps) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'admin' | 'agent'>('agent');
   const [workspaceZone, setWorkspaceZone] = useState(workspaceTimezone);
@@ -63,6 +65,10 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
       {emailSection}
       {webFormSection}
       <AppearanceSection />
+      {exportSection && <section className="settings-card" aria-labelledby="export-heading">
+        <div className="section-heading"><h2 id="export-heading">{messages.exportHeading}</h2><p>{messages.exportDescription}</p></div>
+        <div className="settings-body">{exportSection}</div>
+      </section>}
       <section className="settings-card" aria-labelledby="sessions-heading"><div className="section-heading"><h2 id="sessions-heading">{messages.sessions}</h2><p>{messages.sessionsDescription}</p></div>
         <div className="settings-body"><div className="data-list">{sessions.map((session) => {
           const state = sessionState(session);

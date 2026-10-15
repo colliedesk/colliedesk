@@ -17,6 +17,8 @@ func (a *API) getConfig(response http.ResponseWriter, _ *http.Request) {
 	writeJSON(response, http.StatusOK, map[string]any{
 		"cloud_sign_in": map[string]any{"enabled": enabled, "publishable_key": publishableKey},
 		"billing":       map[string]any{"enabled": a.polar != nil},
+		// Same condition as signUpCloud: 404 unless both are configured, 503 while its settings are missing.
+		"signup": map[string]any{"enabled": enabled && a.polar != nil && !a.config.SignupDisabled},
 	})
 }
 

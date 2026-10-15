@@ -7,12 +7,19 @@ helpdesk, or to keep a copy when a cloud plan ends. The format is open and docum
 
 Admins only, because the file holds every contact. Agents get "403 Forbidden".
 
-The export also works when the workspace is read-only (for example after a cloud trial ended) and
-on self-hosted installs.
+The export also works when the workspace is locked (a cloud trial or subscription ended) and on
+self-hosted installs.
 
 ## How to export
 
-Send an authenticated `GET /api/v1/export`. With an API token:
+In the app, open **Settings → Export all data** and select **Export all data**. On a locked cloud
+workspace the same button is on the locked page. Your browser then downloads the file itself, with its
+own progress bar, straight to disk: a large workspace is never held in memory. Keep the page open until
+the download finishes. If the server is busy with other exports you are told how long to wait. If
+another export of your workspace is still running you are told to wait for it. A file that stops early
+has no `manifest.json`; download it again.
+
+Without the app, send an authenticated `GET /api/v1/export` (the app uses `POST /api/v1/export/link`, which returns a one-time URL valid for 60 seconds that streams the same file without a token). With an API token:
 
 ```sh
 curl -fSL -H "Authorization: Bearer $COLLIEDESK_TOKEN" \

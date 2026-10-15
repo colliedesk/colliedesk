@@ -32,5 +32,7 @@ cannot be loaded, it says so with **Try again** instead.
 - **Assignee**: assign to a teammate or set back to unassigned.
 - **Tags**: see [Tags](tags.md).
 
-**Held conversations** (hosted Free plan only)
-When a month goes over the Free quota, a banner above the list says how many conversations are held. They are stored in full but hidden from the list and search until the workspace upgrades or the month ends. See [Plan and billing](billing.md).
+**Trial and locked workspaces** (hosted cloud only)
+During the trial a banner under the workspace name shows the days left. When the trial or the
+subscription ends, the inbox is replaced by a page that says so, with the ways forward for admins.
+See [Plan and billing](billing.md).

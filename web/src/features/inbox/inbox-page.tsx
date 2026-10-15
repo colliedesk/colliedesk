@@ -28,6 +28,8 @@ interface InboxPageProps {
   onPage?: (page: number) => void;
   onRetryDelivery?: (messageId: string) => void;
   outboundNotice?: string;
+  // deliveryNotice explains a refused retry of a failed delivery.
+  deliveryNotice?: string;
   filtered?: boolean;
   loading?: boolean;
   failed?: boolean;
@@ -36,7 +38,7 @@ interface InboxPageProps {
   onOpenSettings?: () => void;
 }
 
-export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, filtered, loading, failed, onRetry, canManage, onOpenSettings }: InboxPageProps) {
+export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, loading, failed, onRetry, canManage, onOpenSettings }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsToggle = useRef<HTMLButtonElement>(null);
@@ -72,7 +74,9 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
         <TimelinePanel conversation={selected} items={timeline} timeEntries={timeEntries} timezone={timezone} onRetryDelivery={onRetryDelivery}
           detailsOpen={detailsOpen} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}</p>}
-        <ReplyComposer disabled={!selected} onSubmit={onMessage} />
+        {deliveryNotice && <p role="alert" className="composer-notice">{deliveryNotice}</p>}
+        {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
+        <ReplyComposer key={selected?.id} disabled={!selected} onSubmit={onMessage} />
       </div>
       <DetailsPanel conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate}
         onAddTag={onAddTag} onRemoveTag={onRemoveTag} onCreateTag={onCreateTag} onClose={detailsOpen ? closeDetails : undefined} />

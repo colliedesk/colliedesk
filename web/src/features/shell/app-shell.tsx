@@ -11,6 +11,10 @@ interface AppShellProps {
   links?: ReactNode;
   // signIn is shown on the signed-out screen of instances with cloud sign-in.
   signIn?: ReactNode;
+  // notice sits under the identity bar on every view, for example the trial banner.
+  notice?: ReactNode;
+  // lockedScreen replaces the view when the workspace is locked; the identity bar stays.
+  lockedScreen?: ReactNode;
   children: ReactNode;
 }
 
@@ -35,8 +39,14 @@ function useDismissibleTooltips() {
   }, []);
 }
 
-export function AppShell({ me, signedOut = false, brand, links, signIn, children }: AppShellProps) {
+export function AppShell({ me, signedOut = false, brand, links, signIn, notice, lockedScreen, children }: AppShellProps) {
   useDismissibleTooltips();
+  const view = signedOut
+    ? <main className="redeem-page"><section className="redeem-panel">
+        <p role="alert" className="error-copy">{messages.signedOut}</p>
+        {signIn ?? <p className="muted-copy">{messages.signedOutSelfHosted}</p>}
+      </section></main>
+    : lockedScreen ?? children;
   return (
     <div className="app-shell">
       <nav className="app-rail" aria-label={messages.mainNavigation}>
@@ -48,13 +58,9 @@ export function AppShell({ me, signedOut = false, brand, links, signIn, children
         {me && <section className="identity-bar" aria-label={messages.signedInAs}>
           <strong>{me.workspace.name}</strong><span>{me.agent.email}</span>
         </section>}
+        {me && !signedOut && !lockedScreen && notice}
         <div className="app-content">
-          {signedOut
-            ? <main className="redeem-page"><section className="redeem-panel">
-                <p role="alert" className="error-copy">{messages.signedOut}</p>
-                {signIn ?? <p className="muted-copy">{messages.signedOutSelfHosted}</p>}
-              </section></main>
-            : children}
+          {view}
         </div>
       </div>
     </div>

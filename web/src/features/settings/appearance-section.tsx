@@ -1,11 +1,13 @@
-import { useState } from 'react';
-import { saveTheme, storedTheme } from '../../lib/theme';
+import { useEffect, useState } from 'react';
+import { applyTheme, onThemeChange, saveTheme, storedTheme } from '../../lib/theme';
 import type { Theme } from '../../lib/theme';
 import { messages } from '../../messages';
 
 // Appearance is a per-browser choice: it is saved locally, not on the agent profile.
 export function AppearanceSection() {
   const [theme, setTheme] = useState<Theme>(storedTheme);
+  // Another tab saved a different theme: follow it, and show it as the choice.
+  useEffect(() => onThemeChange((next) => { setTheme(next); applyTheme(next); }), []);
   const choose = (value: Theme) => { setTheme(value); saveTheme(value); };
   return (
     <section className="settings-card" aria-labelledby="appearance-heading">

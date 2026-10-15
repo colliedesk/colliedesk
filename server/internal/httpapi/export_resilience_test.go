@@ -67,6 +67,8 @@ type blockedExport struct {
 	storage        *blockingStorage
 	firstDone      chan int
 	releaseOnce    sync.Once
+	// linkA and linkB were made before the export of workspace A started to hold its slot.
+	linkA, linkB exportLink
 }
 
 func (b *blockedExport) unblock() { b.releaseOnce.Do(func() { close(b.storage.release) }) }
@@ -96,6 +98,7 @@ func startBlockedExport(t *testing.T, mutate func(*httpapi.Config)) *blockedExpo
 		message := create(t, api, token, "/api/v1/conversations/"+conversation+"/messages", map[string]any{"kind": "note", "body": "n"})
 		seedAttachment(t, pool, disk, token, api, message, "f.txt", "hello")
 	}
+	blocked.linkA, blocked.linkB = makeExportLink(t, api, blocked.adminA), makeExportLink(t, api, blocked.adminB)
 	t.Cleanup(blocked.unblock)
 	go func() {
 		blocked.firstDone <- request(t, api, http.MethodGet, "/api/v1/export", nil, blocked.adminA, nil).Code
