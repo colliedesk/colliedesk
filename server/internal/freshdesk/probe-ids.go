@@ -6,19 +6,24 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"sync/atomic"
 )
 
 // probeAll looks up ids with a few requests in flight; results keep id order.
-func (r *run) probeAll(ctx context.Context, ids []int64) []probeResult {
+func (r *run) probeAll(ctx context.Context, ids []int64, report bool) []probeResult {
 	results := make([]probeResult, len(ids))
 	slots := make(chan struct{}, probeWorkers)
 	var wg sync.WaitGroup
+	var finished atomic.Int64
 	for index, id := range ids {
 		wg.Add(1)
 		slots <- struct{}{}
 		go func() {
 			defer func() { <-slots; wg.Done() }()
 			results[index] = r.probeOne(ctx, id)
+			if done := int(finished.Add(1)); report {
+				r.progress.tick("checking ticket ids", done, len(ids))
+			}
 		}()
 	}
 	wg.Wait()

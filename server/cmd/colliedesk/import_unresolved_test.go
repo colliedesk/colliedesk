@@ -54,3 +54,27 @@ func TestImportPrintsUnresolvedTicketIDsWhenTheArchiveWasRefused(t *testing.T) {
 		t.Fatalf("a clean report printed an unresolved line:\n%s", clean)
 	}
 }
+
+func TestImportSendsProgressToStderrNotStdout(t *testing.T) {
+	databaseURL := cliDatabase(t)
+	t.Setenv("FRESHDESK_API_KEY", cliTestKey)
+	t.Setenv("ATTACHMENTS_DIR", t.TempDir())
+	createImportDesk(t, databaseURL)
+	var stderr bytes.Buffer
+	previous := progressOutput
+	progressOutput = &stderr
+	defer func() { progressOutput = previous }()
+	stdout, err := runImportWithReport(t, databaseURL, &freshdesk.Report{Status: freshdesk.StatusOK}, func(options freshdesk.Options) {
+		if options.Progress == nil {
+			t.Error("importer received no progress writer")
+			return
+		}
+		_, _ = options.Progress.Write([]byte("progress: importing tickets 1/2, elapsed 0s\n"))
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stderr.String(), "progress: importing tickets 1/2") || strings.Contains(stdout, "progress:") {
+		t.Fatalf("progress must go to stderr only.\nstderr:\n%s\nstdout:\n%s", stderr.String(), stdout)
+	}
+}

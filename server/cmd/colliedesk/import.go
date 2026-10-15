@@ -23,6 +23,9 @@ var freshdeskBaseURL = func(domain string) string { return "https://" + domain }
 // importRun is the importer entry point; tests replace it to check the command alone.
 var importRun = freshdesk.Run
 
+// progressOutput receives progress lines (stderr), so stdout keeps its stable summary format.
+var progressOutput io.Writer = os.Stderr
+
 var freshdeskDomain = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.freshdesk\.com$`)
 
 const importUsage = "usage: colliedesk import freshdesk --workspace <slug> --domain <account>.freshdesk.com [--api-key-env FRESHDESK_API_KEY] [--since YYYY-MM-DD] [--last-ticket-id N] [--dry-run] [--report-dir DIR]"
@@ -41,6 +44,7 @@ func importCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 	if err := database.Migrate(ctx, pool); err != nil {
 		return err
 	}
+	options.Progress = progressOutput
 	if !options.DryRun {
 		storage, err := attachmentStorage()
 		if err != nil {

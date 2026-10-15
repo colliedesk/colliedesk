@@ -40,6 +40,15 @@ type TicketCount struct {
 	UnresolvedIDs []string `json:"unresolved_ids"`
 }
 
+// RateLimitStats counts the waits the importer made for Freshdesk rate limits.
+type RateLimitStats struct {
+	// Pauses are one-minute waits after a response with X-Ratelimit-Remaining 0.
+	Pauses int `json:"pauses_remaining_zero"`
+	// Throttled counts HTTP 429 responses.
+	Throttled   int     `json:"http_429"`
+	WaitSeconds float64 `json:"wait_seconds"`
+}
+
 // Verification says how an expected total was established independently of
 // the list endpoints the importer reads.
 type Verification struct {
@@ -104,6 +113,7 @@ type Report struct {
 	Attachments  AttachmentCount `json:"attachments"`
 	TimeEntries  EntityCount     `json:"time_entries"`
 	Verification Verifications   `json:"verification"`
+	RateLimit    RateLimitStats  `json:"rate_limit"`
 	Missing      []string        `json:"missing"`
 	Failures     []Failure       `json:"failures"`
 	Warnings     []Warning       `json:"warnings"`

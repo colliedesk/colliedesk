@@ -9,10 +9,11 @@ import (
 )
 
 func (r *run) importTickets(ctx context.Context) error {
-	for _, ref := range r.refs {
+	for index, ref := range r.refs {
 		if err := r.importTicket(ctx, ref); err != nil {
 			return err
 		}
+		r.progress.tick("importing tickets", index+1, len(r.refs))
 	}
 	return nil
 }

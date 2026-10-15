@@ -41,7 +41,10 @@ type client struct {
 	sleep  func(context.Context, time.Duration) error
 	pause  time.Duration
 
-	mu sync.Mutex
+	progress *progress
+
+	mu    sync.Mutex
+	stats RateLimitStats
 	// exhausted is set when the last response reported no remaining calls.
 	exhausted bool
 }
@@ -178,7 +181,9 @@ func (c *client) do(ctx context.Context, target string, apiCall bool) (*http.Res
 			throttleRetries++
 			drain(response)
 			c.setExhausted(false)
-			if err := c.wait(ctx, retryAfter(response.Header.Get("Retry-After"))); err != nil {
+			delay := retryAfter(response.Header.Get("Retry-After"))
+			c.noteWait(delay, true)
+			if err := c.wait(ctx, delay); err != nil {
 				return nil, err
 			}
 		case response.StatusCode >= 500 && serverRetries < maxServerRetries:
@@ -200,9 +205,31 @@ func (c *client) respectExhausted(ctx context.Context, withKey bool) error {
 	c.exhausted = c.exhausted && !withKey
 	c.mu.Unlock()
 	if exhausted {
+		c.noteWait(c.pause, false)
 		return c.wait(ctx, c.pause)
 	}
 	return nil
+}
+
+// noteWait counts a rate-limit wait and announces it before the client sleeps.
+func (c *client) noteWait(d time.Duration, throttled bool) {
+	cause := "X-Ratelimit-Remaining 0"
+	c.mu.Lock()
+	if throttled {
+		c.stats.Throttled++
+		cause = "HTTP 429"
+	} else {
+		c.stats.Pauses++
+	}
+	c.stats.WaitSeconds += d.Seconds()
+	c.mu.Unlock()
+	c.progress.note(fmt.Sprintf("rate limit: waiting %s (%s)", d, cause))
+}
+
+func (c *client) rateLimitStats() RateLimitStats {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.stats
 }
 
 func (c *client) noteRemaining(header string) {

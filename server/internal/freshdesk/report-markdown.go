@@ -39,6 +39,8 @@ func (r *Report) Markdown() string {
 	if n := len(r.Tickets.UnresolvedIDs); n > 0 {
 		fmt.Fprintf(&b, "Ticket ids unresolved: %d (listed below). Each may be deleted or archived in Freshdesk.\n", n)
 	}
+	fmt.Fprintf(&b, "Rate limiting: %d pause(s) after X-Ratelimit-Remaining 0, %d HTTP 429 response(s), %s waited in total.\n",
+		r.RateLimit.Pauses, r.RateLimit.Throttled, (time.Duration(r.RateLimit.WaitSeconds * float64(time.Second))).Round(time.Second))
 	b.WriteString("\n## How the totals were verified\n\n")
 	for _, row := range []struct {
 		name string
