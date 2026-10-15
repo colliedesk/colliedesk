@@ -1,0 +1,286 @@
+package httpapi_test
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"testing"
+	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+)
+
+const bulkPath = "/api/v1/conversations"
+
+type bulkFixture struct {
+	api      http.Handler
+	token    string
+	agentID  string
+	other    string // conversation in another workspace
+	otherTok string
+	foreign  string // agent of another workspace
+	ids      []string
+}
+
+func newBulkFixture(t *testing.T, count int) bulkFixture {
+	t.Helper()
+	api, service := testAPI(t)
+	return seedBulkFixture(t, api, service, count)
+}
+
+func seedBulkFixture(t *testing.T, api http.Handler, service *auth.Service, count int) bulkFixture {
+	t.Helper()
+	token := createSession(t, api, service, "Bulk Alpha", "admin@bulk-alpha.example.com")
+	otherToken := createSession(t, api, service, "Bulk Beta", "admin@bulk-beta.example.com")
+	f := bulkFixture{api: api, token: token, otherTok: otherToken}
+	var me struct {
+		Agent struct {
+			ID string `json:"id"`
+		} `json:"agent"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/auth/me", nil, token, nil), &me)
+	f.agentID = me.Agent.ID
+	decode(t, request(t, api, http.MethodGet, "/api/v1/auth/me", nil, otherToken, nil), &me)
+	f.foreign = me.Agent.ID
+	contact := create(t, api, token, "/api/v1/contacts", map[string]any{"name": "Bulk", "email": "bulk@customer.example.com"})
+	for i := 0; i < count; i++ {
+		f.ids = append(f.ids, create(t, api, token, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": fmt.Sprintf("Bulk %d", i)}))
+	}
+	otherContact := create(t, api, otherToken, "/api/v1/contacts", map[string]any{"name": "Other", "email": "other@customer.example.com"})
+	f.other = create(t, api, otherToken, "/api/v1/conversations", map[string]any{"contact_id": otherContact, "subject": "Beta only"})
+	return f
+}
+
+func (f bulkFixture) patch(t *testing.T, ids []string, changes map[string]any) (int, string) {
+	t.Helper()
+	response := request(t, f.api, http.MethodPatch, bulkPath, map[string]any{"ids": ids, "changes": changes}, f.token, nil)
+	return response.Code, response.Body.String()
+}
+
+func (f bulkFixture) snapshot(t *testing.T, ids ...string) map[string]string {
+	t.Helper()
+	result := map[string]string{}
+	for _, id := range ids {
+		token := f.token
+		if id == f.other {
+			token = f.otherTok
+		}
+		response := request(t, f.api, http.MethodGet, "/api/v1/conversations/"+id, nil, token, nil)
+		result[id] = response.Body.String()
+	}
+	return result
+}
+
+func (f bulkFixture) assertUnchanged(t *testing.T, before map[string]string) {
+	t.Helper()
+	ids := make([]string, 0, len(before))
+	for id := range before {
+		ids = append(ids, id)
+	}
+	for id, body := range f.snapshot(t, ids...) {
+		if body != before[id] {
+			t.Errorf("conversation %s changed by a refused bulk update:\nbefore=%s\nafter=%s", id, before[id], body)
+		}
+	}
+}
+
+func TestBulkUpdateSetsStatusAssigneeAndTags(t *testing.T) {
+	f := newBulkFixture(t, 3)
+	tag := create(t, f.api, f.token, "/api/v1/tags", map[string]any{"name": "Bulk tag"})
+	untouchedBefore := f.snapshot(t, f.ids[2])
+	targets := f.ids[:2]
+
+	code, body := f.patch(t, targets, map[string]any{"status": "resolved"})
+	if code != http.StatusOK || body != `{"updated":2}`+"\n" {
+		t.Fatalf("set status: status=%d body=%q, want 200 {\"updated\":2}", code, body)
+	}
+	code, body = f.patch(t, targets, map[string]any{"assignee_id": f.agentID})
+	if code != http.StatusOK {
+		t.Fatalf("assign: status=%d body=%s", code, body)
+	}
+	code, body = f.patch(t, targets, map[string]any{"add_tag_ids": []string{tag}})
+	if code != http.StatusOK {
+		t.Fatalf("add tag: status=%d body=%s", code, body)
+	}
+	for _, id := range targets {
+		var item struct {
+			Status     string  `json:"status"`
+			AssigneeID *string `json:"assignee_id"`
+		}
+		response := request(t, f.api, http.MethodGet, "/api/v1/conversations/"+id, nil, f.token, nil)
+		decode(t, response, &item)
+		if item.Status != "resolved" || item.AssigneeID == nil || *item.AssigneeID != f.agentID || !bodyHasTag(t, response, tag) {
+			t.Errorf("conversation %s = %s, want resolved, assigned to the caller and tagged", id, response.Body.String())
+		}
+	}
+	f.assertUnchanged(t, untouchedBefore)
+
+	code, body = f.patch(t, targets, map[string]any{"assignee_id": nil, "remove_tag_ids": []string{tag}, "status": "open"})
+	if code != http.StatusOK {
+		t.Fatalf("unassign and untag: status=%d body=%s", code, body)
+	}
+	for _, id := range targets {
+		var item struct {
+			Status     string  `json:"status"`
+			AssigneeID *string `json:"assignee_id"`
+		}
+		response := request(t, f.api, http.MethodGet, "/api/v1/conversations/"+id, nil, f.token, nil)
+		decode(t, response, &item)
+		if item.Status != "open" || item.AssigneeID != nil || bodyHasTag(t, response, tag) {
+			t.Errorf("conversation %s = %s, want open, unassigned and untagged", id, response.Body.String())
+		}
+	}
+}
+
+func updatedAt(t *testing.T, body string) time.Time {
+	t.Helper()
+	var item struct {
+		UpdatedAt time.Time `json:"updated_at"`
+	}
+	if err := json.Unmarshal([]byte(body), &item); err != nil {
+		t.Fatalf("decode %q: %v", body, err)
+	}
+	return item.UpdatedAt
+}
+
+func TestBulkUpdateMovesUpdatedAtLikeASingleUpdate(t *testing.T) {
+	f := newBulkFixture(t, 2)
+	before := f.snapshot(t, f.ids...)
+	time.Sleep(20 * time.Millisecond)
+	if code, body := f.patch(t, f.ids, map[string]any{"status": "pending"}); code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", code, body)
+	}
+	for id, body := range f.snapshot(t, f.ids...) {
+		if then, now := updatedAt(t, before[id]), updatedAt(t, body); !now.After(then) {
+			t.Errorf("conversation %s updated_at did not move: %s -> %s", id, then, now)
+		}
+	}
+}
+
+func TestBulkUpdateRefusesMoreThanFiftyIDs(t *testing.T) {
+	f := newBulkFixture(t, 1)
+	ids := make([]string, 51)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("00000000-0000-4000-8000-%012d", i)
+	}
+	ids[0] = f.ids[0]
+	before := f.snapshot(t, f.ids[0])
+	if code, body := f.patch(t, ids, map[string]any{"status": "closed"}); code != http.StatusBadRequest {
+		t.Fatalf("51 ids: status=%d body=%s, want 400", code, body)
+	}
+	f.assertUnchanged(t, before)
+}
+
+func TestBulkUpdateRefusesEmptyRequests(t *testing.T) {
+	f := newBulkFixture(t, 1)
+	tag := create(t, f.api, f.token, "/api/v1/tags", map[string]any{"name": "Both ways"})
+	for name, body := range map[string]map[string]any{
+		"no ids":              {"ids": []string{}, "changes": map[string]any{"status": "closed"}},
+		"no changes":          {"ids": f.ids, "changes": map[string]any{}},
+		"missing changes":     {"ids": f.ids},
+		"unknown change":      {"ids": f.ids, "changes": map[string]any{"subject": "x"}},
+		"bad status":          {"ids": f.ids, "changes": map[string]any{"status": "deleted"}},
+		"bad id":              {"ids": []string{"not-a-uuid"}, "changes": map[string]any{"status": "closed"}},
+		"same tag both ways":  {"ids": f.ids, "changes": map[string]any{"add_tag_ids": []string{tag}, "remove_tag_ids": []string{tag}}},
+		"assignee wrong type": {"ids": f.ids, "changes": map[string]any{"assignee_id": 7}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			before := f.snapshot(t, f.ids...)
+			response := request(t, f.api, http.MethodPatch, bulkPath, body, f.token, nil)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("status=%d body=%s, want 400", response.Code, response.Body.String())
+			}
+			f.assertUnchanged(t, before)
+		})
+	}
+}
+
+func TestBulkUpdateWithAnIDOutsideTheWorkspaceChangesNothing(t *testing.T) {
+	f := newBulkFixture(t, 2)
+	missing := "99999999-9999-4999-8999-999999999999"
+	bodies := map[string]string{}
+	for name, foreign := range map[string]string{"other workspace": f.other, "missing": missing} {
+		t.Run(name, func(t *testing.T) {
+			before := f.snapshot(t, append([]string{f.other}, f.ids...)...)
+			code, body := f.patch(t, []string{f.ids[0], foreign, f.ids[1]}, map[string]any{"status": "closed"})
+			if code != http.StatusNotFound {
+				t.Fatalf("status=%d body=%s, want 404", code, body)
+			}
+			bodies[name] = body
+			f.assertUnchanged(t, before)
+		})
+	}
+	if bodies["other workspace"] != bodies["missing"] {
+		t.Errorf("404 tells a foreign id from a missing one: %q vs %q", bodies["other workspace"], bodies["missing"])
+	}
+}
+
+func TestBulkUpdateRejectsInvalidAssigneeAndTagAtomically(t *testing.T) {
+	f := newBulkFixture(t, 2)
+	foreignTag := create(t, f.api, f.otherTok, "/api/v1/tags", map[string]any{"name": "Beta tag"})
+	cases := map[string]map[string]any{
+		"assignee of another workspace": {"status": "closed", "assignee_id": f.foreign},
+		"unknown assignee":              {"status": "closed", "assignee_id": "99999999-9999-4999-8999-999999999999"},
+		"tag of another workspace":      {"status": "closed", "add_tag_ids": []string{foreignTag}},
+		"unknown tag to remove":         {"status": "closed", "remove_tag_ids": []string{"99999999-9999-4999-8999-999999999999"}},
+	}
+	for name, changes := range cases {
+		t.Run(name, func(t *testing.T) {
+			before := f.snapshot(t, f.ids...)
+			code, body := f.patch(t, f.ids, changes)
+			if code < 400 || code >= 500 || code == http.StatusNotFound {
+				t.Fatalf("status=%d body=%s, want a 4xx other than 404", code, body)
+			}
+			f.assertUnchanged(t, before)
+		})
+	}
+}
+
+func TestBulkUpdateNeedsASessionAndTheWritePermission(t *testing.T) {
+	f := newBulkFixture(t, 1)
+	before := f.snapshot(t, f.ids...)
+	response := request(t, f.api, http.MethodPatch, bulkPath, map[string]any{"ids": f.ids, "changes": map[string]any{"status": "closed"}}, "", nil)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("no session: status=%d, want 401", response.Code)
+	}
+	f.assertUnchanged(t, before)
+
+	for _, route := range httpapi.Routes() {
+		if route.Method == http.MethodPatch && route.Pattern == bulkPath && route.Permission != auth.PermissionConversationsWrite {
+			t.Errorf("bulk update permission=%s, want %s like the single update", route.Permission, auth.PermissionConversationsWrite)
+		}
+	}
+}
+
+func TestBulkUpdateOfFiftyConversationsCostsNoMoreStatementsThanOneAndStaysInBudget(t *testing.T) {
+	counter := &queryCounter{}
+	api, service, _, _ := testAPIOnPool(t, testPoolTraced(t, counter), nil)
+	f := seedBulkFixture(t, api, service, 50)
+	tag := create(t, api, f.token, "/api/v1/tags", map[string]any{"name": "Budget tag"})
+	changes := map[string]any{"status": "pending", "assignee_id": f.agentID, "add_tag_ids": []string{tag}}
+
+	run := func(ids []string) (int, time.Duration) {
+		counter.mu.Lock()
+		counter.statements = 0
+		counter.mu.Unlock()
+		started := time.Now()
+		code, body := f.patch(t, ids, changes)
+		elapsed := time.Since(started)
+		if code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", code, body)
+		}
+		counter.mu.Lock()
+		defer counter.mu.Unlock()
+		return counter.statements, elapsed
+	}
+	one, _ := run(f.ids[:1])
+	fifty, elapsed := run(f.ids)
+	if fifty != one {
+		t.Errorf("50 ids cost %d statements, 1 id costs %d; the cost must not grow with the ids", fifty, one)
+	}
+	if elapsed > 100*time.Millisecond {
+		t.Errorf("50 ids took %s, want at most 100ms", elapsed)
+	}
+	t.Logf("bulk update of 50 ids: %d statements (1 id: %d), %s", fifty, one, elapsed)
+}

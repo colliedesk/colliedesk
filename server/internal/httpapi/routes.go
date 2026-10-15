@@ -8,7 +8,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.getConfig, a.exchangeCloudSession, a.signUpCloud,
 		a.redeem, a.logout, a.me, a.listSessions, a.revokeSession,
 		a.createInvite, a.listInvites, a.revokeInvite,
-		a.listConversations, a.createConversation, a.getConversation, a.updateConversation,
+		a.listConversations, a.createConversation, a.bulkUpdateConversations, a.getConversation, a.updateConversation,
 		a.addConversationTag, a.removeConversationTag,
 		a.listMessages, a.createMessage, a.listTimeEntries, a.downloadAttachment,
 		a.listContacts, a.createContact, a.getContact,
