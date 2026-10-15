@@ -89,7 +89,7 @@ it must keep its MIT notice in `THIRD-PARTY-NOTICES.md`.
 | CSAT and reports | Rating after resolve; response/resolution times, volume per agent | v0.5 |
 | Live chat widget | Embeddable website chat into the same inbox | later |
 | MCP + Agent Skills | Agents (Claude, Codex) work the queue through MCP: `/mcp` serves read and triage tools today (`docs/user/mcp.md`); reply drafts and skills come later | in progress |
-| Billing | Polar subscription gates workspace status | cloud only |
+| Billing | 14-day free trial, then a Polar subscription; an expired workspace is locked (sign in, pay, export only) | cloud only |
 
 ## v0.1 acceptance
 

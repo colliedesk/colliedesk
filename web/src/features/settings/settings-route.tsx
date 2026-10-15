@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, InvalidRequestError, PlanLimitError } from '../../api/client';
+import { ExportAllData } from './export-all-data';
 import { EmailChannelSection } from './email-channel-section';
 import { WebFormSection } from './web-form-section';
 import { SettingsPage } from './settings-page';
@@ -27,7 +28,7 @@ export function SettingsRoute() {
   const isAdmin = me.data?.agent.role === 'admin';
   const emailFailed = saveEmail.isError || rotateSecret.isError || disconnectEmail.isError || verifyDomain.isError || workspaceSlug.isError;
   return <SettingsPage sessions={sessions.data?.items ?? []} invites={invites.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'}
-    canCreateInvites={isAdmin} canManageWorkspace={isAdmin}
+    canCreateInvites={isAdmin} canManageWorkspace={isAdmin} exportSection={isAdmin ? <ExportAllData /> : undefined}
     workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
     error={revokeInvite.isError || revokeSession.isError || emailFailed ? messages.settingsActionFailed : undefined}
     emailSection={<EmailChannelSection settings={emailChannel.data} timezone={me.data?.timezone ?? 'UTC'} canManage={isAdmin} workspaceSlug={me.data?.workspace.slug}

@@ -14,6 +14,8 @@ type Access struct {
 	Plan        string    `json:"plan"`
 	TrialEndsAt time.Time `json:"trial_ends_at"`
 	Locked      bool      `json:"locked"`
+	// TrialExtended is true when a Freshdesk import already extended this workspace's trial.
+	TrialExtended bool `json:"trial_extended"`
 }
 
 // NewAccess derives the plan in effect: the best subscription that is still paid, else the trial

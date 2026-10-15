@@ -659,6 +659,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/export/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get a one-time download URL for the workspace export
+         * @description Admins only; works in every plan state, including a locked workspace. Runs the checks of `GET /api/v1/export` that can be answered before streaming (another export of this workspace is running: 409; the server is at its export limit: 429 with `Retry-After`) and returns a URL that starts the same ZIP download without a session or token. The URL works once, for the workspace that asked, and expires after `expires_in_seconds`; a new link replaces the previous one. A browser that navigates to it streams the file to disk, so a large archive is never held in memory. Links live in the memory of one server process: a restart invalidates them.
+         */
+        post: operations["createExportLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/export/download/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the export a one-time link was made for
+         * @description The token is the credential: it was made by `POST /api/v1/export/link`, works once and expires quickly. Streams the same archive as `GET /api/v1/export`. This route is meant to be opened by a browser navigation, so a refusal is never a JSON error page: it is a 303 to `/settings?export_error=<reason>` where the app explains it. Reasons: `link_invalid` (unknown, used, expired or lost in a restart), `busy` (another export of this workspace is running), `server_busy` (the server is at its export limit) and `failed` (the export could not start). The export slot is taken before the token is spent, so `busy` and `server_busy` leave the link usable until it expires. HEAD and other methods answer 405 without spending the token.
+         */
+        get: operations["downloadExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -672,6 +712,15 @@ export interface components {
                 /** @description False on self-hosted instances; the billing routes answer 404. */
                 enabled: boolean;
             };
+            signup: {
+                /** @description True only where `POST /api/v1/auth/cloud/signup` exists (cloud sign-in and billing both configured). */
+                enabled: boolean;
+            };
+        };
+        ExportLink: {
+            /** @description Path on this server, for example /api/v1/export/download/<token>. */
+            url: string;
+            expires_in_seconds: number;
         };
         /** @enum {string} */
         CheckoutPlan: "team_monthly" | "team_yearly" | "founding";
@@ -712,6 +761,8 @@ export interface components {
             limits: {
                 /** @description Seats of the plan; 0 when locked. */
                 agents: number;
+                /** @description Emailed replies allowed in any 24 hours on the trial; null on every other plan and self-hosted. */
+                replies_per_24h: number | null;
                 /**
                  * Format: int64
                  * @description Attachment storage cap in bytes (2 GiB) on the trial and when locked; null on paid plans and self-hosted, which have none.
@@ -784,6 +835,8 @@ export interface components {
                 /** Format: date-time */
                 trial_ends_at: string;
                 locked: boolean;
+                /** @description True when a Freshdesk import already extended the trial. */
+                trial_extended: boolean;
             };
         };
         /**
@@ -2602,6 +2655,82 @@ export interface operations {
                 content?: never;
             };
             404: components["responses"]["NotFound"];
+        };
+    };
+    createExportLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The one-time link */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportLink"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description The server is already running as many exports as it allows; retry later */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    downloadExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The workspace archive */
+            200: {
+                headers: {
+                    /** @description attachment; filename="colliedesk-<slug>-<UTC yyyymmddThhmmssZ>.zip" */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": string;
+                };
+            };
+            /** @description The download was refused; the app explains why. */
+            303: {
+                headers: {
+                    /** @description The path /settings?export_error=link_invalid|busy|server_busy|failed. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not GET. The token is not spent. */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
 }

@@ -16,7 +16,7 @@ Feature details live in [docs/feature-spec.md](docs/feature-spec.md).
 - **Freshdesk importer**: tickets, replies, notes, attachments (checksummed), tags, contacts,
   with a reconcile report.
 - **One-command install** and a published container image.
-- **Colliedesk Cloud** for the first founding customers.
+- **Colliedesk Cloud** for the first founding customers: 14-day free trial, then Team or Founding; a workspace whose trial ended is locked and can still export everything.
 
 ## Then: v0.3 — AI included
 

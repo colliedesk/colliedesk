@@ -20,17 +20,34 @@ import (
 func (a *API) exportWorkspace(response http.ResponseWriter, request *http.Request) {
 	workspace := principal(request).Workspace
 	release, admission := a.exports.acquire(workspace.ID)
-	switch admission {
-	case exportWorkspaceBusy:
-		writeError(response, http.StatusConflict, "export_running", "An export of this workspace is already running. Try again when it finishes.")
-		return
-	case exportServerBusy:
-		response.Header().Set("Retry-After", exportRetryAfterSeconds)
-		writeError(response, http.StatusTooManyRequests, "export_busy", "The server is running as many exports as it allows. Try again in a few seconds.")
+	if !a.refuseExportIfBusy(response, admission) {
 		return
 	}
 	defer release()
+	a.streamExport(response, request, workspace.ID, workspace.Slug, writeError)
+}
 
+// refuseExportIfBusy writes the 409 or 429 answer for a refused admission and reports whether the
+// export may go on.
+func (a *API) refuseExportIfBusy(response http.ResponseWriter, admission exportAdmission) bool {
+	switch admission {
+	case exportWorkspaceBusy:
+		writeError(response, http.StatusConflict, "export_running", "An export of this workspace is already running. Try again when it finishes.")
+		return false
+	case exportServerBusy:
+		response.Header().Set("Retry-After", exportRetryAfterSeconds)
+		writeError(response, http.StatusTooManyRequests, "export_busy", "The server is running as many exports as it allows. Try again in a few seconds.")
+		return false
+	}
+	return true
+}
+
+// exportFailure answers an export that failed before its first byte: as JSON for API callers, as a
+// redirect into the app for a browser download.
+type exportFailure func(response http.ResponseWriter, status int, code, message string)
+
+// streamExport streams the archive of a workspace whose export slot the caller already holds.
+func (a *API) streamExport(response http.ResponseWriter, request *http.Request, workspaceID, workspaceSlug string, fail exportFailure) {
 	exportedAt := a.now().UTC()
 	// A client that trickles bytes in just fast enough for the write deadline must still not hold
 	// a slot and a snapshot for ever.
@@ -39,7 +56,7 @@ func (a *API) exportWorkspace(response http.ResponseWriter, request *http.Reques
 	deadline, _ := ctx.Deadline()
 	out := &lazyHeaderWriter{ResponseWriter: response, ctx: ctx, controller: http.NewResponseController(response), timeout: a.exportWriteTimeout(), limit: deadline, header: func(h http.Header) {
 		h.Set("Content-Type", "application/zip")
-		h.Set("Content-Disposition", `attachment; filename="colliedesk-`+workspace.Slug+`-`+exportedAt.Format("20060102T150405Z")+`.zip"`)
+		h.Set("Content-Disposition", `attachment; filename="colliedesk-`+workspaceSlug+`-`+exportedAt.Format("20060102T150405Z")+`.zip"`)
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Cache-Control", "private, no-store")
 	}}
@@ -49,21 +66,21 @@ func (a *API) exportWorkspace(response http.ResponseWriter, request *http.Reques
 	if a.config.Attachments != nil {
 		opener = a.config.Attachments
 	}
-	writer := export.NewWriter(out, opener, workspace.ID, exportedAt)
+	writer := export.NewWriter(out, opener, workspaceID, exportedAt)
 	defer writer.Close()
-	err := a.store.ExportWorkspace(ctx, workspace.ID, writer, store.ExportLimits{})
+	err := a.store.ExportWorkspace(ctx, workspaceID, writer, store.ExportLimits{})
 	if err == nil {
 		err = writer.Finish(ctx)
 	}
 	switch {
 	case err == nil:
 	case errors.Is(err, store.ErrExportRunning):
-		writeError(response, http.StatusConflict, "export_running", "An export of this workspace is already running. Try again when it finishes.")
+		fail(response, http.StatusConflict, "export_running", "An export of this workspace is already running. Try again when it finishes.")
 	case !out.started:
-		log.Printf("export %s: %v", workspace.ID, err)
-		writeError(response, http.StatusInternalServerError, "internal_error", "The export could not be created.")
+		log.Printf("export %s: %v", workspaceID, err)
+		fail(response, http.StatusInternalServerError, "internal_error", "The export could not be created.")
 	default:
-		log.Printf("export %s: aborted after %s: %v", workspace.ID, time.Since(exportedAt).Round(time.Millisecond), err)
+		log.Printf("export %s: aborted after %s: %v", workspaceID, time.Since(exportedAt).Round(time.Millisecond), err)
 		panic(http.ErrAbortHandler)
 	}
 }

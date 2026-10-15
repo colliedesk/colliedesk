@@ -52,6 +52,7 @@ var routeTiers = map[string]string{
 	"POST /api/v1/billing/checkout":                              "closed",
 	"POST /api/v1/billing/portal":                                "closed",
 	"GET /api/v1/export":                                         "closed",
+	"POST /api/v1/export/link":                                   "closed",
 	"GET /api/v1/channels/web-form":                              "read",
 	"PUT /api/v1/channels/web-form":                              "closed",
 }

@@ -339,6 +339,17 @@ func TestSlugRenameRefusesBrandsOnTheCloudOnly(t *testing.T) {
 	wantResponse(t, request(t, selfHosted.api, http.MethodPatch, "/api/v1/workspace/slug", map[string]any{"slug": "paypal-help"}, selfHosted.adminA, nil), http.StatusOK, "")
 }
 
+// The web app offers "Create a workspace" only where the server would accept it: cloud sign-in and
+// billing both configured.
+func TestConfigAdvertisesSignupOnlyWhereItExists(t *testing.T) {
+	hosted := newSignupFixture(t, nil)
+	got := request(t, hosted.api, http.MethodGet, "/api/v1/config", nil, "", nil)
+	want := "{\"billing\":{\"enabled\":true},\"cloud_sign_in\":{\"enabled\":true,\"publishable_key\":\"pk_test_example\"},\"signup\":{\"enabled\":true}}\n"
+	if got.Code != http.StatusOK || got.Body.String() != want {
+		t.Fatalf("hosted config status=%d body=%s, want %s", got.Code, got.Body.String(), want)
+	}
+}
+
 // A cloud whose sign-up settings are missing keeps serving everyone else and answers sign-up with a
 // clear refusal instead of a 500 or a crash-looping server.
 func TestSignupTurnedOffAtStartIsRefusedClearly(t *testing.T) {
@@ -349,5 +360,15 @@ func TestSignupTurnedOffAtStartIsRefusedClearly(t *testing.T) {
 		if got := f.count(t, table); got != "0" {
 			t.Fatalf("%s after a refused sign-up = %s, want 0", table, got)
 		}
+	}
+}
+
+// With sign-up turned off at start the web app must not offer it.
+func TestConfigHidesSignupWhileItIsTurnedOff(t *testing.T) {
+	f := newSignupFixture(t, func(config *httpapi.Config) { config.SignupDisabled = true })
+	got := request(t, f.api, http.MethodGet, "/api/v1/config", nil, "", nil)
+	want := "{\"billing\":{\"enabled\":true},\"cloud_sign_in\":{\"enabled\":true,\"publishable_key\":\"pk_test_example\"},\"signup\":{\"enabled\":false}}\n"
+	if got.Code != http.StatusOK || got.Body.String() != want {
+		t.Fatalf("config status=%d body=%s, want %s", got.Code, got.Body.String(), want)
 	}
 }

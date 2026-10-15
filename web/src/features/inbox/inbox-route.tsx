@@ -5,6 +5,7 @@ import { api } from '../../api/client';
 import type { UpdateConversationRequest } from '../../api/client';
 import { InboxPage } from './inbox-page';
 import { messages } from '../../messages';
+import { retryRefusalText } from './refusal-text';
 
 export function InboxRoute() {
   const client = useQueryClient();
@@ -46,6 +47,8 @@ export function InboxRoute() {
     onSuccess: () => client.invalidateQueries({ queryKey: ['messages', selected?.id] }) });
   const retryDelivery = useMutation({ mutationFn: ({ conversationId, messageId }: { conversationId: string; messageId: string }) => api.retryDelivery(conversationId, messageId),
     onSuccess: (retried) => client.invalidateQueries({ queryKey: ['messages', retried.conversation_id] }) });
+  // A refusal belongs to the conversation it happened in; opening another one hides it.
+  const retryError = retryDelivery.isError && retryDelivery.variables?.conversationId === selected?.id ? retryDelivery.error : undefined;
   return <InboxPage conversations={conversations.data?.items} selected={selected} timeline={timeline.data?.items} timeEntries={timeEntries.data?.items}
     agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone}
     page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} onPage={setPage}
@@ -54,7 +57,7 @@ export function InboxRoute() {
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body) => message.mutateAsync({ kind, body })}
-    outboundNotice={outboundNotice} filtered={Object.values(filters).some(Boolean)} loading={conversations.isPending}
+    outboundNotice={outboundNotice} deliveryNotice={retryError ? retryRefusalText(retryError) : undefined} filtered={Object.values(filters).some(Boolean)} loading={conversations.isPending}
     failed={conversations.isError} onRetry={() => void conversations.refetch()}
     canManage={me.data?.agent?.role === 'admin'} onOpenSettings={() => void navigate({ to: '/settings' })}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
