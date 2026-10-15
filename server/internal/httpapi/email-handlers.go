@@ -113,8 +113,10 @@ func (a *API) putEmailChannel(response http.ResponseWriter, request *http.Reques
 // foreignHostedAddress reports whether the address is on the hosted mail domain but not this workspace's own
 // subdomain, so a workspace cannot send its customers' replies into another workspace.
 func (a *API) foreignHostedAddress(workspaceSlug, address string) bool {
-	hosted := a.config.Email.HostedMailDomain
-	return email.UnderDomain(address, hosted) && strings.ToLower(email.Domain(address)) != workspaceSlug+"."+hosted
+	hosted := strings.ToLower(a.config.Email.HostedMailDomain)
+	host := strings.ToLower(email.Domain(address))
+	// The hosted domain itself is not a forwarding address; sending as it still needs domain verification.
+	return email.UnderDomain(address, hosted) && host != hosted && host != workspaceSlug+"."+hosted
 }
 
 // plainAddress accepts a bare addr-spec only: no display name, no comments, no line breaks.

@@ -249,3 +249,14 @@ func TestSupportAddressCannotPointAtAnotherWorkspacesHostedAddress(t *testing.T)
 		t.Errorf("own hosted address: status=%d, want 200", code)
 	}
 }
+
+// The hosted domain itself is the operator's own support domain (it forwards into a workspace like any
+// customer domain). Sending as it still needs domain verification, which only its DNS owner can pass.
+func TestSupportAddressMayUseTheHostedDomainItself(t *testing.T) {
+	api, service, _, _ := testAPIWithConfig(t, hostedConfig)
+	admin := createSession(t, api, service, "Hosted Kappa", "admin@hosted-kappa.example.com")
+	response := request(t, api, http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "support@" + hostedDomain}, admin, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("support address at the hosted domain: status=%d body=%s, want 200", response.Code, response.Body.String())
+	}
+}
