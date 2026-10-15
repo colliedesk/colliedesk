@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Agent, Conversation, Message, Tag, TimeEntry } from '../../api/schemas';
+import type { Conversation, Message, TeamMember, Tag, TimeEntry } from '../../api/schemas';
 import type { UpdateConversationRequest } from '../../api/client';
 import { ConversationList } from './conversation-list';
 import { DetailsPanel } from './details-panel';
@@ -13,7 +13,7 @@ interface InboxPageProps {
   selected?: Conversation;
   timeline?: Message[];
   timeEntries?: TimeEntry[];
-  agents?: Agent[];
+  agents?: TeamMember[];
   tags?: Tag[];
   timezone?: string;
   onSelect?: (id: string) => void;

@@ -183,3 +183,5 @@ Do not close the Freshdesk account until the last report says `OK`.
   and adds new replies and tags. It does not remove tags.
 - The import stops before a download when less than 256 MB would stay free on the attachments
   volume.
+
+If a ticket's Freshdesk responder matches a deactivated Colliedesk agent, the conversation is imported unassigned and the report lists it under the warning `assignee_deactivated`. Reactivate the agent and re-run to assign it.

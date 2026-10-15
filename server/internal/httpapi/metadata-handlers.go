@@ -2,7 +2,9 @@ package httpapi
 
 import (
 	"net/http"
+	"regexp"
 
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -15,6 +17,8 @@ func (a *API) listAgents(response http.ResponseWriter, request *http.Request) {
 	writeJSON(response, http.StatusOK, map[string]any{"items": items})
 }
 
+var uuidShape = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
 // updateAgent changes the role or the active state of an agent. reassign_to only makes sense with
 // active=false: it names the agent that takes over the open and pending conversations.
 func (a *API) updateAgent(response http.ResponseWriter, request *http.Request) {
@@ -25,6 +29,14 @@ func (a *API) updateAgent(response http.ResponseWriter, request *http.Request) {
 	}
 	if err := decodeJSON(request, &input); err != nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Agent changes are invalid.")
+		return
+	}
+	if !uuidShape.MatchString(request.PathValue("id")) {
+		writeError(response, http.StatusNotFound, "not_found", "The requested resource was not found.")
+		return
+	}
+	if input.ReassignTo != nil && !uuidShape.MatchString(*input.ReassignTo) {
+		writeStoreError(response, domain.ErrInvalidReassignTarget)
 		return
 	}
 	if input.Role == nil && input.Active == nil {

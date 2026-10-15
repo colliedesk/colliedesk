@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
@@ -134,9 +135,15 @@ func scanRedeemed(ctx context.Context, tx pgx.Tx, workspaceID, agentID string) (
 // requireActiveAgent returns domain.ErrAgentDeactivated when the link belongs to a deactivated agent:
 // the agent a pairing link names, or the agent that already has the invited address.
 func requireActiveAgent(ctx context.Context, tx pgx.Tx, workspaceID string, agentID *string, email string) error {
+	// FOR SHARE makes this check and the session insert one step against a deactivation: that holds the
+	// row exclusively until it commits, so a redeem that started first finishes first and its session is
+	// revoked afterwards, and one that starts later sees the flag.
 	var deactivated bool
-	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE workspace_id=$1 AND deactivated_at IS NOT NULL
-		AND (id::text=$2 OR ($2='' AND email=lower($3))))`, workspaceID, agentRef(agentID), email).Scan(&deactivated)
+	err := tx.QueryRow(ctx, `SELECT deactivated_at IS NOT NULL FROM agents WHERE workspace_id=$1
+		AND (id::text=$2 OR ($2='' AND email=lower($3))) FOR SHARE`, workspaceID, agentRef(agentID), email).Scan(&deactivated)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("check agent state: %w", err)
 	}

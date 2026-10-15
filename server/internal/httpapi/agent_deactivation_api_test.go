@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type teamMemberView struct {
@@ -22,6 +23,7 @@ type teamMemberView struct {
 // teamFixture is one workspace with an admin and two agents (Ann and Bob), each signed in.
 type teamFixture struct {
 	api                   http.Handler
+	pool                  *pgxpool.Pool
 	service               *auth.Service
 	admin, ann, bob       string
 	annID, bobID, adminID string
@@ -31,8 +33,8 @@ type teamFixture struct {
 
 func newTeamFixture(t *testing.T) teamFixture {
 	t.Helper()
-	api, service := testAPI(t)
-	f := teamFixture{api: api, service: service}
+	api, service, pool := testAPIWithPool(t)
+	f := teamFixture{api: api, pool: pool, service: service}
 	f.admin = createSession(t, api, service, "Team Desk", "admin@team.example.com")
 	_, annURL := createContractInvite(t, api, f.admin, "ann@team.example.com", "agent")
 	f.ann = redeemLabelled(t, api, annURL, "Ann laptop")

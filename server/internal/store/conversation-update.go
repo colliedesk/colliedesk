@@ -39,13 +39,8 @@ func updateConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string, 
 		}
 	}
 	if update.AssigneeID != nil && *update.AssigneeID != nil {
-		var active bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE workspace_id=$1 AND id=$2 AND deactivated_at IS NULL)`,
-			workspaceID, **update.AssigneeID).Scan(&active); err != nil {
-			return domain.Conversation{}, fmt.Errorf("validate assignee: %w", err)
-		}
-		if !active {
-			return domain.Conversation{}, fmt.Errorf("validate assignee: unknown or deactivated agent")
+		if err := ValidateAssignee(ctx, tx, workspaceID, **update.AssigneeID); err != nil {
+			return domain.Conversation{}, err
 		}
 	}
 	result, err := tx.Exec(ctx, `UPDATE conversations SET

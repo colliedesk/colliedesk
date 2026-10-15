@@ -110,6 +110,8 @@ export const messages = {
   teamLastActive: (when: string) => `Last active ${when}`,
   teamYou: 'you',
   teamRoleOf: (name: string) => `Role of ${name}`,
+  teamApplyRole: 'Apply',
+  teamApplyRoleFor: (name: string) => `Apply role for ${name}`,
   teamDeactivate: 'Deactivate',
   teamDeactivateName: (name: string) => `Deactivate ${name}`,
   teamDeactivateQuestion: (name: string) => `Deactivate ${name}?`,

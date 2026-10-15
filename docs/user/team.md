@@ -7,8 +7,9 @@ Admins can change roles, deactivate and reactivate people. To add someone, see
 
 ## Change a role
 
-Admins pick **Agent** or **Admin** in the role list of a row. The change applies to new requests at
-once. A person who is already signed in keeps the access their sign-in link gave them; they sign in
+Admins pick **Agent** or **Admin** in the role list of a row, then select **Apply**. Nothing changes
+until you select **Apply**. The change applies to new requests at once. Demoting someone also cancels
+their unused admin invites. A person who is already signed in keeps the access their sign-in link gave them; they sign in
 again to use a higher role.
 
 A workspace always keeps at least one active admin. Demoting or deactivating the last one is refused

@@ -31,11 +31,25 @@ test('an agent sees the team read-only', () => {
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });
 
-test('an admin changes a role inline', () => {
+test('choosing a role changes nothing until Apply is pressed', () => {
   const onChangeRole = vi.fn();
   render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" onChangeRole={onChangeRole} />);
-  fireEvent.change(screen.getByRole('combobox', { name: 'Role of ann@example.com' }), { target: { value: 'admin' } });
+  expect(screen.queryByRole('button', { name: 'Apply role for ann@example.com' })).not.toBeInTheDocument();
+  const select = screen.getByRole('combobox', { name: 'Role of ann@example.com' });
+  fireEvent.change(select, { target: { value: 'admin' } });
+  expect(onChangeRole).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Apply role for ann@example.com' }));
   expect(onChangeRole).toHaveBeenCalledWith(ann.id, 'admin');
+});
+
+test('putting the role back hides Apply, and a self demotion is applied the same explicit way', () => {
+  const onChangeRole = vi.fn();
+  render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" onChangeRole={onChangeRole} />);
+  const own = screen.getByRole('combobox', { name: 'Role of Ada Admin' });
+  fireEvent.change(own, { target: { value: 'agent' } });
+  expect(onChangeRole).not.toHaveBeenCalled();
+  fireEvent.change(own, { target: { value: 'admin' } });
+  expect(screen.queryByRole('button', { name: 'Apply role for Ada Admin' })).not.toBeInTheDocument();
 });
 
 test('deactivating asks first, shows the open work and moves it to Unassigned by default', () => {
@@ -102,4 +116,25 @@ test('a deactivated agent can be reactivated and has no other action', () => {
 test('shows why a change was refused', () => {
   render(<TeamSection members={[admin]} currentAgentId={admin.id} canManage timezone="UTC" error="A workspace needs at least one active admin." />);
   expect(screen.getByRole('alert')).toHaveTextContent('at least one active admin');
+});
+
+test('the question is visible text and keyboard focus moves into it', () => {
+  render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Deactivate ann@example.com' }));
+  expect(screen.getByText('Deactivate ann@example.com?')).toBeVisible();
+  expect(screen.getByRole('group', { name: 'Deactivate ann@example.com?' })).toHaveFocus();
+});
+
+test('cancel gives focus back to the Deactivate button of the same row', () => {
+  render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Deactivate ann@example.com' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(screen.getByRole('button', { name: 'Deactivate ann@example.com' })).toHaveFocus();
+});
+
+test('confirming leaves focus on the row, not on the page body', () => {
+  render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" onDeactivate={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Deactivate ann@example.com' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Yes, deactivate' }));
+  expect(row('ann@example.com')).toHaveFocus();
 });

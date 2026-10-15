@@ -1,15 +1,12 @@
 import { useState } from 'react';
 import type { UpdateConversationRequest } from '../../api/client';
-import type { Agent, Conversation, ConversationOrigin, Tag } from '../../api/schemas';
+import type { TeamMember, Conversation, ConversationOrigin, Tag } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 
-// An agent as the pickers see it; a deactivated one (deactivated_at set) is never offered.
-type Assignable = Agent & { deactivated_at?: string | null };
-
 interface DetailsPanelProps {
   conversation?: Conversation;
-  agents: Assignable[];
+  agents: TeamMember[];
   tags: Tag[];
   onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void;
   onAddTag?: (conversationId: string, tagId: string) => void;
