@@ -37,7 +37,7 @@ test('posts the raw message with the envelope recipient on top and the server se
   await worker.email(mail, env);
   assert.equal(requests.length, 1);
   assert.equal(requests[0].url, env.INBOUND_URL);
-  assert.equal(requests[0].init.headers['X-CollieDesk-Inbound-Secret'], env.INBOUND_SECRET);
+  assert.equal(requests[0].init.headers['X-Colliedesk-Inbound-Secret'], env.INBOUND_SECRET);
   assert.equal(requests[0].init.headers['Content-Type'], 'message/rfc822');
   assert.ok(requests[0].body.startsWith('X-Original-To: support@acme.colliedesk.com\r\nFrom: a@customer.example'));
   assert.deepEqual(mail.calls, { rejected: [], forwarded: [] });

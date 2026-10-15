@@ -18,7 +18,7 @@ test('redeems a CLI pairing link and completes the inbox workflow', async ({ pag
   }).trim();
 
   await page.goto(pairingURL);
-  await page.getByRole('button', { name: 'Continue to CollieDesk' }).click();
+  await page.getByRole('button', { name: 'Continue to Colliedesk' }).click();
   await expect(page).toHaveURL(`${baseURL}/`);
 
   const headers = { Origin: baseURL };

@@ -1,6 +1,6 @@
 # Plan and billing
 
-Billing exists only on the hosted CollieDesk Cloud. A self-hosted instance has no billing page, no
+Billing exists only on the hosted Colliedesk Cloud. A self-hosted instance has no billing page, no
 plan and no limits; nothing here applies to it.
 
 Only workspace admins see **Billing** (top bar). Agents do not.
@@ -32,7 +32,7 @@ used. Conversations are counted by the UTC month in which they were received.
 - **Replies always work.** A customer replying to an existing conversation, and an agent replying or
   adding a note, are never blocked. Only new conversations count. A reply to a held conversation
   stays with it.
-- Conversations you create yourself in CollieDesk (not received by email) count toward the 100 but
+- Conversations you create yourself in Colliedesk (not received by email) count toward the 100 but
   are never held. You see them at once.
 - Conversations brought in by a Freshdesk import are history, not new mail. They do not count toward
   the quota and are never held, however many there are.
@@ -42,7 +42,7 @@ used. Conversations are counted by the UTC month in which they were received.
 ## Upgrade
 
 1. Open **Billing** and select a plan under **Upgrade**.
-2. Pay on the page that opens. It is hosted by our payment provider, Polar; CollieDesk never sees
+2. Pay on the page that opens. It is hosted by our payment provider, Polar; Colliedesk never sees
    your card.
 3. You return to **Billing**. The plan updates within a few moments, once the provider confirms
    the payment.

@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// Ledger entities. A ledger row maps one Freshdesk id to one CollieDesk row
+// Ledger entities. A ledger row maps one Freshdesk id to one Colliedesk row
 // and makes the import idempotent: a re-run skips every row marked done.
 const (
 	entityContact     = "contact"

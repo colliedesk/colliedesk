@@ -96,9 +96,9 @@ test('freshdesk import: reconcile OK with exact counts, tickets searchable with 
     // The team answers ticket 42 after the import: undo keeps that conversation.
     await page.getByRole('searchbox', { name: 'Search conversations' }).fill(fixture.searchableWord);
     await page.getByRole('button', { name: /Fixture ticket 42:/ }).click();
-    await page.getByLabel('Message body').last().fill('Answered in CollieDesk after the import.');
+    await page.getByLabel('Message body').last().fill('Answered in Colliedesk after the import.');
     await page.getByRole('button', { name: 'Send reply' }).click();
-    await expect(page.getByText('Answered in CollieDesk after the import.')).toBeVisible();
+    await expect(page.getByText('Answered in Colliedesk after the import.')).toBeVisible();
 
     // Undo is what a person runs right after importing into the wrong workspace: it must not stall.
     const startedUndo = Date.now();

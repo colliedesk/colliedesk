@@ -106,7 +106,7 @@ func (e *importEnv) tableCounts(t *testing.T) string {
 	return strings.Join(parts, " ")
 }
 
-// target returns the CollieDesk id recorded in the import ledger for a Freshdesk id.
+// target returns the Colliedesk id recorded in the import ledger for a Freshdesk id.
 func (e *importEnv) target(t *testing.T, entity, freshdeskID string) string {
 	t.Helper()
 	var id string

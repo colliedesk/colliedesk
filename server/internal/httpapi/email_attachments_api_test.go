@@ -296,7 +296,7 @@ func TestPlatformDomainRepliesReachTheirWorkspace(t *testing.T) {
 
 	for _, item := range []struct{ token, conversation, admin string }{{tokenA, conversationA, adminA}, {tokenB, conversationB, adminB}} {
 		result := inboundOK(t, api, platformSecret, mail([]string{
-			"From: z@customer.example", "To: \"Desk via CollieDesk\" <reply+" + item.token + "@mail.colliedesk.test>",
+			"From: z@customer.example", "To: \"Desk via Colliedesk\" <reply+" + item.token + "@mail.colliedesk.test>",
 			"Subject: Re: Platform", "Message-ID: <platform-" + item.token + "@customer.example>",
 		}, "Replied to the From address."))
 		if result.Status != "threaded" || *result.ConversationID != item.conversation {

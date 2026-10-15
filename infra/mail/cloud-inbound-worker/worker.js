@@ -22,7 +22,7 @@ async function post(env, body) {
   try {
     const response = await fetch(env.INBOUND_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'message/rfc822', 'X-CollieDesk-Inbound-Secret': env.INBOUND_SECRET },
+      headers: { 'Content-Type': 'message/rfc822', 'X-Colliedesk-Inbound-Secret': env.INBOUND_SECRET },
       body,
     });
     return response.status;

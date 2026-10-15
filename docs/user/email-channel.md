@@ -4,13 +4,13 @@ Customers write to your support address. Each new email thread becomes a convers
 sender becomes a contact. Customer replies join the same conversation. Your replies go back to
 the customer by email. Private notes are never emailed.
 
-CollieDesk does not run a mail server. A forwarder you already use (Cloudflare Email Routing,
-Postmark, Amazon SES, or your own MTA) posts each raw message to CollieDesk. Replies leave through
+Colliedesk does not run a mail server. A forwarder you already use (Cloudflare Email Routing,
+Postmark, Amazon SES, or your own MTA) posts each raw message to Colliedesk. Replies leave through
 an SMTP relay.
 
-## CollieDesk Cloud: forward to your address
+## Colliedesk Cloud: forward to your address
 
-On CollieDesk Cloud every workspace has a ready-made address, `support@<workspace>.colliedesk.com`.
+On Colliedesk Cloud every workspace has a ready-made address, `support@<workspace>.colliedesk.com`.
 You do not run a forwarder or a Worker. Change where your mailbox forwards and you are done.
 
 1. Open **Settings → Email channel** and enter your **Support address**, for example
@@ -19,7 +19,7 @@ You do not run a forwarder or a Worker. Change where your mailbox forwards and y
 3. In your mailbox, forward all mail for the support address to the forwarding address:
    - **Gmail:** Settings → See all settings → Forwarding and POP/IMAP → Add a forwarding address.
      Gmail sends a confirmation message to the forwarding address. It appears as a new conversation
-     in CollieDesk; open it and select the confirmation link. Then choose **Forward a copy of
+     in Colliedesk; open it and select the confirmation link. Then choose **Forward a copy of
      incoming mail** and save.
    - **Outlook:** Settings → Mail → Forwarding, enter the address and select **Start forwarding**.
 4. Send a test message to your support address. It opens a conversation.
@@ -83,20 +83,20 @@ replies. Conversations and messages stay.
 2. Add that TXT record at your DNS provider.
 3. Select **Verify domain**. DNS changes can take a few minutes; try again if it fails.
 
-Until the domain is verified, replies are sent as **"Your workspace via CollieDesk"** from
+Until the domain is verified, replies are sent as **"Your workspace via Colliedesk"** from
 `reply+…@<MAIL_FROM_DOMAIN>`, with `Reply-To` set to your support address. Customer replies still
 reach you and thread. Settings shows **Replies are sent from …** with the current address.
 
 Changing the support address resets verification and creates a new TXT value.
 
-## 4. Forward mail to CollieDesk
+## 4. Forward mail to Colliedesk
 
 Any forwarder works if it can send one HTTP request per message:
 
 ```
 POST <Inbound URL>
 Content-Type: message/rfc822
-X-CollieDesk-Inbound-Secret: <Inbound secret>
+X-Colliedesk-Inbound-Secret: <Inbound secret>
 
 <the complete raw message, headers and body, unchanged>
 ```
@@ -112,9 +112,9 @@ Responses:
 | `429` | Too much mail from one sender, or too many new conversations for the workspace. | Retry after `Retry-After` seconds. |
 | `500` | Temporary server failure. Nothing was stored. | Retry. |
 
-Sending the same message twice is safe: CollieDesk stores a message once per `Message-ID`.
+Sending the same message twice is safe: Colliedesk stores a message once per `Message-ID`.
 
-**Sender verification.** CollieDesk shows a sender verification result only from the
+**Sender verification.** Colliedesk shows a sender verification result only from the
 `Authentication-Results` header written by your receiving server. Set `EMAIL_TRUSTED_AUTHSERV_ID`
 to the name at the start of that header (the text before the first `;`). Headers with any other
 name are ignored, because a sender can write them. Find the name in the original source of a
@@ -142,7 +142,7 @@ export default {
       method: "POST",
       headers: {
         "Content-Type": "message/rfc822",
-        "X-CollieDesk-Inbound-Secret": env.INBOUND_SECRET,
+        "X-Colliedesk-Inbound-Secret": env.INBOUND_SECRET,
       },
       body: raw,
     });
@@ -198,7 +198,7 @@ workspaces:
 3. Use the same Worker code as in step 4, with `INBOUND_SECRET` set to `MAIL_FROM_INBOUND_SECRET`.
    Keep the `X-Original-To` line: it carries the `reply+<token>` address.
 
-CollieDesk finds the conversation from the token and files the message in its workspace, like any
+Colliedesk finds the conversation from the token and files the message in its workspace, like any
 reply. A bounce marks the reply **Delivery failed**. Mail for an unknown token is answered `200`
 with status `dropped` and reason `unknown_recipient`; the Worker forwards nothing for it.
 

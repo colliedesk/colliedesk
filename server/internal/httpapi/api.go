@@ -168,7 +168,7 @@ func (a *API) authorize(route Route, next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		if viaCookie && writes(request.Method) && request.Header.Get("Origin") != a.config.Origin {
-			writeError(response, http.StatusForbidden, "csrf_rejected", "Origin does not match this CollieDesk instance.")
+			writeError(response, http.StatusForbidden, "csrf_rejected", "Origin does not match this Colliedesk instance.")
 			return
 		}
 		if a.refuseIfLocked(response, route, principal) {

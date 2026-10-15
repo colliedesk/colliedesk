@@ -718,7 +718,7 @@ export interface components {
             /** Format: uuid */
             assignee_id: string | null;
             tags: components["schemas"]["Tag"][];
-            /** @description Where an imported conversation came from; null for conversations created in CollieDesk. */
+            /** @description Where an imported conversation came from; null for conversations created in Colliedesk. */
             origin: null | components["schemas"]["ConversationOrigin"];
             /** Format: date-time */
             created_at: string;
@@ -753,14 +753,14 @@ export interface components {
             conversation_id: string;
             /** Format: uuid */
             author_agent_id: string | null;
-            /** @description Display name of an author without a CollieDesk agent account (customer or imported agent) */
+            /** @description Display name of an author without a Colliedesk agent account (customer or imported agent) */
             author_name: string | null;
             /** @enum {string} */
             kind: "incoming" | "outgoing" | "note";
             body: string;
             /** @description Original HTML of an imported message. Untrusted content: render it only in a sandboxed frame that runs no scripts and loads nothing from the network. */
             body_html: string | null;
-            /** @description Where an imported message came from; null for messages written in CollieDesk. */
+            /** @description Where an imported message came from; null for messages written in Colliedesk. */
             origin: null | components["schemas"]["MessageOrigin"];
             attachments: components["schemas"]["Attachment"][];
             /** Format: date-time */

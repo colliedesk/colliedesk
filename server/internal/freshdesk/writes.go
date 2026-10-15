@@ -11,7 +11,7 @@ import (
 )
 
 // writeConversation creates (or, for a ticket changed since the last run,
-// updates) the CollieDesk conversation with Freshdesk's own timestamps.
+// updates) the Colliedesk conversation with Freshdesk's own timestamps.
 func (r *run) writeConversation(ctx context.Context, ticket fdTicket, contactID string, existing *string, archived bool) (string, error) {
 	key := strconv.FormatInt(ticket.ID, 10)
 	status, ok := mapStatus(ticket.Status)

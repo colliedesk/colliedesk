@@ -1,5 +1,5 @@
 name: Feature request
-description: Something your support team needs that CollieDesk does not do yet.
+description: Something your support team needs that Colliedesk does not do yet.
 labels: [enhancement]
 body:
   - type: textarea

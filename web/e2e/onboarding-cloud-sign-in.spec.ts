@@ -12,7 +12,7 @@ const provider = new IdentityProvider();
 test.beforeAll(async () => { await provider.start(); });
 test.afterAll(async () => { await provider.stop(); });
 
-test('cloud sign-in: a verified identity of an existing agent gets a CollieDesk session; every other token is refused', { tag: '@onboarding' }, async ({ page }) => {
+test('cloud sign-in: a verified identity of an existing agent gets a Colliedesk session; every other token is refused', { tag: '@onboarding' }, async ({ page }) => {
   const suffix = uniqueSuffix();
   const email = `cloud-${suffix}@example.com`;
   createWorkspace(`Cloud Desk ${suffix}`, email, baseURL);
@@ -55,7 +55,7 @@ test('cloud sign-in: a verified identity of an existing agent gets a CollieDesk 
   expect(body.token ?? '').toBe('');
   expect(body.agent).toMatchObject({ email, role: 'admin' });
 
-  // The CollieDesk session is an ordinary browser session: the inbox opens and the device is listed.
+  // The Colliedesk session is an ordinary browser session: the inbox opens and the device is listed.
   await page.goto(baseURL);
   await expect(appNavigationWith(page, `Cloud Desk ${suffix}`)).toHaveCount(1);
   await page.goto(`${baseURL}/settings`);

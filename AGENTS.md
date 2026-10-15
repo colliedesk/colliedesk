@@ -1,6 +1,6 @@
-# CollieDesk
+# Colliedesk
 
-CollieDesk is an open-source helpdesk for small support teams (1–10 agents) leaving Freshdesk.
+Colliedesk is an open-source helpdesk for small support teams (1–10 agents) leaving Freshdesk.
 A Go server (PostgreSQL) serves a JSON API under `/api/v1` and an embedded React + TypeScript
 web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
 
@@ -57,7 +57,7 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
 
 ## Onboarding journeys
 
-Customers leaving Freshdesk judge CollieDesk in their first hour. These end-to-end tests run the
+Customers leaving Freshdesk judge Colliedesk in their first hour. These end-to-end tests run the
 real server, CLI, PostgreSQL and a browser; only external services are local stand-ins (Freshdesk
 API, identity provider JWKS, Mailpit as the SMTP relay). They run on every PR in the CI jobs
 `onboarding` and `install-smoke`. A change to an onboarding surface (`install.sh`,
@@ -72,7 +72,7 @@ untag one; fix the product instead. `corepack pnpm test` fails when this list an
 - `freshdesk import: reconcile OK with exact counts, tickets searchable with original timestamps, undo removes exactly the import` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
 - `freshdesk import: a wrong API key stops before writing anything and says why` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
 - `freshdesk import: an archive refused with 403 is reported UNVERIFIED, never OK` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
-- `cloud sign-in: a verified identity of an existing agent gets a CollieDesk session; every other token is refused` (`web/e2e/onboarding-cloud-sign-in.spec.ts`)
+- `cloud sign-in: a verified identity of an existing agent gets a Colliedesk session; every other token is refused` (`web/e2e/onboarding-cloud-sign-in.spec.ts`)
 - `link errors: expired, reused, revoked, mistyped, missing and another workspace's link explain themselves` (`web/e2e/onboarding-link-errors.spec.ts`)
 
 Also: `tests/install-smoke.sh` (real `install.sh` with Docker against the image built from the

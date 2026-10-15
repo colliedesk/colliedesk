@@ -19,7 +19,7 @@ func (r *Report) Markdown() string {
 	if r.DryRun {
 		b.WriteString("- Dry run: nothing was written. Message, attachment and time entry counts are known only after an import.\n")
 	}
-	b.WriteString("\n## Counts\n\n| Entity | In Freshdesk | In CollieDesk | Failed |\n|---|---:|---:|---:|\n")
+	b.WriteString("\n## Counts\n\n| Entity | In Freshdesk | In Colliedesk | Failed |\n|---|---:|---:|---:|\n")
 	for _, row := range []struct {
 		name  string
 		count EntityCount
@@ -28,7 +28,7 @@ func (r *Report) Markdown() string {
 	}
 	fmt.Fprintf(&b, "\nAttachment bytes: %d in Freshdesk, %d stored. SHA-256 re-verified from storage: %d.\n",
 		r.Attachments.SourceBytes, r.Attachments.ImportedBytes, r.Attachments.ChecksumVerified)
-	fmt.Fprintf(&b, "Companies: %d, %d kept as contact organization. Agents: %d, %d matched to CollieDesk agents by email.\n",
+	fmt.Fprintf(&b, "Companies: %d, %d kept as contact organization. Agents: %d, %d matched to Colliedesk agents by email.\n",
 		r.Companies.Source, r.Companies.Attached, r.Agents.Source, r.Agents.Matched)
 	absentLabel := "Ticket ids that do not exist in Freshdesk"
 	if len(r.Tickets.UnresolvedIDs) > 0 {

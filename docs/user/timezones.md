@@ -1,6 +1,6 @@
 # Timezones
 
-CollieDesk stores every time in UTC and shows it in your timezone.
+Colliedesk stores every time in UTC and shows it in your timezone.
 
 - **Workspace timezone** (admins): the default for everyone in the workspace. It starts as `UTC`.
 - **Personal timezone override** (everyone): use your own timezone instead of the workspace one.

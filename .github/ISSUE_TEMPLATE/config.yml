@@ -3,6 +3,6 @@ contact_links:
   - name: Report a security vulnerability
     url: https://github.com/colliedesk/colliedesk/security/advisories/new
     about: Report privately. Do not open a public issue for a security problem.
-  - name: Hosted CollieDesk support
+  - name: Hosted Colliedesk support
     url: https://colliedesk.com
-    about: Questions about a CollieDesk Cloud workspace or billing.
+    about: Questions about a Colliedesk Cloud workspace or billing.

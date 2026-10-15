@@ -4,7 +4,7 @@ import type { Page } from '@playwright/test';
 // redeemLink opens a one-time link the way a person does: open it, select Continue, land in the inbox.
 export async function redeemLink(page: Page, url: string): Promise<void> {
   await page.goto(url);
-  await page.getByRole('button', { name: 'Continue to CollieDesk' }).click();
+  await page.getByRole('button', { name: 'Continue to Colliedesk' }).click();
   await expect(page).toHaveURL(`${new URL(url).origin}/`);
 }
 

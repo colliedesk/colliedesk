@@ -10,7 +10,7 @@ const nextStep = 'Ask your workspace admin for a new link.';
 
 async function openAndContinue(page: Page, url: string) {
   await page.goto(url);
-  await page.getByRole('button', { name: 'Continue to CollieDesk' }).click();
+  await page.getByRole('button', { name: 'Continue to Colliedesk' }).click();
 }
 
 async function expectLinkRefused(page: Page) {

@@ -1,10 +1,10 @@
-# CollieDesk
+# Colliedesk
 
 **The open-source alternative to Freshdesk, Zendesk and Help Scout** for small support teams.
 Leave Freshdesk with all your data. AI that actually answers tickets is included, not an add-on.
 Flat price, no per-agent fees.
 
-Think of CollieDesk as the sheepdog for your support queue: the AI herds every ticket home,
+Think of Colliedesk as the sheepdog for your support queue: the AI herds every ticket home,
 your team stays in charge.
 
 **Status:** pre-alpha (v0.1). The interface and database schema may change before the first
@@ -12,9 +12,9 @@ stable release. See the [roadmap](ROADMAP.md).
 
 ## "Wait, what are you selling me?"
 
-Self-hosting CollieDesk is free, forever, with every feature. We sell two things:
+Self-hosting Colliedesk is free, forever, with every feature. We sell two things:
 
-1. **CollieDesk Cloud**: we run it for you. One flat price per workspace, not per agent.
+1. **Colliedesk Cloud**: we run it for you. One flat price per workspace, not per agent.
 2. **Migration**: we move your Freshdesk history (tickets, replies, attachments, tags) and give
    you a reconcile report that proves nothing was lost.
 
@@ -23,7 +23,7 @@ On the cloud you can bring your key or use ours at cost plus a small margin.
 
 ## If you don't like something, fork it
 
-You were held hostage at renewal once. That should not happen again. CollieDesk is AGPL-3.0:
+You were held hostage at renewal once. That should not happen again. Colliedesk is AGPL-3.0:
 the code, your data and the export format are yours. If we ever go in the wrong direction,
 you have everything you need to run it yourself or fork it.
 
@@ -36,8 +36,8 @@ curl -fsSL https://raw.githubusercontent.com/colliedesk/colliedesk/main/install.
   --name "My Support Desk" --email "admin@example.com"
 ```
 
-The installer starts CollieDesk and PostgreSQL, keeps your secrets in a local `.env`, and prints a
-one-time sign-in URL. CollieDesk does not use passwords. Details: [docs/user/install.md](docs/user/install.md).
+The installer starts Colliedesk and PostgreSQL, keeps your secrets in a local `.env`, and prints a
+one-time sign-in URL. Colliedesk does not use passwords. Details: [docs/user/install.md](docs/user/install.md).
 
 ## What works today
 
@@ -56,6 +56,6 @@ or a coding agent.
 
 ## License
 
-Copyright (C) 2026 HC Labs. CollieDesk is licensed under the GNU Affero General Public License
+Copyright (C) 2026 HC Labs. Colliedesk is licensed under the GNU Affero General Public License
 v3.0 only (`AGPL-3.0-only`). See `LICENSE`. Contributions require the HC Labs CLA
 (see `CONTRIBUTING.md`).

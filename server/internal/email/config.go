@@ -9,7 +9,7 @@ import (
 // From policies decide which address replies are sent from.
 const (
 	// FromPolicyVerified sends as the support address only after its domain is verified by DNS;
-	// otherwise as "<workspace> via CollieDesk" <reply+token@MAIL_FROM_DOMAIN>. Use it on a shared relay.
+	// otherwise as "<workspace> via Colliedesk" <reply+token@MAIL_FROM_DOMAIN>. Use it on a shared relay.
 	FromPolicyVerified = "verified"
 	// FromPolicyAny always sends as the support address. Use it when the operator owns the relay.
 	FromPolicyAny = "any"

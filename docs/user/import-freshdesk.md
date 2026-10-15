@@ -1,23 +1,23 @@
 # Import from Freshdesk
 
-`colliedesk import freshdesk` copies a Freshdesk account into a CollieDesk workspace through the
+`colliedesk import freshdesk` copies a Freshdesk account into a Colliedesk workspace through the
 Freshdesk API. It ends with a reconcile report that compares what Freshdesk holds with what
-CollieDesk now holds. If anything is missing, the report says **FAILED** and lists the Freshdesk
+Colliedesk now holds. If anything is missing, the report says **FAILED** and lists the Freshdesk
 ids. If the totals could not be confirmed, it says **UNVERIFIED**. Both end with a non-zero exit
 code. Run the same command again to retry: finished items are never copied twice.
 
 ## What is imported
 
-| Freshdesk | CollieDesk |
+| Freshdesk | Colliedesk |
 |---|---|
 | Contacts | Contacts (matched by email when the contact already exists) |
 | Companies | The contact's **organization** |
-| Agents | Matched by email to your CollieDesk agents; otherwise the author name is kept |
+| Agents | Matched by email to your Colliedesk agents; otherwise the author name is kept |
 | Tickets, including archived tickets | Conversations with the original subject, status, priority, assignee, tags and timestamps |
 | Ticket description, replies, incoming replies, private and public notes, forwards | Timeline messages with the original author, time, from/to/cc/bcc and Freshdesk kind. A forward to a third party and a public note become notes, never replies to the customer |
 | Ticket type, channel, due dates, cc and forwarded-to addresses | Shown in the conversation details |
 | Original message HTML | **Show original** on the message (shown in a locked frame that runs no scripts and loads nothing) |
-| Attachments | Files stored by CollieDesk, each with a SHA-256 checksum |
+| Attachments | Files stored by Colliedesk, each with a SHA-256 checksum |
 | Time entries | Time entries (agent, minutes, note, billable, time), shown under **Time logged** on the timeline |
 
 Status mapping: Open → Open, Pending → Pending, Resolved → Resolved, Closed → Closed. Custom
@@ -28,8 +28,8 @@ The report lists what is **not** imported, for example custom fields and knowled
 
 ## Before you start
 
-1. Create the CollieDesk workspace (see [Install](install.md)).
-2. Invite your team first. Replies by an agent link to that agent only when a CollieDesk agent
+1. Create the Colliedesk workspace (see [Install](install.md)).
+2. Invite your team first. Replies by an agent link to that agent only when a Colliedesk agent
    with the same email exists.
 3. Get a Freshdesk API key from an **admin** account with access to all tickets. The import reads
    the account id (View Account), which needs an admin key:
@@ -37,7 +37,7 @@ The report lists what is **not** imported, for example custom fields and knowled
    2. Select your profile picture, then **Profile settings**.
    3. Copy the key under **Your API Key**.
 
-The key gives read access to the whole account. Keep it in an environment variable. CollieDesk
+The key gives read access to the whole account. Keep it in an environment variable. Colliedesk
 never accepts it as a command-line argument and never prints it.
 
 ## Run the import
@@ -91,7 +91,7 @@ Only one import or undo runs in a workspace at a time. A second one stops at onc
 
 ## How completeness is checked
 
-Freshdesk's ticket list leaves out archived, trashed and spam tickets. CollieDesk therefore checks
+Freshdesk's ticket list leaves out archived, trashed and spam tickets. Colliedesk therefore checks
 every ticket number from 1 one by one, and keeps checking past the highest number it knows until
 200 numbers in a row do not exist (or at least up to `--last-ticket-id`). It also compares its
 counts with the totals Freshdesk reports for tickets and contacts. The report says how each total
@@ -117,7 +117,7 @@ An import into the wrong workspace can be removed:
 Undo removes the conversations the import created, with their messages, attachments and time
 entries, and the contacts and tags it created that nothing else uses. A conversation where your
 team wrote a message after the import is kept. Contacts and tags that existed before the import
-are kept. Changes without a new message (status, assignee or tags changed in CollieDesk) are
+are kept. Changes without a new message (status, assignee or tags changed in Colliedesk) are
 removed together with their conversation. Run the import again afterwards if you want the data back.
 
 ## Read the report
@@ -130,7 +130,7 @@ tools.
   `UNVERIFIED` means nothing failed but completeness could not be proven (see **How the totals were
   verified**). `DRY_RUN` is a preview.
 - **Counts**: contacts, tickets, messages, attachments and time entries in Freshdesk and in
-  CollieDesk.
+  Colliedesk.
 - **Attachment bytes**: total size reported by Freshdesk and total size stored. Every stored file
   is read again and its SHA-256 compared with the value recorded at download.
 - **Ticket ids that could not be resolved (archive unavailable)**: ticket numbers Freshdesk does
@@ -138,7 +138,7 @@ tools.
 - **Deleted in Freshdesk during the import**, **In Freshdesk Trash**, **In Freshdesk Spam**:
   tickets that were not imported, by id.
 - **Warnings**: data that was imported with a change you should know about, for example a
-  contact without an email or a Freshdesk agent who has no CollieDesk account.
+  contact without an email or a Freshdesk agent who has no Colliedesk account.
 
 Do not close the Freshdesk account until the last report says `OK`.
 

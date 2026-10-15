@@ -16,7 +16,7 @@ from the public Freshdesk API v2 documentation (developers.freshdesk.com/api) on
 | `attachment_url` is a short-lived pre-signed link | Download as soon as the parent is read. A 400/403/410 from the file host counts as expired: re-read the ticket once for a fresh URL and retry |
 | Attachment size is `size` in most examples, `file_size` in one | Read both |
 | Rate limit: `X-Ratelimit-Remaining`, 429 with `Retry-After` | Remaining `0` pauses the next request one minute. 429 waits `Retry-After` (60 s if absent). 5xx and network errors retry four times with 2–16 s backoff |
-| Conversation `source`: 0 reply, 2 note, 8 forwarded email | A forward (`source` 8, not incoming) went to a third party and a public note (`source` 2, not private) was not an email to the customer: both become CollieDesk notes. `origin.kind` keeps the Freshdesk meaning |
+| Conversation `source`: 0 reply, 2 note, 8 forwarded email | A forward (`source` 8, not incoming) went to a third party and a public note (`source` 2, not private) was not an email to the customer: both become Colliedesk notes. `origin.kind` keeps the Freshdesk meaning |
 | Time entries of archived tickets: no documented endpoint | Warning per ticket; listed under "not imported" |
 | View Account (`/api/v2/account`) gives `account_id` | Required. The ledger is keyed by it |
 
@@ -52,7 +52,7 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
 ## Decisions
 
 - **The ledger is the source of idempotency.** `import_items` maps `(workspace, source, entity,
-  Freshdesk id)` to a CollieDesk id; `source` is `freshdesk:account:<account_id>`, so renaming the
+  Freshdesk id)` to a Colliedesk id; `source` is `freshdesk:account:<account_id>`, so renaming the
   Freshdesk subdomain does not import again. Each row is written in the same transaction as the
   row it describes. A ticket's row is `failed` ("incomplete") from the moment its conversation is
   created until every child succeeded, so an interruption at any point resumes correctly.
@@ -64,7 +64,7 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
   not newer. A newer ticket is processed again: new children are added, existing ones are skipped
   by id, and subject, status, priority, assignee, `origin` and `updated_at` are overwritten. Tags
   are only added. `ticketMeta` keeps source counts so a skipped ticket still counts in the report.
-- **A partial import is FAILED.** Any failed ledger row, any count where CollieDesk holds fewer
+- **A partial import is FAILED.** Any failed ledger row, any count where Colliedesk holds fewer
   items than Freshdesk, a byte total that differs, or a stored file whose SHA-256 no longer matches.
 - **Stored files are re-verified every run.** A missing or changed file turns its attachment and
   ticket back to `failed`; the next run downloads it into the same attachment row.
@@ -83,7 +83,7 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
 - **Bodies.** `body_text` becomes the Markdown body. The original HTML is stored in
   `messages.body_html` and returned by the API; the UI shows it only in an `iframe sandbox=""` whose
   CSP is `default-src 'none'` (no scripts, no network, so no tracking pixels either).
-- **People.** Agents match CollieDesk agents by email in the same workspace; `author_name` is
+- **People.** Agents match Colliedesk agents by email in the same workspace; `author_name` is
   always stored. Contacts reuse a contact with the same email in the same workspace. A contact
   without email gets `freshdesk-contact-<id>@import.invalid` (RFC 2606). Companies become
   `contacts.organization`; companies without contacts are reported.

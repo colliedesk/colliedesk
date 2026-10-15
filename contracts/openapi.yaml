@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: CollieDesk API
+  title: Colliedesk API
   version: 0.2.0
   description: >
     Passwordless, workspace-scoped helpdesk API.
@@ -750,7 +750,7 @@ components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
     sessionCookie: {type: apiKey, in: cookie, name: colliedesk_session}
-    inboundSecret: {type: apiKey, in: header, name: X-CollieDesk-Inbound-Secret}
+    inboundSecret: {type: apiKey, in: header, name: X-Colliedesk-Inbound-Secret}
     polarWebhook: {type: apiKey, in: header, name: webhook-signature}
   parameters:
     ID:
@@ -1013,7 +1013,7 @@ components:
         assignee_id: {type: [string, 'null'], format: uuid}
         tags: {type: array, items: {$ref: '#/components/schemas/Tag'}}
         origin:
-          description: Where an imported conversation came from; null for conversations created in CollieDesk.
+          description: Where an imported conversation came from; null for conversations created in Colliedesk.
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/ConversationOrigin'}
@@ -1045,7 +1045,7 @@ components:
         id: {type: string, format: uuid}
         conversation_id: {type: string, format: uuid}
         author_agent_id: {type: [string, 'null'], format: uuid}
-        author_name: {type: [string, 'null'], description: 'Display name of an author without a CollieDesk agent account (customer or imported agent)'}
+        author_name: {type: [string, 'null'], description: 'Display name of an author without a Colliedesk agent account (customer or imported agent)'}
         kind: {type: string, enum: [incoming, outgoing, note]}
         body: {type: string}
         body_html:
@@ -1054,7 +1054,7 @@ components:
             Original HTML of an imported message. Untrusted content: render it only in a sandboxed
             frame that runs no scripts and loads nothing from the network.
         origin:
-          description: Where an imported message came from; null for messages written in CollieDesk.
+          description: Where an imported message came from; null for messages written in Colliedesk.
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/MessageOrigin'}

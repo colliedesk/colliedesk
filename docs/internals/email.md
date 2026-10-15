@@ -31,7 +31,7 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   sends as its support address only after a DNS TXT check: `_colliedesk.<domain>` must hold
   `colliedesk-verification=<token>`. The token is per workspace, so one workspace's record never
   verifies another's. Changing the address resets verification and the token. Unverified, the
-  worker sends `"<workspace> via CollieDesk" <reply+<conversation token>@MAIL_FROM_DOMAIN>` as
+  worker sends `"<workspace> via Colliedesk" <reply+<conversation token>@MAIL_FROM_DOMAIN>` as
   From and envelope sender, with `Reply-To: support+r-<token>@<support domain>`; replies thread
   through Reply-To and In-Reply-To. Without `MAIL_FROM_DOMAIN` an unverified workspace cannot send.
   `any` keeps the support address always (self-host, operator owns the relay).

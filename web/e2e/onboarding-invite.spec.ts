@@ -83,7 +83,7 @@ test('invite teammate: admin invites, teammate joins under the agent ceiling, ad
   const lateContext = await browser.newContext();
   const latePage = await lateContext.newPage();
   await latePage.goto(lateURL);
-  await latePage.getByRole('button', { name: 'Continue to CollieDesk' }).click();
+  await latePage.getByRole('button', { name: 'Continue to Colliedesk' }).click();
   await expect(latePage.getByRole('alert')).toContainText('This link is invalid, expired, or already used.');
   await expect(latePage).toHaveURL(/\/redeem\?token=/);
 

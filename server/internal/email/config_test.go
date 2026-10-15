@@ -19,7 +19,7 @@ func TestConfigFromEnvDefaultsToVerifiedPolicyAndValidates(t *testing.T) {
 			t.Errorf("invalid %s accepted", name)
 		}
 	}
-	env := map[string]string{"EMAIL_FROM_POLICY": "any", "MAIL_FROM_DOMAIN": "Mail.CollieDesk.example", "EMAIL_TRUSTED_AUTHSERV_ID": "mx.cloudflare.net"}
+	env := map[string]string{"EMAIL_FROM_POLICY": "any", "MAIL_FROM_DOMAIN": "Mail.Colliedesk.example", "EMAIL_TRUSTED_AUTHSERV_ID": "mx.cloudflare.net"}
 	config, err = email.ConfigFromEnv(func(key string) string { return env[key] })
 	if err != nil || config.FromPolicy != "any" || config.MailFromDomain != "mail.colliedesk.example" || config.TrustedAuthServID != "mx.cloudflare.net" {
 		t.Fatalf("parsed: %+v %v", config, err)
@@ -44,7 +44,7 @@ func TestConfigFromEnvReadsThePlatformInboundSecret(t *testing.T) {
 
 func TestConfigFromEnvReadsTheHostedMailDomain(t *testing.T) {
 	secret := "0123456789abcdef0123456789abcdef" // gitleaks:allow (test placeholder)
-	env := map[string]string{"HOSTED_MAIL_DOMAIN": "CollieDesk.com", "MAIL_FROM_INBOUND_SECRET": secret}
+	env := map[string]string{"HOSTED_MAIL_DOMAIN": "Colliedesk.com", "MAIL_FROM_INBOUND_SECRET": secret}
 	config, err := email.ConfigFromEnv(func(key string) string { return env[key] })
 	if err != nil || config.HostedMailDomain != "colliedesk.com" || config.PlatformInboundSecret != secret {
 		t.Fatalf("hosted domain not read: %+v %v", config, err)
