@@ -246,6 +246,8 @@ jobs:
         run: sh tests/ci-ok-needs-test.sh
       - name: Actions and base images are pinned
         run: sh tests/pinned-dependencies-test.sh
+      - name: The pinned-action check fails only on missing pins
+        run: sh tests/pinned-actions-fetchable-decision-test.sh
       - name: Pinned action archives are fetchable
         run: sh tests/pinned-actions-fetchable-test.sh
       - name: Every job passed or was skipped
