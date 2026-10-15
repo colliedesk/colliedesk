@@ -25,6 +25,7 @@ export const billingSchema = z.object({
   plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(),
   status: z.enum(['none', 'incomplete', 'incomplete_expired', 'trialing', 'active', 'past_due', 'canceled', 'unpaid', 'paused', 'unknown']),
   current_period_end: nullableDate, cancel_at_period_end: z.boolean(), active_subscriptions: z.number().int(),
+  complimentary: z.boolean(), complimentary_until: nullableDate,
   limits: z.object({ agents: z.number().int() }),
   usage: z.object({ agents: z.number().int(), pending_invites: z.number().int() }),
 }) satisfies z.ZodType<Generated<'Billing'>>;

@@ -72,6 +72,10 @@ func (a *API) createCheckout(response http.ResponseWriter, request *http.Request
 		writeInternalError(response, err)
 		return
 	}
+	if current.Complimentary {
+		writeError(response, http.StatusConflict, "already_subscribed", "This workspace is on a complimentary plan, so it has nothing to buy. Contact HC Labs to change it.")
+		return
+	}
 	if current.Plan != domain.PlanTrial && current.Plan != domain.PlanNone {
 		writeError(response, http.StatusConflict, "already_subscribed", "This workspace already has a paid plan. Change or cancel it from the billing portal.")
 		return

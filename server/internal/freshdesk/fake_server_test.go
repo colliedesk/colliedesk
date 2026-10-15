@@ -37,6 +37,7 @@ type fakeFreshdesk struct {
 	foreignNextLink      bool
 	archiveForbidden     bool
 	allArchived          bool
+	noTickets            bool
 	failSearch           bool
 	searchTicketTotal    int
 	failAttachment       string
@@ -140,11 +141,13 @@ func (f *fakeFreshdesk) serveAPI(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 2 && parts[0] == "contacts":
 		f.object(w, "contact-"+parts[1]+".json")
 	case r.URL.Path == "/api/v2/tickets":
-		if f.allArchived {
+		if f.allArchived || f.noTickets {
 			writeJSON(w, http.StatusOK, []any{})
 			return
 		}
 		f.page(w, r, f.ticketList(r.URL.Query().Get("updated_since")))
+	case f.noTickets && parts[0] == "tickets":
+		writeJSON(w, http.StatusNotFound, map[string]string{"message": "not found"})
 	case len(parts) == 3 && parts[1] == "archived":
 		f.archived(w, parts[2], n)
 	case len(parts) == 4 && parts[1] == "archived" && parts[3] == "conversations":
@@ -185,6 +188,9 @@ func (f *fakeFreshdesk) search(w http.ResponseWriter, r *http.Request) {
 		total = 5 // live tickets 1, 2, 4, 6 and trashed 5; archived are excluded
 		if f.allArchived {
 			total = 1
+		}
+		if f.noTickets {
+			total = 0
 		}
 		if f.searchTicketTotal >= 0 {
 			total = f.searchTicketTotal

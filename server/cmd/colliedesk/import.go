@@ -13,6 +13,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
+	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -122,7 +123,7 @@ func parseImportFlags(args []string) (freshdesk.Options, string, error) {
 	if apiKey == "" {
 		return freshdesk.Options{}, "", fmt.Errorf("environment variable %s is empty; export your Freshdesk API key there", *keyEnv)
 	}
-	options := freshdesk.Options{WorkspaceSlug: *workspace, BaseURL: freshdeskBaseURL(host), APIKey: apiKey, DryRun: *dryRun, LastTicketID: *lastTicket}
+	options := freshdesk.Options{WorkspaceSlug: *workspace, BaseURL: freshdeskBaseURL(host), APIKey: apiKey, DryRun: *dryRun, LastTicketID: *lastTicket, Cloud: billingEnabled()}
 	if *since != "" {
 		parsed, err := parseSince(*since)
 		if err != nil {
@@ -141,4 +142,10 @@ func parseSince(value string) (time.Time, error) {
 		return parsed, nil
 	}
 	return time.Time{}, fmt.Errorf("--since must be YYYY-MM-DD (UTC) or an RFC 3339 time, got %q", value)
+}
+
+// billingEnabled is true where the trial exists: the instance has the hosted billing configured.
+func billingEnabled() bool {
+	config, err := polar.ConfigFromEnv(os.Getenv)
+	return err == nil && config.Enabled()
 }

@@ -30,6 +30,9 @@ type Options struct {
 	// RateLimitPause is the wait after a response reports zero remaining calls.
 	RateLimitPause time.Duration
 
+	// Cloud is true on Colliedesk Cloud, the only place a trial exists. A self-hosted run still
+	// moves the stored end (nothing reads it) but reports nothing about it.
+	Cloud bool
 	// Now is the clock of the trial extension; nil means time.Now.
 	Now func() time.Time
 

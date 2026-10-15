@@ -164,6 +164,7 @@ export const messages = {
   linkPlanLimited: 'This workspace has reached the agent limit of its plan, so the link cannot add you yet. Ask a workspace admin to upgrade, then use this link again before it expires, or ask for a new link.',
   renewsOn: (when: string) => `Renews ${when}.`,
   cancelsOn: (when: string) => `Cancels ${when}. You keep the plan until then.`,
+  complimentaryPlan: (plan: string, until: string | null) => (until ? `Complimentary ${plan} plan (until ${until})` : `Complimentary ${plan} plan`),
   pastDueNotice: 'Your last payment failed. The plan stays active while the payment is retried; update your card in the billing portal.',
   duplicateSubscriptions: 'This workspace has more than one active subscription, so it is paying twice. Open Manage billing and cancel the extra one.',
   checkoutReturned: 'Payment received. Your plan updates in a few moments.',
