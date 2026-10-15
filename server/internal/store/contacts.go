@@ -46,16 +46,25 @@ func getContact(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.
 }
 
 // ContactFilter narrows a contact list. IDs, when not nil, keeps only those contacts; an id that
-// names no contact of the workspace is skipped.
+// names no contact of the workspace is skipped. Limit, when above zero, caps the list.
 type ContactFilter struct {
 	Search string
 	IDs    []pgtype.UUID
+	Limit  int
 }
 
-func (s *Store) ListContacts(ctx context.Context, workspaceID string, filter ContactFilter) ([]domain.Contact, error) {
-	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.Contact, error) {
-		return listContacts(ctx, tx, workspaceID, filter)
+// ListContacts returns the contacts in name order. hasMore is true when a limit cut the list: the
+// query asks for one row beyond the limit, so no count of all matches is ever made.
+func (s *Store) ListContacts(ctx context.Context, workspaceID string, filter ContactFilter) (contacts []domain.Contact, hasMore bool, err error) {
+	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		var err error
+		contacts, hasMore, err = listContacts(ctx, tx, workspaceID, filter)
+		return err
 	})
+	if err != nil {
+		return nil, false, err
+	}
+	return contacts, hasMore, nil
 }
 
 const (
@@ -63,7 +72,7 @@ const (
 	contactMatches = `($2='' OR name ILIKE '%'||$2||'%' ESCAPE '\' OR email ILIKE '%'||$2||'%' ESCAPE '\')`
 )
 
-func listContacts(ctx context.Context, tx pgx.Tx, workspaceID string, filter ContactFilter) ([]domain.Contact, error) {
+func listContacts(ctx context.Context, tx pgx.Tx, workspaceID string, filter ContactFilter) ([]domain.Contact, bool, error) {
 	query := `SELECT ` + contactColumns + ` FROM contacts WHERE workspace_id=$1 AND ` + contactMatches + ` ORDER BY name,id`
 	args := []any{workspaceID, escapeLikePattern(filter.Search)}
 	if filter.IDs != nil {
@@ -72,24 +81,32 @@ func listContacts(ctx context.Context, tx pgx.Tx, workspaceID string, filter Con
 		query = `SELECT ` + contactColumns + ` FROM contacts WHERE workspace_id=$1 AND id=ANY($3::uuid[]) AND ` + contactMatches + ` ORDER BY name,id`
 		args = append(args, filter.IDs)
 	}
+	if filter.Limit > 0 {
+		args = append(args, filter.Limit+1)
+		query += fmt.Sprintf(" LIMIT $%d", len(args))
+	}
 	rows, err := tx.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list contacts: %w", err)
+		return nil, false, fmt.Errorf("list contacts: %w", err)
 	}
 	defer rows.Close()
 	contacts := make([]domain.Contact, 0)
 	for rows.Next() {
 		var contact domain.Contact
 		if err := rows.Scan(&contact.ID, &contact.Name, &contact.Email, &contact.Organization, &contact.CreatedAt, &contact.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("scan contact: %w", err)
+			return nil, false, fmt.Errorf("scan contact: %w", err)
 		}
 		contact.CreatedAt, contact.UpdatedAt = domain.UTC(contact.CreatedAt), domain.UTC(contact.UpdatedAt)
 		contacts = append(contacts, contact)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate contacts: %w", err)
+		return nil, false, fmt.Errorf("iterate contacts: %w", err)
 	}
-	return contacts, nil
+	hasMore := filter.Limit > 0 && len(contacts) > filter.Limit
+	if hasMore {
+		contacts = contacts[:filter.Limit]
+	}
+	return contacts, hasMore, nil
 }
 
 func contactConversations(ctx context.Context, tx pgx.Tx, workspaceID, contactID string) ([]domain.Conversation, error) {

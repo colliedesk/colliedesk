@@ -2109,6 +2109,8 @@ export interface operations {
                 search?: string;
                 /** @description Comma-separated contact ids (UUIDs), at most 100. Only these contacts of the workspace are returned, in name order; an unknown id, or an id of another workspace, is skipped. More than 100 ids, an empty entry or a value that is not a UUID answers 400 and names the problem. Combines with search. */
                 ids?: string;
+                /** @description Return at most this many contacts (1 to 200), the first in name order. Without it every matching contact is returned. With it, `has_more` says whether more matched. Any other value answers 400. */
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -2124,6 +2126,8 @@ export interface operations {
                 content: {
                     "application/json": {
                         items: components["schemas"]["Contact"][];
+                        /** @description Present only when `limit` was given. True when more contacts matched than were returned. */
+                        has_more?: boolean;
                     };
                 };
             };

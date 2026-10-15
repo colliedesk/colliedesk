@@ -592,6 +592,13 @@ paths:
             100 ids, an empty entry or a value that is not a UUID answers 400 and names the problem.
             Combines with search.
           schema: {type: string}
+        - name: limit
+          in: query
+          description: >-
+            Return at most this many contacts (1 to 200), the first in name order. Without it every
+            matching contact is returned. With it, `has_more` says whether more matched. Any other
+            value answers 400.
+          schema: {type: integer, minimum: 1, maximum: 200}
       responses:
         '200':
           description: Workspace contacts
@@ -602,6 +609,9 @@ paths:
                 required: [items]
                 properties:
                   items: {type: array, items: {$ref: '#/components/schemas/Contact'}}
+                  has_more:
+                    type: boolean
+                    description: Present only when `limit` was given. True when more contacts matched than were returned.
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
     post:

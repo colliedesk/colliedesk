@@ -19,7 +19,7 @@ func contactsFindSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_contacts_find",
 		Title: "Find customers",
-		Description: `Find customers (contacts) whose name or email contains your words. Returns up to limit matches, ordered by name, and the total number of matches. ` +
+		Description: `Find customers (contacts) whose name or email contains your words. Returns up to limit matches, ordered by name, and says in truncated whether more matched. ` +
 			`The query needs at least 2 characters.` +
 			"\n\n" + untrustedNotice + "\n\nTier: read.",
 		Tier: "read", ReadOnly: true,
@@ -27,9 +27,9 @@ func contactsFindSpec() Spec {
 		Input: `{"type":"object","additionalProperties":false,"required":["query"],"properties":{` +
 			`"query":{"type":"string","minLength":2,"maxLength":200,"description":"Part of a name or an email address."},` +
 			`"limit":{"type":"integer","minimum":1,"maximum":50,"default":10},` + detailProperty + `}}`,
-		Output: `{"type":"object","required":["contacts","total_matches","truncated"],"properties":{"contacts":{"type":"array","items":{"type":"object","required":["id","untrusted_customer_content"],"properties":{` +
+		Output: `{"type":"object","required":["contacts","truncated"],"properties":{"contacts":{"type":"array","items":{"type":"object","required":["id","untrusted_customer_content"],"properties":{` +
 			`"id":{"type":"string"},"created_at":{"type":"string"},"untrusted_customer_content":{"type":"object","properties":{"name":{"type":"string"},"email":{"type":"string"},"organization":{"type":["string","null"]}}}}}},` +
-			`"total_matches":{"type":"integer"},"truncated":{"type":"boolean","description":"True when more contacts matched than were returned; narrow the query."}}}`,
+			`"truncated":{"type":"boolean","description":"True when more contacts matched than were returned; narrow the query."}}}`,
 		run: contactsFind,
 	}
 }

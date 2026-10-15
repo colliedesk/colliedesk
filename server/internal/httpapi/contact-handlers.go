@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -37,8 +38,12 @@ func (a *API) getContact(response http.ResponseWriter, request *http.Request) {
 	writeJSON(response, http.StatusOK, contact)
 }
 
-// maxContactIDs bounds the ids= filter of the contact list.
-const maxContactIDs = 100
+const (
+	// maxContactIDs bounds the ids= filter of the contact list.
+	maxContactIDs = 100
+	// maxContactLimit bounds the limit= parameter of the contact list.
+	maxContactLimit = 200
+)
 
 var contactIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
@@ -53,12 +58,24 @@ func (a *API) listContacts(response http.ResponseWriter, request *http.Request) 
 		}
 		filter.IDs = ids
 	}
-	contacts, err := a.store.ListContacts(request.Context(), principal(request).Workspace.ID, filter)
+	if query.Has("limit") {
+		limit, err := strconv.Atoi(query.Get("limit"))
+		if err != nil || limit < 1 || limit > maxContactLimit {
+			writeError(response, http.StatusBadRequest, "invalid_request", fmt.Sprintf("limit must be a whole number from 1 to %d.", maxContactLimit))
+			return
+		}
+		filter.Limit = limit
+	}
+	contacts, hasMore, err := a.store.ListContacts(request.Context(), principal(request).Workspace.ID, filter)
 	if err != nil {
 		writeStoreError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusOK, map[string]any{"items": contacts})
+	body := map[string]any{"items": contacts}
+	if filter.Limit > 0 {
+		body["has_more"] = hasMore
+	}
+	writeJSON(response, http.StatusOK, body)
 }
 
 // parseContactIDs reads a comma-separated list of contact ids as uuids. The first bad entry makes the

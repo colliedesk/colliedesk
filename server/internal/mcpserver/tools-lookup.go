@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
@@ -67,9 +68,8 @@ type contactOutRow struct {
 }
 
 type contactsOut struct {
-	Contacts     []contactOutRow `json:"contacts"`
-	TotalMatches int             `json:"total_matches"`
-	Truncated    bool            `json:"truncated"`
+	Contacts  []contactOutRow `json:"contacts"`
+	Truncated bool            `json:"truncated"`
 }
 
 func contactsFind(c *call, arguments map[string]any) (any, error) {
@@ -84,16 +84,15 @@ func contactsFind(c *call, arguments map[string]any) (any, error) {
 		return nil, &toolError{"The query needs at least 2 characters of a name or an email address."}
 	}
 	var found struct {
-		Items []restContact `json:"items"`
+		Items   []restContact `json:"items"`
+		HasMore bool          `json:"has_more"`
 	}
-	if err := c.get("/api/v1/contacts", url.Values{"search": {strings.TrimSpace(args.Query)}}, &found); err != nil {
+	query := url.Values{"search": {strings.TrimSpace(args.Query)}, "limit": {strconv.Itoa(args.Limit)}}
+	if err := c.get("/api/v1/contacts", query, &found); err != nil {
 		return nil, err
 	}
-	out := contactsOut{Contacts: []contactOutRow{}, TotalMatches: len(found.Items), Truncated: len(found.Items) > args.Limit}
-	for index, contact := range found.Items {
-		if index == args.Limit {
-			break
-		}
+	out := contactsOut{Contacts: make([]contactOutRow, 0, len(found.Items)), Truncated: found.HasMore}
+	for _, contact := range found.Items {
 		row := contactOutRow{ID: contact.ID, UntrustedCustomerContent: contactOut{Name: contact.Name, Email: contact.Email}}
 		if args.Detail == "full" {
 			row.CreatedAt = utc(contact.CreatedAt)
