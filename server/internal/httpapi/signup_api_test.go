@@ -29,6 +29,7 @@ func newSignupFixture(t *testing.T, mutate func(*httpapi.Config)) signupFixture 
 	fixture := newCloudAuthFixtureWith(t, "", func(config *httpapi.Config) {
 		config.Now = clock.Now
 		config.Billing = fake.config()
+		config.SignupHashKey = testSignupKey
 		hostedConfig(config)
 		if mutate != nil {
 			mutate(config)
@@ -36,6 +37,9 @@ func newSignupFixture(t *testing.T, mutate func(*httpapi.Config)) signupFixture 
 	})
 	return signupFixture{cloudAuthFixture: fixture, clock: clock}
 }
+
+// testSignupKey is the SIGNUP_HASH_KEY of the signup tests: 32 bytes.
+const testSignupKey = "0123456789abcdef0123456789abcdef"
 
 const defaultPeer = "203.0.113.7:40000"
 
@@ -259,15 +263,19 @@ func TestSignupSlugConflictTwiceIsAnErrorAndBurnsNothing(t *testing.T) {
 	}
 }
 
-func TestSignupStoresHashesAndClearsIPsAfterThirtyDays(t *testing.T) {
+func TestSignupStoresKeyedHashesOnly(t *testing.T) {
 	f := newSignupFixture(t, nil)
 	wantResponse(t, f.signUp(t, "Ada@Example.com", "Acme", defaultPeer), http.StatusCreated, "")
-	// sha256 of "ada@example.com" and of "203.0.113.7", computed outside the code under test.
-	const wantEmail = "b5fc85e55755f9e0d030a10ab4429b6b2944855f9a0d60077fe832becbc41d72"
-	const wantIP = "fec52565aa0cf18f57d7cf5b3ac728503b8992d2d6f7d46da1d1201090902b02"
+	// HMAC-SHA256 with testSignupKey of "ada@example.com" and of "203.0.113.7", computed with openssl.
+	const wantEmail = "e3e30b4d50224a4ba14084607085d072402144212a122eb4501daddd6bbe0ee3"
+	const wantIP = "55a7c9ba39c762e973ffcf294361c78f7c5a830e44341d1686e3c0fcd1f191e3"
 	if got := queryString(t, f.pool, `SELECT email_hash||'/'||ip_hash FROM cloud_signups`); got != wantEmail+"/"+wantIP {
 		t.Fatalf("cloud_signups row = %s, want %s/%s", got, wantEmail, wantIP)
 	}
+}
+
+func TestSignupAddressSweepClearsOnlyOldHashes(t *testing.T) {
+	f := newSignupFixture(t, nil)
 	seed := func(key string, age time.Duration) {
 		if _, err := f.pool.Exec(context.Background(), `INSERT INTO cloud_signups(email_hash,ip_hash,created_at) VALUES($1,'someip',$2)`, key, signupStart.Add(-age)); err != nil {
 			t.Fatal(err)
@@ -275,7 +283,10 @@ func TestSignupStoresHashesAndClearsIPsAfterThirtyDays(t *testing.T) {
 	}
 	seed("old", 31*24*time.Hour)
 	seed("recent", 29*24*time.Hour)
-	wantResponse(t, f.signUp(t, "next@example.com", "Next", "198.51.100.1:1"), http.StatusCreated, "")
+	cleared, err := f.service.WithClock(f.clock.Now).ClearSignupAddresses(context.Background())
+	if err != nil || cleared != 1 {
+		t.Fatalf("ClearSignupAddresses = %d, %v; want 1 row", cleared, err)
+	}
 	if got := queryString(t, f.pool, `SELECT COALESCE(ip_hash,'-') FROM cloud_signups WHERE email_hash='old'`); got != "-" {
 		t.Fatalf("31 day old ip_hash = %q, want it cleared", got)
 	}
@@ -284,6 +295,28 @@ func TestSignupStoresHashesAndClearsIPsAfterThirtyDays(t *testing.T) {
 	}
 	if got := f.count(t, "cloud_signups WHERE email_hash='old'"); got != "1" {
 		t.Fatalf("the old email hash row was deleted; it must stay so the trial is not handed out twice")
+	}
+}
+
+func TestSignupMalformedEmailIsABadRequest(t *testing.T) {
+	f := newSignupFixture(t, nil)
+	for _, address := range []string{"a@b@c.com", "+tag@example.com", "two words@example.com"} {
+		wantResponse(t, f.signUp(t, address, "Acme", defaultPeer), http.StatusBadRequest, "invalid_request")
+	}
+}
+
+func TestSignupSlugIsAlwaysAValidHostedLabel(t *testing.T) {
+	f := newSignupFixture(t, nil)
+	response := f.signUp(t, "idn@example.com", "xn--shop", defaultPeer)
+	wantResponse(t, response, http.StatusCreated, "")
+	var created struct {
+		Workspace struct {
+			Slug string `json:"slug"`
+		} `json:"workspace"`
+	}
+	decode(t, response, &created)
+	if created.Workspace.Slug != "xn-shop" { // runs of hyphens collapse, so "xn--" never survives
+		t.Fatalf("slug %q, want xn-shop", created.Workspace.Slug)
 	}
 }
 

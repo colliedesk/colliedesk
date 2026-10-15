@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 // storageCap is written out by hand: 2 GiB.
@@ -144,5 +145,89 @@ func TestBillingExposesStorageUsageAndWarningThreshold(t *testing.T) {
 	}
 	if other := f.usage(t, f.adminB); other.Usage.StorageBytes != 0 {
 		t.Fatalf("workspace B usage=%d, want 0 (usage is per workspace)", other.Usage.StorageBytes)
+	}
+}
+
+// countedStorage is the maintained counter the cap and /billing read.
+func (f limitsFixture) countedStorage(t *testing.T, workspace string) int64 {
+	t.Helper()
+	var counted int64
+	if err := f.pool.QueryRow(context.Background(), `SELECT counted_storage_bytes FROM workspaces WHERE id=$1`, workspace).Scan(&counted); err != nil {
+		t.Fatal(err)
+	}
+	return counted
+}
+
+func TestStorageCounterFollowsEveryWayAnAttachmentChanges(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	conversation := f.conversationA(t)
+	base := f.countedStorage(t, f.workspaceA) // the stored raw message of the first mail
+	if base <= 0 || base != f.ownStorage(t, f.workspaceA) {
+		t.Fatalf("counter=%d after one inbound mail, want the size of its stored files (%d)", base, f.ownStorage(t, f.workspaceA))
+	}
+	messageID := queryString(t, f.pool, `SELECT id::text FROM messages WHERE workspace_id=$1 ORDER BY created_at LIMIT 1`, f.workspaceA)
+
+	f.insertAttachment(t, f.workspaceA, messageID, 1000)
+	f.insertAttachment(t, f.workspaceA, messageID, 250)
+	if got := f.countedStorage(t, f.workspaceA); got != base+1250 {
+		t.Fatalf("after inserts counter=%d, want %d", got, base+1250)
+	}
+	if _, err := f.pool.Exec(context.Background(), `UPDATE attachments SET size=400 WHERE workspace_id=$1 AND size=1000`, f.workspaceA); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.countedStorage(t, f.workspaceA); got != base+650 {
+		t.Fatalf("after replacing a 1000 byte file by 400 bytes counter=%d, want %d", got, base+650)
+	}
+	if _, err := f.pool.Exec(context.Background(), `DELETE FROM attachments WHERE workspace_id=$1 AND filename='seed.bin'`, f.workspaceA); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.countedStorage(t, f.workspaceA); got != base {
+		t.Fatalf("after deleting the seeded files counter=%d, want %d", got, base)
+	}
+
+	// Imported files never count, however they come and go.
+	f.seedImported(t, f.workspaceA, conversation, 5000)
+	if got := f.countedStorage(t, f.workspaceA); got != base {
+		t.Fatalf("after an imported file counter=%d, want %d", got, base)
+	}
+	if _, err := f.pool.Exec(context.Background(), `DELETE FROM messages WHERE workspace_id=$1 AND origin IS NOT NULL`, f.workspaceA); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.countedStorage(t, f.workspaceA); got != base {
+		t.Fatalf("after the imported message was deleted counter=%d, want %d", got, base)
+	}
+	if other := f.countedStorage(t, f.workspaceB); other != 0 {
+		t.Fatalf("workspace B counter=%d, want 0", other)
+	}
+}
+
+// With a workspace holding hundreds of thousands of files, reading usage and the cap check must not
+// scan them: the billing page and an inbound mail both stay inside the 200 ms budget.
+func TestStorageUsageStaysFastWithAHugeAttachmentTable(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	f.receive(t, false, 1, "First")
+	messageID := queryString(t, f.pool, `SELECT id::text FROM messages WHERE workspace_id=$1 ORDER BY created_at LIMIT 1`, f.workspaceA)
+	if _, err := f.pool.Exec(context.Background(), `INSERT INTO attachments(workspace_id,message_id,filename,content_type,size,sha256,storage_key)
+		SELECT $1,$2,'bulk.bin','application/octet-stream',10,repeat('0',64),'bulk/'||g FROM generate_series(1,300000) g`, f.workspaceA, messageID); err != nil {
+		t.Fatal(err)
+	}
+	if want := f.ownStorage(t, f.workspaceA); f.countedStorage(t, f.workspaceA) != want {
+		t.Fatalf("counter=%d after a bulk insert, want %d", f.countedStorage(t, f.workspaceA), want)
+	}
+	const budget = 200 * time.Millisecond
+	started := time.Now()
+	view := f.usage(t, f.adminA)
+	if elapsed := time.Since(started); elapsed > budget {
+		t.Fatalf("GET /billing took %v with 300k attachments, budget %v", elapsed, budget)
+	}
+	if view.Usage.StorageBytes < 3000000 {
+		t.Fatalf("usage.storage_bytes=%d, want at least the 3000000 bulk bytes", view.Usage.StorageBytes)
+	}
+	started = time.Now()
+	if got := inbound(t, f.api, platformSecret, sizedMail(t, 600, 9)); got.Code != http.StatusOK {
+		t.Fatalf("inbound status=%d body=%s", got.Code, got.Body.String())
+	}
+	if elapsed := time.Since(started); elapsed > budget {
+		t.Fatalf("inbound mail took %v with 300k attachments, budget %v", elapsed, budget)
 	}
 }

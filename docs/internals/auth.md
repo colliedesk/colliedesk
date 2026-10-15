@@ -50,31 +50,48 @@ and billing are both configured, so a self-hosted server never offers it. Code:
   providers' aliases (a catch-all domain, `ada@corp` vs `ada@alias.corp`) are not detected.
 - **Three sign-ups per client address in any rolling 24 hours**, then 429 `rate_limited`. A refused
   attempt is not counted. The check, the workspace insert and the record are one privileged
-  transaction under an advisory lock, so a failed create burns neither the email nor an IP slot.
-- **Stored data is minimal.** `cloud_signups` holds the sha256 of the normalized email (it can tell a
-  repeat apart, not give the address back), the sha256 of the client address, the time and the
-  workspace id. The IP hash is set to NULL by the next sign-up once the row is 30 days old; no job
-  is needed. A bare hash of an IPv4 address can be brute-forced, which is why it is cleared, and why
-  it is only ever compared for equality. The client address is also logged at INFO (never the email)
-  so a wrong proxy setting shows as every sign-up coming from one address.
+  transaction under an advisory lock (the cheap refusals run once before the lock, so doomed requests do not queue on it), so a failed create burns neither the email nor an IP slot.
+- **Stored data is minimal and keyed.** `cloud_signups` holds the HMAC-SHA256 of the normalized email,
+  the HMAC-SHA256 of the client address, the time and the workspace id. The key is `SIGNUP_HASH_KEY`
+  (at least 32 random characters, kept in Bitwarden, passed through the compose environment). Without
+  the key a row cannot be tested against a list of addresses; a plain hash of an IPv4 address or of a
+  breached email could. `serve` refuses to start with sign-up enabled and no key. The key cannot be
+  rotated without losing the trial history (every stored hash would stop matching), so treat it like a
+  database secret. The IP hash is set to NULL once the row is 30 days old by a sweep that `serve`
+  runs at start and every hour (`Service.ClearSignupAddresses`), not by sign-ups. The email hash
+  stays for good, because it is what stops a second trial; it is a pseudonymous fingerprint kept
+  under legitimate interest (fraud prevention). The privacy policy must say: we keep a one-way keyed
+  fingerprint of your email to prevent repeated free trials. The client address is not logged at
+  INFO; the log line carries the new workspace slug only.
 - **Client address behind the proxy.** `TRUSTED_PROXIES` is a comma-separated list of CIDRs (or single
   IPs) of the reverse proxies whose `X-Forwarded-For` is believed; the default is empty, meaning the
   peer address is the client. When the peer is trusted, the header is read from the right and the
   first entry that is not a trusted hop is the client (entries to its left were written by the
-  client). A bad list stops `serve` at start. IPv6 clients are bucketed by /64. On collie-01 Caddy
-  runs on the host and reaches the container through Docker, so the peer is the Docker network
-  gateway: set `TRUSTED_PROXIES` to the CIDR of the compose network that publishes `127.0.0.1:8080`
-  (for example `172.18.0.0/16`; read it with `docker network inspect`). With it unset, every
-  sign-up shares one address and the fourth gets 429.
-- **Workspace name.** 2 to 60 characters after trimming. `domain.DeniedBrand` splits the name into
+  client). A bad list stops `serve` at start, and so does an empty list while sign-up is enabled
+  (cloud sign-in and billing both on): without it every sign-up shares the proxy's address and the
+  fourth of the day is refused for everyone. IPv6 clients are bucketed by /64. On collie-01 Caddy
+  runs on the host and reaches the container through Docker, so the peer is the gateway of the
+  compose network that publishes `127.0.0.1:8080`. Trust exactly that address as a `/32` (read it
+  with `docker network inspect`, for example `172.18.0.1/32`), not the whole network: then no other
+  container on the network can forge `X-Forwarded-For`.
+- **Catch-all domains and disposable mail defeat the one-per-email rule.** The key collapses `+tag`
+  and Gmail dots only, so a custom domain with a catch-all address, or a disposable-mail provider,
+  gives unlimited verified emails; the per-IP limit and the caps on mail and storage bound the damage.
+  This is closed in Clerk, not in code: before go-live turn on Clerk's block of disposable email
+  addresses and its sign-up bot protection, and keep them on. The go-live checklist in the trial plan
+  lists both.
+- **Workspace name.** 2 to 60 characters after trimming. `domain.DeniedBrand` first folds the name (lowercase, compatibility
+  forms such as fullwidth letters, accents dropped, common Cyrillic and Greek look-alikes mapped to
+  Latin), then splits it into
   words at every character that is not a letter or digit and refuses it (422 `name_not_allowed`) when
   consecutive words joined together equal a listed brand, so `PayPal Support`, `pay pal` and
   `G-O-O-G-L-E` are refused, while `Pineapple`, `Applebee` and `Googleplex` are not (a brand must be
   a whole word, never a substring). A real business named like a brand (`Apple Orchard`) is
   refused too: it contacts us and an operator creates the workspace with the CLI, which has no
-  such check. Look-alike spellings (`paypa1`) are not caught. The same check runs on
+  such check. Digit-for-letter spellings (`paypa1`) are not caught. The same check runs on
   `PATCH /workspace/slug` when billing is on.
-- **Slug.** Derived from the name; if it is taken, reserved for mail (`support`, `help`) or empty it
+- **Slug.** Derived from the name (runs of hyphens collapse, so it can never start with the reserved
+  `xn--`); every candidate is checked as a hosted label; if it is taken, reserved for mail (`support`, `help`) or empty it
   becomes `<base>-<4 hex>`, tried up to twice more, then 409 `slug_unavailable`.
 
 ### Verification traps

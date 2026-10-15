@@ -46,6 +46,9 @@ type Config struct {
 	// TrustedProxies are the reverse proxies whose X-Forwarded-For is believed when finding the
 	// client address of a sign-up (TRUSTED_PROXIES). Empty trusts none: the peer address is the client.
 	TrustedProxies []netip.Prefix
+	// SignupHashKey keys the hashes of the sign-up records (SIGNUP_HASH_KEY, at least 32 bytes); sign-up
+	// answers 500 without it, and serve refuses to start with sign-up enabled and no key.
+	SignupHashKey string
 	// Random is the entropy for generated workspace slug suffixes; nil uses crypto/rand.
 	Random io.Reader
 }
@@ -99,6 +102,7 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports),
 		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits),
 		store: store.NewWithDB(db).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits)}
+	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
 	if config.Random != nil {
 		api.auth = api.auth.WithRandom(config.Random)
 	}

@@ -1,7 +1,8 @@
 -- One row per email that ever started a cloud trial, so deleting a workspace does not hand out a
--- second trial. Only hashes are stored: the email key is the sha256 of the normalized address (a
--- repeat signup is recognised, the address is not recoverable from the row) and the client IP is a
--- sha256 that is cleared 30 days after the signup, long after the 24 hour rate window needs it.
+-- second trial. Only keyed hashes are stored: HMAC-SHA256 under SIGNUP_HASH_KEY of the normalized
+-- address (a repeat is recognised; without the key the table cannot be tested against a list of
+-- addresses) and of the client IP, which is cleared 30 days after the signup, long after the 24 hour
+-- rate window needs it.
 -- Platform-level table: no workspace policy, only the privileged signup transaction reads it.
 -- Older images ignore it, so rolling back to one only stops the signup checks.
 CREATE TABLE cloud_signups (

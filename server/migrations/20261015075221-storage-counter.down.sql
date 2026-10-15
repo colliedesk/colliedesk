@@ -1,0 +1,10 @@
+DROP TRIGGER IF EXISTS attachments_count_updated ON attachments;
+DROP TRIGGER IF EXISTS attachments_count_deleted ON attachments;
+DROP TRIGGER IF EXISTS attachments_count_inserted ON attachments;
+DROP TRIGGER IF EXISTS attachments_set_counted ON attachments;
+DROP FUNCTION IF EXISTS attachments_count_updated();
+DROP FUNCTION IF EXISTS attachments_count_deleted();
+DROP FUNCTION IF EXISTS attachments_count_inserted();
+DROP FUNCTION IF EXISTS attachments_set_counted();
+ALTER TABLE attachments DROP COLUMN IF EXISTS counted;
+ALTER TABLE workspaces DROP COLUMN IF EXISTS counted_storage_bytes;

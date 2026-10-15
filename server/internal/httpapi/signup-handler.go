@@ -45,6 +45,9 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 	ip := clientIP(request, a.config.TrustedProxies)
 	workspace, err := a.auth.SignUpCloud(request.Context(), auth.SignUp{Email: verified, Name: input.WorkspaceName, ClientIP: ip})
 	switch {
+	case errors.Is(err, auth.ErrInvalidEmail):
+		writeError(response, http.StatusBadRequest, "invalid_request", "The identity provider returned an email address this service cannot use.")
+		return
 	case errors.Is(err, auth.ErrInvalidName):
 		writeError(response, http.StatusBadRequest, "invalid_request", "The workspace name must be 2 to 60 characters.")
 		return
@@ -52,7 +55,7 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 		writeError(response, http.StatusUnprocessableEntity, "name_not_allowed", brandNameMessage)
 		return
 	case errors.Is(err, auth.ErrTrialAlreadyUsed):
-		writeError(response, http.StatusConflict, "trial_already_used", "This email already started a CollieDesk trial. Sign in instead, or contact us.")
+		writeError(response, http.StatusConflict, "trial_already_used", "This email already started a Colliedesk trial. Sign in instead, or contact us.")
 		return
 	case errors.Is(err, auth.ErrSignupRateLimited):
 		writeError(response, http.StatusTooManyRequests, "rate_limited", "Too many sign-ups from this network. Try again tomorrow, or contact us.")
@@ -64,9 +67,9 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 		writeInternalError(response, err)
 		return
 	}
-	// The client address is logged, never the email, so a wrong TRUSTED_PROXIES (every signup from
-	// the proxy's own address) shows up in the log.
-	slog.Info("cloud sign-up", "client_ip", ip)
+	// Never the email, and the address only at debug level: the trial record keeps no raw address.
+	slog.Info("cloud sign-up", "workspace", workspace.Slug)
+	slog.Debug("cloud sign-up client", "client_ip", ip)
 	result, _, err := a.auth.ExchangeCloud(request.Context(), verified, workspace.Slug, "Cloud sign-up")
 	if err != nil {
 		writeInternalError(response, err)

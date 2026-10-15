@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -34,6 +35,9 @@ var (
 	ErrTrialAlreadyUsed  = errors.New("this email already started a trial")
 	ErrSignupRateLimited = errors.New("too many sign-ups from this address")
 	ErrSlugUnavailable   = errors.New("no free workspace address for this name")
+	ErrInvalidEmail      = domain.ErrInvalidEmail
+	// ErrSignupKeyMissing means the service has no SIGNUP_HASH_KEY, so it cannot record a trial.
+	ErrSignupKeyMissing = errors.New("SIGNUP_HASH_KEY is not set")
 )
 
 // SignUp is a request to start a cloud trial.
@@ -49,7 +53,9 @@ type SignUp struct {
 // checks that the mailbox never had a trial and that the address is under its daily limit, creates
 // the workspace and records the signup, so a failed create burns neither. Only hashes are kept: the
 // sha256 of the normalized email (enough to recognise a repeat, not to read the address back) and of
-// the client address, which is cleared after 30 days.
+// the client address, which is cleared after 30 days. Both are HMAC-SHA256 under SIGNUP_HASH_KEY:
+// without the key an address cannot be tested against the table, and the key cannot be rotated
+// without losing the trial history.
 func (s *Service) SignUpCloud(ctx context.Context, in SignUp) (domain.Workspace, error) {
 	name := strings.TrimSpace(in.Name)
 	if length := utf8.RuneCountInString(name); length < minNameLength || length > maxNameLength {
@@ -58,34 +64,28 @@ func (s *Service) SignUpCloud(ctx context.Context, in SignUp) (domain.Workspace,
 	if _, denied := domain.DeniedBrand(name); denied {
 		return domain.Workspace{}, ErrNameNotAllowed
 	}
+	if len(s.signupKey) == 0 {
+		return domain.Workspace{}, ErrSignupKeyMissing
+	}
 	key, err := domain.TrialEmailKey(in.Email)
 	if err != nil {
-		return domain.Workspace{}, fmt.Errorf("sign-up email: %w", err)
+		return domain.Workspace{}, ErrInvalidEmail
 	}
-	emailHash, ipHash := digest(key), digest(in.ClientIP)
+	emailHash, ipHash := s.keyedHash(key), s.keyedHash(in.ClientIP)
 	var workspace domain.Workspace
 	err = s.db.Privileged(ctx, database.PrivilegeCreateWorkspace, func(tx pgx.Tx) error {
 		now := s.now()
-		// One signup at a time: the checks below and the insert must see each other.
+		// Cheap refusals first, without the platform-wide lock, so a loop of doomed requests from one
+		// account queues behind nothing. The same checks run again under the lock, which decides.
+		if err := checkSignupAllowed(ctx, tx, emailHash, ipHash, now); err != nil {
+			return err
+		}
+		// One signup at a time: the checks and the insert must see each other.
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('cloud-signup',0))`); err != nil {
 			return fmt.Errorf("lock sign-ups: %w", err)
 		}
-		if _, err := tx.Exec(ctx, `UPDATE cloud_signups SET ip_hash=NULL WHERE ip_hash IS NOT NULL AND created_at < $1`, now.Add(-signupIPRetention)); err != nil {
-			return fmt.Errorf("clear old sign-up addresses: %w", err)
-		}
-		var used bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM cloud_signups WHERE email_hash=$1)`, emailHash).Scan(&used); err != nil {
-			return fmt.Errorf("check earlier trial: %w", err)
-		}
-		if used {
-			return ErrTrialAlreadyUsed
-		}
-		var recent int
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM cloud_signups WHERE ip_hash=$1 AND created_at > $2`, ipHash, now.Add(-SignupIPWindow)).Scan(&recent); err != nil {
-			return fmt.Errorf("count sign-ups of this address: %w", err)
-		}
-		if recent >= SignupsPerIP {
-			return ErrSignupRateLimited
+		if err := checkSignupAllowed(ctx, tx, emailHash, ipHash, now); err != nil {
+			return err
 		}
 		if workspace, err = s.createUniqueWorkspaceTx(ctx, tx, name, in.Email); err != nil {
 			return err
@@ -102,6 +102,41 @@ func (s *Service) SignUpCloud(ctx context.Context, in SignUp) (domain.Workspace,
 	return workspace, nil
 }
 
+// checkSignupAllowed refuses a mailbox that already had a trial and a client address that already
+// started SignupsPerIP trials in the last SignupIPWindow.
+func checkSignupAllowed(ctx context.Context, tx pgx.Tx, emailHash, ipHash string, now time.Time) error {
+	var used bool
+	var recent int
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM cloud_signups WHERE email_hash=$1),
+		(SELECT count(*) FROM cloud_signups WHERE ip_hash=$2 AND created_at > $3)`,
+		emailHash, ipHash, now.Add(-SignupIPWindow)).Scan(&used, &recent); err != nil {
+		return fmt.Errorf("check sign-up limits: %w", err)
+	}
+	switch {
+	case used:
+		return ErrTrialAlreadyUsed
+	case recent >= SignupsPerIP:
+		return ErrSignupRateLimited
+	}
+	return nil
+}
+
+// ClearSignupAddresses drops the client address hash of sign-ups older than 30 days and returns how
+// many rows it cleared. The email hash stays: it is what stops a second trial. Run it at start and
+// periodically; it does not depend on anyone signing up.
+func (s *Service) ClearSignupAddresses(ctx context.Context) (int64, error) {
+	var cleared int64
+	err := s.db.Privileged(ctx, database.PrivilegeCreateWorkspace, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `UPDATE cloud_signups SET ip_hash=NULL WHERE ip_hash IS NOT NULL AND created_at < $1`, s.now().Add(-signupIPRetention))
+		if err != nil {
+			return fmt.Errorf("clear old sign-up addresses: %w", err)
+		}
+		cleared = tag.RowsAffected()
+		return nil
+	})
+	return cleared, err
+}
+
 // createUniqueWorkspaceTx tries the plain slug of the name, then twice with a random suffix, and
 // gives up with ErrSlugUnavailable. A slug that cannot be a mail subdomain (reserved, too long
 // after cleaning) goes straight to the suffixed form.
@@ -113,18 +148,24 @@ func (s *Service) createUniqueWorkspaceTx(ctx context.Context, tx pgx.Tx, name, 
 	if base == "" {
 		base = "workspace"
 	}
-	candidates := []string{base}
-	if email.ValidateHostedSlug(base) != nil {
-		candidates = nil
+	// Three tries: the plain slug, then two with a random suffix. A candidate that cannot be a mail
+	// subdomain (reserved name) is replaced by a suffixed one, never inserted.
+	var candidates []string
+	if email.ValidateHostedSlug(base) == nil {
+		candidates = append(candidates, base)
 	}
 	for len(candidates) < 3 {
 		suffix, err := s.slugSuffix()
 		if err != nil {
 			return domain.Workspace{}, err
 		}
-		candidates = append(candidates, base+"-"+suffix)
+		candidate := base + "-" + suffix
+		if email.ValidateHostedSlug(candidate) != nil {
+			return domain.Workspace{}, ErrSlugUnavailable
+		}
+		candidates = append(candidates, candidate)
 	}
-	for _, slug := range candidates[:3] {
+	for _, slug := range candidates {
 		workspace, _, created, err := s.insertWorkspaceTx(ctx, tx, slug, name, adminEmail)
 		if err != nil {
 			return domain.Workspace{}, err
@@ -148,7 +189,9 @@ func (s *Service) slugSuffix() (string, error) {
 	return hex.EncodeToString(raw[:]), nil
 }
 
-func digest(value string) string {
-	sum := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(sum[:])
+// keyedHash is HMAC-SHA256 of value under the sign-up key, hex-encoded.
+func (s *Service) keyedHash(value string) string {
+	mac := hmac.New(sha256.New, s.signupKey)
+	mac.Write([]byte(value))
+	return hex.EncodeToString(mac.Sum(nil))
 }

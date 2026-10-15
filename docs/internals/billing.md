@@ -191,7 +191,11 @@ and workspaces without an email channel never reach it.
 Trial and locked (`none`) workspaces may hold 2 GiB (`domain.TrialStorageBytes`, 2147483648) of
 attachments; paid plans and self-hosted have no cap. Used bytes are `sum(attachments.size)` over
 messages with `origin IS NULL`: files of imported (Freshdesk) messages never count, because an import
-is history the customer already owned. Code: `Store.CheckStorage` in `store/plan-limits.go`.
+is history the customer already owned. The number is `workspaces.counted_storage_bytes`, kept by triggers on
+`attachments` (migration `storage-counter`; `attachments.counted` is false for files of imported messages
+and is decided when the file is stored). It covers every way a file is added, resized or removed, so
+reading it costs one row however many files exist; `TestStorageUsageStaysFastWithAHugeAttachmentTable`
+holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/plan-limits.go`.
 
 - Reaching the cap exactly is allowed; one byte over is refused with `*domain.StorageLimitError`
   (HTTP 403 `storage_limit_reached`, nothing stored).
@@ -203,7 +207,7 @@ is history the customer already owned. Code: `Store.CheckStorage` in `store/plan
 - Any path that stores a new attachment must call `CheckStorage` in its transaction before writing the
   bytes and map the error through `writeStoreError` (it answers 403 with the same code). Web reply
   attachments, when they land, are one such path.
-- `GET /billing` reports `usage.storage_bytes`, `limits.storage_bytes` (null when uncapped) and
+- `GET /billing` reports (for every plan) `usage.storage_bytes`, `limits.storage_bytes` (null when uncapped) and
   `limits.storage_warn_bytes` (80%, 1717986918), the usage at which the web app should warn.
 
 ### Clock

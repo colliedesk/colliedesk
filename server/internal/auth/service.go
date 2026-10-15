@@ -27,6 +27,8 @@ type Service struct {
 	planLimits bool
 	// random is the entropy for generated slug suffixes; nil reads crypto/rand.
 	random io.Reader
+	// signupKey keys the hashes of the cloud sign-up records (SIGNUP_HASH_KEY).
+	signupKey []byte
 }
 
 type Principal struct {
@@ -144,5 +146,12 @@ func (s *Service) WithClock(now func() time.Time) *Service {
 func (s *Service) WithRandom(r io.Reader) *Service {
 	copy := *s
 	copy.random = r
+	return &copy
+}
+
+// WithSignupKey returns a service that keys the cloud sign-up record hashes with key.
+func (s *Service) WithSignupKey(key string) *Service {
+	copy := *s
+	copy.signupKey = []byte(key)
 	return &copy
 }

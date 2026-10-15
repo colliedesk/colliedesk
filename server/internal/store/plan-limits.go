@@ -153,10 +153,10 @@ func repliesLast24h(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 }
 
 // ownStorageBytes is what the storage cap counts: the bytes of every attachment except those of
-// imported messages, which are history carried over from another desk and never count.
-const ownStorageBytes = `SELECT COALESCE(sum(a.size),0)::bigint FROM attachments a
-	JOIN messages m ON m.workspace_id=a.workspace_id AND m.id=a.message_id
-	WHERE a.workspace_id=$1 AND m.origin IS NULL`
+// imported messages, which are history carried over from another desk and never count. It is a
+// number maintained by statement triggers on attachments (see the storage-counter migration), so reading it
+// costs one row however many files the workspace holds.
+const ownStorageBytes = `SELECT counted_storage_bytes FROM workspaces WHERE id=$1`
 
 // CheckStorage returns a *domain.StorageLimitError when storing addBytes more would pass the storage
 // cap of the workspace's plan. Reaching the cap exactly is allowed. It reads the plan and the usage
