@@ -962,6 +962,62 @@ paths:
             Access-Control-Allow-Headers: {schema: {type: string}}
             Access-Control-Max-Age: {schema: {type: integer}}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/export/link:
+    post:
+      operationId: createExportLink
+      x-permission: workspace:export
+      summary: Get a one-time download URL for the workspace export
+      description: >-
+        Admins only; works in every plan state, including a locked workspace. Runs the checks of
+        `GET /api/v1/export` that can be answered before streaming (another export of this workspace is
+        running: 409; the server is at its export limit: 429 with `Retry-After`) and returns a URL that
+        starts the same ZIP download without a session or token. The URL works once, for the workspace
+        that asked, and expires after `expires_in_seconds`; a new link replaces the previous one. A browser
+        that navigates to it streams the file to disk, so a large archive is never held in memory. Links
+        live in the memory of one server process: a restart invalidates them.
+      responses:
+        '201':
+          description: The one-time link
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ExportLink'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429':
+          description: The server is already running as many exports as it allows; retry later
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/export/download/{token}:
+    get:
+      operationId: downloadExport
+      security: []
+      x-permission: public
+      summary: Download the export a one-time link was made for
+      description: >-
+        The token is the credential: it was made by `POST /api/v1/export/link`, works once and expires
+        quickly. Streams the same archive as `GET /api/v1/export`. An unknown, used or expired token is 404.
+        409 and 429 mean the same as for the export route (another export started in between).
+      parameters:
+        - {name: token, in: path, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        '200':
+          description: The workspace archive
+          headers:
+            Content-Disposition: {schema: {type: string}, description: 'attachment; filename="colliedesk-<slug>-<UTC yyyymmddThhmmssZ>.zip"'}
+          content:
+            application/zip:
+              schema: {type: string, format: binary}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429':
+          description: The server is already running as many exports as it allows; retry later
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '500': {$ref: '#/components/responses/InternalError'}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
@@ -1094,6 +1150,12 @@ components:
           required: [enabled]
           properties:
             enabled: {type: boolean, description: True only where `POST /api/v1/auth/cloud/signup` exists (cloud sign-in and billing both configured).}
+    ExportLink:
+      type: object
+      required: [url, expires_in_seconds]
+      properties:
+        url: {type: string, description: 'Path on this server, for example /api/v1/export/download/<token>.'}
+        expires_in_seconds: {type: integer}
     CheckoutPlan: {type: string, enum: [team_monthly, team_yearly, founding]}
     WebhookResult:
       type: object
@@ -1136,9 +1198,10 @@ components:
           description: 'When a complimentary plan ends; null when it has no end or the plan is not complimentary.'
         limits:
           type: object
-          required: [agents, storage_bytes, storage_warn_bytes]
+          required: [agents, storage_bytes, storage_warn_bytes, replies_per_24h]
           properties:
             agents: {type: integer, description: 'Seats of the plan; 0 when locked.'}
+            replies_per_24h: {type: [integer, 'null'], description: 'Emailed replies allowed in any 24 hours on the trial; null on every other plan and self-hosted.'}
             storage_bytes:
               type: [integer, 'null']
               format: int64
@@ -1215,11 +1278,12 @@ components:
           oneOf:
             - type: 'null'
             - type: object
-              required: [plan, trial_ends_at, locked]
+              required: [plan, trial_ends_at, locked, trial_extended]
               properties:
                 plan: {type: string, enum: [trial, team, founding, none]}
                 trial_ends_at: {type: string, format: date-time}
                 locked: {type: boolean}
+                trial_extended: {type: boolean, description: True when a Freshdesk import already extended the trial.}
     Session:
       type: object
       required: [id, agent_id, agent_email, label, created_at, last_seen_at, expires_at, revoked_at]

@@ -3,16 +3,16 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { NotAnAgentError } from '../../api/cloud-signup';
 import { CloudSignIn } from './cloud-sign-in';
 
-const clerk = vi.hoisted(() => ({ getToken: vi.fn(), signOut: vi.fn() }));
+const clerk = vi.hoisted(() => ({ getToken: vi.fn(), signOut: vi.fn(), signedIn: true, signInProps: vi.fn() }));
 
 vi.mock('@clerk/clerk-react', () => ({
   ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
-  SignIn: () => <div>Clerk widget</div>,
-  useAuth: () => ({ getToken: clerk.getToken, isLoaded: true, isSignedIn: true }),
+  SignIn: (props: Record<string, unknown>) => { clerk.signInProps(props); return <div>Clerk widget</div>; },
+  useAuth: () => ({ getToken: clerk.getToken, isLoaded: true, isSignedIn: clerk.signedIn }),
   useClerk: () => ({ signOut: clerk.signOut }),
 }));
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => { vi.clearAllMocks(); clerk.signedIn = true; });
 
 test('offers a retry when Clerk cannot provide a session token', async () => {
   clerk.getToken.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce('session-token');
@@ -57,4 +57,21 @@ test('"Sign in to your workspace" after a used trial signs the identity out of t
   fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Sign in to your workspace' }));
   expect(clerk.signOut).toHaveBeenCalled();
+});
+
+test('Clerk offers its own sign-up only where Colliedesk sign-up exists, so no orphan accounts pile up', () => {
+  clerk.signedIn = false;
+  const { unmount } = render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={vi.fn()} onSignUp={vi.fn()} />);
+  expect(clerk.signInProps).toHaveBeenLastCalledWith(expect.objectContaining({ withSignUp: true }));
+  unmount();
+  render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={vi.fn()} />);
+  expect(clerk.signInProps).toHaveBeenLastCalledWith(expect.objectContaining({ withSignUp: false }));
+});
+
+test('a failed sign-out is said aloud, not swallowed', async () => {
+  clerk.getToken.mockResolvedValue('token');
+  clerk.signOut.mockRejectedValue(new Error('offline'));
+  render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={vi.fn().mockRejectedValue(new NotAnAgentError())} />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Use another account' }));
+  expect(await screen.findByText(/sign out failed/i)).toBeInTheDocument();
 });

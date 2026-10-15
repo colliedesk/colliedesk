@@ -5,11 +5,11 @@ import { BillingPage } from './billing-page';
 
 const free: Billing = {
   plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, complimentary: false, complimentary_until: null,
-  limits: { agents: 10, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 2, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
+  limits: { agents: 10, replies_per_24h: 200, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 2, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 const team: Billing = {
   plan: 'team', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'active', current_period_end: '2026-11-15T09:30:00Z', cancel_at_period_end: false, active_subscriptions: 1, complimentary: false, complimentary_until: null,
-  limits: { agents: 10, storage_bytes: null, storage_warn_bytes: null }, usage: { agents: 6, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
+  limits: { agents: 10, replies_per_24h: null, storage_bytes: null, storage_warn_bytes: null }, usage: { agents: 6, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 
 test('a trial workspace sees when the trial ends, its usage and three ways to subscribe', () => {
@@ -50,7 +50,7 @@ test('a failed payment is flagged while the plan stays active', () => {
 });
 
 test('after the trial or a subscription ended the workspace is locked but can still pick a plan and open billing', () => {
-  render(<BillingPage billing={{ ...free, plan: 'none', locked: true, limits: { agents: 0, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, status: 'canceled', current_period_end: '2026-10-01T00:00:00Z' }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  render(<BillingPage billing={{ ...free, plan: 'none', locked: true, limits: { agents: 0, replies_per_24h: null, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, status: 'canceled', current_period_end: '2026-10-01T00:00:00Z' }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
   expect(screen.getByText('Trial ended')).toBeInTheDocument();
   expect(screen.getByText(/trial ended oct 15/i)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /manage billing/i })).toBeInTheDocument();
@@ -99,6 +99,9 @@ test('a trial shows its attachment storage and replies, and warns from 80 percen
   const { rerender } = render(<BillingPage billing={withStorage(1.7 * GiB)} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
   expect(screen.getByText(/storage: 1\.7 GB of 2\.0 GB/i)).toBeInTheDocument();
   expect(screen.getByText(/12 of 200 replies in the last 24 hours/i)).toBeInTheDocument();
+  rerender(<BillingPage billing={{ ...withStorage(1.7 * GiB), limits: { ...free.limits, replies_per_24h: 150 } }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.getByText(/12 of 150 replies/i)).toBeInTheDocument();
+  rerender(<BillingPage billing={withStorage(1.7 * GiB)} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
   expect(screen.getByRole('status')).toHaveTextContent(/storage is 85% full/i);
   rerender(<BillingPage billing={withStorage(1.5 * GiB)} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
   expect(screen.queryByRole('status')).not.toBeInTheDocument();

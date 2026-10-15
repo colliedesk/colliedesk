@@ -23,6 +23,7 @@ var lockedAllowed = map[string]bool{
 	"POST /api/v1/billing/checkout":      true,
 	"POST /api/v1/billing/portal":        true,
 	"GET /api/v1/export":                 true,
+	"POST /api/v1/export/link":           true,
 	"DELETE /api/v1/channels/email":      true,
 	"POST /api/v1/channels/email/secret": true,
 }

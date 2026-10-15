@@ -10,9 +10,10 @@ export function LockedRoute({ me }: { me: Me }) {
   const isAdmin = me.agent.role === 'admin';
   const billing = useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: isAdmin });
   const checkout = useMutation({ mutationFn: (plan: CheckoutPlan) => api.startCheckout(plan), onSuccess: (link) => window.location.assign(link.url) });
+  const portal = useMutation({ mutationFn: () => api.openBillingPortal(), onSuccess: (link) => window.location.assign(link.url) });
   // The session is gone once the call succeeds; refetching me switches the shell to the signed-out state.
   const signOut = useMutation({ mutationFn: api.logout, onSuccess: () => client.invalidateQueries({ queryKey: ['me'] }) });
   return <LockedScreen isAdmin={isAdmin} billing={billing.data} timezone={me.timezone}
-    checkoutFailed={checkout.isError} signOutFailed={signOut.isError}
-    exportAction={<ExportAllData />} onCheckout={(plan) => checkout.mutate(plan)} onSignOut={() => signOut.mutate()} />;
+    checkoutFailed={checkout.isError || portal.isError} signOutFailed={signOut.isError}
+    exportAction={<ExportAllData />} onCheckout={(plan) => checkout.mutate(plan)} onManage={() => portal.mutate()} onSignOut={() => signOut.mutate()} />;
 }

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { Billing, CheckoutPlan } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
@@ -13,6 +14,8 @@ interface LockedScreenProps {
   signOutFailed?: boolean;
   exportAction?: ReactNode;
   onCheckout: (plan: CheckoutPlan) => void;
+  // onManage opens the billing portal; offered when a subscription exists, so a failed card is fixed in place.
+  onManage?: () => void;
   onSignOut: () => void;
 }
 
@@ -23,12 +26,16 @@ function heading(billing?: Billing) {
 
 // LockedScreen replaces the whole workspace once the trial or subscription ended. It names what
 // happened, what an admin can do (pay, take the data out) and what anyone can do (sign out).
-export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = false, signOutFailed = false, exportAction, onCheckout, onSignOut }: LockedScreenProps) {
+export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = false, signOutFailed = false, exportAction, onCheckout, onManage, onSignOut }: LockedScreenProps) {
+  // A 402 can swap the inbox for this page; focus would stay on a removed node, so the heading takes it.
+  const title = useRef<HTMLHeadingElement>(null);
+  useEffect(() => title.current?.focus(), []);
+  const hasSubscription = billing !== undefined && billing.status !== 'none' && !billing.complimentary;
   const endedAt = billing && (billing.status === 'none' ? billing.trial_ends_at : billing.current_period_end ?? billing.trial_ends_at);
   return (
     <main className="settings-page panel locked-screen">
       <header>
-        <h1>{heading(billing)}</h1>
+        <h1 ref={title} tabIndex={-1}>{heading(billing)}</h1>
         <p>{endedAt && `${messages.lockedSince(formatDate(endedAt, timezone))} `}{isAdmin ? messages.lockedAdminExplain : messages.lockedAgentExplain}</p>
       </header>
       {checkoutFailed && <p role="alert" className="error-copy">{messages.billingActionFailed}</p>}
@@ -38,7 +45,8 @@ export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = fals
         <div className="settings-body">
           {isAdmin
             ? <div className="button-row">{planOptions.map((option) =>
-                <button key={option.plan} type="button" className="primary-action" onClick={() => onCheckout(option.plan)}>{option.label}</button>)}</div>
+                <button key={option.plan} type="button" className="primary-action" onClick={() => onCheckout(option.plan)}>{option.label}</button>)}
+              {hasSubscription && onManage && <button type="button" onClick={onManage}>{messages.manageBilling}</button>}</div>
             : <p>{messages.askWorkspaceAdmin}</p>}
         </div>
       </section>

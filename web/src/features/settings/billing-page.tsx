@@ -47,7 +47,7 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
         <ul className="muted-copy">
           <li>{messages.agentsUsage(billing.usage.agents, billing.limits.agents, billing.usage.pending_invites)}</li>
           {storageLimit !== null && <li>{messages.storageUsage(formatBytes(billing.usage.storage_bytes), formatBytes(storageLimit))}</li>}
-          {billing.plan === 'trial' && <li>{messages.repliesUsage(billing.usage.replies_last_24h)}</li>}
+          {billing.limits.replies_per_24h !== null && <li>{messages.repliesUsage(billing.usage.replies_last_24h, billing.limits.replies_per_24h)}</li>}
         </ul>
       </section>
       {(billing.plan === 'trial' || billing.plan === 'none') && <section aria-labelledby="upgrade-heading">

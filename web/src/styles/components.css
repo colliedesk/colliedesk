@@ -245,3 +245,4 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .locked-screen { padding: var(--space-6) var(--space-4); }
   .locked-screen .button-row button { flex: 1 1 100%; --control: var(--touch); }
 }
+.locked-screen h1:focus { outline: none; }

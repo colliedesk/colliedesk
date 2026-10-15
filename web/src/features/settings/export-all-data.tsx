@@ -1,8 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
-import { useState } from 'react';
 import { api } from '../../api/client';
-import { ExportRefusedError, saveArchive } from '../../api/workspace-export';
-import { formatBytes } from '../../lib/format-bytes';
+import { ExportRefusedError } from '../../api/workspace-export';
 import { formatWait } from '../../lib/format-wait';
 import { messages } from '../../messages';
 
@@ -16,26 +14,21 @@ function refusalText(error: unknown): string {
   }
 }
 
-// ExportAllData is the admin's way to take the whole workspace out as a ZIP (GET /api/v1/export).
-// The same button serves Settings and the locked screen.
+// ExportAllData is the admin's way to take the whole workspace out as a ZIP. The server checks
+// the request and hands back a one-time link; navigating to it makes the browser stream the file
+// to disk with its own download progress. The same button serves Settings and the locked screen.
 export function ExportAllData() {
-  const [received, setReceived] = useState(0);
-  const download = useMutation({
-    mutationFn: async () => {
-      setReceived(0);
-      const archive = await api.exportWorkspace(setReceived);
-      saveArchive(archive);
-      return archive;
-    },
+  const start = useMutation({
+    mutationFn: api.requestExportLink,
+    onSuccess: (url) => window.location.assign(url),
   });
   return (
     <div className="export-action">
       <div className="button-row">
-        <button type="button" disabled={download.isPending} onClick={() => download.mutate()}>{messages.exportHeading}</button>
+        <button type="button" disabled={start.isPending} onClick={() => start.mutate()}>{messages.exportHeading}</button>
       </div>
-      {download.isPending && <p role="status" className="muted-copy">{messages.exportRunning(formatBytes(received))}</p>}
-      {download.isSuccess && <p role="status" className="muted-copy">{messages.exportDone(download.data.filename)}</p>}
-      {download.isError && <p role="alert" className="error-copy">{refusalText(download.error)}</p>}
+      {start.isSuccess && <p role="status" className="muted-copy">{messages.exportStarted}</p>}
+      {start.isError && <p role="alert" className="error-copy">{refusalText(start.error)}</p>}
     </div>
   );
 }

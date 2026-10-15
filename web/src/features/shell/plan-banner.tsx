@@ -1,5 +1,6 @@
 import type { Billing, Me } from '../../api/schemas';
 import { formatBytes } from '../../lib/format-bytes';
+import { useNow } from '../../lib/use-now';
 import { messages } from '../../messages';
 
 interface PlanBannerProps {
@@ -12,15 +13,17 @@ interface PlanBannerProps {
 }
 
 const dayMs = 24 * 60 * 60 * 1000;
-// A trial starts at 14 days (domain.TrialLength); more left than that means it was extended.
-const standardTrialDays = 14;
+// Browser clocks drift: a few minutes of slack keeps a brand new trial at "14 days", not "15".
+const clockSlackMs = 5 * 60 * 1000;
 
 // PlanBanner tells everyone in a trial workspace how long it lasts, and tells admins when the
 // attachment storage of the trial is nearly full. Paid and self-hosted workspaces show nothing.
-export function PlanBanner({ plan, isAdmin, billing, now = new Date(), onChoosePlan }: PlanBannerProps) {
+export function PlanBanner({ plan, isAdmin, billing, now, onChoosePlan }: PlanBannerProps) {
+  // The day count follows the calendar day of the browser, so a tab left open overnight updates.
+  const clock = useNow('UTC');
   if (plan?.plan !== 'trial') return null;
-  const msLeft = Date.parse(plan.trial_ends_at) - now.getTime();
-  const daysLeft = Math.max(1, Math.ceil(msLeft / dayMs));
+  const msLeft = Date.parse(plan.trial_ends_at) - (now ?? clock).getTime();
+  const daysLeft = Math.max(1, Math.ceil((msLeft - clockSlackMs) / dayMs));
   const limit = billing?.limits.storage_bytes ?? null;
   const warnAt = billing?.limits.storage_warn_bytes ?? null;
   const used = billing?.usage.storage_bytes ?? 0;
@@ -29,7 +32,7 @@ export function PlanBanner({ plan, isAdmin, billing, now = new Date(), onChooseP
     <section className="plan-banner" aria-label={messages.planNotices}>
       <p>
         <strong>{messages.trialDaysLeft(daysLeft)}</strong>
-        {daysLeft > standardTrialDays && <span> {messages.trialExtendedNote}</span>}
+        {plan.trial_extended && <span> {messages.trialExtendedNote}</span>}
       </p>
       {storageFull && <p role="status" className="plan-banner-warning">
         {messages.storageWarning(Math.floor((used / limit) * 100), formatBytes(used), formatBytes(limit))}

@@ -21,8 +21,9 @@ export function createQueryClient(): QueryClient {
   function locked(error: Error) {
     if (!(error instanceof WorkspaceLockedError)) return;
     client.setQueryData<Me>(['me'], (me) => {
-      if (!me || me.plan?.locked) return me;
-      return { ...me, plan: { plan: 'none', trial_ends_at: me.plan?.trial_ends_at ?? new Date(0).toISOString(), locked: true } };
+      // Without a plan object (billing off) nothing can lock; there is no trial end to show either.
+      if (!me?.plan || me.plan.locked) return me;
+      return { ...me, plan: { ...me.plan, plan: 'none', locked: true } };
     });
   }
   return client;

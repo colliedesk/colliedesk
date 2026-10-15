@@ -20,7 +20,7 @@ const config = { cloud_sign_in: { enabled: true, publishable_key: 'pk' }, billin
 const billing = {
   plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, status: 'none', current_period_end: null, cancel_at_period_end: false,
   active_subscriptions: 0, complimentary: false, complimentary_until: null,
-  limits: { agents: 0, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 1, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
+  limits: { agents: 0, replies_per_24h: null, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 1, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 
 function serve(handlers: Record<string, () => Response>) {
@@ -37,7 +37,7 @@ function open() {
 
 test('a locked workspace sees the locked screen with the identity bar and an admin\'s plan choices', async () => {
   serve({
-    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true })),
+    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false })),
     '/api/v1/config': () => json(200, config),
     '/api/v1/billing': () => json(200, billing),
     '/api/v1/conversations': () => json(402, locked),
@@ -51,7 +51,7 @@ test('a locked workspace sees the locked screen with the identity bar and an adm
 
 test('a 402 workspace_locked from the inbox replaces the inbox with the locked screen', async () => {
   serve({
-    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false })),
+    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false })),
     '/api/v1/config': () => json(200, config),
     '/api/v1/conversations': () => json(402, locked),
     '/api/v1/agents': () => json(402, locked),

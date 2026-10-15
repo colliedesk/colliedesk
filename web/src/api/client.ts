@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 import { NotAnAgentError, signUpCloud } from './cloud-signup';
 import { OutboundRefusedError } from './outbound-error';
-import { exportWorkspace } from './workspace-export';
+import { requestExportLink } from './workspace-export';
 import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactDetailSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema,
@@ -157,7 +157,7 @@ export const api = {
   openBillingPortal: () => request('/api/v1/billing/portal', billingLinkSchema, { method: 'POST' }),
   exchangeCloudSession,
   signUpCloud,
-  exportWorkspace,
+  requestExportLink,
   logout: () => requestNoContent('/api/v1/auth/logout', { method: 'POST' }),
   redeem: (token: string, label: string) => request('/api/v1/auth/redeem', redeemedSchema, {
     method: 'POST', body: json<'redeemLink'>({ token, label, session_type: 'cookie' }),

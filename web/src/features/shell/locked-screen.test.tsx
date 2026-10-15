@@ -6,7 +6,7 @@ import { LockedScreen } from './locked-screen';
 const ended: Billing = {
   plan: 'none', trial_ends_at: '2026-10-15T09:00:00Z', locked: true, status: 'none', current_period_end: null, cancel_at_period_end: false,
   active_subscriptions: 0, complimentary: false, complimentary_until: null,
-  limits: { agents: 0, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 2, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
+  limits: { agents: 0, replies_per_24h: null, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 2, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 const exportSlot = <button type="button">Export all data</button>;
 
@@ -44,4 +44,29 @@ test('an agent is sent to a workspace admin and gets no plan or export controls'
 test('a failed checkout is said aloud', () => {
   render(<LockedScreen isAdmin billing={ended} timezone="UTC" checkoutFailed exportAction={exportSlot} onCheckout={vi.fn()} onSignOut={vi.fn()} />);
   expect(screen.getByRole('alert')).toHaveTextContent(/billing action failed/i);
+});
+
+test('a lapsed subscription can be fixed in the billing portal instead of paying twice', () => {
+  const onManage = vi.fn();
+  render(<LockedScreen isAdmin billing={{ ...ended, status: 'past_due', current_period_end: '2026-10-01T00:00:00Z' }} timezone="UTC"
+    exportAction={exportSlot} onCheckout={vi.fn()} onManage={onManage} onSignOut={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Manage billing' }));
+  expect(onManage).toHaveBeenCalledTimes(1);
+});
+
+test('an ended trial has no billing account to manage, and a complimentary plan has none either', () => {
+  const { rerender } = render(<LockedScreen isAdmin billing={ended} timezone="UTC" exportAction={exportSlot} onCheckout={vi.fn()} onManage={vi.fn()} onSignOut={vi.fn()} />);
+  expect(screen.queryByRole('button', { name: 'Manage billing' })).not.toBeInTheDocument();
+  rerender(<LockedScreen isAdmin billing={{ ...ended, status: 'canceled', complimentary: true }} timezone="UTC" exportAction={exportSlot} onCheckout={vi.fn()} onManage={vi.fn()} onSignOut={vi.fn()} />);
+  expect(screen.queryByRole('button', { name: 'Manage billing' })).not.toBeInTheDocument();
+});
+
+test('the heading takes focus when the page appears, so keyboard and screen reader users land on it', () => {
+  render(<LockedScreen isAdmin billing={ended} timezone="UTC" exportAction={exportSlot} onCheckout={vi.fn()} onSignOut={vi.fn()} />);
+  expect(screen.getByRole('heading', { level: 1 })).toHaveFocus();
+});
+
+test('the retention promise is a floor, not a schedule', () => {
+  render(<LockedScreen isAdmin billing={ended} timezone="UTC" exportAction={exportSlot} onCheckout={vi.fn()} onSignOut={vi.fn()} />);
+  expect(screen.getByText(/at least 12 months.*at least 30 days/i)).toBeInTheDocument();
 });

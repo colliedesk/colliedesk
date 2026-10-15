@@ -122,19 +122,25 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
   (admin: checkout; agent: "Ask a workspace admin"), Export all data (admin) and Sign out. A 402
   `workspace_locked` from any request marks the cached `me` locked (`query-client.ts`), so a workspace that
   locks while a tab is open changes at the next request, not at the next reload.
-- Trial: `PlanBanner` shows "Trial: N days left" (`ceil((trial_ends_at - now) / 24 h)`), an admin button, an
-  extension note when more than 14 days are left, and for admins a storage warning from
-  `limits.storage_warn_bytes`. The extension note is inferred from the days left, not read from
-  `trial_extended_at`: `/auth/me` does not carry that flag, and an operator `trial set` beyond 14 days shows
-  the same note.
+- Trial: `PlanBanner` shows "Trial: N days left" (`ceil((trial_ends_at - now - 5 min) / 24 h)`, the slack keeps a browser
+  clock that runs a little behind from turning a new trial into "15 days"), an admin button, an extension note
+  from `me.plan.trial_extended` (`workspaces.trial_extended_at IS NOT NULL`, read in the same row as the session),
+  and for admins a storage warning from `limits.storage_warn_bytes`. The reply cap shown on Billing is
+  `limits.replies_per_24h` from the API.
+- The locked screen focuses its heading on mount, offers Manage billing when a subscription exists (a failed card
+  is fixed in the portal, not by a second checkout), and says retention is "at least 12 months" with "at least 30
+  days" notice: the app shows no deletion date, on purpose, because deletion is an operator switch.
 - `lockedScreenShipped` in `cmd/colliedesk/serve.go` keeps billing off (and logs why) in a build whose web app cannot show
   the lock. It is true because this screen exists; do not set it back.
 - Cloud sign-up: `GET /api/v1/config` reports `signup.enabled` (cloud sign-in and billing both on and sign-up not turned
   off at start, the same condition as the route; the web app maps 503 `signup_unavailable` too). After Clerk authenticates, the exchange answers 403 `forbidden` for an email that
   belongs to no workspace; the sign-in page then shows the workspace-name form and posts to
   `/auth/cloud/signup` with a token fetched at that moment (Clerk tokens live about a minute).
-- Export: the browser reads the stream to its end and saves a Blob. It keeps the archive in memory, so very
-  large workspaces should use `curl`; a stream that ends early is an error and never saved.
+- Export: `POST /api/v1/export/link` (admin, on the locked allowlist) runs the 409 and 429 checks and returns
+  `/api/v1/export/download/<token>`; the web app navigates the browser to it, so the ZIP streams to disk. The
+  token is random, kept as a SHA-256 in process memory, valid 60 s, single use, bound to the workspace, and a
+  new link replaces the workspace's previous one. A server restart invalidates links. The download route is
+  public in the permission table because the token is the credential.
 
 ### Agent seats
 

@@ -56,3 +56,16 @@ func (l *exportLimiter) acquire(workspaceID string) (func(), exportAdmission) {
 		})
 	}, exportAdmitted
 }
+
+// peek says what acquire would answer now, without taking a slot.
+func (l *exportLimiter) peek(workspaceID string) exportAdmission {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if _, running := l.active[workspaceID]; running {
+		return exportWorkspaceBusy
+	}
+	if len(l.active) >= l.max {
+		return exportServerBusy
+	}
+	return exportAdmitted
+}

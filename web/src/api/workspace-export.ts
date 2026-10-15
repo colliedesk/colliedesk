@@ -1,3 +1,5 @@
+import { exportLinkSchema } from './schemas';
+
 // ExportRefusedError means the server did not start the export. `busy` is another export of this
 // workspace still running (409), `server_busy` the server is at its limit (429, with a wait),
 // `forbidden` the caller is not an admin (403).
@@ -15,8 +17,6 @@ export class ExportRefusedError extends Error {
   }
 }
 
-export interface WorkspaceArchive { blob: Blob; filename: string; bytes: number }
-
 function refusal(response: Response): ExportRefusedError {
   if (response.status === 409) return new ExportRefusedError('busy');
   if (response.status === 403) return new ExportRefusedError('forbidden');
@@ -27,48 +27,21 @@ function refusal(response: Response): ExportRefusedError {
   return new ExportRefusedError('failed');
 }
 
-function archiveName(response: Response): string {
-  const match = /filename="([^"\r\n]+)"/.exec(response.headers.get('Content-Disposition') ?? '');
-  return match?.[1] ?? 'colliedesk-export.zip';
-}
-
-// exportWorkspace downloads the whole-workspace ZIP. The server streams it, so a connection that
-// ends early is a failed export: the stream is read to its end and any read error is thrown as
-// `failed`, never a half archive handed to the person. onProgress receives the bytes read so far.
-export async function exportWorkspace(onProgress?: (bytes: number) => void): Promise<WorkspaceArchive> {
+// requestExportLink asks for a one-time download URL. The server runs the checks that can fail
+// (not an admin, another export running, server busy) here, where the page can say why. The caller
+// then navigates the browser to the URL, which streams the ZIP straight to disk: a large archive
+// is never held in memory.
+export async function requestExportLink(): Promise<string> {
   let response: Response;
   try {
-    response = await fetch('/api/v1/export', { credentials: 'same-origin' });
+    response = await fetch('/api/v1/export/link', { method: 'POST', credentials: 'same-origin' });
   } catch {
     throw new ExportRefusedError('failed');
   }
   if (!response.ok) throw refusal(response);
-  if (!response.body) throw new ExportRefusedError('failed');
-  const reader = response.body.getReader();
-  const parts: Uint8Array[] = [];
-  let bytes = 0;
   try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      parts.push(value);
-      bytes += value.byteLength;
-      onProgress?.(bytes);
-    }
+    return exportLinkSchema.parse(await response.json()).url;
   } catch {
     throw new ExportRefusedError('failed');
   }
-  return { blob: new Blob(parts as BlobPart[], { type: 'application/zip' }), filename: archiveName(response), bytes };
-}
-
-// saveArchive hands the archive to the browser as a file download.
-export function saveArchive({ blob, filename }: WorkspaceArchive): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

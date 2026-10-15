@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, test } from '@playwright/test';
+import { expect, request as playwrightRequest, test } from '@playwright/test';
 import type { APIResponse, Page } from '@playwright/test';
 import { appNavigationWith } from './support/browser';
 import { psql, servers, uniqueSuffix } from './support/cli';
@@ -77,7 +77,16 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   const archive = readFileSync(await file.path());
   expect(archive.subarray(0, 2).toString()).toBe('PK');
   expect(archive.includes(Buffer.from('manifest.json'))).toBe(true);
-  await expect(page.getByRole('status')).toContainText('Export downloaded');
+  await expect(page.getByRole('status')).toContainText('download is starting');
+
+  // The link behind the button is single use and needs no session: it works once, then it is gone.
+  const made = await page.request.post(`${baseURL}/api/v1/export/link`, { headers: { Origin: baseURL } });
+  expect(made.status()).toBe(201);
+  const { url } = await made.json() as { url: string };
+  const bare = await playwrightRequest.newContext();
+  expect((await bare.get(`${baseURL}${url}`)).status(), 'first use, no cookie').toBe(200);
+  expect((await bare.get(`${baseURL}${url}`)).status(), 'second use').toBe(404);
+  await bare.dispose();
 
   // Signing out ends the session.
   await page.getByRole('button', { name: 'Sign out' }).click();

@@ -4,13 +4,13 @@ import type { Billing } from '../../api/schemas';
 import { PlanBanner } from './plan-banner';
 
 const trialEnd = '2026-10-15T09:00:00Z';
-const trial = { plan: 'trial' as const, trial_ends_at: trialEnd, locked: false };
+const trial = { plan: 'trial' as const, trial_ends_at: trialEnd, locked: false, trial_extended: false };
 const at = (iso: string) => new Date(iso);
 const GiB = 1024 ** 3;
 const billing = (storageBytes: number): Billing => ({
   plan: 'trial', trial_ends_at: trialEnd, locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false,
   active_subscriptions: 0, complimentary: false, complimentary_until: null,
-  limits: { agents: 10, storage_bytes: 2 * GiB, storage_warn_bytes: Math.floor(1.6 * GiB) },
+  limits: { agents: 10, replies_per_24h: 200, storage_bytes: 2 * GiB, storage_warn_bytes: Math.floor(1.6 * GiB) },
   usage: { agents: 1, pending_invites: 0, replies_last_24h: 0, storage_bytes: storageBytes },
 });
 
@@ -33,16 +33,18 @@ test('an agent sees the days but has no plan button', () => {
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });
 
-test('a trial longer than the standard 14 days says it was extended', () => {
-  render(<PlanBanner plan={{ ...trial, trial_ends_at: '2026-11-14T09:00:00Z' }} isAdmin now={at('2026-10-15T09:00:00Z')} onChoosePlan={vi.fn()} />);
+test('an extended trial says so, however many days are left', () => {
+  const { rerender } = render(<PlanBanner plan={{ ...trial, trial_ends_at: '2026-10-20T09:00:00Z', trial_extended: true }} isAdmin now={at('2026-10-15T09:00:00Z')} onChoosePlan={vi.fn()} />);
+  expect(screen.getByText('Trial: 5 days left')).toBeInTheDocument();
+  expect(screen.getByText(/was extended/i)).toBeInTheDocument();
+  rerender(<PlanBanner plan={{ ...trial, trial_ends_at: '2026-11-14T09:00:00Z' }} isAdmin now={at('2026-10-15T09:00:00Z')} onChoosePlan={vi.fn()} />);
   expect(screen.getByText('Trial: 30 days left')).toBeInTheDocument();
-  expect(screen.getByText(/longer than the standard 14 days/i)).toBeInTheDocument();
+  expect(screen.queryByText(/extended/i)).not.toBeInTheDocument();
 });
 
-test('a standard trial carries no extension note', () => {
-  render(<PlanBanner plan={{ ...trial, trial_ends_at: '2026-10-29T09:00:00Z' }} isAdmin now={at('2026-10-15T09:00:00Z')} onChoosePlan={vi.fn()} />);
+test('a browser clock a little behind the server does not turn a fresh trial into 15 days', () => {
+  render(<PlanBanner plan={{ ...trial, trial_ends_at: '2026-10-29T09:00:00Z' }} isAdmin now={at('2026-10-15T08:59:30Z')} onChoosePlan={vi.fn()} />);
   expect(screen.getByText('Trial: 14 days left')).toBeInTheDocument();
-  expect(screen.queryByText(/longer than/i)).not.toBeInTheDocument();
 });
 
 test('storage at 85 percent warns the admin; 75 percent does not', () => {
@@ -53,7 +55,7 @@ test('storage at 85 percent warns the admin; 75 percent does not', () => {
 });
 
 test('a paid or self-hosted workspace shows nothing', () => {
-  const { container, rerender } = render(<PlanBanner plan={{ plan: 'team', trial_ends_at: trialEnd, locked: false }} isAdmin onChoosePlan={vi.fn()} />);
+  const { container, rerender } = render(<PlanBanner plan={{ plan: 'team', trial_ends_at: trialEnd, locked: false, trial_extended: false }} isAdmin onChoosePlan={vi.fn()} />);
   expect(container).toBeEmptyDOMElement();
   rerender(<PlanBanner plan={null} isAdmin onChoosePlan={vi.fn()} />);
   expect(container).toBeEmptyDOMElement();

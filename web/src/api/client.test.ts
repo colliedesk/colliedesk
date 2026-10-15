@@ -60,32 +60,26 @@ test('sign-up sends the bearer token and the workspace name and returns the sess
   expect(redeemed.workspace.slug).toBe('acme');
 });
 
-test('export reads the whole stream, reports progress and names the file from the server', async () => {
-  const chunks = [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5])];
-  fetchMock.mockResolvedValue(new Response(new ReadableStream({
-    start(controller) { chunks.forEach((chunk) => controller.enqueue(chunk)); controller.close(); },
-  }), { status: 200, headers: { 'Content-Disposition': 'attachment; filename="colliedesk-acme-20261015T100000Z.zip"' } }));
-  const progress: number[] = [];
-  const archive = await api.exportWorkspace((bytes) => progress.push(bytes));
-  expect(archive.filename).toBe('colliedesk-acme-20261015T100000Z.zip');
-  expect(archive.bytes).toBe(5);
-  expect(progress).toEqual([3, 5]);
+test('export asks for a one-time link and hands back its url', async () => {
+  fetchMock.mockResolvedValue(reply(201, { url: '/api/v1/export/download/abc', expires_in_seconds: 60 }));
+  expect(await api.requestExportLink()).toBe('/api/v1/export/download/abc');
+  const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(url).toBe('/api/v1/export/link');
+  expect(init.method).toBe('POST');
 });
 
 test('export 429 carries the wait the server asked for; 409 and 403 are their own refusals', async () => {
   fetchMock.mockResolvedValueOnce(reply(429, apiError('rate_limited'), { 'Retry-After': '120' }));
-  await expect(api.exportWorkspace()).rejects.toMatchObject({ refusal: 'server_busy', retryAfterSeconds: 120 });
+  await expect(api.requestExportLink()).rejects.toMatchObject({ refusal: 'server_busy', retryAfterSeconds: 120 });
   fetchMock.mockResolvedValueOnce(reply(409, apiError('conflict')));
-  await expect(api.exportWorkspace()).rejects.toMatchObject({ refusal: 'busy' });
+  await expect(api.requestExportLink()).rejects.toMatchObject({ refusal: 'busy' });
   fetchMock.mockResolvedValueOnce(reply(403, apiError('forbidden')));
-  await expect(api.exportWorkspace()).rejects.toMatchObject({ refusal: 'forbidden' });
+  await expect(api.requestExportLink()).rejects.toMatchObject({ refusal: 'forbidden' });
 });
 
-test('an export that breaks off halfway is a failure, never a short file', async () => {
-  fetchMock.mockResolvedValue(new Response(new ReadableStream({
-    start(controller) { controller.enqueue(new Uint8Array([1])); controller.error(new Error('reset')); },
-  }), { status: 200 }));
-  const error = await api.exportWorkspace().catch((caught: unknown) => caught);
-  expect(error).toBeInstanceOf(ExportRefusedError);
-  expect((error as ExportRefusedError).refusal).toBe('failed');
+test('a network failure or an unreadable answer is a failed export, never a navigation', async () => {
+  fetchMock.mockRejectedValueOnce(new TypeError('offline'));
+  await expect(api.requestExportLink()).rejects.toBeInstanceOf(ExportRefusedError);
+  fetchMock.mockResolvedValueOnce(reply(201, { nope: true }));
+  await expect(api.requestExportLink()).rejects.toMatchObject({ refusal: 'failed' });
 });

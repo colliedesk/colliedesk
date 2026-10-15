@@ -31,6 +31,7 @@ function CloudSession({ onSessionToken, onSignUp }: Pick<CloudSignInProps, 'onSe
   const exchanged = useRef(false);
   const [failed, setFailed] = useState(false);
   const [noWorkspace, setNoWorkspace] = useState(false);
+  const [signOutFailed, setSignOutFailed] = useState(false);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || exchanged.current || failed || noWorkspace) return;
@@ -48,8 +49,13 @@ function CloudSession({ onSessionToken, onSignUp }: Pick<CloudSignInProps, 'onSe
   // Leaving the sign-up form means signing the identity provider session out, or the next sign-in
   // would be the same person again.
   const leave = async () => {
-    await clerk.signOut();
-    setNoWorkspace(false);
+    try {
+      await clerk.signOut();
+      setSignOutFailed(false);
+      setNoWorkspace(false);
+    } catch {
+      setSignOutFailed(true);
+    }
   };
   if (noWorkspace && onSignUp) {
     // Clerk session tokens live for about a minute, so the token is fetched when the form is sent.
@@ -58,15 +64,19 @@ function CloudSession({ onSessionToken, onSignUp }: Pick<CloudSignInProps, 'onSe
       if (!token) throw new Error('Clerk did not return a session token');
       await onSignUp(token, name);
     };
-    return <CloudSignup onCreate={create} onSignIn={leave} onUseAnotherAccount={leave} />;
+    return <>
+      <CloudSignup onCreate={create} onSignIn={leave} onUseAnotherAccount={leave} />
+      {signOutFailed && <p role="alert" className="error-copy">{messages.signOutFailed}</p>}
+    </>;
   }
   if (noWorkspace) return <div className="cloud-signup">
     <p role="alert" className="error-copy">{messages.noWorkspaceForEmail}</p>
     <button type="button" onClick={leave}>{messages.useAnotherAccount}</button>
+    {signOutFailed && <p role="alert" className="error-copy">{messages.signOutFailed}</p>}
   </div>;
   if (failed) return <button type="button" onClick={() => setFailed(false)}>{messages.retryCloudSignIn}</button>;
   if (!isLoaded || isSignedIn) return <p>{messages.cloudSigningIn}</p>;
-  return <SignIn routing="hash" withSignUp appearance={clerkAppearance()} />;
+  return <SignIn routing="hash" withSignUp={Boolean(onSignUp)} appearance={clerkAppearance()} />;
 }
 
 export function CloudSignIn({ publishableKey, onSessionToken, onSignUp }: CloudSignInProps) {

@@ -13,7 +13,7 @@ Every new cloud workspace starts a 14-day free trial of the full Team plan. No c
 - A banner under the workspace name shows "Trial: N days left". Admins get a **Choose a plan**
   button in it.
 - A workspace that imports its history from Freshdesk gets a longer trial: 30 days in total, once.
-  The banner then says the trial is longer than the standard 14 days.
+  The banner then says the trial was extended.
 - One trial per email address. Writing the address with capitals, a `+tag` or (for Gmail) dots does
   not make a new one. If you sign up again with the same address you are told to sign in instead.
 - Sign-up is limited to 3 new workspaces per network address per day.
@@ -50,14 +50,14 @@ and no storage cap. Prices are in US dollars.
 The workspace is **locked**. Nothing is deleted. Everyone who signs in sees a page that says the
 trial (or the subscription) has ended, instead of the inbox.
 
-- **Admins** can choose a plan, **Export all data**, or sign out. Choosing a plan and paying opens
+- **Admins** can choose a plan (or open **Manage billing** when a subscription ended or failed), **Export all data**, or sign out. Choosing a plan and paying opens
   the workspace again within a few moments of the provider confirming the payment.
 - **Agents** are told to ask a workspace admin to choose a plan, and can sign out.
 - Customers who write to a locked workspace get a bounce. Nothing is stored, so nothing is lost
   that you did not already have.
 - In the app only paying, exporting and signing out work until the workspace has a plan.
-- A locked workspace is kept for 12 months. Its admins get an email 30 days before anything is
-  deleted. Export your data before then. See [Export all data](export.md).
+- A locked workspace is kept for at least 12 months. Its admins get an email at least 30 days
+  before anything is deleted. Export your data before then. See [Export all data](export.md).
 
 ## Upgrade
 

@@ -27,18 +27,26 @@ test('other failures are retried once and leave the session alone', async () => 
 
 test('a 402 workspace_locked on any request locks the cached session at once and is not retried', async () => {
   const client = createQueryClient();
-  const me = { agent: {}, workspace: {}, timezone: 'UTC', plan: { plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false } };
+  const me = { agent: {}, workspace: {}, timezone: 'UTC', plan: { plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, trial_extended: true } };
   client.setQueryData(['me'], me);
   const refused = vi.fn().mockRejectedValue(new WorkspaceLockedError('This workspace is locked.'));
   await client.fetchQuery({ queryKey: ['conversations'], queryFn: refused, retryDelay: 0 }).catch(() => {});
   expect(refused).toHaveBeenCalledTimes(1);
-  expect(client.getQueryData<typeof me>(['me'])?.plan).toEqual({ plan: 'none', trial_ends_at: '2026-10-15T09:00:00Z', locked: true });
+  expect(client.getQueryData<typeof me>(['me'])?.plan).toEqual({ plan: 'none', trial_ends_at: '2026-10-15T09:00:00Z', locked: true, trial_extended: true });
 });
 
 test('a 402 that is not the lock leaves the session alone', async () => {
   const client = createQueryClient();
-  const me = { plan: { plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false } };
+  const me = { plan: { plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, trial_extended: false } };
   client.setQueryData(['me'], me);
   await client.fetchQuery({ queryKey: ['x'], queryFn: () => Promise.reject(new PlanLimitError('cap')), retryDelay: 0 }).catch(() => {});
+  expect(client.getQueryData(['me'])).toEqual(me);
+});
+
+test('a lock on an instance without plans (me.plan is null) never invents a trial end', async () => {
+  const client = createQueryClient();
+  const me = { agent: {}, workspace: {}, timezone: 'UTC', plan: null };
+  client.setQueryData(['me'], me);
+  await client.fetchQuery({ queryKey: ['x'], queryFn: () => Promise.reject(new WorkspaceLockedError('locked')), retryDelay: 0 }).catch(() => {});
   expect(client.getQueryData(['me'])).toEqual(me);
 });
