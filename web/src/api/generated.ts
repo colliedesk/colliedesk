@@ -2107,7 +2107,7 @@ export interface operations {
         parameters: {
             query?: {
                 search?: string;
-                /** @description Comma-separated contact ids (at most 100). Only these contacts of the workspace are returned, in name order; an unknown id is skipped. Combines with search. */
+                /** @description Comma-separated contact ids (UUIDs), at most 100. Only these contacts of the workspace are returned, in name order; an unknown id, or an id of another workspace, is skipped. More than 100 ids, an empty entry or a value that is not a UUID answers 400 and names the problem. Combines with search. */
                 ids?: string;
             };
             header?: never;

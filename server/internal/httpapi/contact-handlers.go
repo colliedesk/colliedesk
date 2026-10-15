@@ -1,11 +1,14 @@
 package httpapi
 
 import (
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func (a *API) createContact(response http.ResponseWriter, request *http.Request) {
@@ -43,9 +46,9 @@ func (a *API) listContacts(response http.ResponseWriter, request *http.Request) 
 	query := request.URL.Query()
 	filter := store.ContactFilter{Search: query.Get("search")}
 	if query.Has("ids") {
-		ids, ok := parseContactIDs(query.Get("ids"))
-		if !ok {
-			writeError(response, http.StatusBadRequest, "invalid_request", "ids must be 1 to 100 contact ids separated by commas.")
+		ids, problem := parseContactIDs(query.Get("ids"))
+		if problem != "" {
+			writeError(response, http.StatusBadRequest, "invalid_request", problem)
 			return
 		}
 		filter.IDs = ids
@@ -58,16 +61,32 @@ func (a *API) listContacts(response http.ResponseWriter, request *http.Request) 
 	writeJSON(response, http.StatusOK, map[string]any{"items": contacts})
 }
 
-// parseContactIDs splits a comma-separated id list; a bad or empty entry makes the whole list invalid.
-func parseContactIDs(raw string) ([]string, bool) {
-	ids := strings.Split(strings.ToLower(raw), ",")
-	if len(ids) > maxContactIDs {
-		return nil, false
+// parseContactIDs reads a comma-separated list of contact ids as uuids. The first bad entry makes the
+// whole list invalid; problem then says which and why, for the client.
+func parseContactIDs(raw string) (ids []pgtype.UUID, problem string) {
+	entries := strings.Split(strings.ToLower(raw), ",")
+	if len(entries) > maxContactIDs {
+		return nil, fmt.Sprintf("ids takes at most %d contact ids, got %d.", maxContactIDs, len(entries))
 	}
-	for _, id := range ids {
-		if !contactIDPattern.MatchString(id) {
-			return nil, false
+	ids = make([]pgtype.UUID, len(entries))
+	for index, entry := range entries {
+		if entry == "" {
+			return nil, "ids has an empty entry. Give contact ids (UUIDs) separated by single commas."
+		}
+		if !contactIDPattern.MatchString(entry) || ids[index].Scan(entry) != nil {
+			return nil, fmt.Sprintf("ids must be contact ids (UUIDs) separated by commas; %q is not one.", shorten(entry, 40))
 		}
 	}
-	return ids, true
+	return ids, ""
+}
+
+// shorten cuts text to at most limit bytes (at a character boundary) for an error message.
+func shorten(text string, limit int) string {
+	if len(text) <= limit {
+		return text
+	}
+	for limit > 0 && !utf8.RuneStart(text[limit]) {
+		limit--
+	}
+	return text[:limit] + "..."
 }

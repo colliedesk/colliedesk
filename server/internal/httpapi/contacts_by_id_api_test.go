@@ -61,3 +61,41 @@ func TestContactsCanBeFetchedByIDWithinOneWorkspace(t *testing.T) {
 	}
 	names("ids="+url.QueryEscape(strings.Join(many, ",")), http.StatusBadRequest)
 }
+
+func TestContactIDsFilterExplainsWhatIsWrong(t *testing.T) {
+	api, service := testAPI(t)
+	token := createSession(t, api, service, "Ids Message", "admin@ids-message.example.com")
+	ada := create(t, api, token, "/api/v1/contacts", map[string]any{"name": "Ada", "email": "ada@ids-message.example.com"})
+	tooMany := make([]string, 101)
+	for index := range tooMany {
+		tooMany[index] = fmt.Sprintf("00000000-0000-4000-8000-%012d", index)
+	}
+	cases := []struct {
+		name, ids string
+		want      []string
+	}{
+		{"not an id", "not-a-uuid", []string{`"not-a-uuid"`, "UUID"}},
+		{"one bad id among good ones", ada + ",12345", []string{`"12345"`, "UUID"}},
+		{"empty entry", ada + ",," + ada, []string{"empty", "ids"}},
+		{"too many", strings.Join(tooMany, ","), []string{"at most 100"}},
+	}
+	for _, c := range cases {
+		response := request(t, api, http.MethodGet, "/api/v1/contacts?ids="+url.QueryEscape(c.ids), nil, token, nil)
+		if response.Code != http.StatusBadRequest {
+			t.Errorf("%s: status=%d body=%s, want 400", c.name, response.Code, response.Body.String())
+			continue
+		}
+		var body struct {
+			Error struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		decode(t, response, &body)
+		for _, want := range c.want {
+			if !strings.Contains(body.Error.Message, want) {
+				t.Errorf("%s: message %q lacks %q", c.name, body.Error.Message, want)
+			}
+		}
+	}
+}

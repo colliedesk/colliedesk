@@ -6,6 +6,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func (s *Store) CreateContact(ctx context.Context, workspaceID, name, email string) (domain.Contact, error) {
@@ -48,7 +49,7 @@ func getContact(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.
 // names no contact of the workspace is skipped.
 type ContactFilter struct {
 	Search string
-	IDs    []string
+	IDs    []pgtype.UUID
 }
 
 func (s *Store) ListContacts(ctx context.Context, workspaceID string, filter ContactFilter) ([]domain.Contact, error) {
@@ -57,10 +58,21 @@ func (s *Store) ListContacts(ctx context.Context, workspaceID string, filter Con
 	})
 }
 
+const (
+	contactColumns = `id::text,name,email,organization,created_at,updated_at`
+	contactMatches = `($2='' OR name ILIKE '%'||$2||'%' ESCAPE '\' OR email ILIKE '%'||$2||'%' ESCAPE '\')`
+)
+
 func listContacts(ctx context.Context, tx pgx.Tx, workspaceID string, filter ContactFilter) ([]domain.Contact, error) {
-	rows, err := tx.Query(ctx, `SELECT id::text,name,email,organization,created_at,updated_at FROM contacts
-		WHERE workspace_id=$1 AND ($2='' OR name ILIKE '%'||$2||'%' ESCAPE '\' OR email ILIKE '%'||$2||'%' ESCAPE '\')
-		AND ($3::text[] IS NULL OR id::text=ANY($3::text[])) ORDER BY name,id`, workspaceID, escapeLikePattern(filter.Search), filter.IDs)
+	query := `SELECT ` + contactColumns + ` FROM contacts WHERE workspace_id=$1 AND ` + contactMatches + ` ORDER BY name,id`
+	args := []any{workspaceID, escapeLikePattern(filter.Search)}
+	if filter.IDs != nil {
+		// A statement of its own: matching uuid values lets the planner use the (workspace_id, id) index.
+		// Comparing id::text defeated it and scanned every contact of every workspace.
+		query = `SELECT ` + contactColumns + ` FROM contacts WHERE workspace_id=$1 AND id=ANY($3::uuid[]) AND ` + contactMatches + ` ORDER BY name,id`
+		args = append(args, filter.IDs)
+	}
+	rows, err := tx.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list contacts: %w", err)
 	}
