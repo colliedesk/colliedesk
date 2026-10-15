@@ -140,8 +140,8 @@ func withFailedEmailReply(t *testing.T, api http.Handler, pool *pgxpool.Pool, ad
 	t.Helper()
 	secret := connectEmail(t, api, admin, "support@contract-all.example.com")
 	// The workspace is on a trial, which replies only to customers who wrote first.
-	if _, err := pool.Exec(context.Background(), `INSERT INTO messages(workspace_id,conversation_id,kind,body)
-		SELECT workspace_id,id,'incoming','Customer question' FROM conversations WHERE id=$1`, conversationID); err != nil {
+	if _, err := pool.Exec(context.Background(), `INSERT INTO messages(workspace_id,conversation_id,kind,body,email_meta)
+		SELECT workspace_id,id,'incoming','Customer question','{"from":"c@customer.example","authentication":"pass","via":"platform"}' FROM conversations WHERE id=$1`, conversationID); err != nil {
 		t.Fatal(err)
 	}
 	replyID := create(t, api, admin, "/api/v1/conversations/"+conversationID+"/messages", map[string]any{"kind": "outgoing", "body": "Contract reply"})

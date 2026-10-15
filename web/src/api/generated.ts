@@ -846,6 +846,11 @@ export interface components {
             from: string;
             authentication: components["schemas"]["EmailAuthentication"];
             /**
+             * @description Door the message came through; absent on mail stored before this was recorded. Trial replies need `platform`.
+             * @enum {string}
+             */
+            via?: "platform" | "workspace";
+            /**
              * Format: uuid
              * @description Attachment holding the complete raw message, gzip-compressed (original-message.eml.gz). Null for mail received before raw messages were kept.
              */
@@ -1576,6 +1581,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["TrialOutboundLimit"];
             500: components["responses"]["InternalError"];
         };
     };

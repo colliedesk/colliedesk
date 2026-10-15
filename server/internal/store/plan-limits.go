@@ -76,30 +76,35 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 const repliesInWindow = `SELECT count(*) FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND status <> 'failed'`
 
 // customerWroteFirst is true for a conversation that holds a message from the customer: an
-// imported one, or inbound mail whose authentication did not fail. Without that rule a trial user
-// could mail their own hosted address with a forged From and use the relay to write to the victim.
-// A "none" verdict passes because many small senders publish no DMARC; the daily cap bounds that.
+// imported one, or inbound mail that came through the platform forwarder and whose authentication
+// did not fail. Mail posted to a workspace's own inbound endpoint never counts: its admin writes the
+// whole message, Authentication-Results included. Without these rules a trial user could mail
+// themselves with a forged From and use the relay to write to the victim.
+// A "none" verdict passes for MVP because many small senders publish no DMARC; the daily cap bounds
+// that. The real hardening, when needed, is requiring an aligned dmarc=pass, which needs the parser
+// to record the DMARC result separately (today a bare spf=pass or dkim=pass of any domain is "pass").
 const customerWroteFirst = `SELECT EXISTS(SELECT 1 FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND kind='incoming'
-	AND (origin IS NOT NULL OR COALESCE(email_meta->>'authentication','none') <> 'fail'))`
+	AND (origin IS NOT NULL OR (email_meta->>'via'='platform' AND COALESCE(email_meta->>'authentication','none') <> 'fail')))`
 
-// checkTrialOutbound refuses a reply the trial does not allow with a *domain.TrialOutboundError.
-// It only applies to the hosted cloud on the trial plan; paid workspaces, locked ones (their
-// replies are refused earlier) and self-hosted servers are untouched. A workspace-wide advisory
-// lock makes two concurrent replies see each other's row before the cap is compared.
-func (s *Store) checkTrialOutbound(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, domainVerified bool) error {
+// onTrial reports whether the trial outbound rules apply to the workspace now: plan limits are on
+// and the plan in effect is the trial. Paid, locked and self-hosted workspaces are untouched.
+func (s *Store) onTrial(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (bool, error) {
 	if !s.limits {
-		return nil
+		return false, nil
 	}
-	now := s.now()
 	access, err := workspaceAccess(ctx, tx, workspaceID, now)
 	if err != nil {
+		return false, err
+	}
+	return access.Plan == domain.PlanTrial, nil
+}
+
+// checkTrialOutbound refuses a new reply the trial does not allow with a *domain.TrialOutboundError:
+// first the customer-wrote-first rule, then the daily cap.
+func (s *Store) checkTrialOutbound(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, domainVerified bool) error {
+	now := s.now()
+	if trial, err := s.onTrial(ctx, tx, workspaceID, now); err != nil || !trial {
 		return err
-	}
-	if access.Plan != domain.PlanTrial {
-		return nil
-	}
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "outbound-cap:"+workspaceID); err != nil {
-		return fmt.Errorf("lock outbound cap: %w", err)
 	}
 	if !domainVerified {
 		var wrote bool
@@ -109,6 +114,17 @@ func (s *Store) checkTrialOutbound(ctx context.Context, tx pgx.Tx, workspaceID, 
 		if !wrote {
 			return &domain.TrialOutboundError{}
 		}
+	}
+	return s.checkTrialCap(ctx, tx, workspaceID, now)
+}
+
+// checkTrialCap refuses with a *domain.TrialOutboundError carrying RetryAfter when the workspace
+// already has TrialRepliesPerDay deliveries in the window. Both a new reply and the retry of a
+// failed one (which counts again once queued) pass through it. A workspace-wide advisory lock makes
+// two concurrent callers see each other's row before the cap is compared.
+func (s *Store) checkTrialCap(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) error {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "outbound-cap:"+workspaceID); err != nil {
+		return fmt.Errorf("lock outbound cap: %w", err)
 	}
 	windowStart := now.Add(-domain.TrialReplyWindow)
 	var sent int

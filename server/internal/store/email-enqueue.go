@@ -112,6 +112,14 @@ func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	if reason := s.outbound.notReadyReason(verified); reason != "" {
 		return domain.Message{}, fmt.Errorf("%w: %s", ErrOutboundNotReady, reason)
 	}
+	now := s.now()
+	if trial, err := s.onTrial(ctx, tx, workspaceID, now); err != nil {
+		return domain.Message{}, err
+	} else if trial {
+		if err := s.checkTrialCap(ctx, tx, workspaceID, now); err != nil {
+			return domain.Message{}, err
+		}
+	}
 	result, err := tx.Exec(ctx, `UPDATE email_outbox SET status='queued',attempts=0,next_attempt_at=now(),locked_until=NULL,
 		claim_token=NULL,last_error=NULL,updated_at=now() WHERE workspace_id=$1 AND message_id=$2 AND status='failed'`, workspaceID, messageID)
 	if err != nil {

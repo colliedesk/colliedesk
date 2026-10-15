@@ -323,6 +323,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '429': {$ref: '#/components/responses/TrialOutboundLimit'}
         '500': {$ref: '#/components/responses/InternalError'}
   /api/v1/channels/email:
     get:
@@ -1177,6 +1178,10 @@ components:
       properties:
         from: {type: string}
         authentication: {$ref: '#/components/schemas/EmailAuthentication'}
+        via:
+          type: string
+          enum: [platform, workspace]
+          description: Door the message came through; absent on mail stored before this was recorded. Trial replies need `platform`.
         original_attachment_id:
           type: [string, 'null']
           format: uuid

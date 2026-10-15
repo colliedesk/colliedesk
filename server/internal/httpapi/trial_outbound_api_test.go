@@ -1,8 +1,10 @@
 package httpapi_test
 
 import (
+	"bytes"
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -96,7 +98,8 @@ func TestTrialRefusesRepliesInAgentStartedConversations(t *testing.T) {
 
 func TestTrialRefusesRepliesToSpoofedSenders(t *testing.T) {
 	f := newLimitsFixture(t, true)
-	failed := inboundOK(t, f.api, f.secretA, mail([]string{
+	failed := inboundOK(t, f.api, platformSecret, mail([]string{
+		"X-Original-To: support@limits-alpha." + hostedDomain,
 		"From: victim@customer.example", "To: support@limits-alpha.example.com", "Subject: Forged",
 		"Message-ID: <forged@customer.example>",
 		"Authentication-Results: mx.example.net; spf=fail smtp.mailfrom=customer.example; dkim=none; dmarc=fail header.from=customer.example",
@@ -105,7 +108,8 @@ func TestTrialRefusesRepliesToSpoofedSenders(t *testing.T) {
 		t.Fatalf("fixture: %+v", failed)
 	}
 	wantStatus(t, f.reply(t, f.adminA, *failed.ConversationID), http.StatusForbidden, restrictedCode, "reply to dmarc=fail mail")
-	passed := inboundOK(t, f.api, f.secretA, mail([]string{
+	passed := inboundOK(t, f.api, platformSecret, mail([]string{
+		"X-Original-To: support@limits-alpha." + hostedDomain,
 		"From: real@customer.example", "To: support@limits-alpha.example.com", "Subject: Genuine",
 		"Message-ID: <genuine@customer.example>", passingAuth,
 	}, "Genuine."))
@@ -200,20 +204,56 @@ func TestRepliesQueuedBeforeTheLockStillSend(t *testing.T) {
 	}
 }
 
+// Two replies to different conversations meet at the cap. The test holds the workspace's cap lock
+// itself, so both requests are provably inside their transactions and queued on it at the same
+// moment; without the lock in the code they would never wait and both would be admitted at 199.
 func TestTwoRepliesRacingAtTheCapAdmitExactlyOne(t *testing.T) {
 	f := newLimitsFixture(t, true)
-	conversation := f.conversationA(t)
+	first := f.conversationA(t)
+	second := *f.receive(t, false, 2, "Second question").ConversationID
 	f.seedOutbox(t, f.workspaceA, 199, "sent", f.clock.Now().Add(-time.Hour))
+	ctx := context.Background()
+	holder, err := f.pool.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Release()
+	var key int64
+	if err := holder.QueryRow(ctx, `SELECT hashtextextended($1,0)`, "outbound-cap:"+f.workspaceA).Scan(&key); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := holder.Exec(ctx, `SELECT pg_advisory_lock($1)`, key); err != nil {
+		t.Fatal(err)
+	}
 	codes := make([]int, 2)
 	var wg sync.WaitGroup
-	for i := range codes {
+	for i, conversation := range []string{first, second} {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			codes[i] = f.reply(t, f.adminA, conversation).Code
 		}()
 	}
+	waiting := func() int {
+		var count int
+		if err := f.pool.QueryRow(ctx, `SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND NOT granted
+			AND ((classid::bigint << 32) | objid::bigint) = $1`, key).Scan(&count); err != nil {
+			t.Error(err)
+		}
+		return count
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for waiting() < 2 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	overlapped := waiting() == 2
+	if _, err := holder.Exec(ctx, `SELECT pg_advisory_unlock($1)`, key); err != nil {
+		t.Fatal(err)
+	}
 	wg.Wait()
+	if !overlapped {
+		t.Fatalf("the two replies never waited together on the cap lock; codes=%v", codes)
+	}
 	created, limited := 0, 0
 	for _, code := range codes {
 		switch code {
@@ -270,4 +310,67 @@ func TestTrialCapCountStaysFastOnALargeOutbox(t *testing.T) {
 		t.Fatalf("fastest of 5 replies took %s on a 200k-row outbox, want <= 200ms", best)
 	}
 	t.Logf("fastest of 5 trial replies on a 200k-row outbox: %s", best)
+}
+
+// The workspace's own inbound endpoint takes whatever its admin posts, including a forged
+// Authentication-Results line, so only mail that came through the platform forwarder proves that a
+// customer wrote.
+func TestTrialIgnoresMailThePlanAdminPostedToTheWorkspaceEndpoint(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	cases := map[string][]string{
+		"no verdict":         nil,
+		"self-asserted pass": {"Authentication-Results: mx.example.net; dmarc=pass header.from=victim.example"},
+	}
+	for name, headers := range cases {
+		posted := f.receiveViaWorkspaceSecret(t, "stranger-"+strings.ReplaceAll(name, " ", "-")+"@victim.example", headers...)
+		if posted.ConversationID == nil {
+			t.Fatalf("%s: %+v", name, posted)
+		}
+		outbox := f.outboxCount(t, f.workspaceA)
+		wantStatus(t, f.reply(t, f.adminA, *posted.ConversationID), http.StatusForbidden, restrictedCode, name)
+		if f.outboxCount(t, f.workspaceA) != outbox {
+			t.Fatalf("%s: a refused reply must not reach the outbox", name)
+		}
+	}
+	// A verified domain and a paid plan both lift the rule, as for any other conversation.
+	posted := f.receiveViaWorkspaceSecret(t, "paid@victim.example")
+	f.upgrade(t, f.workspaceA, "sub_posted")
+	f.wantReplyQueued(t, *posted.ConversationID, "paid workspace replying to posted mail")
+}
+
+func (f limitsFixture) retry(t *testing.T, conversation, message string) *responseView {
+	t.Helper()
+	response := request(t, f.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/messages/"+message+"/retry", nil, f.adminA, nil)
+	return &responseView{Code: response.Code, Body: response.Body.String()}
+}
+
+// A failure frees a slot, the slot is used, and retrying the old failure must not push the
+// workspace past 200 queued-or-sent replies in the window.
+func TestTrialRetryOfAFailedDeliveryRespectsTheCap(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	conversation := f.conversationA(t)
+	f.seedOutbox(t, f.workspaceA, 198, "sent", f.clock.Now().Add(-time.Hour))
+	var failed struct {
+		ID string `json:"id"`
+	}
+	response := f.reply(t, f.adminA, conversation)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("setup reply: %+v", response)
+	}
+	decode(t, &httptest.ResponseRecorder{Code: response.Code, Body: bytes.NewBufferString(response.Body)}, &failed)
+	if _, err := f.pool.Exec(context.Background(), `UPDATE email_outbox SET status='failed', last_error='550 mailbox unavailable' WHERE message_id=$1`, failed.ID); err != nil {
+		t.Fatal(err)
+	}
+	f.wantReplyQueued(t, conversation, "the freed slot")
+	f.wantReplyQueued(t, conversation, "the 200th counted reply")
+	got := f.retry(t, conversation, failed.ID)
+	wantStatus(t, got, http.StatusTooManyRequests, limitCode, "retry at the cap")
+	if status := queryString(t, f.pool, `SELECT status FROM email_outbox WHERE message_id=$1`, failed.ID); status != "failed" {
+		t.Fatalf("refused retry changed the delivery to %q", status)
+	}
+	// Once a counted reply leaves the window there is room again.
+	f.clock.set(f.clock.Now().Add(23*time.Hour + time.Minute))
+	if got := f.retry(t, conversation, failed.ID); got.Code != http.StatusOK {
+		t.Fatalf("retry with room: status=%d body=%s", got.Code, got.Body)
+	}
 }

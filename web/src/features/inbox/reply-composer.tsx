@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { OutboundRefusedError } from '../../api/outbound-error';
 import { messages } from '../../messages';
 import { LockIcon, ReplyIcon } from '../../ui/icons';
 
 interface ReplyComposerProps {
   disabled?: boolean;
-  onSubmit?: (kind: 'outgoing' | 'note', body: string) => void;
+  // May return a promise: the text is kept, with the reason shown, when it rejects.
+  onSubmit?: (kind: 'outgoing' | 'note', body: string) => void | Promise<unknown>;
 }
 
 type Kind = 'outgoing' | 'note';
@@ -23,16 +25,34 @@ function isTyping(target: EventTarget | null) {
 
 // An input method (Vietnamese Telex/VNI on macOS, CJK) still holds marked text while it composes;
 // acting on that key would send or switch before the text is committed.
+function waitText(seconds: number) {
+  const minutes = Math.max(1, Math.ceil(seconds / 60));
+  return minutes < 90 ? messages.minutes(minutes) : messages.hours(Math.ceil(minutes / 60));
+}
+
+function refusalText(error: unknown) {
+  if (error instanceof OutboundRefusedError) {
+    return error.code === 'trial_outbound_limit' ? messages.trialReplyLimit(waitText(error.retryAfterSeconds ?? 3600)) : messages.trialReplyRestricted;
+  }
+  return messages.replyNotSent;
+}
+
 const composing = (event: KeyboardEvent) => event.isComposing || event.keyCode === 229;
 
 export function ReplyComposer({ disabled, onSubmit }: ReplyComposerProps) {
   const [kind, setKind] = useState<Kind>('outgoing');
   const [body, setBody] = useState('');
+  const [problem, setProblem] = useState<string>();
+  const [sending, setSending] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
+  // The text leaves the box only after the server accepted it; a refusal keeps it with the reason.
   const submit = () => {
-    if (!body.trim()) return;
-    onSubmit?.(kind, body.trim());
-    setBody('');
+    if (!body.trim() || sending) return;
+    const result = onSubmit?.(kind, body.trim());
+    if (typeof (result as Promise<unknown> | undefined)?.then !== 'function') { setBody(''); return; }
+    setSending(true);
+    setProblem(undefined);
+    (result as Promise<unknown>).then(() => setBody(''), (error: unknown) => setProblem(refusalText(error))).finally(() => setSending(false));
   };
   // R starts a reply and N a private note from anywhere on the page, as the keycaps on the tabs say.
   useEffect(() => {
@@ -65,9 +85,10 @@ export function ReplyComposer({ disabled, onSubmit }: ReplyComposerProps) {
         </div>
         <textarea ref={field} aria-label={messages.messageBody} value={body} disabled={disabled} onKeyDown={onFieldKey}
           placeholder={kind === 'note' ? messages.notePlaceholder : messages.replyPlaceholder} onChange={(event) => setBody(event.target.value)} />
+        {problem && <p role="alert" className="composer-notice">{problem}</p>}
         <div className="composer-actions">
           <span className="composer-hint" aria-hidden="true"><kbd>Ctrl</kbd><kbd>Enter</kbd> {messages.sendShortcut}</span>
-          <button className="primary-action" type="button" disabled={disabled || !body.trim()} onClick={submit}>
+          <button className="primary-action" type="button" disabled={disabled || sending || !body.trim()} onClick={submit}>
             {kind === 'note' ? messages.privateNote : messages.reply}
           </button>
         </div>

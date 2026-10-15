@@ -64,6 +64,7 @@ func newLimitsFixtureTraced(t *testing.T, billingEnabled bool, tracer pgx.QueryT
 	fake := newFakePolarAPI(t)
 	api, service, pool, _ := testAPIOnPool(t, testPoolTraced(t, tracer), func(config *httpapi.Config) {
 		config.Now = clock.Now
+		hostedConfig(config)
 		if billingEnabled {
 			config.Billing = fake.config()
 		}
@@ -80,17 +81,28 @@ func newLimitsFixtureTraced(t *testing.T, billingEnabled bool, tracer pgx.QueryT
 	return f
 }
 
-// receive delivers one new-thread customer email to workspace A (or B) and returns the result.
+// receive delivers one new-thread customer email to workspace A (or B) through the platform
+// forwarder, the way real customer mail arrives on the hosted cloud, and returns the result.
 func (f limitsFixture) receive(t *testing.T, workspaceB bool, number int, subject string) inboundResult {
 	t.Helper()
-	secret, support := f.secretA, "support@limits-alpha.example.com"
+	slug := "limits-alpha"
 	if workspaceB {
-		secret, support = f.secretB, "support@limits-bravo.example.com"
+		slug = "limits-bravo"
 	}
-	return inboundOK(t, f.api, secret, mail([]string{
-		fmt.Sprintf("From: customer%d@customer.example", number), "To: " + support,
+	return inboundOK(t, f.api, platformSecret, mail([]string{
+		"X-Original-To: support@" + slug + "." + hostedDomain,
+		fmt.Sprintf("From: customer%d@customer.example", number), "To: support@" + slug + "." + hostedDomain,
 		"Subject: " + subject, fmt.Sprintf("Message-ID: <limits-%d-%t@customer.example>", number, workspaceB),
 	}, "Please help with "+subject+"."))
+}
+
+// receiveViaWorkspaceSecret posts a raw message to workspace A's own inbound endpoint, which the
+// workspace admin controls completely: no trusted mail server stands in between.
+func (f limitsFixture) receiveViaWorkspaceSecret(t *testing.T, from string, extraHeaders ...string) inboundResult {
+	t.Helper()
+	headers := append([]string{"From: " + from, "To: support@limits-alpha.example.com", "Subject: Posted by the admin",
+		"Message-ID: <posted-" + from + ">"}, extraHeaders...)
+	return inboundOK(t, f.api, f.secretA, mail(headers, "Written by the workspace admin."))
 }
 
 func (f limitsFixture) upgrade(t *testing.T, workspace, subscriptionID string) {

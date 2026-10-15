@@ -150,17 +150,26 @@ and workspaces without an email channel never reach it.
 
 - **Replies only to customers who wrote first**, unless the support address domain is verified
   (`email_channels.domain_verified_at`). A conversation qualifies when it has an `incoming` message
-  that is imported history (`origin IS NOT NULL`) or inbound mail whose authentication verdict is
-  not `fail`. Refusal: HTTP 403 `trial_outbound_restricted`.
-- **Spoof-From trade-off.** A trial user can mail their own hosted address with a forged
-  `From: victim@...` and then reply to the victim through our relay. `fail` is refused. `none` is
-  allowed because many small senders publish no DMARC; refusing it would block real customers. The
-  residual risk is bounded by the 200/day cap, the hourly 300 worker limit and signup controls.
-  Requiring `pass` later is a one-line change in `customerWroteFirst`, no schema change.
+  that is imported history (`origin IS NOT NULL`) or inbound mail that came through the platform
+  forwarder (`email_meta.via = 'platform'`) and whose authentication verdict is not `fail`.
+  Refusal: HTTP 403 `trial_outbound_restricted`.
+- **Mail posted to a workspace's own inbound secret never qualifies.** The admin writes that whole
+  message, `Authentication-Results` included, so it proves nothing about the sender. `IngestEmail`
+  records the door in `email_meta.via` (`platform` or `workspace`). Mail stored before `via`
+  existed has none and does not qualify; no trial users existed when this shipped.
+- **Spoof-From trade-off.** A trial user can send a forged `From: victim@...` through the hosted
+  address and then reply to the victim through our relay. `fail` is refused. `none` is allowed for
+  now because many small senders publish no DMARC and refusing it would block real customers; the
+  200/day cap, the hourly 300 worker limit and the signup controls bound the abuse. "Require
+  `pass`" is not the hardening: without a DMARC record, any `spf=pass` or `dkim=pass`, even for an
+  unrelated domain, makes the verdict `pass`. The real step is requiring an *aligned* `dmarc=pass`,
+  which needs the parser to record the DMARC result on its own.
 - **200 replies per rolling 24 h per workspace**, counted from `email_outbox.created_at > now-24h`
   with `status <> 'failed'` (a failed delivery never left). A row exactly 24 h old no longer counts.
   Refusal: HTTP 429 `trial_outbound_limit`, with `Retry-After` and `retry_after_seconds` (time until
   the 200th newest counted reply leaves the window). The existing 300/hour worker limit stays.
+- Both a new reply and the retry of a failed delivery pass `checkTrialCap`, because a retried row
+  counts again once it is queued (429 on retry too).
 - Both checks run under `pg_advisory_xact_lock("outbound-cap:<workspace>")` inside the message
   transaction, so two replies racing for the last slot admit exactly one, and a refusal rolls back
   the whole message (no orphan reply in the timeline).
@@ -171,6 +180,9 @@ and workspaces without an email channel never reach it.
   `TestTrialCapCountStaysFastOnALargeOutbox` asserts the plan uses it and a reply takes under
   200 ms with 200k outbox rows (measured ~12 ms).
 - `GET /billing` reports `usage.replies_last_24h` (0 off-trial).
+- Imported history qualifies. Imports run only through the operator CLI today; if import becomes
+  self-service for trial workspaces, this gate must be revisited (a Freshdesk trial could invent
+  tickets for any address).
 - There is no Cc support yet, so nothing to restrict. When reply Cc lands, it must be refused in
   trial unless the domain is verified, with the same `trial_outbound_restricted` code.
 
