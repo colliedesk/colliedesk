@@ -56,8 +56,7 @@ trial (or the subscription) has ended, instead of the inbox.
 - Customers who write to a locked workspace get a bounce. Nothing is stored, so nothing is lost
   that you did not already have.
 - In the app only paying, exporting and signing out work until the workspace has a plan.
-- A locked workspace is kept for at least 12 months. Its admins get an email at least 30 days
-  before anything is deleted. Export your data before then. See [Export all data](export.md).
+- A locked workspace is kept for at least 12 months. See "What happens to a locked workspace" below.
 
 ## Upgrade
 
@@ -86,6 +85,20 @@ card, download invoices and cancel there. The button stays available after a sub
 - A subscription that ended, was unpaid or never completed locks the workspace once the trial is
   over. Nothing is deleted: conversations, contacts and attachments stay until the retention period
   above ends.
+
+## What happens to a locked workspace
+
+1. The workspace stays locked, with all its data, for at least 12 months while you decide. You can
+   choose a plan at any time, and everything is there again.
+2. Before a locked workspace is deleted, every admin gets an email with the exact deletion date, at
+   least 30 days ahead. It is sent from Colliedesk, not from your workspace's address.
+3. When the workspace is deleted, it is deleted for good: conversations, contacts and attachments.
+   Choosing a plan before that date cancels the deletion, and a later lock starts a new period.
+4. To keep a copy, export all your data before the deletion date. See [Export all data](export.md).
+   Export works while the workspace is locked.
+
+Deleted data can stay in Colliedesk's encrypted nightly backups until they expire; it is not
+restored on request after the deletion date.
 
 ## What the Billing page shows
 

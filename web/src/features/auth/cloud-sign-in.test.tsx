@@ -59,19 +59,39 @@ test('"Sign in to your workspace" after a used trial signs the identity out of t
   expect(clerk.signOut).toHaveBeenCalled();
 });
 
-test('Clerk offers its own sign-up only where Colliedesk sign-up exists, so no orphan accounts pile up', () => {
-  clerk.signedIn = false;
-  const { unmount } = render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={vi.fn()} onSignUp={vi.fn()} />);
-  expect(clerk.signInProps).toHaveBeenLastCalledWith(expect.objectContaining({ withSignUp: true }));
-  unmount();
-  render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={vi.fn()} />);
-  expect(clerk.signInProps).toHaveBeenLastCalledWith(expect.objectContaining({ withSignUp: false }));
-});
-
 test('a failed sign-out is said aloud, not swallowed', async () => {
   clerk.getToken.mockResolvedValue('token');
   clerk.signOut.mockRejectedValue(new Error('offline'));
   render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={vi.fn().mockRejectedValue(new NotAnAgentError())} />);
   fireEvent.click(await screen.findByRole('button', { name: 'Use another account' }));
   expect(await screen.findByText(/sign out failed/i)).toBeInTheDocument();
+});
+
+test('keeps Clerk on the current page after sign-in so the exchange still runs', async () => {
+  window.history.pushState({}, '', '/redeem?from=cloud');
+  clerk.signedIn = false;
+  clerk.getToken.mockResolvedValue('session-token');
+  const onSessionToken = vi.fn().mockResolvedValue(undefined);
+  const view = render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={onSessionToken} />);
+
+  expect(clerk.signInProps).toHaveBeenLastCalledWith(expect.objectContaining({
+    forceRedirectUrl: '/redeem?from=cloud',
+    signUpForceRedirectUrl: '/redeem?from=cloud',
+  }));
+  expect(onSessionToken).not.toHaveBeenCalled();
+
+  clerk.signedIn = true;
+  view.rerender(<CloudSignIn publishableKey="pk_test_example" onSessionToken={onSessionToken} />);
+  await waitFor(() => expect(onSessionToken).toHaveBeenCalledWith('session-token'));
+});
+
+// An invited agent has no Clerk identity yet, so Clerk's combined sign-in-or-up flow must be on even
+// where Colliedesk sign-up is off; the server still admits only emails that belong to an agent.
+test('renders the combined sign-in-or-up flow with and without Colliedesk sign-up', () => {
+  clerk.signedIn = false;
+  const { unmount } = render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={vi.fn()} />);
+  expect(clerk.signInProps).toHaveBeenLastCalledWith(expect.objectContaining({ withSignUp: true }));
+  unmount();
+  render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={vi.fn()} onSignUp={vi.fn()} />);
+  expect(clerk.signInProps).toHaveBeenLastCalledWith(expect.objectContaining({ withSignUp: true }));
 });

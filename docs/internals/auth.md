@@ -96,8 +96,21 @@ and billing are both configured, so a self-hosted server never offers it. Code:
 
 ### Verification traps
 
-- Customize the Clerk session token itself with `email` and boolean `email_verified` claims. The
-  default token does not contain enough email information. Use the verified primary email only.
+- Customize the Clerk session token (Clerk Dashboard, Sessions, Customize session token) with
+  exactly these claims; the default token carries no email:
+
+  ```json
+  { "email": "{{user.primary_email_address}}", "email_verified": "{{user.email_verified}}" }
+  ```
+
+  The verifier rejects a token without `email_verified: true`, so omitting the second claim breaks
+  every sign-in (it did on the hosted cloud until the claim was added). Use the verified primary
+  email only.
+- The web widget uses Clerk's combined sign-in-or-up flow (`withSignUp`), so an agent with no Clerk
+  identity yet can sign in with an email code. This creates a Clerk user only. The server still
+  admits the email only when it belongs to an agent; otherwise the exchange fails and the page shows
+  "Cloud sign-in failed" with a retry button. The widget redirects Clerk back to the current page
+  (`forceRedirectUrl`) so the exchange runs before any navigation; the default `/` would unmount it.
 - JWT time checks allow at most 60 seconds of clock skew around `exp` and `nbf`. Keep host clocks
   synchronized; do not widen this window to hide clock problems.
 - Public keys are cached by `kid`. An unknown `kid` triggers one JWKS refresh so normal key rotation

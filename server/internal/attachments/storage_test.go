@@ -159,3 +159,116 @@ func countFiles(t *testing.T, root string) int {
 	}
 	return count
 }
+
+func TestTrashMovesAWorkspaceAsideAndCanBeUndone(t *testing.T) {
+	root := t.TempDir()
+	disk, err := attachments.NewLocalDisk(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const workspace = "11111111-2222-3333-4444-555555555555"
+	other := "66666666-2222-3333-4444-555555555555"
+	object, err := disk.Put(context.Background(), workspace, strings.NewReader("bytes"), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherObject, err := disk.Put(context.Background(), other, strings.NewReader("keep"), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2027, 11, 1, 0, 0, 0, 0, time.UTC)
+	undo, found, err := disk.Trash(context.Background(), workspace, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := disk.Open(context.Background(), object.Key); err == nil {
+		t.Fatal("file still readable at its old key after Trash")
+	}
+	if _, err := os.Stat(filepath.Join(root, ".trash", workspace+"-1825027200")); err != nil {
+		t.Fatalf("trash entry missing: %v", err)
+	}
+	if _, err := disk.Open(context.Background(), otherObject.Key); err != nil {
+		t.Fatalf("another workspace was touched: %v", err)
+	}
+	if !found {
+		t.Fatal("Trash must report the files it moved")
+	}
+	if err := undo(); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := disk.Open(context.Background(), object.Key)
+	if err != nil {
+		t.Fatalf("file not back after undo: %v", err)
+	}
+	reader.Close()
+}
+
+func TestTrashOfAWorkspaceWithoutFilesReportsNothingFound(t *testing.T) {
+	disk, err := attachments.NewLocalDisk(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	undo, found, err := disk.Trash(context.Background(), "11111111-2222-3333-4444-555555555555", time.Now())
+	if err != nil || found || undo() != nil {
+		t.Fatalf("trash of nothing: found %v err %v", found, err)
+	}
+}
+
+func TestTrashEntriesCanBeListedRestoredAndRemoved(t *testing.T) {
+	root := t.TempDir()
+	disk, err := attachments.NewLocalDisk(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const first, second = "11111111-2222-3333-4444-555555555555", "66666666-2222-3333-4444-555555555555"
+	for index, workspace := range []string{first, second} {
+		if _, err := disk.Put(context.Background(), workspace, strings.NewReader("x"), -1); err != nil {
+			t.Fatal(err)
+		}
+		// Trashed on 2027-11-01 and 2027-11-20.
+		if _, _, err := disk.Trash(context.Background(), workspace, time.Date(2027, 11, 1+19*index, 0, 0, 0, 0, time.UTC)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries, err := disk.ListTrash(context.Background())
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("ListTrash = %+v, %v", entries, err)
+	}
+	byID := map[string]attachments.TrashEntry{entries[0].WorkspaceID: entries[0], entries[1].WorkspaceID: entries[1]}
+	if got := byID[first].TrashedAt; !got.Equal(time.Date(2027, 11, 1, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("TrashedAt = %s", got)
+	}
+	if err := disk.RestoreTrash(context.Background(), byID[first]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, first)); err != nil {
+		t.Fatalf("not restored: %v", err)
+	}
+	// Restoring another workspace works; a place already taken is checked below.
+	if err := disk.RestoreTrash(context.Background(), byID[second]); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := disk.Trash(context.Background(), first, time.Date(2027, 12, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	again, _ := disk.ListTrash(context.Background())
+	var firstAgain attachments.TrashEntry
+	for _, entry := range again {
+		if entry.WorkspaceID == first {
+			firstAgain = entry
+		}
+	}
+	if _, err := disk.Put(context.Background(), first, strings.NewReader("new"), -1); err != nil {
+		t.Fatal(err)
+	}
+	if err := disk.RestoreTrash(context.Background(), firstAgain); err == nil {
+		t.Fatal("RestoreTrash must refuse when the workspace directory already exists")
+	}
+	if err := disk.RemoveTrash(context.Background(), firstAgain); err != nil {
+		t.Fatal(err)
+	}
+	left, _ := disk.ListTrash(context.Background())
+	if len(left) != 0 {
+		t.Fatalf("trash after remove: %+v", left)
+	}
+}

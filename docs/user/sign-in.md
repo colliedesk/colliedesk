@@ -19,6 +19,10 @@ revoke every signed-in device in [Sessions and devices](sessions.md).
 Some hosted Colliedesk instances show **Sign in** on the same page. Use it to authenticate with the
 identity methods enabled by the instance owner, such as Google, Microsoft, email, or MFA.
 
+Enter your email address, then the six-digit code Clerk sends to that address. You do not need to
+create a Clerk account first: the same form works for everyone, and an agent who has been invited can
+sign in this way even before they have one.
+
 Signing in does not by itself add you to a workspace. Your verified primary email must belong to an
 agent in at least one workspace. If it belongs to several workspaces, choose the workspace after
 authentication. Colliedesk then creates its own ordinary browser session; the identity provider does

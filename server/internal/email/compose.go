@@ -26,6 +26,8 @@ type Outgoing struct {
 	InReplyTo   string
 	References  []string
 	Date        time.Time
+	// Standalone keeps Subject as written; a reply gets "Re: " in front.
+	Standalone bool
 }
 
 // Compose renders a plain-text UTF-8 RFC 5322 message. Every header value is single-line by construction.
@@ -52,7 +54,7 @@ func Compose(message Outgoing) ([]byte, error) {
 		}
 		header("Reply-To", (&mail.Address{Name: name, Address: message.ReplyTo}).String())
 	}
-	header("Subject", foldEncodedWords(mime.QEncoding.Encode("utf-8", replySubject(message.Subject))))
+	header("Subject", foldEncodedWords(mime.QEncoding.Encode("utf-8", subjectFor(message))))
 	header("Date", message.Date.UTC().Format(time.RFC1123Z))
 	header("Message-ID", angle(message.MessageID))
 	header("In-Reply-To", angle(message.InReplyTo))
@@ -83,6 +85,13 @@ func foldEncodedWords(value string) string {
 }
 
 const maxSubjectRunes = 250
+
+func subjectFor(message Outgoing) string {
+	if message.Standalone {
+		return cleanLine(message.Subject)
+	}
+	return replySubject(message.Subject)
+}
 
 func replySubject(subject string) string {
 	subject = cleanLine(subject)

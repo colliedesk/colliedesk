@@ -156,6 +156,10 @@ export default {
 
 ### Example: an MTA pipe (Postfix, Exim)
 
+To refuse unknown recipients during the SMTP session instead of bouncing them later, point a Postfix
+`check_policy_service` at `infra/mail/colliedesk-rcpt-policy.py`; it asks
+`POST /api/v1/channels/email/inbound/recipient` with the server-wide inbound secret.
+
 Use the wrapper shipped in `infra/mail/colliedesk-inbound-pipe.sh`. MTAs keep a message and retry
 only when the pipe command exits with `75` (`EX_TEMPFAIL`); any other failure bounces the
 message to the sender. The wrapper maps the responses:

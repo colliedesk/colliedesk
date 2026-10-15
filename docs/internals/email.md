@@ -129,14 +129,24 @@ unchanged; the workspace's Support address stays the identity customers see.
 - So per-workspace Cloudflare subdomains stop at about 28 workspaces, and a catch-all cannot serve
   `*.colliedesk.com`. A "mail domain provisioner" calling the API would hit the 30 limit, so the
   server has none.
-- The server design does not care which receiver feeds it. Two receivers work with the same
-  endpoint: (a) up to ~28 subdomains on Cloudflare Email Routing with explicit rules to the shared
-  Worker `infra/mail/cloud-inbound-worker`; (b) for unbounded workspaces, a wildcard
-  `*.colliedesk.com` MX at an MTA run by us, piping each message through
-  `infra/mail/colliedesk-inbound-pipe.sh` with `X-Original-To` added (Postfix
-  `virtual_mailbox_domains` via `pcre` and a `pipe` transport with `flags=O`). A wildcard MX does
-  not apply to names that already have records (`app`, `www`, `api`, the MTA host), which is why
-  those slugs are reserved.
+- The server design does not care which receiver feeds it. **The hosted cloud uses an MTA run by us**
+  (owner decision 2026-10-15, live since 09:05 UTC for every workspace): `*.colliedesk.com MX 10
+  mx.colliedesk.com` -> Postfix + rspamd on collie-01 (infra repo `hosts/collie-01/mail`). Per-workspace
+  Cloudflare subdomains are retired; the Worker in `infra/mail/cloud-inbound-worker` stays as an option for
+  self-hosters.
+  - Postfix: `relay_domains` = a pcre map of one-label subdomains (queried with the **domain**);
+    `transport_maps` = a second pcre map anchored on `@` (a regexp transport map is queried with the **full
+    address**; matching the domain there silently falls back to relay and bounces); transport `colliedesk`
+    is `pipe flags=O` through `infra/mail/colliedesk-inbound-pipe.sh`, one recipient per call.
+  - RCPT check: `infra/mail/colliedesk-rcpt-policy.py` (policy service) asks
+    `POST /api/v1/channels/email/inbound/recipient`; unknown -> 550, server trouble -> 451.
+  - rspamd milter writes the only `Authentication-Results` (authserv-id `mx.colliedesk.com`, the Postfix
+    `myhostname`) after removing every sender-written one. `milter_headers` skips local and authenticated
+    clients by default, which lets a forged header through: set `skip_local = false` and
+    `skip_authenticated = false`. `milter_default_action = tempfail`, so a stopped rspamd defers mail
+    instead of accepting it unwashed.
+  - A wildcard MX does not apply to names that already have records (`app`, `www`, `send`, `rsend`, `mx`),
+    which is why those slugs are reserved.
 
 ## Open
 

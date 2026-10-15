@@ -253,6 +253,70 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
 `httpapi.Config.Now` feeds the store and the auth service. Tests move it across a month boundary
 instead of sleeping. The webhook signature check keeps the real clock.
 
+## Retention of locked workspaces
+
+A workspace that stays locked (no entitled subscription or comp grant, trial over) for 12 months is
+hard-deleted, after its admins got an email at least 30 days before. Cloud only: `serve` starts the job
+when billing is configured, and `colliedesk retention plan|run` refuse without billing, so self-hosted
+never deletes.
+
+- **Lock start** is `domain.LockedSince`: the latest end among `trial_ends_at`, each subscription that
+  ever gave access (`ended_at`, canceled period end, or last change for unpaid states; abandoned
+  checkouts do not count) and each ended comp grant (`until`, or `revoked_at`). An end ahead of our clock
+  counts as now, never skipped. `store.LoadAccessHistory` supplies the ended grants.
+- **Floors** (`domain.RetentionLockStart`): the lock never starts before `domain.RetentionReleasedAt` (the
+  release of this feature) nor before the latest `workspace_trial_changes.changed_at`. So a trial end set
+  into the past, or a backfill, cannot make a workspace due early: it gets 12 months from the change.
+- `retention.Decide` is the one decision: notice from lock start + 12 months - 30 days; delete from lock
+  start + 12 months and only when `workspaces.retention_notice_sent_at` is at least 30 days old and not
+  older than the lock. A job that was down sends the notice late and the delete waits 30 days after it.
+  Gaining access again clears the notice; a notice from an earlier lock is cleared or replaced.
+- **Notice**: every admin gets one email from `noreply@MAIL_FROM_DOMAIN` through `SMTP_*`, never through
+  the workspace's own channel. `workspace_retention_notices` records per admin (agent id, no address) who
+  was reached or refused for good (5xx), so a partly failed pass never mails an admin twice. The 30 day
+  clock starts when no admin is left to mail and at least one was reached. Without SMTP or
+  `MAIL_FROM_DOMAIN` nothing is sent and so nothing is ever deleted (logged as an error each pass).
+  "Reached" means the relay accepted the message (SMTP 2xx); an asynchronous bounce is not seen.
+  The email says where to export: Settings, or `GET /api/v1/export`. The in-app banner with the
+  deletion date belongs to phase 06 and must ship before the first notice (about 2027-09).
+- **Fail-safes** (an irreversible job):
+  - `RETENTION_DELETE=on` turns deletion on; unset or `off`, the pass sends notices and logs what it would
+    delete (`held back` in the result). `retention plan` works either way.
+  - `RETENTION_MAX_DELETIONS_PER_DAY` (default 5, `0` deletes nothing) caps deletions in any rolling
+    24 hours, counted in `retention_deletions` (one row per deletion: id, slug, time; the slug is the workspace's address, usually a company name, and stays after the deletion).
+  - Before each deletion Polar is asked (`GET /v1/subscriptions/?external_customer_id=<workspace id>`)
+    whether the workspace has a paid subscription. A paid one, a Polar error or a missing client keeps the
+    workspace and logs an error.
+  - Decisions use the database clock (`SELECT now()`); a pass refuses to run when it differs from the
+    application clock by more than 5 minutes (`ErrClockSkew`).
+  - `colliedesk retention run` needs `--yes`; read `retention plan` first.
+- **Settings never stop `serve`.** A bad `RETENTION_DELETE` or `RETENTION_MAX_DELETIONS_PER_DAY` is logged as an
+  error (variable name, not the value) and the job runs with deletion off; the CLI is strict and refuses.
+  `retention plan|run` follow the same billing decision as `serve` (`billingAtStart`): while the build has no
+  locked screen, billing is off and both refuse.
+- **Delete** runs in one transaction under `FOR UPDATE` on the workspace row (the notice step takes only
+  `FOR NO KEY UPDATE`, so a payment webhook is never blocked by a slow mail relay): the workspace
+  directory is renamed to `<attachments>/.trash/<workspace id>-<unix time>` (atomic), then the row is
+  deleted (cascade) and recorded in `retention_deletions`. When the transaction does not commit, the
+  directory is renamed back, but only while the workspace row still exists (a commit that reached the
+  database and failed on the way back leaves the files in the trash to be purged). A workspace that lists
+  attachments in the database but has no directory in the storage (wrong `ATTACHMENTS_DIR`) is not deleted.
+  After a crash between the rename and the commit, each pass moves a trash entry older than one hour back
+  when its workspace row still exists, and never purges such an entry.
+  Runbook: if the log says a trash entry "could not be restored", the workspace directory already exists
+  (the customer paid and uploaded files after the crash). Merge the two by hand
+  (`cp -an .trash/<id>-<unix>/. <id>/`, then remove the trash entry); the entry stays and the error repeats
+  hourly until you do. Each pass purges trash entries older than 30 days, so an operator can undo a
+  deletion for 30 days by renaming the directory back and restoring the database rows from a backup.
+- Deleted data stays in the nightly database dumps and the attachment volume backup until they expire
+  (collie-01 backup retention). Restoring one workspace from a full dump is a manual job.
+- `colliedesk retention plan` prints `action slug id locked_since notice_at delete_at` per workspace to act
+  on and changes nothing; `retention run --yes` does one pass. The job runs at start and hourly. The
+  hourly list is pre-filtered in SQL: a workspace with an entitled subscription or a comp grant in force
+  is not evaluated.
+- Platform-level reads and the delete use `PrivilegeRetention`. The log line of a deletion carries workspace
+  id, slug and counts, no addresses.
+
 ## Operator commands: trial end and complimentary plan
 
 Run on the server shell (`docker compose exec server /app/colliedesk ...`).
