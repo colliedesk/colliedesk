@@ -65,7 +65,7 @@ export const messageDeliverySchema = z.object({
 }) satisfies z.ZodType<Generated<'MessageDelivery'>>;
 export const emailAuthenticationSchema = z.enum(['pass', 'fail', 'none']);
 export const incomingEmailSchema = z.object({
-  from: z.string(), authentication: emailAuthenticationSchema,
+  from: z.string(), authentication: emailAuthenticationSchema, via: z.enum(['platform', 'workspace', 'web_form']).optional(),
   attachments: z.array(z.object({ filename: z.string(), content_type: z.string() })),
   original_attachment_id: z.string().uuid().nullable(),
 }) satisfies z.ZodType<Generated<'IncomingEmail'>>;
@@ -90,6 +90,9 @@ export const emailChannelSettingsSchema = z.object({
   from_policy: z.enum(['verified', 'any']), sending_from: z.string().nullable(), hosted_address: z.string().nullable(),
   smtp: z.object({ configured: z.boolean(), host: z.string(), port: z.number().int(), starttls: z.boolean(), authenticated: z.boolean() }),
 }) satisfies z.ZodType<Generated<'EmailChannelSettings'>>;
+export const webFormSettingsSchema = z.object({
+  enabled: z.boolean(), allowed_origins: z.array(z.string()), submit_path: z.string(),
+}) satisfies z.ZodType<Generated<'WebFormSettings'>>;
 export const inboundSecretSchema = z.object({ inbound_secret: z.string().min(1), inbound_url: z.string().url() }) satisfies z.ZodType<JsonResponse<'rotateEmailInboundSecret', 200>>;
 export const sessionSchema = z.object({
   id: z.string().uuid(), agent_id: z.string().uuid(), agent_email: z.string().email(), label: z.string(),
@@ -128,5 +131,6 @@ export type Conversation = Generated<'Conversation'>;
 export type Invite = Generated<'Invite'>;
 export type Message = Generated<'Message'>;
 export type EmailChannelSettings = Generated<'EmailChannelSettings'>;
+export type WebFormSettings = Generated<'WebFormSettings'>;
 export type Session = Generated<'Session'>;
 export type Tag = Generated<'Tag'>;

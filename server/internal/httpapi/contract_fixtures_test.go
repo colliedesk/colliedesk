@@ -99,6 +99,10 @@ func newContractFixture(t *testing.T) contractFixture {
 		t.Fatalf("seed subscription webhook status=%d body=%s", response.Code, response.Body.String())
 	}
 
+	if response := request(t, api, http.MethodPut, "/api/v1/channels/web-form", map[string]any{"enabled": true, "allowed_origins": []string{}}, adminToken, nil); response.Code != http.StatusOK {
+		t.Fatalf("enable web form status=%d body=%s", response.Code, response.Body.String())
+	}
+
 	return contractFixture{api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, attachmentID: attachmentID, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token}

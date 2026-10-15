@@ -7,6 +7,7 @@ One page per feature. Each page says what the feature does, how to use it, and i
 - [Invite your team](invites.md)
 - [Work the inbox](inbox.md)
 - [Email channel](email-channel.md)
+- [Web form](web-form.md)
 - [Plan and billing](billing.md) (hosted cloud only)
 - [Tags](tags.md)
 - [Timezones](timezones.md)
