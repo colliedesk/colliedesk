@@ -1,0 +1,21 @@
+name: Feature request
+description: Something your support team needs that CollieDesk does not do yet.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What your team is trying to do and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: How you handle it now
+      description: The workaround, or how your previous helpdesk did it.
+  - type: input
+    id: team
+    attributes:
+      label: Team size
+      description: How many agents work the queue.

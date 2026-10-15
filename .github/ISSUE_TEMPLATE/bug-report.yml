@@ -1,0 +1,45 @@
+name: Bug report
+description: Something does not work as documented.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to …
+        2. Click …
+        3. See …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `colliedesk version`, or the image tag you run (for example 0.2.0 or edge).
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you run CollieDesk
+      options:
+        - CollieDesk Cloud
+        - install.sh
+        - Docker Compose from a clone
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Server log lines around the problem. Remove email addresses, tokens and customer data.
+      render: text
