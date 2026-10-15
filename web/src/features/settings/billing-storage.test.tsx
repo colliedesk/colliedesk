@@ -28,10 +28,11 @@ test('at 80% of the cap the page warns and says how to avoid the limit', () => {
   expect(warning).toHaveTextContent(/team/i);
 });
 
-test('over the cap the page says new attachments are refused and nothing is deleted', () => {
+test('over the cap the page says uploads and imports are refused, mail is still stored and nothing is deleted', () => {
   show(founding(20 * GiB + 5));
   const warning = screen.getByRole('alert', { name: /storage/i });
-  expect(warning).toHaveTextContent(/new attachments are refused/i);
+  expect(warning).toHaveTextContent(/new uploads and imports are refused/i);
+  expect(warning).toHaveTextContent(/customer email is still stored/i);
   expect(warning).toHaveTextContent(/nothing is deleted/i);
   expect(warning).toHaveTextContent(/team/i);
 });

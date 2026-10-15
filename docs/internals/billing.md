@@ -214,8 +214,11 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
   roughly 41-56 GB), so it has a cap. Unlike the trial, imported files count: the number is
   `workspaces.stored_storage_bytes`, the sum of every attachment, kept by the same triggers (migration
   `founding-storage-counter`, additive; the three trigger functions now update both counters). Team has
-  no cap. Over the cap nothing is deleted; only new inbound attachments (403 `storage_limit_reached`) and
-  new imports are refused. Reading, replies without new files and export are untouched.
+  no cap. Over the cap nothing is deleted. Inbound customer mail is exempt (`Store.CheckInboundStorage` lets Founding
+  through, so it is stored in full and its bytes still count: a bounced customer email hurts the paying
+  team's own customers and looks like an outage; the cost is bounded by real mail). The cap still refuses
+  what an agent or an import supplies (`Store.CheckStorage`, the importer's guard). Reading, replies
+  without new files and export are untouched. The trial and a locked workspace still refuse inbound mail.
 - **Import on Founding stops before any write.** The ticket list does not carry attachment sizes, so
   `freshdesk.guardFoundingStorage` runs a read-only pass first: the dry-run listing and id probing, then
   one read of each ticket and its conversations, and adds up the reported sizes of attachments the ledger

@@ -134,7 +134,7 @@ type StorageLimitError struct {
 func (e *StorageLimitError) Error() string {
 	limit := FormatBytes(e.Limit)
 	if e.Plan == PlanFounding {
-		return fmt.Sprintf("This workspace has reached the %s attachment storage limit of the Founding plan. Nothing is deleted, and you can still read, reply and export. Upgrade to the Team plan under Billing > Manage billing to remove the limit, or export your data.", limit)
+		return fmt.Sprintf("This workspace has reached the %s attachment storage limit of the Founding plan. Nothing is deleted, customer email is still stored, and you can still read, reply and export. Uploads and imports are refused until then. Upgrade to the Team plan under Billing > Manage billing to remove the limit, or export your data.", limit)
 	}
 	return fmt.Sprintf("This workspace has reached its %s attachment storage limit. Subscribe to remove the limit, or export your data.", limit)
 }

@@ -1194,7 +1194,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description The workspace no longer accepts this mail. Error code `mailbox_closed`: the workspace is locked. Error code `storage_limit_reached`: a trial or locked workspace would pass its 2 GiB attachment storage limit (imported files do not count), or a Founding workspace would pass its 20 GiB limit (imported files count); the message names the limit and how to upgrade. Nothing is deleted and reading, replying without new attachments and export keep working. Both are permanent for the sender: the forwarder bounces the message instead of retrying, and nothing was stored. */
+        /** @description The workspace no longer accepts this mail. Error code `mailbox_closed`: the workspace is locked. Error code `storage_limit_reached`: a trial or locked workspace would pass its 2 GiB attachment storage limit (imported files do not count), A Founding workspace never gets this answer for mail: its 20 GiB limit (imported files count) applies to uploads and imports only, and mail over it is stored in full. Nothing is deleted and reading, replying without new attachments and export keep working. Both are permanent for the sender: the forwarder bounces the message instead of retrying, and nothing was stored. */
         MailboxClosed: {
             headers: {
                 [name: string]: unknown;

@@ -27,10 +27,13 @@ used. Conversations are counted by the UTC month in which they were received.
 **Billing** shows the attachments you have used, and warns at 80% of the limit.
 
 On Founding, at the limit nothing is deleted. You can still read everything, reply without adding
-files, and export all your data. Only new attachments are refused: an email whose files would pass
-the limit bounces with a message that names the limit, and a Freshdesk import that would pass it
-does not start (see [Import from Freshdesk](import-freshdesk.md)). To lift the limit, switch to the
-Team plan under **Manage billing**, or export your data.
+files, and export all your data. **Email from your customers is never refused.** It is stored in
+full, attachments included, even when that takes the workspace past 20 GiB; those bytes still count,
+so **Billing** shows the usage over the limit. What the limit stops is files you add yourself: an
+upload, an attachment on a reply, and a Freshdesk import that would pass it (the import does not
+start; see [Import from Freshdesk](import-freshdesk.md)). Each refusal names the limit. To lift the
+limit, switch to the Team plan under **Manage billing**, or export your data. The trial is
+different: its 2 GiB limit also applies to incoming email.
 
 ## What happens at the limits (Free plan)
 

@@ -172,7 +172,7 @@ export const messages = {
   trialEnded: (when: string) => `Your free trial ended ${when}. Choose a plan to unlock the workspace.`,
   storageUsage: (used: string, limit: string) => `${used} of ${limit} attachment storage used`,
   storageWarning: (percent: number, upgrade: string) => `Attachment storage is at ${percent}% of the limit. ${upgrade}`,
-  storageFull: (upgrade: string) => `Attachment storage is full. New attachments are refused. Nothing is deleted, and you can still read, reply and export. ${upgrade}`,
+  storageFull: (upgrade: string) => `Attachment storage is full. New uploads and imports are refused. Nothing is deleted, customer email is still stored, and you can still read, reply and export. ${upgrade}`,
   storageUpgradeFounding: 'Upgrade to the Team plan under Manage billing to remove the limit.',
   storageUpgradeTrial: 'Subscribe above to remove the limit.',
   agentsUsage: (used: number, limit: number, pending = 0) =>

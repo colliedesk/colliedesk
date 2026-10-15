@@ -217,11 +217,30 @@ func (s *Store) GetStorageRoom(ctx context.Context, workspaceID string) (Storage
 	return room, nil
 }
 
+// CheckInboundStorage is CheckStorage for a customer's email. A paying Founding workspace never
+// bounces its customers' mail for storage: the mail is stored in full and its bytes still count, so
+// billing shows the usage past the cap. The cap holds for uploads, reply attachments and imports. The
+// trial and a locked workspace keep refusing inbound mail at their 2 GiB, as before.
+func (s *Store) CheckInboundStorage(ctx context.Context, tx pgx.Tx, workspaceID string, addBytes int64, now time.Time) error {
+	if !s.limits {
+		return nil
+	}
+	access, err := workspaceAccess(ctx, tx, workspaceID, now)
+	if err != nil {
+		return err
+	}
+	if access.Plan == domain.PlanFounding {
+		return nil
+	}
+	return s.CheckStorage(ctx, tx, workspaceID, addBytes, now)
+}
+
 // CheckStorage returns a *domain.StorageLimitError when storing addBytes more would pass the storage
 // cap of the workspace's plan. Reaching the cap exactly is allowed. It reads the plan and the usage
-// inside tx and takes no lock, so inbound mail is never serialized: two messages that arrive together
-// can together pass the cap by at most one message. Every path that stores a new attachment calls it
-// before writing the bytes. Team and self-hosted workspaces have no cap.
+// inside tx and takes no lock, so two requests that arrive together can together pass the cap by at
+// most one request. Every path that stores an attachment an agent or an import supplies calls it
+// before writing the bytes; inbound mail calls CheckInboundStorage. Team and self-hosted workspaces
+// have no cap.
 func (s *Store) CheckStorage(ctx context.Context, tx pgx.Tx, workspaceID string, addBytes int64, now time.Time) error {
 	if !s.limits {
 		return nil
