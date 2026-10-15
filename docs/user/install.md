@@ -50,10 +50,6 @@ To check which build you run:
 docker compose exec server /app/collie version
 ```
 
-The command was called `colliedesk` before it was renamed to `collie`. Images still ship
-`/app/colliedesk` as a link to `/app/collie`, so a compose file written by an older installer
-keeps working.
-
 ## Data to back up
 
 Colliedesk keeps data in two places. Back up both:
