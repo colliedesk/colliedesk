@@ -12,7 +12,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.addConversationTag, a.removeConversationTag,
 		a.listMessages, a.createMessage, a.listTimeEntries, a.downloadAttachment,
 		a.listContacts, a.createContact, a.getContact,
-		a.listAgents, a.updateWorkspaceTimezone, a.updateAgentTimezone,
+		a.listAgents, a.updateWorkspaceTimezone, a.updateWorkspaceSlug, a.updateAgentTimezone,
 		a.listTags, a.createTag, a.updateTag, a.deleteTag,
 		a.retryMessageDelivery,
 		a.getEmailChannel, a.putEmailChannel, a.deleteEmailChannel, a.verifyEmailDomain, a.receiveInboundEmail, a.rotateEmailSecret,

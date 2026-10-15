@@ -49,6 +49,9 @@ type Inbound struct {
 	Files []File
 	// BodyHTML is the HTML part with inline images embedded; empty when the message has no HTML.
 	BodyHTML string
+	// EnvelopeTo is the topmost X-Original-To value, lowercased: the recipient the trusted forwarder saw.
+	// Unlike Recipients it ignores To, Cc and lower X-Original-To lines, which a sender controls.
+	EnvelopeTo string
 }
 
 var (
@@ -75,6 +78,7 @@ func Parse(raw []byte, trustedAuthServID string) (Inbound, error) {
 		FromAddress: strings.ToLower(from.Address),
 		FromName:    cleanLine(from.Name),
 		Recipients:  recipients(header),
+		EnvelopeTo:  envelopeTo(header),
 		Subject:     cleanLine(decodeHeader(header.Get("Subject"))),
 	}
 	if parsed.MessageID == "" {
@@ -162,6 +166,18 @@ func recipients(header mail.Header) []string {
 		}
 	}
 	return result
+}
+
+func envelopeTo(header mail.Header) string {
+	values := header["X-Original-To"]
+	if len(values) == 0 {
+		return ""
+	}
+	address, err := addressParser.Parse(values[0])
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(address.Address)
 }
 
 func decodeHeader(value string) string {

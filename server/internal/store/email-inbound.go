@@ -79,6 +79,18 @@ func (s *Store) WorkspaceForReplyToken(ctx context.Context, token string) (strin
 	return workspaceID, true, nil
 }
 
+// WorkspaceForMailSlug finds the workspace whose slug is the mail subdomain of a hosted address.
+func (s *Store) WorkspaceForMailSlug(ctx context.Context, slug string) (string, bool, error) {
+	workspaceID, err := s.db.WorkspaceIDBySlug(ctx, slug)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return workspaceID, true, nil
+}
+
 func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound, now time.Time, stash StashFunc) (InboundResult, error) {
 	result := InboundResult{Authentication: in.Authentication}
 	tx, err := s.db.BeginWorkspace(ctx, workspaceID)

@@ -138,6 +138,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/contacts/{id}":                                  {"/api/v1/contacts/" + f.contactID, nil, admin, 200, ""},
 		"GET /api/v1/agents":                                         {"/api/v1/agents", nil, admin, 200, ""},
 		"PATCH /api/v1/workspace/timezone":                           {"/api/v1/workspace/timezone", map[string]any{"timezone": "UTC"}, admin, 200, ""},
+		"PATCH /api/v1/workspace/slug":                               {"/api/v1/workspace/slug", map[string]any{"slug": "contract-desk"}, admin, 200, ""},
 		"PATCH /api/v1/agents/me/timezone":                           {"/api/v1/agents/me/timezone", map[string]any{"timezone": "UTC"}, admin, 200, ""},
 		"GET /api/v1/tags":                                           {"/api/v1/tags", nil, admin, 200, ""},
 		"POST /api/v1/tags":                                          {"/api/v1/tags", map[string]any{"name": "Created contract tag"}, admin, 201, ""},

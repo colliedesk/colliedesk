@@ -1,0 +1,78 @@
+package email_test
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/colliedesk/colliedesk/server/internal/email"
+)
+
+func TestValidateHostedSlug(t *testing.T) {
+	for _, slug := range []string{"acme", "acme-support", "a1", "x", strings.Repeat("a", 63)} {
+		if err := email.ValidateHostedSlug(slug); err != nil {
+			t.Errorf("%q rejected: %v", slug, err)
+		}
+	}
+	for name, slug := range map[string]string{
+		"empty":         "",
+		"uppercase":     "Acme",
+		"leading dash":  "-acme",
+		"trailing dash": "acme-",
+		"underscore":    "acme_inc",
+		"dot":           "a.b",
+		"too long":      strings.Repeat("a", 64),
+		"reserved app":  "app",
+		"reserved www":  "www",
+		"reserved mail": "mail",
+		"reserved in":   "in",
+		"reserved help": "help",
+		"punycode":      "xn--acme",
+	} {
+		if err := email.ValidateHostedSlug(slug); err == nil {
+			t.Errorf("%s (%q) accepted", name, slug)
+		}
+	}
+}
+
+func TestHostedAddress(t *testing.T) {
+	if got := email.HostedAddress("acme", "colliedesk.com"); got != "support@acme.colliedesk.com" {
+		t.Fatalf("address = %q", got)
+	}
+	if got := email.HostedAddress("acme", ""); got != "" {
+		t.Fatalf("feature off must give no address, got %q", got)
+	}
+	if got := email.HostedAddress("app", "colliedesk.com"); got != "" {
+		t.Fatalf("a reserved slug must give no address, got %q", got)
+	}
+}
+
+func TestHostedSlug(t *testing.T) {
+	for name, tc := range map[string]struct{ recipient, want string }{
+		"support":        {"support@acme.colliedesk.com", "acme"},
+		"any local part": {"billing@acme.colliedesk.com", "acme"},
+		"plus address":   {"support+r-0123@acme.colliedesk.com", "acme"},
+		"uppercase":      {"Support@ACME.CollieDesk.com", "acme"},
+		"apex":           {"support@colliedesk.com", ""},
+		"nested":         {"support@a.b.colliedesk.com", ""},
+		"other domain":   {"support@acme.example.com", ""},
+		"lookalike":      {"support@acme.evilcolliedesk.com", ""},
+		"reserved":       {"support@app.colliedesk.com", ""},
+		"no at":          {"acme.colliedesk.com", ""},
+	} {
+		if got := email.HostedSlug(tc.recipient, "colliedesk.com"); got != tc.want {
+			t.Errorf("%s: HostedSlug(%q) = %q, want %q", name, tc.recipient, got, tc.want)
+		}
+	}
+	if got := email.HostedSlug("support@acme.colliedesk.com", ""); got != "" {
+		t.Errorf("feature off: %q", got)
+	}
+}
+
+func TestParseKeepsOnlyTheTopmostEnvelopeRecipient(t *testing.T) {
+	raw := "X-Original-To: support@acme.colliedesk.com\r\nX-Original-To: support@victim.colliedesk.com\r\n" +
+		"From: a@customer.example\r\nTo: support@victim.colliedesk.com\r\nSubject: s\r\nMessage-ID: <1@c.example>\r\n\r\nhi\r\n"
+	parsed, err := email.Parse([]byte(raw), "")
+	if err != nil || parsed.EnvelopeTo != "support@acme.colliedesk.com" {
+		t.Fatalf("envelope = %q, %v", parsed.EnvelopeTo, err)
+	}
+}
