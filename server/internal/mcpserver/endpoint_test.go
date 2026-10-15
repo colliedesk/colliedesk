@@ -187,3 +187,45 @@ func TestMCPServesTheHostNameOfAReverseProxyOnALoopbackListener(t *testing.T) {
 		t.Fatalf("status=%d body=%s, want 200: a proxy on the same host forwards the public Host header", response.StatusCode, body)
 	}
 }
+
+// Only a failing database is a reason for 503. Every way a token can be refused is a 401, so a client
+// knows to ask for a new token instead of retrying.
+func TestMCPAnswers401ForEveryRefusedToken(t *testing.T) {
+	e := newEnv(t)
+	w := e.newWorkspace("Refused Desk", "admin@refused.example.com")
+	issue := func(label string) string {
+		status, issued := e.rest(http.MethodPost, "/api/v1/auth/tokens", map[string]any{"label": label, "scope": "read"}, w.admin)
+		if status != http.StatusCreated {
+			t.Fatalf("create token %q status=%d body=%v", label, status, issued)
+		}
+		return issued["token"].(string)
+	}
+	age := func(label, set string) {
+		if _, err := e.pool.Exec(context.Background(), `UPDATE sessions SET `+set+` WHERE workspace_id=$1 AND label=$2`, w.id, label); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pastTheCap, expired, revoked := issue("past the cap"), issue("expired"), issue("revoked")
+	age("past the cap", "created_at=now()-interval '366 days'")
+	age("expired", "expires_at=now()-interval '1 minute'")
+	age("revoked", "revoked_at=now()")
+
+	for name, token := range map[string]string{"past the one-year cap": pastTheCap, "expired": expired, "revoked": revoked, "unknown": "cdk_agent_" + strings.Repeat("A", 43)} {
+		req, err := http.NewRequest(http.MethodPost, e.mcpURL(), strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("Authorization", "Bearer "+token)
+		response, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(response.Body)
+		_ = response.Body.Close()
+		if response.StatusCode != http.StatusUnauthorized || !strings.HasPrefix(response.Header.Get("WWW-Authenticate"), "Bearer") {
+			t.Errorf("%s token: status=%d WWW-Authenticate=%q body=%s, want 401 with a Bearer challenge", name, response.StatusCode, response.Header.Get("WWW-Authenticate"), body)
+		}
+	}
+}

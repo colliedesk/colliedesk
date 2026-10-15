@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,9 +12,14 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// ErrInvalidCredential wraps every refusal of a credential: missing, unknown, revoked, expired, an agent
+// token past its maximum age, or an agent token sent as a cookie. Any other error from Authenticate is a
+// failure of the system, and a caller must not tell the client its credential is bad.
+var ErrInvalidCredential = errors.New("invalid credential")
+
 func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) (Principal, error) {
 	if raw == "" {
-		return Principal{}, fmt.Errorf("missing credential")
+		return Principal{}, fmt.Errorf("%w: missing credential", ErrInvalidCredential)
 	}
 	now := s.now()
 	hash := credentialHash(raw)
@@ -22,6 +28,9 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 	err := s.db.Privileged(ctx, database.PrivilegeSessionToken, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `SELECT workspace_id::text FROM sessions WHERE token_hash=$1`, hash).Scan(&workspaceID)
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Principal{}, fmt.Errorf("%w: no such session", ErrInvalidCredential)
+	}
 	if err != nil {
 		return Principal{}, fmt.Errorf("authenticate session: %w", err)
 	}
@@ -36,19 +45,22 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 			Scan(&principal.Workspace.ID, &principal.Workspace.Slug, &principal.Workspace.Name, &principal.Workspace.Timezone,
 				&principal.Agent.ID, &principal.Agent.Email, &principal.Agent.DisplayName, &principal.Agent.Role,
 				&principal.Agent.TimezoneOverride, &principal.SessionID, &trialEndsAt, &principal.Scope, &trialExtended, &createdAt)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("%w: session revoked, expired or not found", ErrInvalidCredential)
+		}
 		if err != nil {
 			return fmt.Errorf("authenticate session: %w", err)
 		}
 		// A browser attaches cookies by itself; an agent token is only ever sent on purpose, as a bearer.
 		if viaCookie && principal.Scope != "" {
-			return fmt.Errorf("authenticate session: agent tokens are not accepted as cookies")
+			return fmt.Errorf("%w: agent tokens are not accepted as cookies", ErrInvalidCredential)
 		}
 		expires := now.Add(sessionLifetime)
 		if principal.Scope != "" {
 			// A token that is used every day still ends one year after its creation.
 			limit := createdAt.Add(agentTokenMaxAge)
 			if !now.Before(limit) {
-				return fmt.Errorf("authenticate session: agent token is older than its maximum age")
+				return fmt.Errorf("%w: agent token is older than its maximum age", ErrInvalidCredential)
 			}
 			if limit.Before(expires) {
 				expires = limit

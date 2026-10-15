@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
-	"github.com/jackc/pgx/v5"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -74,7 +73,7 @@ func requireBearer(service *auth.Service, next http.Handler) http.Handler {
 			return
 		}
 		if _, err := service.Authenticate(request.Context(), raw, false); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
+			if errors.Is(err, auth.ErrInvalidCredential) {
 				unauthorized(response)
 				return
 			}
