@@ -35,7 +35,9 @@ var privilegedCallSites = []string{
 var poolFiles = []string{
 	"cmd/colliedesk/commands.go",
 	"cmd/colliedesk/import.go",
+	"cmd/colliedesk/plan.go",
 	"cmd/colliedesk/serve.go",
+	"cmd/colliedesk/trial.go",
 	"cmd/colliedesk/undo.go",
 	"internal/auth/service.go",
 	"internal/database/migrate.go",

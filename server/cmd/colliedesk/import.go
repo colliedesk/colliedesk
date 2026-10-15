@@ -69,6 +69,11 @@ func importCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 	if err := printUnresolved(output, report.Tickets.UnresolvedIDs); err != nil {
 		return err
 	}
+	if report.TrialExtendedTo != nil {
+		if _, err := fmt.Fprintf(output, "trial: extended to %s\n", report.TrialExtendedTo.UTC().Format(time.RFC3339)); err != nil {
+			return err
+		}
+	}
 	switch report.Status {
 	case freshdesk.StatusFailed:
 		return fmt.Errorf("import FAILED: %d failure(s); see %s, fix the cause and run the same command again", len(report.Failures), markdownPath)
