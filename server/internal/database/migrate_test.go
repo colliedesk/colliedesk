@@ -63,10 +63,10 @@ func TestMigrateRejectsCrossWorkspaceRelationships(t *testing.T) {
 		t.Fatalf("Migrate: %v", err)
 	}
 	var workspaceA, workspaceB, contactB string
-	if err := pool.QueryRow(ctx, `INSERT INTO workspaces(slug,name) VALUES('alpha','Alpha') RETURNING id::text`).Scan(&workspaceA); err != nil {
+	if err := pool.QueryRow(ctx, `INSERT INTO workspaces(slug,name,trial_ends_at) VALUES('alpha','Alpha',now()) RETURNING id::text`).Scan(&workspaceA); err != nil {
 		t.Fatal(err)
 	}
-	if err := pool.QueryRow(ctx, `INSERT INTO workspaces(slug,name) VALUES('beta','Beta') RETURNING id::text`).Scan(&workspaceB); err != nil {
+	if err := pool.QueryRow(ctx, `INSERT INTO workspaces(slug,name,trial_ends_at) VALUES('beta','Beta',now()) RETURNING id::text`).Scan(&workspaceB); err != nil {
 		t.Fatal(err)
 	}
 	if err := pool.QueryRow(ctx, `INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Example','person@example.com') RETURNING id::text`, workspaceB).Scan(&contactB); err != nil {

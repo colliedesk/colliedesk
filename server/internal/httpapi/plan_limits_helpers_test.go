@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -53,9 +54,15 @@ type limitsFixture struct {
 
 func newLimitsFixture(t *testing.T, billingEnabled bool) limitsFixture {
 	t.Helper()
+	return newLimitsFixtureTraced(t, billingEnabled, nil)
+}
+
+// newLimitsFixtureTraced is newLimitsFixture on a pool whose queries a tracer sees.
+func newLimitsFixtureTraced(t *testing.T, billingEnabled bool, tracer pgx.QueryTracer) limitsFixture {
+	t.Helper()
 	clock := &testClock{now: trialStart}
 	fake := newFakePolarAPI(t)
-	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
+	api, service, pool, _ := testAPIOnPool(t, testPoolTraced(t, tracer), func(config *httpapi.Config) {
 		config.Now = clock.Now
 		if billingEnabled {
 			config.Billing = fake.config()

@@ -22,6 +22,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -64,7 +65,12 @@ func (d *fakeDNS) lookupTXT(_ context.Context, name string) ([]string, error) {
 // the "any" From policy, a trusted authserv-id of mx.example.net and a fake DNS resolver.
 func testAPIWithConfig(t *testing.T, mutate func(*httpapi.Config)) (http.Handler, *auth.Service, *pgxpool.Pool, *fakeDNS) {
 	t.Helper()
-	pool := testPool(t)
+	return testAPIOnPool(t, testPool(t), mutate)
+}
+
+// testAPIOnPool is testAPIWithConfig on a pool the test opened, for example one with a tracer.
+func testAPIOnPool(t *testing.T, pool *pgxpool.Pool, mutate func(*httpapi.Config)) (http.Handler, *auth.Service, *pgxpool.Pool, *fakeDNS) {
+	t.Helper()
 	if err := database.Migrate(context.Background(), pool); err != nil {
 		t.Fatal(err)
 	}
@@ -201,6 +207,12 @@ func linkToken(t *testing.T, raw string) string {
 
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	return testPoolTraced(t, nil)
+}
+
+// testPoolTraced is testPool with a query tracer on every connection; nil traces nothing.
+func testPoolTraced(t *testing.T, tracer pgx.QueryTracer) *pgxpool.Pool {
+	t.Helper()
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL is unset; skipping real PostgreSQL API test")
@@ -218,6 +230,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 		t.Fatal(err)
 	}
 	config.ConnConfig.RuntimeParams["search_path"] = schema
+	config.ConnConfig.Tracer = tracer
 	pool, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
 		t.Fatal(err)

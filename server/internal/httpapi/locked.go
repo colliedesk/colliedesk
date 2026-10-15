@@ -19,6 +19,7 @@ var lockedAllowed = map[string]bool{
 	"GET /api/v1/auth/sessions":          true,
 	"DELETE /api/v1/auth/sessions/{id}":  true,
 	"GET /api/v1/billing":                true,
+	"GET /api/v1/channels/email":         true,
 	"POST /api/v1/billing/checkout":      true,
 	"POST /api/v1/billing/portal":        true,
 	"GET /api/v1/export":                 true,
@@ -37,22 +38,10 @@ func LockedAllowlist() []string {
 }
 
 // refuseIfLocked answers 402 workspace_locked and reports true when the workspace is locked and the
-// route is not on the allowlist. During the trial it costs nothing: the trial end came with the
-// session. Only a request after the trial end reads the subscriptions.
-func (a *API) refuseIfLocked(response http.ResponseWriter, request *http.Request, route Route, who auth.Principal) bool {
-	if !a.limits || lockedAllowed[route.Method+" "+route.Pattern] {
-		return false
-	}
-	now := a.now()
-	if now.Before(who.TrialEndsAt) {
-		return false
-	}
-	access, err := a.store.WorkspaceAccess(request.Context(), who.Workspace.ID, who.TrialEndsAt, now)
-	if err != nil {
-		writeInternalError(response, err)
-		return true
-	}
-	if !access.Locked {
+// route is not on the allowlist. The state was derived while the session was authenticated, so the
+// check costs nothing.
+func (a *API) refuseIfLocked(response http.ResponseWriter, route Route, who auth.Principal) bool {
+	if !a.limits || !who.Access.Locked || lockedAllowed[route.Method+" "+route.Pattern] {
 		return false
 	}
 	writeLocked(response)
