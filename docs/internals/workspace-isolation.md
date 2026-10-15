@@ -50,6 +50,10 @@ InitPlan), not once per row. The app role's qual has no `OR`, so the planner can
 `workspace_id` indexes. Before this change, inline `current_setting()` plus an `OR` branch for the
 privileged policy cost about 28 ms p95 on the inbox gate. See `performance.md` for the gate.
 
+A table added after that migration repeats the same two policies and the app role grant in its own
+migration (`workspace_billing` and `billing_webhook_events` do; see `billing.md`). Skipping this leaves
+the app role without access, and every request on that table fails.
+
 Referential integrity checks and `ON DELETE CASCADE` run as the table owner without RLS, so
 composite foreign keys keep working across the scoped tables.
 

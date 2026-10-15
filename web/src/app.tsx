@@ -3,10 +3,11 @@ import { Link, Outlet, createRootRoute, createRoute, createRouter, useRouterStat
 import { api, UnauthorizedError } from './api/client';
 import { InboxRoute } from './features/inbox/inbox-route';
 import { RedeemRoute } from './features/auth/redeem-route';
+import { BillingRoute } from './features/settings/billing-route';
 import { SettingsRoute } from './features/settings/settings-route';
 import { AppShell } from './features/shell/app-shell';
 import { messages } from './messages';
-import { InboxIcon, SettingsIcon } from './ui/icons';
+import { CreditCardIcon, InboxIcon, SettingsIcon } from './ui/icons';
 import { LogoMark } from './ui/logo';
 
 function AppLayout() {
@@ -14,17 +15,21 @@ function AppLayout() {
   const onRedeem = path === '/redeem';
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: !onRedeem });
   const signedOut = !onRedeem && me.error instanceof UnauthorizedError;
-  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config, enabled: signedOut });
+  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config, enabled: !onRedeem });
   // On an instance with cloud sign-in the way back in is the sign-in page, not a new pairing link.
   const signIn = config.data?.cloud_sign_in.enabled ? <Link to="/redeem" search={{ token: '' }}>{messages.signIn}</Link> : undefined;
   // Sign-in pages have nowhere to navigate to yet.
   if (onRedeem) return <div className="app-main"><Outlet /></div>;
-  const inSettings = path.startsWith('/settings');
+  // Billing exists only on the hosted cloud and only admins manage it.
+  const showBilling = config.data?.billing.enabled === true && me.data?.agent.role === 'admin';
+  const inBilling = path.startsWith('/settings/billing');
+  const inSettings = path.startsWith('/settings') && !inBilling;
   return <AppShell me={me.data} signedOut={signedOut} signIn={signIn}
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand} data-tip={messages.brand}><LogoMark /></Link>}
     links={<>
-      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings ? undefined : 'page'}><InboxIcon /></Link>
+      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inBilling ? undefined : 'page'}><InboxIcon /></Link>
       <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}><SettingsIcon /></Link>
+      {showBilling && <Link to="/settings/billing" search={{ checkout: '' }} className="rail-link" data-tip={messages.billing} aria-label={messages.billing} aria-current={inBilling ? 'page' : undefined}><CreditCardIcon /></Link>}
     </>}>
     <Outlet />
   </AppShell>;
@@ -34,6 +39,12 @@ const rootRoute = createRootRoute({ component: AppLayout });
 const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: InboxRoute });
 const conversationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/conversations/$conversationId', component: InboxRoute });
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsRoute });
+const billingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/billing',
+  validateSearch: (search: Record<string, unknown>) => ({ checkout: search.checkout === 'success' ? 'success' : '' }),
+  component: () => <BillingRoute checkoutReturned={billingRoute.useSearch().checkout === 'success'} />,
+});
 const redeemRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/redeem',
@@ -41,7 +52,7 @@ const redeemRoute = createRoute({
   component: () => <RedeemRoute token={redeemRoute.useSearch().token} />,
 });
 
-const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, settingsRoute, redeemRoute]);
+const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, settingsRoute, billingRoute, redeemRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

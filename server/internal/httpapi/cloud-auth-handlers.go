@@ -16,6 +16,7 @@ func (a *API) getConfig(response http.ResponseWriter, _ *http.Request) {
 	}
 	writeJSON(response, http.StatusOK, map[string]any{
 		"cloud_sign_in": map[string]any{"enabled": enabled, "publishable_key": publishableKey},
+		"billing":       map[string]any{"enabled": a.polar != nil},
 	})
 }
 

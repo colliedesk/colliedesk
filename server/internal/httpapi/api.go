@@ -11,6 +11,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -25,6 +26,8 @@ type Config struct {
 	// RequestPool, when set, runs workspace-scoped queries as a separate request login
 	// (DATABASE_REQUEST_URL); nil runs them on the owner pool.
 	RequestPool *pgxpool.Pool
+	// Billing turns on Polar billing for the hosted cloud; the zero value leaves it off.
+	Billing polar.Config
 	// LookupTXT resolves DNS TXT records for domain verification; nil uses the system resolver.
 	LookupTXT func(ctx context.Context, name string) ([]string, error)
 }
@@ -40,6 +43,7 @@ type API struct {
 	auth   *auth.Service
 	cloud  *cloudauth.Verifier
 	store  *store.Store
+	polar  *polar.Client
 }
 
 type routeSpec struct {
@@ -68,8 +72,14 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 	if config.CloudAuth.Enabled() {
 		api.cloud = cloudauth.New(config.CloudAuth)
 	}
+	if config.Billing.Enabled() {
+		api.polar = polar.NewClient(config.Billing)
+	}
 	mux := http.NewServeMux()
 	for _, route := range api.routeSpecs() {
+		if billingRoute(route.Route) && api.polar == nil {
+			continue
+		}
 		mux.Handle(route.Method+" "+route.Pattern, api.authorize(route.Permission, route.handler))
 	}
 	return mux
@@ -114,6 +124,10 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/channels/email/domain-verification", auth.PermissionAccessWrite},
 		{http.MethodPost, "/api/v1/channels/email/inbound", auth.PermissionChannelInbound},
 		{http.MethodPost, "/api/v1/channels/email/secret", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/billing", auth.PermissionBillingManage},
+		{http.MethodPost, "/api/v1/billing/checkout", auth.PermissionBillingManage},
+		{http.MethodPost, "/api/v1/billing/portal", auth.PermissionBillingManage},
+		{http.MethodPost, polarWebhookPath, auth.PermissionPublic},
 	}
 }
 

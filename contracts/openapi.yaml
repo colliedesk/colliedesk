@@ -620,11 +620,97 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/billing:
+    get:
+      operationId: getBilling
+      x-permission: billing:manage
+      description: >
+        The workspace plan, subscription state, the limits of that plan and current usage. Only
+        present when billing is configured (the hosted cloud); self-hosted instances answer 404.
+      responses:
+        '200':
+          description: Plan, subscription state, limits and usage
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Billing'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/billing/checkout:
+    post:
+      operationId: createBillingCheckout
+      x-permission: billing:manage
+      description: >
+        Start a hosted checkout for the signed-in workspace. The workspace is taken from the session,
+        never from the body. A workspace that already has a paid plan gets 409; it changes or cancels
+        its plan in the portal.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan]
+              additionalProperties: false
+              properties:
+                plan: {$ref: '#/components/schemas/CheckoutPlan'}
+      responses:
+        '200': {$ref: '#/components/responses/BillingLink'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+  /api/v1/billing/portal:
+    post:
+      operationId: createBillingPortal
+      x-permission: billing:manage
+      description: >
+        Open the billing portal, where the customer changes the card, downloads invoices or cancels.
+        404 until the workspace has had a subscription. The portal stays available after one ends.
+      responses:
+        '200': {$ref: '#/components/responses/BillingLink'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+  /api/v1/webhooks/polar:
+    post:
+      operationId: receivePolarWebhook
+      security: [{polarWebhook: []}]
+      x-permission: public
+      description: >
+        Receives Polar events. Authenticated by the Standard Webhooks signature (`webhook-id`,
+        `webhook-timestamp`, `webhook-signature`), not by a session; a missing, wrong or stale
+        signature is 401 and nothing is stored. A `subscription.*` event updates the workspace named by
+        `customer.external_id`. Every understood event is 200 so Polar stops retrying; `status` says
+        whether it was applied, was a redelivery, was older than the stored state, or was ignored
+        (unknown workspace or product, other event types). Only present when billing is configured.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        '200':
+          description: Event understood
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebhookResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
     sessionCookie: {type: apiKey, in: cookie, name: colliedesk_session}
     inboundSecret: {type: apiKey, in: header, name: X-CollieDesk-Inbound-Secret}
+    polarWebhook: {type: apiKey, in: header, name: webhook-signature}
   parameters:
     ID:
       name: id
@@ -656,6 +742,18 @@ components:
     InternalError:
       description: Temporary server failure; the message was not stored and the forwarder should retry
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    BillingLink:
+      description: A single-use URL on the billing provider
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [url]
+            properties:
+              url: {type: string, format: uri}
+    BadGateway:
+      description: The billing provider failed or could not be reached; nothing changed, try again
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     PayloadTooLarge:
       description: Message larger than 25 MiB or with more than 100 attachments; nothing was stored
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
@@ -682,7 +780,7 @@ components:
   schemas:
     PublicConfig:
       type: object
-      required: [cloud_sign_in]
+      required: [cloud_sign_in, billing]
       properties:
         cloud_sign_in:
           type: object
@@ -690,6 +788,49 @@ components:
           properties:
             enabled: {type: boolean}
             publishable_key: {type: [string, 'null']}
+        billing:
+          type: object
+          required: [enabled]
+          properties:
+            enabled: {type: boolean, description: False on self-hosted instances; the billing routes answer 404.}
+    CheckoutPlan: {type: string, enum: [team_monthly, team_yearly, founding]}
+    WebhookResult:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [applied, duplicate, stale, ignored]}
+    Billing:
+      type: object
+      required: [plan, status, current_period_end, cancel_at_period_end, active_subscriptions, limits, usage]
+      properties:
+        plan: {type: string, enum: [free, team, founding], description: The plan in effect now.}
+        status:
+          type: string
+          enum: [none, incomplete, incomplete_expired, trialing, active, past_due, canceled, unpaid, paused, unknown]
+          description: >
+            The latest subscription status from the provider, `none` when there never was one.
+            `past_due` keeps the paid plan while the provider retries the card; `canceled` keeps it
+            until `current_period_end`; `unknown` is a status this version does not recognise and
+            grants nothing. With several subscriptions the one that decides the plan is shown.
+        current_period_end: {type: [string, 'null'], format: date-time}
+        cancel_at_period_end: {type: boolean}
+        active_subscriptions:
+          type: integer
+          description: >
+            Subscriptions that grant a paid plan now. More than one means the workspace pays twice;
+            cancel the extra one in the billing portal.
+        limits:
+          type: object
+          required: [agents, conversations_per_month]
+          properties:
+            agents: {type: integer}
+            conversations_per_month: {type: [integer, 'null'], description: Null means no cap.}
+        usage:
+          type: object
+          required: [agents, conversations_this_month]
+          properties:
+            agents: {type: integer}
+            conversations_this_month: {type: integer, description: Conversations created since the start of the current UTC month.}
     WorkspaceChoice:
       type: object
       required: [slug, name]

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
@@ -21,6 +22,7 @@ type contractFixture struct {
 	inboundSecret             string
 	failedReplyID             string
 	deleteChannelToken        string
+	portalToken, webhookBody  string
 }
 
 func newContractFixture(t *testing.T) contractFixture {
@@ -29,7 +31,11 @@ func newContractFixture(t *testing.T) contractFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	api, service, pool, dns := testAPIWithConfig(t, func(config *httpapi.Config) { config.Attachments = storage })
+	fakePolar := newFakePolarAPI(t)
+	api, service, pool, dns := testAPIWithConfig(t, func(config *httpapi.Config) {
+		config.Attachments = storage
+		config.Billing = fakePolar.config()
+	})
 	adminToken := createSession(t, api, service, "Contract All", "admin@contract-all.example.com")
 	contactID := create(t, api, adminToken, "/api/v1/contacts", map[string]any{
 		"name": "Contract Contact", "email": "contact@contract-all.example.com",
@@ -85,7 +91,14 @@ func newContractFixture(t *testing.T) contractFixture {
 	deleteChannelToken := createSession(t, api, service, "Contract Disconnect", "admin@contract-disconnect.example.com")
 	_ = connectEmail(t, api, deleteChannelToken, "support@contract-disconnect.example.com")
 
-	return contractFixture{api: api, inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	// A workspace with a paid subscription, so the portal has a Polar customer to open.
+	portalToken := createSession(t, api, service, "Contract Billing", "admin@contract-billing.example.com")
+	subscription := activeTeam(workspaceID(t, api, portalToken), "sub_contract", time.Now())
+	if response := serve(api, signedWebhookRequest("msg_contract_seed", subscription.event("subscription.active"))); response.Code != http.StatusOK {
+		t.Fatalf("seed subscription webhook status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	return contractFixture{api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, attachmentID: attachmentID, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token}
 }
