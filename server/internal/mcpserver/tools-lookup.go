@@ -12,7 +12,6 @@ var tierMeaning = map[string]string{
 	"read":  "You can read the inbox. You cannot change anything.",
 	"draft": "You can read, change status, priority, assignee and tags, and add private notes. Nothing you do reaches a customer.",
 	"send":  "You may do everything a team member can. The tools of this server still never send a message to a customer.",
-	"full":  "This is a person's own session, not an agent token.",
 }
 
 type whoamiOut struct {
@@ -37,7 +36,7 @@ func whoami(c *call, _ map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := whoamiOut{TokenTier: "full", WorkspaceLocked: me.Plan != nil && me.Plan.Locked}
+	out := whoamiOut{WorkspaceLocked: me.Plan != nil && me.Plan.Locked}
 	scope := ""
 	if me.Scope != nil {
 		scope = *me.Scope

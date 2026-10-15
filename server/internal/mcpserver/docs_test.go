@@ -10,7 +10,7 @@ import (
 func TestDocsSearchRanksTheEmbeddedUserGuides(t *testing.T) {
 	e := newEnv(t)
 	w := e.newWorkspace("Docs Desk", "admin@docs.example.com")
-	for name, token := range map[string]string{"read token": w.read, "person session": w.admin} {
+	for name, token := range map[string]string{"read token": w.read} {
 		session := e.connect(token, "")
 		cases := []struct {
 			query string

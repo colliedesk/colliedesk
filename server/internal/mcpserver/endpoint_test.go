@@ -81,7 +81,7 @@ func TestToolsListIsTheCatalogInFixedOrderWithAnnotations(t *testing.T) {
 func TestWhoamiReturnsTheTierOfTheToken(t *testing.T) {
 	e := newEnv(t)
 	w := e.newWorkspace("Whoami Desk", "admin@whoami.example.com")
-	for tier, token := range map[string]string{"read": w.read, "draft": w.draft, "send": w.send, "full": w.admin} {
+	for tier, token := range map[string]string{"read": w.read, "draft": w.draft, "send": w.send} {
 		out := e.ok(e.connect(token, ""), "colliedesk_whoami", nil)
 		if got := at(t, out, "token_tier"); got != tier {
 			t.Errorf("token_tier=%v, want %q (%v)", got, tier, out)
@@ -141,6 +141,7 @@ func TestMCPRequiresABearerTokenAndNeverACookie(t *testing.T) {
 		{"person session as cookie", nil, &http.Cookie{Name: "colliedesk_session", Value: w.admin}},
 		{"agent token as cookie", nil, &http.Cookie{Name: "colliedesk_session", Value: w.read}},
 		{"valid cookie with a bad bearer", map[string]string{"Authorization": "Bearer nope"}, &http.Cookie{Name: "colliedesk_session", Value: w.admin}},
+		{"person session as bearer", map[string]string{"Authorization": "Bearer " + w.admin}, nil},
 	}
 	for _, c := range cases {
 		response := post(c.headers, c.cookie)
@@ -149,10 +150,8 @@ func TestMCPRequiresABearerTokenAndNeverACookie(t *testing.T) {
 			t.Errorf("%s: status=%d WWW-Authenticate=%q body=%s, want 401 with a Bearer challenge", c.name, response.StatusCode, response.Header.Get("WWW-Authenticate"), body)
 		}
 	}
-	for name, token := range map[string]string{"person session": w.admin, "agent token": w.read} {
-		if response := post(map[string]string{"Authorization": "Bearer " + token}, nil); response.StatusCode != http.StatusOK {
-			t.Errorf("%s as bearer: status=%d, want 200", name, response.StatusCode)
-		}
+	if response := post(map[string]string{"Authorization": "Bearer " + w.read}, nil); response.StatusCode != http.StatusOK {
+		t.Errorf("agent token as bearer: status=%d, want 200", response.StatusCode)
 	}
 	// Stateless: there is no stream to open and no session to end.
 	for _, method := range []string{http.MethodGet, http.MethodDelete} {

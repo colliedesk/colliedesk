@@ -16,7 +16,10 @@
   for a REST client. Do not copy any of them into a tool. Each REST call authenticates again
   (about 3 ms); that is the price of one code path.
 - **Gate.** `requireBearer` runs before the SDK reads any message. No `Authorization: Bearer`
-  header gives 401 with `WWW-Authenticate: Bearer`; cookies are never read. Every refusal of a
+  header gives 401 with `WWW-Authenticate: Bearer`; cookies are never read. A person's own session
+  as a bearer is also 401: it has no tier, no one-year cap and no attribution, so an AI client holding
+  one would act with that person's full rights and leave no trace of the agent
+  (`TestMCPRequiresABearerTokenAndNeverACookie`). Every refusal of a
   credential (unknown, revoked, expired, an agent token past its one-year limit) wraps
   `auth.ErrInvalidCredential` and is 401; any other `Authenticate` error is 503, so a client does not
   throw a good token away over a database outage (`TestMCPAnswers401ForEveryRefusedToken`,

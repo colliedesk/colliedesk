@@ -64,7 +64,8 @@ func New(config Config) http.Handler {
 	return requireBearer(config.Auth, streamable)
 }
 
-// requireBearer answers 401 unless the request carries a valid bearer token. Cookies are never read.
+// requireBearer answers 401 unless the request carries a valid agent token as a bearer. Cookies and
+// a person's own session are never accepted.
 func requireBearer(service *auth.Service, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		raw, ok := bearerToken(request)
@@ -72,13 +73,20 @@ func requireBearer(service *auth.Service, next http.Handler) http.Handler {
 			unauthorized(response)
 			return
 		}
-		if _, err := service.Authenticate(request.Context(), raw, false); err != nil {
+		principal, err := service.Authenticate(request.Context(), raw, false)
+		if err != nil {
 			if errors.Is(err, auth.ErrInvalidCredential) {
 				unauthorized(response)
 				return
 			}
 			slog.Error("authenticate MCP request", "error", err)
 			writeJSONError(response, http.StatusServiceUnavailable, "unavailable", "Colliedesk could not check the token right now. Try again in a moment.")
+			return
+		}
+		// A person's own session has no tier, no one-year cap and no attribution, so an AI client
+		// holding one could do everything that person can without leaving a trace of the agent.
+		if principal.Scope == "" {
+			unauthorized(response)
 			return
 		}
 		next.ServeHTTP(response, request)
@@ -97,7 +105,7 @@ func bearerToken(request *http.Request) (string, bool) {
 func unauthorized(response http.ResponseWriter) {
 	response.Header().Set("WWW-Authenticate", `Bearer realm="colliedesk"`)
 	writeJSONError(response, http.StatusUnauthorized, "unauthorized",
-		"Send an agent token as 'Authorization: Bearer <token>'. Cookies are not accepted here. An admin creates a token in Settings.")
+		"Send an agent token as 'Authorization: Bearer <token>'. Cookies and a person's own session are not accepted here. An admin creates a token in Settings.")
 }
 
 func writeJSONError(response http.ResponseWriter, status int, code, message string) {

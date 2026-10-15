@@ -9,8 +9,8 @@ charge.
 
 - URL: `https://<your-colliedesk>/mcp`. It uses MCP Streamable HTTP without sessions, protocol
   versions `2025-11-25` and `2026-07-28`.
-- Sign-in: an **agent token** in the `Authorization: Bearer <token>` header. A browser cookie is
-  never accepted on `/mcp`. A missing or invalid token gets HTTP 401.
+- Sign-in: an **agent token** in the `Authorization: Bearer <token>` header. A browser cookie or a
+  person's own session token is never accepted on `/mcp`. A missing or invalid token gets HTTP 401.
 - Create the token as described in [Agent tokens](sessions.md#agent-tokens). Pick the lowest tier
   that does the job. The token is shown once; revoke it in **Settings → Sessions**.
 
