@@ -11,9 +11,6 @@ importers:
       '@clerk/clerk-react':
         specifier: 5.55.0
         version: 5.55.0(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
-      '@fontsource-variable/geist':
-        specifier: 5.2.8
-        version: 5.2.8
       '@tanstack/react-query':
         specifier: 5.102.8
         version: 5.102.8(react@19.1.1)
@@ -388,9 +385,6 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
-
-  '@fontsource-variable/geist@5.2.8':
-    resolution: {integrity: sha512-cJ6m9e+8MQ5dCYJsLylfZrgBh6KkG4bOLckB35Tr9J/EqdkEM6QllH5PxqP1dhTvFup+HtMRPuz9xOjxXJggxw==}
 
   '@isaacs/fs-minipass@4.0.1':
     resolution: {integrity: sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==}
@@ -1981,8 +1975,6 @@ snapshots:
 
   '@esbuild/win32-x64@0.25.12':
     optional: true
-
-  '@fontsource-variable/geist@5.2.8': {}
 
   '@isaacs/fs-minipass@4.0.1':
     dependencies:

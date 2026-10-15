@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, test } from 'vitest';
 import { AppShell } from './app-shell';
 
@@ -8,11 +8,8 @@ const me = {
   timezone: 'UTC',
 };
 
-test('names the workspace and the signed-in person in the main navigation', () => {
+test('shows the page content next to the rail', () => {
   render(<AppShell me={me}><p>inbox</p></AppShell>);
-  const nav = screen.getAllByRole('navigation')[0];
-  expect(within(nav).getByText('Beta Desk')).toBeInTheDocument();
-  expect(within(nav).getByText('sam@example.com')).toBeInTheDocument();
   expect(screen.getByText('inbox')).toBeInTheDocument();
 });
 
@@ -31,4 +28,20 @@ test('a signed-out visitor of a cloud instance gets a sign-in link instead of th
 test('a signed-out visitor of a self-hosted instance keeps the pair hint', () => {
   render(<AppShell signedOut><p>inbox</p></AppShell>);
   expect(screen.getByText(/colliedesk pair/)).toBeInTheDocument();
+});
+
+test('the workspace and the signed-in address sit in an always-visible bar, not in a tooltip', () => {
+  render(<AppShell me={me}><p>inbox</p></AppShell>);
+  const bar = screen.getByRole('region', { name: 'Signed in as' });
+  expect(bar).toHaveTextContent('Beta Desk');
+  expect(bar).toHaveTextContent('sam@example.com');
+  expect(bar.closest('[data-tip]')).toBeNull();
+});
+
+test('Escape dismisses open tooltips and the next pointer move brings them back', () => {
+  render(<AppShell me={me}><p>inbox</p></AppShell>);
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  expect(document.documentElement).toHaveAttribute('data-tips-off');
+  fireEvent.pointerMove(document.body);
+  expect(document.documentElement).not.toHaveAttribute('data-tips-off');
 });

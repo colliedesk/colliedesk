@@ -33,8 +33,22 @@ docker compose exec server /app/colliedesk pair --workspace <slug> --email admin
 ```
 
 After you sign in, the empty inbox links to the next steps: connect your support email, import
-from Freshdesk, and invite your team. The top bar shows the workspace and the address you are signed
+from Freshdesk, and invite your team. A bar at the top of every page shows the workspace and the address you are signed
 in as.
+
+## Image channels
+
+The installer writes `COLLIE_DESK_IMAGE` to `.env`. Pick one tag:
+
+- `ghcr.io/colliedesk/colliedesk:edge` (current default): the latest `main` commit that passed CI
+  and booted against PostgreSQL.
+- `ghcr.io/colliedesk/colliedesk:X.Y.Z`, `:X.Y` or `:latest`: tagged releases.
+
+To check which build you run:
+
+```sh
+docker compose exec server /app/colliedesk version
+```
 
 ## Data to back up
 

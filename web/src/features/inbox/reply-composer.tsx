@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { messages } from '../../messages';
+import { LockIcon } from '../../ui/icons';
 
 interface ReplyComposerProps {
   disabled?: boolean;
@@ -16,14 +17,18 @@ export function ReplyComposer({ disabled, onSubmit }: ReplyComposerProps) {
   };
   return (
     <div className="composer">
-      <div className="composer-tabs" role="group" aria-label={messages.messageBody}>
-        <button type="button" data-active={kind === 'outgoing'} onClick={() => setKind('outgoing')}>{messages.replyMode}</button>
-        <button type="button" data-active={kind === 'note'} onClick={() => setKind('note')}>{messages.noteMode}</button>
+      <div className="composer-card" data-kind={kind}>
+        <div className="composer-tabs" role="group" aria-label={messages.messageBody}>
+          <button type="button" aria-pressed={kind === 'outgoing'} onClick={() => setKind('outgoing')}>{messages.replyMode}</button>
+          <button type="button" aria-pressed={kind === 'note'} onClick={() => setKind('note')}><LockIcon />{messages.noteMode}</button>
+        </div>
+        <textarea aria-label={messages.messageBody} value={body} onChange={(event) => setBody(event.target.value)} disabled={disabled} />
+        <div className="composer-actions">
+          <button className="primary-action" type="button" disabled={disabled || !body.trim()} onClick={submit}>
+            {kind === 'note' ? messages.privateNote : messages.reply}
+          </button>
+        </div>
       </div>
-      <textarea aria-label={messages.messageBody} value={body} onChange={(event) => setBody(event.target.value)} disabled={disabled} />
-      <button className="primary-action" type="button" disabled={disabled || !body.trim()} onClick={submit}>
-        {kind === 'note' ? messages.privateNote : messages.reply}
-      </button>
     </div>
   );
 }

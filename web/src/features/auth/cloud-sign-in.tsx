@@ -7,6 +7,19 @@ interface CloudSignInProps {
   onSessionToken: (token: string) => Promise<void>;
 }
 
+// Clerk draws its own form; it takes its colours from the brand tokens so it matches the dark app.
+function clerkAppearance() {
+  const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || undefined;
+  return {
+    variables: {
+      colorBackground: token('--surface-1'), colorText: token('--text-1'), colorTextSecondary: token('--text-2'),
+      colorPrimary: token('--accent'), colorTextOnPrimaryBackground: token('--on-accent'), colorInputBackground: token('--surface-0'),
+      colorInputText: token('--text-1'), colorNeutral: token('--text-1'), colorDanger: token('--danger'),
+      fontFamily: token('--font-sans'), borderRadius: token('--radius'),
+    },
+  };
+}
+
 function CloudSession({ onSessionToken }: Pick<CloudSignInProps, 'onSessionToken'>) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const exchanged = useRef(false);
@@ -24,9 +37,9 @@ function CloudSession({ onSessionToken }: Pick<CloudSignInProps, 'onSessionToken
 	});
   }, [failed, getToken, isLoaded, isSignedIn, onSessionToken]);
 
-  if (failed) return <button className="secondary-action" type="button" onClick={() => setFailed(false)}>{messages.retryCloudSignIn}</button>;
+  if (failed) return <button type="button" onClick={() => setFailed(false)}>{messages.retryCloudSignIn}</button>;
   if (!isLoaded || isSignedIn) return <p>{messages.cloudSigningIn}</p>;
-  return <SignIn routing="hash" />;
+  return <SignIn routing="hash" appearance={clerkAppearance()} />;
 }
 
 export function CloudSignIn({ publishableKey, onSessionToken }: CloudSignInProps) {

@@ -46,7 +46,7 @@ one-time sign-in URL. CollieDesk does not use passwords. Details: [docs/user/ins
 - Workspaces fully isolated from each other.
 - Per-workspace timezone with per-agent override.
 
-User guides: [docs/user](docs/user/README.md).
+User guides: [docs/user](docs/user/README.md). They are also published at [colliedesk.com/docs](https://colliedesk.com/docs) by [colliedesk/colliedesk.com](https://github.com/colliedesk/colliedesk.com).
 
 ## Development
 

@@ -10,7 +10,7 @@ so nobody, including us, can read it back later. If a link is invalid, expired o
 ask your admin for a new one.
 
 Opening a link signs that browser in for 30 days; using CollieDesk extends it. A link for another
-workspace switches the browser to that workspace; the top bar always shows which workspace and
+workspace switches the browser to that workspace; a bar at the top of every page always shows which workspace and
 address you are signed in as. You can see and
 revoke every signed-in device in [Sessions and devices](sessions.md).
 

@@ -1,0 +1,25 @@
+version: 2
+# web/ is not listed: Dependabot runs its own pnpm major instead of the packageManager pin
+# and would rewrite pnpm-lock.yaml with it. Web dependencies are bumped by hand with corepack.
+updates:
+  - package-ecosystem: gomod
+    directory: /server
+    schedule:
+      interval: weekly
+    groups:
+      go:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: docker
+    directory: /server
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
