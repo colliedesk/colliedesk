@@ -17,7 +17,7 @@ test('connects email, receives a customer email and shows why the reply is not e
     },
   }).trim();
   await page.goto(pairingURL);
-  await page.getByRole('button', { name: 'Continue to CollieDesk' }).click();
+  await page.getByRole('button', { name: 'Continue to Colliedesk' }).click();
   await expect(page).toHaveURL(`${baseURL}/`);
 
   await page.goto(`${baseURL}/settings`);
@@ -52,7 +52,7 @@ test('connects email, receives a customer email and shows why the reply is not e
     '--e2e--',
   ].join('\r\n');
   const inbound = await page.request.post(`${baseURL}/api/v1/channels/email/inbound`, {
-    headers: { 'Content-Type': 'message/rfc822', 'X-CollieDesk-Inbound-Secret': secret }, data: Buffer.from(raw),
+    headers: { 'Content-Type': 'message/rfc822', 'X-Colliedesk-Inbound-Secret': secret }, data: Buffer.from(raw),
   });
   expect(inbound.status()).toBe(200);
   expect((await inbound.json() as { status: string }).status).toBe('created');

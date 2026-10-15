@@ -1,6 +1,6 @@
 # Install and create a workspace
 
-CollieDesk runs as one server plus PostgreSQL. Requirements: Docker with Compose v2.
+Colliedesk runs as one server plus PostgreSQL. Requirements: Docker with Compose v2.
 
 ## One command
 
@@ -52,7 +52,7 @@ docker compose exec server /app/colliedesk version
 
 ## Data to back up
 
-CollieDesk keeps data in two places. Back up both:
+Colliedesk keeps data in two places. Back up both:
 
 - PostgreSQL (the `postgres-data` volume).
 - Attachment files in `ATTACHMENTS_DIR` (the `attachments-data` volume, mounted at
@@ -62,7 +62,7 @@ PostgreSQL row-level security keeps each workspace's rows apart. Because of it:
 
 1. Run `pg_dump` as a superuser: `postgres` for installs made with the installer, `colliedesk`
    for older installs and for the repository's `compose.yaml`.
-2. Before you restore into a new PostgreSQL server, create the role that CollieDesk uses for
+2. Before you restore into a new PostgreSQL server, create the role that Colliedesk uses for
    requests. Its name is `colliedesk_app_` followed by the database name:
    ```sql
    CREATE ROLE colliedesk_app_colliedesk NOLOGIN;
@@ -74,7 +74,7 @@ PostgreSQL row-level security keeps each workspace's rows apart. Because of it:
 
 An external database must be PostgreSQL 16 or newer.
 
-The installer connects CollieDesk with two users:
+The installer connects Colliedesk with two users:
 - `colliedesk` owns the data and runs migrations. It is not a superuser.
 - `colliedesk_request` serves requests and can only read the signed-in workspace.
 

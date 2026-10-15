@@ -1,4 +1,4 @@
-# CollieDesk feature spec
+# Colliedesk feature spec
 
 Status: v0.1 scope defined 2026-10-14. Owner: HC Labs.
 
@@ -32,7 +32,7 @@ Reference: T3 Code (MIT, github.com/pingdotgg/t3code), `docs/internals/environme
 `docs/user/remote-access.md`. T3 Code is MIT-licensed, so studying it is fine; any code copied from
 it must keep its MIT notice in `THIRD-PARTY-NOTICES.md`.
 
-1. **No passwords.** Nobody sets or types a password in CollieDesk.
+1. **No passwords.** Nobody sets or types a password in Colliedesk.
 2. **Bootstrap like `t3 pair`.** `colliedesk create-workspace --name <n> --admin-email <e>` prints a
    one-time pairing URL. `colliedesk pair --workspace <slug> --email <e>` prints a fresh one for an
    existing agent (new device or lost session). Links are single use, expire after 15 minutes and
@@ -51,8 +51,8 @@ it must keep its MIT notice in `THIRD-PARTY-NOTICES.md`.
    enumerates every registered API route and fails if one has no declared permission.
 6. **Later.** Email magic link (v0.2, with the email channel). **Cloud sign-in through Clerk** (v0.3):
    Clerk authenticates the account (Google, Microsoft, email, MFA; SAML when an enterprise needs it),
-   then the CollieDesk server mints a one-time link that is redeemed for an ordinary CollieDesk session.
-   Clerk never holds a CollieDesk session; self-hosted installs do not use Clerk at all; MCP clients sign in through OAuth authorization code + PKCE and receive either a
+   then the Colliedesk server mints a one-time link that is redeemed for an ordinary Colliedesk session.
+   Clerk never holds a Colliedesk session; self-hosted installs do not use Clerk at all; MCP clients sign in through OAuth authorization code + PKCE and receive either a
    read-only grant or an operate grant (v0.4+).
 
 ## Engineering principles (learned from T3 Code)

@@ -7,6 +7,6 @@ was created and last used.
   a session that ran out shows **Expired**.
 - Agents see their own sessions. Admins see and can revoke every session in the workspace.
 
-A session lasts 30 days and extends while you use CollieDesk. A browser without a valid session
+A session lasts 30 days and extends while you use Colliedesk. A browser without a valid session
 shows **You are signed out** instead of the inbox; on instances with cloud sign-in it links to **Sign in**. To sign in again on a revoked device, ask an
 admin for a new link.

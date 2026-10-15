@@ -22,7 +22,7 @@ func inboundRequest(t *testing.T, raw, secret string) *http.Request {
 	req := httptest.NewRequest(http.MethodPost, inboundPath, strings.NewReader(raw))
 	req.Header.Set("Content-Type", "message/rfc822")
 	if secret != "" {
-		req.Header.Set("X-CollieDesk-Inbound-Secret", secret)
+		req.Header.Set("X-Colliedesk-Inbound-Secret", secret)
 	}
 	return req
 }

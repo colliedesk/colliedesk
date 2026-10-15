@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	inboundSecretHeader = "X-CollieDesk-Inbound-Secret"
+	inboundSecretHeader = "X-Colliedesk-Inbound-Secret"
 	maxInboundBytes     = 25 << 20
 	maxInboundFiles     = 100
 )

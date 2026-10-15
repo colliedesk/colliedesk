@@ -28,7 +28,7 @@ type UndoResult struct {
 	KeptConversationTickets []string `json:"kept_conversation_tickets"`
 }
 
-// targetExists tells whether the CollieDesk row a ledger row points at still exists.
+// targetExists tells whether the Colliedesk row a ledger row points at still exists.
 const targetExists = `CASE i.entity
 	WHEN 'ticket' THEN EXISTS(SELECT 1 FROM conversations x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'description' THEN EXISTS(SELECT 1 FROM messages x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
@@ -43,7 +43,7 @@ const targetExists = `CASE i.entity
 // (with their messages, attachments and time entries), and the contacts and
 // tags it created that nothing else uses. A conversation that gained a
 // message after the import is kept with its ledger rows, so work done in
-// CollieDesk is never lost and a later import does not duplicate it.
+// Colliedesk is never lost and a later import does not duplicate it.
 func Undo(ctx context.Context, pool *pgxpool.Pool, storage attachments.Storage, options UndoOptions) (UndoResult, error) {
 	db := database.New(pool)
 	workspaceID, err := db.WorkspaceIDBySlug(ctx, options.WorkspaceSlug)

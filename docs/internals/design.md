@@ -79,7 +79,7 @@ focus `#f0b44c`. Every text pair is at least 4.5:1; focus rings and input border
 - Do not recolour, outline, rotate, glow or put a gradient on the mark. Do not put the bare mark
   (without its tile) on a photo, a light background or `--accent`.
 - Wordmark: "collie" Plex Sans 700 in `--text-1`, "desk" Plex Sans 400 in `--text-2`, one lowercase
-  word. In running text write "CollieDesk".
+  word. In running text write "Colliedesk".
 
 ## Rules
 

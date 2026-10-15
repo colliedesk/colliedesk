@@ -96,7 +96,7 @@ type Warning struct {
 }
 
 // Report is the reconcile report of one import run: source counts versus
-// what CollieDesk holds, so a customer can prove nothing was lost.
+// what Colliedesk holds, so a customer can prove nothing was lost.
 type Report struct {
 	Status       string          `json:"status"`
 	Domain       string          `json:"domain"`

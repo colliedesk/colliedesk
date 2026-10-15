@@ -24,7 +24,7 @@ cannot be loaded, it says so with **Try again** instead.
 - **Private note** is visible only to your team.
 - Messages support Markdown.
 - Attachments appear under their message with name and size. Select a file name to download it.
-  Files always download; they are never opened inside CollieDesk.
+  Files always download; they are never opened inside Colliedesk.
 
 **Change the conversation** (details pane)
 - **Status**: every status can be changed back, for example Resolved → Open to reopen.

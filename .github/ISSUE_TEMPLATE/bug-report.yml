@@ -29,9 +29,9 @@ body:
   - type: dropdown
     id: install
     attributes:
-      label: How you run CollieDesk
+      label: How you run Colliedesk
       options:
-        - CollieDesk Cloud
+        - Colliedesk Cloud
         - install.sh
         - Docker Compose from a clone
         - Other

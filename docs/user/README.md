@@ -1,4 +1,4 @@
-# CollieDesk user guides
+# Colliedesk user guides
 
 One page per feature. Each page says what the feature does, how to use it, and its limits.
 

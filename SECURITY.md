@@ -16,7 +16,7 @@ you ask us not to.
 
 ## Scope
 
-In scope: the CollieDesk server, the web app, the container image `ghcr.io/colliedesk/colliedesk`
+In scope: the Colliedesk server, the web app, the container image `ghcr.io/colliedesk/colliedesk`
 and the install script. Cross-workspace data access is always treated as critical.
 
 Out of scope: denial of service by volume, findings that need a compromised host, and reports

@@ -1,4 +1,4 @@
-// Package freshdesk imports a Freshdesk account into a CollieDesk workspace
+// Package freshdesk imports a Freshdesk account into a Colliedesk workspace
 // through the public Freshdesk API v2 and ends every run with a reconcile report.
 package freshdesk
 

@@ -210,7 +210,7 @@ The Freshdesk importer and undo resolve the slug once, then run every read and w
   - The installer's owner password reaches `psql` through its environment (`\getenv`), not argv.
   - psql still expands the owner password into the one-time `CREATE ROLE` that initdb runs. If that
     statement failed, the log of the fresh volume would hold it.
-- **Dropping a database.** Roles are cluster-wide, so dropping a CollieDesk database leaves its app
+- **Dropping a database.** Roles are cluster-wide, so dropping a Colliedesk database leaves its app
   role, and the request login if there is one.
   1. Before the drop, read the app role's name in that database:
      `SELECT roles[1] FROM pg_policies WHERE tablename='workspaces' AND policyname='workspace_isolation';`

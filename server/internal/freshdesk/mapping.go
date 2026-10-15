@@ -146,7 +146,7 @@ func utcPointer(value *time.Time) *time.Time {
 	return &utc
 }
 
-// author resolves a Freshdesk user id to a CollieDesk agent (when matched by
+// author resolves a Freshdesk user id to a Colliedesk agent (when matched by
 // email) and a display name that is always kept.
 func (r *run) author(userID int64) (*string, string) {
 	if agent, ok := r.agents[userID]; ok {

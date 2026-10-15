@@ -43,7 +43,7 @@ func TestTimestampsArePreservedInUTC(t *testing.T) {
 	}
 }
 
-func TestConversationFieldsMapToCollieDesk(t *testing.T) {
+func TestConversationFieldsMapToColliedesk(t *testing.T) {
 	env := newImportEnv(t)
 	env.mustRun(t)
 	data := store.New(env.pool)

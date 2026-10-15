@@ -30,7 +30,7 @@ const (
 	maxMessageIDLen = 255
 )
 
-// Inbound is the part of a received message CollieDesk stores or uses for threading.
+// Inbound is the part of a received message Colliedesk stores or uses for threading.
 type Inbound struct {
 	MessageID      string
 	InReplyTo      []string

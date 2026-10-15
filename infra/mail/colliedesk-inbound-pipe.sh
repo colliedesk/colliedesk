@@ -1,5 +1,5 @@
 #!/bin/sh
-# Deliver one message from an MTA pipe (Postfix pipe(8), Exim pipe transport) to CollieDesk.
+# Deliver one message from an MTA pipe (Postfix pipe(8), Exim pipe transport) to Colliedesk.
 #
 # Environment: COLLIEDESK_INBOUND_URL, and COLLIEDESK_INBOUND_SECRET or COLLIEDESK_INBOUND_SECRET_FILE.
 # Exit codes follow sysexits(3), which is what MTAs act on:
@@ -23,22 +23,22 @@ fi
 WORK=$(mktemp -d) || exit 75
 trap 'rm -rf "$WORK"' EXIT HUP INT TERM
 # The secret goes in a private header file, never in argv, which other local users can read.
-(umask 077 && printf 'X-CollieDesk-Inbound-Secret: %s\n' "$SECRET" >"$WORK/headers") || exit 75
+(umask 077 && printf 'X-Colliedesk-Inbound-Secret: %s\n' "$SECRET" >"$WORK/headers") || exit 75
 
 STATUS=$("$CURL" --silent --show-error --max-time 120 --output /dev/null --write-out '%{http_code}' \
   -X POST -H 'Content-Type: message/rfc822' -H "@$WORK/headers" --data-binary @- "$URL") || {
-  echo 'colliedesk-inbound-pipe: CollieDesk is unreachable; the MTA will retry' >&2
+  echo 'colliedesk-inbound-pipe: Colliedesk is unreachable; the MTA will retry' >&2
   exit 75
 }
 
 case $STATUS in
   2??) exit 0 ;;
   400 | 403 | 413)
-    echo "colliedesk-inbound-pipe: CollieDesk rejected the message (HTTP $STATUS)" >&2
+    echo "colliedesk-inbound-pipe: Colliedesk rejected the message (HTTP $STATUS)" >&2
     exit 65
     ;;
   *)
-    echo "colliedesk-inbound-pipe: CollieDesk answered HTTP $STATUS; the MTA will retry" >&2
+    echo "colliedesk-inbound-pipe: Colliedesk answered HTTP $STATUS; the MTA will retry" >&2
     exit 75
     ;;
 esac

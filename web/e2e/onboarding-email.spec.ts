@@ -30,7 +30,7 @@ test('email channel: forwarded mail opens a conversation, the reply is delivered
   // Step 4: the forwarder posts the raw message, with an attachment, unchanged.
   const customerMessageID = `<first-${suffix}@customer.example>`;
   const inbound = await page.request.post(inboundURL, {
-    headers: { 'Content-Type': 'message/rfc822', 'X-CollieDesk-Inbound-Secret': secret },
+    headers: { 'Content-Type': 'message/rfc822', 'X-Colliedesk-Inbound-Secret': secret },
     data: rawEmail([
       `From: Erin Customer <${customer}>`, `To: ${support}`, `Subject: Order ${suffix} never arrived`,
       `Message-ID: ${customerMessageID}`, 'Date: Tue, 13 Oct 2026 23:30:00 +0000', 'MIME-Version: 1.0',
@@ -68,7 +68,7 @@ test('email channel: forwarded mail opens a conversation, the reply is delivered
 
   // The customer answers from their mail client: In-Reply-To names our reply.
   const answer = await page.request.post(inboundURL, {
-    headers: { 'Content-Type': 'message/rfc822', 'X-CollieDesk-Inbound-Secret': secret },
+    headers: { 'Content-Type': 'message/rfc822', 'X-Colliedesk-Inbound-Secret': secret },
     data: rawEmail([
       `From: Erin Customer <${customer}>`, `To: ${support}`, `Subject: Re: Order ${suffix} never arrived`,
       `Message-ID: <second-${suffix}@customer.example>`, `In-Reply-To: ${replyMessageID}`,

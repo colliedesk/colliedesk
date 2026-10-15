@@ -181,7 +181,7 @@ func (w *Worker) identity(item store.Delivery) (mail.Address, string, bool) {
 		return mail.Address{}, "", false
 	}
 	address := "reply+" + item.ReplyToken + "@" + w.options.MailFromDomain
-	return mail.Address{Name: item.WorkspaceName + " via CollieDesk", Address: address}, address, true
+	return mail.Address{Name: item.WorkspaceName + " via Colliedesk", Address: address}, address, true
 }
 
 func truncate(value string) string {

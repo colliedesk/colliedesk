@@ -51,7 +51,7 @@ func TestHostedSlug(t *testing.T) {
 		"support":        {"support@acme.colliedesk.com", "acme"},
 		"any local part": {"billing@acme.colliedesk.com", "acme"},
 		"plus address":   {"support+r-0123@acme.colliedesk.com", "acme"},
-		"uppercase":      {"Support@ACME.CollieDesk.com", "acme"},
+		"uppercase":      {"Support@ACME.Colliedesk.com", "acme"},
 		"apex":           {"support@colliedesk.com", ""},
 		"nested":         {"support@a.b.colliedesk.com", ""},
 		"other domain":   {"support@acme.example.com", ""},

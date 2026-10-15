@@ -52,7 +52,7 @@ fi
 mkdir -p "$TARGET_DIR"
 
 if [ ! -f "$TARGET_DIR/.env" ]; then
-  # The superuser only creates the database. CollieDesk connects as the non-superuser owner
+  # The superuser only creates the database. Colliedesk connects as the non-superuser owner
   # (DATABASE_URL) and serves requests as a separate login that can only take the app role
   # (DATABASE_REQUEST_URL), so SQL that leaves the row-level security role gains nothing.
   POSTGRES_PASSWORD=$("$OPENSSL" rand -hex 32)
@@ -170,7 +170,7 @@ done
 [ "$attempt" -lt 60 ] || fail 'Server did not become healthy within 120 seconds. Run docker compose ps for details.'
 
 if [ -f .initialized ]; then
-  printf '%s\n' 'CollieDesk is running. Existing workspace initialization was kept.'
+  printf '%s\n' 'Colliedesk is running. Existing workspace initialization was kept.'
   exit 0
 fi
 
@@ -178,7 +178,7 @@ PAIRING_URL=$("$DOCKER" compose exec -T server /app/colliedesk create-workspace 
   --name "$WORKSPACE_NAME" --admin-email "$ADMIN_EMAIL" </dev/null)
 [ -n "$PAIRING_URL" ] || fail 'Workspace creation did not return a pairing URL.'
 touch .initialized
-printf 'CollieDesk is ready. Open this one-time pairing URL:\n%s\n' "$PAIRING_URL"
+printf 'Colliedesk is ready. Open this one-time pairing URL:\n%s\n' "$PAIRING_URL"
 }
 
 main "$@"

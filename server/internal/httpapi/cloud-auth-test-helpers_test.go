@@ -111,6 +111,6 @@ func sessionCookie(t *testing.T, response *httptest.ResponseRecorder) *http.Cook
 			return cookie
 		}
 	}
-	t.Fatal("cloud exchange did not set a CollieDesk session cookie")
+	t.Fatal("cloud exchange did not set a Colliedesk session cookie")
 	return nil
 }

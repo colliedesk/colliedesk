@@ -15,34 +15,34 @@ func (r *run) loadAgents(ctx context.Context) error {
 	local := map[string]string{}
 	tx, err := r.begin(ctx)
 	if err != nil {
-		return fmt.Errorf("list CollieDesk agents: %w", err)
+		return fmt.Errorf("list Colliedesk agents: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck // also covers a panic; a second rollback is a no-op
 	rows, err := tx.Query(ctx, `SELECT id::text,lower(email) FROM agents WHERE workspace_id=$1`, r.workspaceID)
 	if err != nil {
 		_ = tx.Rollback(ctx)
-		return fmt.Errorf("list CollieDesk agents: %w", err)
+		return fmt.Errorf("list Colliedesk agents: %w", err)
 	}
 	for rows.Next() {
 		var id, email string
 		if err := rows.Scan(&id, &email); err != nil {
 			rows.Close()
 			_ = tx.Rollback(ctx)
-			return fmt.Errorf("scan CollieDesk agent: %w", err)
+			return fmt.Errorf("scan Colliedesk agent: %w", err)
 		}
 		local[email] = id
 	}
 	rows.Close()
 	_ = tx.Rollback(ctx) // read only; end it before the Freshdesk calls below
 	if err := rows.Err(); err != nil {
-		return fmt.Errorf("list CollieDesk agents: %w", err)
+		return fmt.Errorf("list Colliedesk agents: %w", err)
 	}
 	return listAll(ctx, r.client, r.endpoint("/api/v2/agents", pageQuery()), func(agent fdAgent) error {
 		r.agents[agent.ID] = agent
 		if id, ok := local[strings.ToLower(strings.TrimSpace(agent.Contact.Email))]; ok {
 			r.agentTargets[agent.ID] = id
 		} else {
-			r.warn("agent_not_matched", "Freshdesk agent has no CollieDesk agent with the same email; their replies keep the author name only. Invite them, then re-run to keep future items linked.", strconv.FormatInt(agent.ID, 10))
+			r.warn("agent_not_matched", "Freshdesk agent has no Colliedesk agent with the same email; their replies keep the author name only. Invite them, then re-run to keep future items linked.", strconv.FormatInt(agent.ID, 10))
 		}
 		return nil
 	})
@@ -80,13 +80,13 @@ func (r *run) importContacts(ctx context.Context) error {
 	}
 	for id := range r.companies {
 		if !r.usedCompanies[id] {
-			r.warn("company_without_contacts", "Freshdesk company has no contacts, so its name is not kept anywhere in CollieDesk.", strconv.FormatInt(id, 10))
+			r.warn("company_without_contacts", "Freshdesk company has no contacts, so its name is not kept anywhere in Colliedesk.", strconv.FormatInt(id, 10))
 		}
 	}
 	return nil
 }
 
-// requesterContact returns the CollieDesk contact for a Freshdesk requester,
+// requesterContact returns the Colliedesk contact for a Freshdesk requester,
 // fetching contacts that the list endpoint did not return (for example deleted ones).
 func (r *run) requesterContact(ctx context.Context, freshdeskID int64) (string, error) {
 	key := strconv.FormatInt(freshdeskID, 10)
@@ -137,7 +137,7 @@ func (r *run) importContact(ctx context.Context, contact fdContact) (string, err
 	}
 	if email == "" {
 		email = "freshdesk-contact-" + key + "@import.invalid"
-		r.warn("contact_without_email", "Freshdesk contact has no email; CollieDesk gave it a reserved .invalid address.", key)
+		r.warn("contact_without_email", "Freshdesk contact has no email; Colliedesk gave it a reserved .invalid address.", key)
 	}
 	name := strings.TrimSpace(contact.Name)
 	if name == "" {

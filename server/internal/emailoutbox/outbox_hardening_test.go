@@ -76,7 +76,7 @@ func TestSendingIdentityFollowsDomainVerification(t *testing.T) {
 	}{
 		{"any policy", "", `"Outbound Desk" <support@outbound.example.com>`, "support@outbound.example.com", email.FromPolicyAny},
 		{"verified domain", "now()", `"Outbound Desk" <support@outbound.example.com>`, "support@outbound.example.com", email.FromPolicyVerified},
-		{"unverified domain", "", `"Outbound Desk via CollieDesk" <reply+TOKEN@mail.colliedesk.test>`, "reply+TOKEN@mail.colliedesk.test", email.FromPolicyVerified},
+		{"unverified domain", "", `"Outbound Desk via Colliedesk" <reply+TOKEN@mail.colliedesk.test>`, "reply+TOKEN@mail.colliedesk.test", email.FromPolicyVerified},
 	}
 	for _, item := range cases {
 		t.Run(item.name, func(t *testing.T) {

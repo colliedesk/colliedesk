@@ -1,4 +1,4 @@
-/* CollieDesk brand tokens: Blue Merle. Light is the default theme; dark is opt-in through
+/* Colliedesk brand tokens: Blue Merle. Light is the default theme; dark is opt-in through
    data-theme="dark" on <html> (see src/lib/theme.ts). Load fonts.css first.
    Contrast for every pair is checked by scripts/check-contrast.mjs and listed in docs/internals/design.md. */
 :root {

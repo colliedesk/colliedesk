@@ -26,7 +26,7 @@ func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.R
 		return
 	}
 	if request.Header.Get("Origin") != a.config.Origin {
-		writeError(response, http.StatusForbidden, "csrf_rejected", "Origin does not match this CollieDesk instance.")
+		writeError(response, http.StatusForbidden, "csrf_rejected", "Origin does not match this Colliedesk instance.")
 		return
 	}
 	token, ok := bearerToken(request.Header.Get("Authorization"))

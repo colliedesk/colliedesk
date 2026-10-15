@@ -147,7 +147,7 @@ func (c *client) do(ctx context.Context, target string, apiCall bool) (*http.Res
 			return nil, fmt.Errorf("build request for %s: %w", redact(target), err)
 		}
 		request.Header.Set("Accept", "application/json")
-		request.Header.Set("User-Agent", "CollieDesk-Importer/0.2")
+		request.Header.Set("User-Agent", "Colliedesk-Importer/0.2")
 		if withKey {
 			request.SetBasicAuth(c.apiKey, "X")
 		}

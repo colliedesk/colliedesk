@@ -1,6 +1,6 @@
 # Performance budgets
 
-CollieDesk targets a usable screen within 200 ms from a user action. The target includes network, server, data, and cached assets. The repository gates the parts it can measure deterministically.
+Colliedesk targets a usable screen within 200 ms from a user action. The target includes network, server, data, and cached assets. The repository gates the parts it can measure deterministically.
 
 ## Inbox server budget
 
