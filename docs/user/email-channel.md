@@ -77,8 +77,8 @@ the reason, and the composer shows a notice. Fix the cause, then select **Retry 
 4. Copy the **Inbound URL**.
 
 Rotate the secret with **Rotate inbound secret**. The old secret stops working immediately, so
-update your forwarder at the same time. **Disconnect email** stops inbound mail and outgoing
-replies. Conversations and messages stay.
+update your forwarder at the same time. **Disconnect email** asks first, then stops inbound mail and
+outgoing replies. Conversations and messages stay.
 
 ## 3. Verify the domain (when the policy is `verified`)
 

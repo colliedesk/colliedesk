@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import type { EmailChannelSettings } from '../../api/schemas';
 import { EmailChannelSection } from './email-channel-section';
@@ -45,7 +45,21 @@ test('rotates the inbound secret, shows it once and disconnects', () => {
   rerender(<EmailChannelSection settings={connected} timezone="UTC" canManage createdSecret="key.secret" onRotate={onRotate} onDisconnect={onDisconnect} />);
   expect(screen.getByRole('textbox', { name: /inbound secret/i })).toHaveValue('key.secret');
   fireEvent.click(screen.getByRole('button', { name: /disconnect email/i }));
+  expect(onDisconnect).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Yes, disconnect' }));
   expect(onDisconnect).toHaveBeenCalled();
+});
+
+test('disconnecting asks first, says what stops, and can be cancelled', () => {
+  const onDisconnect = vi.fn();
+  render(<EmailChannelSection settings={connected} timezone="UTC" canManage onDisconnect={onDisconnect} />);
+  fireEvent.click(screen.getByRole('button', { name: /disconnect email/i }));
+  const question = screen.getByRole('group', { name: 'Disconnect email?' });
+  expect(question).toHaveTextContent('mail sent to support@example.com stops arriving and replies are no longer emailed');
+  expect(within(question).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+  fireEvent.click(within(question).getByRole('button', { name: 'Cancel' }));
+  expect(onDisconnect).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: /disconnect email/i })).toHaveFocus();
 });
 
 test('offers to create the first secret when none is set', () => {

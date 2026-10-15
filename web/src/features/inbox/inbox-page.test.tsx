@@ -181,6 +181,18 @@ test('an empty filtered list says no conversation matches', () => {
   expect(screen.getByText('No conversations match these filters.')).toBeInTheDocument();
 });
 
+test('an empty filtered list offers a way out that clears every filter', () => {
+  const onFilters = vi.fn();
+  render(<InboxPage conversations={[]} filtered onFilters={onFilters} />);
+  fireEvent.change(screen.getByRole('searchbox', { name: /search conversations/i }), { target: { value: 'refund' } });
+  fireEvent.click(screen.getByRole('radio', { name: 'Pending' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+  expect(onFilters).toHaveBeenLastCalledWith({});
+  expect(screen.getByRole('searchbox', { name: /search conversations/i })).toHaveValue('');
+  expect(screen.getByRole('radio', { name: 'All' })).toBeChecked();
+  expect(screen.getByRole('searchbox', { name: /search conversations/i })).toHaveFocus();
+});
+
 test('a list that failed to load says so and offers a retry, never "Get started"', () => {
   const onRetry = vi.fn();
   render(<InboxPage conversations={[]} failed onRetry={onRetry} />);

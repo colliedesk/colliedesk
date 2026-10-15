@@ -122,3 +122,9 @@ test('a personal timezone save shows Saving…, Saved and a failure next to its 
   rerender(<SettingsPage sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ error: 'Unknown timezone.' }} />);
   expect(screen.getByRole('alert')).toHaveTextContent('Unknown timezone.');
 });
+
+test('shows the loading status while settings data is pending, without the forms', () => {
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" loading canCreateInvites />);
+  expect(screen.getByRole('status')).toHaveTextContent('Loading workspace…');
+  expect(screen.queryByRole('button', { name: /create invite/i })).not.toBeInTheDocument();
+});

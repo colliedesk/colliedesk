@@ -67,3 +67,10 @@ test('the web form save shows Saved after it succeeds', async () => {
   fireEvent.click(await screen.findByRole('button', { name: /save web form/i }));
   await waitFor(() => expect(screen.getByText('Saved')).toHaveAttribute('role', 'status'));
 });
+
+test('Settings shows the loading status until its data arrives', async () => {
+  show('admin');
+  api.me.mockReturnValue(new Promise(() => {}));
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><SettingsRoute /></QueryClientProvider>);
+  expect(screen.getAllByRole('status')[0]).toHaveTextContent('Loading workspace…');
+});

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { EmailChannelSettings } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
@@ -29,6 +29,16 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   const addressFeedback = useSaveFeedback(addressSave);
   const slugFeedback = useSaveFeedback(slugSave);
   const [copied, setCopied] = useState(false);
+  // Disconnecting stops inbound mail for everyone, so it asks first; Cancel is the focused default.
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
+  const disconnectButton = useRef<HTMLButtonElement>(null);
+  const returnFocus = useRef(false);
+  const cancelDisconnect = () => { returnFocus.current = true; setConfirmingDisconnect(false); };
+  useEffect(() => {
+    if (confirmingDisconnect || !returnFocus.current) return;
+    returnFocus.current = false;
+    disconnectButton.current?.focus();
+  }, [confirmingDisconnect]);
   const smtp = settings?.smtp;
   const hostedAddress = settings?.hosted_address ?? null;
   const copyAddress = () => {
@@ -64,8 +74,15 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
           <input readOnly value={createdSecret} /><small>{messages.inboundSecretNotice}</small></label>}
         {canManage && channel && <span className="button-row">
           {!hostedAddress && <button type="button" onClick={() => onRotate?.()}>{channel.secret_set ? messages.rotateInboundSecret : messages.createInboundSecret}</button>}
-          <button type="button" className="danger-action" onClick={() => onDisconnect?.()}>{messages.disconnectEmail}</button>
+          {!confirmingDisconnect && <button type="button" className="danger-action" ref={disconnectButton} onClick={() => setConfirmingDisconnect(true)}>{messages.disconnectEmail}</button>}
         </span>}
+        {canManage && channel && confirmingDisconnect && <div className="confirm-panel" role="group" aria-labelledby="disconnect-email-question">
+          <p><strong id="disconnect-email-question">{messages.disconnectEmailQuestion}</strong> {messages.disconnectEmailConsequence(channel.support_address)}</p>
+          <span className="button-row">
+            <button type="button" className="danger-action" onClick={() => { setConfirmingDisconnect(false); onDisconnect?.(); }}>{messages.confirmDisconnectEmail}</button>
+            <button type="button" autoFocus onClick={cancelDisconnect}>{messages.cancel}</button>
+          </span>
+        </div>}
         {channel && (channel.domain_verified_at
           ? <p className="muted-copy">{messages.domainVerified(channel.domain, formatDate(channel.domain_verified_at, timezone))}</p>
           : <div className="email-channel-dns"><p className="muted-copy">{messages.domainVerificationHelp}</p>

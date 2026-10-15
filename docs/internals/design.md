@@ -102,6 +102,22 @@ focus `#f0b44c`. Every text pair is at least 4.5:1; focus rings and input border
 - Customer email stays plain text (see `plain-text-body.tsx`); the original HTML opens in a
   sandboxed frame that keeps a white page so the customer's own styling stays readable. Avatars are
   initials, never images, so the timeline loads nothing remote.
+- Every empty list says which kind of empty it is and gives the next step: a new workspace gets
+  **Get started** links, a filtered list with no match gets **Clear filters**, a failed load gets
+  **Try again**.
+
+## Review checklists
+
+When a screen changes, check it against the matching lists on [checklist.design](https://www.checklist.design).
+They are a gap finder, not a spec: where a list conflicts with a rule above, the rule wins.
+
+| Surface | Checklists |
+|---|---|
+| Conversation list and filters | Empty State, Filtering items, Search Results, Data Table |
+| Timeline and composer | Comments, Submitting a form, Showing input error |
+| Settings and email channel | Settings, Integrations, Saving changes |
+| Sign-in, invites, sessions | Login, User Management |
+| Every screen | Accessibility, Loading, Toast, Drawer |
 
 ## Identity bar
 
