@@ -1,5 +1,5 @@
-/* App shell: a slim rail on the left, the active view fills the rest. */
-.app-shell { height: 100dvh; display: grid; grid-template-columns: 60px minmax(0, 1fr); }
+/* App shell: a slim rail on the grey app background; each view sits in white panels with a small gap. */
+.app-shell { height: 100dvh; display: grid; grid-template-columns: 56px minmax(0, 1fr); background: var(--surface-0); }
 .app-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .app-content { flex: 1; min-width: 0; min-height: 0; overflow: auto; }
 .app-content > .inbox-shell { height: 100%; }
@@ -7,12 +7,13 @@
 .rail-avatar { margin-top: auto; }
 /* Always visible, never a tooltip: it is what tells a person which workspace this browser acts in. */
 .identity-bar {
-  flex: none; display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; border-bottom: 1px solid var(--line);
-  background: var(--surface-0); padding: var(--space-1) var(--space-4); font-size: var(--fs-label);
+  flex: none; display: flex; align-items: baseline; gap: var(--space-2); min-width: 0;
+  background: var(--surface-0); padding: var(--space-2) var(--space-3) var(--space-1); font-size: var(--fs-label);
 }
 .identity-bar strong { flex: none; max-width: 50%; overflow: hidden; color: var(--text-1); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .identity-bar span { min-width: 0; overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }
-.app-rail { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); padding: var(--space-4) 0 var(--space-3); background: var(--surface-0); border-right: 1px solid var(--line); }
+.identity-bar span::before { content: "·"; margin-right: var(--space-2); color: var(--text-3); }
+.app-rail { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); padding: var(--space-3) 0; background: var(--surface-0); }
 .rail-brand { width: 36px; height: 36px; display: grid; place-items: center; margin-bottom: var(--space-4); border-radius: var(--radius); }
 .rail-links { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); }
 .rail-link {
@@ -20,66 +21,96 @@
   transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 .rail-link:hover { background: var(--surface-2); color: var(--text-1); }
-.rail-link[aria-current="page"] { background: var(--surface-3); color: var(--text-1); }
+.rail-link[aria-current="page"] { background: var(--surface-1); color: var(--accent-text); box-shadow: var(--shadow-1), 0 0 0 1px var(--line); }
 .rail-link svg { width: 20px; height: 20px; }
 .rail-brand[data-tip]::after, .rail-link[data-tip]::after { left: calc(100% + var(--space-2)); top: 50%; translate: 0 -50%; }
 
-/* Inbox: list | thread | details. */
-.inbox-shell { height: 100%; display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr) minmax(240px, 300px); }
-.list-pane:focus { outline: none; }
-.list-pane { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); border-right: 1px solid var(--line); background: var(--surface-1); }
-.list-pane > header { display: grid; gap: var(--space-3); padding: var(--space-4) var(--space-4) var(--space-3); border-bottom: 1px solid var(--line); }
-.list-title { display: flex; align-items: baseline; gap: var(--space-2); }
-.list-title h1 { font-size: 18px; font-weight: 600; }
-.list-title span { color: var(--text-3); font-family: var(--font-mono); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
-.conversation-center { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; background: var(--surface-0); }
-.details-panel { min-width: 0; min-height: 0; overflow-y: auto; border-left: 1px solid var(--line); background: var(--surface-0); }
+/* A panel is the white working surface: list, thread, details, settings. */
+.panel { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
 
-/* Settings: one readable column of grouped cards. */
-.settings-page { max-width: 56rem; margin: 0 auto; padding: var(--space-8) var(--space-6); }
-.settings-page > header { margin-bottom: var(--space-6); }
-.settings-page > header h1 { font-size: 18px; font-weight: 600; }
-.settings-page > header p { margin-top: var(--space-1); color: var(--text-3); }
+/* Inbox: list | thread | details. */
+.inbox-shell {
+  height: 100%; display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr) minmax(240px, 300px);
+  gap: var(--space-2); padding: 0 var(--space-2) var(--space-2) 0;
+}
+.list-pane:focus { outline: none; }
+.list-pane { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
+.list-pane > header { display: grid; gap: var(--space-3); padding: var(--space-4) var(--space-4) 0; border-bottom: 1px solid var(--line); }
+.list-title { display: flex; align-items: baseline; gap: var(--space-2); }
+.list-title h1 { font-size: 16px; font-weight: 600; }
+.list-title span { color: var(--text-3); font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
+.conversation-center { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; overflow: hidden; }
+.details-panel { min-width: 0; min-height: 0; overflow-y: auto; }
+
+/* Settings: one white panel, each section a heading column beside its controls. */
+.settings-page { min-height: calc(100% - var(--space-2)); margin: 0 var(--space-2) var(--space-2) 0; padding: var(--space-8) var(--space-10); }
+.settings-page > header { max-width: 72rem; margin-bottom: var(--space-6); }
+.settings-page > header h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.settings-page > header p { margin-top: var(--space-1); color: var(--text-2); }
 .settings-page > .error-copy { margin-bottom: var(--space-4); }
-.settings-card { margin-bottom: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1); box-shadow: var(--shadow-1); }
-.section-heading { padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--line); }
+.settings-card { max-width: 72rem; display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr); gap: var(--space-4) var(--space-10); border-top: 1px solid var(--line); padding: var(--space-6) 0; }
 .section-heading h2 { font-size: 14px; font-weight: 600; }
-.section-heading p { margin-top: var(--space-1); color: var(--text-3); }
-.settings-body { display: grid; gap: var(--space-4); padding: var(--space-5); }
+.section-heading p { margin-top: var(--space-1); color: var(--text-3); font-size: var(--fs-small); }
+.settings-body { display: grid; align-content: start; gap: var(--space-4); }
 .settings-body:empty { display: none; }
 
-/* Sign-in. */
+/* Sign-in: the brand on a dark side, the form on white. */
 .redeem-page { min-height: 100dvh; display: grid; place-items: center; padding: var(--space-6); background: var(--surface-0); }
-.redeem-panel { width: min(100%, 26rem); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1); box-shadow: var(--shadow-3); padding: var(--space-8); }
-.redeem-panel h1 { margin: var(--space-5) 0 var(--space-2); font-size: 24px; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; }
+.redeem-page.signin-split { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); place-items: stretch; padding: 0; background: var(--surface-1); }
+.signin-brand {
+  display: flex; flex-direction: column; justify-content: center; gap: var(--space-6); background: var(--brand-panel); color: var(--on-brand-panel);
+  padding: var(--space-16) clamp(var(--space-8), 6vw, var(--space-24));
+}
+.signin-brand-lockup { display: flex; align-items: center; gap: var(--space-3); font-size: 24px; letter-spacing: -0.01em; }
+.signin-brand-lockup .logo-mark { width: 64px; height: 64px; }
+.wordmark { font-weight: 400; color: var(--on-brand-panel-2); }
+.wordmark b { font-weight: 700; color: var(--on-brand-panel); }
+.signin-tagline { max-width: 26rem; font-size: 22px; font-weight: 500; line-height: 1.35; letter-spacing: -0.01em; }
+.signin-footnote { margin-top: auto; color: var(--on-brand-panel-2); font-size: var(--fs-small); }
+.signin-brand .signin-footnote { margin-top: var(--space-8); }
+.signin-split .redeem-panel { align-self: center; justify-self: center; border: 0; box-shadow: none; }
+.signin-split .redeem-panel .brand-lockup { display: none; }
+.redeem-panel { width: min(100%, 26rem); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-8); }
+.redeem-panel h1 { margin: var(--space-5) 0 var(--space-2); font-size: 26px; font-weight: 600; line-height: 1.2; letter-spacing: -0.015em; }
+.signin-split .redeem-panel h1 { margin-top: 0; }
 .redeem-panel > p { color: var(--text-2); }
-.redeem-panel > .primary-action { width: 100%; margin-top: var(--space-6); --control: 40px; }
+.redeem-panel > .primary-action { width: 100%; margin-top: var(--space-6); --control: 44px; font-size: var(--fs-ui); }
 .redeem-panel > .error-copy { margin-top: var(--space-4); }
 .brand-lockup { display: flex; align-items: center; gap: var(--space-3); font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
 .cloud-sign-in { display: grid; gap: var(--space-3); margin-top: var(--space-6); }
 .cloud-sign-in h2 { font-size: 14px; font-weight: 600; }
 .workspace-choices { display: grid; gap: var(--space-2); }
-.workspace-choices button { justify-content: flex-start; --control: 40px; }
+.workspace-choices button { justify-content: flex-start; --control: 44px; }
 
 @media (max-width: 75rem) {
-  .inbox-shell { grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); }
+  .inbox-shell { grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); }
   .details-panel { display: none; }
+}
+@media (max-width: 56rem) {
+  .redeem-page.signin-split { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .signin-brand { gap: var(--space-3); padding: var(--space-6); }
+  .signin-brand-lockup .logo-mark { width: 40px; height: 40px; }
+  .signin-tagline { font-size: 16px; }
+  .signin-brand .signin-footnote { display: none; }
+  .signin-split .redeem-panel { align-self: start; padding: var(--space-8) var(--space-6); }
+  .settings-card { grid-template-columns: 1fr; }
+  .settings-page { padding: var(--space-6); }
 }
 @media (max-width: 44rem) {
   .app-shell { height: auto; min-height: 100dvh; grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-  .app-rail { position: sticky; top: 0; z-index: 2; flex-direction: row; padding: var(--space-2) var(--space-3); border-right: 0; border-bottom: 1px solid var(--line); }
+  .app-rail { position: sticky; top: 0; z-index: 2; flex-direction: row; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
   .rail-brand { margin: 0 var(--space-2) 0 0; }
   .rail-links { flex-direction: row; }
-    .rail-brand[data-tip]::after, .rail-link[data-tip]::after { display: none; }
+  .rail-brand[data-tip]::after, .rail-link[data-tip]::after { display: none; }
+  .rail-link { width: var(--touch); height: var(--touch); }
   .app-main, .app-content { overflow: visible; }
   .rail-avatar { margin: 0 0 0 auto; }
+  .identity-bar { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
   .app-content > .inbox-shell { height: auto; }
-  .inbox-shell { height: auto; grid-template-columns: 1fr; }
-  .list-pane:focus { outline: none; }
-.list-pane { border-right: 0; border-bottom: 1px solid var(--line); }
-  .list-pane .conversation-scroll { max-height: 20rem; }
+  .inbox-shell { height: auto; grid-template-columns: 1fr; gap: 0; padding: 0; }
+  .panel { border-width: 0 0 1px; border-radius: 0; box-shadow: none; }
+  .list-pane .conversation-scroll { max-height: 22rem; }
   .conversation-center { min-height: 32rem; }
-  .settings-page { padding: var(--space-5) var(--space-3); }
-  .section-heading, .settings-body { padding-inline: var(--space-4); }
-  .redeem-panel { padding: var(--space-6); }
+  .settings-page { margin: 0; padding: var(--space-5) var(--space-4); }
+  .settings-card { padding: var(--space-5) 0; }
 }
