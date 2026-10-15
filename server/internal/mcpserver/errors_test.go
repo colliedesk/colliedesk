@@ -1,6 +1,7 @@
 package mcpserver_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -54,5 +55,20 @@ func TestToolArgumentsAreValidatedAgainstTheSchema(t *testing.T) {
 		if !strings.Contains(message, c.want) || !strings.HasPrefix(message, "Invalid arguments") {
 			t.Errorf("%s %v: message %q, want it to start with Invalid arguments and name %q", c.tool, c.args, message, c.want)
 		}
+	}
+}
+
+func TestAnswerTooLargeForOneCallIsExplainedNotAnInternalError(t *testing.T) {
+	e := newEnv(t)
+	w := e.newWorkspace("Huge Desk", "admin@huge.example.com")
+	contact := e.created("/api/v1/contacts", map[string]any{"name": "Wordy", "email": "wordy@huge.example.com"}, w.admin)
+	conversation := e.created("/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Huge thread"}, w.admin)
+	if _, err := e.pool.Exec(context.Background(),
+		`INSERT INTO messages(workspace_id,conversation_id,kind,body) VALUES($1,$2,'incoming',repeat('x', 17*1024*1024))`, w.id, conversation); err != nil {
+		t.Fatal(err)
+	}
+	message := e.fails(e.connect(w.read, ""), "colliedesk_conversation_get", map[string]any{"conversation_id": conversation})
+	if !strings.Contains(message, "too large") || strings.Contains(message, "internal problem") {
+		t.Errorf("message=%q, want a plain too large explanation", message)
 	}
 }

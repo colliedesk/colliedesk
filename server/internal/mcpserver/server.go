@@ -52,6 +52,7 @@ func New(config Config) http.Handler {
 	server := mcp.NewServer(&mcp.Implementation{Name: "colliedesk", Title: "Colliedesk", Version: config.Version},
 		&mcp.ServerOptions{Instructions: instructions})
 	rest := &restClient{api: config.API}
+	docSections() // build the guide index now, so a bad embed stops the server at start
 	for _, spec := range Catalog() {
 		register(server, spec, rest)
 	}

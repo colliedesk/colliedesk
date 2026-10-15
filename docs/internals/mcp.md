@@ -38,6 +38,9 @@
 - **A new tool needs its route in `tokenTiers`** (and the hand-written copy in
   `agent_token_scope_api_test.go`), or every token gets `scope_insufficient`. The tool's tier in
   the catalog is only used to word the error and to list `tools_you_can_use`; REST decides.
+- **Size.** One in-process call buffers at most 16 MiB of REST answer; beyond that the tool says the
+  answer is too large (`TestAnswerTooLargeForOneCallIsExplainedNotAnInternalError`) instead of
+  reporting an internal problem. `detail=full` of a very long thread is the usual cause.
 - **Pagination.** REST pages by `page` and `page_size`. The cursor is the next page number plus a
   fingerprint of the search, so a cursor used with other filters is refused. `next_cursor` is set
   when the page is full, so the last page can be empty; an exact "has more" would cost a second

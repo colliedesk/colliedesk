@@ -1,6 +1,7 @@
 package mcpserver
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -17,6 +18,9 @@ var scopeMessage = regexp.MustCompile("has the (read|draft|send) scope; this act
 // refuse turns a failure of a REST call into the message a model sees. notFound is the text for a
 // 404, which only the tool knows how to word.
 func (c *call) refuse(err error, notFound string) error {
+	if errors.Is(err, errTooLarge) {
+		return &toolError{"The answer is too large to return in one call (over 16 MiB). Open this in the web app, or ask an admin to export the data."}
+	}
 	failure, ok := err.(*restError)
 	if !ok {
 		return err // nil, a *toolError or an unplanned failure: nothing to translate

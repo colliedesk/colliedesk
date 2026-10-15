@@ -15,6 +15,9 @@ import (
 // maxRESTResponse bounds what one in-process call may buffer.
 const maxRESTResponse = 16 << 20
 
+// errTooLarge is an answer longer than maxRESTResponse.
+var errTooLarge = errors.New("response too large")
+
 // restClient serves requests through the REST API handler without a network hop.
 type restClient struct{ api http.Handler }
 
@@ -57,7 +60,7 @@ func (r *restClient) do(ctx context.Context, token, method, path string, query u
 	recorder := &recorder{header: http.Header{}}
 	r.api.ServeHTTP(recorder, request)
 	if recorder.overflow {
-		return errors.New("REST response exceeded the in-process limit")
+		return errTooLarge
 	}
 	if recorder.status < 200 || recorder.status > 299 {
 		return parseRESTError(recorder)
@@ -107,7 +110,7 @@ func (r *recorder) Write(data []byte) (int, error) {
 	}
 	if r.body.Len()+len(data) > maxRESTResponse {
 		r.overflow = true
-		return 0, errors.New("response too large")
+		return 0, errTooLarge
 	}
 	return r.body.Write(data)
 }
