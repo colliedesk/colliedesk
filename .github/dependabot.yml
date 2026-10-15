@@ -13,6 +13,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # GitHub cannot serve the v7.0.0 commit archive (codeload 404), so runners fail to fetch it.
+      - dependency-name: actions/setup-go
+        versions: ["7.0.0"]
     groups:
       actions:
         patterns: ["*"]
