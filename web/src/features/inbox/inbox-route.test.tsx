@@ -6,7 +6,7 @@ import { InboxRoute } from './inbox-route';
 
 const api = vi.hoisted(() => ({
   me: vi.fn(), conversations: vi.fn(), agents: vi.fn(), tags: vi.fn(), messages: vi.fn(), timeEntries: vi.fn(),
-  updateConversation: vi.fn(), createMessage: vi.fn(), createTag: vi.fn(),
+  updateConversation: vi.fn(), bulkUpdateConversations: vi.fn(), createMessage: vi.fn(), createTag: vi.fn(),
   addConversationTag: vi.fn(), removeConversationTag: vi.fn(), retryDelivery: vi.fn(),
   emailChannel: vi.fn(async () => ({ channel: null, inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null })),
 }));
@@ -116,4 +116,31 @@ test('a retry the trial refuses says why instead of doing nothing', async () => 
   render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
   fireEvent.click(await screen.findByRole('button', { name: /retry delivery/i }));
   expect(await screen.findByRole('alert')).toHaveTextContent(/200 replies in 24 hours.*about 2 hours/i);
+});
+
+test('a bulk status change sends the selected ids, then reloads the list and reports the result', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
+  const gamma = conversation('55555555-5555-4555-8555-555555555555', 'Gamma conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', role: 'agent' } });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha, beta, gamma], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  api.bulkUpdateConversations.mockResolvedValue({ updated: 2 });
+
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await screen.findByRole('button', { name: /alpha conversation/i });
+  fireEvent.click(screen.getByRole('checkbox', { name: /alpha conversation/i }));
+  fireEvent.click(screen.getByRole('checkbox', { name: /gamma conversation/i }));
+  const loadsBefore = api.conversations.mock.calls.length;
+  fireEvent.click(screen.getByRole('button', { name: 'Resolved' }));
+
+  await waitFor(() => expect(api.bulkUpdateConversations).toHaveBeenCalledWith([alpha.id, gamma.id], { status: 'resolved' }));
+  expect(await screen.findByRole('status')).toHaveTextContent('Updated 2 conversations');
+  await waitFor(() => expect(api.conversations.mock.calls.length).toBeGreaterThan(loadsBefore));
+  expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).not.toBeInTheDocument();
 });
