@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
-import { api, CloudWorkspaceChoiceError } from '../../api/client';
+import { api, CloudWorkspaceChoiceError, PlanLimitError } from '../../api/client';
 import type { WorkspaceChoice } from '../../api/schemas';
 import { messages } from '../../messages';
 import { RedeemPage } from './redeem-page';
@@ -34,7 +34,7 @@ export function RedeemRoute({ token }: { token: string }) {
   const cloudEnabled = !token && cloudConfig?.enabled === true && cloudConfig.publishable_key !== null;
 
   return <RedeemPage token={token} cloudEnabled={cloudEnabled} workspaces={workspaces}
-    pending={redeem.isPending || cloudPending} failed={redeem.isError || cloudFailed}
+    pending={redeem.isPending || cloudPending} failed={redeem.isError || cloudFailed} planLimited={redeem.error instanceof PlanLimitError}
     onRedeem={() => redeem.mutate()} onSelectWorkspace={(slug) => { setWorkspaces([]); setWorkspaceSlug(slug); }}
     cloudSignIn={cloudEnabled && <Suspense fallback={<p>{messages.loadingCloudSignIn}</p>}>
       <CloudSignIn key={workspaceSlug ?? 'default'} publishableKey={cloudConfig.publishable_key ?? ''} onSessionToken={exchange} />

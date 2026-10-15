@@ -7,6 +7,8 @@ interface RedeemPageProps {
   token: string;
   pending?: boolean;
   failed?: boolean;
+  // planLimited means the link is valid but the workspace's plan has no free agent seat.
+  planLimited?: boolean;
   onRedeem?: () => void;
   cloudEnabled?: boolean;
   cloudSignIn?: ReactNode;
@@ -15,7 +17,7 @@ interface RedeemPageProps {
 }
 
 export function RedeemPage({
-  token, pending, failed, onRedeem, cloudEnabled = false, cloudSignIn, workspaces = [], onSelectWorkspace,
+  token, pending, failed, planLimited = false, onRedeem, cloudEnabled = false, cloudSignIn, workspaces = [], onSelectWorkspace,
 }: RedeemPageProps) {
   return (
     <main className="redeem-page">
@@ -35,7 +37,7 @@ export function RedeemPage({
           <p className="muted-copy">{messages.oneTimeLinkInstead}</p>
         </div>}
         {failed && workspaces.length === 0 && <p role="alert" className="error-copy">
-          {token ? messages.invalidLink : messages.cloudSignInFailed}
+          {token ? (planLimited ? messages.linkPlanLimited : messages.invalidLink) : messages.cloudSignInFailed}
         </p>}
         {token && <button className="primary-action" type="button" onClick={onRedeem} disabled={pending}>
           {pending ? messages.redeeming : messages.continue}

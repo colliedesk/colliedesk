@@ -5,11 +5,11 @@ import { BillingPage } from './billing-page';
 
 const free: Billing = {
   plan: 'free', status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0,
-  limits: { agents: 3, conversations_per_month: 100 }, usage: { agents: 2, conversations_this_month: 40 },
+  limits: { agents: 3, conversations_per_month: 100 }, usage: { agents: 2, pending_invites: 0, conversations_this_month: 40, held_conversations: 0 },
 };
 const team: Billing = {
   plan: 'team', status: 'active', current_period_end: '2026-11-15T09:30:00Z', cancel_at_period_end: false, active_subscriptions: 1,
-  limits: { agents: 10, conversations_per_month: null }, usage: { agents: 6, conversations_this_month: 412 },
+  limits: { agents: 10, conversations_per_month: null }, usage: { agents: 6, pending_invites: 0, conversations_this_month: 412, held_conversations: 0 },
 };
 
 test('a free workspace sees its usage against the limits and three ways to upgrade', () => {
@@ -70,4 +70,22 @@ test('two active subscriptions are flagged so the admin cancels the extra one', 
   expect(screen.getByRole('alert')).toHaveTextContent(/more than one active subscription/i);
   expect(screen.getByRole('alert')).toHaveTextContent(/cancel the extra one/i);
   expect(screen.queryByRole('alert', { name: /last payment/i })).not.toBeInTheDocument();
+});
+
+test('pending invites are shown because they hold a seat against the cap', () => {
+  render(<BillingPage billing={{ ...free, usage: { ...free.usage, agents: 1, pending_invites: 2 } }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.getByText(/1 of 3 agents, plus 2 pending invites/i)).toBeInTheDocument();
+});
+
+test('held conversations are counted and explained with the way to release them', () => {
+  render(<BillingPage billing={{ ...free, usage: { ...free.usage, conversations_this_month: 130, held_conversations: 30 } }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.getByText(/130 of 100 new conversations this month/i)).toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent(/30 conversations are held/i);
+  expect(screen.getByRole('status')).toHaveTextContent(/stored in full/i);
+  expect(screen.getByRole('status')).toHaveTextContent(/upgrade/i);
+});
+
+test('no held notice when nothing is held', () => {
+  render(<BillingPage billing={free} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
 });

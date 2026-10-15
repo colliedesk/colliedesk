@@ -37,3 +37,11 @@ test('a refused link says what happened and what to do next', () => {
 	render(<RedeemPage token="spent" failed />);
 	expect(screen.getByRole('alert')).toHaveTextContent('This link is invalid, expired, or already used. Ask your workspace admin for a new link.');
 });
+
+test('a link refused by the plan says the link is fine and the workspace is full', () => {
+	render(<RedeemPage token="valid" failed planLimited />);
+	expect(screen.getByRole('alert')).toHaveTextContent(/agent limit/i);
+	expect(screen.getByRole('alert')).toHaveTextContent(/ask a workspace admin to upgrade/i);
+	expect(screen.getByRole('alert')).toHaveTextContent(/use this link again/i);
+	expect(screen.getByRole('alert')).not.toHaveTextContent(/invalid/i);
+});

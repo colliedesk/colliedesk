@@ -57,6 +57,7 @@ export function InboxRoute() {
     outboundNotice={outboundNotice} filtered={Object.values(filters).some(Boolean)} loading={conversations.isPending}
     failed={conversations.isError} onRetry={() => void conversations.refetch()}
     canManage={me.data?.agent?.role === 'admin'} onOpenSettings={() => void navigate({ to: '/settings' })}
+    heldCount={conversations.data?.held_count ?? 0} onOpenBilling={() => void navigate({ to: '/settings/billing', search: { checkout: '' } })}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })} />;
 }

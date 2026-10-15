@@ -275,3 +275,26 @@ test('widening the window past the drawer breakpoint closes the drawer instead o
     vi.unstubAllGlobals();
   }
 });
+
+test('banner tells an admin that conversations are held and links to the plan', () => {
+  const onOpenBilling = vi.fn();
+  render(<InboxPage heldCount={3} canManage onOpenBilling={onOpenBilling} />);
+  const banner = screen.getByRole('status', { name: /held conversations/i });
+  expect(banner).toHaveTextContent(/3 conversations are held/i);
+  expect(banner).toHaveTextContent(/stored in full/i);
+  fireEvent.click(within(banner).getByRole('button', { name: /view plan/i }));
+  expect(onOpenBilling).toHaveBeenCalled();
+});
+
+test('banner tells an agent to ask an admin and offers no plan button', () => {
+  render(<InboxPage heldCount={1} canManage={false} />);
+  const banner = screen.getByRole('status', { name: /held conversations/i });
+  expect(banner).toHaveTextContent(/1 conversation is held/i);
+  expect(banner).toHaveTextContent(/ask a workspace admin/i);
+  expect(within(banner).queryByRole('button')).not.toBeInTheDocument();
+});
+
+test('no banner when nothing is held', () => {
+  render(<InboxPage heldCount={0} canManage />);
+  expect(screen.queryByRole('status', { name: /held conversations/i })).not.toBeInTheDocument();
+});

@@ -86,3 +86,9 @@ test('a revoked or expired session is shown as such and cannot be revoked again'
   expect(row('Old device')).toHaveTextContent('Expired');
   expect(within(sessions).getAllByRole('button', { name: 'Revoke' })).toHaveLength(1);
 });
+
+test('shows why an invite was refused next to the invite form', () => {
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canCreateInvites
+    inviteError="The Free plan allows 3 agents, pending invites included." />);
+  expect(screen.getByRole('alert')).toHaveTextContent(/free plan allows 3 agents/i);
+});

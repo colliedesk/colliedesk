@@ -19,6 +19,8 @@ interface SettingsPageProps {
   onSetWorkspaceTimezone?: (timezone: string) => void;
   onSetAgentTimezone?: (timezone: string | null) => void;
   error?: string;
+  // inviteError explains a refused invite, for example a full agent cap.
+  inviteError?: string;
   emailSection?: ReactNode;
 }
 
@@ -36,7 +38,7 @@ function inviteState(invite: Invite): keyof typeof messages.inviteStates {
 
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
   workspaceTimezone = 'UTC', timezoneOverride = null, createdInviteUrl, onCreateInvite, onRevokeInvite,
-  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, error, emailSection }: SettingsPageProps) {
+  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, error, inviteError, emailSection }: SettingsPageProps) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'admin' | 'agent'>('agent');
   const [workspaceZone, setWorkspaceZone] = useState(workspaceTimezone);
@@ -76,6 +78,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
             </select></label>
             <button className="primary-action" type="submit">{messages.createInvite}</button>
           </form>}
+          {canCreateInvites && inviteError && <p role="alert" className="error-copy">{inviteError}</p>}
           {canCreateInvites && createdInviteUrl && <label className="invite-link"><span className="field-label">{messages.inviteLink}</span>
             <input aria-label={messages.inviteLink} readOnly value={createdInviteUrl} />
             <small>{messages.inviteLinkNotice}</small>

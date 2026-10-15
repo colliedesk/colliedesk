@@ -25,7 +25,7 @@ export const billingSchema = z.object({
   status: z.enum(['none', 'incomplete', 'incomplete_expired', 'trialing', 'active', 'past_due', 'canceled', 'unpaid', 'paused', 'unknown']),
   current_period_end: nullableDate, cancel_at_period_end: z.boolean(), active_subscriptions: z.number().int(),
   limits: z.object({ agents: z.number().int(), conversations_per_month: z.number().int().nullable() }),
-  usage: z.object({ agents: z.number().int(), conversations_this_month: z.number().int() }),
+  usage: z.object({ agents: z.number().int(), pending_invites: z.number().int(), conversations_this_month: z.number().int(), held_conversations: z.number().int() }),
 }) satisfies z.ZodType<Generated<'Billing'>>;
 export const billingLinkSchema = z.object({ url: z.string().url() }) satisfies z.ZodType<JsonResponse<'createBillingPortal', 200>>;
 export const agentSchema = z.object({
@@ -103,7 +103,7 @@ export const meSchema = z.object({ agent: agentSchema, workspace: workspaceSchem
 export const sessionListSchema = z.object({ items: z.array(sessionSchema) }) satisfies z.ZodType<JsonResponse<'listSessions', 200>>;
 export const inviteListSchema = z.object({ items: z.array(inviteSchema) }) satisfies z.ZodType<JsonResponse<'listInvites', 200>>;
 export const inviteCreatedSchema = z.object({ invite: inviteSchema, url: z.string().url() }) satisfies z.ZodType<JsonResponse<'createInvite', 201>>;
-export const conversationPageSchema = z.object({ items: z.array(conversationSchema), page: z.number(), page_size: z.number() }) satisfies z.ZodType<Generated<'ConversationPage'>>;
+export const conversationPageSchema = z.object({ items: z.array(conversationSchema), page: z.number(), page_size: z.number(), held_count: z.number().int() }) satisfies z.ZodType<Generated<'ConversationPage'>>;
 export const messageListSchema = z.object({ items: z.array(messageSchema) }) satisfies z.ZodType<JsonResponse<'listMessages', 200>>;
 export const contactListSchema = z.object({ items: z.array(contactSchema) }) satisfies z.ZodType<JsonResponse<'listContacts', 200>>;
 export const agentListSchema = z.object({ items: z.array(agentSchema) }) satisfies z.ZodType<JsonResponse<'listAgents', 200>>;
