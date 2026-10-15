@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"context"
 	"flag"
 	"fmt"
@@ -35,6 +36,9 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	}
 	billing, err := polar.ConfigFromEnv(os.Getenv)
 	if err != nil {
+		return err
+	}
+	if err := requireLockedScreen(billing, lockedScreenShipped); err != nil {
 		return err
 	}
 	requestPool := pool
@@ -104,4 +108,16 @@ func cloudAuthConfig() cloudauth.Config {
 		PublishableKey:    os.Getenv("CLERK_PUBLISHABLE_KEY"),
 		EmailClaim:        os.Getenv("CLOUD_AUTH_EMAIL_CLAIM"),
 	}
+}
+
+// lockedScreenShipped says the web app shows a locked workspace (trial over, nothing paid) instead
+// of a broken inbox. Billing locks workspaces, so it stays off in production until this is true.
+const lockedScreenShipped = false
+
+// requireLockedScreen refuses to start with billing on while the web app cannot show the lock.
+func requireLockedScreen(billing polar.Config, shipped bool) error {
+	if billing.Enabled() && !shipped {
+		return errors.New("billing is configured but this build has no locked screen yet: workspaces would lock with no explanation in the web app; unset every POLAR_* variable")
+	}
+	return nil
 }
