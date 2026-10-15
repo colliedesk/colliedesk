@@ -159,5 +159,6 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"POST " + webhookPath:                         {path: webhookPath, raw: f.webhookBody, status: 200},
 		"GET /api/v1/conversations/{id}/time-entries": {path: "/api/v1/conversations/" + f.conversationID + "/time-entries", token: admin, status: 200},
 		"GET /api/v1/attachments/{id}":                {path: "/api/v1/attachments/" + f.attachmentID, token: admin, status: 200},
+		"GET /api/v1/export":                          {path: "/api/v1/export", token: admin, status: 200},
 	}
 }

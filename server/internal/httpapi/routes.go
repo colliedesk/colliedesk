@@ -17,6 +17,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.retryMessageDelivery,
 		a.getEmailChannel, a.putEmailChannel, a.deleteEmailChannel, a.verifyEmailDomain, a.receiveInboundEmail, a.rotateEmailSecret,
 		a.getBilling, a.createCheckout, a.createPortal, a.receivePolarWebhook,
+		a.exportWorkspace,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {

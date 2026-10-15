@@ -69,6 +69,13 @@ func (d *DB) AppRole(ctx context.Context) (string, error) {
 // only. Row-level security then limits every statement to that workspace. The caller commits or
 // rolls back; both end the scope, so a pooled connection never carries it to the next user.
 func (d *DB) BeginWorkspace(ctx context.Context, workspaceID string) (pgx.Tx, error) {
+	return d.BeginWorkspaceTx(ctx, workspaceID, pgx.TxOptions{})
+}
+
+// BeginWorkspaceTx is BeginWorkspace with transaction options, for example a read-only
+// REPEATABLE READ snapshot. Isolation and access mode must be fixed before the first statement,
+// so they cannot be set after BeginWorkspace returns.
+func (d *DB) BeginWorkspaceTx(ctx context.Context, workspaceID string, options pgx.TxOptions) (pgx.Tx, error) {
 	if !uuidPattern.MatchString(workspaceID) {
 		return nil, ErrNoWorkspace
 	}
@@ -76,7 +83,7 @@ func (d *DB) BeginWorkspace(ctx context.Context, workspaceID string) (pgx.Tx, er
 	if err != nil {
 		return nil, err
 	}
-	tx, err := d.request.Begin(ctx)
+	tx, err := d.request.BeginTx(ctx, options)
 	if err != nil {
 		return nil, fmt.Errorf("begin workspace transaction: %w", err)
 	}

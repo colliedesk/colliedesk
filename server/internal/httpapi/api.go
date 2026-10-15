@@ -140,6 +140,7 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/billing/checkout", auth.PermissionBillingManage},
 		{http.MethodPost, "/api/v1/billing/portal", auth.PermissionBillingManage},
 		{http.MethodPost, polarWebhookPath, auth.PermissionPublic},
+		{http.MethodGet, "/api/v1/export", auth.PermissionWorkspaceExport},
 	}
 }
 
