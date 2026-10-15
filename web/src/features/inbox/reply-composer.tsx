@@ -21,6 +21,7 @@ interface ReplyComposerProps {
   customerName?: string;
   agentName?: string;
   onManageSavedReplies?: () => void;
+  savedRepliesState?: 'loading' | 'failed' | 'ready';
 }
 
 type Kind = 'outgoing' | 'note';
@@ -40,7 +41,7 @@ function isTyping(target: EventTarget | null) {
 // acting on that key would send or switch before the text is committed.
 const composing = (event: KeyboardEvent) => event.isComposing || event.keyCode === 229;
 
-export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState }: ReplyComposerProps) {
   const [kind, setKind] = useState<Kind>('outgoing');
   const [body, setBody] = useState('');
   const [problem, setProblem] = useState<string>();
@@ -54,10 +55,18 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
   // Inserting adds text at the cursor and replaces nothing; the rest of the draft and the files stay.
   const insertSavedReply = (reply: SavedReply) => {
     const text = renderSavedReply(reply.body, { customerName, agentName });
-    const at = Math.min(field.current?.selectionStart ?? body.length, body.length);
+    const box = field.current;
+    const at = Math.min(box?.selectionStart ?? body.length, body.length);
+    setPicking(false);
+    // The browser inserts the text as if it were typed, so Ctrl+Z takes it out again. It fires the
+    // input event that updates the draft. Without it (or when it refuses) the composer writes the text.
+    if (box) {
+      box.focus();
+      box.setSelectionRange(at, at);
+      if (typeof document.execCommand === 'function' && document.execCommand('insertText', false, text)) return;
+    }
     caret.current = at + text.length;
     setBody(body.slice(0, at) + text + body.slice(at));
-    setPicking(false);
   };
   const closePicker = (restoreFocus: boolean) => {
     setPicking(false);
@@ -73,6 +82,9 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
   // The text leaves the box only after the server accepted it; a refusal keeps it with the reason.
   const submit = () => {
     if (!body.trim() || sending || fileProblem) return;
+    // A variable no saved reply filled in would reach the customer as written.
+    const unfilled = kind === 'outgoing' ? [...new Set(body.match(/\{\{[^{}]*\}\}/g) ?? [])] : [];
+    if (unfilled.length > 0 && !window.confirm(messages.unfilledVariables(unfilled))) return;
     const sent = body.trim();
     const sentFiles = files;
     const result = sentFiles.length > 0 ? onSubmit?.(kind, sent, sentFiles) : onSubmit?.(kind, sent);
@@ -121,7 +133,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
         </div>
         <textarea ref={field} aria-label={messages.messageBody} value={body} disabled={disabled} onKeyDown={onFieldKey}
           placeholder={kind === 'note' ? messages.notePlaceholder : messages.replyPlaceholder} onChange={(event) => setBody(event.target.value)} />
-        {picking && !disabled && <SavedReplyPicker replies={savedReplies} onPick={insertSavedReply} onClose={closePicker} onManage={onManageSavedReplies} />}
+        {picking && !disabled && <SavedReplyPicker replies={savedReplies} onPick={insertSavedReply} onClose={closePicker} onManage={onManageSavedReplies} state={savedRepliesState} />}
         {problem && <p role="alert" className="composer-notice">{problem}</p>}
         <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={disabled || sending} />
         <div className="composer-actions">

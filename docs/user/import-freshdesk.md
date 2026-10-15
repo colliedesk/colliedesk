@@ -47,13 +47,19 @@ The report also lists, by Freshdesk id, what does not come over:
 - **Files attached to a canned response.** Saved replies hold text only. Download the files from
   Freshdesk if you still need them.
 - **A canned response with no text.** There is nothing to import.
-- **A personal folder.** Its responses are imported and become shared with the whole workspace.
-  Delete any that should stay private.
+- **A personal folder.** Saved replies are shared by the whole workspace, so responses in a personal
+  folder are **not imported** by default. The report lists their Freshdesk ids under **Canned
+  responses in personal folders, not imported**. To share them, run the import again with
+  `--include-personal-canned-responses`.
+- **An image in the HTML** of a canned response. Saved replies hold text only, so the image is dropped
+  and the report warns (`saved_reply_images_dropped`). Links are kept as `text (address)`.
 
 A canned response whose title is already taken by another saved reply is imported as
 `<title> (Freshdesk <id>)`. An existing reply is never changed. If the workspace would pass 500 saved
 replies, or a text is longer than 20 000 characters, that item is listed under **Failures** and the
-status is `FAILED`. Running the import again never adds a canned response twice and never overwrites
+status is `FAILED`. If Freshdesk fails to list the folders (not a refusal, for example server errors),
+the tickets still import; the report shows a failure for the canned responses and the status is
+`FAILED` until you run the import again. Running the import again never adds a canned response twice and never overwrites
 a saved reply your team edited or deleted. The Freshdesk API key needs a plan that has canned
 responses; if Freshdesk refuses them, the report says so and the status is `UNVERIFIED`.
 

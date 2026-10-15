@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { AttachmentsTooLargeError, AttachmentStorageError } from '../../api/attachments-error';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { ReplyComposer } from './reply-composer';
@@ -301,4 +301,84 @@ test('the empty list leads to Manage saved replies', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Insert saved reply' }));
   fireEvent.click(screen.getByRole('button', { name: 'Manage saved replies' }));
   expect(onManage).toHaveBeenCalledOnce();
+});
+
+afterEach(() => {
+  delete (document as { execCommand?: unknown }).execCommand;
+  vi.restoreAllMocks();
+});
+
+test('the browser inserts the text, so Ctrl+Z can undo it like typing', () => {
+  const seen: { start: number; end: number; focused: boolean }[] = [];
+  const body = () => screen.getByLabelText('Message body') as HTMLTextAreaElement;
+  (document as { execCommand?: unknown }).execCommand = vi.fn(() => {
+    seen.push({ start: body().selectionStart, end: body().selectionEnd, focused: document.activeElement === body() });
+    return true;
+  });
+  render(<ReplyComposer savedReplies={[greeting]} customerName="Mai Linh" agentName="Chinh" />);
+  fireEvent.change(body(), { target: { value: 'Hello.\n\nBye' } });
+  body().setSelectionRange(6, 6);
+  pickFromButton('Greeting');
+  expect(document.execCommand).toHaveBeenCalledExactlyOnceWith('insertText', false, 'Hi Mai Linh, I am Chinh.');
+  // It runs in the focused box with the cursor where the reply belongs and nothing selected.
+  expect(seen).toEqual([{ start: 6, end: 6, focused: true }]);
+  // The browser's own input event updates the draft; the composer does not write it a second time.
+  expect(body().value).toBe('Hello.\n\nBye');
+});
+
+test('when the browser refuses to insert, the composer puts the text in itself', () => {
+  (document as { execCommand?: unknown }).execCommand = vi.fn(() => false);
+  render(<ReplyComposer savedReplies={[refund]} />);
+  const box = screen.getByLabelText('Message body') as HTMLTextAreaElement;
+  fireEvent.change(box, { target: { value: 'Draft' } });
+  box.setSelectionRange(5, 5);
+  pickFromButton('Refund steps');
+  expect(document.execCommand).toHaveBeenCalledOnce();
+  expect(box.value).toBe('DraftWe refunded you.');
+});
+
+test('a reply that still holds {{…}} asks before it is sent; a note does not', () => {
+  const onSubmit = vi.fn();
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  render(<ReplyComposer onSubmit={onSubmit} />);
+  const box = screen.getByLabelText('Message body');
+  fireEvent.change(box, { target: { value: 'Track it at {{ticket.url}}' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+  expect(confirm).toHaveBeenCalledOnce();
+  expect(confirm.mock.calls[0][0]).toContain('{{ticket.url}}');
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(box).toHaveValue('Track it at {{ticket.url}}');
+  confirm.mockReturnValue(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+  expect(onSubmit).toHaveBeenCalledExactlyOnceWith('outgoing', 'Track it at {{ticket.url}}');
+  confirm.mockClear();
+  fireEvent.keyDown(document.body, { key: 'n' });
+  fireEvent.change(box, { target: { value: 'Remember {{ticket.url}}' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add private note' }));
+  expect(confirm).not.toHaveBeenCalled();
+  expect(onSubmit).toHaveBeenLastCalledWith('note', 'Remember {{ticket.url}}');
+});
+
+test('a reply without {{…}} is sent without a question', () => {
+  const confirm = vi.spyOn(window, 'confirm');
+  const onSubmit = vi.fn();
+  render(<ReplyComposer onSubmit={onSubmit} />);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Plain text, { braces } alone.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+  expect(confirm).not.toHaveBeenCalled();
+  expect(onSubmit).toHaveBeenCalledOnce();
+});
+
+test('while the list is loading the picker says so and does not claim there are none', () => {
+  render(<ReplyComposer savedReplies={[]} savedRepliesState="loading" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Insert saved reply' }));
+  expect(screen.getByText('Loading saved replies…')).toBeInTheDocument();
+  expect(screen.queryByText('No saved replies yet.')).not.toBeInTheDocument();
+});
+
+test('a list that could not be loaded says so', () => {
+  render(<ReplyComposer savedReplies={[]} savedRepliesState="failed" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Insert saved reply' }));
+  expect(screen.getByText('Saved replies could not be loaded. Close this and try again.')).toBeInTheDocument();
+  expect(screen.queryByText('No saved replies yet.')).not.toBeInTheDocument();
 });

@@ -31,6 +31,8 @@ var (
 	ErrDuplicateTitle = errors.New("a saved reply with this title already exists")
 	// ErrSavedReplyLimit means the workspace already holds MaxSavedReplies saved replies.
 	ErrSavedReplyLimit = fmt.Errorf("a workspace holds at most %d saved replies; delete one first", MaxSavedReplies)
+	// ErrSavedReplyChanged means the reply was saved by someone else after the client read it.
+	ErrSavedReplyChanged = errors.New("this saved reply was changed by someone else; reload to see their version")
 	// ErrSavedReplyNotFound means the id names no saved reply in the workspace.
 	ErrSavedReplyNotFound = errors.New("saved reply not found")
 )

@@ -61,6 +61,8 @@ type run struct {
 	cannedFolders      int
 	cannedIDs          []string
 	cannedEmpty        []string
+	cannedPersonal     []string
+	cannedListError    string
 	cannedWithFiles    []string
 	cannedAttachments  int
 	cannedUnreadable   []string

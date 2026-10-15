@@ -60,16 +60,18 @@ type Tag struct {
 }
 
 type Conversation struct {
-	ID         string              `json:"id"`
-	ContactID  string              `json:"contact_id"`
-	Subject    string              `json:"subject"`
-	Status     string              `json:"status"`
-	Priority   string              `json:"priority"`
-	AssigneeID *string             `json:"assignee_id"`
-	Tags       []Tag               `json:"tags"`
-	Origin     *ConversationOrigin `json:"origin"`
-	CreatedAt  time.Time           `json:"created_at"`
-	UpdatedAt  time.Time           `json:"updated_at"`
+	ID        string `json:"id"`
+	ContactID string `json:"contact_id"`
+	// ContactName saves the reply box a second request for the customer's name.
+	ContactName string              `json:"contact_name"`
+	Subject     string              `json:"subject"`
+	Status      string              `json:"status"`
+	Priority    string              `json:"priority"`
+	AssigneeID  *string             `json:"assignee_id"`
+	Tags        []Tag               `json:"tags"`
+	Origin      *ConversationOrigin `json:"origin"`
+	CreatedAt   time.Time           `json:"created_at"`
+	UpdatedAt   time.Time           `json:"updated_at"`
 }
 
 // ConversationOrigin records where an imported conversation came from.

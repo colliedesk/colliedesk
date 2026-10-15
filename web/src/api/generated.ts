@@ -573,7 +573,7 @@ export interface paths {
         delete: operations["deleteSavedReply"];
         options?: never;
         head?: never;
-        /** @description Change the title, the body or both. Any agent may edit a shared reply. */
+        /** @description Change the title, the body or both. Any agent may edit a shared reply. Send back the `updated_at` you read; when the reply was saved since, nothing changes and the answer is 409 `changed_elsewhere`. A taken title is 409 `duplicate_title`. */
         patch: operations["updateSavedReply"];
         trace?: never;
     };
@@ -982,6 +982,7 @@ export interface components {
             id: string;
             /** Format: uuid */
             contact_id: string;
+            contact_name: string;
             subject: string;
             status: components["schemas"]["ConversationStatus"];
             priority: components["schemas"]["Priority"];
@@ -2600,6 +2601,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** Format: date-time */
+                    updated_at: string;
                     title?: string;
                     body?: string;
                 };

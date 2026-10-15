@@ -68,7 +68,7 @@ func TestSavedReplyImportStaysInItsWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	report := env.mustRun(t)
-	if report.Status != "OK" || len(env.savedReplies(t)) != 5 {
+	if report.Status != "OK" || len(env.savedReplies(t)) != 4 {
 		t.Fatalf("status=%s failures=%+v rows=%d", report.Status, report.Failures, len(env.savedReplies(t)))
 	}
 	for _, reply := range env.savedReplies(t) {

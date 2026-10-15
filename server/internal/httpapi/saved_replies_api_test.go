@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -45,6 +46,28 @@ func listSavedReplies(t *testing.T, api http.Handler, token string) []savedReply
 	return list.Items
 }
 
+// seenAt is the updated_at a client holds for a reply: what an edit must send back.
+func seenAt(t *testing.T, api http.Handler, token, id string) string {
+	t.Helper()
+	for _, item := range listSavedReplies(t, api, token) {
+		if item.ID == id {
+			return item.UpdatedAt
+		}
+	}
+	t.Fatalf("saved reply %s not listed", id)
+	return ""
+}
+
+// patchReply edits a reply the way the web app does, sending back the updated_at it last saw.
+func patchReply(t *testing.T, api http.Handler, token, id string, fields map[string]any) *httptest.ResponseRecorder {
+	t.Helper()
+	body := map[string]any{"updated_at": seenAt(t, api, token, id)}
+	for key, value := range fields {
+		body[key] = value
+	}
+	return request(t, api, http.MethodPatch, "/api/v1/saved-replies/"+id, body, token, nil)
+}
+
 func TestAnyAgentCreatesEditsAndDeletesSharedSavedReplies(t *testing.T) {
 	api, service := testAPI(t)
 	admin := createSession(t, api, service, "Replies Desk", "admin@replies.example.com")
@@ -73,7 +96,7 @@ func TestAnyAgentCreatesEditsAndDeletesSharedSavedReplies(t *testing.T) {
 
 	// Another agent edits and deletes a reply an admin wrote.
 	adminReply := listSavedReplies(t, api, agent)[0]
-	edited := request(t, api, http.MethodPatch, "/api/v1/saved-replies/"+adminReply.ID, map[string]any{"body": "We are sorry."}, agent, nil)
+	edited := patchReply(t, api, agent, adminReply.ID, map[string]any{"body": "We are sorry."})
 	if edited.Code != http.StatusOK {
 		t.Fatalf("agent edit status=%d body=%s", edited.Code, edited.Body.String())
 	}
@@ -82,7 +105,7 @@ func TestAnyAgentCreatesEditsAndDeletesSharedSavedReplies(t *testing.T) {
 	if after.Title != "apology" || after.Body != "We are sorry." || after.CreatedByAgentID == nil || *after.CreatedByAgentID != *adminReply.CreatedByAgentID {
 		t.Fatalf("edited reply = %+v (before %+v)", after, adminReply)
 	}
-	renamed := request(t, api, http.MethodPatch, "/api/v1/saved-replies/"+adminReply.ID, map[string]any{"title": "Apology"}, agent, nil)
+	renamed := patchReply(t, api, agent, adminReply.ID, map[string]any{"title": "Apology"})
 	if renamed.Code != http.StatusOK || !strings.Contains(renamed.Body.String(), `"title":"Apology"`) || !strings.Contains(renamed.Body.String(), `"body":"We are sorry."`) {
 		t.Fatalf("rename status=%d body=%s", renamed.Code, renamed.Body.String())
 	}
@@ -132,6 +155,7 @@ func TestSavedReplyValidation(t *testing.T) {
 		"body too long":  {"body": strings.Repeat("a", 20001)},
 		"title too long": {"title": strings.Repeat("a", 201)},
 	} {
+		input["updated_at"] = seenAt(t, api, token, existing)
 		if response := request(t, api, http.MethodPatch, "/api/v1/saved-replies/"+existing, input, token, nil); response.Code != http.StatusBadRequest {
 			t.Errorf("patch with %s: status=%d body=%s, want 400", name, response.Code, response.Body.String())
 		}
@@ -153,12 +177,12 @@ func TestSavedReplyTitleIsUniqueIgnoringCase(t *testing.T) {
 	if duplicate.Code != http.StatusConflict || !strings.Contains(duplicate.Body.String(), `"duplicate_title"`) {
 		t.Fatalf("duplicate create status=%d body=%s, want 409 duplicate_title", duplicate.Code, duplicate.Body.String())
 	}
-	clash := request(t, api, http.MethodPatch, "/api/v1/saved-replies/"+second, map[string]any{"title": "REFUND"}, token, nil)
+	clash := patchReply(t, api, token, second, map[string]any{"title": "REFUND"})
 	if clash.Code != http.StatusConflict || !strings.Contains(clash.Body.String(), `"duplicate_title"`) {
 		t.Fatalf("rename into a taken title status=%d body=%s, want 409", clash.Code, clash.Body.String())
 	}
 	// Changing only the case of its own title is not a clash.
-	own := request(t, api, http.MethodPatch, "/api/v1/saved-replies/"+first, map[string]any{"title": "REFUND"}, token, nil)
+	own := patchReply(t, api, token, first, map[string]any{"title": "REFUND"})
 	if own.Code != http.StatusOK {
 		t.Fatalf("recase own title status=%d body=%s", own.Code, own.Body.String())
 	}
@@ -184,7 +208,7 @@ func TestSavedReplyCountIsLimitedPerWorkspace(t *testing.T) {
 	}
 	// Deleting one makes room again, and editing a full workspace's reply still works.
 	first := listSavedReplies(t, api, alpha)[0]
-	if edit := request(t, api, http.MethodPatch, "/api/v1/saved-replies/"+first.ID, map[string]any{"body": "edited"}, alpha, nil); edit.Code != http.StatusOK {
+	if edit := patchReply(t, api, alpha, first.ID, map[string]any{"body": "edited"}); edit.Code != http.StatusOK {
 		t.Fatalf("edit in a full workspace status=%d body=%s", edit.Code, edit.Body.String())
 	}
 	if gone := request(t, api, http.MethodDelete, "/api/v1/saved-replies/"+first.ID, nil, alpha, nil); gone.Code != http.StatusNoContent {
@@ -212,7 +236,7 @@ func TestSavedRepliesStayWorkspaceScoped(t *testing.T) {
 		}
 	}
 	for _, id := range []string{alphaID, "not-a-uuid", "99999999-9999-4999-8999-999999999999"} {
-		patch := request(t, api, http.MethodPatch, "/api/v1/saved-replies/"+id, map[string]any{"title": "Hijacked", "body": "Hijacked"}, beta, nil)
+		patch := request(t, api, http.MethodPatch, "/api/v1/saved-replies/"+id, map[string]any{"title": "Hijacked", "body": "Hijacked", "updated_at": "2026-01-01T00:00:00Z"}, beta, nil)
 		if patch.Code != http.StatusNotFound {
 			t.Errorf("PATCH %s status=%d body=%s, want 404", id, patch.Code, patch.Body.String())
 		}
@@ -238,6 +262,65 @@ func TestSavedRepliesRequireSignIn(t *testing.T) {
 	} {
 		if response := request(t, api, call.method, call.path, map[string]any{"title": "x", "body": "x"}, "", nil); response.Code != http.StatusUnauthorized {
 			t.Errorf("%s %s without a session: status=%d, want 401", call.method, call.path, response.Code)
+		}
+	}
+}
+
+func TestConversationsCarryTheNameOfTheirContact(t *testing.T) {
+	api, service := testAPI(t)
+	token := createSession(t, api, service, "Name Desk", "admin@contact-name.example.com")
+	contact := create(t, api, token, "/api/v1/contacts", map[string]any{"name": "Nguyễn Thị Ánh", "email": "anh@contact-name.example.com"})
+	conversation := create(t, api, token, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Hello"})
+
+	type view struct {
+		ID          string `json:"id"`
+		ContactName string `json:"contact_name"`
+	}
+	var one view
+	decode(t, request(t, api, http.MethodGet, "/api/v1/conversations/"+conversation, nil, token, nil), &one)
+	if one.ContactName != "Nguyễn Thị Ánh" {
+		t.Fatalf("GET conversation contact_name = %q", one.ContactName)
+	}
+	var list struct {
+		Items []view `json:"items"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/conversations", nil, token, nil), &list)
+	if len(list.Items) != 1 || list.Items[0].ContactName != "Nguyễn Thị Ánh" {
+		t.Fatalf("list = %+v", list.Items)
+	}
+	var updated view
+	decode(t, request(t, api, http.MethodPatch, "/api/v1/conversations/"+conversation, map[string]any{"status": "closed"}, token, nil), &updated)
+	if updated.ContactName != "Nguyễn Thị Ánh" {
+		t.Fatalf("PATCH conversation contact_name = %q", updated.ContactName)
+	}
+}
+
+func TestSavedReplyEditNeedsTheVersionTheClientSaw(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "Version Desk", "admin@reply-version.example.com")
+	agent := agentSession(t, api, admin, "agent@reply-version.example.com")
+	id := create(t, api, admin, "/api/v1/saved-replies", map[string]any{"title": "Greeting", "body": "Original"})
+	opened := seenAt(t, api, admin, id)
+
+	// Another agent saves first; the first agent's edit, made from the older version, is refused.
+	if first := patchReply(t, api, agent, id, map[string]any{"body": "Agent's version"}); first.Code != http.StatusOK {
+		t.Fatalf("first edit status=%d body=%s", first.Code, first.Body.String())
+	}
+	stale := request(t, api, http.MethodPatch, "/api/v1/saved-replies/"+id, map[string]any{"body": "Admin's version", "updated_at": opened}, admin, nil)
+	if stale.Code != http.StatusConflict || !strings.Contains(stale.Body.String(), `"changed_elsewhere"`) {
+		t.Fatalf("stale edit status=%d body=%s, want 409 changed_elsewhere", stale.Code, stale.Body.String())
+	}
+	if got := listSavedReplies(t, api, admin)[0].Body; got != "Agent's version" {
+		t.Fatalf("a refused edit changed the reply: %q", got)
+	}
+	// After reloading, the same edit goes through.
+	if again := patchReply(t, api, admin, id, map[string]any{"body": "Admin's version"}); again.Code != http.StatusOK {
+		t.Fatalf("edit after reload status=%d body=%s", again.Code, again.Body.String())
+	}
+	// Without the version the request is refused, and so is one that is not a time.
+	for name, input := range map[string]map[string]any{"missing": {"body": "x"}, "not a time": {"body": "x", "updated_at": "yesterday"}} {
+		if response := request(t, api, http.MethodPatch, "/api/v1/saved-replies/"+id, input, admin, nil); response.Code != http.StatusBadRequest {
+			t.Errorf("%s updated_at: status=%d body=%s, want 400", name, response.Code, response.Body.String())
 		}
 	}
 }

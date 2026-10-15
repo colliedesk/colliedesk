@@ -82,6 +82,7 @@ func (r *Report) Markdown() string {
 		}
 	}
 	writeList(&b, "Canned responses with no text, not imported (Freshdesk ids)", r.SavedReplies.EmptySkipped)
+	writeList(&b, "Canned responses in personal folders, not imported (Freshdesk ids; run again with --include-personal-canned-responses to share them)", r.SavedReplies.PersonalNotImported)
 	writeList(&b, "Canned responses whose files were not imported (Freshdesk ids)", r.SavedReplies.ResponsesWithAttachments)
 	writeList(&b, "Freshdesk placeholders left as written in saved replies (canned response ids)", placeholderLines(r.SavedReplies.UnmappedPlaceholders))
 	writeList(&b, "Ticket ids that could not be resolved (archive unavailable)", r.Tickets.UnresolvedIDs)

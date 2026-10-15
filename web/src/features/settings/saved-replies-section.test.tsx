@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
-import { InvalidRequestError } from '../../api/client';
+import { ChangedElsewhereError, InvalidRequestError } from '../../api/client';
 import type { SavedReply } from '../../api/schemas';
 import { SavedRepliesSection } from './saved-replies-section';
 
@@ -8,7 +8,7 @@ const reply = (id: string, title: string, body: string): SavedReply => ({
   id, title, body, created_by_agent_id: null, created_at: '2026-10-15T00:00:00Z', updated_at: '2026-10-15T00:00:00Z',
 });
 const replies = [reply('1', 'Greeting', 'Hi {{customer.name}}'), reply('2', 'Refund steps', 'We refunded you.')];
-const handlers = () => ({ onCreate: vi.fn().mockResolvedValue(undefined), onUpdate: vi.fn().mockResolvedValue(undefined), onDelete: vi.fn().mockResolvedValue(undefined) });
+const handlers = () => ({ onCreate: vi.fn().mockResolvedValue(undefined), onUpdate: vi.fn().mockResolvedValue(undefined), onDelete: vi.fn().mockResolvedValue(undefined), onReload: vi.fn() });
 
 test('lists every saved reply with its title and the start of its text, and names the variables', () => {
   render(<SavedRepliesSection replies={replies} {...handlers()} />);
@@ -73,7 +73,7 @@ test('editing opens the reply in a form, saves both fields, and cancel changes n
   expect(within(form).getByLabelText('Text')).toHaveValue('Hi {{customer.name}}');
   fireEvent.change(within(form).getByLabelText('Text'), { target: { value: 'Hello {{customer.name}}' } });
   fireEvent.click(within(form).getByRole('button', { name: 'Save saved reply' }));
-  expect(actions.onUpdate).toHaveBeenCalledWith('1', { title: 'Greeting', body: 'Hello {{customer.name}}' });
+  expect(actions.onUpdate).toHaveBeenCalledWith('1', { title: 'Greeting', body: 'Hello {{customer.name}}', updated_at: '2026-10-15T00:00:00Z' });
   await waitFor(() => expect(screen.queryByRole('form', { name: 'Edit Greeting' })).not.toBeInTheDocument());
 });
 
@@ -107,4 +107,19 @@ test('a failed delete says so', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Delete Greeting' }));
   fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('could not be saved');
+});
+
+test('an edit made from an older version is refused, says who won, and Reload shows the current text', async () => {
+  const actions = handlers();
+  actions.onUpdate.mockRejectedValue(new ChangedElsewhereError('This saved reply was changed by someone else. Reload to see their version, then edit again.'));
+  render(<SavedRepliesSection replies={replies} {...actions} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Edit Greeting' }));
+  fireEvent.change(screen.getByLabelText('Text', { selector: 'form[aria-label="Edit Greeting"] textarea' }), { target: { value: 'My version' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save saved reply' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('changed by someone else');
+  expect(screen.getByRole('form', { name: 'Edit Greeting' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+  expect(actions.onReload).toHaveBeenCalledOnce();
+  expect(screen.queryByRole('form', { name: 'Edit Greeting' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });

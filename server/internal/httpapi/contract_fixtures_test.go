@@ -19,6 +19,7 @@ type contractFixture struct {
 	inviteID, sessionID          string
 	updateTagID, deleteTagID     string
 	updateReplyID, deleteReplyID string
+	updateReplySeen              string
 	attachmentID                 string
 	redeemToken, logoutToken     string
 	inboundSecret                string
@@ -54,6 +55,7 @@ func newContractFixture(t *testing.T) contractFixture {
 	updateTagID := create(t, api, adminToken, "/api/v1/tags", map[string]any{"name": "Update contract tag"})
 	deleteTagID := create(t, api, adminToken, "/api/v1/tags", map[string]any{"name": "Delete contract tag"})
 	updateReplyID := create(t, api, adminToken, "/api/v1/saved-replies", map[string]any{"title": "Update contract reply", "body": "Hello {{customer.name}}"})
+	updateReplySeen := seenAt(t, api, adminToken, updateReplyID)
 	deleteReplyID := create(t, api, adminToken, "/api/v1/saved-replies", map[string]any{"title": "Delete contract reply", "body": "Bye"})
 
 	inviteID, agentURL := createContractInvite(t, api, adminToken, "agent@contract-all.example.com", "agent")
@@ -110,7 +112,7 @@ func newContractFixture(t *testing.T) contractFixture {
 	agentID := memberIDByEmail(t, api, adminToken, "agent@contract-all.example.com")
 	return contractFixture{agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, inviteID: inviteID, sessionID: sessionID,
-		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, deleteReplyID: deleteReplyID, attachmentID: attachmentID, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token}
+		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, attachmentID: attachmentID, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token}
 }
 
 func createContractInvite(t *testing.T, api http.Handler, token, email, role string) (string, string) {

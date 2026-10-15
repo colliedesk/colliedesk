@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { InvalidRequestError } from '../../api/client';
+import { ChangedElsewhereError, InvalidRequestError } from '../../api/client';
 import type { SavedReply } from '../../api/schemas';
 import { messages } from '../../messages';
 
@@ -7,26 +7,32 @@ interface SavedRepliesSectionProps {
   replies: SavedReply[];
   // Each action resolves when the server accepted it and rejects with the reason when it did not.
   onCreate: (title: string, body: string) => Promise<unknown>;
-  onUpdate: (id: string, change: { title: string; body: string }) => Promise<unknown>;
+  // updated_at is the version this form was opened on; the server refuses the edit if the reply was saved since.
+  onUpdate: (id: string, change: { title: string; body: string; updated_at: string }) => Promise<unknown>;
   onDelete: (id: string) => Promise<unknown>;
+  // Loads the list again; used after an edit was refused because someone else saved first.
+  onReload?: () => void;
 }
 
 // Every agent manages the shared saved replies, so nothing here depends on the role.
-export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete }: SavedRepliesSectionProps) {
+export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onReload }: SavedRepliesSectionProps) {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [editing, setEditing] = useState<{ id: string; title: string; body: string } | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [problem, setProblem] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [stale, setStale] = useState(false);
   // run keeps the form open with the server's reason when an action is refused.
   const run = async (action: () => Promise<unknown>, done: () => void) => {
     setBusy(true);
     setProblem(undefined);
+    setStale(false);
     try {
       await action();
       done();
     } catch (error) {
+      setStale(error instanceof ChangedElsewhereError);
       setProblem(error instanceof InvalidRequestError ? error.message : messages.savedReplyActionFailed);
     } finally {
       setBusy(false);
@@ -37,6 +43,7 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete }: S
       <div className="section-heading"><h2 id="saved-replies-heading">{messages.savedReplies}</h2><p>{messages.savedRepliesDescription}</p></div>
       <div className="settings-body">
         {problem && <p role="alert" className="error-copy">{problem}</p>}
+        {stale && <button type="button" onClick={() => { setEditing(null); setProblem(undefined); setStale(false); onReload?.(); }}>{messages.reload}</button>}
         {!editing && <form className="saved-reply-form" aria-label={messages.addSavedReply}
           onSubmit={(event) => { event.preventDefault(); if (!busy) void run(() => onCreate(title, body), () => { setTitle(''); setBody(''); }); }}>
           <label className="field"><span>{messages.savedReplyTitle}</span><input value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} /></label>
@@ -47,7 +54,7 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete }: S
           <li key={reply.id}>
             {editing?.id === reply.id
               ? <form className="saved-reply-form" aria-label={messages.editSavedReplyName(reply.title)}
-                  onSubmit={(event) => { event.preventDefault(); if (!busy) void run(() => onUpdate(reply.id, { title: editing.title, body: editing.body }), () => setEditing(null)); }}>
+                  onSubmit={(event) => { event.preventDefault(); if (!busy) void run(() => onUpdate(reply.id, { title: editing.title, body: editing.body, updated_at: reply.updated_at }), () => setEditing(null)); }}>
                   <label className="field"><span>{messages.savedReplyTitle}</span><input value={editing.title} maxLength={200} onChange={(event) => setEditing({ ...editing, title: event.target.value })} /></label>
                   <label className="field"><span>{messages.savedReplyText}</span><textarea rows={4} value={editing.body} maxLength={20000} onChange={(event) => setEditing({ ...editing, body: event.target.value })} /></label>
                   <div className="saved-reply-actions">

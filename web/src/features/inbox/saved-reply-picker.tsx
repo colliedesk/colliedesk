@@ -11,11 +11,13 @@ interface SavedReplyPickerProps {
   onClose: (restoreFocus: boolean) => void;
   // Leads to the place that adds saved replies; shown when there are none.
   onManage?: () => void;
+  // The list comes from a query: while it loads or after it failed, "none yet" would be untrue.
+  state?: 'loading' | 'failed' | 'ready';
 }
 
 // SavedReplyPicker is a searchable list the keyboard drives end to end: type to filter by title,
 // arrows to move, Enter to insert, Escape to close. The list is already in memory, so it opens at once.
-export function SavedReplyPicker({ replies, onPick, onClose, onManage }: SavedReplyPickerProps) {
+export function SavedReplyPicker({ replies, onPick, onClose, onManage, state = 'ready' }: SavedReplyPickerProps) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const search = useRef<HTMLInputElement>(null);
@@ -45,8 +47,10 @@ export function SavedReplyPicker({ replies, onPick, onClose, onManage }: SavedRe
             onMouseMove={() => { if (index !== current) setActive(index); }}>{reply.title}</li>
         ))}
       </ul>
-      {matches.length === 0 && <p className="saved-reply-empty" role="status">{replies.length === 0 ? messages.noSavedReplies : messages.noSavedRepliesMatch}</p>}
-      {replies.length === 0 && onManage && <button type="button" onClick={onManage}>{messages.manageSavedReplies}</button>}
+      {state === 'loading' && replies.length === 0 && <p className="saved-reply-empty" role="status">{messages.loadingSavedReplies}</p>}
+      {state === 'failed' && replies.length === 0 && <p className="saved-reply-empty" role="alert">{messages.savedRepliesFailed}</p>}
+      {state === 'ready' && matches.length === 0 && <p className="saved-reply-empty" role="status">{replies.length === 0 ? messages.noSavedReplies : messages.noSavedRepliesMatch}</p>}
+      {state === 'ready' && replies.length === 0 && onManage && <button type="button" onClick={onManage}>{messages.manageSavedReplies}</button>}
     </div>
   );
 }

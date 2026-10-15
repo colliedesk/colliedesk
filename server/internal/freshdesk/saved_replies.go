@@ -52,10 +52,32 @@ func mapPlaceholders(body string) (string, []string) {
 func cannedText(response fdCannedResponse) string {
 	text := response.Content
 	if strings.TrimSpace(text) == "" && strings.TrimSpace(response.ContentHTML) != "" {
-		text = email.HTMLToText(response.ContentHTML)
+		text = email.HTMLToText(keepLinks(response.ContentHTML))
 	}
 	text = strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
 	return strings.TrimSpace(blankSpaceLines.ReplaceAllString(text, ""))
+}
+
+var (
+	anchorPattern = regexp.MustCompile(`(?is)<a\s[^>]*?href\s*=\s*["']([^"']+)["'][^>]*>(.*?)</a>`)
+	tagPattern    = regexp.MustCompile(`(?s)<[^>]*>`)
+	imagePattern  = regexp.MustCompile(`(?i)<img\b`)
+)
+
+// keepLinks writes <a href="url">text</a> as "text (url)", so the address survives the reduction to
+// text. A link whose text already is the address stays as that address.
+func keepLinks(markup string) string {
+	return anchorPattern.ReplaceAllStringFunc(markup, func(match string) string {
+		parts := anchorPattern.FindStringSubmatch(match)
+		url, label := strings.TrimSpace(parts[1]), strings.TrimSpace(tagPattern.ReplaceAllString(parts[2], ""))
+		switch {
+		case label == "" || label == url || "mailto:"+label == url:
+			return url
+		case strings.HasPrefix(url, "#") || strings.HasPrefix(strings.ToLower(url), "javascript:"):
+			return label
+		}
+		return label + " (" + url + ")"
+	})
 }
 
 func savedReplyTitle(folder, title string) string {
@@ -75,8 +97,9 @@ func fitTitle(title, suffix string) string {
 	return title + suffix
 }
 
-// importSavedReplies lists the canned response folders and imports their responses. Item problems go
-// to the ledger and the report; only cancellation and ledger errors stop the run.
+// importSavedReplies lists the canned response folders and imports their responses. Item problems
+// go to the ledger and the report. Only cancellation and ledger errors stop the run: a folder list
+// that cannot be read is reported as a failure and the tickets still import.
 func (r *run) importSavedReplies(ctx context.Context) error {
 	verification := Verification{Verified: true,
 		Method: "The sum of responses_count over the canned response folders, compared with the canned responses listed in them."}
@@ -94,15 +117,21 @@ func (r *run) importSavedReplies(ctx context.Context) error {
 		r.verification.SavedReplies = verification
 		return nil
 	case err != nil:
-		return fmt.Errorf("list canned response folders: %w", err)
+		r.cannedListError = "list canned response folders: " + err.Error()
+		verification.Verified, verification.Detail = false, "The canned response folders could not be listed: "+err.Error()
+		r.verification.SavedReplies = verification
+		return nil
 	}
 	r.cannedFolders = len(folders)
 	reported, listed := 0, 0
 	for _, folder := range folders {
 		id := strconv.FormatInt(folder.ID, 10)
 		reported += folder.ResponsesCount
-		if folder.Personal {
+		if folder.Personal && r.opts.IncludePersonalCannedResponses {
 			r.warn("saved_reply_personal_folder", "This Freshdesk folder is personal. Its canned responses were imported and are now shared with the whole workspace; delete any that should stay private.", id)
+		}
+		if folder.Personal && !r.opts.IncludePersonalCannedResponses {
+			r.warn("saved_reply_personal_folder", "This Freshdesk folder is personal, so its canned responses were not imported. Run again with --include-personal-canned-responses to share them with the workspace.", id)
 		}
 		var responses []fdCannedResponse
 		err := listAll(ctx, r.client, r.endpoint("/api/v2/canned_response_folders/"+id+"/responses", pageQuery()), func(response fdCannedResponse) error {
@@ -126,6 +155,10 @@ func (r *run) importSavedReplies(ctx context.Context) error {
 		}
 		listed += len(responses)
 		for _, response := range responses {
+			if folder.Personal && !r.opts.IncludePersonalCannedResponses {
+				r.cannedPersonal = append(r.cannedPersonal, strconv.FormatInt(response.ID, 10))
+				continue
+			}
 			r.importSavedReply(ctx, folder, response)
 		}
 	}
@@ -149,6 +182,9 @@ func (r *run) importSavedReply(ctx context.Context, folder fdCannedFolder, respo
 		r.cannedAttachments += len(response.Attachments)
 		r.cannedWithFiles = append(r.cannedWithFiles, key)
 		r.warn("saved_reply_attachments_not_imported", "Saved replies hold text only, so the files on this canned response were not imported. Download them from Freshdesk if they are still needed.", key)
+	}
+	if imagePattern.MatchString(response.ContentHTML) {
+		r.warn("saved_reply_images_dropped", "The HTML of this canned response holds an image. Saved replies hold text only, so the image was dropped; add it by hand or link it.", key)
 	}
 	text := cannedText(response)
 	if text == "" {

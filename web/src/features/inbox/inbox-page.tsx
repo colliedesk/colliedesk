@@ -26,6 +26,7 @@ interface InboxPageProps {
   customerName?: string;
   agentName?: string;
   onManageSavedReplies?: () => void;
+  savedRepliesState?: 'loading' | 'failed' | 'ready';
   onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void;
   onAddTag?: (conversationId: string, tagId: string) => void;
   onRemoveTag?: (conversationId: string, tagId: string) => void;
@@ -47,7 +48,7 @@ interface InboxPageProps {
   onOpenSettings?: () => void;
 }
 
-export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, loading, refreshing, timelineLoading, failed, onRetry, canManage, onOpenSettings }: InboxPageProps) {
+export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, loading, refreshing, timelineLoading, failed, onRetry, canManage, onOpenSettings }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Filters are an uncontrolled form; clearing remounts it so every field returns to its default.
@@ -89,7 +90,7 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
         {deliveryNotice && <p role="alert" className="composer-notice">{deliveryNotice}</p>}
         {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
         <ReplyComposer key={selected?.id} disabled={!selected} onSubmit={onMessage} attachmentLimits={attachmentLimits}
-          savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} />
+          savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState} />
       </div>
       <DetailsPanel conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate}
         onAddTag={onAddTag} onRemoveTag={onRemoveTag} onCreateTag={onCreateTag} onClose={detailsOpen ? closeDetails : undefined} />

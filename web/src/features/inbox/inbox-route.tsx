@@ -40,7 +40,6 @@ export function InboxRoute() {
   const timeline = useQuery({ queryKey: ['messages', selected?.id], queryFn: () => api.messages(selected!.id), enabled: Boolean(selected),
     // Poll while a reply waits in the email outbox so its delivery status updates without a reload.
     refetchInterval: (query) => (query.state.data?.items.some((item) => item.delivery?.status === 'queued') ? 5000 : false) });
-  const customer = useQuery({ queryKey: ['contact', selected?.contact_id], queryFn: () => api.contact(selected!.contact_id), enabled: Boolean(selected) });
   const timeEntries = useQuery({ queryKey: ['time-entries', selected?.id], queryFn: () => api.timeEntries(selected!.id), enabled: Boolean(selected) });
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes), onSuccess: refresh });
@@ -64,8 +63,10 @@ export function InboxRoute() {
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body, files) => message.mutateAsync({ kind, body, files })}
-    savedReplies={savedReplies.data?.items} customerName={customer.data?.name} agentName={me.data?.agent?.display_name}
-    onManageSavedReplies={() => void navigate({ to: '/settings' })}
+    savedReplies={savedReplies.data?.items} customerName={selected?.contact_name} agentName={me.data?.agent?.display_name}
+    savedRepliesState={savedReplies.isPending ? 'loading' : savedReplies.isError ? 'failed' : 'ready'}
+    // A new tab, so the draft and the files in this reply box stay where they are.
+    onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
     outboundNotice={outboundNotice} deliveryNotice={retryError ? retryRefusalText(retryError) : undefined} filtered={Object.values(filters).some(Boolean)} loading={conversations.isPending} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}

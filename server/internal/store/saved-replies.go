@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
@@ -89,8 +90,9 @@ func (s *Store) CreateSavedReply(ctx context.Context, workspaceID, agentID, titl
 	})
 }
 
-// UpdateSavedReply changes the title, the body or both; a nil field stays as it is.
-func (s *Store) UpdateSavedReply(ctx context.Context, workspaceID, id string, title, body *string) (domain.SavedReply, error) {
+// UpdateSavedReply changes the title, the body or both; a nil field stays as it is. seen is the
+// updated_at the client read: when the reply was saved since, it answers domain.ErrSavedReplyChanged.
+func (s *Store) UpdateSavedReply(ctx context.Context, workspaceID, id string, seen time.Time, title, body *string) (domain.SavedReply, error) {
 	if !savedReplyID.MatchString(id) {
 		return domain.SavedReply{}, domain.ErrSavedReplyNotFound
 	}
@@ -107,8 +109,15 @@ func (s *Store) UpdateSavedReply(ctx context.Context, workspaceID, id string, ti
 		}
 	}
 	reply, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.SavedReply, error) {
-		return scanSavedReply(tx.QueryRow(ctx, `UPDATE saved_replies SET title=COALESCE($3,title), body=COALESCE($4,body), updated_at=now()
-			WHERE workspace_id=$1 AND id=$2 RETURNING `+savedReplyColumns, workspaceID, id, title, body))
+		reply, err := scanSavedReply(tx.QueryRow(ctx, `UPDATE saved_replies SET title=COALESCE($3,title), body=COALESCE($4,body), updated_at=clock_timestamp()
+			WHERE workspace_id=$1 AND id=$2 AND updated_at=$5 RETURNING `+savedReplyColumns, workspaceID, id, title, body, seen))
+		if errors.Is(err, pgx.ErrNoRows) {
+			var exists bool
+			if checkErr := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM saved_replies WHERE workspace_id=$1 AND id=$2)`, workspaceID, id).Scan(&exists); checkErr == nil && exists {
+				return domain.SavedReply{}, domain.ErrSavedReplyChanged
+			}
+		}
+		return reply, err
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):

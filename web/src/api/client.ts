@@ -55,10 +55,19 @@ export class ConflictError extends InvalidRequestError {
   }
 }
 
+// ChangedElsewhereError means someone saved the same saved reply after this client read it (HTTP 409).
+export class ChangedElsewhereError extends ConflictError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ChangedElsewhereError';
+  }
+}
+
 async function invalidRequest(response: Response): Promise<Error> {
   try {
-    const body = await response.json() as { error?: { message?: unknown } };
+    const body = await response.json() as { error?: { code?: unknown; message?: unknown } };
     if (typeof body.error?.message === 'string' && body.error.message) {
+      if (response.status === 409 && body.error.code === 'changed_elsewhere') return new ChangedElsewhereError(body.error.message);
       return response.status === 409 ? new ConflictError(body.error.message) : new InvalidRequestError(body.error.message);
     }
   } catch {

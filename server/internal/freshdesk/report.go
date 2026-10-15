@@ -69,6 +69,8 @@ type SavedReplyCount struct {
 	EntityCount
 	Folders      int      `json:"folders"`
 	EmptySkipped []string `json:"empty_skipped"`
+	// PersonalNotImported are canned responses in personal folders, left out unless asked for.
+	PersonalNotImported []string `json:"personal_not_imported"`
 	// AttachmentsNotImported counts files on canned responses; saved replies carry none.
 	AttachmentsNotImported   int      `json:"attachments_not_imported"`
 	ResponsesWithAttachments []string `json:"responses_with_attachments"`

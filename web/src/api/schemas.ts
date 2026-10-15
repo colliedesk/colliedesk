@@ -66,7 +66,7 @@ export const timeEntrySchema = z.object({
   minutes: z.number().int().nonnegative(), note: z.string(), billable: z.boolean(), executed_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TimeEntry'>>;
 export const conversationSchema = z.object({
-  id: z.string().uuid(), contact_id: z.string().uuid(), subject: z.string(),
+  id: z.string().uuid(), contact_id: z.string().uuid(), contact_name: z.string(), subject: z.string(),
   status: statusSchema, priority: prioritySchema, assignee_id: z.string().uuid().nullable(),
   tags: z.array(tagSchema), origin: conversationOriginSchema.nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'Conversation'>>;

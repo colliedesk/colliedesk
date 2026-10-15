@@ -848,15 +848,19 @@ paths:
     patch:
       operationId: updateSavedReply
       x-permission: conversations:write
-      description: Change the title, the body or both. Any agent may edit a shared reply.
+      description: >
+        Change the title, the body or both. Any agent may edit a shared reply. Send back the
+        `updated_at` you read; when the reply was saved since, nothing changes and the answer is 409
+        `changed_elsewhere`. A taken title is 409 `duplicate_title`.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              minProperties: 1
+              required: [updated_at]
               properties:
+                updated_at: {type: string, format: date-time}
                 title: {type: string, minLength: 1, maxLength: 200}
                 body: {type: string, minLength: 1, maxLength: 20000}
       responses:
@@ -1528,10 +1532,11 @@ components:
         updated_at: {type: string, format: date-time}
     Conversation:
       type: object
-      required: [id, contact_id, subject, status, priority, assignee_id, tags, origin, created_at, updated_at]
+      required: [id, contact_id, contact_name, subject, status, priority, assignee_id, tags, origin, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         contact_id: {type: string, format: uuid}
+        contact_name: {type: string}
         subject: {type: string}
         status: {$ref: '#/components/schemas/ConversationStatus'}
         priority: {$ref: '#/components/schemas/Priority'}
