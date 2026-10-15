@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 )
@@ -152,5 +153,40 @@ func TestClientRejectsAReplyWithoutURL(t *testing.T) {
 	fake := newFakePolar(t, http.StatusCreated, `{"id":"co_1"}`)
 	if _, err := fake.client().CreateCheckout(context.Background(), polar.CheckoutRequest{ProductID: "p", CustomerID: "c"}); err == nil {
 		t.Fatal("want an error when Polar returns no checkout url")
+	}
+}
+
+func TestHasPaidSubscriptionReadsTheCustomersSubscriptionsByExternalID(t *testing.T) {
+	now := time.Date(2027, 11, 1, 0, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name  string
+		reply string
+		want  bool
+	}{
+		{"none", `{"items":[],"pagination":{"total_count":0,"max_page":0}}`, false},
+		{"active", `{"items":[{"status":"active","current_period_end":"2027-12-01T00:00:00Z","ended_at":null}],"pagination":{"total_count":1,"max_page":1}}`, true},
+		{"past due keeps the plan", `{"items":[{"status":"past_due","current_period_end":"2027-10-01T00:00:00Z","ended_at":null}],"pagination":{"total_count":1,"max_page":1}}`, true},
+		{"canceled but paid until the future", `{"items":[{"status":"canceled","current_period_end":"2027-11-15T00:00:00Z","ended_at":null}],"pagination":{"total_count":1,"max_page":1}}`, true},
+		{"canceled and over", `{"items":[{"status":"canceled","current_period_end":"2027-10-15T00:00:00Z","ended_at":"2027-10-15T00:00:00Z"}],"pagination":{"total_count":1,"max_page":1}}`, false},
+		{"one dead and one live", `{"items":[{"status":"canceled","ended_at":"2027-01-01T00:00:00Z"},{"status":"trialing","ended_at":null}],"pagination":{"total_count":2,"max_page":1}}`, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			fake := newFakePolar(t, http.StatusOK, c.reply)
+			got, err := fake.client().HasPaidSubscription(context.Background(), "ws-1", now)
+			if err != nil || got != c.want {
+				t.Fatalf("HasPaidSubscription = %v, %v; want %v", got, err, c.want)
+			}
+			if fake.method != http.MethodGet || fake.path != "/v1/subscriptions/" {
+				t.Fatalf("request %s %s", fake.method, fake.path)
+			}
+		})
+	}
+}
+
+func TestHasPaidSubscriptionFailsOnPolarErrors(t *testing.T) {
+	fake := newFakePolar(t, http.StatusInternalServerError, `{}`)
+	if got, err := fake.client().HasPaidSubscription(context.Background(), "ws-1", time.Now()); err == nil || got {
+		t.Fatalf("got %v, %v; want an error and false", got, err)
 	}
 }

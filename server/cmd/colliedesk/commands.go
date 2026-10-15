@@ -26,10 +26,10 @@ var clock = func() time.Time { return time.Now().UTC() }
 
 func run(ctx context.Context, args []string, output io.Writer, databaseURL, origin string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("expected subcommand: serve, migrate, create-workspace, pair, import, trial, plan, healthcheck, or version")
+		return fmt.Errorf("expected subcommand: serve, migrate, create-workspace, pair, import, trial, plan, retention, healthcheck, or version")
 	}
 	if args[0] == "--help" || args[0] == "help" {
-		_, err := fmt.Fprintln(output, "Usage: colliedesk <serve|migrate|create-workspace|pair|import|trial|plan|healthcheck|version>")
+		_, err := fmt.Fprintln(output, "Usage: colliedesk <serve|migrate|create-workspace|pair|import|trial|plan|retention|healthcheck|version>")
 		return err
 	}
 	if args[0] == "version" {
@@ -75,6 +75,8 @@ func run(ctx context.Context, args []string, output io.Writer, databaseURL, orig
 		return trialCommand(ctx, pool, args[1:], output)
 	case "plan":
 		return planCommand(ctx, pool, args[1:], output)
+	case "retention":
+		return retentionCommand(ctx, pool, origin, args[1:], output)
 	default:
 		return fmt.Errorf("unknown subcommand %q", args[0])
 	}
