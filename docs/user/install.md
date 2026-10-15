@@ -104,8 +104,9 @@ Details: [workspace isolation](../internals/workspace-isolation.md).
 
 ## Usage report
 
-The server sends a daily usage report with counts only (no names, emails or ticket content).
-Set `DISABLE_TELEMETRY=true` to turn it off. Every field is listed in [usage report](telemetry.md).
+The install sends a daily usage report: counts and its public host name, never names, emails or
+ticket content. Add `DISABLE_TELEMETRY=true` to `.env` and run `docker compose up -d` to turn it
+off. Every field is listed in [usage report](telemetry.md).
 
 To receive and answer customer email, set up the [email channel](email-channel.md).
 See the [roadmap](../../ROADMAP.md).

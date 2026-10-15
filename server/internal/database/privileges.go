@@ -32,7 +32,8 @@ const (
 	PrivilegeRequestLogin Privilege = "request-login"
 	// PrivilegeOutboxClaim leases due outbox rows of every workspace for the email worker.
 	PrivilegeOutboxClaim Privilege = "outbox-claim"
-	// PrivilegeTelemetry reads the install id and instance-wide counts (workspaces, active agents,
-	// replies, channels in use) for the daily usage report. It reads counts only, never row content.
+	// PrivilegeTelemetry claims the install's daily usage report in the platform-level instance
+	// table and reads instance-wide counts (workspaces, active agents, replies, channels in use).
+	// Only aggregates leave the transaction, never row content.
 	PrivilegeTelemetry Privilege = "telemetry"
 )

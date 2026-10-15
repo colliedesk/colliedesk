@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/getkin/kin-openapi v0.150.0
 	github.com/jackc/pgx/v5 v5.11.0
+	golang.org/x/net v0.61.0
 	golang.org/x/text v0.43.0
 )
 

@@ -53,6 +53,8 @@ services:
       TRUSTED_PROXIES: ${TRUSTED_PROXIES-127.0.0.0/8,::1/128,172.16.0.0/12}
       SIGNUP_HASH_KEY: ${SIGNUP_HASH_KEY:-}
       ATTACHMENTS_DIR: /data/attachments
+      DISABLE_TELEMETRY: ${DISABLE_TELEMETRY:-}
+      DO_NOT_TRACK: ${DO_NOT_TRACK:-}
     ports:
       - "127.0.0.1:${COLLIE_DESK_PORT:-8080}:8080"
     volumes:

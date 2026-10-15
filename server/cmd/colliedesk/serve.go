@@ -86,7 +86,9 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		go worker.Run(ctx, 5*time.Second)
 	}
 	warnWithoutTrustedProxies(slog.Default(), trustedProxies)
-	go telemetry.New(db, telemetry.ConfigFromEnv(os.Getenv, origin, cloudAuth.Enabled(), version), nil).Run(ctx, slog.Default())
+	// The hosted cloud is cloud sign-in with billing; a self-hosted server may use sign-in alone.
+	hostedCloud := cloudAuth.Enabled() && billing.Enabled()
+	go telemetry.New(db, telemetry.ConfigFromEnv(os.Getenv, origin, hostedCloud, version), nil).Run(ctx, slog.Default())
 	if billing.Enabled() {
 		retentionService, err := newRetentionService(db, origin, billing, retentionSettingsForServe(os.Getenv, slog.Default()))
 		if err != nil {

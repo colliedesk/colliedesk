@@ -139,7 +139,7 @@ transaction only resolves the workspace; the work after that runs in `InWorkspac
 | `PrivilegeReplyToken` | `store/email-inbound.go` | Inbound mail reply token → workspace (`MAIL_FROM_DOMAIN` routing) |
 | `PrivilegeInboundSecret` | `store/email-channels.go` | Inbound email secret key id → workspace |
 | `PrivilegeOutboxClaim` | `store/email-outbox.go` | The email worker leases due rows of all workspaces; each row is then loaded and finished scoped |
-| `PrivilegeTelemetry` | `telemetry/usage.go` | The daily usage report reads the install id from `instance` (a platform-level table like `cloud_signups`) and instance-wide counts: workspaces, agents seen in 30 days, replies in 30 days, whether any email channel, web form or Freshdesk import exists. One `SELECT` of aggregates; no row content leaves the transaction |
+| `PrivilegeTelemetry` | `telemetry/usage.go` | The daily usage report claims the day in `instance` (a platform-level table like `cloud_signups`: install id and last report time) and reads instance-wide counts: workspaces, agents seen in 30 days, replies sent in 30 days, whether any email channel, enabled web form or Freshdesk import record exists. One `SELECT` of aggregates under a 10 s statement timeout; no row content leaves the transaction |
 
 The Freshdesk importer and undo resolve the slug once, then run every read and write in
 `InWorkspace` for that workspace. Their advisory lock (`DB.TryAdvisoryLock`) reads no table.

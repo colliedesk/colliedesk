@@ -1,14 +1,17 @@
 package telemetry_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -43,6 +46,27 @@ func TestConfigFromEnv(t *testing.T) {
 		{name: "lan name is not sent", origin: "https://desk.lan", wantRealm: "self-hosted"},
 		{name: "single-label host is not sent", origin: "http://colliedesk:8080", wantRealm: "self-hosted"},
 		{name: "port and case are dropped", origin: "https://Help.Acme.com:8443", wantDomain: "help.acme.com", wantRealm: "self-hosted"},
+		// Any other non-empty opt-out value means off: someone who set it wants it off.
+		{name: "DISABLE_TELEMETRY=y", env: map[string]string{"DISABLE_TELEMETRY": "y"}, origin: "https://help.acme.com", wantOff: "DISABLE_TELEMETRY", wantDomain: "help.acme.com", wantRealm: "self-hosted"},
+		{name: "DISABLE_TELEMETRY=disable", env: map[string]string{"DISABLE_TELEMETRY": "disable"}, origin: "https://help.acme.com", wantOff: "DISABLE_TELEMETRY", wantDomain: "help.acme.com", wantRealm: "self-hosted"},
+		{name: "DO_NOT_TRACK=2", env: map[string]string{"DO_NOT_TRACK": "2"}, origin: "https://help.acme.com", wantOff: "DO_NOT_TRACK", wantDomain: "help.acme.com", wantRealm: "self-hosted"},
+		{name: "DISABLE_TELEMETRY=0 keeps it on", env: map[string]string{"DISABLE_TELEMETRY": "0"}, origin: "https://help.acme.com", wantDomain: "help.acme.com", wantRealm: "self-hosted"},
+		{name: "DISABLE_TELEMETRY=Off keeps it on", env: map[string]string{"DISABLE_TELEMETRY": "Off"}, origin: "https://help.acme.com", wantDomain: "help.acme.com", wantRealm: "self-hosted"},
+		// Only names under an ICANN public suffix are sent.
+		{name: "onion service is not sent", origin: "http://abcdefghijklmnop.onion", wantRealm: "self-hosted"},
+		{name: "corp name is not sent", origin: "https://desk.acme.corp", wantRealm: "self-hosted"},
+		{name: "home name is not sent", origin: "https://desk.home", wantRealm: "self-hosted"},
+		{name: "test name is not sent", origin: "https://desk.test", wantRealm: "self-hosted"},
+		{name: "tailnet name is not sent", origin: "https://myhost.tail1234.ts.net", wantRealm: "self-hosted"},
+		{name: "address in a wildcard DNS name is not sent", origin: "http://10.0.0.5.nip.io", wantRealm: "self-hosted"},
+		{name: "short IPv4 form is not sent", origin: "http://127.1:8080", wantRealm: "self-hosted"},
+		{name: "hex IPv4 form is not sent", origin: "http://0x7f.0.0.1", wantRealm: "self-hosted"},
+		{name: "two trailing dots do not bypass the filter", origin: "https://desk.lan..", wantRealm: "self-hosted"},
+		{name: "IPv6 literal is not sent", origin: "http://[2001:db8::1]:8080", wantRealm: "self-hosted"},
+		{name: "a bare public suffix is not sent", origin: "https://co.uk", wantRealm: "self-hosted"},
+		{name: "credentials in the origin are never sent", origin: "https://user:secret@help.acme.com", wantDomain: "help.acme.com", wantRealm: "self-hosted"},
+		{name: "international name is sent in ASCII form", origin: "https://bücher.example.de", wantDomain: "xn--bcher-kva.example.de", wantRealm: "self-hosted"},
+		{name: "trailing dot is dropped", origin: "https://help.acme.com.", wantDomain: "help.acme.com", wantRealm: "self-hosted"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -64,6 +88,13 @@ func TestConfigFromEnv(t *testing.T) {
 				t.Fatalf("Version = %q, want 1.2.3", config.Version)
 			}
 		})
+	}
+}
+
+func TestDevelopmentBuildSendsNothing(t *testing.T) {
+	config := telemetry.ConfigFromEnv(func(string) string { return "" }, "https://help.acme.com", false, "dev")
+	if !strings.Contains(config.OffReason, "development build") {
+		t.Fatalf("OffReason = %q, want a development build to be off", config.OffReason)
 	}
 }
 
@@ -118,44 +149,30 @@ func TestHeartbeatSendsInstanceCountsAndNoPersonalData(t *testing.T) {
 	recorded := &capture{}
 	server := recorded.server(t)
 	config := telemetry.Config{Endpoint: server.URL, ProjectKey: "phc_test", Version: "1.2.3", Realm: "self-hosted", Domain: "help.acme.com"}
-	reporter := telemetry.New(db, config, server.Client())
-	if err := reporter.SendOnce(ctx); err != nil {
+	if err := telemetry.New(db, config, server.Client()).SendOnce(ctx); err != nil {
 		t.Fatalf("SendOnce: %v", err)
 	}
-	if err := reporter.SendOnce(ctx); err != nil {
-		t.Fatalf("second SendOnce: %v", err)
-	}
-	if len(recorded.bodies) != 2 {
-		t.Fatalf("requests = %d, want 2", len(recorded.bodies))
+	if len(recorded.bodies) != 1 {
+		t.Fatalf("requests = %d, want 1", len(recorded.bodies))
 	}
 	if recorded.paths[0] != "POST /i/v0/e/" {
 		t.Fatalf("request = %q, want POST /i/v0/e/", recorded.paths[0])
 	}
-
-	var first, second heartbeat
-	if err := json.Unmarshal(recorded.bodies[0], &first); err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(recorded.bodies[1], &second); err != nil {
-		t.Fatal(err)
-	}
+	first := decode(t, recorded.bodies[0])
 	if first.APIKey != "phc_test" || first.Event != "instance heartbeat" {
 		t.Fatalf("api_key/event = %q/%q", first.APIKey, first.Event)
 	}
-	if !regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`).MatchString(first.DistinctID) {
+	if !uuidPattern.MatchString(first.DistinctID) {
 		t.Fatalf("distinct_id = %q, want a random install id", first.DistinctID)
-	}
-	if second.DistinctID != first.DistinctID {
-		t.Fatalf("install id changed between reports: %q then %q", first.DistinctID, second.DistinctID)
 	}
 	if _, err := time.Parse(time.RFC3339, first.Timestamp); err != nil {
 		t.Fatalf("timestamp %q: %v", first.Timestamp, err)
 	}
 
 	// Expected values come from the fixture: two workspaces; three agents seen in the last 30 days
-	// (one only 40 days ago is not counted); two replies in the last 30 days (a note and a reply
-	// from 40 days ago are not counted); an email channel in one workspace, no web form, one
-	// Freshdesk import.
+	// (one only 40 days ago is not counted); two replies in the last 30 days (a note, a reply from
+	// 40 days ago and a reply imported from Freshdesk are not counted); an email channel in one
+	// workspace; a web form row that is switched off; one Freshdesk import.
 	want := map[string]any{
 		"version":           "1.2.3",
 		"realm":             "self-hosted",
@@ -178,6 +195,15 @@ func TestHeartbeatSendsInstanceCountsAndNoPersonalData(t *testing.T) {
 		}
 	}
 
+	// The fields are exactly the ones docs/user/telemetry.md lists; a new one needs the docs first.
+	if got, want := keys(first.Properties), "$set,agents_active_30d,arch,domain,email_channel,freshdesk_import,os,realm,replies_30d,version,web_form,workspaces"; got != want {
+		t.Errorf("property keys = %s, want %s", got, want)
+	}
+	set, _ := first.Properties["$set"].(map[string]any)
+	if got, want := keys(set), "domain,realm,version"; got != want {
+		t.Errorf("$set keys = %s, want %s", got, want)
+	}
+
 	// Nothing that names a person, a customer or what they wrote leaves the instance.
 	raw := string(recorded.bodies[0])
 	for _, secret := range []string{"owner-a@example.com", "owner-b@example.com", "helper-a@example.com", "buyer@example.org",
@@ -186,6 +212,116 @@ func TestHeartbeatSendsInstanceCountsAndNoPersonalData(t *testing.T) {
 			t.Errorf("report contains %q: %s", secret, raw)
 		}
 	}
+}
+
+func TestOneReportPerDayAndTheInstallIDStays(t *testing.T) {
+	db := newDB(t)
+	ctx := context.Background()
+	fixture(t, db)
+	recorded := &capture{}
+	server := recorded.server(t)
+	config := telemetry.Config{Endpoint: server.URL, ProjectKey: "phc_test", Version: "1.2.3", Realm: "self-hosted"}
+
+	if err := telemetry.New(db, config, server.Client()).SendOnce(ctx); err != nil {
+		t.Fatalf("SendOnce: %v", err)
+	}
+	// The same server again, and a second server on the same database (a restart, a crash loop or
+	// another replica), stay quiet until a day has passed.
+	for range 2 {
+		if err := telemetry.New(db, config, server.Client()).SendOnce(ctx); err != nil {
+			t.Fatalf("repeat SendOnce: %v", err)
+		}
+	}
+	if len(recorded.bodies) != 1 {
+		t.Fatalf("requests = %d, want 1 within a day", len(recorded.bodies))
+	}
+
+	execSQL(t, db, `UPDATE instance SET last_reported_at = now() - interval '24 hours'`)
+	execSQL(t, db, `UPDATE web_form_channels SET enabled = true`)
+	if err := telemetry.New(db, config, server.Client()).SendOnce(ctx); err != nil {
+		t.Fatalf("next-day SendOnce: %v", err)
+	}
+	if len(recorded.bodies) != 2 {
+		t.Fatalf("requests = %d, want 2 after a day", len(recorded.bodies))
+	}
+	first, second := decode(t, recorded.bodies[0]), decode(t, recorded.bodies[1])
+	if second.DistinctID != first.DistinctID {
+		t.Fatalf("install id changed between reports: %q then %q", first.DistinctID, second.DistinctID)
+	}
+	if second.Properties["web_form"] != true {
+		t.Fatalf("web_form = %#v after switching a form on, want true", second.Properties["web_form"])
+	}
+}
+
+func TestMissingInstanceRowIsRecreated(t *testing.T) {
+	db := newDB(t)
+	execSQL(t, db, `DELETE FROM instance`)
+	recorded := &capture{}
+	server := recorded.server(t)
+	config := telemetry.Config{Endpoint: server.URL, ProjectKey: "phc_test", Version: "1.2.3", Realm: "self-hosted"}
+	if err := telemetry.New(db, config, server.Client()).SendOnce(context.Background()); err != nil {
+		t.Fatalf("SendOnce: %v", err)
+	}
+	if len(recorded.bodies) != 1 || !uuidPattern.MatchString(decode(t, recorded.bodies[0]).DistinctID) {
+		t.Fatalf("want one report with a new install id, got %d requests", len(recorded.bodies))
+	}
+}
+
+func TestRunSaysWhyTheReportIsOff(t *testing.T) {
+	var logs bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		telemetry.New(nil, telemetry.Config{OffReason: "DISABLE_TELEMETRY is set"}, nil).Run(context.Background(), slog.New(slog.NewTextHandler(&logs, nil)))
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run kept running while the report is off")
+	}
+	if !strings.Contains(logs.String(), "usage report is off") || !strings.Contains(logs.String(), "DISABLE_TELEMETRY is set") {
+		t.Fatalf("log = %q, want the off line with its reason", logs.String())
+	}
+}
+
+func TestRunStopsWhenTheServerStops(t *testing.T) {
+	var logs bytes.Buffer
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	config := telemetry.Config{Endpoint: "http://127.0.0.1:1", ProjectKey: "phc_test", Version: "1.2.3"}
+	go func() {
+		telemetry.New(nil, config, nil).Run(ctx, slog.New(slog.NewTextHandler(&logs, nil)))
+		close(done)
+	}()
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run did not stop when its context ended")
+	}
+	if !strings.Contains(logs.String(), "usage report is on") || !strings.Contains(logs.String(), "DISABLE_TELEMETRY=true") {
+		t.Fatalf("log = %q, want the on line that says how to turn it off", logs.String())
+	}
+}
+
+var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+func decode(t *testing.T, body []byte) heartbeat {
+	t.Helper()
+	var event heartbeat
+	if err := json.Unmarshal(body, &event); err != nil {
+		t.Fatal(err)
+	}
+	return event
+}
+
+func keys(m map[string]any) string {
+	names := make([]string, 0, len(m))
+	for name := range m {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return strings.Join(names, ",")
 }
 
 func TestDisabledReporterSendsNothing(t *testing.T) {
@@ -262,16 +398,7 @@ func fixture(t *testing.T, db *database.DB) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	exec := func(sql string, args ...any) {
-		t.Helper()
-		err := db.Privileged(ctx, database.PrivilegeMigrate, func(tx pgx.Tx) error {
-			_, err := tx.Exec(ctx, sql, args...)
-			return err
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
+	exec := func(sql string, args ...any) { t.Helper(); execSQL(t, db, sql, args...) }
 	exec(`INSERT INTO agents(workspace_id,email,role) VALUES($1,'helper-a@example.com','agent')`, a.ID)
 	exec(`INSERT INTO agents(workspace_id,email,role) VALUES($1,'idle-b@example.com','agent')`, b.ID)
 	session := func(workspaceID, email, seen string) {
@@ -299,7 +426,24 @@ func fixture(t *testing.T, db *database.DB) {
 	message("note", "Internal note", "1 hour")
 	message("outgoing", "Refund please", "40 days")
 	message("incoming", "Refund please", "1 hour")
+	// A reply imported from Freshdesk keeps its original recent timestamp; it was not sent here.
+	exec(`UPDATE messages SET origin = '{"system":"freshdesk"}'::jsonb WHERE id = (
+		SELECT id FROM messages WHERE kind = 'outgoing' AND created_at >= now() - interval '2 hours')`)
+	message("outgoing", "Refund please", "30 minutes")
 
 	exec(`INSERT INTO email_channels(workspace_id,support_address,domain_verification_token) VALUES($1,'support@beta.example','token')`, b.ID)
+	exec(`INSERT INTO web_form_channels(workspace_id,enabled) VALUES($1,false)`, a.ID)
 	exec(`INSERT INTO import_items(workspace_id,source,entity,source_id,status) VALUES($1,'freshdesk:account:42','ticket','1','done')`, a.ID)
+}
+
+func execSQL(t *testing.T, db *database.DB, sql string, args ...any) {
+	t.Helper()
+	ctx := context.Background()
+	err := db.Privileged(ctx, database.PrivilegeMigrate, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, sql, args...)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }

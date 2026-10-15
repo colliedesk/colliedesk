@@ -1,6 +1,7 @@
-// Package telemetry sends one usage report a day from a running server so HC Labs can count the
-// installs, their versions and how much they are used. It carries counts only, never a name, an
-// email address or anything a customer wrote. docs/user/telemetry.md lists every field.
+// Package telemetry sends one usage report a day from a running server so the Colliedesk team can
+// count the installs, their versions and how much they are used. It carries counts and the public
+// host name of the install, never a person's name, an email address or anything a customer wrote.
+// docs/user/telemetry.md lists every field.
 package telemetry
 
 import (
@@ -19,9 +20,11 @@ import (
 )
 
 const (
-	// startDelay keeps a container that crash-loops from reporting on every start.
 	startDelay = time.Minute
-	interval   = 24 * time.Hour
+	// checkEvery is how often a running server asks whether a day has passed since the install last
+	// reported; the claim in the database makes it one report a day however often servers start.
+	checkEvery  = time.Hour
+	sendTimeout = 30 * time.Second
 )
 
 // Reporter collects the counts and sends them.
@@ -29,6 +32,7 @@ type Reporter struct {
 	db     *database.DB
 	config Config
 	client *http.Client
+	logger *slog.Logger
 }
 
 // New returns a reporter. A nil client gets one with a 10 second timeout.
@@ -36,12 +40,14 @@ func New(db *database.DB, config Config, client *http.Client) *Reporter {
 	if client == nil {
 		client = &http.Client{Timeout: 10 * time.Second}
 	}
-	return &Reporter{db: db, config: config, client: client}
+	return &Reporter{db: db, config: config, client: client, logger: slog.Default()}
 }
 
-// Run says whether the report is on, then sends one a minute after start and one a day until ctx
-// ends. A failed report is logged and never stops the server.
+// Run says whether the report is on, then from a minute after start checks every hour and sends
+// the install's report when a day has passed, until ctx ends. A failed report is logged and never
+// stops the server.
 func (r *Reporter) Run(ctx context.Context, logger *slog.Logger) {
+	r.logger = logger
 	if !r.config.Enabled() {
 		reason := r.config.OffReason
 		if reason == "" {
@@ -50,7 +56,7 @@ func (r *Reporter) Run(ctx context.Context, logger *slog.Logger) {
 		logger.Info("usage report is off", "reason", reason)
 		return
 	}
-	logger.Info("usage report is on: once a day this server sends counts (no names, emails or ticket content) to PostHog; set DISABLE_TELEMETRY=true to turn it off",
+	logger.Info("usage report is on: once a day this install sends counts and its public host name (no names, emails or ticket content) to PostHog; set DISABLE_TELEMETRY=true to turn it off",
 		"fields", "https://github.com/colliedesk/colliedesk/blob/main/docs/user/telemetry.md")
 	wait := startDelay
 	for {
@@ -62,18 +68,24 @@ func (r *Reporter) Run(ctx context.Context, logger *slog.Logger) {
 		if err := r.SendOnce(ctx); err != nil && ctx.Err() == nil {
 			logger.Warn("usage report not sent", "error", err)
 		}
-		wait = interval
+		wait = checkEvery
 	}
 }
 
-// SendOnce collects the counts and sends one report. It does nothing when the report is off.
+// SendOnce sends the install's report unless it is off or the install already reported in the
+// last 23 hours, and logs what it sent.
 func (r *Reporter) SendOnce(ctx context.Context) error {
 	if !r.config.Enabled() {
 		return nil
 	}
-	u, err := collectUsage(ctx, r.db)
+	ctx, cancel := context.WithTimeout(ctx, sendTimeout)
+	defer cancel()
+	u, claimed, err := claimUsage(ctx, r.db)
 	if err != nil {
 		return fmt.Errorf("collect usage: %w", err)
+	}
+	if !claimed {
+		return nil
 	}
 	install := map[string]any{"version": r.config.Version, "realm": r.config.Realm, "domain": r.config.Domain}
 	properties := map[string]any{
@@ -112,5 +124,8 @@ func (r *Reporter) SendOnce(ctx context.Context) error {
 	if response.StatusCode/100 != 2 {
 		return fmt.Errorf("PostHog answered %d", response.StatusCode)
 	}
+	r.logger.Info("usage report sent", "install_id", u.installID, "version", r.config.Version, "realm", r.config.Realm,
+		"domain", r.config.Domain, "workspaces", u.workspaces, "agents_active_30d", u.activeAgents, "replies_30d", u.replies,
+		"email_channel", u.emailChannel, "web_form", u.webForm, "freshdesk_import", u.freshdeskImport)
 	return nil
 }
