@@ -61,7 +61,7 @@ export class FakeFreshdesk {
     await Promise.all([this.api, this.files].map((server) => new Promise((resolve) => server?.close(resolve))));
   }
 
-  // env is what the e2e importer build reads to reach this fake (cmd/colliedesk/e2e_freshdesk.go).
+  // env is what the e2e importer build reads to reach this fake (cmd/collie/e2e_freshdesk.go).
   env(): Record<string, string> {
     return {
       COLLIEDESK_E2E_FRESHDESK_URL: this.apiURL, COLLIEDESK_E2E_FRESHDESK_CA: this.caPath,

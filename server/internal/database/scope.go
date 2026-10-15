@@ -56,7 +56,7 @@ func (d *DB) AppRole(ctx context.Context) (string, error) {
 	err := d.pool.QueryRow(ctx, `SELECT roles[1]::text FROM pg_policies
 		WHERE schemaname=current_schema() AND tablename='workspaces' AND policyname='workspace_isolation'`).Scan(&role)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", errors.New("row-level security is not set up in this schema; run `colliedesk migrate` first")
+		return "", errors.New("row-level security is not set up in this schema; run `collie migrate` first")
 	}
 	if err != nil {
 		return "", fmt.Errorf("read the app role: %w", err)
@@ -183,7 +183,7 @@ func (d *DB) Verify(ctx context.Context) error {
 	var super, bypass bool
 	err = d.pool.QueryRow(ctx, `SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=$1`, role).Scan(&super, &bypass)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("database role %s is missing; run `colliedesk migrate` first", role)
+		return fmt.Errorf("database role %s is missing; run `collie migrate` first", role)
 	}
 	if err != nil {
 		return fmt.Errorf("check database role %s: %w", role, err)

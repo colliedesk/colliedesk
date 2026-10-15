@@ -46,7 +46,7 @@ test('cloud sign-in: a verified identity of an existing agent gets a Colliedesk 
   await visitor.goto(baseURL);
   await expect(visitor.getByRole('alert')).toContainText('You are signed out');
   await expect(visitor.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/redeem?token=');
-  await expect(visitor.getByText(/colliedesk pair/)).toHaveCount(0);
+  await expect(visitor.getByText(/collie pair/)).toHaveCount(0);
   await visitor.close();
 
   const accepted = await exchange(provider.token({ email: email.toUpperCase() }));

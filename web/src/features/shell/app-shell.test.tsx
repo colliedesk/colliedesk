@@ -23,12 +23,12 @@ test('a signed-out visitor is told how to get back in instead of seeing an empty
 test('a signed-out visitor of a cloud instance gets a sign-in link instead of the self-host hint', () => {
   render(<AppShell signedOut signIn={<a href="/redeem">Sign in</a>}><p>inbox</p></AppShell>);
   expect(screen.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/redeem');
-  expect(screen.queryByText(/colliedesk pair/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/collie pair/)).not.toBeInTheDocument();
 });
 
 test('a signed-out visitor of a self-hosted instance keeps the pair hint', () => {
   render(<AppShell signedOut><p>inbox</p></AppShell>);
-  expect(screen.getByText(/colliedesk pair/)).toBeInTheDocument();
+  expect(screen.getByText(/collie pair/)).toBeInTheDocument();
 });
 
 test('the workspace and the signed-in address sit in an always-visible bar, not in a tooltip', () => {
