@@ -30,15 +30,20 @@ type emailChannelSettings struct {
 	SMTP        smtpStatus           `json:"smtp"`
 	FromPolicy  string               `json:"from_policy"`
 	SendingFrom *string              `json:"sending_from"`
+	// HostedAddress is where to forward mail on the hosted cloud; nil when that feature is off.
+	HostedAddress *string `json:"hosted_address"`
 }
 
-func (a *API) emailSettings(channel *domain.EmailChannel) emailChannelSettings {
+func (a *API) emailSettings(workspaceSlug string, channel *domain.EmailChannel) emailChannelSettings {
 	config := a.config.Email
 	smtp := config.SMTP
 	settings := emailChannelSettings{Channel: channel, InboundURL: a.config.Origin + inboundEmailPath, FromPolicy: config.FromPolicy,
 		SMTP: smtpStatus{Configured: smtp.Configured(), Host: smtp.Host, Port: smtp.Port, StartTLS: smtp.StartTLS, Authenticated: smtp.Username != ""}}
 	if settings.FromPolicy == "" {
 		settings.FromPolicy = email.FromPolicyVerified
+	}
+	if address := email.HostedAddress(workspaceSlug, config.HostedMailDomain); address != "" {
+		settings.HostedAddress = &address
 	}
 	if channel == nil || !smtp.Configured() {
 		return settings
@@ -64,7 +69,7 @@ func (a *API) verifyEmailDomain(response http.ResponseWriter, request *http.Requ
 		writeEmailStoreError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusOK, a.emailSettings(&channel))
+	writeJSON(response, http.StatusOK, a.emailSettings(principal(request).Workspace.Slug, &channel))
 }
 
 // writeEmailStoreError reports a missing resource as 404 and anything else as a server failure.
@@ -82,7 +87,7 @@ func (a *API) getEmailChannel(response http.ResponseWriter, request *http.Reques
 		writeInternalError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusOK, a.emailSettings(channel))
+	writeJSON(response, http.StatusOK, a.emailSettings(principal(request).Workspace.Slug, channel))
 }
 
 func (a *API) putEmailChannel(response http.ResponseWriter, request *http.Request) {
@@ -93,12 +98,23 @@ func (a *API) putEmailChannel(response http.ResponseWriter, request *http.Reques
 		writeError(response, http.StatusBadRequest, "invalid_request", "A plain support address such as support@example.com is required.")
 		return
 	}
+	if a.foreignHostedAddress(principal(request).Workspace.Slug, input.SupportAddress) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "This address belongs to another workspace's forwarding address.")
+		return
+	}
 	channel, err := a.store.UpsertEmailChannel(request.Context(), principal(request).Workspace.ID, input.SupportAddress)
 	if err != nil {
 		writeEmailStoreError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusOK, a.emailSettings(&channel))
+	writeJSON(response, http.StatusOK, a.emailSettings(principal(request).Workspace.Slug, &channel))
+}
+
+// foreignHostedAddress reports whether the address is on the hosted mail domain but not this workspace's own
+// subdomain, so a workspace cannot send its customers' replies into another workspace.
+func (a *API) foreignHostedAddress(workspaceSlug, address string) bool {
+	hosted := a.config.Email.HostedMailDomain
+	return email.UnderDomain(address, hosted) && strings.ToLower(email.Domain(address)) != workspaceSlug+"."+hosted
 }
 
 // plainAddress accepts a bare addr-spec only: no display name, no comments, no line breaks.

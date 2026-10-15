@@ -123,6 +123,7 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/contacts/{id}", auth.PermissionContactsRead},
 		{http.MethodGet, "/api/v1/agents", auth.PermissionAccessRead},
 		{http.MethodPatch, "/api/v1/workspace/timezone", auth.PermissionAccessWrite},
+		{http.MethodPatch, "/api/v1/workspace/slug", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/agents/me/timezone", auth.PermissionAuthenticated},
 		{http.MethodGet, "/api/v1/tags", auth.PermissionConversationsRead},
 		{http.MethodPost, "/api/v1/tags", auth.PermissionConversationsWrite},

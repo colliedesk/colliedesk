@@ -303,7 +303,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Accepts one raw RFC 5322 message from a forwarder (Cloudflare Email Worker, Postmark or SES forwarding, an MTA pipe). Authenticated by the workspace inbound secret, not by a session. Every accepted outcome is 200 so the forwarder does not retry; the `status` says what happened. The server-wide MAIL_FROM_INBOUND_SECRET is also accepted: it is used by the forwarder of MAIL_FROM_DOMAIN, and the workspace is taken from the reply+<token>@MAIL_FROM_DOMAIN recipient. Attachments, inline images and the gzip-compressed raw message are stored with the message; a storage failure returns 500 and stores nothing. */
+        /** @description Accepts one raw RFC 5322 message from a forwarder (Cloudflare Email Worker, Postmark or SES forwarding, an MTA pipe). Authenticated by the workspace inbound secret, not by a session. Every accepted outcome is 200 so the forwarder does not retry; the `status` says what happened. The server-wide MAIL_FROM_INBOUND_SECRET is also accepted: it is used by the forwarder of MAIL_FROM_DOMAIN, and the workspace is taken from the reply+<token>@MAIL_FROM_DOMAIN recipient. On the hosted cloud (HOSTED_MAIL_DOMAIN set) the same secret also carries mail for `<local>@<workspace slug>.<HOSTED_MAIL_DOMAIN>`: the workspace is taken from the topmost `X-Original-To` header, which the forwarder writes from the envelope recipient; To and Cc are never used. A recipient under the hosted domain that matches no workspace with a connected email channel is answered 404 so the forwarder rejects the message. Attachments, inline images and the gzip-compressed raw message are stored with the message; a storage failure returns 500 and stores nothing. */
         post: operations["receiveInboundEmail"];
         delete?: never;
         options?: never;
@@ -413,6 +413,23 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateWorkspaceTimezone"];
+        trace?: never;
+    };
+    "/api/v1/workspace/slug": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Rename the workspace slug. On the hosted cloud the slug is the subdomain of the forwarding address (`hosted_address`), so mail sent to the old address is rejected from this moment. A slug is 1 to 63 lowercase letters, digits or inner hyphens and not a reserved name such as `app`, `www` or `mail`. */
+        patch: operations["updateWorkspaceSlug"];
         trace?: never;
     };
     "/api/v1/agents/me/timezone": {
@@ -838,6 +855,8 @@ export interface components {
             authenticated: boolean;
         };
         EmailChannelSettings: {
+            /** @description Forwarding address of this workspace on the hosted cloud, `support@<slug>.<HOSTED_MAIL_DOMAIN>`. Null when the server has no HOSTED_MAIL_DOMAIN (self-host) or the slug cannot be a mail subdomain; change the slug with `PATCH /api/v1/workspace/slug`. */
+            hosted_address: string | null;
             /**
              * @description `verified`: send as the support address only after domain verification. `any`: always (operator owns the relay).
              * @enum {string}
@@ -1627,6 +1646,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             413: components["responses"]["PayloadTooLarge"];
             429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalError"];
@@ -1815,6 +1835,36 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    updateWorkspaceSlug: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    slug: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Updated workspace */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workspace"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
         };
     };
     updateAgentTimezone: {

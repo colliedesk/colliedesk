@@ -41,3 +41,23 @@ func TestConfigFromEnvReadsThePlatformInboundSecret(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigFromEnvReadsTheHostedMailDomain(t *testing.T) {
+	secret := "0123456789abcdef0123456789abcdef" // gitleaks:allow (test placeholder)
+	env := map[string]string{"HOSTED_MAIL_DOMAIN": "CollieDesk.com", "MAIL_FROM_INBOUND_SECRET": secret}
+	config, err := email.ConfigFromEnv(func(key string) string { return env[key] })
+	if err != nil || config.HostedMailDomain != "colliedesk.com" || config.PlatformInboundSecret != secret {
+		t.Fatalf("hosted domain not read: %+v %v", config, err)
+	}
+	if config, err = email.ConfigFromEnv(func(string) string { return "" }); err != nil || config.HostedMailDomain != "" {
+		t.Fatalf("feature must default to off: %+v %v", config, err)
+	}
+	for name, bad := range map[string]map[string]string{
+		"no secret":  {"HOSTED_MAIL_DOMAIN": "colliedesk.com"},
+		"bad domain": {"HOSTED_MAIL_DOMAIN": "not a domain", "MAIL_FROM_INBOUND_SECRET": secret},
+	} {
+		if _, err := email.ConfigFromEnv(func(key string) string { return bad[key] }); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+}

@@ -7,18 +7,27 @@ interface EmailChannelSectionProps {
   settings?: EmailChannelSettings;
   timezone: string;
   canManage: boolean;
+  workspaceSlug?: string;
   createdSecret?: string;
   onSave?: (address: string) => void;
+  onSaveSlug?: (slug: string) => void;
   onRotate?: () => void;
   onDisconnect?: () => void;
   onVerifyDomain?: () => void;
 }
 
-export function EmailChannelSection({ settings, timezone, canManage, createdSecret, onSave, onRotate, onDisconnect, onVerifyDomain }: EmailChannelSectionProps) {
+export function EmailChannelSection({ settings, timezone, canManage, workspaceSlug, createdSecret, onSave, onSaveSlug, onRotate, onDisconnect, onVerifyDomain }: EmailChannelSectionProps) {
   const channel = settings?.channel ?? null;
   const [address, setAddress] = useState(channel?.support_address ?? '');
   useEffect(() => setAddress(channel?.support_address ?? ''), [channel?.support_address]);
+  const [slug, setSlug] = useState(workspaceSlug ?? '');
+  useEffect(() => setSlug(workspaceSlug ?? ''), [workspaceSlug]);
+  const [copied, setCopied] = useState(false);
   const smtp = settings?.smtp;
+  const hostedAddress = settings?.hosted_address ?? null;
+  const copyAddress = () => {
+    if (hostedAddress) void navigator.clipboard.writeText(hostedAddress).then(() => setCopied(true));
+  };
   return (
     <section className="settings-card" aria-labelledby="email-channel-heading">
       <div className="section-heading"><h2 id="email-channel-heading">{messages.emailChannel}</h2><p>{messages.emailChannelDescription}</p></div>
@@ -29,13 +38,24 @@ export function EmailChannelSection({ settings, timezone, canManage, createdSecr
               <button className="primary-action" type="submit">{messages.saveSupportAddress}</button>
             </form>
           : <p><strong>{messages.supportAddress}: </strong><span>{channel ? channel.support_address : messages.emailNotConnected}</span></p>}
-        {settings && <label className="invite-link"><span className="field-label">{messages.inboundURL}</span><input readOnly value={settings.inbound_url} /></label>}
-        {channel && <p className="muted-copy">{channel.secret_set && channel.secret_rotated_at
+        {hostedAddress && <div className="email-channel-forwarding">
+          <label className="invite-link"><span className="field-label">{messages.forwardingAddress}</span><input readOnly value={hostedAddress} /></label>
+          <span className="button-row"><button type="button" onClick={copyAddress}>{messages.copyForwardingAddress}</button>{copied && <span role="status">{messages.addressCopied}</span>}</span>
+          <p className="muted-copy">{messages.forwardingHelp}</p>
+          <ul className="muted-copy"><li>{messages.forwardingGmail}</li><li>{messages.forwardingOutlook}</li></ul>
+          {canManage && <form className="form-row" onSubmit={(event) => { event.preventDefault(); onSaveSlug?.(slug.trim()); }}>
+            <label className="field"><span>{messages.workspaceAddressName}</span><input value={slug} onChange={(event) => setSlug(event.target.value)} required /></label>
+            <button type="submit">{messages.saveAddressName}</button>
+            <small>{messages.addressNameWarning}</small>
+          </form>}
+        </div>}
+        {settings && !hostedAddress && <label className="invite-link"><span className="field-label">{messages.inboundURL}</span><input readOnly value={settings.inbound_url} /></label>}
+        {channel && !hostedAddress && <p className="muted-copy">{channel.secret_set && channel.secret_rotated_at
           ? messages.inboundSecretSet(formatDate(channel.secret_rotated_at, timezone)) : messages.inboundSecretMissing}</p>}
-        {canManage && createdSecret && <label className="invite-link"><span className="field-label">{messages.inboundSecret}</span>
+        {canManage && !hostedAddress && createdSecret && <label className="invite-link"><span className="field-label">{messages.inboundSecret}</span>
           <input readOnly value={createdSecret} /><small>{messages.inboundSecretNotice}</small></label>}
         {canManage && channel && <span className="button-row">
-          <button type="button" onClick={() => onRotate?.()}>{channel.secret_set ? messages.rotateInboundSecret : messages.createInboundSecret}</button>
+          {!hostedAddress && <button type="button" onClick={() => onRotate?.()}>{channel.secret_set ? messages.rotateInboundSecret : messages.createInboundSecret}</button>}
           <button type="button" className="danger-action" onClick={() => onDisconnect?.()}>{messages.disconnectEmail}</button>
         </span>}
         {channel && (channel.domain_verified_at
