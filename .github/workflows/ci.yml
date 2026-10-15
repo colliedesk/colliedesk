@@ -195,10 +195,18 @@ jobs:
           push: true
           tags: ghcr.io/colliedesk/colliedesk:sha-${{ github.sha }}
 
+  # compose.yaml as a contributor or "From a clone" self-hoster runs it.
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the stack from compose.yaml and reach the server
+        run: sh tests/compose-smoke.sh
+
   # The one check to watch: adding or splitting jobs above never renames it.
   ci-ok:
     if: ${{ !cancelled() }}
-    needs: [go, web, e2e, onboarding, image]
+    needs: [go, web, e2e, onboarding, image, compose-smoke]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -66,7 +66,7 @@ func (r *run) classifyTickets(ctx context.Context) error {
 			todo = append(todo, id)
 		}
 	}
-	results := r.probeAll(ctx, todo)
+	results := r.probeAll(ctx, todo, true)
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ func (r *run) classifyTickets(ctx context.Context) error {
 			batch = append(batch, next)
 			next++
 		}
-		results := r.probeAll(ctx, batch)
+		results := r.probeAll(ctx, batch, false)
 		if err := ctx.Err(); err != nil {
 			return err
 		}
