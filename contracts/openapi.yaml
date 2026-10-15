@@ -468,6 +468,33 @@ paths:
         '413': {$ref: '#/components/responses/PayloadTooLarge'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
         '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/channels/email/inbound/recipient:
+    post:
+      operationId: checkInboundRecipient
+      security: [{inboundSecret: []}]
+      x-permission: channels:inbound
+      description: >
+        Asked by the hosted-cloud MTA before it accepts RCPT TO, with the server-wide
+        MAIL_FROM_INBOUND_SECRET (a workspace secret is refused). 204 when `POST
+        /api/v1/channels/email/inbound` would route mail for this address to a workspace with a connected
+        email channel, 404 otherwise. Refusing in the SMTP session means an address nobody owns is never
+        bounced afterwards to a sender that may be forged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [recipient]
+              properties:
+                recipient: {type: string, description: Envelope recipient (RCPT TO) address}
+      responses:
+        '204': {description: Mail for this address would be accepted}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
   /api/v1/conversations/{id}/time-entries:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:

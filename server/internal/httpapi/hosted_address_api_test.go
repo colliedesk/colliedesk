@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -258,5 +259,55 @@ func TestSupportAddressMayUseTheHostedDomainItself(t *testing.T) {
 	response := request(t, api, http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "support@" + hostedDomain}, admin, nil)
 	if response.Code != http.StatusOK {
 		t.Fatalf("support address at the hosted domain: status=%d body=%s, want 200", response.Code, response.Body.String())
+	}
+}
+
+const recipientPath = "/api/v1/channels/email/inbound/recipient"
+
+func recipientCheck(t *testing.T, api http.Handler, secret, recipient string) int {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, recipientPath, strings.NewReader(`{"recipient":"`+recipient+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	if secret != "" {
+		req.Header.Set("X-Colliedesk-Inbound-Secret", secret)
+	}
+	return serve(api, req).Code
+}
+
+// The MTA asks before it accepts RCPT TO, so an address nobody owns is refused in the SMTP session and
+// never bounced afterwards to a sender that may be forged. The answer must match what inbound accepts.
+func TestRecipientCheckAnswersLikeHostedInbound(t *testing.T) {
+	api, service, _, _ := testAPIWithConfig(t, hostedConfig)
+	admin := createSession(t, api, service, "Hosted Zeta", "admin@hosted-zeta.example.com")
+	createSession(t, api, service, "Hosted Eta", "admin@hosted-eta.example.com")
+	secret := connectEmail(t, api, admin, "support@zeta.example.com")
+
+	if code := recipientCheck(t, api, platformSecret, "Support@Hosted-Zeta."+hostedDomain); code != http.StatusNoContent {
+		t.Fatalf("connected workspace: status=%d, want 204", code)
+	}
+	if code := recipientCheck(t, api, platformSecret, "billing+x@hosted-zeta."+hostedDomain); code != http.StatusNoContent {
+		t.Fatalf("any local part of a connected workspace: status=%d, want 204", code)
+	}
+	for name, recipient := range map[string]string{
+		"unknown slug":                          "support@nobody." + hostedDomain,
+		"workspace without a connected channel": "support@hosted-eta." + hostedDomain,
+		"reserved slug":                         "support@app." + hostedDomain,
+		"nested subdomain":                      "support@x.hosted-zeta." + hostedDomain,
+		"apex":                                  "support@" + hostedDomain,
+		"another domain":                        "support@hosted-zeta.elsewhere.example",
+		"not an address":                        "hosted-zeta." + hostedDomain,
+	} {
+		if code := recipientCheck(t, api, platformSecret, recipient); code != http.StatusNotFound {
+			t.Errorf("%s: status=%d, want 404", name, code)
+		}
+	}
+	for name, given := range map[string]string{"no secret": "", "wrong secret": platformSecret + "x", "workspace secret": secret} {
+		if code := recipientCheck(t, api, given, "support@hosted-zeta."+hostedDomain); code != http.StatusUnauthorized {
+			t.Errorf("%s: status=%d, want 401", name, code)
+		}
+	}
+	off, _, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.Email.PlatformInboundSecret = platformSecret })
+	if code := recipientCheck(t, off, platformSecret, "support@hosted-zeta."+hostedDomain); code != http.StatusNotFound {
+		t.Fatalf("hosted addresses off: status=%d, want 404", code)
 	}
 }

@@ -57,6 +57,10 @@ func TestHostedSlug(t *testing.T) {
 		"other domain":   {"support@acme.example.com", ""},
 		"lookalike":      {"support@acme.evilcolliedesk.com", ""},
 		"reserved":       {"support@app.colliedesk.com", ""},
+		"mail sender":    {"support@send.colliedesk.com", ""},
+		"return path":    {"support@rsend.colliedesk.com", ""},
+		"resend":         {"support@resend.colliedesk.com", ""},
+		"bounce host":    {"support@bounce.colliedesk.com", ""},
 		"no at":          {"acme.colliedesk.com", ""},
 	} {
 		if got := email.HostedSlug(tc.recipient, "colliedesk.com"); got != tc.want {
