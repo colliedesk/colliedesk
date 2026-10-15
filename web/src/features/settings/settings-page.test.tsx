@@ -6,14 +6,14 @@ test('creates an invite and exposes its one-time URL', () => {
   const onCreateInvite = vi.fn();
   render(<SettingsPage sessions={[]} invites={[]} timezone="UTC"
     canCreateInvites
-    createdInviteUrl="https://desk.example.com/redeem?token=once"
+    createdInviteUrl="https://desk.example.com/sign-in?token=once"
     onCreateInvite={onCreateInvite} />);
 
   fireEvent.change(screen.getByLabelText(/invite email/i), { target: { value: 'agent@example.com' } });
   fireEvent.click(screen.getByRole('button', { name: /create invite/i }));
 
   expect(onCreateInvite).toHaveBeenCalledWith('agent@example.com', 'agent');
-  expect(screen.getByRole('textbox', { name: /one-time invite link/i })).toHaveValue('https://desk.example.com/redeem?token=once');
+  expect(screen.getByRole('textbox', { name: /one-time invite link/i })).toHaveValue('https://desk.example.com/sign-in?token=once');
 });
 
 test('does not offer invite creation without admin permission', () => {
@@ -91,4 +91,10 @@ test('shows why an invite was refused next to the invite form', () => {
   render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canCreateInvites
     inviteError="The trial allows 10 agents, pending invites included." />);
   expect(screen.getByRole('alert')).toHaveTextContent(/trial allows 10 agents/i);
+});
+
+test('shows the loading status while settings data is pending, without the forms', () => {
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" loading canCreateInvites />);
+  expect(screen.getByRole('status')).toHaveTextContent('Loading workspace…');
+  expect(screen.queryByRole('button', { name: /create invite/i })).not.toBeInTheDocument();
 });

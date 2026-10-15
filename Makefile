@@ -18,7 +18,7 @@ test:
 build:
 	cd web && corepack pnpm build
 	mkdir -p .cache
-	cd server && $(GO_ENV) go build -o ../.cache/colliedesk ./cmd/colliedesk
+	cd server && $(GO_ENV) go build -o ../.cache/collie ./cmd/collie
 
 # e2e needs PostgreSQL and Mailpit: docker compose --profile test up -d postgres mailpit
 # E2E_ARGS selects tests, for example E2E_ARGS='--grep @onboarding'.

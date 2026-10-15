@@ -184,6 +184,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .invite-form { display: grid; grid-template-columns: minmax(0, 1fr) 9rem auto; align-items: end; gap: var(--space-3); }
 .button-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .invite-link { display: grid; gap: var(--space-1); }
+.confirm-panel { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--danger); border-radius: var(--radius); }
 .invite-link small { color: var(--text-3); font-size: var(--fs-label); }
 .email-channel-dns { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-0); padding: var(--space-4); }
 .data-list { border-top: 1px solid var(--line); }

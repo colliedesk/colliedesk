@@ -16,16 +16,19 @@ interface ConversationListProps {
   onPage?: (page: number) => void;
   filtered?: boolean;
   loading?: boolean;
+  // refreshing: a refetch is running while the previous rows stay on screen.
+  refreshing?: boolean;
   failed?: boolean;
   onRetry?: () => void;
+  onClearFilters?: () => void;
   canManage?: boolean;
   onOpenSettings?: () => void;
 }
 
 const visibleTags = 2;
 
-export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, loading = false,
-  failed = false, onRetry, canManage = false, onOpenSettings }: ConversationListProps) {
+export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, loading = false, refreshing = false,
+  failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings }: ConversationListProps) {
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
   const now = useNow(timezone);
   const settled = !loading && !failed;
@@ -36,7 +39,8 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
     onOpenSettings();
   }}>{label}</a>;
   return (
-    <div className="conversation-scroll">
+    <div className="conversation-scroll" aria-busy={refreshing}>
+      {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
       {brandNew && <section className="get-started" aria-label={messages.getStarted}>
         <h2>{messages.noConversationsYet}</h2>
         <p className="muted-copy">{messages.getStartedExplanation}</p>
@@ -48,7 +52,8 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
       </section>}
       {failed && <div className="empty-copy"><p role="alert" className="error-copy">{messages.conversationsFailed}</p>
         <button type="button" onClick={() => onRetry?.()}>{messages.tryAgain}</button></div>}
-      {items.length === 0 && !brandNew && settled && <p className="empty-copy">{messages.noConversations}</p>}
+      {items.length === 0 && !brandNew && settled && <div className="empty-copy"><p>{messages.noConversations}</p>
+        {filtered && onClearFilters && <button type="button" onClick={onClearFilters}>{messages.clearFilters}</button>}</div>}
       {items.map((item, index) => {
         const group = dayGroup(item.updated_at, timezone, now);
         const startsGroup = index === 0 || group !== dayGroup(items[index - 1].updated_at, timezone, now);

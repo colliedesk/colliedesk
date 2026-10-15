@@ -42,4 +42,23 @@ test('a screen reader hears which conversation is open, and only that one', () =
   render(<ConversationList items={[row('2026-10-15T09:05:00Z'), other]} selectedId={other.id} timezone="UTC" page={1} hasNextPage={false} />);
   expect(screen.getByRole('button', { name: /other request/i })).toHaveAttribute('aria-current', 'true');
   expect(screen.getByRole('button', { name: /example request/i })).not.toHaveAttribute('aria-current');
+
+test('the first load shows a loading status, never "No conversations" or the get-started guide', () => {
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} loading />);
+  expect(screen.getByRole('status')).toHaveTextContent('Loading workspace…');
+  expect(screen.queryByText(/no conversations/i)).not.toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: /get started/i })).not.toBeInTheDocument();
+});
+
+test('a refetch keeps the previous rows, marks the list busy and shows no loading status', () => {
+  vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+  render(<ConversationList items={[row('2026-10-15T09:05:00Z')]} timezone="UTC" page={1} hasNextPage={false} refreshing />);
+  expect(screen.getByRole('button', { name: /example request/i })).toBeInTheDocument();
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(document.querySelector('.conversation-scroll')).toHaveAttribute('aria-busy', 'true');
+});
+
+test('a settled list is not marked busy', () => {
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} filtered />);
+  expect(document.querySelector('.conversation-scroll')).toHaveAttribute('aria-busy', 'false');
 });
