@@ -186,6 +186,26 @@ and workspaces without an email channel never reach it.
 - There is no Cc support yet, so nothing to restrict. When reply Cc lands, it must be refused in
   trial unless the domain is verified, with the same `trial_outbound_restricted` code.
 
+### Storage cap
+
+Trial and locked (`none`) workspaces may hold 2 GiB (`domain.TrialStorageBytes`, 2147483648) of
+attachments; paid plans and self-hosted have no cap. Used bytes are `sum(attachments.size)` over
+messages with `origin IS NULL`: files of imported (Freshdesk) messages never count, because an import
+is history the customer already owned. Code: `Store.CheckStorage` in `store/plan-limits.go`.
+
+- Reaching the cap exactly is allowed; one byte over is refused with `*domain.StorageLimitError`
+  (HTTP 403 `storage_limit_reached`, nothing stored).
+- Inbound mail checks `used + raw size + decoded file sizes` before anything is written. This is an
+  upper bound, because the stored `.eml.gz` is smaller than the raw message. The 403 is a permanent
+  failure for the Worker and the pipe, like `mailbox_closed`: the mail bounces.
+- No lock is taken, so inbound is never serialized: messages that arrive at the same moment can pass
+  the cap together by at most one message each.
+- Any path that stores a new attachment must call `CheckStorage` in its transaction before writing the
+  bytes and map the error through `writeStoreError` (it answers 403 with the same code). Web reply
+  attachments, when they land, are one such path.
+- `GET /billing` reports `usage.storage_bytes`, `limits.storage_bytes` (null when uncapped) and
+  `limits.storage_warn_bytes` (80%, 1717986918), the usage at which the web app should warn.
+
 ### Clock
 
 `httpapi.Config.Now` feeds the store and the auth service. Tests move it across a month boundary

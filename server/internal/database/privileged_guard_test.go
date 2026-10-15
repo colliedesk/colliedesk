@@ -22,6 +22,7 @@ var privilegedCallSites = []string{
 	"internal/auth/links.go: PrivilegeLinkToken",
 	"internal/auth/service.go: PrivilegeCreateWorkspace",
 	"internal/auth/sessions.go: PrivilegeSessionToken",
+	"internal/auth/signup.go: PrivilegeCreateWorkspace",
 	"internal/database/migrate.go: PrivilegeMigrate",
 	"internal/database/scope.go: PrivilegeRequestLogin",
 	"internal/database/scope.go: PrivilegeWorkspaceBySlug",

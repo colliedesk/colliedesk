@@ -19,10 +19,12 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type cloudAuthFixture struct {
 	api          http.Handler
+	pool         *pgxpool.Pool
 	service      *auth.Service
 	issuer       string
 	key          *rsa.PrivateKey
@@ -37,6 +39,13 @@ func newCloudAuthFixture(t *testing.T) *cloudAuthFixture {
 }
 
 func newCloudAuthFixtureWithEmailClaim(t *testing.T, emailClaim string) *cloudAuthFixture {
+	t.Helper()
+	return newCloudAuthFixtureWith(t, emailClaim, nil)
+}
+
+// newCloudAuthFixtureWith is the fixture with the server config adjusted by mutate, for example to
+// switch billing on or move the clock.
+func newCloudAuthFixtureWith(t *testing.T, emailClaim string, mutate func(*httpapi.Config)) *cloudAuthFixture {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -56,11 +65,16 @@ func newCloudAuthFixtureWithEmailClaim(t *testing.T, emailClaim string) *cloudAu
 	if err := database.Migrate(context.Background(), pool); err != nil {
 		t.Fatal(err)
 	}
+	fixture.pool = pool
 	fixture.service = auth.New(pool, testOrigin)
-	fixture.api = httpapi.New(pool, httpapi.Config{Origin: testOrigin, CloudAuth: cloudauth.Config{
+	config := httpapi.Config{Origin: testOrigin, CloudAuth: cloudauth.Config{
 		Issuer: fixture.issuer, JWKSURL: fixture.jwks.URL, AuthorizedParties: []string{testOrigin}, PublishableKey: "pk_test_example",
 		EmailClaim: emailClaim,
-	}})
+	}}
+	if mutate != nil {
+		mutate(&config)
+	}
+	fixture.api = httpapi.New(pool, config)
 	return fixture
 }
 

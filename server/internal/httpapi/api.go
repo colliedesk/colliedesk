@@ -2,8 +2,10 @@ package httpapi
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -41,6 +43,11 @@ type Config struct {
 	// ExportTimeout is the longest one export may run in total (default 2 h), however slowly the
 	// client keeps reading.
 	ExportTimeout time.Duration
+	// TrustedProxies are the reverse proxies whose X-Forwarded-For is believed when finding the
+	// client address of a sign-up (TRUSTED_PROXIES). Empty trusts none: the peer address is the client.
+	TrustedProxies []netip.Prefix
+	// Random is the entropy for generated workspace slug suffixes; nil uses crypto/rand.
+	Random io.Reader
 }
 
 type Route struct {
@@ -92,6 +99,9 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports),
 		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits),
 		store: store.NewWithDB(db).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits)}
+	if config.Random != nil {
+		api.auth = api.auth.WithRandom(config.Random)
+	}
 	if config.CloudAuth.Enabled() {
 		api.cloud = cloudauth.New(config.CloudAuth)
 	}
@@ -112,6 +122,7 @@ func Routes() []Route {
 	return []Route{
 		{http.MethodGet, "/api/v1/config", auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/auth/cloud/exchange", auth.PermissionPublic},
+		{http.MethodPost, cloudSignupPath, auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/auth/redeem", auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/auth/logout", auth.PermissionAuthenticated},
 		{http.MethodGet, "/api/v1/auth/me", auth.PermissionAuthenticated},

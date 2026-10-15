@@ -51,6 +51,45 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/CloudWorkspaceChoices'}
+  /api/v1/auth/cloud/signup:
+    post:
+      operationId: signUpCloud
+      summary: Start a cloud trial
+      description: >
+        Creates a workspace on a 14 day trial with the verified email of the identity provider's bearer
+        token as its first admin, and signs that person in (session cookie, as for the cloud exchange).
+        The route exists only on the hosted cloud, where cloud sign-in and billing are both configured;
+        everywhere else it answers 404. One trial per mailbox: the email is lowercased, a `+tag` is dropped
+        and Gmail dots are ignored, so `Ana.B+x@gmail.com` and `anab@googlemail.com` are the same person.
+        At most 3 sign-ups per client address in a rolling 24 hours.
+      security:
+        - bearerAuth: []
+      x-permission: public
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [workspace_name]
+              additionalProperties: false
+              properties:
+                workspace_name: {type: string, minLength: 2, maxLength: 60, description: 'Trimmed; 2 to 60 characters.'}
+      responses:
+        '201': {$ref: '#/components/responses/Redeemed'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: >
+            Error code `trial_already_used` (this mailbox already started a trial: sign in instead) or
+            `slug_unavailable` (no address was free for the name: try another).
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '422': {$ref: '#/components/responses/NameNotAllowed'}
+        '429':
+          description: Error code `rate_limited`. This client address already started 3 trials in the last 24 hours.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/auth/redeem:
     post:
       operationId: redeemLink
@@ -579,6 +618,7 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/NameNotAllowed'}
   /api/v1/agents/me/timezone:
     patch:
       operationId: updateAgentTimezone
@@ -865,10 +905,18 @@ components:
         The workspace's trial or subscription ended (error code `workspace_locked`). Nothing was read
         or changed. Choose a plan in billing, or export the data; the same request works after payment.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    NameNotAllowed:
+      description: >
+        The name contains a well-known brand (error code `name_not_allowed`), for example a payment or
+        mail provider. On the hosted cloud only; a self-hosted server accepts any name. Nothing was
+        created or changed. The match is on whole words, so "Pineapple" is fine and "PayPal Support" is not.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     MailboxClosed:
       description: >
-        The workspace is locked and no longer accepts new mail (error code `mailbox_closed`). This is
-        permanent for the sender: the forwarder bounces the message instead of retrying.
+        The workspace no longer accepts this mail. Error code `mailbox_closed`: the workspace is locked.
+        Error code `storage_limit_reached`: a trial or locked workspace would pass its 2 GiB attachment
+        storage limit (imported files do not count). Both are permanent for the sender: the forwarder
+        bounces the message instead of retrying, and nothing was stored.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error401:
       description: Authentication failed
@@ -931,14 +979,26 @@ components:
             cancel the extra one in the billing portal.
         limits:
           type: object
-          required: [agents]
+          required: [agents, storage_bytes, storage_warn_bytes]
           properties:
             agents: {type: integer, description: 'Seats of the plan; 0 when locked.'}
+            storage_bytes:
+              type: [integer, 'null']
+              format: int64
+              description: Attachment storage cap in bytes (2 GiB) on the trial and when locked; null on paid plans and self-hosted, which have none.
+            storage_warn_bytes:
+              type: [integer, 'null']
+              format: int64
+              description: Usage at which the web app warns, 80% of `storage_bytes`; null when there is no cap.
         usage:
           type: object
-          required: [agents, pending_invites, replies_last_24h]
+          required: [agents, pending_invites, replies_last_24h, storage_bytes]
           properties:
             agents: {type: integer}
+            storage_bytes:
+              type: integer
+              format: int64
+              description: Attachment bytes counted against `limits.storage_bytes`; files of imported messages are not counted.
             replies_last_24h:
               type: integer
               description: Emailed replies of the last 24 hours that count against the trial cap of 200; 0 on other plans.

@@ -151,3 +151,35 @@ func repliesLast24h(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 	}
 	return sent, nil
 }
+
+// ownStorageBytes is what the storage cap counts: the bytes of every attachment except those of
+// imported messages, which are history carried over from another desk and never count.
+const ownStorageBytes = `SELECT COALESCE(sum(a.size),0)::bigint FROM attachments a
+	JOIN messages m ON m.workspace_id=a.workspace_id AND m.id=a.message_id
+	WHERE a.workspace_id=$1 AND m.origin IS NULL`
+
+// CheckStorage returns a *domain.StorageLimitError when storing addBytes more would pass the storage
+// cap of the workspace's plan. Reaching the cap exactly is allowed. It reads the plan and the usage
+// inside tx and takes no lock, so inbound mail is never serialized: two messages that arrive together
+// can together pass the cap by at most one message. Every path that stores a new attachment calls it
+// before writing the bytes. Paid and self-hosted workspaces have no cap.
+func (s *Store) CheckStorage(ctx context.Context, tx pgx.Tx, workspaceID string, addBytes int64, now time.Time) error {
+	if !s.limits {
+		return nil
+	}
+	access, err := workspaceAccess(ctx, tx, workspaceID, now)
+	if err != nil {
+		return err
+	}
+	if !domain.StorageCapped(access.Plan) {
+		return nil
+	}
+	var used int64
+	if err := tx.QueryRow(ctx, ownStorageBytes, workspaceID).Scan(&used); err != nil {
+		return fmt.Errorf("sum attachment storage: %w", err)
+	}
+	if limit := domain.TrialStorageBytes; used+addBytes > limit {
+		return &domain.StorageLimitError{Used: used, Adding: addBytes, Limit: limit}
+	}
+	return nil
+}

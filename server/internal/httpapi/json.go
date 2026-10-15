@@ -44,12 +44,15 @@ func writeStoreError(response http.ResponseWriter, err error) {
 	writeError(response, http.StatusBadRequest, "invalid_request", "The request could not be completed.")
 }
 
-// writePlanLimit answers 402 when err is a plan limit or a locked workspace, and 403 or 429 when the trial refuses a reply, and reports whether it did.
+// writePlanLimit answers 402 when err is a plan limit or a locked workspace, 403 when the storage cap refuses a file, and 403 or 429 when the trial refuses a reply, and reports whether it did.
 func writePlanLimit(response http.ResponseWriter, err error) bool {
 	var limit *domain.PlanLimitError
 	var locked *domain.LockedError
 	var outbound *domain.TrialOutboundError
+	var storage *domain.StorageLimitError
 	switch {
+	case errors.As(err, &storage):
+		writeError(response, http.StatusForbidden, "storage_limit_reached", storage.Error())
 	case errors.As(err, &outbound):
 		writeTrialOutbound(response, outbound)
 	case errors.As(err, &limit):

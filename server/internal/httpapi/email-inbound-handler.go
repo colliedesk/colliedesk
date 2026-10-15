@@ -91,6 +91,9 @@ func (a *API) receiveInboundEmail(response http.ResponseWriter, request *http.Re
 		writeError(response, http.StatusForbidden, "mailbox_closed", "This mailbox is not accepting new mail.")
 		return
 	}
+	if writePlanLimit(response, err) {
+		return
+	}
 	if err != nil {
 		writeInternalError(response, err)
 		return

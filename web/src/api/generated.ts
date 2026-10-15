@@ -36,6 +36,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/cloud/signup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a cloud trial
+         * @description Creates a workspace on a 14 day trial with the verified email of the identity provider's bearer token as its first admin, and signs that person in (session cookie, as for the cloud exchange). The route exists only on the hosted cloud, where cloud sign-in and billing are both configured; everywhere else it answers 404. One trial per mailbox: the email is lowercased, a `+tag` is dropped and Gmail dots are ignored, so `Ana.B+x@gmail.com` and `anab@googlemail.com` are the same person. At most 3 sign-ups per client address in a rolling 24 hours.
+         */
+        post: operations["signUpCloud"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/redeem": {
         parameters: {
             query?: never;
@@ -613,9 +633,24 @@ export interface components {
             limits: {
                 /** @description Seats of the plan; 0 when locked. */
                 agents: number;
+                /**
+                 * Format: int64
+                 * @description Attachment storage cap in bytes (2 GiB) on the trial and when locked; null on paid plans and self-hosted, which have none.
+                 */
+                storage_bytes: number | null;
+                /**
+                 * Format: int64
+                 * @description Usage at which the web app warns, 80% of `storage_bytes`; null when there is no cap.
+                 */
+                storage_warn_bytes: number | null;
             };
             usage: {
                 agents: number;
+                /**
+                 * Format: int64
+                 * @description Attachment bytes counted against `limits.storage_bytes`; files of imported messages are not counted.
+                 */
+                storage_bytes: number;
                 /** @description Emailed replies of the last 24 hours that count against the trial cap of 200; 0 on other plans. */
                 replies_last_24h: number;
                 /** @description Unused, unrevoked, unexpired invites. Each holds an agent seat, so agents plus pending invites is compared with `limits.agents`. */
@@ -1069,7 +1104,16 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description The workspace is locked and no longer accepts new mail (error code `mailbox_closed`). This is permanent for the sender: the forwarder bounces the message instead of retrying. */
+        /** @description The name contains a well-known brand (error code `name_not_allowed`), for example a payment or mail provider. On the hosted cloud only; a self-hosted server accepts any name. Nothing was created or changed. The match is on whole words, so "Pineapple" is fine and "PayPal Support" is not. */
+        NameNotAllowed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The workspace no longer accepts this mail. Error code `mailbox_closed`: the workspace is locked. Error code `storage_limit_reached`: a trial or locked workspace would pass its 2 GiB attachment storage limit (imported files do not count). Both are permanent for the sender: the forwarder bounces the message instead of retrying, and nothing was stored. */
         MailboxClosed: {
             headers: {
                 [name: string]: unknown;
@@ -1161,6 +1205,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CloudWorkspaceChoices"];
+                };
+            };
+        };
+    };
+    signUpCloud: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Trimmed; 2 to 60 characters. */
+                    workspace_name: string;
+                };
+            };
+        };
+        responses: {
+            201: components["responses"]["Redeemed"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description Error code `trial_already_used` (this mailbox already started a trial: sign in instead) or `slug_unavailable` (no address was free for the name: try another). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            422: components["responses"]["NameNotAllowed"];
+            /** @description Error code `rate_limited`. This client address already started 3 trials in the last 24 hours. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -1931,6 +2017,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["NameNotAllowed"];
         };
     };
     updateAgentTimezone: {

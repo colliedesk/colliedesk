@@ -73,7 +73,9 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   500, so the forwarder retries.
 - **Inline images become `data:` URIs** in `body_html` (5 MiB budget per message). The sandboxed
   original allows only `data:` images, so nothing is fetched from the network.
-- **Limits before storage:** 25 MiB request body, 100 files; both are 413.
+- **Limits before storage:** 25 MiB request body, 100 files; both are 413. A trial or locked workspace
+  also has a 2 GiB attachment cap: mail that would pass it is 403 `storage_limit_reached` (a permanent
+  failure like `mailbox_closed`; see `billing.md`, Storage cap).
 - **Platform domain inbound.** `MAIL_FROM_INBOUND_SECRET` authenticates the forwarder of
   `MAIL_FROM_DOMAIN` on the same endpoint. The workspace comes from the conversation of the
   `reply+<token>@MAIL_FROM_DOMAIN` recipient (tokens are unique and 128-bit). Only that domain

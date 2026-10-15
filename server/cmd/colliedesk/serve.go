@@ -55,6 +55,10 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err := db.Verify(ctx); err != nil {
 		return err
 	}
+	trustedProxies, err := httpapi.ParseTrustedProxies(os.Getenv("TRUSTED_PROXIES"))
+	if err != nil {
+		return err
+	}
 	storage, err := attachmentStorage()
 	if err != nil {
 		return err
@@ -70,7 +74,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	}
 	server := &http.Server{
 		Addr:              *address,
-		Handler:           webui.Handler(httpapi.New(pool, httpapi.Config{Origin: origin, CloudAuth: cloudAuthConfig(), Email: emailConfig, Attachments: storage, RequestPool: requestPool, Billing: billing})),
+		Handler:           webui.Handler(httpapi.New(pool, httpapi.Config{Origin: origin, CloudAuth: cloudAuthConfig(), Email: emailConfig, Attachments: storage, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies})),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	done := make(chan error, 1)
