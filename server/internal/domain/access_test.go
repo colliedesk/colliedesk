@@ -53,3 +53,12 @@ func TestLockedPlanHasNoSeatsAndPaidPlansHaveTen(t *testing.T) {
 		}
 	}
 }
+
+func TestExpiredComplimentaryGrantLeavesNoBillingStatusToManage(t *testing.T) {
+	end := instant("2026-11-01T00:00:00Z")
+	expired := domain.Subscription{Plan: domain.PlanTeam, SubscriptionID: domain.CompSubscriptionPrefix + "1", Status: "canceled", CurrentPeriodEnd: &end, ModifiedAt: instant("2026-10-20T09:00:00Z")}
+	got := domain.NewBilling([]domain.Subscription{expired}, instant("2026-10-15T09:00:00Z"), domain.BillingUsage{}, instant("2026-12-01T00:00:00Z"))
+	if got.Status != domain.BillingStatusNone || got.CurrentPeriodEnd != nil || got.Complimentary || got.Plan != domain.PlanNone || !got.Locked {
+		t.Fatalf("billing=%+v, want a locked workspace with no subscription state (no portal to open)", got)
+	}
+}

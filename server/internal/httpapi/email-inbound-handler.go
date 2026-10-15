@@ -60,6 +60,7 @@ func (a *API) receiveInboundEmail(response http.ResponseWriter, request *http.Re
 		writeError(response, http.StatusRequestEntityTooLarge, "too_many_files", fmt.Sprintf("The message has more than %d attachments.", maxInboundFiles))
 		return
 	}
+	parsed.Platform = platform
 	if platform {
 		var hosted bool
 		if workspaceID, hosted, err = a.platformWorkspace(request.Context(), parsed); err != nil {

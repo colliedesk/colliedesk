@@ -56,6 +56,9 @@ func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conver
 	if err != nil {
 		return fmt.Errorf("load email channel: %w", err)
 	}
+	if err := s.checkTrialOutbound(ctx, tx, workspaceID, conversationID, verified); err != nil {
+		return err
+	}
 	emailMessageID, err := email.NewMessageID(email.Domain(supportAddress))
 	if err != nil {
 		return err
@@ -75,8 +78,8 @@ func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conver
 	if reason != "" {
 		status = "failed"
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO email_outbox(workspace_id,message_id,status,last_error) VALUES($1,$2,$3,NULLIF($4,''))`,
-		workspaceID, messageID, status, reason); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO email_outbox(workspace_id,message_id,status,last_error,created_at) VALUES($1,$2,$3,NULLIF($4,''),$5)`,
+		workspaceID, messageID, status, reason, s.now()); err != nil {
 		return fmt.Errorf("queue reply: %w", err)
 	}
 	return nil
@@ -108,6 +111,14 @@ func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	}
 	if reason := s.outbound.notReadyReason(verified); reason != "" {
 		return domain.Message{}, fmt.Errorf("%w: %s", ErrOutboundNotReady, reason)
+	}
+	now := s.now()
+	if trial, err := s.onTrial(ctx, tx, workspaceID, now); err != nil {
+		return domain.Message{}, err
+	} else if trial {
+		if err := s.checkTrialCap(ctx, tx, workspaceID, now); err != nil {
+			return domain.Message{}, err
+		}
 	}
 	result, err := tx.Exec(ctx, `UPDATE email_outbox SET status='queued',attempts=0,next_attempt_at=now(),locked_until=NULL,
 		claim_token=NULL,last_error=NULL,updated_at=now() WHERE workspace_id=$1 AND message_id=$2 AND status='failed'`, workspaceID, messageID)

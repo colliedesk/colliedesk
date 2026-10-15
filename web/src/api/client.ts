@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import { OutboundRefusedError } from './outbound-error';
 import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactDetailSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema,
@@ -39,6 +40,19 @@ async function planLimitFailure(response: Response): Promise<PlanLimitError> {
   return new PlanLimitError('This action is not included in your plan.');
 }
 
+async function outboundRefusal(response: Response): Promise<Error> {
+  try {
+    const body = await response.json() as { error?: { code?: unknown; message?: unknown; retry_after_seconds?: unknown } };
+    const { code, message, retry_after_seconds: retry } = body.error ?? {};
+    if (code === 'trial_outbound_restricted' || code === 'trial_outbound_limit') {
+      return new OutboundRefusedError(code, typeof message === 'string' ? message : '', typeof retry === 'number' ? retry : undefined);
+    }
+  } catch {
+    // An unreadable body is an ordinary failure.
+  }
+  return failure(response.status);
+}
+
 async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     credentials: 'same-origin',
@@ -46,6 +60,7 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
     ...init,
   });
   if (response.status === 402) throw await planLimitFailure(response);
+  if (response.status === 403 || response.status === 429) throw await outboundRefusal(response);
   if (!response.ok) throw failure(response.status);
   return schema.parse(await response.json());
 }

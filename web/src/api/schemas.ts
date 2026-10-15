@@ -27,7 +27,7 @@ export const billingSchema = z.object({
   current_period_end: nullableDate, cancel_at_period_end: z.boolean(), active_subscriptions: z.number().int(),
   complimentary: z.boolean(), complimentary_until: nullableDate,
   limits: z.object({ agents: z.number().int() }),
-  usage: z.object({ agents: z.number().int(), pending_invites: z.number().int() }),
+  usage: z.object({ agents: z.number().int(), pending_invites: z.number().int(), replies_last_24h: z.number().int() }),
 }) satisfies z.ZodType<Generated<'Billing'>>;
 export const billingLinkSchema = z.object({ url: z.string().url() }) satisfies z.ZodType<JsonResponse<'createBillingPortal', 200>>;
 export const agentSchema = z.object({
