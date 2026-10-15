@@ -14,6 +14,7 @@ import (
 type contractFixture struct {
 	api                       http.Handler
 	adminToken, agentToken    string
+	agentID                   string
 	contactID, conversationID string
 	inviteID, sessionID       string
 	updateTagID, deleteTagID  string
@@ -103,7 +104,8 @@ func newContractFixture(t *testing.T) contractFixture {
 		t.Fatalf("enable web form status=%d body=%s", response.Code, response.Body.String())
 	}
 
-	return contractFixture{api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	agentID := memberIDByEmail(t, api, adminToken, "agent@contract-all.example.com")
+	return contractFixture{agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, attachmentID: attachmentID, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token}
 }
@@ -154,4 +156,19 @@ func withFailedEmailReply(t *testing.T, api http.Handler, pool *pgxpool.Pool, ad
 		t.Fatal(err)
 	}
 	return api, secret, replyID
+}
+
+func memberIDByEmail(t *testing.T, api http.Handler, token, email string) string {
+	t.Helper()
+	var body struct {
+		Items []teamMemberView `json:"items"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/agents", nil, token, nil), &body)
+	for _, item := range body.Items {
+		if item.Email == email {
+			return item.ID
+		}
+	}
+	t.Fatalf("no agent %s", email)
+	return ""
 }

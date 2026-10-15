@@ -87,7 +87,7 @@ func exportWorkspaceRow(ctx context.Context, tx pgx.Tx, workspaceID string, sink
 }
 
 func exportAgents(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,email,display_name,role,timezone_override,created_at
+	rows, err := tx.Query(ctx, `SELECT id::text,email,display_name,role,timezone_override,created_at,deactivated_at
 		FROM agents WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export agents: %w", err)
@@ -95,10 +95,11 @@ func exportAgents(ctx context.Context, tx pgx.Tx, workspaceID string, sink expor
 	defer rows.Close()
 	for rows.Next() {
 		var record export.Agent
-		if err := rows.Scan(&record.ID, &record.Email, &record.DisplayName, &record.Role, &record.TimezoneOverride, &record.CreatedAt); err != nil {
+		if err := rows.Scan(&record.ID, &record.Email, &record.DisplayName, &record.Role, &record.TimezoneOverride, &record.CreatedAt, &record.DeactivatedAt); err != nil {
 			return fmt.Errorf("export agents: %w", err)
 		}
 		record.CreatedAt = domain.UTC(record.CreatedAt)
+		record.DeactivatedAt = domain.UTCOptional(record.DeactivatedAt)
 		if err := sink.Agent(record); err != nil {
 			return err
 		}

@@ -38,6 +38,16 @@ func updateConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string, 
 			}
 		}
 	}
+	if update.AssigneeID != nil && *update.AssigneeID != nil {
+		var active bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE workspace_id=$1 AND id=$2 AND deactivated_at IS NULL)`,
+			workspaceID, **update.AssigneeID).Scan(&active); err != nil {
+			return domain.Conversation{}, fmt.Errorf("validate assignee: %w", err)
+		}
+		if !active {
+			return domain.Conversation{}, fmt.Errorf("validate assignee: unknown or deactivated agent")
+		}
+	}
 	result, err := tx.Exec(ctx, `UPDATE conversations SET
 		status=COALESCE($3,status),priority=COALESCE($4,priority),
 		assignee_id=CASE WHEN $5 THEN $6::uuid ELSE assignee_id END,updated_at=now()

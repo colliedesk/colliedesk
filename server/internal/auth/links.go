@@ -74,6 +74,9 @@ func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string
 		}
 		role = requestedRole
 	}
+	if err := requireActiveAgent(ctx, tx, workspaceID, agentID, email); err != nil {
+		return Redeemed{}, err
+	}
 	if kind == "invite" {
 		if s.planLimits {
 			if err := store.CheckAgentSeat(ctx, tx, workspaceID, now, email, linkID); err != nil {
@@ -126,4 +129,26 @@ func scanRedeemed(ctx context.Context, tx pgx.Tx, workspaceID, agentID string) (
 		return Redeemed{}, fmt.Errorf("load redeemed identity: %w", err)
 	}
 	return result, nil
+}
+
+// requireActiveAgent returns domain.ErrAgentDeactivated when the link belongs to a deactivated agent:
+// the agent a pairing link names, or the agent that already has the invited address.
+func requireActiveAgent(ctx context.Context, tx pgx.Tx, workspaceID string, agentID *string, email string) error {
+	var deactivated bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE workspace_id=$1 AND deactivated_at IS NOT NULL
+		AND (id::text=$2 OR ($2='' AND email=lower($3))))`, workspaceID, agentRef(agentID), email).Scan(&deactivated)
+	if err != nil {
+		return fmt.Errorf("check agent state: %w", err)
+	}
+	if deactivated {
+		return domain.ErrAgentDeactivated
+	}
+	return nil
+}
+
+func agentRef(agentID *string) string {
+	if agentID == nil {
+		return ""
+	}
+	return *agentID
 }

@@ -19,6 +19,9 @@ func (s *Service) CreateInvite(ctx context.Context, principal Principal, email, 
 		return domain.Invite{}, "", fmt.Errorf("begin invite: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := requireActiveAgent(ctx, tx, principal.Workspace.ID, nil, strings.ToLower(email)); err != nil {
+		return domain.Invite{}, "", err
+	}
 	if s.planLimits {
 		if err := store.CheckAgentSeat(ctx, tx, principal.Workspace.ID, s.now(), strings.ToLower(email), ""); err != nil {
 			return domain.Invite{}, "", err

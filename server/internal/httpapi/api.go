@@ -161,6 +161,7 @@ func Routes() []Route {
 		{http.MethodPatch, "/api/v1/workspace/timezone", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/workspace/slug", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/agents/me/timezone", auth.PermissionAuthenticated},
+		{http.MethodPatch, "/api/v1/agents/{id}", auth.PermissionAccessWrite},
 		{http.MethodGet, "/api/v1/tags", auth.PermissionConversationsRead},
 		{http.MethodPost, "/api/v1/tags", auth.PermissionConversationsWrite},
 		{http.MethodPatch, "/api/v1/tags/{id}", auth.PermissionConversationsWrite},

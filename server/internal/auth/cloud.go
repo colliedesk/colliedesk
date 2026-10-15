@@ -82,7 +82,7 @@ func (s *Service) cloudAgents(ctx context.Context, email string) ([]cloudAgent, 
 func listCloudAgents(ctx context.Context, tx pgx.Tx, email string) ([]cloudAgent, error) {
 	rows, err := tx.Query(ctx, `SELECT w.id::text,w.slug,w.name,a.id::text,a.email,a.role
 		FROM agents a JOIN workspaces w ON w.id=a.workspace_id
-		WHERE lower(a.email)=lower($1) ORDER BY w.slug`, strings.TrimSpace(email))
+		WHERE lower(a.email)=lower($1) AND a.deactivated_at IS NULL ORDER BY w.slug`, strings.TrimSpace(email))
 	if err != nil {
 		return nil, fmt.Errorf("find cloud agents: %w", err)
 	}
