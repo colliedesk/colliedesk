@@ -75,7 +75,7 @@ composite foreign keys keep working across the scoped tables.
   privileges, and nothing on `schema_migrations`. The migration creates the role and grants it to
   the owner. The server reads the name back from the `workspace_isolation` policy, so the
   migration is the only place that defines it.
-- **Request login.** `colliedesk migrate` creates it when `DATABASE_REQUEST_URL` is set
+- **Request login.** `collie migrate` creates it when `DATABASE_REQUEST_URL` is set
   (`database.EnsureRequestLogin`). The user and password come from that URL. Go computes the
   SCRAM-SHA-256 verifier (4096 iterations, random 16-byte salt). Only the verifier is sent in
   `CREATE ROLE`, so server logs, `log_statement` and `pg_stat_statements` never see the plaintext
@@ -94,7 +94,7 @@ composite foreign keys keep working across the scoped tables.
 - **Existing installs** keep upgrading with no manual step. Their `.env` has neither variable, so
   `compose.yaml` falls back to the old superuser `DATABASE_URL`, and they run in single-login mode.
 
-`colliedesk serve` calls `database.DB.Verify` at start and refuses to run in these cases:
+`collie serve` calls `database.DB.Verify` at start and refuses to run in these cases:
 
 - The app role is missing, is a superuser or has `BYPASSRLS`.
 - The request connection cannot `SET ROLE` to the app role.
@@ -128,7 +128,7 @@ transaction only resolves the workspace; the work after that runs in `InWorkspac
 | Privilege | Call site | Why it crosses workspaces |
 |---|---|---|
 | `PrivilegeMigrate` | `database/migrate.go` | Schema changes and data migrations |
-| `PrivilegeRequestLogin` | `database/scope.go` (`EnsureRequestLogin`) | Creates the request login and grants it the app role (`colliedesk migrate`) |
+| `PrivilegeRequestLogin` | `database/scope.go` (`EnsureRequestLogin`) | Creates the request login and grants it the app role (`collie migrate`) |
 | `PrivilegeCreateWorkspace` | `auth/service.go`, `auth/signup.go` | Inserts the workspace, its first admin and pairing link (CLI `create-workspace`). `signup.go` (`POST /auth/cloud/signup`) also reads and writes `cloud_signups`, the platform-level table of trials already given: it has no `workspace_id`, no workspace policy and no grant to the app role, only the `privileged_access` policy, so only this transaction can touch it |
 | `PrivilegeSignupSweep` | `auth/signup.go` (`ClearSignupAddresses`) | Clears the client address hash of old `cloud_signups` rows (the platform-level table above); runs hourly from `serve` |
 | `PrivilegeRetention` | `retention/service.go` | Lists locked workspaces, reads their admins to send the 30-day deletion notice, and hard-deletes a workspace locked for 12 months with its attachment files. Each pass locks one workspace row and acts on it only. `retention_deletions` is a platform-level table like `cloud_signups` (privileged policy only, no grant to the app role) |
@@ -188,7 +188,7 @@ The Freshdesk importer and undo resolve the slug once, then run every read and w
 - **PostgreSQL 16 or newer** is required. The `SET` option of role membership (`pg_has_role(...,
   'SET')`, `GRANT ... WITH INHERIT FALSE, SET TRUE`) appeared in 16. `compose.yaml`, `install.sh`
   and CI use `postgres:17-bookworm`.
-- **Upgrades** need no manual step. `colliedesk migrate`, which the compose command runs, creates
+- **Upgrades** need no manual step. `collie migrate`, which the compose command runs, creates
   the app role and grants it.
 - **Optional hardening for an existing install** (request-login mode):
   1. Add a line to `.env`:
@@ -199,7 +199,7 @@ The Freshdesk importer and undo resolve the slug once, then run every read and w
 - **Managed PostgreSQL** (owner not a superuser, no `CREATEROLE`): the migration stops with the
   exact statement to run as a superuser. One example is
   `CREATE ROLE colliedesk_app_<db> NOLOGIN; GRANT colliedesk_app_<db> TO <owner>;`. Then run
-  `colliedesk migrate` again. The same applies when only the GRANT is missing.
+  `collie migrate` again. The same applies when only the GRANT is missing.
 - **Changing the owner role.** `privileged_access` names the role that ran the migration. If you
   move to another `DATABASE_URL` role that is not a superuser, make it the owner of the tables and
   recreate that policy for it. A superuser role needs nothing.

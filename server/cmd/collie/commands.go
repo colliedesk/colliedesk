@@ -29,7 +29,7 @@ func run(ctx context.Context, args []string, output io.Writer, databaseURL, orig
 		return fmt.Errorf("expected subcommand: serve, migrate, create-workspace, pair, import, trial, plan, retention, healthcheck, or version")
 	}
 	if args[0] == "--help" || args[0] == "help" {
-		_, err := fmt.Fprintln(output, "Usage: colliedesk <serve|migrate|create-workspace|pair|import|trial|plan|retention|healthcheck|version>")
+		_, err := fmt.Fprintln(output, "Usage: collie <serve|migrate|create-workspace|pair|import|trial|plan|retention|healthcheck|version>")
 		return err
 	}
 	if args[0] == "version" {
@@ -137,7 +137,7 @@ func createWorkspace(ctx context.Context, pool *pgxpool.Pool, origin string, arg
 	if _, err := fmt.Fprintln(output, link); err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(stderr, "Workspace %q created (slug %s). The link works once and expires in 15 minutes; print a new one with:\n  colliedesk pair --workspace %s --email %s\n",
+	_, err = fmt.Fprintf(stderr, "Workspace %q created (slug %s). The link works once and expires in 15 minutes; print a new one with:\n  collie pair --workspace %s --email %s\n",
 		workspace.Name, workspace.Slug, workspace.Slug, strings.ToLower(*email))
 	return err
 }
