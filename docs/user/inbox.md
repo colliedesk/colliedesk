@@ -1,18 +1,19 @@
 # Work the inbox
 
 The inbox has three panes: the **conversation list** on the left, the **timeline** in the middle
-with the composer below it, and **conversation details** on the right.
+with the composer below it, and **conversation details** on the right. On a narrower screen the
+details pane is hidden; open it with **Show details** above the timeline.
 
 A new workspace has no conversations yet. The list then links to the next steps: **Connect your
 support email**, **Import from Freshdesk** and **Invite your team** (admins see all three). If the list
 cannot be loaded, it says so with **Try again** instead.
 
 **Find conversations**
-- Filter by **Status** (Open, Pending, Resolved, Closed), **Assignee** (Anyone, Assigned to me,
+- Filter by **Status** (Open, Pending, Resolved, Closed), **Assignee** (Any assignee, Assigned to me,
   Unassigned) and **Tag**.
 - **Search conversations** matches subject and message text. Characters such as `%` and `_`
   are matched literally.
-- The list is ordered by latest activity. Use **Previous page** and **Next page** to move.
+- The list is ordered by latest activity and grouped under **Today** and **Earlier**. Use **Previous page** and **Next page** below the list to move; they appear only when there is more than one page.
 - Dates from an earlier year show the year, for example imported history.
 - The list loads again each time you open the inbox, so mail that arrived meanwhile is there.
 
