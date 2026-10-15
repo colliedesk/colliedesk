@@ -7,7 +7,7 @@ interface CloudSignInProps {
   onSessionToken: (token: string) => Promise<void>;
 }
 
-// Clerk draws its own form; it takes its colours from the brand tokens so it matches the dark app.
+// Clerk draws its own form; it reads the brand tokens of the active theme so it matches the app.
 function clerkAppearance() {
   const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || undefined;
   return {

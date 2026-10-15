@@ -1,8 +1,110 @@
-/* CollieDesk brand tokens: Blue Merle, dark theme (app + colliedesk.com).
-   Load fonts.css first. Contrast for every pair is listed in docs/internals/design.md. */
+/* CollieDesk brand tokens: Blue Merle. Light is the default theme; dark is opt-in through
+   data-theme="dark" on <html> (see src/lib/theme.ts). Load fonts.css first.
+   Contrast for every pair is checked by scripts/check-contrast.mjs and listed in docs/internals/design.md. */
 :root {
-  color-scheme: dark;
+  /* Shape */
+  --radius: 6px;
+  --radius-sm: 4px;
+  --radius-lg: 10px;                 /* cards, panels, composer */
+  --radius-full: 999px;
 
+  /* Spacing: 4 px grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-24: 96px;
+  --touch: 44px;                     /* min touch target */
+
+  /* Type */
+  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --fs-ui: 14px;                     /* app body */
+  --fs-label: 12px;                  /* meta, labels, kbd */
+  --fs-small: 13px;                  /* secondary rows */
+  --fs-body: 16px;                   /* site body */
+  --fs-h2: 40px;
+  --fs-display: 60px;
+  --lh-ui: 1.45;
+  --lh-body: 1.55;
+  --track-display: -0.025em;
+  --track-label: 0.05em;
+  --icon-stroke: 1.5;
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 120ms;
+  --dur: 180ms;
+}
+
+:root, :root[data-theme="light"] {
+  color-scheme: light;
+  /* Surfaces: 0 = app background, rail, side panes; 1 = list, thread, cards; 2 = hover; 3 = selected */
+  --surface-0: #f5f7fa;
+  --surface-1: #ffffff;
+  --surface-2: #eef1f5;
+  --surface-3: #e4e9f0;
+  --surface-inverse: #1b2330;        /* tooltips */
+
+  /* Lines */
+  --line: #e3e7ee;                   /* hairline dividers only */
+  --line-strong: #77839a;            /* inputs and controls whose border is the only cue (>= 3:1) */
+
+  /* Text */
+  --text-1: #151c27;
+  --text-2: #465267;
+  --text-3: #5b687c;                 /* meta, timestamps, labels */
+  --text-inverse: #ffffff;
+
+  /* Brand: merle blue, darkened so white text and links reach 4.5:1 */
+  --accent: #2d62b3;
+  --accent-hover: #234f94;
+  --on-accent: #ffffff;
+  --accent-text: #2a5ca9;
+  --accent-soft: #e8effa;
+  --accent-strong: #2c5a9e;          /* graphics only */
+  --logo-tile: #1b2330;              /* the mark always sits on a dark tile */
+  --line-control: #cdd3dc;           /* secondary button outline; the label is the cue */
+  --brand-panel: #141b26;            /* sign-in brand side */
+  --on-brand-panel: #ffffff;
+  --on-brand-panel-2: #b4bfcf;
+
+  /* Focus and notes: amber (never used for status) */
+  --focus: #b86e00;
+  --focus-ring: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--focus);
+  --note-bg: #fff6e0;
+  --note-line: #ecc87a;
+  --note-text: #7f5200;
+
+  /* Status: a dot plus a word, never colour alone */
+  --danger: #c0261b;
+  --danger-soft: #fdeceb;
+  --warn: #a3460a;
+  --warn-soft: #fdf0e5;
+  --ok: #11703d;
+  --ok-soft: #e6f5ec;
+  --open: var(--accent);
+  --pending: #a3730f;
+
+  /* SLA */
+  --sla-risk: var(--danger);
+  --sla-warn: var(--warn);
+  --sla-ok: var(--text-3);
+  --sla-track: #f5d5d2;
+
+  --shadow-1: 0 1px 2px rgb(16 24 40 / 0.06);
+  --shadow-2: 0 1px 2px rgb(16 24 40 / 0.06), 0 8px 24px -8px rgb(16 24 40 / 0.14);
+  --shadow-3: 0 2px 4px rgb(16 24 40 / 0.06), 0 24px 56px -12px rgb(16 24 40 / 0.22);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
   /* Surfaces: 0 = page, 1 = panel/list, 2 = raised/hover, 3 = selected/active */
   --surface-0: #0b0f15;
   --surface-1: #111721;
@@ -27,6 +129,11 @@
   --accent-text: #8fb3ea;            /* links and brand-coloured text on any surface */
   --accent-soft: #1a2940;            /* selected row, AI hint background */
   --accent-strong: #2c5a9e;          /* graphics only (mark, bars); never text on dark */
+  --logo-tile: #18202c;
+  --line-control: #2e3a4d;
+  --brand-panel: #111721;
+  --on-brand-panel: #e8edf4;
+  --on-brand-panel-2: #b4bfcf;
 
   /* Focus and notes: amber (never used for status) */
   --focus: #f0b44c;
@@ -51,48 +158,10 @@
   --sla-ok: var(--text-3);
   --sla-track: #3a2524;
 
-  /* Shape */
-  --radius: 6px;
-  --radius-sm: 4px;
-  --radius-full: 999px;
-
-  /* Spacing: 4 px grid */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --space-10: 40px;
-  --space-12: 48px;
-  --space-16: 64px;
-  --space-24: 96px;
-  --touch: 44px;                     /* min touch target */
-
-  /* Type */
-  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
-  --fs-ui: 13px;                     /* app body */
-  --fs-label: 11.5px;                /* mono uppercase labels, kbd */
-  --fs-body: 16px;                   /* site body */
-  --fs-h2: 40px;
-  --fs-display: 60px;
-  --lh-ui: 1.45;
-  --lh-body: 1.55;
-  --track-display: -0.025em;
-  --track-label: 0.05em;
-  --icon-stroke: 1.5;
-
-  /* Elevation: dark UIs separate by surface step first, shadow second */
   --shadow-1: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-2: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 8px 24px -6px rgb(0 0 0 / 0.55);
   --shadow-3: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 24px 56px -12px rgb(0 0 0 / 0.7);
 
-  /* Motion */
-  --ease: cubic-bezier(0.2, 0, 0, 1);
-  --dur-fast: 120ms;
-  --dur: 180ms;
 }
 
 @media (prefers-reduced-motion: reduce) {

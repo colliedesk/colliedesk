@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0b0f15" />
+    <!-- Set the saved theme while the head is parsed, before first paint, so a dark choice never paints light.
+         Same key and rule as src/lib/theme.ts; light is the default whatever the OS prefers. -->
+    <script>try{if(localStorage.getItem('colliedesk.theme')==='dark')document.documentElement.dataset.theme='dark'}catch(e){}</script>
+    <meta name="theme-color" content="#f5f7fa" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>CollieDesk</title>
   </head>

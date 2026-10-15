@@ -20,7 +20,12 @@ export function RedeemPage({
   token, pending, failed, planLimited = false, onRedeem, cloudEnabled = false, cloudSignIn, workspaces = [], onSelectWorkspace,
 }: RedeemPageProps) {
   return (
-    <main className="redeem-page">
+    <main className="redeem-page signin-split">
+      <div className="signin-brand">
+        <div className="signin-brand-lockup"><LogoMark size={40} /><span className="wordmark"><b>collie</b>desk</span></div>
+        <p className="signin-tagline">{messages.signInTagline}</p>
+        <p className="signin-footnote">{messages.signInFootnote}</p>
+      </div>
       <section className="redeem-panel">
         <div className="brand-lockup"><LogoMark size={36} /><span>{messages.brand}</span></div>
         <h1>{messages.openSecureLink}</h1>
