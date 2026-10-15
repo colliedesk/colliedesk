@@ -70,3 +70,13 @@ test('lists stored email files and offers the original message separately', () =
   expect(within(files).queryByText('original-message.eml.gz')).not.toBeInTheDocument();
   expect(within(message).queryByText(/not imported/i)).not.toBeInTheDocument();
 });
+
+test('shows the loading status while the selected conversation timeline loads, not an empty timeline', () => {
+  render(<TimelinePanel items={[]} timezone="UTC" loading />);
+  expect(screen.getByRole('status')).toHaveTextContent('Loading workspace…');
+});
+
+test('shows no loading status once the timeline has loaded', () => {
+  render(<TimelinePanel items={[note]} timezone="UTC" />);
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+});

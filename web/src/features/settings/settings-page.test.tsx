@@ -92,3 +92,39 @@ test('shows why an invite was refused next to the invite form', () => {
     inviteError="The trial allows 10 agents, pending invites included." />);
   expect(screen.getByRole('alert')).toHaveTextContent(/trial allows 10 agents/i);
 });
+
+test('a pending timezone save disables its button and reads Saving…', () => {
+  const onSetWorkspaceTimezone = vi.fn();
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canManageWorkspace onSetWorkspaceTimezone={onSetWorkspaceTimezone}
+    workspaceTimezoneSave={{ pending: true }} />);
+  const button = screen.getByRole('button', { name: 'Saving…' });
+  expect(button).toBeDisabled();
+  fireEvent.click(button);
+  expect(onSetWorkspaceTimezone).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: /save personal timezone/i })).toBeEnabled();
+});
+
+test('a saved timezone shows Saved next to its form and clears when the field is edited', () => {
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canManageWorkspace workspaceTimezone="UTC"
+    workspaceTimezoneSave={{ saved: true }} />);
+  expect(screen.getByRole('status')).toHaveTextContent('Saved');
+  expect(screen.getByRole('status').closest('label')).toContainElement(screen.getByRole('textbox', { name: /workspace timezone/i }));
+  fireEvent.change(screen.getByRole('textbox', { name: /workspace timezone/i }), { target: { value: 'Asia/Tokyo' } });
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+});
+
+test('a personal timezone save shows Saving…, Saved and a failure next to its own form', () => {
+  const { rerender } = render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ pending: true }} />);
+  expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: /clear personal timezone/i })).toBeDisabled();
+  rerender(<SettingsPage sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ saved: true }} />);
+  expect(screen.getByRole('status')).toHaveTextContent('Saved');
+  rerender(<SettingsPage sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ error: 'Unknown timezone.' }} />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Unknown timezone.');
+});
+
+test('shows the loading status while settings data is pending, without the forms', () => {
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" loading canCreateInvites />);
+  expect(screen.getByRole('status')).toHaveTextContent('Loading workspace…');
+  expect(screen.queryByRole('button', { name: /create invite/i })).not.toBeInTheDocument();
+});

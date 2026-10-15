@@ -15,6 +15,8 @@ TMP=${TMPDIR:-/tmp}/colliedesk-install-smoke-$$
 COMPOSE_PROJECT_NAME=colliedesk-install-smoke-$$
 export COLLIE_DESK_IMAGE COMPOSE_PROJECT_NAME
 export COLLIE_DESK_PORT="$PORT"
+# A smoke install is not a real one: keep it out of the usage report counts.
+export DISABLE_TELEMETRY=true
 
 cleanup() {
   if [ -f "$TMP/compose.yaml" ]; then

@@ -6,6 +6,11 @@ import { TeamSection } from './team-section';
 import { WebFormSection } from './web-form-section';
 import { SettingsPage } from './settings-page';
 import { messages } from '../../messages';
+import type { SaveState } from './save-feedback';
+
+function saveState(m: { isPending: boolean; isSuccess: boolean; isError: boolean; error: unknown }): SaveState {
+  return { pending: m.isPending, saved: m.isSuccess, error: m.isError ? (m.error instanceof InvalidRequestError ? m.error.message : messages.settingsActionFailed) : undefined };
+}
 
 export function SettingsRoute() {
   const client = useQueryClient();
@@ -33,9 +38,10 @@ export function SettingsRoute() {
   const webForm = useQuery({ queryKey: ['web-form'], queryFn: api.webForm });
   const saveWebForm = useMutation({ mutationFn: ({ enabled, origins }: { enabled: boolean; origins: string[] }) => api.saveWebForm(enabled, origins), onSuccess: () => refresh('web-form') });
   const isAdmin = me.data?.agent.role === 'admin';
-  const emailFailed = saveEmail.isError || rotateSecret.isError || disconnectEmail.isError || verifyDomain.isError || workspaceSlug.isError;
-  return <SettingsPage sessions={sessions.data?.items ?? []} invites={invites.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'}
+  const emailFailed = rotateSecret.isError || disconnectEmail.isError || verifyDomain.isError;
+  return <SettingsPage loading={me.isPending || sessions.isPending || invites.isPending} sessions={sessions.data?.items ?? []} invites={invites.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'}
     canCreateInvites={isAdmin} canManageWorkspace={isAdmin} exportSection={isAdmin ? <ExportAllData /> : undefined}
+    workspaceTimezoneSave={saveState(workspaceTimezone)} personalTimezoneSave={saveState(agentTimezone)}
     workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
     error={revokeInvite.isError || revokeSession.isError || emailFailed ? messages.settingsActionFailed : undefined}
     teamSection={<TeamSection members={team.data?.items ?? []} currentAgentId={me.data?.agent.id} canManage={isAdmin} timezone={me.data?.timezone ?? 'UTC'}
@@ -43,10 +49,10 @@ export function SettingsRoute() {
       onChangeRole={(id, role) => updateAgent.mutate({ id, role })}
       onDeactivate={(id, reassignTo) => updateAgent.mutate({ id, active: false, ...(reassignTo ? { reassign_to: reassignTo } : {}) })}
       onReactivate={(id) => updateAgent.mutate({ id, active: true })} />}
-    emailSection={<EmailChannelSection settings={emailChannel.data} timezone={me.data?.timezone ?? 'UTC'} canManage={isAdmin} workspaceSlug={me.data?.workspace.slug}
+    emailSection={<EmailChannelSection settings={emailChannel.data} timezone={me.data?.timezone ?? 'UTC'} canManage={isAdmin} workspaceSlug={me.data?.workspace.slug} addressSave={saveState(saveEmail)} slugSave={saveState(workspaceSlug)}
       onSaveSlug={(slug) => workspaceSlug.mutate(slug)} createdSecret={rotateSecret.data?.inbound_secret} onSave={(address) => saveEmail.mutate(address)}
       onRotate={() => rotateSecret.mutate()} onVerifyDomain={() => verifyDomain.mutate()} onDisconnect={() => disconnectEmail.mutate()} />}
-    webFormSection={<WebFormSection settings={webForm.data} canManage={isAdmin} error={saveWebForm.isError ? (saveWebForm.error instanceof InvalidRequestError ? saveWebForm.error.message : messages.settingsActionFailed) : undefined} onSave={(enabled, origins) => saveWebForm.mutate({ enabled, origins })} />}
+    webFormSection={<WebFormSection settings={webForm.data} canManage={isAdmin} save={saveState(saveWebForm)} onSave={(enabled, origins) => saveWebForm.mutate({ enabled, origins })} />}
     inviteError={createInvite.error instanceof PlanLimitError || createInvite.error instanceof InvalidRequestError ? createInvite.error.message : createInvite.isError ? messages.settingsActionFailed : undefined}
     createdInviteUrl={createInvite.data?.url}
     onCreateInvite={(email, role) => createInvite.mutate({ email, role })}
