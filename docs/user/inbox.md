@@ -15,7 +15,8 @@ cannot be loaded, it says so with **Try again** instead.
 - Filter by **Status** (All, Open, Pending, Resolved, Closed), **Assignee** (Any assignee, Assigned to me,
   Unassigned) and **Tag**.
 - **Search conversations** matches subject and message text, in every status unless you picked a
-  status tab first, so imported closed tickets are found. Characters such as `%` and `_` are matched
+  status tab first, so imported closed tickets are found; the view stays on **All** after you clear
+  the search. Characters such as `%` and `_` are matched
   literally.
 - A conversation you opened stays on screen after you resolve or close it, although it leaves the
   Open list.

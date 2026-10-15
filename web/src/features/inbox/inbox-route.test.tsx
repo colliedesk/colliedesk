@@ -173,3 +173,35 @@ test('resolving the open conversation keeps it on screen although it left the Op
   await waitFor(() => expect(api.conversation).toHaveBeenCalledWith(alpha.id));
   expect(await screen.findByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
 });
+
+test('resolving the open conversation never swaps the screen to another one, so its draft survives', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversation.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
+  let isResolved = false;
+  api.conversations.mockImplementation(async () => ({ items: isResolved ? [beta] : [alpha, beta], page: 1, page_size: 50 }));
+  api.conversation.mockReturnValue(new Promise(() => {})); // the by-id fetch never answers: only the update response can keep alpha
+  api.updateConversation.mockImplementation(async () => { isResolved = true; return { ...alpha, status: 'resolved' as const }; });
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Half-written answer' } });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), { target: { value: 'resolved' } });
+  await waitFor(() => expect(screen.queryByRole('button', { name: /alpha conversation/i })).not.toBeInTheDocument());
+  expect(screen.getByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Beta conversation' })).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Message body')).toHaveValue('Half-written answer');
+});
+
+test('when the caught-up check fails, the inbox does not pretend the workspace is new', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversations.mockImplementation(async (query: string) => {
+    if (new URLSearchParams(query).get('status') === 'open') return { items: [], page: 1, page_size: 50 };
+    throw new Error('network');
+  });
+  renderRoute();
+  expect(await screen.findByText('No open conversations. Every customer has an answer.')).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: /get started/i })).not.toBeInTheDocument();
+});

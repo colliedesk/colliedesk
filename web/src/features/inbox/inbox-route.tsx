@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { api } from '../../api/client';
 import type { UpdateConversationRequest } from '../../api/client';
+import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
 import { defaultInboxFilters } from './inbox-filters';
 import { messages } from '../../messages';
@@ -35,21 +36,24 @@ export function InboxRoute() {
   // An empty Open view is either a new workspace or one that is caught up; one row of All tells which.
   const checkAny = !narrowed && filters.status === defaultInboxFilters.status && page === 1 && conversations.data?.items.length === 0;
   const anyConversation = useQuery({ queryKey: ['conversations', 'any'], queryFn: () => api.conversations('page=1&page_size=1'), enabled: checkAny });
-  const nothingOpen = checkAny && (anyConversation.data?.items.length ?? 0) > 0;
+  // A failed check is not proof of an empty workspace, so it never shows the new-workspace steps.
+  const nothingOpen = checkAny && (anyConversation.isError || (anyConversation.data?.items.length ?? 0) > 0);
   const activeID = selectedId ?? params.conversationId;
   const listed = conversations.data?.items.find((item) => item.id === activeID);
-  // A conversation the agent opened stays on screen after it leaves the list, e.g. once resolved.
+  // A conversation the agent opened stays on screen after it leaves the list, e.g. once resolved. It is
+  // fetched alongside the list for a deep link, and seeded from every change so the panes never swap.
   const opened = useQuery({ queryKey: ['conversations', 'one', activeID], queryFn: () => api.conversation(activeID!),
-    enabled: Boolean(activeID && conversations.data && !listed) });
+    enabled: Boolean(activeID && !listed) });
   const selected = listed ?? (opened.data?.id === activeID ? opened.data : undefined) ?? conversations.data?.items[0];
   const timeline = useQuery({ queryKey: ['messages', selected?.id], queryFn: () => api.messages(selected!.id), enabled: Boolean(selected),
     // Poll while a reply waits in the email outbox so its delivery status updates without a reload.
     refetchInterval: (query) => (query.state.data?.items.some((item) => item.delivery?.status === 'queued') ? 5000 : false) });
   const timeEntries = useQuery({ queryKey: ['time-entries', selected?.id], queryFn: () => api.timeEntries(selected!.id), enabled: Boolean(selected) });
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
-  const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes), onSuccess: refresh });
-  const addTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.addConversationTag(conversationId, tagId), onSuccess: refresh });
-  const removeTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.removeConversationTag(conversationId, tagId), onSuccess: refresh });
+  const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
+  const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes), onSuccess: keepOpened });
+  const addTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.addConversationTag(conversationId, tagId), onSuccess: keepOpened });
+  const removeTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.removeConversationTag(conversationId, tagId), onSuccess: keepOpened });
   const createTag = useMutation({ mutationFn: ({ name }: { conversationId: string; name: string }) => api.createTag(name), onSuccess: (tag, variables) => {
     void client.invalidateQueries({ queryKey: ['tags'] });
     addTag.mutate({ conversationId: variables.conversationId, tagId: tag.id });
