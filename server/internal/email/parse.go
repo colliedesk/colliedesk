@@ -42,7 +42,10 @@ type Inbound struct {
 	Body           string
 	Attachments    []domain.EmailAttachment
 	Authentication string
-	DropReason     string
+	// Platform is true when the message arrived through the platform forwarder (the hosted MX), not
+	// through a workspace inbound secret whose holder writes the raw message.
+	Platform   bool
+	DropReason string
 	// BouncedMessageIDs are the Message-IDs named in a delivery status report's returned headers.
 	BouncedMessageIDs []string
 	// Files holds every attachment, inline image and embedded message with its bytes.

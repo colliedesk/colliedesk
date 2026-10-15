@@ -120,6 +120,9 @@ type Report struct {
 	NotImported  []string        `json:"not_imported"`
 	// TrialExtendedTo is the new trial end when this run extended the workspace's trial.
 	TrialExtendedTo *time.Time `json:"trial_extended_to,omitempty"`
+	// TrialExtensionError is set when the import finished but the trial could not be extended;
+	// running the same import again retries it.
+	TrialExtensionError string `json:"trial_extension_error,omitempty"`
 }
 
 // notImported lists Freshdesk data this importer does not carry over, so the

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -44,6 +45,15 @@ type Subscription struct {
 	ModifiedAt        time.Time // the subscription's own modified_at, for ordering events
 }
 
+// CompSubscriptionPrefix starts the subscription id of a complimentary plan, so it is never
+// mistaken for a Polar subscription id.
+const CompSubscriptionPrefix = "comp:"
+
+// Complimentary reports whether the subscription is an operator-granted plan that nobody pays for.
+func (s Subscription) Complimentary() bool {
+	return strings.HasPrefix(s.SubscriptionID, CompSubscriptionPrefix)
+}
+
 // Entitled reports whether the subscription grants its paid plan at now.
 // active and trialing pay; past_due stays paid while Polar retries the card; canceled pays until
 // the period it already paid for ends; everything else (unpaid, incomplete, paused) does not.
@@ -67,6 +77,9 @@ type BillingUsage struct {
 	Agents int `json:"agents"`
 	// PendingInvites are unused, unrevoked, unexpired invites; each holds an agent seat.
 	PendingInvites int `json:"pending_invites"`
+	// RepliesLast24h counts the emailed replies of the last 24 hours that count against the
+	// trial's daily cap; it is 0 on every other plan.
+	RepliesLast24h int `json:"replies_last_24h"`
 }
 
 // PlanLimitError means an action would exceed a limit of the workspace's plan.
@@ -89,6 +102,30 @@ func (e *PlanLimitError) Error() string {
 	return fmt.Sprintf("The %s plan allows %d agents, pending invites included. Revoke a pending invite to free a seat, or contact us for more than %d agents.", name, e.Agents, e.Agents)
 }
 
+// Trial outbound controls: during the trial email goes only to customers who wrote first (unless
+// the workspace verified its own sending domain), and at most TrialRepliesPerDay replies leave in
+// any rolling 24 hours.
+const (
+	TrialRepliesPerDay = 200
+	TrialReplyWindow   = 24 * time.Hour
+)
+
+// TrialOutboundError refuses a reply the trial does not allow. Nothing was stored.
+type TrialOutboundError struct {
+	// RetryAfter is set when the daily cap is the reason: the time until a slot frees.
+	RetryAfter time.Duration
+}
+
+// Limited reports whether the daily cap, not the first-contact rule, refused the reply.
+func (e *TrialOutboundError) Limited() bool { return e.RetryAfter > 0 }
+
+func (e *TrialOutboundError) Error() string {
+	if e.Limited() {
+		return fmt.Sprintf("The trial sends up to %d replies in 24 hours. Try again later, or upgrade to remove this limit.", TrialRepliesPerDay)
+	}
+	return "During the trial, email goes only to customers who wrote to you first. Verify your sending domain in Settings or upgrade to start new conversations."
+}
+
 // Billing is what an admin sees about their workspace's plan.
 type Billing struct {
 	Plan string `json:"plan"`
@@ -101,9 +138,14 @@ type Billing struct {
 	CancelAtPeriodEnd bool       `json:"cancel_at_period_end"`
 	// ActiveSubscriptions counts subscriptions that grant a paid plan now; more than one is a
 	// duplicate the admin should cancel in the portal.
-	ActiveSubscriptions int          `json:"active_subscriptions"`
-	Limits              PlanLimits   `json:"limits"`
-	Usage               BillingUsage `json:"usage"`
+	ActiveSubscriptions int `json:"active_subscriptions"`
+	// Complimentary is true when the plan in effect is a grant by HC Labs, not a Polar subscription:
+	// there is no billing account, so no portal and no checkout. ComplimentaryUntil is its end, nil
+	// when it has none.
+	Complimentary      bool         `json:"complimentary"`
+	ComplimentaryUntil *time.Time   `json:"complimentary_until"`
+	Limits             PlanLimits   `json:"limits"`
+	Usage              BillingUsage `json:"usage"`
 }
 
 // NewBilling derives the plan in effect from every subscription of the workspace. The best
@@ -115,7 +157,9 @@ func NewBilling(subscriptions []Subscription, trialEndsAt time.Time, usage Billi
 	var best, latest *Subscription
 	for index := range subscriptions {
 		candidate := &subscriptions[index]
-		if latest == nil || candidate.ModifiedAt.After(latest.ModifiedAt) {
+		// A complimentary grant has no billing account behind it, so once it ran out there is
+		// nothing to explain or manage.
+		if !candidate.Complimentary() && (latest == nil || candidate.ModifiedAt.After(latest.ModifiedAt)) {
 			latest = candidate
 		}
 		if candidate.Entitled(now) {
@@ -135,6 +179,9 @@ func NewBilling(subscriptions []Subscription, trialEndsAt time.Time, usage Billi
 		billing.Status = shown.Status
 		billing.CurrentPeriodEnd = UTCOptional(shown.CurrentPeriodEnd)
 		billing.CancelAtPeriodEnd = shown.CancelAtPeriodEnd
+	}
+	if best != nil && best.Complimentary() {
+		billing.Complimentary, billing.ComplimentaryUntil = true, UTCOptional(best.CurrentPeriodEnd)
 	}
 	billing.Limits = LimitsFor(billing.Plan)
 	return billing

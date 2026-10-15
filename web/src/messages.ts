@@ -174,6 +174,7 @@ export const messages = {
   linkPlanLimited: 'This workspace has reached the agent limit of its plan, so the link cannot add you yet. Ask a workspace admin to upgrade, then use this link again before it expires, or ask for a new link.',
   renewsOn: (when: string) => `Renews ${when}.`,
   cancelsOn: (when: string) => `Cancels ${when}. You keep the plan until then.`,
+  complimentaryPlan: (plan: string, until: string | null) => (until ? `Complimentary ${plan} plan (until ${until})` : `Complimentary ${plan} plan`),
   pastDueNotice: 'Your last payment failed. The plan stays active while the payment is retried; update your card in the billing portal.',
   duplicateSubscriptions: 'This workspace has more than one active subscription, so it is paying twice. Open Manage billing and cancel the extra one.',
   checkoutReturned: 'Payment received. Your plan updates in a few moments.',
@@ -193,4 +194,9 @@ export const messages = {
   appearanceDescription: 'Light is the default. Your choice is saved in this browser.',
   theme: 'Theme',
   themes: { light: 'Light', dark: 'Dark' },
+  replyNotSent: 'The reply could not be sent. Your text is still here; try again.',
+  trialReplyRestricted: 'During the trial, email goes only to customers who wrote to you first. Verify your sending domain in Settings or choose a plan to start new conversations. Your text is still here.',
+  trialReplyLimit: (wait: string) => `The trial sends up to 200 replies in 24 hours. Try again in about ${wait}, or choose a plan to remove the limit. Your text is still here.`,
+  hours: (count: number) => `${count} hour${count === 1 ? '' : 's'}`,
+  minutes: (count: number) => `${count} minute${count === 1 ? '' : 's'}`,
 } as const;

@@ -1,4 +1,5 @@
 import { afterEach, expect, expectTypeOf, test, vi } from 'vitest';
+import { OutboundRefusedError } from './outbound-error';
 import { api, CloudWorkspaceChoiceError, PlanLimitError, UnauthorizedError, type UpdateConversationRequest } from './client';
 import type { operations } from './generated';
 
@@ -45,4 +46,18 @@ test('a 402 carries the server message so the page can say which limit was reach
 test('a 402 without a readable body still reports a plan limit', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 402, json: vi.fn().mockRejectedValue(new Error('not json')) }));
   await expect(api.createInvite('new@example.com', 'agent')).rejects.toBeInstanceOf(PlanLimitError);
+});
+
+test('a trial outbound refusal keeps the server code, message and retry hint', async () => {
+  const headers = { get: (name: string) => (name === 'Retry-After' ? '82800' : null) };
+  const restricted = 'During the trial, email goes only to customers who wrote to you first.';
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, status: 403, headers, json: vi.fn().mockResolvedValue({ error: { code: 'trial_outbound_restricted', message: restricted } }) })
+    .mockResolvedValueOnce({ ok: false, status: 429, headers, json: vi.fn().mockResolvedValue({ error: { code: 'trial_outbound_limit', message: 'Cap', retry_after_seconds: 82800 } }) }));
+  await expect(api.createMessage('c1', 'outgoing', 'Hi')).rejects.toEqual(expect.objectContaining({ name: OutboundRefusedError.name, code: 'trial_outbound_restricted', message: restricted }));
+  await expect(api.createMessage('c1', 'outgoing', 'Hi')).rejects.toEqual(expect.objectContaining({ code: 'trial_outbound_limit', retryAfterSeconds: 82800 }));
+});
+
+test('any other 403 stays a plain failure', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403, json: vi.fn().mockResolvedValue({ error: { code: 'forbidden', message: 'No' } }) }));
+  await expect(api.createMessage('c1', 'outgoing', 'Hi')).rejects.toEqual(new Error('API 403'));
 });

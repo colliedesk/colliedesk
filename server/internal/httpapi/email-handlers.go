@@ -157,6 +157,9 @@ func (a *API) retryMessageDelivery(response http.ResponseWriter, request *http.R
 		writeError(response, http.StatusConflict, "outbound_not_ready", strings.TrimPrefix(err.Error(), store.ErrOutboundNotReady.Error()+": "))
 		return
 	}
+	if writePlanLimit(response, err) {
+		return
+	}
 	if err != nil {
 		writeEmailStoreError(response, err)
 		return

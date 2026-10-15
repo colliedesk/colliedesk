@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
@@ -42,11 +44,14 @@ func writeStoreError(response http.ResponseWriter, err error) {
 	writeError(response, http.StatusBadRequest, "invalid_request", "The request could not be completed.")
 }
 
-// writePlanLimit answers 402 when err is a plan limit or a locked workspace, and reports whether it did.
+// writePlanLimit answers 402 when err is a plan limit or a locked workspace, and 403 or 429 when the trial refuses a reply, and reports whether it did.
 func writePlanLimit(response http.ResponseWriter, err error) bool {
 	var limit *domain.PlanLimitError
 	var locked *domain.LockedError
+	var outbound *domain.TrialOutboundError
 	switch {
+	case errors.As(err, &outbound):
+		writeTrialOutbound(response, outbound)
 	case errors.As(err, &limit):
 		writeError(response, http.StatusPaymentRequired, "plan_limit_reached", limit.Error())
 	case errors.As(err, &locked):
@@ -55,4 +60,17 @@ func writePlanLimit(response http.ResponseWriter, err error) bool {
 		return false
 	}
 	return true
+}
+
+// writeTrialOutbound answers 403 trial_outbound_restricted for a reply the trial never allows (the
+// customer did not write first) and 429 trial_outbound_limit, with Retry-After, for the daily cap.
+func writeTrialOutbound(response http.ResponseWriter, refusal *domain.TrialOutboundError) {
+	if !refusal.Limited() {
+		writeError(response, http.StatusForbidden, "trial_outbound_restricted", refusal.Error())
+		return
+	}
+	seconds := int((refusal.RetryAfter + time.Second - 1) / time.Second)
+	response.Header().Set("Retry-After", strconv.Itoa(seconds))
+	writeJSON(response, http.StatusTooManyRequests, map[string]any{"error": map[string]any{
+		"code": "trial_outbound_limit", "message": refusal.Error(), "retry_after_seconds": seconds}})
 }

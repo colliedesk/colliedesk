@@ -139,11 +139,20 @@ type MessageDelivery struct {
 	SentAt    *time.Time `json:"sent_at"`
 }
 
+// Doors an inbound message can come through.
+const (
+	ViaPlatform  = "platform"
+	ViaWorkspace = "workspace"
+)
+
 // IncomingEmail is the envelope of a message that arrived by email.
 type IncomingEmail struct {
-	From           string            `json:"from"`
-	Authentication string            `json:"authentication"`
-	Attachments    []EmailAttachment `json:"attachments"`
+	From           string `json:"from"`
+	Authentication string `json:"authentication"`
+	// Via is how the message arrived: ViaPlatform or ViaWorkspace. Mail stored before this field
+	// existed has none.
+	Via         string            `json:"via,omitempty"`
+	Attachments []EmailAttachment `json:"attachments"`
 	// OriginalAttachmentID is the stored, gzip-compressed raw message (an attachment of this message).
 	OriginalAttachmentID *string `json:"original_attachment_id"`
 }
