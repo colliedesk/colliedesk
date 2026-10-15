@@ -25,6 +25,7 @@ interface SettingsPageProps {
   emailSection?: ReactNode;
   // exportSection is the admin's whole-workspace export.
   exportSection?: ReactNode;
+  webFormSection?: ReactNode;
 }
 
 function sessionState(session: Session): keyof typeof messages.sessionStates {
@@ -41,7 +42,7 @@ function inviteState(invite: Invite): keyof typeof messages.inviteStates {
 
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
   workspaceTimezone = 'UTC', timezoneOverride = null, createdInviteUrl, onCreateInvite, onRevokeInvite,
-  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, error, inviteError, emailSection, exportSection }: SettingsPageProps) {
+  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, error, inviteError, emailSection, webFormSection, exportSection }: SettingsPageProps) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'admin' | 'agent'>('agent');
   const [workspaceZone, setWorkspaceZone] = useState(workspaceTimezone);
@@ -62,6 +63,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
         </div>
       </section>
       {emailSection}
+      {webFormSection}
       <AppearanceSection />
       {exportSection && <section className="settings-card" aria-labelledby="export-heading">
         <div className="section-heading"><h2 id="export-heading">{messages.exportHeading}</h2><p>{messages.exportDescription}</p></div>

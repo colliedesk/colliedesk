@@ -44,7 +44,8 @@ type Config struct {
 	// client keeps reading.
 	ExportTimeout time.Duration
 	// TrustedProxies are the reverse proxies whose X-Forwarded-For is believed when finding the
-	// client address of a sign-up (TRUSTED_PROXIES). Empty trusts none: the peer address is the client.
+	// client address of a sign-up or of a public web form submission (TRUSTED_PROXIES). Empty trusts
+	// none: the peer address is the client.
 	TrustedProxies []netip.Prefix
 	// SignupHashKey keys the hashes of the sign-up records (SIGNUP_HASH_KEY, at least 32 bytes).
 	SignupHashKey string
@@ -70,8 +71,11 @@ type API struct {
 	store  *store.Store
 	// exports admits workspace exports; see exportLimiter.
 	exports *exportLimiter
-	polar   *polar.Client
-	now     func() time.Time
+	// webForms limits the public web form per client address and workspace.
+	webForms       *webFormLimiter
+	webFormClients *webFormLimiter
+	polar          *polar.Client
+	now            func() time.Time
 }
 
 type routeSpec struct {
@@ -101,7 +105,7 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 		clock = func() time.Time { return time.Now().UTC() }
 	}
 	limits := config.Billing.Enabled()
-	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports),
+	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
 		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits),
 		store: store.NewWithDB(db).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits)}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
@@ -121,6 +125,8 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 		}
 		mux.Handle(route.Method+" "+route.Pattern, api.authorize(route.Route, route.handler))
 	}
+	// The CORS preflight of the public web form is sent by the browser, never by an agent.
+	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)
 	return mux
 }
 
@@ -171,6 +177,9 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/billing/portal", auth.PermissionBillingManage},
 		{http.MethodPost, polarWebhookPath, auth.PermissionPublic},
 		{http.MethodGet, "/api/v1/export", auth.PermissionWorkspaceExport},
+		{http.MethodGet, "/api/v1/channels/web-form", auth.PermissionAccessRead},
+		{http.MethodPut, "/api/v1/channels/web-form", auth.PermissionAccessWrite},
+		{http.MethodPost, webFormSubmitPattern, auth.PermissionPublic},
 	}
 }
 

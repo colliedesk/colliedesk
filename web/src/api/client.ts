@@ -5,7 +5,7 @@ import { exportWorkspace } from './workspace-export';
 import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactDetailSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema,
-  cloudWorkspaceChoicesSchema, emailChannelSettingsSchema, inboundSecretSchema,
+  cloudWorkspaceChoicesSchema, emailChannelSettingsSchema, inboundSecretSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, messageListSchema, messageSchema, timeEntryListSchema,
   billingLinkSchema, billingSchema, publicConfigSchema, redeemedSchema, sessionListSchema, tagListSchema, tagSchema, workspaceSchema,
 } from './schemas';
@@ -35,6 +35,24 @@ export class WorkspaceLockedError extends PlanLimitError {
     super(message);
     this.name = 'WorkspaceLockedError';
   }
+}
+
+// InvalidRequestError means the server refused the input (HTTP 400); its message says what to fix.
+export class InvalidRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidRequestError';
+  }
+}
+
+async function invalidRequest(response: Response): Promise<Error> {
+  try {
+    const body = await response.json() as { error?: { message?: unknown } };
+    if (typeof body.error?.message === 'string' && body.error.message) return new InvalidRequestError(body.error.message);
+  } catch {
+    // An unreadable body is an ordinary failure.
+  }
+  return failure(response.status);
 }
 
 function failure(status: number): Error {
@@ -74,6 +92,7 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
     ...init,
   });
   if (response.status === 402) throw await planLimitFailure(response);
+  if (response.status === 400) throw await invalidRequest(response);
   if (response.status === 403 || response.status === 429) throw await outboundRefusal(response);
   if (!response.ok) throw failure(response.status);
   return schema.parse(await response.json());
@@ -127,6 +146,8 @@ export const api = {
   emailChannel: () => request('/api/v1/channels/email', emailChannelSettingsSchema),
   saveEmailChannel: (support_address: string) => request('/api/v1/channels/email', emailChannelSettingsSchema, { method: 'PUT', body: json<'putEmailChannel'>({ support_address }) }),
   disconnectEmailChannel: () => requestNoContent('/api/v1/channels/email', { method: 'DELETE' }),
+  webForm: () => request('/api/v1/channels/web-form', webFormSettingsSchema),
+  saveWebForm: (enabled: boolean, allowed_origins: string[]) => request('/api/v1/channels/web-form', webFormSettingsSchema, { method: 'PUT', body: json<'putWebForm'>({ enabled, allowed_origins }) }),
   verifyEmailDomain: () => request('/api/v1/channels/email/domain-verification', emailChannelSettingsSchema, { method: 'POST' }),
   rotateEmailSecret: () => request('/api/v1/channels/email/secret', inboundSecretSchema, { method: 'POST' }),
   retryDelivery: (conversationId: string, messageId: string) => request(`/api/v1/conversations/${conversationId}/messages/${messageId}/retry`, messageSchema, { method: 'POST' }),

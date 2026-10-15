@@ -77,7 +77,9 @@ function kindLabel(kind: Message['kind']) {
 }
 
 function EmailEnvelope({ email, storedFiles }: { email: NonNullable<Message['email']>; storedFiles: number }) {
-  const warning = email.authentication === 'fail' ? messages.senderFailedVerification
+  // Anyone can type any address into a web form, so that label replaces the generic one.
+  const warning = email.via === 'web_form' ? messages.webFormSender
+    : email.authentication === 'fail' ? messages.senderFailedVerification
     : email.authentication === 'none' ? messages.senderNotVerified : undefined;
   return (
     <div className="message-envelope">

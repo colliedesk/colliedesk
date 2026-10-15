@@ -90,6 +90,9 @@ paths:
         '429':
           description: Error code `rate_limited`. This client address already started 3 trials in the last 24 hours.
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '503':
+          description: Error code `signup_unavailable`. Sign-up is off because SIGNUP_HASH_KEY or TRUSTED_PROXIES is missing on the server (logged at start).
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/auth/redeem:
     post:
       operationId: redeemLink
@@ -849,6 +852,116 @@ paths:
             Retry-After: {schema: {type: integer}}
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/channels/web-form:
+    get:
+      operationId: getWebForm
+      x-permission: access:read
+      description: State of the public web form channel. A workspace that never set it up has it off.
+      responses:
+        '200': {$ref: '#/components/responses/WebFormSettings'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    put:
+      operationId: putWebForm
+      x-permission: access:write
+      description: >-
+        Turn the public web form on or off and replace its allowed origins. Turning it off keeps the
+        origins, so turning it on again needs nothing else. Origins are exact (`scheme://host[:port]`,
+        http or https), at most 20, with no path, wildcard or credentials; they are lowercased and
+        de-duplicated.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled, allowed_origins]
+              properties:
+                enabled: {type: boolean}
+                allowed_origins:
+                  type: array
+                  maxItems: 20
+                  items: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/WebFormSettings'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/public/forms/{workspace_slug}:
+    parameters:
+      - name: workspace_slug
+        in: path
+        required: true
+        schema: {type: string}
+    post:
+      operationId: submitWebForm
+      security: []
+      x-permission: public
+      description: >-
+        Public, unauthenticated. A website posts a visitor's email (and optionally a message) and the
+        workspace gets a conversation: the visitor becomes a contact (found by email), the text is an
+        incoming message, the subject is `Web form: <source>` (or `Web form`) and the tag is
+        `web-form`. Nothing is sent to the visitor. The body must be `application/json`. A filled
+        `website` field is a bot trap: the answer is the same 202 and nothing is stored. An unknown
+        workspace, a form that is off and a locked workspace all answer the same 404. Browsers may
+        read the answer only from an origin on the workspace's allowed list (CORS). At most 5
+        submissions per client address and workspace per minute, and 30 requests per client address
+        per minute across all forms; a workspace also accepts at most 50 form conversations per 10
+        minutes, counted apart from email. Fields the form does not know are ignored. The message
+        is marked `email.via = web_form` with authentication `none` (unverified address).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: {type: string, format: email, maxLength: 254}
+                message: {type: string, maxLength: 5000}
+                source: {type: string, maxLength: 100, description: 'Where the form sits, for example site:updates'}
+                website: {type: string, description: Honeypot; leave empty}
+      responses:
+        '202':
+          description: Accepted (also for a honeypot hit)
+          headers:
+            Access-Control-Allow-Origin: {schema: {type: string}, description: Set only for an allowed origin}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: {type: boolean}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '415':
+          description: The body is not application/json
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '422':
+          description: Invalid input; `error.fields` names each bad field
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '429':
+          description: Too many submissions; retry after the `Retry-After` seconds
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '500': {$ref: '#/components/responses/InternalError'}
+    options:
+      operationId: preflightWebForm
+      security: []
+      x-permission: public
+      description: CORS preflight. 204 with the allow headers for an allowed origin; every other case is the same 404 as a missing form.
+      responses:
+        '204':
+          description: Preflight accepted
+          headers:
+            Access-Control-Allow-Origin: {schema: {type: string}}
+            Access-Control-Allow-Methods: {schema: {type: string}}
+            Access-Control-Allow-Headers: {schema: {type: string}}
+            Access-Control-Max-Age: {schema: {type: integer}}
+        '404': {$ref: '#/components/responses/NotFound'}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
@@ -901,6 +1014,9 @@ components:
     PayloadTooLarge:
       description: Message larger than 25 MiB or with more than 100 attachments; nothing was stored
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    WebFormSettings:
+      description: Web form channel state
+      content: {application/json: {schema: {$ref: '#/components/schemas/WebFormSettings'}}}
     TooManyRequests:
       description: Per-contact inbound rate limit reached; the forwarder should retry later
       headers:
@@ -1281,8 +1397,11 @@ components:
         authentication: {$ref: '#/components/schemas/EmailAuthentication'}
         via:
           type: string
-          enum: [platform, workspace]
-          description: Door the message came through; absent on mail stored before this was recorded. Trial replies need `platform`.
+          enum: [platform, workspace, web_form]
+          description: >-
+            Door the message came through; absent on mail stored before this was recorded. `web_form`
+            is text typed into the public web form: the address is unverified (authentication `none`).
+            Trial replies need `platform`.
         original_attachment_id:
           type: [string, 'null']
           format: uuid
@@ -1354,6 +1473,13 @@ components:
         conversation_id: {type: [string, 'null'], format: uuid}
         message_id: {type: [string, 'null'], format: uuid}
         authentication: {$ref: '#/components/schemas/EmailAuthentication'}
+    WebFormSettings:
+      type: object
+      required: [enabled, allowed_origins, submit_path]
+      properties:
+        enabled: {type: boolean}
+        allowed_origins: {type: array, items: {type: string}}
+        submit_path: {type: string, description: Path a website posts to; the host is this instance}
     Error:
       type: object
       required: [error]
@@ -1364,4 +1490,8 @@ components:
           properties:
             code: {type: string}
             message: {type: string}
+            fields:
+              type: object
+              description: 'Present on validation errors (422), one message per bad field name'
+              additionalProperties: {type: string}
             retry_after_seconds: {type: integer, description: 'Only on trial_outbound_limit: seconds until a reply can be sent.'}
