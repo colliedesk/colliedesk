@@ -12,9 +12,11 @@ import (
 
 // messageSelect returns timeline rows with their email delivery (outgoing) and envelope (incoming).
 const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_id::text,m.author_name,m.kind,m.body,m.body_html,m.origin,m.created_at,m.email_meta,
-	o.status,o.attempts,o.last_error,o.sent_at
+	o.status,o.attempts,o.last_error,o.sent_at,t.id::text,t.label,t.scope,COALESCE(NULLIF(ta.display_name,''),ta.email)
 	FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
-	LEFT JOIN email_outbox o ON o.workspace_id=m.workspace_id AND o.message_id=m.id`
+	LEFT JOIN email_outbox o ON o.workspace_id=m.workspace_id AND o.message_id=m.id
+	LEFT JOIN sessions t ON t.workspace_id=m.workspace_id AND t.id=m.agent_token_id
+	LEFT JOIN agents ta ON ta.workspace_id=t.workspace_id AND ta.id=t.agent_id`
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -23,14 +25,18 @@ type rowScanner interface {
 func scanMessage(row rowScanner) (domain.Message, error) {
 	var message domain.Message
 	var meta []byte
-	var status, lastError *string
+	var status, lastError, tokenID, tokenLabel, tokenScope, tokenAgent *string
 	var attempts *int32
 	var sentAt *time.Time
 	if err := row.Scan(&message.ID, &message.ConversationID, &message.AuthorAgentID, &message.AuthorName, &message.Kind, &message.Body,
-		&message.BodyHTML, &message.Origin, &message.CreatedAt, &meta, &status, &attempts, &lastError, &sentAt); err != nil {
+		&message.BodyHTML, &message.Origin, &message.CreatedAt, &meta, &status, &attempts, &lastError, &sentAt,
+		&tokenID, &tokenLabel, &tokenScope, &tokenAgent); err != nil {
 		return domain.Message{}, err
 	}
 	message.CreatedAt = domain.UTC(message.CreatedAt)
+	if tokenID != nil && tokenLabel != nil && tokenScope != nil && tokenAgent != nil {
+		message.AgentToken = &domain.MessageToken{ID: *tokenID, Label: *tokenLabel, Scope: *tokenScope, AgentName: *tokenAgent}
+	}
 	message.Attachments = []domain.Attachment{}
 	if status != nil && attempts != nil {
 		message.Delivery = &domain.MessageDelivery{Status: *status, Attempts: int(*attempts), LastError: lastError, SentAt: domain.UTCOptional(sentAt)}
@@ -91,18 +97,25 @@ func getMessage(ctx context.Context, query messageQuerier, workspaceID, messageI
 	return message, nil
 }
 
+// Actor is who wrote something: an agent, and the agent token they used when an AI agent wrote it
+// for them. TokenID is empty for what a person did.
+type Actor struct {
+	AgentID string
+	TokenID string
+}
+
 // CreateMessage stores a reply or note. A reply is queued for email when the workspace has an
 // email channel; a note never is.
-func (s *Store) CreateMessage(ctx context.Context, workspaceID, conversationID, agentID, kind, body string) (domain.Message, error) {
+func (s *Store) CreateMessage(ctx context.Context, workspaceID, conversationID string, actor Actor, kind, body string) (domain.Message, error) {
 	tx, err := s.db.BeginWorkspace(ctx, workspaceID)
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("begin message creation: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 	var messageID string
-	err = tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,author_agent_id,kind,body)
-		SELECT $1,c.id,$3,$4,$5 FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2
-		RETURNING id::text`, workspaceID, conversationID, agentID, kind, body).Scan(&messageID)
+	err = tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,author_agent_id,agent_token_id,kind,body)
+		SELECT $1,c.id,$3,NULLIF($4,'')::uuid,$5,$6 FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2
+		RETURNING id::text`, workspaceID, conversationID, actor.AgentID, actor.TokenID, kind, body).Scan(&messageID)
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("create message: %w", err)
 	}

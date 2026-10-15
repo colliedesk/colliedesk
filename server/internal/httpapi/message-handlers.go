@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
 func (a *API) listMessages(response http.ResponseWriter, request *http.Request) {
@@ -40,7 +41,11 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		writeScopeInsufficient(response, identity.Scope, need)
 		return
 	}
-	item, err := a.store.CreateMessage(request.Context(), identity.Workspace.ID, request.PathValue("id"), identity.Agent.ID, input.Kind, input.Body)
+	actor := store.Actor{AgentID: identity.Agent.ID}
+	if identity.Scope != "" {
+		actor.TokenID = identity.SessionID // what an agent token writes is marked as its work
+	}
+	item, err := a.store.CreateMessage(request.Context(), identity.Workspace.ID, request.PathValue("id"), actor, input.Kind, input.Body)
 	if err != nil {
 		writeStoreError(response, err)
 		return

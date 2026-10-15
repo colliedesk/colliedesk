@@ -109,11 +109,21 @@ type TimeEntry struct {
 	ExecutedAt     time.Time `json:"executed_at"`
 }
 
+// MessageToken names the agent token a message was written with. AgentName is the display name of
+// the agent the token acts as, or their email when they have none.
+type MessageToken struct {
+	ID        string `json:"id"`
+	Label     string `json:"label"`
+	Scope     string `json:"scope"`
+	AgentName string `json:"agent_name"`
+}
+
 type Message struct {
 	ID             string           `json:"id"`
 	ConversationID string           `json:"conversation_id"`
 	AuthorAgentID  *string          `json:"author_agent_id"`
 	AuthorName     *string          `json:"author_name"`
+	AgentToken     *MessageToken    `json:"agent_token"`
 	Kind           string           `json:"kind"`
 	Body           string           `json:"body"`
 	BodyHTML       *string          `json:"body_html"`

@@ -153,6 +153,7 @@ export const messages = {
   senderFailedVerification: 'Failed sender verification',
   senderNotVerified: 'Sender not verified',
   webFormSender: 'Unverified sender (web form)',
+  writtenByAgentToken: (agentName: string, tokenLabel: string) => `by ${agentName} via ${tokenLabel}`,
   attachmentsNotImported: (names: string[]) => `${names.length} attachment${names.length === 1 ? '' : 's'} not imported: ${names.join(', ')}`,
   dnsRecordName: 'TXT record name',
   dnsRecordValue: 'TXT record value',

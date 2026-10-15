@@ -75,9 +75,12 @@ export const attachmentSchema = z.object({
   id: z.string().uuid(), message_id: z.string().uuid(), filename: z.string(), content_type: z.string(),
   size: z.number().int().nonnegative(), sha256: z.string().regex(/^[0-9a-f]{64}$/), created_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'Attachment'>>;
+export const messageAgentTokenSchema = z.object({
+  id: z.string().uuid(), label: z.string(), scope: z.enum(['read', 'draft', 'send']), agent_name: z.string(),
+}) satisfies z.ZodType<Generated<'MessageAgentToken'>>;
 export const messageSchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), author_agent_id: z.string().uuid().nullable(),
-  author_name: z.string().nullable(), kind: z.enum(['incoming', 'outgoing', 'note']), body: z.string(),
+  author_name: z.string().nullable(), agent_token: messageAgentTokenSchema.nullable(), kind: z.enum(['incoming', 'outgoing', 'note']), body: z.string(),
   body_html: z.string().nullable(), origin: messageOriginSchema.nullable(),
   attachments: z.array(attachmentSchema), created_at: z.string().datetime(),
   delivery: messageDeliverySchema.nullable(), email: incomingEmailSchema.nullable(),

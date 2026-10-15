@@ -39,7 +39,7 @@ func TestUndoRemovesWhatTheImportCreatedAndKeepsWorkSinceThen(t *testing.T) {
 	if err := env.pool.QueryRow(ctx, `SELECT id::text FROM agents WHERE workspace_id=$1`, env.workspaceID).Scan(&alice); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := data.CreateMessage(ctx, env.workspaceID, env.target(t, "ticket", "2"), alice, "outgoing", "Written after the migration"); err != nil {
+	if _, err := data.CreateMessage(ctx, env.workspaceID, env.target(t, "ticket", "2"), store.Actor{AgentID: alice}, "outgoing", "Written after the migration"); err != nil {
 		t.Fatal(err)
 	}
 

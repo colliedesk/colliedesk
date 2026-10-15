@@ -11,12 +11,16 @@ info:
     plan, export the data (`GET /api/v1/export`), and show or disconnect the email channel. Paying unlocks the
     workspace on the next request. Self-hosted instances have no trial and no lock.
 
-    An agent token (`POST /api/v1/auth/tokens`) is a bearer credential for an AI agent. It acts as the
-    agent who created it, limited to a tier: `read` (what an agent may read), `draft` (also changes that
-    never reach a customer: status, priority, assignee, tags, private notes) or `send` (also outgoing
-    replies and creating records). A token never reaches administration (sessions, invites, tokens,
-    workspace, channel, billing and export settings) and is refused as a cookie. A call outside the tier
-    answers 403 with error code `scope_insufficient`; the message names the tier the action needs.
+    An agent token (`POST /api/v1/auth/tokens`) is a bearer credential for an AI agent. It starts with
+    `cdk_agent_` and acts as the agent who created it, limited to a tier: `read` (conversations,
+    messages, contacts, tags and the team list), `draft` (also changes that never reach a customer:
+    status, priority, assignee, tags, new tags, private notes) or `send` (also outgoing replies and
+    creating contacts and conversations). A token never changes administration (sessions, invites,
+    tokens, workspace, channel, billing and export settings), cannot read the lists of sessions and
+    invites or the channel settings, and is refused as a cookie. A call outside the tier answers 403
+    with error code `scope_insufficient`; the message names the tier the action needs. A token expires
+    30 days after its last use and never lives longer than one year from its creation. A message it
+    writes carries `agent_token`, so a person can tell it from their own.
 servers:
   - url: /
 security:
@@ -173,8 +177,9 @@ paths:
       description: >
         Creates a bearer token for an AI agent that acts as the signed-in agent. The token has the
         agent role whatever the creator's role is, so it never reaches administration. A token cannot
-        create tokens. It appears in `GET /api/v1/auth/sessions` with its label and scope, and
-        `DELETE /api/v1/auth/sessions/{id}` revokes it.
+        create tokens. It appears in `GET /api/v1/auth/sessions` (for a person) with its label and
+        scope, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last
+        use, and one year after its creation at the latest.
       requestBody:
         required: true
         content:
@@ -1351,7 +1356,7 @@ components:
       type: object
       required: [token, session]
       properties:
-        token: {type: string, description: 'Raw bearer value; Colliedesk stores only its SHA-256 and never shows it again'}
+        token: {type: string, description: 'Raw bearer value, starting with cdk_agent_; Colliedesk stores only a hash of it and never shows it again'}
         session: {$ref: '#/components/schemas/Session'}
     Session:
       type: object
@@ -1445,12 +1450,17 @@ components:
         page_size: {type: integer, minimum: 1}
     Message:
       type: object
-      required: [id, conversation_id, author_agent_id, author_name, kind, body, body_html, origin, attachments, created_at, delivery, email]
+      required: [id, conversation_id, author_agent_id, author_name, agent_token, kind, body, body_html, origin, attachments, created_at, delivery, email]
       properties:
         id: {type: string, format: uuid}
         conversation_id: {type: string, format: uuid}
         author_agent_id: {type: [string, 'null'], format: uuid}
         author_name: {type: [string, 'null'], description: 'Display name of an author without a Colliedesk agent account (customer or imported agent)'}
+        agent_token:
+          description: The agent token the message was written with; null for what a person wrote and for incoming mail.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/MessageAgentToken'}
         kind: {type: string, enum: [incoming, outgoing, note]}
         body: {type: string}
         body_html:
@@ -1475,6 +1485,14 @@ components:
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/IncomingEmail'}
+    MessageAgentToken:
+      type: object
+      required: [id, label, scope, agent_name]
+      properties:
+        id: {type: string, format: uuid}
+        label: {type: string, description: 'Name the token was given when it was created, for example Claude Code'}
+        scope: {$ref: '#/components/schemas/TokenScope'}
+        agent_name: {type: string, description: 'Display name, or the email when there is none, of the agent the token acts as'}
     MessageOrigin:
       type: object
       required: [system, external_id, kind, from, to, cc, bcc]

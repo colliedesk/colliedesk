@@ -147,7 +147,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Creates a bearer token for an AI agent that acts as the signed-in agent. The token has the agent role whatever the creator's role is, so it never reaches administration. A token cannot create tokens. It appears in `GET /api/v1/auth/sessions` with its label and scope, and `DELETE /api/v1/auth/sessions/{id}` revokes it. */
+        /** @description Creates a bearer token for an AI agent that acts as the signed-in agent. The token has the agent role whatever the creator's role is, so it never reaches administration. A token cannot create tokens. It appears in `GET /api/v1/auth/sessions` (for a person) with its label and scope, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last use, and one year after its creation at the latest. */
         post: operations["createAgentToken"];
         delete?: never;
         options?: never;
@@ -845,7 +845,7 @@ export interface components {
          */
         TokenScope: "read" | "draft" | "send";
         AgentToken: {
-            /** @description Raw bearer value; Colliedesk stores only its SHA-256 and never shows it again */
+            /** @description Raw bearer value, starting with cdk_agent_; Colliedesk stores only a hash of it and never shows it again */
             token: string;
             session: components["schemas"]["Session"];
         };
@@ -955,6 +955,8 @@ export interface components {
             author_agent_id: string | null;
             /** @description Display name of an author without a Colliedesk agent account (customer or imported agent) */
             author_name: string | null;
+            /** @description The agent token the message was written with; null for what a person wrote and for incoming mail. */
+            agent_token: null | components["schemas"]["MessageAgentToken"];
             /** @enum {string} */
             kind: "incoming" | "outgoing" | "note";
             body: string;
@@ -969,6 +971,15 @@ export interface components {
             delivery: null | components["schemas"]["MessageDelivery"];
             /** @description Envelope details of an incoming email; null for messages that did not arrive by email. */
             email: null | components["schemas"]["IncomingEmail"];
+        };
+        MessageAgentToken: {
+            /** Format: uuid */
+            id: string;
+            /** @description Name the token was given when it was created, for example Claude Code */
+            label: string;
+            scope: components["schemas"]["TokenScope"];
+            /** @description Display name, or the email when there is none, of the agent the token acts as */
+            agent_name: string;
         };
         MessageOrigin: {
             system: string;
