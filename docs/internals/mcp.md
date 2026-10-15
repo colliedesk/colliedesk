@@ -60,11 +60,24 @@
   field named `untrusted_customer_content`; `TestCustomerWrittenTextAppearsOnlyUnderUntrustedCustomerContent`
   walks every string of the result. A new output field must be classified the same way.
   The marker lowers prompt-injection risk; it does not remove it, so tiers stay the control.
-- **Two small REST additions** exist for this server and are in the OpenAPI contract:
-  `GET /auth/me` returns `scope` (the token tier), and `GET /contacts?ids=` fetches contacts by id.
-  Without `ids`, naming the customers of a page of 50 conversations meant `GET /contacts/{id}`
-  per customer, which loads every conversation of that customer (a shared sender address can have
-  thousands).
+- **Provenance decides trust, not `kind`.** `nativeTeamMessage` (`tools-conversation.go`) trusts a
+  message only when it is not `incoming`, has `author_agent_id`, and has no `origin` or an `origin.kind`
+  of `reply` or `private_note`. The Freshdesk importer stores a public note or a forward as `kind=note`,
+  and the contact can have written it; a matched agent's public note stays untrusted on purpose. An
+  imported reply whose author matched no Colliedesk agent has only `author_name`, so it is untrusted
+  too, name included. Do not widen the rule without a source that proves the author.
+- **Token-written text is model output.** `written_by_agent_token {label, scope}` appears on a
+  trusted message when `agent_token` is set, and `note_add` returns it for the note it wrote. The
+  instructions and the tool descriptions say to read it as model output. A person's name is shown
+  as author even when a token typed the text, so the token field is the only tell.
+- **Small REST additions** exist for this server and are in the OpenAPI contract:
+  `GET /auth/me` returns `scope` (the token tier); `GET /contacts?ids=` fetches contacts by id; and
+  `GET /contacts?limit=` stops the list and sets `has_more` (the store asks for one row more, so no
+  count is made). Without `ids`, naming the customers of a page of 50 conversations meant
+  `GET /contacts/{id}` per customer, which loads every conversation of that customer (a shared sender
+  address can have thousands). The `ids` handler parses uuids (at most 100) and the store runs a
+  statement of its own over a `uuid[]`: comparing `id::text` could not use the `(workspace_id, id)`
+  index and scanned every contact of every workspace (see Performance).
 - **Embedded guides.** `go:embed` cannot read outside the module, so `docs_search` reads a copy of
   `docs/user` in `server/internal/mcpserver/userdocs`. Run `make sync-user-docs` after editing a
   guide; `TestEmbeddedUserGuidesMatchTheDocsDirectory` fails on a stale copy. `README.md` is not

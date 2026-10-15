@@ -196,10 +196,11 @@ type noteArgs struct {
 type noteOut struct {
 	ConversationID string `json:"conversation_id"`
 	Message        struct {
-		ID        string `json:"id"`
-		Kind      string `json:"kind"`
-		CreatedAt string `json:"created_at"`
-		Author    string `json:"author,omitempty"`
+		ID                  string    `json:"id"`
+		Kind                string    `json:"kind"`
+		CreatedAt           string    `json:"created_at"`
+		Author              string    `json:"author,omitempty"`
+		WrittenByAgentToken *tokenOut `json:"written_by_agent_token,omitempty"`
 	} `json:"message"`
 }
 
@@ -219,8 +220,12 @@ func noteAdd(c *call, arguments map[string]any) (any, error) {
 	}
 	out := noteOut{ConversationID: args.ConversationID}
 	out.Message.ID, out.Message.Kind, out.Message.CreatedAt = created.ID, created.Kind, utc(created.CreatedAt)
-	if created.AuthorName != nil {
-		out.Message.Author = *created.AuthorName
+	if nativeTeamMessage(created) {
+		out.Message.WrittenByAgentToken = tokenOf(created)
+		// The note is saved already, so a failed team lookup only leaves the author's name out.
+		if agents, err := c.agentsByID(); err == nil {
+			out.Message.Author = authorOf(created, agents)
+		}
 	}
 	return out, nil
 }

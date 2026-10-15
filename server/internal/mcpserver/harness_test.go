@@ -179,3 +179,16 @@ func (e *env) nameAgents(w workspace, name string) {
 		e.t.Fatal(err)
 	}
 }
+
+// imported stores a message the way the Freshdesk importer does: its Freshdesk classification in origin
+// and either a matched Colliedesk agent or only the display name of its author. The REST API cannot
+// create one.
+func (e *env) imported(w workspace, conversationID, kind, originKind string, agentID *string, authorName, body string) {
+	e.t.Helper()
+	origin := fmt.Sprintf(`{"system":"freshdesk","external_id":"%s-%d","kind":"%s","from":null,"to":[],"cc":[],"bcc":[]}`, originKind, time.Now().UnixNano(), originKind)
+	if _, err := e.pool.Exec(context.Background(),
+		`INSERT INTO messages(workspace_id,conversation_id,author_agent_id,author_name,kind,body,origin) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)`,
+		w.id, conversationID, agentID, authorName, kind, body, origin); err != nil {
+		e.t.Fatal(err)
+	}
+}

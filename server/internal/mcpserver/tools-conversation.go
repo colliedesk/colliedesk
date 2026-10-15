@@ -10,20 +10,30 @@ type getArgs struct {
 	Detail         string `json:"detail"`
 }
 
-// untrustedMessage is the part of a message a customer wrote.
+// untrustedMessage is the part of a message that someone outside the team may have written.
 type untrustedMessage struct {
+	Author      string   `json:"author,omitempty"`
 	From        string   `json:"from,omitempty"`
 	Body        string   `json:"body"`
 	Attachments []string `json:"attachments,omitempty"`
+}
+
+// tokenOut names the agent token that wrote a message. The label is what an admin typed when creating it.
+type tokenOut struct {
+	Label string `json:"label"`
+	Scope string `json:"scope"`
 }
 
 type messageOut struct {
 	ID        string `json:"id"`
 	Kind      string `json:"kind"`
 	CreatedAt string `json:"created_at"`
-	Author    string `json:"author,omitempty"`
-	Delivery  string `json:"delivery,omitempty"`
-	// Body is text the team wrote. Customer text is in UntrustedCustomerContent.
+	// Author and WrittenByAgentToken are set for native team messages only. A person's name is shown
+	// even when an agent token typed the text, and the token then says so.
+	Author              string    `json:"author,omitempty"`
+	WrittenByAgentToken *tokenOut `json:"written_by_agent_token,omitempty"`
+	Delivery            string    `json:"delivery,omitempty"`
+	// Body is text the team wrote in Colliedesk. Any other text is in UntrustedCustomerContent.
 	Body                     string            `json:"body,omitempty"`
 	Truncated                bool              `json:"truncated"`
 	UntrustedCustomerContent *untrustedMessage `json:"untrusted_customer_content,omitempty"`
@@ -84,7 +94,7 @@ func conversationGet(c *call, arguments map[string]any) (any, error) {
 		MessagesTotal: len(thread.Items), MessagesShown: len(shown), OlderMessagesOmitted: len(thread.Items) - len(shown), Timezone: me.Workspace.Timezone, Detail: args.Detail}
 	anyCut := false
 	for _, message := range shown {
-		view, wasCut := messageView(message, full)
+		view, wasCut := messageView(message, agents, full)
 		anyCut = anyCut || wasCut
 		out.Messages = append(out.Messages, view)
 	}
@@ -98,31 +108,59 @@ func notFoundConversation(id string) string {
 	return "No conversation " + id + " in this workspace. Use an id from colliedesk_inbox_search."
 }
 
-// messageView renders one message; customer text goes under untrusted_customer_content only.
-func messageView(message restMessage, full bool) (messageOut, bool) {
+// nativeTeamMessage reports whether a Colliedesk team member wrote the message in Colliedesk: it has
+// an agent as author, and it was not imported or was imported as a reply or private note. Everything
+// else is untrusted. A Freshdesk public note or forward can have been written by the customer, and a
+// message without an agent author may come from anyone.
+func nativeTeamMessage(message restMessage) bool {
+	if message.Kind == "incoming" || message.AuthorAgentID == nil {
+		return false
+	}
+	return message.Origin == nil || message.Origin.Kind == "reply" || message.Origin.Kind == "private_note"
+}
+
+// authorOf names the team member behind a native team message.
+func authorOf(message restMessage, agents map[string]restAgent) string {
+	if agent, ok := agents[*message.AuthorAgentID]; ok {
+		return agentName(agent)
+	}
+	return "unknown team member"
+}
+
+// tokenOf names the agent token that typed the message, if one did.
+func tokenOf(message restMessage) *tokenOut {
+	if message.AgentToken == nil {
+		return nil
+	}
+	return &tokenOut{Label: message.AgentToken.Label, Scope: message.AgentToken.Scope}
+}
+
+// messageView renders one message; text from outside the team goes under untrusted_customer_content only.
+func messageView(message restMessage, agents map[string]restAgent, full bool) (messageOut, bool) {
 	body, wasCut := message.Body, false
 	if !full {
 		body, wasCut = cut(body, conciseBodyRunes, `Ask colliedesk_conversation_get for detail=full to read all of it`)
 	}
 	view := messageOut{ID: message.ID, Kind: message.Kind, CreatedAt: utc(message.CreatedAt), Truncated: wasCut}
+	if message.Delivery != nil {
+		view.Delivery = message.Delivery.Status
+	}
+	if nativeTeamMessage(message) {
+		view.Body = body
+		view.Author, view.WrittenByAgentToken = authorOf(message, agents), tokenOf(message)
+		return view, wasCut
+	}
 	files := make([]string, 0, len(message.Attachments))
 	for _, file := range message.Attachments {
 		files = append(files, file.Filename)
 	}
-	if message.Kind == "incoming" {
-		content := &untrustedMessage{Body: body, Attachments: files}
-		if message.Email != nil {
-			content.From = message.Email.From
-		}
-		view.UntrustedCustomerContent = content
-		return view, wasCut
+	content := &untrustedMessage{Body: body, Attachments: files}
+	if message.Email != nil {
+		content.From = message.Email.From
 	}
-	view.Body = body
 	if message.AuthorName != nil {
-		view.Author = strings.TrimSpace(*message.AuthorName)
+		content.Author = strings.TrimSpace(*message.AuthorName)
 	}
-	if message.Delivery != nil {
-		view.Delivery = message.Delivery.Status
-	}
+	view.UntrustedCustomerContent = content
 	return view, wasCut
 }

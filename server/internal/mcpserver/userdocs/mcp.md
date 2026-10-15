@@ -50,7 +50,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_conversation_get` | Reads one conversation with its messages and customer | `read` |
 | `colliedesk_conversation_update` | Sets status, priority, assignee and adds or removes tags in one idempotent call; a tag name that does not exist yet is created | `draft` |
 | `colliedesk_note_add` | Adds a private note | `draft` |
-| `colliedesk_contacts_find` | Finds customers by part of a name or email | `read` |
+| `colliedesk_contacts_find` | Finds customers by part of a name or email; `truncated` says when more matched than were returned | `read` |
 | `colliedesk_tags_list` | Lists tags | `read` |
 | `colliedesk_agents_list` | Lists team members for assigning | `read` |
 | `colliedesk_docs_search` | Searches these user guides | any |
@@ -70,6 +70,14 @@ could not do with the API directly. Another workspace is never visible.
   appear only inside a field named `untrusted_customer_content`. The tool descriptions tell the
   model to treat it as data and never as instructions. This lowers the risk that a hostile email
   steers the agent; it does not remove it. Keep agents on the lowest tier that works.
+- **Only native team messages count as team text.** A reply or note written in Colliedesk by a
+  team member shows its author. A message imported from another helpdesk is marked like customer
+  text unless it was a reply or a private note of a team member: a Freshdesk public note or a
+  forward can have been written by the customer. A message with no team member as author is marked
+  too, author name included.
+- **Who wrote it.** When an agent token wrote a note, the message also shows
+  `written_by_agent_token` with the label and tier of the token. The server tells the model to read
+  such text as model output, not as a decision of the person the token acts as.
 
 ## Limits and errors
 

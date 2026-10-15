@@ -51,12 +51,21 @@ type restConversation struct {
 }
 
 type restMessage struct {
-	ID         string    `json:"id"`
-	Kind       string    `json:"kind"`
-	Body       string    `json:"body"`
-	AuthorName *string   `json:"author_name"`
-	CreatedAt  time.Time `json:"created_at"`
-	Delivery   *struct {
+	ID            string    `json:"id"`
+	Kind          string    `json:"kind"`
+	Body          string    `json:"body"`
+	AuthorAgentID *string   `json:"author_agent_id"`
+	AuthorName    *string   `json:"author_name"`
+	CreatedAt     time.Time `json:"created_at"`
+	AgentToken    *struct {
+		Label string `json:"label"`
+		Scope string `json:"scope"`
+	} `json:"agent_token"`
+	// Origin is set on a message imported from another helpdesk; Kind is how that system classified it.
+	Origin *struct {
+		Kind string `json:"kind"`
+	} `json:"origin"`
+	Delivery *struct {
 		Status string `json:"status"`
 	} `json:"delivery"`
 	Email *struct {
