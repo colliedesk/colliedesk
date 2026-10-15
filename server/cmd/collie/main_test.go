@@ -70,7 +70,7 @@ func TestCreateWorkspaceAndPairPrintFreshOneTimeURLs(t *testing.T) {
 		t.Fatalf("create-workspace hint %q does not contain %q", hint.String(), want)
 	}
 	parsed, err := url.Parse(firstURL)
-	if err != nil || parsed.Query().Get("token") == "" || parsed.Path != "/redeem" {
+	if err != nil || parsed.Query().Get("token") == "" || parsed.Path != "/sign-in" {
 		t.Fatalf("invalid pairing URL %q: %v", firstURL, err)
 	}
 
