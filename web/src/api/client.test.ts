@@ -38,6 +38,7 @@ test.each([
   [422, 'name_not_allowed', 'name_not_allowed'],
   [429, 'rate_limited', 'rate_limited'],
   [400, 'invalid_request', 'invalid'],
+  [503, 'signup_unavailable', 'signup_unavailable'],
   [500, 'internal_error', 'unavailable'],
 ])('sign-up %i %s is reported as %s', async (status, code, reason) => {
   fetchMock.mockResolvedValue(reply(status, apiError(code, 'Words from the server.')));

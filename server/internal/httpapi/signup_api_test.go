@@ -349,3 +349,24 @@ func TestConfigAdvertisesSignupOnlyWhereItExists(t *testing.T) {
 		t.Fatalf("hosted config status=%d body=%s, want %s", got.Code, got.Body.String(), want)
 	}
 }
+
+// A cloud whose sign-up settings are missing keeps serving everyone else and answers sign-up with a
+// clear refusal instead of a 500 or a crash-looping server.
+func TestSignupTurnedOffAtStartIsRefusedClearly(t *testing.T) {
+	f := newSignupFixture(t, func(config *httpapi.Config) { config.SignupDisabled = true })
+	response := f.signUp(t, "ana@example.com", "Northwind Help", "203.0.113.7")
+	wantResponse(t, response, http.StatusServiceUnavailable, "signup_unavailable")
+	if got := f.count(t, "workspaces"); got != "0" {
+		t.Fatalf("workspaces after a refused sign-up = %s, want 0", got)
+	}
+}
+
+// With sign-up turned off at start the web app must not offer it.
+func TestConfigHidesSignupWhileItIsTurnedOff(t *testing.T) {
+	f := newSignupFixture(t, func(config *httpapi.Config) { config.SignupDisabled = true })
+	got := request(t, f.api, http.MethodGet, "/api/v1/config", nil, "", nil)
+	want := "{\"billing\":{\"enabled\":true},\"cloud_sign_in\":{\"enabled\":true,\"publishable_key\":\"pk_test_example\"},\"signup\":{\"enabled\":false}}\n"
+	if got.Code != http.StatusOK || got.Body.String() != want {
+		t.Fatalf("config status=%d body=%s, want %s", got.Code, got.Body.String(), want)
+	}
+}

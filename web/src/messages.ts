@@ -192,6 +192,7 @@ export const messages = {
     name_not_allowed: 'This name is not available. Choose another name, or contact us if it is your own brand.',
     slug_unavailable: 'No address was free for this name. Try a different name.',
     invalid: 'The workspace name must be 2 to 60 characters.',
+    signup_unavailable: 'Sign-up is temporarily unavailable. Please try again later.',
     unavailable: 'The workspace could not be created. Try again.',
   },
   billing: 'Billing',

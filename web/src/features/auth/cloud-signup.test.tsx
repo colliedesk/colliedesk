@@ -37,6 +37,7 @@ test.each([
   ['name_not_allowed', /name is not available/i],
   ['slug_unavailable', /no address was free/i],
   ['invalid', /2 to 60 characters/i],
+  ['signup_unavailable', /temporarily unavailable/i],
   ['unavailable', /could not be created/i],
 ] as const)('%s is explained in words', async (reason, words) => {
   render(<CloudSignup onCreate={vi.fn().mockRejectedValue(new SignupError(reason))} onSignIn={vi.fn()} onUseAnotherAccount={vi.fn()} />);

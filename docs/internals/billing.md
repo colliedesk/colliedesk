@@ -10,6 +10,8 @@ User page: `docs/user/billing.md`.
 Billing is on only when every `POLAR_*` variable is set. None set means self-hosted: the billing
 routes are not registered (404), `/api/v1/config` says `billing.enabled=false`, the UI hides the page.
 Some set but not all stops `serve` at startup and names the missing keys (never the values).
+All set on a build without the locked screen (`lockedScreenShipped` false) starts `serve` with billing
+off and logs why, so an image older than its configuration never stops the inboxes.
 
 | Variable | Meaning |
 |---|---|
@@ -127,10 +129,10 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
   `limits.storage_warn_bytes`. The extension note is inferred from the days left, not read from
   `trial_extended_at`: `/auth/me` does not carry that flag, and an operator `trial set` beyond 14 days shows
   the same note.
-- `lockedScreenShipped` in `cmd/colliedesk/serve.go` is the start guard: a build whose web app cannot show the
-  lock must not start with billing on. It is true because this screen exists; do not set it back.
-- Cloud sign-up: `GET /api/v1/config` reports `signup.enabled` (cloud sign-in and billing both on, the same
-  condition as the route). After Clerk authenticates, the exchange answers 403 `forbidden` for an email that
+- `lockedScreenShipped` in `cmd/colliedesk/serve.go` keeps billing off (and logs why) in a build whose web app cannot show
+  the lock. It is true because this screen exists; do not set it back.
+- Cloud sign-up: `GET /api/v1/config` reports `signup.enabled` (cloud sign-in and billing both on and sign-up not turned
+  off at start, the same condition as the route; the web app maps 503 `signup_unavailable` too). After Clerk authenticates, the exchange answers 403 `forbidden` for an email that
   belongs to no workspace; the sign-in page then shows the workspace-name form and posts to
   `/auth/cloud/signup` with a token fetched at that moment (Clerk tokens live about a minute).
 - Export: the browser reads the stream to its end and saves a Blob. It keeps the archive in memory, so very
