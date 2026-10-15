@@ -98,3 +98,22 @@ test('a reply the trial refuses stays in the composer with the reason', async ()
   expect(await screen.findByRole('alert')).toHaveTextContent(/verify your sending domain/i);
   expect(body).toHaveValue('Please read this');
 });
+
+test('a retry the trial refuses says why instead of doing nothing', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [{
+    id: '33333333-3333-4333-8333-333333333333', conversation_id: alpha.id, author_agent_id: null, author_name: null, kind: 'outgoing', body: 'Answer.',
+    body_html: null, origin: null, attachments: [], created_at: '2026-10-14T00:00:00Z', email: null,
+    delivery: { status: 'failed', attempts: 1, last_error: 'x', sent_at: null },
+  }] });
+  api.retryDelivery.mockRejectedValue(new OutboundRefusedError('trial_outbound_limit', 'server text', 7200));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: /retry delivery/i }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(/200 replies in 24 hours.*about 2 hours/i);
+});

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, test } from 'vitest';
 import { SettingsPage } from './settings-page';
 
@@ -18,4 +18,11 @@ test('choosing dark switches the page and remembers it', () => {
   fireEvent.click(screen.getByRole('radio', { name: 'Light' }));
   expect(document.documentElement.dataset.theme).toBe('light');
   expect(localStorage.getItem('colliedesk.theme')).toBe('light');
+});
+
+test('a theme chosen in another tab moves the choice shown here and the page', () => {
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" />);
+  act(() => { window.dispatchEvent(new StorageEvent('storage', { key: 'colliedesk.theme', newValue: 'dark' })); });
+  expect(screen.getByRole('radio', { name: 'Dark' })).toBeChecked();
+  expect(document.documentElement.dataset.theme).toBe('dark');
 });

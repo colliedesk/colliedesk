@@ -3,10 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Set the saved theme while the head is parsed, before first paint, so a dark choice never paints light.
-         Same key and rule as src/lib/theme.ts; light is the default whatever the OS prefers. -->
-    <script>try{if(localStorage.getItem('colliedesk.theme')==='dark')document.documentElement.dataset.theme='dark'}catch(e){}</script>
     <meta name="theme-color" content="#f5f7fa" />
+    <!-- Set the saved theme while the head is parsed, before first paint, so a dark choice never paints light.
+         Same key and rule as src/lib/theme.ts; light is the default whatever the OS prefers. The theme-color
+         tag above is rewritten here, so it must come first. -->
+    <script>try{if(localStorage.getItem('colliedesk.theme')==='dark'){document.documentElement.dataset.theme='dark';document.querySelector('meta[name="theme-color"]').content='#0b0f15'}}catch(e){}</script>
     <link rel="icon" href="/favicon.ico?v=2" sizes="32x32" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />

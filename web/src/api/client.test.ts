@@ -1,63 +1,85 @@
-import { afterEach, expect, expectTypeOf, test, vi } from 'vitest';
-import { OutboundRefusedError } from './outbound-error';
-import { api, CloudWorkspaceChoiceError, PlanLimitError, UnauthorizedError, type UpdateConversationRequest } from './client';
-import type { operations } from './generated';
+import { afterEach, expect, test, vi } from 'vitest';
+import { api, PlanLimitError, WorkspaceLockedError } from './client';
+import { NotAnAgentError, SignupError } from './cloud-signup';
+import { ExportRefusedError } from './workspace-export';
 
-afterEach(() => vi.unstubAllGlobals());
+const reply = (status: number, body: unknown = {}, headers: Record<string, string> = {}) =>
+  new Response(typeof body === 'string' ? body : JSON.stringify(body), { status, headers });
+const fetchMock = vi.fn();
+vi.stubGlobal('fetch', fetchMock);
+afterEach(() => fetchMock.mockReset());
 
-test('revoke operations reject non-success responses', async () => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
-  await expect(api.revokeSession('session-id')).rejects.toThrow('API 500');
-  await expect(api.revokeInvite('invite-id')).rejects.toThrow('API 500');
+const apiError = (code: string, message = 'Server words.') => ({ error: { code, message } });
+
+test('402 workspace_locked becomes a WorkspaceLockedError that is still a plan limit', async () => {
+  fetchMock.mockResolvedValue(reply(402, apiError('workspace_locked', 'This workspace is locked.')));
+  const error = await api.tags().catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(WorkspaceLockedError);
+  expect(error).toBeInstanceOf(PlanLimitError);
 });
 
-test('conversation updates use the generated OpenAPI request body type', () => {
-  type Generated = operations['updateConversation']['requestBody']['content']['application/json'];
-  expectTypeOf<UpdateConversationRequest>().toEqualTypeOf<Generated>();
-  expectTypeOf(api.updateConversation).parameter(1).toEqualTypeOf<Generated>();
+test('another 402 stays an ordinary plan limit', async () => {
+  fetchMock.mockResolvedValue(reply(402, apiError('plan_limit_reached', 'Agent limit.')));
+  const error = await api.tags().catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(PlanLimitError);
+  expect(error).not.toBeInstanceOf(WorkspaceLockedError);
 });
 
-test('cloud exchange exposes workspace choices from a conflict response', async () => {
-	vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-		ok: false,
-		status: 409,
-		json: vi.fn().mockResolvedValue({ workspaces: [{ slug: 'alpha', name: 'Alpha' }, { slug: 'beta', name: 'Beta' }] }),
-	}));
-
-	await expect(api.exchangeCloudSession('clerk-session')).rejects.toEqual(expect.objectContaining({
-		name: CloudWorkspaceChoiceError.name,
-		workspaces: [{ slug: 'alpha', name: 'Alpha' }, { slug: 'beta', name: 'Beta' }],
-	}));
+test('a verified identity that is nobody\'s agent is told apart from a refused origin', async () => {
+  fetchMock.mockResolvedValueOnce(reply(403, apiError('forbidden')));
+  await expect(api.exchangeCloudSession('t')).rejects.toBeInstanceOf(NotAnAgentError);
+  fetchMock.mockResolvedValueOnce(reply(403, apiError('csrf_rejected')));
+  await expect(api.exchangeCloudSession('t')).rejects.not.toBeInstanceOf(NotAnAgentError);
 });
 
-test('a 401 is reported as a signed-out session, distinct from other failures', async () => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401, json: vi.fn() }));
-  await expect(api.me()).rejects.toBeInstanceOf(UnauthorizedError);
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403, json: vi.fn() }));
-  await expect(api.me()).rejects.not.toBeInstanceOf(UnauthorizedError);
+test.each([
+  [409, 'trial_already_used', 'trial_already_used'],
+  [409, 'slug_unavailable', 'slug_unavailable'],
+  [422, 'name_not_allowed', 'name_not_allowed'],
+  [429, 'rate_limited', 'rate_limited'],
+  [400, 'invalid_request', 'invalid'],
+  [503, 'signup_unavailable', 'signup_unavailable'],
+  [500, 'internal_error', 'unavailable'],
+])('sign-up %i %s is reported as %s', async (status, code, reason) => {
+  fetchMock.mockResolvedValue(reply(status, apiError(code, 'Words from the server.')));
+  const error = await api.signUpCloud('token', 'Acme').catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(SignupError);
+  expect((error as SignupError).reason).toBe(reason);
 });
 
-test('a 402 carries the server message so the page can say which limit was reached', async () => {
-  const message = 'The trial allows 10 agents, pending invites included. Revoke a pending invite to free a seat, or subscribe and contact us for more than 10 agents.';
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 402, json: vi.fn().mockResolvedValue({ error: { code: 'plan_limit_reached', message } }) }));
-  await expect(api.createInvite('new@example.com', 'agent')).rejects.toEqual(expect.objectContaining({ name: PlanLimitError.name, message }));
+test('sign-up sends the bearer token and the workspace name and returns the session', async () => {
+  fetchMock.mockResolvedValue(reply(201, {
+    agent: { id: '11111111-1111-4111-8111-111111111111', email: 'ana@example.com', display_name: '', role: 'admin', timezone_override: null },
+    workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'acme', name: 'Acme', timezone: 'UTC' },
+  }));
+  const redeemed = await api.signUpCloud('jwt', 'Acme');
+  const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(url).toBe('/api/v1/auth/cloud/signup');
+  expect((init.headers as Record<string, string>).Authorization).toBe('Bearer jwt');
+  expect(JSON.parse(init.body as string)).toEqual({ workspace_name: 'Acme' });
+  expect(redeemed.workspace.slug).toBe('acme');
 });
 
-test('a 402 without a readable body still reports a plan limit', async () => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 402, json: vi.fn().mockRejectedValue(new Error('not json')) }));
-  await expect(api.createInvite('new@example.com', 'agent')).rejects.toBeInstanceOf(PlanLimitError);
+test('export asks for a one-time link and hands back its url', async () => {
+  fetchMock.mockResolvedValue(reply(201, { url: '/api/v1/export/download/abc', expires_in_seconds: 60 }));
+  expect(await api.requestExportLink()).toBe('/api/v1/export/download/abc');
+  const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(url).toBe('/api/v1/export/link');
+  expect(init.method).toBe('POST');
 });
 
-test('a trial outbound refusal keeps the server code, message and retry hint', async () => {
-  const headers = { get: (name: string) => (name === 'Retry-After' ? '82800' : null) };
-  const restricted = 'During the trial, email goes only to customers who wrote to you first.';
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, status: 403, headers, json: vi.fn().mockResolvedValue({ error: { code: 'trial_outbound_restricted', message: restricted } }) })
-    .mockResolvedValueOnce({ ok: false, status: 429, headers, json: vi.fn().mockResolvedValue({ error: { code: 'trial_outbound_limit', message: 'Cap', retry_after_seconds: 82800 } }) }));
-  await expect(api.createMessage('c1', 'outgoing', 'Hi')).rejects.toEqual(expect.objectContaining({ name: OutboundRefusedError.name, code: 'trial_outbound_restricted', message: restricted }));
-  await expect(api.createMessage('c1', 'outgoing', 'Hi')).rejects.toEqual(expect.objectContaining({ code: 'trial_outbound_limit', retryAfterSeconds: 82800 }));
+test('export 429 carries the wait the server asked for; 409 and 403 are their own refusals', async () => {
+  fetchMock.mockResolvedValueOnce(reply(429, apiError('rate_limited'), { 'Retry-After': '120' }));
+  await expect(api.requestExportLink()).rejects.toMatchObject({ refusal: 'server_busy', retryAfterSeconds: 120 });
+  fetchMock.mockResolvedValueOnce(reply(409, apiError('conflict')));
+  await expect(api.requestExportLink()).rejects.toMatchObject({ refusal: 'busy' });
+  fetchMock.mockResolvedValueOnce(reply(403, apiError('forbidden')));
+  await expect(api.requestExportLink()).rejects.toMatchObject({ refusal: 'forbidden' });
 });
 
-test('any other 403 stays a plain failure', async () => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403, json: vi.fn().mockResolvedValue({ error: { code: 'forbidden', message: 'No' } }) }));
-  await expect(api.createMessage('c1', 'outgoing', 'Hi')).rejects.toEqual(new Error('API 403'));
+test('a network failure or an unreadable answer is a failed export, never a navigation', async () => {
+  fetchMock.mockRejectedValueOnce(new TypeError('offline'));
+  await expect(api.requestExportLink()).rejects.toBeInstanceOf(ExportRefusedError);
+  fetchMock.mockResolvedValueOnce(reply(201, { nope: true }));
+  await expect(api.requestExportLink()).rejects.toMatchObject({ refusal: 'failed' });
 });

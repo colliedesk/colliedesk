@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { OutboundRefusedError } from '../../api/outbound-error';
+import { replyRefusalText } from './refusal-text';
 import { messages } from '../../messages';
 import { LockIcon, ReplyIcon } from '../../ui/icons';
 
@@ -25,18 +25,6 @@ function isTyping(target: EventTarget | null) {
 
 // An input method (Vietnamese Telex/VNI on macOS, CJK) still holds marked text while it composes;
 // acting on that key would send or switch before the text is committed.
-function waitText(seconds: number) {
-  const minutes = Math.max(1, Math.ceil(seconds / 60));
-  return minutes < 90 ? messages.minutes(minutes) : messages.hours(Math.ceil(minutes / 60));
-}
-
-function refusalText(error: unknown) {
-  if (error instanceof OutboundRefusedError) {
-    return error.code === 'trial_outbound_limit' ? messages.trialReplyLimit(waitText(error.retryAfterSeconds ?? 3600)) : messages.trialReplyRestricted;
-  }
-  return messages.replyNotSent;
-}
-
 const composing = (event: KeyboardEvent) => event.isComposing || event.keyCode === 229;
 
 export function ReplyComposer({ disabled, onSubmit }: ReplyComposerProps) {
@@ -55,7 +43,7 @@ export function ReplyComposer({ disabled, onSubmit }: ReplyComposerProps) {
     setProblem(undefined);
     // Clear only what was sent: text typed while the request was in flight (a note right after a reply) stays.
     const clearSent = () => setBody((current) => (current.trim() === sent ? '' : current));
-    (result as Promise<unknown>).then(clearSent, (error: unknown) => setProblem(refusalText(error))).finally(() => setSending(false));
+    (result as Promise<unknown>).then(clearSent, (error: unknown) => setProblem(replyRefusalText(error))).finally(() => setSending(false));
   };
   // R starts a reply and N a private note from anywhere on the page, as the keycaps on the tabs say.
   useEffect(() => {

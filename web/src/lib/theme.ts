@@ -13,8 +13,13 @@ export function storedTheme(storage: Pick<Storage, 'getItem'> | undefined = defa
   try { return storage?.getItem(themeStorageKey) === 'dark' ? 'dark' : 'light'; } catch { return 'light'; }
 }
 
+// The page background of each theme (`--surface-0`), for the browser chrome. index.html carries the
+// same dark value in its boot script; a test keeps all three equal to tokens.css.
+export const themeColors: Record<Theme, string> = { light: '#f5f7fa', dark: '#0b0f15' };
+
 export function applyTheme(theme: Theme, root: HTMLElement = document.documentElement) {
   root.dataset.theme = theme;
+  root.ownerDocument.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColors[theme]);
 }
 
 export function applyStoredTheme() {
@@ -25,4 +30,13 @@ export function applyStoredTheme() {
 export function saveTheme(theme: Theme, storage: ThemeStorage | undefined = defaultStorage()) {
   applyTheme(theme);
   try { storage?.setItem(themeStorageKey, theme); } catch { /* remembered for this page only */ }
+}
+
+// onThemeChange calls listener when another tab of this origin saves a theme, and returns the way to stop.
+export function onThemeChange(listener: (theme: Theme) => void): () => void {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === themeStorageKey) listener(event.newValue === 'dark' ? 'dark' : 'light');
+  };
+  window.addEventListener('storage', onStorage);
+  return () => window.removeEventListener('storage', onStorage);
 }

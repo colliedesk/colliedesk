@@ -21,8 +21,9 @@ Roles:
 | Agent | Work conversations, contacts and tags; manage own sessions and timezone |
 | Admin | Everything an agent can, plus invites, all sessions and the workspace timezone |
 
-## Agent limit on the Free plan
+## Agent limit on the hosted cloud
 
-On the hosted Free plan an agent and a pending invite each take one of 3 seats. Creating a fourth
-fails with a message that names the limit. Revoke an invite you no longer need, or upgrade under
-**Billing**. See [Plan and billing](billing.md).
+On the hosted cloud, during the trial and on the Team and Founding plans, an agent and a pending
+invite each take one of 10 seats. Creating an eleventh fails with a message that names the limit.
+Revoke an invite you no longer need. See [Plan and billing](billing.md). A locked workspace (trial or
+subscription ended) cannot create or accept invites until it has a plan.
