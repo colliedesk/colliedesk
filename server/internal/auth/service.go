@@ -127,7 +127,7 @@ func slugify(value string) string {
 }
 
 func (s *Service) redeemURL(token string) string {
-	return s.origin + "/redeem?token=" + url.QueryEscape(token)
+	return s.origin + "/sign-in?token=" + url.QueryEscape(token)
 }
 
 // WithPlanLimits returns a service that refuses to add agents beyond the workspace plan's cap.

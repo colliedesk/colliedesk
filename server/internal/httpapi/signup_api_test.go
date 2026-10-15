@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
@@ -370,5 +371,37 @@ func TestConfigHidesSignupWhileItIsTurnedOff(t *testing.T) {
 	want := "{\"billing\":{\"enabled\":true},\"cloud_sign_in\":{\"enabled\":true,\"publishable_key\":\"pk_test_example\"},\"signup\":{\"enabled\":false}}\n"
 	if got.Code != http.StatusOK || got.Body.String() != want {
 		t.Fatalf("config status=%d body=%s, want %s", got.Code, got.Body.String(), want)
+	}
+}
+
+// Settings show a new trial workspace support@<slug>.<hosted domain> as ready to use, so mail sent there
+// right after sign-up must open a conversation instead of being refused at RCPT time.
+func TestSignupWorkspaceReceivesMailAtItsHostedAddress(t *testing.T) {
+	storage, err := attachments.NewLocalDisk(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := newSignupFixture(t, func(config *httpapi.Config) { config.Attachments = storage })
+	response := f.signUp(t, "grace@example.com", "Hopper Help", defaultPeer)
+	wantResponse(t, response, http.StatusCreated, "")
+	cookie := sessionCookie(t, response)
+	address := "support@hopper-help." + hostedDomain
+
+	if code := recipientCheck(t, f.api, platformSecret, address); code != http.StatusNoContent {
+		t.Fatalf("recipient check for %s right after sign-up: status=%d, want 204", address, code)
+	}
+	result := inboundOK(t, f.api, platformSecret, hostedMail(address, "first@customer.example"))
+	if result.Status != "created" || result.ConversationID == nil {
+		t.Fatalf("first mail to the hosted address: %+v, want a created conversation", result)
+	}
+	settings := request(t, f.api, http.MethodGet, "/api/v1/channels/email", nil, "", cookie)
+	var body struct {
+		Channel *struct {
+			SupportAddress string `json:"support_address"`
+		} `json:"channel"`
+	}
+	decode(t, settings, &body)
+	if settings.Code != http.StatusOK || body.Channel == nil || body.Channel.SupportAddress != address {
+		t.Fatalf("email settings status=%d channel=%+v, want support address %s", settings.Code, body.Channel, address)
 	}
 }

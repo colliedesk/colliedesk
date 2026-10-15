@@ -6,14 +6,14 @@ test('creates an invite and exposes its one-time URL', () => {
   const onCreateInvite = vi.fn();
   render(<SettingsPage sessions={[]} invites={[]} timezone="UTC"
     canCreateInvites
-    createdInviteUrl="https://desk.example.com/redeem?token=once"
+    createdInviteUrl="https://desk.example.com/sign-in?token=once"
     onCreateInvite={onCreateInvite} />);
 
   fireEvent.change(screen.getByLabelText(/invite email/i), { target: { value: 'agent@example.com' } });
   fireEvent.click(screen.getByRole('button', { name: /create invite/i }));
 
   expect(onCreateInvite).toHaveBeenCalledWith('agent@example.com', 'agent');
-  expect(screen.getByRole('textbox', { name: /one-time invite link/i })).toHaveValue('https://desk.example.com/redeem?token=once');
+  expect(screen.getByRole('textbox', { name: /one-time invite link/i })).toHaveValue('https://desk.example.com/sign-in?token=once');
 });
 
 test('does not offer invite creation without admin permission', () => {
