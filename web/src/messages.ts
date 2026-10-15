@@ -1,6 +1,12 @@
 export const messages = {
   brand: 'Colliedesk',
   inbox: 'Inbox',
+  notificationsEnable: 'Enable desktop notifications',
+  notificationsOn: 'Desktop notifications are on. Turn off',
+  notificationsBlocked: 'Desktop notifications are blocked in this browser',
+  notificationNew: 'New conversation',
+  notificationAssigned: 'Assigned to you',
+  notificationSummary: (count: number) => `${count} new updates in your inbox`,
   settings: 'Settings',
   timezoneSettings: 'Timezone',
   timezoneDescription: 'Use IANA timezone names such as America/New_York.',

@@ -4,7 +4,7 @@ Colliedesk targets a usable screen within 200 ms from a user action. The target 
 
 ## Inbox server budget
 
-`TestInboxListLatencyBudget` runs against real PostgreSQL. It creates two isolated workspaces with 5,000 conversations each. Every conversation has messages and tags. The test calls the authenticated inbox endpoint 50 times with a status filter and 50 times with a search query, using the maximum page size. Each path must stay at or below 100 ms p95.
+`TestInboxListLatencyBudget` runs against real PostgreSQL. It creates two isolated workspaces with 5,000 conversations each. Every conversation has messages and tags. The test calls the authenticated inbox endpoint 50 times with a status filter and 50 times with a search query, using the maximum page size. Each path must stay at or below 100 ms p95. The same test calls `GET /api/v1/inbox/activity` (polled by every open inbox tab every 20 seconds) 50 times and holds it to 20 ms p95. Keep that query ordered by `created_at` or `assigned_at` only: a tie-break on `id` forces a sort of every row after the cursor.
 
 The test runs in the normal Go suite and in CI. It is not behind a build tag. Set `TEST_DATABASE_URL` to run it locally.
 

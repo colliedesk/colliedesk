@@ -367,6 +367,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inbox/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description What changed in the inbox after `since`: conversations created, and conversations another agent assigned to the caller. Each list holds at most 50 items, newest first. Send the returned `now` as the next `since`. Without `since` both lists are empty and `now` is the first cursor. */
+        get: operations["getInboxActivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/attachments/{id}": {
         parameters: {
             query?: never;
@@ -914,6 +931,28 @@ export interface components {
             items: components["schemas"]["Conversation"][];
             page: number;
             page_size: number;
+        };
+        InboxActivity: {
+            /** Format: date-time */
+            now: string;
+            new_conversations: {
+                /** Format: uuid */
+                id: string;
+                subject: string;
+                contact_name: string;
+                contact_email: string;
+                /** Format: date-time */
+                created_at: string;
+            }[];
+            assigned_to_me: {
+                /** Format: uuid */
+                id: string;
+                subject: string;
+                contact_name: string;
+                contact_email: string;
+                /** Format: date-time */
+                assigned_at: string;
+            }[];
         };
         Message: {
             /** Format: uuid */
@@ -2000,6 +2039,30 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getInboxActivity: {
+        parameters: {
+            query?: {
+                since?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Inbox activity after the cursor */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxActivity"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
         };
     };
     downloadAttachment: {

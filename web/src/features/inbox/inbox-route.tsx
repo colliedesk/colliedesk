@@ -6,9 +6,11 @@ import type { UpdateConversationRequest } from '../../api/client';
 import { InboxPage } from './inbox-page';
 import { messages } from '../../messages';
 import { retryRefusalText } from './refusal-text';
+import { useInboxActivity } from './use-inbox-activity';
 
 export function InboxRoute() {
   const client = useQueryClient();
+  useInboxActivity();
   const navigate = useNavigate();
   const params = useParams({ strict: false }) as { conversationId?: string };
   const [filters, setFilters] = useState<Record<string, string>>({});

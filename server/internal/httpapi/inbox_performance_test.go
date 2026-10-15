@@ -11,7 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const inboxLatencyBudget = 100 * time.Millisecond
+const (
+	inboxLatencyBudget    = 100 * time.Millisecond
+	activityLatencyBudget = 20 * time.Millisecond
+)
 
 func TestInboxListLatencyBudget(t *testing.T) {
 	api, service, pool := testAPIWithPool(t)
@@ -22,7 +25,11 @@ func TestInboxListLatencyBudget(t *testing.T) {
 
 	statusP95 := inboxP95(t, api, tokenA, "/api/v1/conversations?status=open&page_size=100")
 	searchP95 := inboxP95(t, api, tokenA, "/api/v1/conversations?search=budget-needle&page_size=100")
-	t.Logf("inbox p95: status=%s search=%s", statusP95, searchP95)
+	activityP95 := inboxP95(t, api, tokenA, "/api/v1/inbox/activity?since="+time.Now().UTC().Add(-time.Hour).Format(time.RFC3339Nano))
+	t.Logf("inbox p95: status=%s search=%s activity=%s", statusP95, searchP95, activityP95)
+	if activityP95 > activityLatencyBudget {
+		t.Fatalf("inbox activity p95 exceeds %s: %s", activityLatencyBudget, activityP95)
+	}
 	if statusP95 > inboxLatencyBudget || searchP95 > inboxLatencyBudget {
 		t.Fatalf("inbox p95 exceeds %s: status=%s search=%s", inboxLatencyBudget, statusP95, searchP95)
 	}

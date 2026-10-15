@@ -7,6 +7,7 @@ import { BillingRoute } from './features/settings/billing-route';
 import { SettingsRoute } from './features/settings/settings-route';
 import { AppShell } from './features/shell/app-shell';
 import { LockedRoute } from './features/shell/locked-route';
+import { NotificationToggle } from './features/shell/notification-toggle';
 import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
 import { CreditCardIcon, InboxIcon, SettingsIcon } from './ui/icons';
@@ -34,6 +35,7 @@ function AppLayout() {
       <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inBilling ? undefined : 'page'}><InboxIcon /></Link>
       <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}><SettingsIcon /></Link>
       {showBilling && <Link to="/settings/billing" search={{ checkout: '' }} className="rail-link" data-tip={messages.billing} aria-label={messages.billing} aria-current={inBilling ? 'page' : undefined}><CreditCardIcon /></Link>}
+      <NotificationToggle />
     </>}>
     <Outlet />
   </AppShell>;
