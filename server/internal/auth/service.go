@@ -30,6 +30,9 @@ type Principal struct {
 	Agent     domain.Agent
 	SessionID string
 	ViaCookie bool
+	// TrialEndsAt is when the workspace's trial ends or ended; it is read with the session so the
+	// lock check costs no query during the trial.
+	TrialEndsAt time.Time
 }
 
 func New(pool *pgxpool.Pool, origin string) *Service {
@@ -49,7 +52,7 @@ func (s *Service) CreateWorkspace(ctx context.Context, name, email string) (doma
 	var workspace domain.Workspace
 	var link createdLink
 	err := s.db.Privileged(ctx, database.PrivilegeCreateWorkspace, func(tx pgx.Tx) error {
-		if err := tx.QueryRow(ctx, `INSERT INTO workspaces(slug,name) VALUES($1,$2) RETURNING id::text,slug,name,timezone`, slug, name).
+		if err := tx.QueryRow(ctx, `INSERT INTO workspaces(slug,name,trial_ends_at) VALUES($1,$2,$3) RETURNING id::text,slug,name,timezone`, slug, name, s.now().Add(domain.TrialLength)).
 			Scan(&workspace.ID, &workspace.Slug, &workspace.Name, &workspace.Timezone); err != nil {
 			return fmt.Errorf("create workspace: %w", err)
 		}

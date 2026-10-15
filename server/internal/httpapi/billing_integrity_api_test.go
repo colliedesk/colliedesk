@@ -38,8 +38,8 @@ func TestCancellingASpareSubscriptionKeepsThePaidPlan(t *testing.T) {
 	}
 	kept.Status, kept.PeriodEnd, kept.EndedAt, kept.ModifiedAt = "canceled", ended, &ended, now.Add(4*time.Minute)
 	f.mustDeliver(t, "msg_kept_revoked", kept.event("subscription.revoked"))
-	if got := getBilling(t, f.api, f.adminA); got.Plan != "free" || got.ActiveSubscriptions != 0 {
-		t.Fatalf("billing=%+v, want free once no subscription is left", got)
+	if got := getBilling(t, f.api, f.adminA); got.Plan != "trial" || got.ActiveSubscriptions != 0 {
+		t.Fatalf("billing=%+v, want trial once no subscription is left", got)
 	}
 }
 
@@ -92,8 +92,8 @@ func TestPolarWebhookStoresAnUnknownFutureStatusAsNotPaid(t *testing.T) {
 	if response := f.deliver(t, "msg_future", sub.event("subscription.updated")); response.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s, want 2xx: a 5xx would make Polar retry forever", response.Code, response.Body.String())
 	}
-	if got := getBilling(t, f.api, f.adminA); got.Plan != "free" || got.Status != "unknown" {
-		t.Fatalf("billing=%+v, want free with status unknown", got)
+	if got := getBilling(t, f.api, f.adminA); got.Plan != "trial" || got.Status != "unknown" {
+		t.Fatalf("billing=%+v, want trial with status unknown", got)
 	}
 }
 

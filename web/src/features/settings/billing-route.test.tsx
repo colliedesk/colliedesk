@@ -12,8 +12,8 @@ const me = (role: 'admin' | 'agent') => ({
   timezone: 'UTC',
 });
 const free = {
-  plan: 'free', status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0,
-  limits: { agents: 3, conversations_per_month: 100 }, usage: { agents: 1, conversations_this_month: 0 },
+  plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0,
+  limits: { agents: 10 }, usage: { agents: 1, pending_invites: 0 },
 };
 const assign = vi.fn();
 

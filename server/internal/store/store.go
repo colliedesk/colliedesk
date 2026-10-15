@@ -14,7 +14,7 @@ import (
 type Store struct {
 	db       *database.DB
 	outbound OutboundPolicy
-	// limits turns on the plan limits of the hosted cloud; the zero value (self-hosted) has none.
+	// limits turns on the trial, lock and agent cap of the hosted cloud; the zero value (self-hosted) has none.
 	limits bool
 	clock  func() time.Time
 }
@@ -43,8 +43,8 @@ func scoped[T any](ctx context.Context, s *Store, workspaceID string, fn func(pg
 	return result, nil
 }
 
-// WithPlanLimits returns a store that enforces the Free plan's monthly conversation quota. Without
-// it (self-hosted) no conversation is ever held.
+// WithPlanLimits returns a store that applies the hosted cloud's trial and lock rules. Without it
+// (self-hosted) there is no trial and no lock.
 func (s *Store) WithPlanLimits(enabled bool) *Store {
 	copy := *s
 	copy.limits = enabled

@@ -61,20 +61,6 @@ test('loads the time entries of the selected conversation', async () => {
   expect(api.timeEntries).toHaveBeenCalledWith(alpha.id);
 });
 
-test('the held count of the list response reaches the banner for an agent who cannot see billing', async () => {
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { role: 'agent' } });
-  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50, held_count: 4 });
-  api.agents.mockResolvedValue({ items: [] });
-  api.tags.mockResolvedValue({ items: [] });
-  api.messages.mockResolvedValue({ items: [] });
-  api.timeEntries.mockResolvedValue({ items: [] });
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
-  const banner = await screen.findByRole('status', { name: /held conversations/i });
-  expect(banner).toHaveTextContent(/4 conversations are held/i);
-  expect(banner).toHaveTextContent(/ask a workspace admin/i);
-});
-
 test('coming back to the inbox shows mail that arrived meanwhile, even within the cache window', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   api.me.mockResolvedValue({ timezone: 'UTC' });

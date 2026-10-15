@@ -9,13 +9,34 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// effectivePlan is the plan in effect for the workspace at now.
-func effectivePlan(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (string, error) {
+// workspaceAccess is the plan in effect for the workspace at now, read inside tx.
+func workspaceAccess(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (domain.Access, error) {
+	var trialEndsAt time.Time
+	if err := tx.QueryRow(ctx, `SELECT trial_ends_at FROM workspaces WHERE id=$1`, workspaceID).Scan(&trialEndsAt); err != nil {
+		return domain.Access{}, fmt.Errorf("load trial end: %w", err)
+	}
+	return accessAt(ctx, tx, workspaceID, trialEndsAt, now)
+}
+
+// accessAt is workspaceAccess for a caller that already holds the trial end.
+func accessAt(ctx context.Context, tx pgx.Tx, workspaceID string, trialEndsAt, now time.Time) (domain.Access, error) {
 	subscriptions, err := loadSubscriptions(ctx, tx, workspaceID)
 	if err != nil {
-		return "", fmt.Errorf("load subscriptions: %w", err)
+		return domain.Access{}, fmt.Errorf("load subscriptions: %w", err)
 	}
-	return domain.NewBilling(subscriptions, domain.BillingUsage{}, now).Plan, nil
+	return domain.NewAccess(subscriptions, trialEndsAt, now), nil
+}
+
+// WorkspaceAccess is the plan in effect for the workspace at now, given the trial end the caller
+// already loaded with the session. It costs one indexed query on the subscriptions.
+func (s *Store) WorkspaceAccess(ctx context.Context, workspaceID string, trialEndsAt, now time.Time) (domain.Access, error) {
+	access, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Access, error) {
+		return accessAt(ctx, tx, workspaceID, trialEndsAt, now)
+	})
+	if err != nil {
+		return domain.Access{}, fmt.Errorf("workspace access: %w", err)
+	}
+	return access, nil
 }
 
 // pendingSeatEmails counts the people who hold a seat only through an invite: distinct invited
@@ -43,10 +64,14 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 	if known {
 		return nil
 	}
-	plan, err := effectivePlan(ctx, tx, workspaceID, now)
+	access, err := workspaceAccess(ctx, tx, workspaceID, now)
 	if err != nil {
 		return err
 	}
+	if access.Locked {
+		return &domain.LockedError{}
+	}
+	plan := access.Plan
 	limit := domain.LimitsFor(plan).Agents
 	var seats int
 	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM agents WHERE workspace_id=$1) +
@@ -59,60 +84,6 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 	}
 	if seats+1 > limit {
 		return &domain.PlanLimitError{Plan: plan, Agents: limit}
-	}
-	return nil
-}
-
-// lockConversationQuota serializes the writers that change a workspace's monthly conversation
-// count until the end of the caller's transaction. Take it as late as possible, after any slow work
-// such as uploads, and always after the inbound sender lock.
-func lockConversationQuota(ctx context.Context, tx pgx.Tx, workspaceID string) error {
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "conversation-quota:"+workspaceID); err != nil {
-		return fmt.Errorf("lock conversation quota: %w", err)
-	}
-	return nil
-}
-
-// overConversationQuota reports whether a conversation received now would exceed the monthly quota
-// of the workspace's plan. It is false without plan limits (self-hosted) and for plans with no cap.
-// The workspace-wide advisory lock lasts to the end of the caller's transaction, so concurrent
-// deliveries count each other and the quota holds exactly.
-func (s *Store) overConversationQuota(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (bool, error) {
-	if !s.limits {
-		return false, nil
-	}
-	if err := lockConversationQuota(ctx, tx, workspaceID); err != nil {
-		return false, err
-	}
-	plan, err := effectivePlan(ctx, tx, workspaceID, now)
-	if err != nil {
-		return false, err
-	}
-	quota := domain.LimitsFor(plan).ConversationsPerMonth
-	if quota == nil {
-		return false, nil
-	}
-	var received int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM conversations WHERE workspace_id=$1 AND origin IS NULL AND created_at >= $2`,
-		workspaceID, domain.MonthStart(now)).Scan(&received); err != nil {
-		return false, fmt.Errorf("count conversations this month: %w", err)
-	}
-	return received >= *quota, nil
-}
-
-// releaseHeldIfPaid makes the workspace's held conversations visible once its plan in effect is
-// paid. It runs in the transaction that records the subscription, so an upgrade and the release
-// commit together.
-func releaseHeldIfPaid(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) error {
-	plan, err := effectivePlan(ctx, tx, workspaceID, now)
-	if err != nil {
-		return err
-	}
-	if plan == domain.PlanFree {
-		return nil
-	}
-	if _, err := tx.Exec(ctx, `UPDATE conversations SET held_at=NULL WHERE workspace_id=$1 AND held_at IS NOT NULL`, workspaceID); err != nil {
-		return fmt.Errorf("release held conversations: %w", err)
 	}
 	return nil
 }

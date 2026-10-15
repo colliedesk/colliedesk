@@ -589,10 +589,17 @@ export interface components {
         };
         Billing: {
             /**
-             * @description The plan in effect now.
+             * @description The plan in effect now. `trial` is the free trial; `none` means the trial is over and nothing is paid.
              * @enum {string}
              */
-            plan: "free" | "team" | "founding";
+            plan: "trial" | "team" | "founding" | "none";
+            /**
+             * Format: date-time
+             * @description When the free trial ends or ended, whatever the plan.
+             */
+            trial_ends_at: string;
+            /** @description True when `plan` is `none`; the workspace refuses every route outside the locked allowlist. */
+            locked: boolean;
             /**
              * @description The latest subscription status from the provider, `none` when there never was one. `past_due` keeps the paid plan while the provider retries the card; `canceled` keeps it until `current_period_end`; `unknown` is a status this version does not recognise and grants nothing. With several subscriptions the one that decides the plan is shown.
              * @enum {string}
@@ -604,18 +611,13 @@ export interface components {
             /** @description Subscriptions that grant a paid plan now. More than one means the workspace pays twice; cancel the extra one in the billing portal. */
             active_subscriptions: number;
             limits: {
+                /** @description Seats of the plan; 0 when locked. */
                 agents: number;
-                /** @description Null means no cap. */
-                conversations_per_month: number | null;
             };
             usage: {
                 agents: number;
                 /** @description Unused, unrevoked, unexpired invites. Each holds an agent seat, so agents plus pending invites is compared with `limits.agents`. */
                 pending_invites: number;
-                /** @description Conversations received since the start of the current UTC month, held ones included. Conversations imported from another helpdesk never count. */
-                conversations_this_month: number;
-                /** @description Received over the monthly quota this month and hidden from the inbox and search. They are stored in full and appear when the workspace upgrades or the month ends. */
-                held_conversations: number;
             };
         };
         WorkspaceChoice: {
@@ -657,6 +659,14 @@ export interface components {
             agent: components["schemas"]["Agent"];
             workspace: components["schemas"]["Workspace"];
             timezone: string;
+            /** @description The trial and lock state, so every agent sees it. Null on self-hosted instances. */
+            plan: null | {
+                /** @enum {string} */
+                plan: "trial" | "team" | "founding" | "none";
+                /** Format: date-time */
+                trial_ends_at: string;
+                locked: boolean;
+            };
         };
         Session: {
             /** Format: uuid */
@@ -752,8 +762,6 @@ export interface components {
             items: components["schemas"]["Conversation"][];
             page: number;
             page_size: number;
-            /** @description Conversations received over the Free plan's monthly quota and hidden from `items` and from search. Always 0 on self-hosted instances and on paid plans. */
-            held_count: number;
         };
         Message: {
             /** Format: uuid */
@@ -1024,8 +1032,26 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description The action would exceed a limit of the workspace's plan (error code `plan_limit_reached`): more agents, pending invites included, than the plan allows. Nothing was changed; the action works again after an upgrade or after freeing a seat. */
+        /** @description The action would exceed a limit of the workspace's plan (error code `plan_limit_reached`): more agents, pending invites included, than the plan allows. Nothing was changed; the action works again after an upgrade or after freeing a seat. A locked workspace answers `workspace_locked` instead. */
         PlanLimitReached: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The workspace's trial or subscription ended (error code `workspace_locked`). Nothing was read or changed. Choose a plan in billing, or export the data; the same request works after payment. */
+        WorkspaceLocked: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The workspace is locked and no longer accepts new mail (error code `mailbox_closed`). This is permanent for the sender: the forwarder bounces the message instead of retrying. */
+        MailboxClosed: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1663,6 +1689,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["MailboxClosed"];
             404: components["responses"]["NotFound"];
             413: components["responses"]["PayloadTooLarge"];
             429: components["responses"]["TooManyRequests"];

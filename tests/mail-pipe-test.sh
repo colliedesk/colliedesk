@@ -48,6 +48,7 @@ expect 'wrong secret keeps the mail' 75 401
 expect 'connection failure' 75 000 7
 expect 'not an email' 65 400
 expect 'too large' 65 413
+expect 'mailbox closed' 65 403
 
 if grep -F top-secret-value "$TMP/argv" >/dev/null; then
   echo 'FAIL secret appears in curl argv' >&2

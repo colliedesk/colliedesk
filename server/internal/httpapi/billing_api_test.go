@@ -1,7 +1,6 @@
 package httpapi_test
 
 import (
-	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -27,33 +26,17 @@ func TestBillingIsAdminOnly(t *testing.T) {
 	}
 }
 
-func TestFreeWorkspaceBillingShowsLimitsAndThisMonthsUsage(t *testing.T) {
+func TestTrialWorkspaceBillingShowsLimitsAndSeatUsage(t *testing.T) {
 	f := newBillingFixture(t)
-	contact := create(t, f.api, f.adminA, "/api/v1/contacts", map[string]any{"name": "Usage", "email": "usage@customer.example"})
-	ids := make([]string, 4)
-	for index := range ids {
-		ids[index] = create(t, f.api, f.adminA, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Usage"})
-	}
-	// Hand-written calendar: 40 days ago and one second before the UTC month starts are last month's;
-	// the exact start of the UTC month and now are this month's. Expected usage: 2.
-	for index, moment := range []string{
-		`now() - interval '40 days'`,
-		`date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' - interval '1 second'`,
-		`date_trunc('month', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`,
-	} {
-		if _, err := f.pool.Exec(context.Background(), `UPDATE conversations SET created_at=`+moment+` WHERE id=$1`, ids[index]); err != nil {
-			t.Fatal(err)
-		}
-	}
 	got := getBilling(t, f.api, f.adminA)
-	if got.Plan != "free" || got.Status != "none" || got.CurrentPeriodEnd != nil || got.CancelAtPeriodEnd {
-		t.Fatalf("billing=%+v, want a free workspace with no subscription", got)
+	if got.Plan != "trial" || got.Status != "none" || got.CurrentPeriodEnd != nil || got.CancelAtPeriodEnd || got.Locked {
+		t.Fatalf("billing=%+v, want an unlocked trial workspace with no subscription", got)
 	}
-	if got.Limits.Agents != 3 || got.Limits.ConversationsPerMonth == nil || *got.Limits.ConversationsPerMonth != 100 {
-		t.Fatalf("limits=%+v, want 3 agents and 100 conversations a month", got.Limits)
+	if got.Limits.Agents != 10 {
+		t.Fatalf("limits=%+v, want 10 agents", got.Limits)
 	}
-	if got.Usage.Agents != 2 || got.Usage.ConversationsThisMonth != 2 {
-		t.Fatalf("usage=%+v, want 2 agents (admin + invited agent) and 2 conversations this month", got.Usage)
+	if got.Usage.Agents != 2 {
+		t.Fatalf("usage=%+v, want 2 agents (admin + invited agent)", got.Usage)
 	}
 }
 
@@ -64,10 +47,10 @@ func TestBillingFromOneWorkspaceNeverShowsAnothers(t *testing.T) {
 	f.mustDeliver(t, "msg_iso", activeTeam(f.workspaceA, "sub_iso", time.Now()).event("subscription.active"))
 
 	b := getBilling(t, f.api, f.adminB)
-	if b.Plan != "free" || b.Usage.ConversationsThisMonth != 0 || b.Usage.Agents != 1 {
-		t.Fatalf("workspace B sees billing=%+v, want its own free state with 1 agent and 0 conversations", b)
+	if b.Plan != "trial" || b.Usage.Agents != 1 {
+		t.Fatalf("workspace B sees billing=%+v, want its own trial state with 1 agent", b)
 	}
-	if a := getBilling(t, f.api, f.adminA); a.Plan != "team" || a.Usage.ConversationsThisMonth != 1 {
+	if a := getBilling(t, f.api, f.adminA); a.Plan != "team" || a.Usage.Agents != 2 {
 		t.Fatalf("workspace A billing=%+v", a)
 	}
 }
@@ -250,8 +233,8 @@ func TestPortalStaysAvailableAfterTheSubscriptionEnded(t *testing.T) {
 	ended := now.Add(-time.Hour)
 	f.mustDeliver(t, "msg_gone", subscription{ID: "sub_gone", Workspace: f.workspaceA, Product: productMonthly, Status: "canceled",
 		PeriodEnd: ended, EndedAt: &ended, ModifiedAt: now}.event("subscription.revoked"))
-	if got := getBilling(t, f.api, f.adminA); got.Plan != "free" {
-		t.Fatalf("plan=%q, want free", got.Plan)
+	if got := getBilling(t, f.api, f.adminA); got.Plan != "trial" {
+		t.Fatalf("plan=%q, want trial", got.Plan)
 	}
 	if got := request(t, f.api, http.MethodPost, "/api/v1/billing/portal", nil, f.adminA, nil).Code; got != http.StatusOK {
 		t.Fatalf("status=%d, want 200: invoices and card stay reachable", got)
