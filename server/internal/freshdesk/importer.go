@@ -39,6 +39,7 @@ type run struct {
 	trashed       []string
 	spam          []string
 	absent        int
+	unresolved    []string
 	archived      int
 	warnings      []*Warning
 	internalErr   error
@@ -52,6 +53,7 @@ type run struct {
 	unchanged          []string
 	archiveUnavailable atomic.Bool
 	verification       Verifications
+	progress           *progress
 }
 
 // Run imports (or, with DryRun, only counts) a Freshdesk account. Item-level
@@ -74,12 +76,18 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 		}
 		defer release()
 	}
-	steps := []func(context.Context) error{r.loadAgents, r.loadCompanies, r.importContacts, r.listTickets, r.classifyTickets, r.verifyTotals}
+	type step struct {
+		name string
+		run  func(context.Context) error
+	}
+	steps := []step{{"loading agents", r.loadAgents}, {"loading companies", r.loadCompanies}, {"importing contacts", r.importContacts},
+		{"listing tickets", r.listTickets}, {"checking ticket ids", r.classifyTickets}, {"verifying totals", r.verifyTotals}}
 	if !options.DryRun {
-		steps = append(steps, r.importTickets)
+		steps = append(steps, step{"importing tickets", r.importTickets})
 	}
 	for _, step := range steps {
-		if err := step(ctx); err != nil {
+		r.progress.phase(step.name)
+		if err := step.run(ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -116,9 +124,12 @@ func newRun(ctx context.Context, db *database.DB, options Options) (*run, error)
 	if err != nil {
 		return nil, err
 	}
+	progress := newProgress(options.Progress, options.ProgressInterval)
+	httpClient := newClient(base, options.APIKey, options)
+	httpClient.progress = progress
 	return &run{
-		opts: options, db: db, workspaceID: workspaceID,
-		client: newClient(base, options.APIKey, options),
+		opts: options, db: db, workspaceID: workspaceID, progress: progress,
+		client: httpClient,
 		ledger: ledger{db: db, workspaceID: workspaceID}, probeAhead: probeAhead(options.hooks),
 		agents: map[int64]fdAgent{}, agentTargets: map[int64]string{}, companies: map[int64]string{},
 		usedCompanies: map[int64]bool{}, contactNames: map[int64]string{},

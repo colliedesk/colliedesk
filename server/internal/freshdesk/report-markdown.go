@@ -30,8 +30,17 @@ func (r *Report) Markdown() string {
 		r.Attachments.SourceBytes, r.Attachments.ImportedBytes, r.Attachments.ChecksumVerified)
 	fmt.Fprintf(&b, "Companies: %d, %d kept as contact organization. Agents: %d, %d matched to CollieDesk agents by email.\n",
 		r.Companies.Source, r.Companies.Attached, r.Agents.Source, r.Agents.Matched)
-	fmt.Fprintf(&b, "Archived tickets found by id probing: %d. Ticket ids that do not exist in Freshdesk: %d. Ids probed this run: %d (up to id %d).\n",
-		r.Tickets.Archived, r.Tickets.AbsentIDs, r.Tickets.ProbedIDs, r.Tickets.HighestProbedID)
+	absentLabel := "Ticket ids that do not exist in Freshdesk"
+	if len(r.Tickets.UnresolvedIDs) > 0 {
+		absentLabel = "Ticket ids confirmed absent (none can be confirmed while the archive endpoint is refused)"
+	}
+	fmt.Fprintf(&b, "Archived tickets found by id probing: %d. %s: %d. Ids probed this run: %d (up to id %d).\n",
+		r.Tickets.Archived, absentLabel, r.Tickets.AbsentIDs, r.Tickets.ProbedIDs, r.Tickets.HighestProbedID)
+	if n := len(r.Tickets.UnresolvedIDs); n > 0 {
+		fmt.Fprintf(&b, "Ticket ids unresolved: %d (listed below). Each may be deleted or archived in Freshdesk.\n", n)
+	}
+	fmt.Fprintf(&b, "Rate limiting: %d pause(s) after X-Ratelimit-Remaining 0, %d HTTP 429 response(s), %s waited in total.\n",
+		r.RateLimit.Pauses, r.RateLimit.Throttled, (time.Duration(r.RateLimit.WaitSeconds * float64(time.Second))).Round(time.Second))
 	b.WriteString("\n## How the totals were verified\n\n")
 	for _, row := range []struct {
 		name string
@@ -54,6 +63,7 @@ func (r *Report) Markdown() string {
 			fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", failure.Entity, failure.FreshdeskID, failure.TicketID, strings.ReplaceAll(failure.Error, "|", "/"))
 		}
 	}
+	writeList(&b, "Ticket ids that could not be resolved (archive unavailable)", r.Tickets.UnresolvedIDs)
 	writeList(&b, "Deleted in Freshdesk during the import (ticket ids)", r.Tickets.DeletedAtSource)
 	writeList(&b, "In Freshdesk Trash, not imported (ticket ids)", r.Tickets.Trashed)
 	writeList(&b, "In Freshdesk Spam, not imported (ticket ids)", r.Tickets.Spam)
