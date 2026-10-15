@@ -596,7 +596,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Public, unauthenticated. A website posts a visitor's email (and optionally a message) and the workspace gets a conversation: the visitor becomes a contact (found by email), the text is an incoming message, the subject is `Web form: <source>` (or `Web form`) and the tag is `web-form`. Nothing is sent to the visitor. The body must be `application/json`. A filled `website` field is a bot trap: the answer is the same 202 and nothing is stored. An unknown workspace, a form that is off and a locked workspace all answer the same 404. Browsers may read the answer only from an origin on the workspace's allowed list (CORS). At most 5 submissions per client address and workspace per minute; a workspace also accepts at most 200 new conversations per 10 minutes. */
+        /** @description Public, unauthenticated. A website posts a visitor's email (and optionally a message) and the workspace gets a conversation: the visitor becomes a contact (found by email), the text is an incoming message, the subject is `Web form: <source>` (or `Web form`) and the tag is `web-form`. Nothing is sent to the visitor. The body must be `application/json`. A filled `website` field is a bot trap: the answer is the same 202 and nothing is stored. An unknown workspace, a form that is off and a locked workspace all answer the same 404. Browsers may read the answer only from an origin on the workspace's allowed list (CORS). At most 5 submissions per client address and workspace per minute, and 30 requests per client address per minute across all forms; a workspace also accepts at most 50 form conversations per 10 minutes, counted apart from email. Fields the form does not know are ignored. The message is marked `email.via = web_form` with authentication `none` (unverified address). */
         post: operations["submitWebForm"];
         delete?: never;
         /** @description CORS preflight. 204 with the allow headers for an allowed origin; every other case is the same 404 as a missing form. */
@@ -891,10 +891,10 @@ export interface components {
             from: string;
             authentication: components["schemas"]["EmailAuthentication"];
             /**
-             * @description Door the message came through; absent on mail stored before this was recorded. Trial replies need `platform`.
+             * @description Door the message came through; absent on mail stored before this was recorded. `web_form` is text typed into the public web form: the address is unverified (authentication `none`). Trial replies need `platform`.
              * @enum {string}
              */
-            via?: "platform" | "workspace";
+            via?: "platform" | "workspace" | "web_form";
             /**
              * Format: uuid
              * @description Attachment holding the complete raw message, gzip-compressed (original-message.eml.gz). Null for mail received before raw messages were kept.

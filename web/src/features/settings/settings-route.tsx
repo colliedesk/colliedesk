@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, PlanLimitError } from '../../api/client';
+import { api, InvalidRequestError, PlanLimitError } from '../../api/client';
 import { EmailChannelSection } from './email-channel-section';
 import { WebFormSection } from './web-form-section';
 import { SettingsPage } from './settings-page';
@@ -25,7 +25,7 @@ export function SettingsRoute() {
   const webForm = useQuery({ queryKey: ['web-form'], queryFn: api.webForm });
   const saveWebForm = useMutation({ mutationFn: ({ enabled, origins }: { enabled: boolean; origins: string[] }) => api.saveWebForm(enabled, origins), onSuccess: () => refresh('web-form') });
   const isAdmin = me.data?.agent.role === 'admin';
-  const emailFailed = saveEmail.isError || rotateSecret.isError || disconnectEmail.isError || verifyDomain.isError || workspaceSlug.isError || saveWebForm.isError;
+  const emailFailed = saveEmail.isError || rotateSecret.isError || disconnectEmail.isError || verifyDomain.isError || workspaceSlug.isError;
   return <SettingsPage sessions={sessions.data?.items ?? []} invites={invites.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'}
     canCreateInvites={isAdmin} canManageWorkspace={isAdmin}
     workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
@@ -33,7 +33,7 @@ export function SettingsRoute() {
     emailSection={<EmailChannelSection settings={emailChannel.data} timezone={me.data?.timezone ?? 'UTC'} canManage={isAdmin} workspaceSlug={me.data?.workspace.slug}
       onSaveSlug={(slug) => workspaceSlug.mutate(slug)} createdSecret={rotateSecret.data?.inbound_secret} onSave={(address) => saveEmail.mutate(address)}
       onRotate={() => rotateSecret.mutate()} onVerifyDomain={() => verifyDomain.mutate()} onDisconnect={() => disconnectEmail.mutate()} />}
-    webFormSection={<WebFormSection settings={webForm.data} canManage={isAdmin} onSave={(enabled, origins) => saveWebForm.mutate({ enabled, origins })} />}
+    webFormSection={<WebFormSection settings={webForm.data} canManage={isAdmin} error={saveWebForm.isError ? (saveWebForm.error instanceof InvalidRequestError ? saveWebForm.error.message : messages.settingsActionFailed) : undefined} onSave={(enabled, origins) => saveWebForm.mutate({ enabled, origins })} />}
     inviteError={createInvite.error instanceof PlanLimitError ? createInvite.error.message : createInvite.isError ? messages.settingsActionFailed : undefined}
     createdInviteUrl={createInvite.data?.url}
     onCreateInvite={(email, role) => createInvite.mutate({ email, role })}

@@ -10,55 +10,73 @@ import (
 )
 
 const (
-	webFormMaxPerWindow = 5
-	webFormWindow       = time.Minute
-	// webFormMaxKeys bounds the limiter's memory. When it is full of live keys the limiter refuses
-	// new ones, so a flood of addresses cannot grow the server without bound.
+	// webFormMaxPerWorkspace is how many submissions one client address may send to one workspace's form per window.
+	webFormMaxPerWorkspace = 5
+	// webFormMaxPerAddress is how many requests one client address may send to any public form per
+	// window, junk slugs and preflights included. It bounds what one address can ask the database.
+	webFormMaxPerAddress = 30
+	webFormWindow        = time.Minute
+	// webFormMaxKeys bounds each limiter's memory. A full limiter evicts its oldest key to admit a new
+	// one, so a flood of keys can never make the limiter refuse everyone.
 	webFormMaxKeys = 20000
 )
 
-// webFormLimiter allows webFormMaxPerWindow submissions per client address and workspace in a
-// sliding webFormWindow. It lives in this process only: a restart clears it, and several server
-// processes each keep their own count. The per-workspace ceiling on new conversations in the
-// store bounds what rotating addresses can do.
+// webFormLimiter allows limit attempts per key in a sliding webFormWindow. It lives in this process
+// only: a restart clears it, and several server processes each keep their own count. The
+// per-workspace ceiling on new conversations in the store bounds what rotating addresses can do.
 type webFormLimiter struct {
-	mu   sync.Mutex
-	hits map[string][]time.Time
+	mu      sync.Mutex
+	limit   int
+	maxKeys int
+	hits    map[string][]time.Time
 }
 
-func newWebFormLimiter() *webFormLimiter {
-	return &webFormLimiter{hits: map[string][]time.Time{}}
+func newWebFormLimiter(limit, maxKeys int) *webFormLimiter {
+	return &webFormLimiter{limit: limit, maxKeys: maxKeys, hits: map[string][]time.Time{}}
 }
 
 // allow records one attempt for key at now. When refused it reports how long until a slot frees.
 func (l *webFormLimiter) allow(key string, now time.Time) (bool, time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	recent := l.hits[key][:0:0]
-	for _, hit := range l.hits[key] {
+	known := l.hits[key]
+	recent := make([]time.Time, 0, len(known)+1)
+	for _, hit := range known {
 		if now.Sub(hit) < webFormWindow {
 			recent = append(recent, hit)
 		}
 	}
-	if len(recent) >= webFormMaxPerWindow {
+	if len(recent) >= l.limit {
 		l.hits[key] = recent
 		return false, webFormWindow - now.Sub(recent[0])
 	}
-	if _, known := l.hits[key]; !known && len(l.hits) >= webFormMaxKeys {
-		l.sweep(now)
-		if len(l.hits) >= webFormMaxKeys {
-			return false, webFormWindow
-		}
+	if _, present := l.hits[key]; !present && len(l.hits) >= l.maxKeys {
+		l.makeRoom(now)
 	}
 	l.hits[key] = append(recent, now)
 	return true, 0
 }
 
-func (l *webFormLimiter) sweep(now time.Time) {
+// makeRoom drops keys whose attempts have all left the window; when every key is live it drops the
+// one that was used longest ago.
+func (l *webFormLimiter) makeRoom(now time.Time) {
+	var oldest string
+	var oldestSeen time.Time
 	for key, hits := range l.hits {
-		if len(hits) == 0 || now.Sub(hits[len(hits)-1]) >= webFormWindow {
-			delete(l.hits, key)
+		last := time.Time{}
+		if len(hits) > 0 {
+			last = hits[len(hits)-1]
 		}
+		if now.Sub(last) >= webFormWindow {
+			delete(l.hits, key)
+			continue
+		}
+		if oldest == "" || last.Before(oldestSeen) {
+			oldest, oldestSeen = key, last
+		}
+	}
+	if len(l.hits) >= l.maxKeys && oldest != "" {
+		delete(l.hits, oldest)
 	}
 }
 
@@ -79,8 +97,8 @@ func clientAddress(request *http.Request, trusted []netip.Prefix) string {
 	if isTrusted(client, trusted) {
 		entries := strings.Split(strings.Join(request.Header.Values("X-Forwarded-For"), ","), ",")
 		for i := len(entries) - 1; i >= 0; i-- {
-			candidate, err := netip.ParseAddr(strings.TrimSpace(entries[i]))
-			if err != nil {
+			candidate, ok := forwardedAddress(entries[i])
+			if !ok {
 				break
 			}
 			client = candidate.Unmap()
@@ -95,6 +113,17 @@ func clientAddress(request *http.Request, trusted []netip.Prefix) string {
 		}
 	}
 	return client.String()
+}
+
+// forwardedAddress reads one X-Forwarded-For entry: a bare address, or an address with a port
+// ("198.51.100.7:4711", "[2001:db8::1]:443") as some load balancers send it.
+func forwardedAddress(entry string) (netip.Addr, bool) {
+	entry = strings.TrimSpace(entry)
+	if withPort, err := netip.ParseAddrPort(entry); err == nil {
+		return withPort.Addr(), true
+	}
+	address, err := netip.ParseAddr(strings.Trim(entry, "[]"))
+	return address, err == nil
 }
 
 func isTrusted(address netip.Addr, trusted []netip.Prefix) bool {

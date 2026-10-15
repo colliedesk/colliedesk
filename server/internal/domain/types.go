@@ -143,13 +143,15 @@ type MessageDelivery struct {
 const (
 	ViaPlatform  = "platform"
 	ViaWorkspace = "workspace"
+	// ViaWebForm marks a message typed into the public web form: the address was never verified.
+	ViaWebForm = "web_form"
 )
 
 // IncomingEmail is the envelope of a message that arrived by email.
 type IncomingEmail struct {
 	From           string `json:"from"`
 	Authentication string `json:"authentication"`
-	// Via is how the message arrived: ViaPlatform or ViaWorkspace. Mail stored before this field
+	// Via is how the message arrived: ViaPlatform, ViaWorkspace or ViaWebForm. Mail stored before this field
 	// existed has none.
 	Via         string            `json:"via,omitempty"`
 	Attachments []EmailAttachment `json:"attachments"`

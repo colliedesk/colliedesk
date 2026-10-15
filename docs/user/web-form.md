@@ -3,7 +3,12 @@
 A form on your website can open a conversation in your workspace. The visitor types an email
 address (and, if you want, a message). Colliedesk finds or creates a contact for that address,
 opens a conversation with the text as an incoming message, subject `Web form: <source>` and the tag
-`web-form`. Colliedesk sends **nothing** to the visitor; you reply from the conversation as usual.
+`web-form`. Colliedesk sends **nothing** to the visitor. The message is marked **Unverified sender
+(web form)**: anyone can type any address, so check before you trust it.
+
+You can reply from the conversation. On a Colliedesk Cloud **trial**, a reply to a web form
+conversation is refused (error `trial_outbound_restricted`), because the form cannot prove who owns
+the address; a paid plan has no such rule. Self-hosted installs have no trial.
 
 It works the same on self-hosted installs and on Colliedesk Cloud.
 
@@ -53,11 +58,18 @@ Answers:
 - A browser may call the form only from a listed origin. Other origins get no CORS permission.
   Origin checks protect visitors' browsers; they do not authenticate the caller, because any script
   can set an `Origin` header. That is why the next limits exist.
-- 5 submissions per minute for each visitor address and workspace, and at most 200 new
-  conversations per workspace in 10 minutes (shared with email). The per-address count lives in the
-  server process: a restart clears it.
-- Behind a reverse proxy, set `TRUSTED_PROXY_CIDRS` on the server to the proxy's address or range
-  (comma separated, for example `172.16.0.0/12`). Colliedesk then reads the visitor's address from
-  `X-Forwarded-For`. Without it every visitor looks like the proxy and shares one limit.
+- 5 submissions per minute for each visitor address and workspace, and 30 requests per minute for
+  each visitor address across all forms (this includes the browser's preflight). A workspace also
+  accepts at most 50 form conversations in 10 minutes. That ceiling is separate from email, so form
+  spam never blocks incoming mail. The per-address counts live in the server process: a restart
+  clears them.
+- Behind a reverse proxy, Colliedesk must know the proxy to read the visitor's address from
+  `X-Forwarded-For`. The shipped `compose.yaml` and installer trust loopback and the Docker bridge
+  range (`127.0.0.0/8,::1/128,172.16.0.0/12`), which fits a proxy on the same host. For another
+  setup, set `TRUSTED_PROXY_CIDRS` (comma separated addresses or ranges). If it is empty the server
+  logs a warning at startup, and every visitor then counts as the proxy and shares one limit.
+- Extra fields in the JSON body, such as `name`, are ignored.
+- Answers to a request that is refused before the form is found (too many requests from one
+  address) carry no CORS permission, so a browser reports a network error instead of the `429`.
 - Anyone can submit any email address. A submission proves nothing about who owns the address, so
   do not treat it as verified.

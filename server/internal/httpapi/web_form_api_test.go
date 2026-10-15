@@ -292,9 +292,6 @@ func TestWebFormRefusesBodiesThatAreNotJSON(t *testing.T) {
 	if response := serve(f.api, req); response.Code != http.StatusUnsupportedMediaType {
 		t.Fatalf("text/plain status=%d, want 415", response.Code)
 	}
-	if response := f.submit(f.slugA, `{"email":"a@example.com","unknown":1}`, "", ""); response.Code != http.StatusBadRequest {
-		t.Fatalf("unknown field status=%d, want 400", response.Code)
-	}
 	if response := f.submit(f.slugA, `not json`, "", ""); response.Code != http.StatusBadRequest {
 		t.Fatalf("malformed JSON status=%d, want 400", response.Code)
 	}

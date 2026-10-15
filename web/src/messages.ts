@@ -152,6 +152,7 @@ export const messages = {
   downloadOriginalEmail: 'Download original email',
   senderFailedVerification: 'Failed sender verification',
   senderNotVerified: 'Sender not verified',
+  webFormSender: 'Unverified sender (web form)',
   attachmentsNotImported: (names: string[]) => `${names.length} attachment${names.length === 1 ? '' : 's'} not imported: ${names.join(', ')}`,
   dnsRecordName: 'TXT record name',
   dnsRecordValue: 'TXT record value',

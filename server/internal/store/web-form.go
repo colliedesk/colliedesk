@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -12,6 +13,10 @@ import (
 
 // WebFormTag marks every conversation opened by the public web form.
 const WebFormTag = "web-form"
+
+// WebFormNewConversationLimit caps the conversations the public form may open in one workspace per
+// InboundRateWindow. It is counted apart from email's ceiling, so form spam cannot block mail.
+const WebFormNewConversationLimit = 50
 
 // WebFormSubmission is a validated, normalized submission of the public form.
 type WebFormSubmission struct {
@@ -120,11 +125,11 @@ func (s *Store) SubmitWebForm(ctx context.Context, workspaceID string, in WebFor
 		return fmt.Errorf("lock web form: %w", err)
 	}
 	var created int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM conversations WHERE workspace_id=$1 AND created_at>$2`,
-		workspaceID, now.Add(-InboundRateWindow)).Scan(&created); err != nil {
-		return fmt.Errorf("check new conversation ceiling: %w", err)
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM messages WHERE workspace_id=$1 AND kind='incoming' AND created_at>$2 AND email_meta->>'via'=$3`,
+		workspaceID, now.Add(-InboundRateWindow), domain.ViaWebForm).Scan(&created); err != nil {
+		return fmt.Errorf("check web form ceiling: %w", err)
 	}
-	if created >= InboundNewConversationLimit {
+	if created >= WebFormNewConversationLimit {
 		return ErrRateLimited
 	}
 	var contactID, tagID, conversationID string
@@ -152,8 +157,13 @@ func (s *Store) SubmitWebForm(ctx context.Context, workspaceID string, in WebFor
 	if body == "" {
 		body = "(no message)"
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,created_at) VALUES($1,$2,'incoming',$3,$4)`,
-		workspaceID, conversationID, body, now); err != nil {
+	// The sender typed this address and nothing checked it. The mark stays on the message when an agent removes the tag.
+	meta, err := json.Marshal(domain.IncomingEmail{From: in.Email, Authentication: "none", Via: domain.ViaWebForm, Attachments: []domain.EmailAttachment{}})
+	if err != nil {
+		return fmt.Errorf("encode web form metadata: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,email_meta,created_at) VALUES($1,$2,'incoming',$3,$4,$5)`,
+		workspaceID, conversationID, body, meta, now); err != nil {
 		return fmt.Errorf("store web form message: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {

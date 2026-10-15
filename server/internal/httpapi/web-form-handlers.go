@@ -112,12 +112,27 @@ func writeFormNotFound(response http.ResponseWriter) {
 	writeError(response, http.StatusNotFound, "not_found", "The requested resource was not found.")
 }
 
+// refuseBusyAddress answers 429 and reports true when the address has used up its requests to the
+// public forms of every workspace together. It runs before any database lookup.
+func (a *API) refuseBusyAddress(response http.ResponseWriter, client string) bool {
+	allowed, wait := a.webFormClients.allow(client, a.now())
+	if allowed {
+		return false
+	}
+	response.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+	writeError(response, http.StatusTooManyRequests, "rate_limited", "Too many requests. Try again in a minute.")
+	return true
+}
+
 // preflightWebForm answers the browser's CORS preflight. Every refusal is the same 404 as a
 // missing form, so an origin that is not listed learns nothing about the workspace.
 func (a *API) preflightWebForm(response http.ResponseWriter, request *http.Request) {
 	slug := request.PathValue("workspace_slug")
 	if len(slug) > 63 || !slugShape.MatchString(slug) {
 		writeFormNotFound(response)
+		return
+	}
+	if a.refuseBusyAddress(response, clientAddress(request, a.config.TrustedProxies)) {
 		return
 	}
 	_, origins, open, err := a.store.OpenWebForm(request.Context(), slug)
@@ -147,16 +162,8 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 		writeFormNotFound(response)
 		return
 	}
-	allowed, wait := a.webForms.allow(clientAddress(request, a.config.TrustedProxies)+"|"+slug, a.now())
-	if !allowed {
-		response.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
-		writeError(response, http.StatusTooManyRequests, "rate_limited", "Too many submissions. Try again in a minute.")
-		return
-	}
-	// Browsers send application/json across origins only after a preflight, which this form
-	// answers for listed origins alone. text/plain would skip that check.
-	if media, _, err := mime.ParseMediaType(request.Header.Get("Content-Type")); err != nil || media != "application/json" {
-		writeError(response, http.StatusUnsupportedMediaType, "unsupported_media_type", "Send the form as application/json.")
+	client := clientAddress(request, a.config.TrustedProxies)
+	if a.refuseBusyAddress(response, client) {
 		return
 	}
 	workspaceID, origins, open, err := a.store.OpenWebForm(request.Context(), slug)
@@ -173,6 +180,18 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 	if origin, listed := allowedOrigin(request, origins); listed {
 		header.Set("Access-Control-Allow-Origin", origin)
 	}
+	// Only a form that exists is charged to the address-and-workspace bucket, so junk slugs cannot fill it.
+	if allowed, wait := a.webForms.allow(client+"|"+slug, a.now()); !allowed {
+		header.Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+		writeError(response, http.StatusTooManyRequests, "rate_limited", "Too many submissions. Try again in a minute.")
+		return
+	}
+	// Browsers send application/json across origins only after a preflight, which this form
+	// answers for listed origins alone. text/plain would skip that check.
+	if media, _, err := mime.ParseMediaType(request.Header.Get("Content-Type")); err != nil || media != "application/json" {
+		writeError(response, http.StatusUnsupportedMediaType, "unsupported_media_type", "Send the form as application/json.")
+		return
+	}
 
 	var input struct {
 		Email   string `json:"email"`
@@ -180,9 +199,8 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 		Source  string `json:"source"`
 		Website string `json:"website"`
 	}
-	decoder := json.NewDecoder(io.LimitReader(request.Body, maxWebFormBody))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&input); err != nil {
+	// Unknown fields are ignored: a site's form often has inputs this channel does not read.
+	if err := json.NewDecoder(io.LimitReader(request.Body, maxWebFormBody)).Decode(&input); err != nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "The body must be a JSON object with an email.")
 		return
 	}

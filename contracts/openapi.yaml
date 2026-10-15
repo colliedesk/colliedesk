@@ -836,8 +836,10 @@ paths:
         `website` field is a bot trap: the answer is the same 202 and nothing is stored. An unknown
         workspace, a form that is off and a locked workspace all answer the same 404. Browsers may
         read the answer only from an origin on the workspace's allowed list (CORS). At most 5
-        submissions per client address and workspace per minute; a workspace also accepts at most
-        200 new conversations per 10 minutes.
+        submissions per client address and workspace per minute, and 30 requests per client address
+        per minute across all forms; a workspace also accepts at most 50 form conversations per 10
+        minutes, counted apart from email. Fields the form does not know are ignored. The message
+        is marked `email.via = web_form` with authentication `none` (unverified address).
       requestBody:
         required: true
         content:
@@ -1300,8 +1302,11 @@ components:
         authentication: {$ref: '#/components/schemas/EmailAuthentication'}
         via:
           type: string
-          enum: [platform, workspace]
-          description: Door the message came through; absent on mail stored before this was recorded. Trial replies need `platform`.
+          enum: [platform, workspace, web_form]
+          description: >-
+            Door the message came through; absent on mail stored before this was recorded. `web_form`
+            is text typed into the public web form: the address is unverified (authentication `none`).
+            Trial replies need `platform`.
         original_attachment_id:
           type: [string, 'null']
           format: uuid

@@ -63,9 +63,10 @@ type API struct {
 	// exports admits workspace exports; see exportLimiter.
 	exports *exportLimiter
 	// webForms limits the public web form per client address and workspace.
-	webForms *webFormLimiter
-	polar    *polar.Client
-	now      func() time.Time
+	webForms       *webFormLimiter
+	webFormClients *webFormLimiter
+	polar          *polar.Client
+	now            func() time.Time
 }
 
 type routeSpec struct {
@@ -95,7 +96,7 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 		clock = func() time.Time { return time.Now().UTC() }
 	}
 	limits := config.Billing.Enabled()
-	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), webForms: newWebFormLimiter(),
+	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
 		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits),
 		store: store.NewWithDB(db).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits)}
 	if config.CloudAuth.Enabled() {

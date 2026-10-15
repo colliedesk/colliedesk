@@ -26,6 +26,24 @@ export class PlanLimitError extends Error {
   }
 }
 
+// InvalidRequestError means the server refused the input (HTTP 400); its message says what to fix.
+export class InvalidRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidRequestError';
+  }
+}
+
+async function invalidRequest(response: Response): Promise<Error> {
+  try {
+    const body = await response.json() as { error?: { message?: unknown } };
+    if (typeof body.error?.message === 'string' && body.error.message) return new InvalidRequestError(body.error.message);
+  } catch {
+    // An unreadable body is an ordinary failure.
+  }
+  return failure(response.status);
+}
+
 function failure(status: number): Error {
   return status === 401 ? new UnauthorizedError() : new Error(`API ${status}`);
 }
@@ -60,6 +78,7 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
     ...init,
   });
   if (response.status === 402) throw await planLimitFailure(response);
+  if (response.status === 400) throw await invalidRequest(response);
   if (response.status === 403 || response.status === 429) throw await outboundRefusal(response);
   if (!response.ok) throw failure(response.status);
   return schema.parse(await response.json());

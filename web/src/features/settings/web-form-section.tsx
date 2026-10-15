@@ -5,6 +5,8 @@ import { messages } from '../../messages';
 interface WebFormSectionProps {
   settings?: WebFormSettings;
   canManage: boolean;
+  // error explains a refused save, in the server's words.
+  error?: string;
   onSave?: (enabled: boolean, origins: string[]) => void;
 }
 
@@ -12,7 +14,7 @@ function parseOrigins(text: string): string[] {
   return text.split('\n').map((line) => line.trim()).filter(Boolean);
 }
 
-export function WebFormSection({ settings, canManage, onSave }: WebFormSectionProps) {
+export function WebFormSection({ settings, canManage, error, onSave }: WebFormSectionProps) {
   const [enabled, setEnabled] = useState(settings?.enabled ?? false);
   const [origins, setOrigins] = useState((settings?.allowed_origins ?? []).join('\n'));
   useEffect(() => setEnabled(settings?.enabled ?? false), [settings?.enabled]);
@@ -23,6 +25,7 @@ export function WebFormSection({ settings, canManage, onSave }: WebFormSectionPr
       <div className="section-heading"><h2 id="web-form-heading">{messages.webForm}</h2><p>{messages.webFormDescription}</p></div>
       <div className="settings-body">
         <p role="status"><strong>{state}</strong></p>
+        {error && <p role="alert" className="error-copy">{error}</p>}
         {canManage
           ? <form onSubmit={(event) => { event.preventDefault(); onSave?.(enabled, parseOrigins(origins)); }}>
               <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /><span>{messages.webFormAccept}</span></label>
