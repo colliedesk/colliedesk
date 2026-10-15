@@ -1,0 +1,105 @@
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { expect, test, vi } from 'vitest';
+import type { TeamMember } from '../../api/schemas';
+import { TeamSection } from './team-section';
+
+const member = (overrides: Partial<TeamMember> & Pick<TeamMember, 'id' | 'email'>): TeamMember => ({
+  display_name: '', role: 'agent', timezone_override: null, deactivated_at: null, last_active_at: null, open_conversations: 0, ...overrides,
+});
+const admin = member({ id: '11111111-1111-4111-8111-111111111111', email: 'admin@example.com', display_name: 'Ada Admin', role: 'admin', last_active_at: '2026-10-15T09:30:00Z' });
+const ann = member({ id: '22222222-2222-4222-8222-222222222222', email: 'ann@example.com', open_conversations: 2 });
+const bob = member({ id: '33333333-3333-4333-8333-333333333333', email: 'bob@example.com', display_name: 'Bob Builder' });
+const cy = member({ id: '44444444-4444-4444-8444-444444444444', email: 'cy@example.com', deactivated_at: '2026-10-10T00:00:00Z', last_active_at: '2026-10-09T08:00:00Z' });
+
+const row = (text: string) => screen.getByText(text).closest('article') as HTMLElement;
+
+test('lists every member with role, state and last activity', () => {
+  render(<TeamSection members={[admin, ann, bob, cy]} currentAgentId={admin.id} canManage={false} timezone="UTC" />);
+  const team = screen.getByRole('region', { name: 'Team' });
+  expect(within(team).getAllByRole('article')).toHaveLength(4);
+  expect(row('Ada Admin')).toHaveTextContent('admin@example.com');
+  expect(row('Ada Admin')).toHaveTextContent('Admin');
+  expect(row('Ada Admin')).toHaveTextContent('Active');
+  expect(row('Ada Admin')).toHaveTextContent('Oct 15');
+  expect(row('ann@example.com')).toHaveTextContent('Never signed in');
+  expect(row('cy@example.com')).toHaveTextContent('Deactivated');
+});
+
+test('an agent sees the team read-only', () => {
+  render(<TeamSection members={[admin, ann, cy]} currentAgentId={ann.id} canManage={false} timezone="UTC" />);
+  expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button')).not.toBeInTheDocument();
+});
+
+test('an admin changes a role inline', () => {
+  const onChangeRole = vi.fn();
+  render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" onChangeRole={onChangeRole} />);
+  fireEvent.change(screen.getByRole('combobox', { name: 'Role of ann@example.com' }), { target: { value: 'admin' } });
+  expect(onChangeRole).toHaveBeenCalledWith(ann.id, 'admin');
+});
+
+test('deactivating asks first, shows the open work and moves it to Unassigned by default', () => {
+  const onDeactivate = vi.fn();
+  render(<TeamSection members={[admin, ann, bob, cy]} currentAgentId={admin.id} canManage timezone="UTC" onDeactivate={onDeactivate} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Deactivate ann@example.com' }));
+  expect(onDeactivate).not.toHaveBeenCalled();
+
+  const confirm = screen.getByRole('group', { name: 'Deactivate ann@example.com?' });
+  expect(confirm).toHaveTextContent('2 open or pending conversations are assigned to them');
+  expect(within(confirm).getByRole('radio', { name: 'Move them to Unassigned' })).toBeChecked();
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Yes, deactivate' }));
+  expect(onDeactivate).toHaveBeenCalledWith(ann.id, null);
+});
+
+test('open work can go to another active agent, never to a deactivated one or to the same person', () => {
+  const onDeactivate = vi.fn();
+  render(<TeamSection members={[admin, ann, bob, cy]} currentAgentId={admin.id} canManage timezone="UTC" onDeactivate={onDeactivate} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Deactivate ann@example.com' }));
+  const confirm = screen.getByRole('group', { name: 'Deactivate ann@example.com?' });
+  fireEvent.click(within(confirm).getByRole('radio', { name: 'Assign them to another agent' }));
+  const target = within(confirm).getByRole('combobox', { name: 'Assign to' });
+  expect(within(target).getAllByRole('option').map((option) => option.textContent)).toEqual(['Ada Admin', 'Bob Builder']);
+  fireEvent.change(target, { target: { value: bob.id } });
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Yes, deactivate' }));
+  expect(onDeactivate).toHaveBeenCalledWith(ann.id, bob.id);
+});
+
+test('cancel closes the question without changing anything', () => {
+  const onDeactivate = vi.fn();
+  render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" onDeactivate={onDeactivate} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Deactivate ann@example.com' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(screen.queryByRole('group')).not.toBeInTheDocument();
+  expect(onDeactivate).not.toHaveBeenCalled();
+});
+
+test('someone with no open work gets a plain confirmation and nothing to move', () => {
+  const onDeactivate = vi.fn();
+  render(<TeamSection members={[admin, bob]} currentAgentId={admin.id} canManage timezone="UTC" onDeactivate={onDeactivate} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Deactivate Bob Builder' }));
+  const confirm = screen.getByRole('group', { name: 'Deactivate Bob Builder?' });
+  expect(confirm).toHaveTextContent('No open or pending conversations are assigned to them');
+  expect(within(confirm).queryByRole('radio')).not.toBeInTheDocument();
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Yes, deactivate' }));
+  expect(onDeactivate).toHaveBeenCalledWith(bob.id, null);
+});
+
+test('deactivating yourself warns that you will be signed out', () => {
+  render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Deactivate Ada Admin' }));
+  expect(screen.getByRole('group', { name: 'Deactivate Ada Admin?' })).toHaveTextContent('You will be signed out');
+});
+
+test('a deactivated agent can be reactivated and has no other action', () => {
+  const onReactivate = vi.fn();
+  render(<TeamSection members={[admin, cy]} currentAgentId={admin.id} canManage timezone="UTC" onReactivate={onReactivate} />);
+  const line = row('cy@example.com');
+  expect(within(line).queryByRole('button', { name: /^Deactivate/ })).not.toBeInTheDocument();
+  fireEvent.click(within(line).getByRole('button', { name: 'Reactivate cy@example.com' }));
+  expect(onReactivate).toHaveBeenCalledWith(cy.id);
+});
+
+test('shows why a change was refused', () => {
+  render(<TeamSection members={[admin]} currentAgentId={admin.id} canManage timezone="UTC" error="A workspace needs at least one active admin." />);
+  expect(screen.getByRole('alert')).toHaveTextContent('at least one active admin');
+});

@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { api, PlanLimitError, WorkspaceLockedError } from './client';
+import { api, ConflictError, PlanLimitError, WorkspaceLockedError } from './client';
 import { NotAnAgentError, SignupError } from './cloud-signup';
 import { ExportRefusedError } from './workspace-export';
 
@@ -82,4 +82,22 @@ test('a network failure or an unreadable answer is a failed export, never a navi
   await expect(api.requestExportLink()).rejects.toBeInstanceOf(ExportRefusedError);
   fetchMock.mockResolvedValueOnce(reply(201, { nope: true }));
   await expect(api.requestExportLink()).rejects.toMatchObject({ refusal: 'failed' });
+});
+
+test('updateAgent sends only the given change and parses the team member', async () => {
+  const member = { id: '22222222-2222-4222-8222-222222222222', email: 'ann@example.com', display_name: '', role: 'agent', timezone_override: null, deactivated_at: '2026-10-15T10:00:00Z', last_active_at: null, open_conversations: 0 };
+  fetchMock.mockResolvedValue(reply(200, member));
+  const result = await api.updateAgent(member.id, { active: false, reassign_to: '33333333-3333-4333-8333-333333333333' });
+  expect(result.deactivated_at).toBe('2026-10-15T10:00:00Z');
+  const [path, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(path).toBe(`/api/v1/agents/${member.id}`);
+  expect(init.method).toBe('PATCH');
+  expect(JSON.parse(init.body as string)).toEqual({ active: false, reassign_to: '33333333-3333-4333-8333-333333333333' });
+});
+
+test('a 409 from the team keeps the server explanation as a ConflictError', async () => {
+  fetchMock.mockResolvedValue(reply(409, apiError('last_admin', 'A workspace needs at least one active admin.')));
+  const error = await api.updateAgent('22222222-2222-4222-8222-222222222222', { active: false }).catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(ConflictError);
+  expect((error as Error).message).toBe('A workspace needs at least one active admin.');
 });

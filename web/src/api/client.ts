@@ -7,7 +7,7 @@ import {
   agentListSchema, agentSchema, contactDetailSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema,
   cloudWorkspaceChoicesSchema, emailChannelSettingsSchema, inboundSecretSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, messageListSchema, messageSchema, timeEntryListSchema,
-  billingLinkSchema, billingSchema, publicConfigSchema, redeemedSchema, sessionListSchema, tagListSchema, tagSchema, workspaceSchema,
+  billingLinkSchema, billingSchema, publicConfigSchema, redeemedSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
 import type { WorkspaceChoice } from './schemas';
 
@@ -45,10 +45,21 @@ export class InvalidRequestError extends Error {
   }
 }
 
+// ConflictError is the same refusal for a resource whose state does not allow the action (HTTP 409),
+// for example removing the last admin.
+export class ConflictError extends InvalidRequestError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConflictError';
+  }
+}
+
 async function invalidRequest(response: Response): Promise<Error> {
   try {
     const body = await response.json() as { error?: { message?: unknown } };
-    if (typeof body.error?.message === 'string' && body.error.message) return new InvalidRequestError(body.error.message);
+    if (typeof body.error?.message === 'string' && body.error.message) {
+      return response.status === 409 ? new ConflictError(body.error.message) : new InvalidRequestError(body.error.message);
+    }
   } catch {
     // An unreadable body is an ordinary failure.
   }
@@ -92,7 +103,7 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
     ...init,
   });
   if (response.status === 402) throw await planLimitFailure(response);
-  if (response.status === 400) throw await invalidRequest(response);
+  if (response.status === 400 || response.status === 409) throw await invalidRequest(response);
   if (response.status === 403 || response.status === 429) throw await outboundRefusal(response);
   if (!response.ok) throw failure(response.status);
   return schema.parse(await response.json());
@@ -166,6 +177,7 @@ export const api = {
   updateWorkspaceTimezone: (timezone: RequestBody<'updateWorkspaceTimezone'>['timezone']) => request('/api/v1/workspace/timezone', workspaceSchema, { method: 'PATCH', body: json<'updateWorkspaceTimezone'>({ timezone }) }),
   updateWorkspaceSlug: (slug: RequestBody<'updateWorkspaceSlug'>['slug']) => request('/api/v1/workspace/slug', workspaceSchema, { method: 'PATCH', body: json<'updateWorkspaceSlug'>({ slug }) }),
   updateAgentTimezone: (timezone: RequestBody<'updateAgentTimezone'>['timezone']) => request('/api/v1/agents/me/timezone', agentSchema, { method: 'PATCH', body: json<'updateAgentTimezone'>({ timezone }) }),
+  updateAgent: (id: string, value: RequestBody<'updateAgent'>) => request(`/api/v1/agents/${id}`, teamMemberSchema, { method: 'PATCH', body: json<'updateAgent'>(value) }),
   sessions: () => request('/api/v1/auth/sessions', sessionListSchema),
   revokeSession: (id: string) => requestNoContent(`/api/v1/auth/sessions/${id}`, { method: 'DELETE' }),
   invites: () => request('/api/v1/auth/invites', inviteListSchema),

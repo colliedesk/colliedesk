@@ -4,9 +4,12 @@ import type { Agent, Conversation, ConversationOrigin, Tag } from '../../api/sch
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 
+// An agent as the pickers see it; a deactivated one (deactivated_at set) is never offered.
+type Assignable = Agent & { deactivated_at?: string | null };
+
 interface DetailsPanelProps {
   conversation?: Conversation;
-  agents: Agent[];
+  agents: Assignable[];
   tags: Tag[];
   onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void;
   onAddTag?: (conversationId: string, tagId: string) => void;
@@ -40,7 +43,8 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
         <label className="property-row"><span>{messages.assignee}</span><select value={conversation?.assignee_id ?? ''} disabled={!conversation}
           onChange={(event) => conversation && onUpdate?.(conversation.id, { assignee_id: event.target.value || null })}>
           <option value="">{messages.unassigned}</option>
-          {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.display_name || agent.email}</option>)}
+          {agents.filter((agent) => !agent.deactivated_at || agent.id === conversation?.assignee_id).map((agent) =>
+            <option key={agent.id} value={agent.id}>{agent.display_name || agent.email}{agent.deactivated_at ? ` ${messages.deactivatedSuffix}` : ''}</option>)}
         </select></label>
       </section>
       <fieldset className="details-section" disabled={!conversation}><legend>{messages.tags}</legend>
