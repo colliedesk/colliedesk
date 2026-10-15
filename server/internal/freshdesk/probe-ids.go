@@ -6,19 +6,24 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"sync/atomic"
 )
 
 // probeAll looks up ids with a few requests in flight; results keep id order.
-func (r *run) probeAll(ctx context.Context, ids []int64) []probeResult {
+func (r *run) probeAll(ctx context.Context, ids []int64, report bool) []probeResult {
 	results := make([]probeResult, len(ids))
 	slots := make(chan struct{}, probeWorkers)
 	var wg sync.WaitGroup
+	var finished atomic.Int64
 	for index, id := range ids {
 		wg.Add(1)
 		slots <- struct{}{}
 		go func() {
 			defer func() { <-slots; wg.Done() }()
 			results[index] = r.probeOne(ctx, id)
+			if done := int(finished.Add(1)); report {
+				r.progress.tick("checking ticket ids", done, len(ids))
+			}
 		}()
 	}
 	wg.Wait()
@@ -89,14 +94,16 @@ func (r *run) applyProbes(ctx context.Context, results []probeResult) []int64 {
 // recordAbsent stores ids that do not exist below the highest existing id.
 // Ids above it are not stored: Freshdesk may give them to new tickets later.
 // Nothing is stored while the archive endpoint is refused: an id missing from
-// /tickets may be an archived ticket, so it stays unknown and is probed again.
+// /tickets may be an archived ticket, so it stays unknown, is probed again and
+// is reported as unresolved.
 func (r *run) recordAbsent(ctx context.Context, ids []int64) error {
-	if r.archiveUnavailable.Load() {
-		return r.internalErr
-	}
 	for _, id := range ids {
 		if id < r.highestExisting {
 			key := strconv.FormatInt(id, 10)
+			if r.archiveUnavailable.Load() {
+				r.unresolved = append(r.unresolved, key)
+				continue
+			}
 			r.recordSkip(skipAbsent, key)
 			r.markSkip(ctx, key, skipAbsent)
 		}

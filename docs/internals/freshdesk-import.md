@@ -38,6 +38,16 @@ endpoints the importer reads:
    `active:true` + `active:false` must not exceed the contact list.
 3. A refused archive endpoint (HTTP 403) or an unreadable total makes the report **UNVERIFIED**
    (non-zero exit). Any other probe error fails only that id. The report states the method.
+4. While the archive endpoint is refused, ids below the highest existing id that answer 404 are
+   `Tickets.UnresolvedIDs` (JSON `unresolved_ids`), not `AbsentIDs`. The CLI prints them after the
+   report paths. They stay unresolved on purpose: weakening this would hide a possibly archived ticket.
+
+## Operator feedback
+
+`Options.Progress` (stderr in the CLI) gets `progress: ...` lines: phase starts, counters at most
+every `ProgressInterval` (30 s), and each rate-limit wait. Stdout keeps its fixed summary.
+`Report.RateLimit` counts `X-Ratelimit-Remaining: 0` pauses, HTTP 429 responses and the seconds
+waited (requested durations, not measured time). 5xx backoff is not counted.
 
 ## Decisions
 

@@ -19,9 +19,11 @@ func (r *run) reconcile(ctx context.Context, report *Report) (*Report, error) {
 	report.Tickets.Source = len(ticketIDs)
 	report.Tickets.DeletedAtSource = uniqueSorted(r.deleted)
 	report.Tickets.Trashed, report.Tickets.Spam = uniqueSorted(r.trashed), uniqueSorted(r.spam)
+	report.Tickets.UnresolvedIDs = uniqueSorted(r.unresolved)
 	report.Tickets.AbsentIDs, report.Tickets.Archived = r.absent, r.archived
 	report.Tickets.HighestID, report.Tickets.HighestProbedID, report.Tickets.ProbedIDs = r.highestExisting, r.highestProbed, r.probed
 	report.Verification = r.verification
+	report.RateLimit = r.client.rateLimitStats()
 	steps := []func(context.Context, *Report, []string, []string) error{r.countTickets, r.countChildren, r.collectFailures}
 	if !r.opts.DryRun {
 		// Verify first: a damaged file turns its ledger rows back to failed.

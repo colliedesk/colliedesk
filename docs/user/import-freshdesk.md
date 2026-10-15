@@ -21,7 +21,8 @@ code. Run the same command again to retry: finished items are never copied twice
 | Time entries | Time entries (agent, minutes, note, billable, time), shown under **Time logged** on the timeline |
 
 Status mapping: Open → Open, Pending → Pending, Resolved → Resolved, Closed → Closed. Custom
-statuses become Pending and are listed in the report. Priority: Low, Medium → Normal, High, Urgent.
+statuses become Pending and are listed in the report. Priority: Low → Low, Medium → Normal, High → High, Urgent → Urgent. An unknown priority becomes
+Normal and is listed in the report.
 
 The report lists what is **not** imported, for example custom fields and knowledge base articles.
 
@@ -73,6 +74,12 @@ Options:
 The import respects Freshdesk's rate limit. It waits when Freshdesk says the limit is used up,
 so a large account can take hours. You can stop it at any time with Ctrl+C.
 
+While it runs, the command prints progress lines to stderr, for example
+`progress: importing tickets 120/400, elapsed 4m10s`: one line when each step starts, one line at
+most every 30 seconds with the counts, and one line for each rate-limit wait. The summary on
+stdout is unchanged. The report states how many pauses, HTTP 429 responses and seconds of waiting
+the rate limit cost.
+
 ## Resume or retry
 
 Run the same command again. Items that were imported are skipped, an interrupted ticket continues
@@ -89,7 +96,10 @@ every ticket number from 1 one by one, and keeps checking past the highest numbe
 200 numbers in a row do not exist (or at least up to `--last-ticket-id`). It also compares its
 counts with the totals Freshdesk reports for tickets and contacts. The report says how each total
 was verified. If Freshdesk refuses the archive (some plans) or a total cannot be read, the report
-is **UNVERIFIED**: check the archive in Freshdesk before you close the account.
+is **UNVERIFIED**: check the archive in Freshdesk before you close the account. When the archive
+is refused, ticket numbers below the highest existing ticket that Freshdesk does not return are
+printed at the end of the command output and listed in the report under **Ticket ids that could
+not be resolved**. Each may be a deleted or an archived ticket: look them up in Freshdesk.
 
 ## Undo an import
 
@@ -123,6 +133,8 @@ tools.
   CollieDesk.
 - **Attachment bytes**: total size reported by Freshdesk and total size stored. Every stored file
   is read again and its SHA-256 compared with the value recorded at download.
+- **Ticket ids that could not be resolved (archive unavailable)**: ticket numbers Freshdesk does
+  not return while the archive is refused. Not counted as absent. Check them in Freshdesk.
 - **Deleted in Freshdesk during the import**, **In Freshdesk Trash**, **In Freshdesk Spam**:
   tickets that were not imported, by id.
 - **Warnings**: data that was imported with a change you should know about, for example a
