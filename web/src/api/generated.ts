@@ -840,7 +840,7 @@ export interface components {
             };
         };
         /**
-         * @description Tier of an agent token. `read`: read what an agent may read. `draft`: also change status, priority, assignee and tags of a conversation and add private notes. `send`: also send replies and create contacts, conversations and tags.
+         * @description Tier of an agent token. `read`: read what an agent may read. `draft`: also change status, priority, assignee and tags of a conversation, create tags and add private notes. `send`: also send and retry replies, rename and delete tags, and create contacts and conversations.
          * @enum {string}
          */
         TokenScope: "read" | "draft" | "send";

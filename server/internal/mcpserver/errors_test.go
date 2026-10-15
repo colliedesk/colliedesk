@@ -34,6 +34,10 @@ func TestLockedWorkspaceSaysOnlyExportWorks(t *testing.T) {
 	if who["workspace_locked"] != true {
 		t.Errorf("whoami must still answer on a locked workspace and say so: %v", who)
 	}
+	// The guide reads no workspace data, so it keeps working; the user guide says so.
+	if docs := e.ok(session, "colliedesk_docs_search", map[string]any{"query": "agent token"}); docs["count"] == float64(0) {
+		t.Errorf("docs_search must still answer on a locked workspace: %v", docs)
+	}
 }
 
 func TestToolArgumentsAreValidatedAgainstTheSchema(t *testing.T) {

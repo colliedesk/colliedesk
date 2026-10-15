@@ -15,8 +15,9 @@ admin for a new link.
 
 An agent token lets an AI agent, such as Claude Code, Codex or a script, work your inbox as you
 with a limit you choose. It is a session with a label and a **scope**. It appears in
-**Settings → Sessions** next to your browser sessions. **Revoke** ends it at once, as for any
-session. Admins see and revoke the tokens of every agent.
+**Settings → Sessions** next to your browser sessions, with its scope as a badge and the date it
+stops working. **Revoke** ends it at once, as for any session. Admins see and revoke the tokens of
+every agent.
 
 Create a token with the command line on your own server:
 

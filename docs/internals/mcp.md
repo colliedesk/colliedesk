@@ -103,9 +103,10 @@
 
 ## Performance
 
-`TestInboxSearchLatencyBudget` seeds 5,000 conversations (3 messages each, 50 contacts) and calls
-`colliedesk_inbox_search` 50 times with limit 50. Budget: p95 at most 100 ms, the same as the REST
-inbox gate. Measured on the dev host: REST list 56 ms, tool 58 ms (status filter) and 76 ms (text
-search); `colliedesk_whoami` 11 ms. The tool adds a few small REST calls (identity, agents, contacts)
-to one list query. If the gate fails, look at the list query first (`performance.md`), not at the
-adapter.
+`TestInboxSearchLatencyBudget` seeds 5,000 conversations (3 messages each, 50 customers) and 100,000
+contacts over two workspaces, then calls `colliedesk_inbox_search` and `colliedesk_conversation_get` 50
+times each. Budget: p95 at most 100 ms, the same as the REST inbox gate (`performance.md` describes
+the fixture). Measured on the dev host: tool 58 ms (status filter) and 71 ms (text search), thread
+read 27 ms; `colliedesk_whoami` 11 ms. The tool adds a few small REST calls (identity, agents,
+contacts by id) to one list query. If the gate fails, look at the list query first, then at the
+contact lookup by id, not at the adapter.

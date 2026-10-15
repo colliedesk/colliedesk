@@ -81,8 +81,8 @@ could not do with the API directly. Another workspace is never visible.
 
 ## Limits and errors
 
-- A locked workspace (hosted cloud, trial over, nothing paid) answers every tool except `whoami`
-  with a message that only exporting data works.
+- A locked workspace (hosted cloud, trial over, nothing paid) answers every tool except `whoami` and
+  `docs_search`, which read no workspace data, with a message that only exporting data works.
 - A conversation id from another workspace answers "No conversation <id> in this workspace".
 - Tag names are matched by their exact spelling first. When no tag has that spelling, the one tag
   that differs only in case is used. If two tags differ only in case (`Refund` and `refund`) and the
