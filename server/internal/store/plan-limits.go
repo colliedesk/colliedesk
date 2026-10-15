@@ -9,10 +9,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// pendingInvite selects the pairing_links rows that still hold an agent seat: invites not used,
-// not revoked and not expired. It expects the current time as query parameter $2.
-const pendingInvite = `kind='invite' AND used_at IS NULL AND revoked_at IS NULL AND expires_at > $2`
-
 // effectivePlan is the plan in effect for the workspace at now.
 func effectivePlan(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (string, error) {
 	subscriptions, err := loadSubscriptions(ctx, tx, workspaceID)
@@ -22,14 +18,30 @@ func effectivePlan(ctx context.Context, tx pgx.Tx, workspaceID string, now time.
 	return domain.NewBilling(subscriptions, domain.BillingUsage{}, now).Plan, nil
 }
 
-// CheckAgentSeat returns a *domain.PlanLimitError when one more agent would exceed the cap of the
-// workspace's plan. Agents and pending invites both hold a seat, so a burst of invites cannot pass
-// the cap. A workspace-wide advisory lock makes two concurrent invites see each other. The caller
-// runs it only where plan limits apply (the hosted cloud). ignoreInvite names an invite that is
-// being redeemed and so is about to become the agent it already reserved.
-func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time, ignoreInvite string) error {
+// pendingSeatEmails counts the people who hold a seat only through an invite: distinct invited
+// addresses that are not agents yet. Two invites to one address are one person, and inviting someone
+// who is already an agent (a role change) takes no seat.
+const pendingSeatEmails = `SELECT count(DISTINCT p.email) FROM pairing_links p
+	WHERE p.workspace_id=$1 AND p.kind='invite' AND p.used_at IS NULL AND p.revoked_at IS NULL AND p.expires_at > $2
+	AND NOT EXISTS (SELECT 1 FROM agents a WHERE a.workspace_id=p.workspace_id AND a.email=p.email)`
+
+// CheckAgentSeat returns a *domain.PlanLimitError when giving email an agent seat would exceed the
+// cap of the workspace's plan. A seat is an agent or a person with a pending invite, so a burst of
+// invites cannot pass the cap. Someone who is already an agent, or who already holds a seat through
+// another pending invite, needs no new seat. A workspace-wide advisory lock makes two concurrent
+// invites see each other. The caller runs it only where plan limits apply (the hosted cloud).
+// ignoreInvite names an invite that is being redeemed, which is about to become the agent it
+// already reserved.
+func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time, email, ignoreInvite string) error {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "agent-seats:"+workspaceID); err != nil {
 		return fmt.Errorf("lock agent seats: %w", err)
+	}
+	var known bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE workspace_id=$1 AND email=lower($2))`, workspaceID, email).Scan(&known); err != nil {
+		return fmt.Errorf("check agent: %w", err)
+	}
+	if known {
+		return nil
 	}
 	plan, err := effectivePlan(ctx, tx, workspaceID, now)
 	if err != nil {
@@ -37,14 +49,26 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 	}
 	limit := domain.LimitsFor(plan).Agents
 	var seats int
-	if err := tx.QueryRow(ctx, `SELECT
-		(SELECT count(*) FROM agents WHERE workspace_id=$1) +
-		(SELECT count(*) FROM pairing_links WHERE workspace_id=$1 AND `+pendingInvite+` AND id::text<>$3)`,
-		workspaceID, now, ignoreInvite).Scan(&seats); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM agents WHERE workspace_id=$1) +
+		(SELECT count(DISTINCT p.email) FROM pairing_links p
+			WHERE p.workspace_id=$1 AND p.kind='invite' AND p.used_at IS NULL AND p.revoked_at IS NULL AND p.expires_at > $2
+			AND p.id::text<>$3 AND p.email<>lower($4)
+			AND NOT EXISTS (SELECT 1 FROM agents a WHERE a.workspace_id=p.workspace_id AND a.email=p.email))`,
+		workspaceID, now, ignoreInvite, email).Scan(&seats); err != nil {
 		return fmt.Errorf("count agent seats: %w", err)
 	}
 	if seats+1 > limit {
 		return &domain.PlanLimitError{Plan: plan, Agents: limit}
+	}
+	return nil
+}
+
+// lockConversationQuota serializes the writers that change a workspace's monthly conversation
+// count until the end of the caller's transaction. Take it as late as possible, after any slow work
+// such as uploads, and always after the inbound sender lock.
+func lockConversationQuota(ctx context.Context, tx pgx.Tx, workspaceID string) error {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "conversation-quota:"+workspaceID); err != nil {
+		return fmt.Errorf("lock conversation quota: %w", err)
 	}
 	return nil
 }
@@ -57,8 +81,8 @@ func (s *Store) overConversationQuota(ctx context.Context, tx pgx.Tx, workspaceI
 	if !s.limits {
 		return false, nil
 	}
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "conversation-quota:"+workspaceID); err != nil {
-		return false, fmt.Errorf("lock conversation quota: %w", err)
+	if err := lockConversationQuota(ctx, tx, workspaceID); err != nil {
+		return false, err
 	}
 	plan, err := effectivePlan(ctx, tx, workspaceID, now)
 	if err != nil {

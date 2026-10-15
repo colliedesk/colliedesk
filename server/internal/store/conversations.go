@@ -30,6 +30,13 @@ type ConversationPage struct {
 
 func (s *Store) CreateConversation(ctx context.Context, workspaceID, contactID, subject string) (domain.Conversation, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Conversation, error) {
+		// Never held, but counted: take the quota lock so an inbound delivery reads a count that
+		// includes this row once it commits.
+		if s.limits {
+			if err := lockConversationQuota(ctx, tx, workspaceID); err != nil {
+				return domain.Conversation{}, err
+			}
+		}
 		var id string
 		err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject)
 			SELECT $1,c.id,$3 FROM contacts c WHERE c.workspace_id=$1 AND c.id=$2 RETURNING id::text`, workspaceID, contactID, subject).Scan(&id)

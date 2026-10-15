@@ -96,7 +96,7 @@ func (s *Store) GetBilling(ctx context.Context, workspaceID string, now time.Tim
 		var usage domain.BillingUsage
 		err = tx.QueryRow(ctx, `SELECT
 			(SELECT count(*) FROM agents WHERE workspace_id=$1),
-			(SELECT count(*) FROM pairing_links WHERE workspace_id=$1 AND `+pendingInvite+`),
+			(`+pendingSeatEmails+`),
 			(SELECT count(*) FROM conversations WHERE workspace_id=$1 AND origin IS NULL AND created_at >= $3),
 			(SELECT count(*) FROM conversations WHERE workspace_id=$1 AND held_at >= $3)`,
 			workspaceID, now, domain.MonthStart(now)).

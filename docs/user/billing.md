@@ -10,7 +10,7 @@ Only workspace admins see **Billing** (top bar). Agents do not.
 | Plan | Price | Agents | New conversations |
 |---|---|---|---|
 | Free | $0 | up to 3 | up to 100 per UTC calendar month |
-| Team | $49 per month or $490 per year, per workspace | up to 10 | no limit |
+| Team | $49 per month or $490 per year, per workspace | up to 10 (contact us for more) | no limit |
 | Founding | $100 per year, for life | up to 10 | no limit |
 
 The plan belongs to the workspace, not to a person. The page shows how much of each limit you have
@@ -19,7 +19,7 @@ used. Conversations are counted by the UTC month in which they were received.
 ## What happens at the limits (Free plan)
 
 - **Agents.** An agent and a pending invite each take one of the 3 seats. When all seats are taken,
-  creating another invite fails with "The Free plan allows 3 agents". Revoke a pending invite, or
+  creating an invite for another person fails with "The Free plan allows 3 agents". Sending a second invite to the same address, or inviting someone who already is an agent, does not use another seat. Revoke a pending invite, or
   upgrade, and try again. If the workspace is over the limit after a downgrade, nobody is removed;
   an unused invite cannot be accepted until a seat is free or the workspace upgrades. The invite
   stays valid until it expires, so the person can use it again after the upgrade.

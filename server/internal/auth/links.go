@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
@@ -76,8 +75,10 @@ func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string
 		role = requestedRole
 	}
 	if kind == "invite" {
-		if err := s.checkSeatForInvite(ctx, tx, workspaceID, linkID, email, now); err != nil {
-			return Redeemed{}, err
+		if s.planLimits {
+			if err := store.CheckAgentSeat(ctx, tx, workspaceID, now, email, linkID); err != nil {
+				return Redeemed{}, err
+			}
 		}
 		var created string
 		if err := tx.QueryRow(ctx, `INSERT INTO agents(workspace_id,email,role) VALUES($1,lower($2),$3)
@@ -125,21 +126,4 @@ func scanRedeemed(ctx context.Context, tx pgx.Tx, workspaceID, agentID string) (
 		return Redeemed{}, fmt.Errorf("load redeemed identity: %w", err)
 	}
 	return result, nil
-}
-
-// checkSeatForInvite refuses to turn an invite into a new agent beyond the plan's cap, for example
-// after a downgrade. The invite stays unused, so it works once the workspace upgrades. Someone who
-// is already an agent takes no new seat.
-func (s *Service) checkSeatForInvite(ctx context.Context, tx pgx.Tx, workspaceID, linkID, email string, now time.Time) error {
-	if !s.planLimits {
-		return nil
-	}
-	var known bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE workspace_id=$1 AND email=lower($2))`, workspaceID, email).Scan(&known); err != nil {
-		return fmt.Errorf("check invited agent: %w", err)
-	}
-	if known {
-		return nil
-	}
-	return store.CheckAgentSeat(ctx, tx, workspaceID, now, linkID)
 }

@@ -96,8 +96,10 @@ that is still inside its paid period keeps the paid limits. Code: `store/plan-li
 
 ### Agent seats
 
-- Cap: 3 on Free, 10 on Team and Founding. A seat is an agent or an unused, unrevoked, unexpired
-  invite. Counting invites stops a burst of invites from passing the cap.
+- Cap: 3 on Free, 10 on Team and Founding (more than 10 is "contact us", so the paid message says
+  that instead of offering an upgrade). A seat is an agent, or a person with an unused, unrevoked,
+  unexpired invite. Pending invites count by distinct address: re-sending an invite to the same
+  address, or inviting someone who is already an agent (a role change), takes no new seat.
 - Checked when an invite is created and when one is redeemed. Redeem excludes the invite itself
   and skips someone who is already an agent. Redeem matters after a downgrade: the invite stays
   unused (the transaction rolls back), so it works after an upgrade.
@@ -113,9 +115,10 @@ that is still inside its paid period keeps the paid limits. Code: `store/plan-li
 - Only the inbound email pipeline holds. Held means `conversations.held_at` is set to the arrival
   time; the row, its messages and its attachments are stored exactly like any other. The check
   runs under `pg_advisory_xact_lock("conversation-quota:<workspace>")` so two deliveries racing
-  for the last slot cannot both pass. Replies that thread onto an existing conversation never
-  reach the check.
-- **API-created conversations (`POST /api/v1/conversations`) count but are never held.** An agent
+  for the last slot cannot both pass. The lock is taken after the attachment upload and right
+  before the insert, so a slow object store never queues other new conversations. Lock order is
+  sender, then quota. Replies that thread onto an existing conversation never reach the check.
+- **API-created conversations (`POST /api/v1/conversations`) count but are never held** (they take the same quota lock for the length of the insert). An agent
   who just created one expects to see it, and the quota exists to bound inbound volume.
 - **The Freshdesk importer is exempt on both sides.** Imported rows carry `origin`, so they are
   not counted, and the importer never sets `held_at`, so they are never held. An import is a

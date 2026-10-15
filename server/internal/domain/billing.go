@@ -95,7 +95,7 @@ func (e *PlanLimitError) Error() string {
 	if e.Plan == PlanFounding {
 		name = "Founding"
 	}
-	return fmt.Sprintf("The %s plan allows %d agents, pending invites included. Revoke a pending invite to add another.", name, e.Agents)
+	return fmt.Sprintf("The %s plan allows %d agents, pending invites included. Revoke a pending invite to free a seat, or contact us for more than %d agents.", name, e.Agents, e.Agents)
 }
 
 // Billing is what an admin sees about their workspace's plan.

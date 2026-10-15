@@ -20,7 +20,7 @@ func (s *Service) CreateInvite(ctx context.Context, principal Principal, email, 
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 	if s.planLimits {
-		if err := store.CheckAgentSeat(ctx, tx, principal.Workspace.ID, s.now(), ""); err != nil {
+		if err := store.CheckAgentSeat(ctx, tx, principal.Workspace.ID, s.now(), strings.ToLower(email), ""); err != nil {
 			return domain.Invite{}, "", err
 		}
 	}

@@ -3,11 +3,14 @@ package httpapi_test
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -50,10 +53,19 @@ type limitsFixture struct {
 
 func newLimitsFixture(t *testing.T, billingEnabled bool) limitsFixture {
 	t.Helper()
+	return newLimitsFixtureWithStorage(t, billingEnabled, nil)
+}
+
+// newLimitsFixtureWithStorage lets a test wrap attachment storage, for example to hold an upload.
+func newLimitsFixtureWithStorage(t *testing.T, billingEnabled bool, wrap func(attachments.Storage) attachments.Storage) limitsFixture {
+	t.Helper()
 	clock := &testClock{now: midMonth}
 	fake := newFakePolarAPI(t)
 	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
 		config.Now = clock.Now
+		if wrap != nil {
+			config.Attachments = wrap(config.Attachments)
+		}
 		if billingEnabled {
 			config.Billing = fake.config()
 		}
@@ -153,6 +165,7 @@ type planUsageView struct {
 	Plan  string `json:"plan"`
 	Usage struct {
 		Agents                 int `json:"agents"`
+		PendingInvites         int `json:"pending_invites"`
 		ConversationsThisMonth int `json:"conversations_this_month"`
 		HeldConversations      int `json:"held_conversations"`
 	} `json:"usage"`
@@ -163,4 +176,20 @@ type apiError struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	} `json:"error"`
+}
+
+// gatedStorage holds the first upload until released, like a slow object store.
+type gatedStorage struct {
+	attachments.Storage
+	entered chan struct{}
+	release chan struct{}
+	started atomic.Bool
+}
+
+func (g *gatedStorage) Put(ctx context.Context, workspaceID string, body io.Reader, expectedSize int64) (attachments.Object, error) {
+	if g.started.CompareAndSwap(false, true) {
+		close(g.entered)
+		<-g.release
+	}
+	return g.Storage.Put(ctx, workspaceID, body, expectedSize)
 }

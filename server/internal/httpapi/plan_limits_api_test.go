@@ -1,12 +1,15 @@
 package httpapi_test
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 )
 
 func invite(t *testing.T, f limitsFixture, admin string, number int) *responseView {
@@ -379,6 +382,121 @@ func TestConcurrentInvitesAndDeliveriesNeverPassTheLimits(t *testing.T) {
 	}
 	if got := f.usage(t, f.adminA).Usage; got.ConversationsThisMonth != 104 || got.HeldConversations != 4 {
 		t.Fatalf("usage=%+v, want 104 received and exactly 4 held (98 seeded + 2 within the quota)", got)
+	}
+}
+
+// A slow upload of one delivery must not queue the other new conversations of the workspace, or a
+// few large attachments would time out the mail webhook; the quota still comes out exact.
+func TestSlowUploadDoesNotBlockOtherNewConversationsAndQuotaStaysExact(t *testing.T) {
+	gate := &gatedStorage{entered: make(chan struct{}), release: make(chan struct{})}
+	f := newLimitsFixtureWithStorage(t, true, func(inner attachments.Storage) attachments.Storage {
+		gate.Storage = inner
+		return gate
+	})
+	f.seedConversations(t, f.workspaceA, 99, f.clock.Now().Add(-time.Hour), false)
+
+	firstDone := make(chan inboundResult, 1)
+	go func() { firstDone <- f.receive(t, false, 1, "Slow upload") }()
+	select {
+	case <-gate.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the first delivery never reached attachment storage")
+	}
+	secondDone := make(chan inboundResult, 1)
+	go func() { secondDone <- f.receive(t, false, 2, "Quick one") }()
+	select {
+	case <-secondDone:
+	case <-time.After(3 * time.Second):
+		close(gate.release)
+		t.Fatal("a delivery waited for another delivery's upload")
+	}
+	close(gate.release)
+	<-firstDone
+
+	// 99 seeded + the quick one (100th, visible) + the slow one (101st, held).
+	if subjects := f.inboxSubjects(t, f.adminA, "&search=Quick+one"); len(subjects) != 1 {
+		t.Fatalf("the delivery inside the quota is hidden: %v", subjects)
+	}
+	if got := f.usage(t, f.adminA).Usage; got.ConversationsThisMonth != 101 || got.HeldConversations != 1 {
+		t.Fatalf("usage=%+v, want 101 received and exactly 1 held", got)
+	}
+}
+
+func TestReinvitingAnExistingAgentOrResendingAPendingInviteTakesNoSeat(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	// Seat 2 is an agent, seat 3 a pending invite: the workspace is at the cap of 3.
+	_, agentURL := createContractInvite(t, f.api, f.adminA, "agent@limits-alpha.example.com", "agent")
+	if got := request(t, f.api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{"token": linkToken(t, agentURL)}, "", nil).Code; got != http.StatusOK {
+		t.Fatalf("redeem status=%d", got)
+	}
+	if got := invite(t, f, f.adminA, 1); got.Code != http.StatusCreated {
+		t.Fatalf("pending invite status=%d", got.Code)
+	}
+
+	again := func(email string) int {
+		return request(t, f.api, http.MethodPost, "/api/v1/auth/invites",
+			map[string]any{"email": email, "role_ceiling": "admin"}, f.adminA, nil).Code
+	}
+	if got := again("agent@limits-alpha.example.com"); got != http.StatusCreated {
+		t.Fatalf("role change for an existing agent at the cap status=%d, want 201", got)
+	}
+	if got := again("Teammate1@limits-alpha.example.com"); got != http.StatusCreated {
+		t.Fatalf("re-sending a pending invite status=%d, want 201 (same person, same seat)", got)
+	}
+	if got := f.usage(t, f.adminA).Usage; got.Agents != 2 || got.PendingInvites != 1 {
+		t.Fatalf("usage=%+v, want 2 agents and 1 pending invite (one person, not one per link)", got)
+	}
+	if got := again("someone-new@limits-alpha.example.com"); got != http.StatusPaymentRequired {
+		t.Fatalf("a genuinely new person at the cap status=%d, want 402", got)
+	}
+}
+
+func TestPaidPlanLimitMessageSaysToContactUsInsteadOfUpgrade(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	f.upgrade(t, f.workspaceA, "sub_message")
+	for number := 1; number <= 9; number++ {
+		invite(t, f, f.adminA, number)
+	}
+	refused := invite(t, f, f.adminA, 10)
+	if refused.Code != http.StatusPaymentRequired || !strings.Contains(refused.Body, "contact us for more than 10 agents") ||
+		strings.Contains(strings.ToLower(refused.Body), "upgrade") {
+		t.Fatalf("status=%d body=%s, want a contact-us message without an upgrade offer", refused.Code, refused.Body)
+	}
+}
+
+// Creating a conversation through the API takes the same workspace quota lock as inbound mail, so
+// the count a delivery reads never misses a conversation that is being written.
+func TestCreatingAConversationWaitsForTheQuotaLock(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	contact := create(t, f.api, f.adminA, "/api/v1/contacts", map[string]any{"name": "Lock", "email": "lock@customer.example"})
+	ctx := context.Background()
+	tx, err := f.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "conversation-quota:"+f.workspaceA); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan int, 1)
+	go func() {
+		done <- request(t, f.api, http.MethodPost, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Locked"}, f.adminA, nil).Code
+	}()
+	select {
+	case code := <-done:
+		t.Fatalf("conversation created (status %d) while another writer held the quota lock", code)
+	case <-time.After(500 * time.Millisecond):
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case code := <-done:
+		if code != http.StatusCreated {
+			t.Fatalf("status=%d after the lock was released, want 201", code)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("conversation creation never finished")
 	}
 }
 
