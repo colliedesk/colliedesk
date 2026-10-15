@@ -65,7 +65,7 @@ test('self-host first run: fresh database, create-workspace, pairing link, empty
 
   // The docs: "If it expires, print a new one" with `pair --workspace <slug>`. The slug must be told
   // to the self-hoster at creation time; they cannot sign in to look it up once the link expired.
-  const hint = created.stderr.match(/colliedesk pair --workspace (\S+) --email (\S+)/);
+  const hint = created.stderr.match(/collie pair --workspace (\S+) --email (\S+)/);
   expect(hint, `create-workspace stderr: ${created.stderr}`).not.toBeNull();
   expect(hint?.[2]).toBe(`owner-${suffix}@example.com`);
   const repaired = mustColliedesk(['pair', '--workspace', hint?.[1] ?? '', '--email', hint?.[2] ?? ''], { databaseURL: freshURL, origin });

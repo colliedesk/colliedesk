@@ -130,7 +130,7 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
 - The locked screen focuses its heading on mount, offers Manage billing when a subscription exists (a failed card
   is fixed in the portal, not by a second checkout), and says retention is "at least 12 months" with "at least 30
   days" notice: the app shows no deletion date, on purpose, because deletion is an operator switch.
-- `lockedScreenShipped` in `cmd/colliedesk/serve.go` keeps billing off (and logs why) in a build whose web app cannot show
+- `lockedScreenShipped` in `cmd/collie/serve.go` keeps billing off (and logs why) in a build whose web app cannot show
   the lock. It is true because this screen exists; do not set it back.
 - Cloud sign-up: `GET /api/v1/config` reports `signup.enabled` (cloud sign-in and billing both on and sign-up not turned
   off at start, the same condition as the route; the web app maps 503 `signup_unavailable` too). After Clerk authenticates, the exchange answers 403 `forbidden` for an email that
@@ -245,8 +245,43 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
 - Any path that stores a new attachment must call `CheckStorage` in its transaction before writing the
   bytes and map the error through `writeStoreError` (it answers 403 with the same code). Web reply
   attachments, when they land, are one such path.
+- **Founding plan: 20 GiB, imports included.** `domain.FoundingStorageBytes` (21474836480). Founding is
+  $100 once a year for life and attachments are the one cost that grows without bound (break-even is
+  roughly 41-56 GB), so it has a cap. Unlike the trial, imported files count: the number is
+  `workspaces.stored_storage_bytes`, the sum of every attachment, kept by the same triggers (migration
+  `founding-storage-counter`, additive; the three trigger functions now update both counters). Team has
+  no cap. Over the cap nothing is deleted. Inbound customer mail is exempt (`Store.CheckInboundStorage` lets Founding
+  through, so it is stored in full and its bytes still count: a bounced customer email hurts the paying
+  team's own customers and looks like an outage; the cost is bounded by real mail). The cap still refuses
+  what an agent or an import supplies (`Store.CheckStorage`, the importer's guard). There is no agent
+  upload or reply-attachment endpoint yet: `CheckStorage` has one production caller, `CheckInboundStorage`,
+  and its tests (`TestCheckStorage...`) prove the store function, not an upload route. **Any future
+  upload route must call `CheckStorage` before writing and get a test of its own.** Reading, replies
+  without new files and export are untouched. The trial and a locked workspace still refuse inbound mail.
+- **Import on Founding: one check, before any write; then admitted.** The ticket list does not carry
+  attachment sizes, so `freshdesk.guardFoundingStorage` runs a read-only pass first: the dry-run
+  listing and id probing (`listTickets`, `classifyTickets`, which the real run then repeats), then a
+  read of each ticket and of its conversations (paged, so at least two calls per ticket), adding up
+  the reported sizes of attachments the ledger does not hold yet. It then re-reads the room (the pass
+  can take hours) and, if `used + needed` passes the cap, returns `*freshdesk.StorageCapError` (human
+  sizes) and writes nothing. A ticket whose read fails is tried `sizingAttempts` times, each with the
+  client's own retry and backoff; a persistent failure stops the run before any write. A ticket that
+  is gone (404) or forbidden (403) is not retried: it is skipped and listed, as the real import fails
+  that ticket and goes on (`Report.StorageCap.SkippedTickets` in a dry run). **No cap check
+  after that:** an admitted import is never stopped by the cap, so bytes that arrive meanwhile (inbound
+  mail is exempt; uploads and a file added at the source after the pass) may take usage past
+  20 GiB, by whatever arrives while the import runs (the real run lists the tickets again, so tickets
+  created at the source during the sizing window are imported without being sized; on a busy account that
+  is not small), which is accepted, and there is no partial-import path from the cap (only a full disk still
+  stops a run, as before). `--dry-run` reports the same comparison in `Report.StorageCap` without
+  refusing. The counter counts logical rows: a file attached twice counts twice although the local
+  disk stores it once, which is safe for cost. `import undo` deletes the files, and the triggers
+  release the bytes. `Options.FoundingStorageBytes` and `Store.WithFoundingStorageBytes` are test-only
+  seams that shrink the cap (kept as options because an unexported hook would mean threading a
+  package-private value through the `store` and `freshdesk` packages).
 - `GET /billing` reports (for every plan) `usage.storage_bytes`, `limits.storage_bytes` (null when uncapped) and
-  `limits.storage_warn_bytes` (80%, 1717986918), the usage at which the web app should warn.
+  `limits.storage_warn_bytes` (80%: 1717986918 on the trial, 17179869184 on Founding), the usage at which the web app
+  warns. On Founding `usage.storage_bytes` is the stored counter, imports included.
 
 ### Clock
 
@@ -257,7 +292,7 @@ instead of sleeping. The webhook signature check keeps the real clock.
 
 A workspace that stays locked (no entitled subscription or comp grant, trial over) for 12 months is
 hard-deleted, after its admins got an email at least 30 days before. Cloud only: `serve` starts the job
-when billing is configured, and `colliedesk retention plan|run` refuse without billing, so self-hosted
+when billing is configured, and `collie retention plan|run` refuse without billing, so self-hosted
 never deletes.
 
 - **Lock start** is `domain.LockedSince`: the latest end among `trial_ends_at`, each subscription that
@@ -289,7 +324,7 @@ never deletes.
     workspace and logs an error.
   - Decisions use the database clock (`SELECT now()`); a pass refuses to run when it differs from the
     application clock by more than 5 minutes (`ErrClockSkew`).
-  - `colliedesk retention run` needs `--yes`; read `retention plan` first.
+  - `collie retention run` needs `--yes`; read `retention plan` first.
 - **Settings never stop `serve`.** A bad `RETENTION_DELETE` or `RETENTION_MAX_DELETIONS_PER_DAY` is logged as an
   error (variable name, not the value) and the job runs with deletion off; the CLI is strict and refuses.
   `retention plan|run` follow the same billing decision as `serve` (`billingAtStart`): while the build has no
@@ -310,7 +345,7 @@ never deletes.
   deletion for 30 days by renaming the directory back and restoring the database rows from a backup.
 - Deleted data stays in the nightly database dumps and the attachment volume backup until they expire
   (collie-01 backup retention). Restoring one workspace from a full dump is a manual job.
-- `colliedesk retention plan` prints `action slug id locked_since notice_at delete_at` per workspace to act
+- `collie retention plan` prints `action slug id locked_since notice_at delete_at` per workspace to act
   on and changes nothing; `retention run --yes` does one pass. The job runs at start and hourly. The
   hourly list is pre-filtered in SQL: a workspace with an entitled subscription or a comp grant in force
   is not evaluated.
@@ -319,12 +354,12 @@ never deletes.
 
 ## Operator commands: trial end and complimentary plan
 
-Run on the server shell (`docker compose exec server /app/colliedesk ...`).
+Run on the server shell (`docker compose exec server /app/collie ...`).
 
-- `colliedesk trial set --workspace <slug> --ends <RFC3339>` sets `trial_ends_at`, prints the old
+- `collie trial set --workspace <slug> --ends <RFC3339>` sets `trial_ends_at`, prints the old
   and new value and records who changed it, when, and from what to what in `workspace_trial_changes`
   (`--by`, default the OS user). It never touches `trial_extended_at`. Undo a mistake by running it again.
-- `colliedesk plan grant --workspace <slug> --plan team --until <RFC3339|forever> [--by <name>]` puts
+- `collie plan grant --workspace <slug> --plan team --until <RFC3339|forever> [--by <name>]` puts
   a workspace on a complimentary Team plan: no payment, no trial clock. `plan revoke --workspace <slug>`
   ends it, and the workspace is locked again once its trial is over.
 - A grant is a row in `workspace_comp_plans` (who, when, until, who revoked and when); at most one is in

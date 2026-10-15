@@ -153,7 +153,7 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 	}
 
 	// The stored raw message is gzip-compressed, so raw size plus the decoded files is an upper bound.
-	if err := s.CheckStorage(ctx, tx, workspaceID, inboundStorageBound(in), now); err != nil {
+	if err := s.CheckInboundStorage(ctx, tx, workspaceID, inboundStorageBound(in), now); err != nil {
 		return result, err
 	}
 

@@ -76,7 +76,7 @@ test('link errors: expired, reused, revoked, mistyped, missing and another works
   await expect(stranger.getByRole('alert')).toContainText('You are signed out');
   await expect(stranger.getByRole('alert')).toContainText(nextStep);
   await expect(stranger.getByRole('button', { name: 'Send reply' })).toHaveCount(0);
-  await expect(stranger.getByText(/colliedesk pair --workspace/)).toBeVisible();
+  await expect(stranger.getByText(/collie pair --workspace/)).toBeVisible();
   await expect(stranger.getByRole('link', { name: 'Sign in' })).toHaveCount(0);
   await expectReadablePage(stranger);
   await stranger.goto(`${baseURL}/settings`);

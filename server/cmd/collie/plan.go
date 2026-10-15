@@ -16,8 +16,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const planUsage = "usage: colliedesk plan grant --workspace <slug> --plan team --until <RFC3339 time|forever> [--by <name>]\n" +
-	"       colliedesk plan revoke --workspace <slug> [--by <name>]"
+const planUsage = "usage: collie plan grant --workspace <slug> --plan team --until <RFC3339 time|forever> [--by <name>]\n" +
+	"       collie plan revoke --workspace <slug> [--by <name>]"
 
 // planCommand grants or revokes a complimentary paid plan: a workspace that HC Labs keeps free of
 // charge and without a trial clock. Every change records who made it and when.

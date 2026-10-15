@@ -20,7 +20,7 @@ clone of the repository.
    ```
 2. Create a workspace and its first admin:
    ```sh
-   docker compose exec server /app/colliedesk create-workspace \
+   docker compose exec server /app/collie create-workspace \
      --name "Example Support" --admin-email "admin@example.com"
    ```
 3. Open the one-time URL the command prints. It signs you in as the admin. The command also
@@ -29,7 +29,7 @@ clone of the repository.
 The link works once and expires after 15 minutes. If it expires, print a new one:
 
 ```sh
-docker compose exec server /app/colliedesk pair --workspace <slug> --email admin@example.com
+docker compose exec server /app/collie pair --workspace <slug> --email admin@example.com
 ```
 
 After you sign in, the empty inbox links to the next steps: connect your support email, import
@@ -47,8 +47,12 @@ The installer writes `COLLIE_DESK_IMAGE` to `.env`. Pick one tag:
 To check which build you run:
 
 ```sh
-docker compose exec server /app/colliedesk version
+docker compose exec server /app/collie version
 ```
+
+The command was called `colliedesk` before it was renamed to `collie`. Images still ship
+`/app/colliedesk` as a link to `/app/collie`, so a compose file written by an older installer
+keeps working.
 
 ## Data to back up
 

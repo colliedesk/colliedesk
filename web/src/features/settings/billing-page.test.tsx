@@ -97,7 +97,7 @@ test('a trial shows its attachment storage and replies, and warns from 80 percen
   const GiB = 1024 ** 3;
   const withStorage = (bytes: number): Billing => ({ ...free, usage: { ...free.usage, storage_bytes: bytes, replies_last_24h: 12 } });
   const { rerender } = render(<BillingPage billing={withStorage(1.7 * GiB)} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
-  expect(screen.getByText(/storage: 1\.7 GB of 2\.0 GB/i)).toBeInTheDocument();
+  expect(screen.getByText(/storage: 1\.7 GiB of 2\.0 GiB/i)).toBeInTheDocument();
   expect(screen.getByText(/12 of 200 replies in the last 24 hours/i)).toBeInTheDocument();
   rerender(<BillingPage billing={{ ...withStorage(1.7 * GiB), limits: { ...free.limits, replies_per_24h: 150 } }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
   expect(screen.getByText(/12 of 150 replies/i)).toBeInTheDocument();
