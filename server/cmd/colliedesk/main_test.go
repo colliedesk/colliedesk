@@ -37,6 +37,17 @@ func TestHelpAndHealthcheckDoNotRequireDatabase(t *testing.T) {
 	}
 }
 
+func TestVersionPrintsBuildVersionWithoutDatabase(t *testing.T) {
+	var output bytes.Buffer
+	if err := run(context.Background(), []string{"version"}, &output, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	// Unstamped builds (go run, go test) report "dev"; release images stamp the tag via -ldflags.
+	if got := output.String(); got != "dev\n" {
+		t.Fatalf("version output = %q, want %q", got, "dev\n")
+	}
+}
+
 func TestCreateWorkspaceAndPairPrintFreshOneTimeURLs(t *testing.T) {
 	baseURL := os.Getenv("TEST_DATABASE_URL")
 	if baseURL == "" {

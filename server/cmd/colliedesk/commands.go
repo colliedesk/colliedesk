@@ -18,12 +18,19 @@ import (
 // stderr receives hints meant for the person at the terminal; stdout stays machine-readable.
 var stderr io.Writer = os.Stderr
 
+// version is stamped at image build time with -ldflags "-X main.version=..."; see server/Dockerfile.
+var version = "dev"
+
 func run(ctx context.Context, args []string, output io.Writer, databaseURL, origin string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("expected subcommand: serve, migrate, create-workspace, pair, import, or healthcheck")
+		return fmt.Errorf("expected subcommand: serve, migrate, create-workspace, pair, import, healthcheck, or version")
 	}
 	if args[0] == "--help" || args[0] == "help" {
-		_, err := fmt.Fprintln(output, "Usage: colliedesk <serve|migrate|create-workspace|pair|import|healthcheck>")
+		_, err := fmt.Fprintln(output, "Usage: colliedesk <serve|migrate|create-workspace|pair|import|healthcheck|version>")
+		return err
+	}
+	if args[0] == "version" {
+		_, err := fmt.Fprintln(output, version)
 		return err
 	}
 	if args[0] == "healthcheck" {
