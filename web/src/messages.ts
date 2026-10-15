@@ -71,6 +71,12 @@ export const messages = {
   incoming: 'Incoming',
   noteMode: 'Private note',
   attachments: 'Attachments',
+  attachFiles: 'Attach files',
+  addAttachment: 'Add attachment',
+  filesToSend: 'Files to send',
+  removeFile: (filename: string) => `Remove ${filename}`,
+  attachmentsTooMany: (limit: number) => `A message can carry at most ${limit} files.`,
+  attachmentsTooLarge: (total: string, limit: string) => `These files add up to ${total}. A message can carry at most ${limit} in total. Remove a file to send.`,
   originKinds: {
     description: 'Ticket opened in', reply: 'Reply sent from', incoming: 'Received in', private_note: 'Private note from',
     public_note: 'Public note (customer could see it) from', forward: 'Forwarded from', forwarded_email: 'Forwarded email received in', other: 'Imported from',

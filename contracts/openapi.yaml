@@ -325,6 +325,12 @@ paths:
     post:
       operationId: createMessage
       x-permission: conversations:write
+      description: >
+        Send JSON for a text-only message, or `multipart/form-data` to attach files: fields `kind` and
+        `body` plus repeated `files` parts, each with a filename. A message carries at most
+        `limits.outgoing_attachments_files` files and `limits.outgoing_attachments_bytes` bytes in total
+        (both from `GET /api/v1/config`); more answers 413 and nothing is stored. A reply emails its
+        files as attachments; a note never leaves the workspace.
       requestBody:
         required: true
         content:
@@ -335,6 +341,19 @@ paths:
               properties:
                 kind: {type: string, enum: [outgoing, note]}
                 body: {type: string, minLength: 1, description: Markdown source}
+          multipart/form-data:
+            schema:
+              type: object
+              required: [kind, body]
+              properties:
+                kind: {type: string, enum: [outgoing, note]}
+                body: {type: string, minLength: 1, description: Markdown source}
+                files:
+                  type: array
+                  maxItems: 10
+                  items: {type: string, format: binary}
+            encoding:
+              files: {contentType: application/octet-stream}
       responses:
         '201':
           description: Created reply or private note
@@ -346,7 +365,11 @@ paths:
         '402': {$ref: '#/components/responses/WorkspaceLocked'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '413': {$ref: '#/components/responses/AttachmentsTooLarge'}
         '429': {$ref: '#/components/responses/TrialOutboundLimit'}
+        '507':
+          description: The attachments volume is low on disk space; nothing was sent or stored
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/conversations/{id}/messages/{messageId}/retry:
     parameters:
       - {$ref: '#/components/parameters/ID'}
@@ -1119,6 +1142,9 @@ components:
     BadGateway:
       description: The billing provider failed or could not be reached; nothing changed, try again
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    AttachmentsTooLarge:
+      description: More files than allowed or more bytes than allowed in total for one message; nothing was stored
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     PayloadTooLarge:
       description: Message larger than 25 MiB or with more than 100 attachments; nothing was stored
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
@@ -1187,8 +1213,14 @@ components:
   schemas:
     PublicConfig:
       type: object
-      required: [cloud_sign_in, billing, signup]
+      required: [cloud_sign_in, billing, signup, limits]
       properties:
+        limits:
+          type: object
+          required: [outgoing_attachments_bytes, outgoing_attachments_files]
+          properties:
+            outgoing_attachments_bytes: {type: integer, description: Most raw bytes of files one reply or note can carry in total.}
+            outgoing_attachments_files: {type: integer, description: Most files one reply or note can carry.}
         cloud_sign_in:
           type: object
           required: [enabled, publishable_key]

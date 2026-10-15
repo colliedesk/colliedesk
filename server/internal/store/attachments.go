@@ -33,8 +33,9 @@ func InsertAttachment(ctx context.Context, q Querier, workspaceID string, input 
 		contentType = "application/octet-stream"
 	}
 	var item domain.Attachment
-	err := q.QueryRow(ctx, `INSERT INTO attachments(workspace_id,message_id,filename,content_type,size,sha256,storage_key)
-		SELECT $1,m.id,$3,$4,$5,$6,$7 FROM messages m WHERE m.workspace_id=$1 AND m.id=$2
+	// clock_timestamp, not the transaction's now(): files added in one transaction keep their order.
+	err := q.QueryRow(ctx, `INSERT INTO attachments(workspace_id,message_id,filename,content_type,size,sha256,storage_key,created_at)
+		SELECT $1,m.id,$3,$4,$5,$6,$7,clock_timestamp() FROM messages m WHERE m.workspace_id=$1 AND m.id=$2
 		RETURNING `+attachmentColumns, workspaceID, input.MessageID, input.Filename, contentType,
 		input.Object.Size, input.Object.SHA256, input.Object.Key).
 		Scan(&item.ID, &item.MessageID, &item.Filename, &item.ContentType, &item.Size, &item.SHA256, &item.CreatedAt)
@@ -64,6 +65,19 @@ func (s *Store) GetAttachment(ctx context.Context, workspaceID, id string) (doma
 	}
 	item.CreatedAt = domain.UTC(item.CreatedAt)
 	return item, key, nil
+}
+
+// AttachmentKeyInUse reports whether any attachment of the workspace still points at the storage
+// key. Objects are content-addressed, so one object can back several attachments.
+func (s *Store) AttachmentKeyInUse(ctx context.Context, workspaceID, key string) (bool, error) {
+	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
+		var used bool
+		err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM attachments WHERE workspace_id=$1 AND storage_key=$2)`, workspaceID, key).Scan(&used)
+		if err != nil {
+			return false, fmt.Errorf("check attachment key: %w", err)
+		}
+		return used, nil
+	})
 }
 
 // rowsQuerier is satisfied by a transaction.

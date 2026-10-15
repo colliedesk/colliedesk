@@ -214,7 +214,8 @@ with status `dropped` and reason `unknown_recipient`; the Worker forwards nothin
 
 - Incoming messages show the sender address and are shown as plain text: no remote images load,
   and only web addresses written in the text become links.
-- Attachments are listed under the message; select a file name to download it. **Show original**
+- Attachments are listed under the message, including the files you sent with a reply; select a
+  file name to download it. **Show original**
   opens the HTML version in a locked frame; inline images in it come from the stored message,
   never from the internet. **Download original email** gives the complete message as received
   (`.eml.gz`), so nothing is lost even if a part could not be shown.
@@ -242,6 +243,12 @@ conversation contact.
 
 ## Limits
 
+- A reply carries at most 10 attachments and 10 MiB of files in total (the raw size, before email
+  encoding). The limit is also in `GET /api/v1/config` as `limits.outgoing_attachments_bytes` and
+  `limits.outgoing_attachments_files`. More answers `413` with the reason, and nothing is stored
+  or sent. Make sure your mail relay accepts a message of about 14 MiB; email encoding adds a third.
+- If a stored file is gone when the reply is sent, the reply shows **Delivery failed** and names the
+  file. Colliedesk never sends the reply without it.
 - A message may be up to 25 MiB with at most 100 attachments. Larger mail gets `413` and nothing
   is stored; the forwarder should keep a copy for a person.
 - If attachment storage fails, the forwarder gets `500` and nothing is stored; it retries.

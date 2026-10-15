@@ -4,6 +4,7 @@ import type { UpdateConversationRequest } from '../../api/client';
 import { ConversationList } from './conversation-list';
 import { DetailsPanel } from './details-panel';
 import { InboxFilters } from './inbox-filters';
+import type { AttachmentLimits } from './attachment-picker';
 import { ReplyComposer } from './reply-composer';
 import { TimelinePanel } from './timeline-panel';
 import { messages } from '../../messages';
@@ -18,7 +19,8 @@ interface InboxPageProps {
   timezone?: string;
   onSelect?: (id: string) => void;
   onFilters?: (filters: Record<string, string>) => void;
-  onMessage?: (kind: 'outgoing' | 'note', body: string) => void | Promise<unknown>;
+  onMessage?: (kind: 'outgoing' | 'note', body: string, files?: File[]) => void | Promise<unknown>;
+  attachmentLimits?: AttachmentLimits;
   onUpdate?: (conversationId: string, value: UpdateConversationRequest) => void;
   onAddTag?: (conversationId: string, tagId: string) => void;
   onRemoveTag?: (conversationId: string, tagId: string) => void;
@@ -40,7 +42,7 @@ interface InboxPageProps {
   onOpenSettings?: () => void;
 }
 
-export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, loading, refreshing, timelineLoading, failed, onRetry, canManage, onOpenSettings }: InboxPageProps) {
+export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, loading, refreshing, timelineLoading, failed, onRetry, canManage, onOpenSettings }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Filters are an uncontrolled form; clearing remounts it so every field returns to its default.
@@ -81,7 +83,7 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}</p>}
         {deliveryNotice && <p role="alert" className="composer-notice">{deliveryNotice}</p>}
         {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
-        <ReplyComposer key={selected?.id} disabled={!selected} onSubmit={onMessage} />
+        <ReplyComposer key={selected?.id} disabled={!selected} onSubmit={onMessage} attachmentLimits={attachmentLimits} />
       </div>
       <DetailsPanel conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate}
         onAddTag={onAddTag} onRemoveTag={onRemoveTag} onCreateTag={onCreateTag} onClose={detailsOpen ? closeDetails : undefined} />

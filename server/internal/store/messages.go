@@ -91,9 +91,10 @@ func getMessage(ctx context.Context, query messageQuerier, workspaceID, messageI
 	return message, nil
 }
 
-// CreateMessage stores a reply or note. A reply is queued for email when the workspace has an
-// email channel; a note never is.
-func (s *Store) CreateMessage(ctx context.Context, workspaceID, conversationID, agentID, kind, body string) (domain.Message, error) {
+// CreateMessage stores a reply or note with files already written to attachment storage (only
+// Filename, ContentType and Object are read). A reply is queued for email when the workspace has an
+// email channel; a note never is. When it fails, the caller owns the stored bytes.
+func (s *Store) CreateMessage(ctx context.Context, workspaceID, conversationID, agentID, kind, body string, files ...NewAttachment) (domain.Message, error) {
 	tx, err := s.db.BeginWorkspace(ctx, workspaceID)
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("begin message creation: %w", err)
@@ -109,6 +110,9 @@ func (s *Store) CreateMessage(ctx context.Context, workspaceID, conversationID, 
 	if _, err := tx.Exec(ctx, `UPDATE conversations SET updated_at=now() WHERE workspace_id=$1 AND id=$2`, workspaceID, conversationID); err != nil {
 		return domain.Message{}, fmt.Errorf("touch conversation: %w", err)
 	}
+	if err := s.insertMessageFiles(ctx, tx, workspaceID, messageID, files); err != nil {
+		return domain.Message{}, err
+	}
 	if kind == "outgoing" {
 		if err := s.enqueueReply(ctx, tx, workspaceID, conversationID, messageID); err != nil {
 			return domain.Message{}, err
@@ -122,4 +126,24 @@ func (s *Store) CreateMessage(ctx context.Context, workspaceID, conversationID, 
 		return domain.Message{}, fmt.Errorf("commit message creation: %w", err)
 	}
 	return message, nil
+}
+
+func (s *Store) insertMessageFiles(ctx context.Context, tx pgx.Tx, workspaceID, messageID string, files []NewAttachment) error {
+	if len(files) == 0 {
+		return nil
+	}
+	var total int64
+	for _, file := range files {
+		total += file.Object.Size
+	}
+	if err := s.CheckStorage(ctx, tx, workspaceID, total, s.now()); err != nil {
+		return err
+	}
+	for _, file := range files {
+		file.MessageID = messageID
+		if _, err := InsertAttachment(ctx, tx, workspaceID, file); err != nil {
+			return err
+		}
+	}
+	return nil
 }

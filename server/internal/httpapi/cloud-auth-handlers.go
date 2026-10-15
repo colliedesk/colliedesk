@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 )
 
@@ -19,6 +20,7 @@ func (a *API) getConfig(response http.ResponseWriter, _ *http.Request) {
 		"billing":       map[string]any{"enabled": a.polar != nil},
 		// Same condition as signUpCloud: 404 unless both are configured, 503 while its settings are missing.
 		"signup": map[string]any{"enabled": enabled && a.polar != nil && !a.config.SignupDisabled},
+		"limits": map[string]any{"outgoing_attachments_bytes": attachments.MaxOutgoingBytes, "outgoing_attachments_files": attachments.MaxOutgoingFiles},
 	})
 }
 
