@@ -151,6 +151,11 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 		return result, ErrRateLimited
 	}
 
+	// The stored raw message is gzip-compressed, so raw size plus the decoded files is an upper bound.
+	if err := s.CheckStorage(ctx, tx, workspaceID, inboundStorageBound(in), now); err != nil {
+		return result, err
+	}
+
 	conversationID, err := findThread(ctx, tx, workspaceID, in)
 	if err != nil {
 		return result, err
@@ -214,6 +219,15 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 	}
 	result.ConversationID, result.MessageID = &conversationID, &messageID
 	return result, nil
+}
+
+// inboundStorageBound is the most attachment storage one message can use.
+func inboundStorageBound(in email.Inbound) int64 {
+	total := int64(in.RawBytes)
+	for _, file := range in.Files {
+		total += int64(len(file.Data))
+	}
+	return total
 }
 
 func dropped(result InboundResult, reason string) InboundResult {

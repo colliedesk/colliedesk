@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"regexp"
 	"strings"
@@ -23,6 +25,10 @@ type Service struct {
 	now    func() time.Time
 	// planLimits turns on the agent cap of the hosted cloud's plans; self-hosted has none.
 	planLimits bool
+	// random is the entropy for generated slug suffixes; nil reads crypto/rand.
+	random io.Reader
+	// signupKey keys the hashes of the cloud sign-up records (SIGNUP_HASH_KEY).
+	signupKey []byte
 }
 
 type Principal struct {
@@ -53,15 +59,16 @@ func (s *Service) CreateWorkspace(ctx context.Context, name, email string) (doma
 	var workspace domain.Workspace
 	var link createdLink
 	err := s.db.Privileged(ctx, database.PrivilegeCreateWorkspace, func(tx pgx.Tx) error {
-		if err := tx.QueryRow(ctx, `INSERT INTO workspaces(slug,name,trial_ends_at) VALUES($1,$2,$3) RETURNING id::text,slug,name,timezone`, slug, name, s.now().Add(domain.TrialLength)).
-			Scan(&workspace.ID, &workspace.Slug, &workspace.Name, &workspace.Timezone); err != nil {
-			return fmt.Errorf("create workspace: %w", err)
-		}
 		var agentID string
-		if err := tx.QueryRow(ctx, `INSERT INTO agents(workspace_id,email,role) VALUES($1,lower($2),'admin') RETURNING id::text`, workspace.ID, email).Scan(&agentID); err != nil {
-			return fmt.Errorf("create admin agent: %w", err)
-		}
+		var created bool
 		var err error
+		workspace, agentID, created, err = s.insertWorkspaceTx(ctx, tx, slug, name, email)
+		if err != nil {
+			return err
+		}
+		if !created {
+			return fmt.Errorf("create workspace: the name %q is already used by another workspace", slug)
+		}
 		link, err = s.createLinkTx(ctx, tx, workspace.ID, agentID, strings.ToLower(email), "pairing", "admin", nil)
 		return err
 	})
@@ -69,6 +76,24 @@ func (s *Service) CreateWorkspace(ctx context.Context, name, email string) (doma
 		return domain.Workspace{}, "", err
 	}
 	return workspace, link.URL, nil
+}
+
+// insertWorkspaceTx creates a workspace on a fresh trial and its first admin inside tx. created is
+// false, and nothing is written, when the slug is already used by another workspace.
+func (s *Service) insertWorkspaceTx(ctx context.Context, tx pgx.Tx, slug, name, email string) (workspace domain.Workspace, agentID string, created bool, err error) {
+	err = tx.QueryRow(ctx, `INSERT INTO workspaces(slug,name,trial_ends_at) VALUES($1,$2,$3) ON CONFLICT (slug) DO NOTHING
+		RETURNING id::text,slug,name,timezone`, slug, name, s.now().Add(domain.TrialLength)).
+		Scan(&workspace.ID, &workspace.Slug, &workspace.Name, &workspace.Timezone)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Workspace{}, "", false, nil
+	}
+	if err != nil {
+		return domain.Workspace{}, "", false, fmt.Errorf("create workspace: %w", err)
+	}
+	if err := tx.QueryRow(ctx, `INSERT INTO agents(workspace_id,email,role) VALUES($1,lower($2),'admin') RETURNING id::text`, workspace.ID, email).Scan(&agentID); err != nil {
+		return domain.Workspace{}, "", false, fmt.Errorf("create admin agent: %w", err)
+	}
+	return workspace, agentID, true, nil
 }
 
 func (s *Service) Pair(ctx context.Context, workspaceSlug, email string) (string, error) {
@@ -114,5 +139,19 @@ func (s *Service) WithPlanLimits(enabled bool) *Service {
 func (s *Service) WithClock(now func() time.Time) *Service {
 	copy := *s
 	copy.now = func() time.Time { return now().UTC() }
+	return &copy
+}
+
+// WithRandom returns a service that draws generated slug suffixes from r; tests pin it.
+func (s *Service) WithRandom(r io.Reader) *Service {
+	copy := *s
+	copy.random = r
+	return &copy
+}
+
+// WithSignupKey returns a service that keys the cloud sign-up record hashes with key.
+func (s *Service) WithSignupKey(key string) *Service {
+	copy := *s
+	copy.signupKey = []byte(key)
 	return &copy
 }
