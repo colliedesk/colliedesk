@@ -49,7 +49,7 @@ done
 "$DOCKER" run -d --name "$NAME-server" --network "$NAME" \
   -e DATABASE_URL="postgres://colliedesk:$PASSWORD@postgres:5432/colliedesk?sslmode=disable" \
   -e DATABASE_REQUEST_URL="postgres://colliedesk_request:$PASSWORD@postgres:5432/colliedesk?sslmode=disable" \
-  -e APP_ORIGIN=http://localhost:8080 \
+  -e APP_ORIGIN=http://localhost:8080 -e DISABLE_TELEMETRY=true \
   --entrypoint /bin/sh "$IMAGE" -c '/app/collie migrate && exec /app/collie serve' >/dev/null
 
 attempt=0
