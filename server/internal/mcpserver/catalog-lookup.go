@@ -39,7 +39,7 @@ func tagsListSpec() Spec {
 		Name:  "colliedesk_tags_list",
 		Title: "List tags",
 		Description: `List the tags of this workspace. Use these exact names in colliedesk_inbox_search (tag) and colliedesk_conversation_update (add_tags, remove_tags). ` +
-			`Tags cannot be created through this server.` +
+			`Look here before you add a tag: colliedesk_conversation_update creates a tag only when no tag has the name, so reuse an existing one.` +
 			"\n\nTier: read.",
 		Tier: "read", ReadOnly: true,
 		REST:   []string{"GET /api/v1/tags"},

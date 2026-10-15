@@ -7,18 +7,19 @@ func conversationUpdateSpec() Spec {
 		Description: `Change a conversation's status (open, pending, resolved, closed), priority, assignee or tags in one call. ` +
 			`It is safe to repeat: you state the result you want, so a second identical call changes nothing. ` +
 			`Give at least one change. assignee takes "me", "unassigned", or a team member's email, name or id (see colliedesk_agents_list). ` +
-			`add_tags and remove_tags take names of tags that already exist (see colliedesk_tags_list) and leave the other tags alone. ` +
+			`add_tags takes tag names; a name that is not a tag yet is created first (see colliedesk_tags_list for the existing ones, and reuse them: ` +
+			`names match ignoring case). remove_tags takes names of existing tags. Both leave the other tags alone. ` +
 			`It never sends anything to the customer and deletes nothing; every change can be undone by another call.` +
 			"\n\nTier: draft.",
 		Tier: "draft", Idempotent: true,
 		REST: []string{"PATCH /api/v1/conversations/{id}", "PUT /api/v1/conversations/{id}/tags/{tagId}", "DELETE /api/v1/conversations/{id}/tags/{tagId}",
-			"GET /api/v1/agents", "GET /api/v1/tags", "GET /api/v1/auth/me"},
+			"POST /api/v1/tags", "GET /api/v1/agents", "GET /api/v1/tags", "GET /api/v1/auth/me"},
 		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id"],"properties":{` +
 			`"conversation_id":{"type":"string",` + uuid + `},` +
 			`"status":{"type":"string","enum":["open","pending","resolved","closed"]},` +
 			`"priority":{"type":"string","enum":["low","normal","high","urgent"]},` +
 			`"assignee":{"type":"string","maxLength":200,"description":"me, unassigned, or a team member's email, name or id."},` +
-			`"add_tags":{"type":"array","maxItems":20,"items":{"type":"string","maxLength":100},"description":"Names of existing tags to put on the conversation."},` +
+			`"add_tags":{"type":"array","maxItems":20,"items":{"type":"string","minLength":1,"maxLength":100},"description":"Names of tags to put on the conversation. A name that is not a tag yet is created."},` +
 			`"remove_tags":{"type":"array","maxItems":20,"items":{"type":"string","maxLength":100},"description":"Names of tags to take off."}}}`,
 		Output: `{"type":"object","required":["conversation","timezone"],"properties":{"conversation":` + stateSchema + `,"timezone":{"type":"string"}}}`,
 		run:    conversationUpdate,

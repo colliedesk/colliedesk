@@ -80,7 +80,7 @@ func TestConversationUpdateRefusesBadInputBeforeChangingAnything(t *testing.T) {
 		want string
 	}{
 		{"nothing to change", map[string]any{"conversation_id": f.c3}, "Nothing to change"},
-		{"unknown tag", map[string]any{"conversation_id": f.c3, "status": "closed", "add_tags": []string{"nonesuch"}}, "No tag named"},
+		{"unknown tag to remove", map[string]any{"conversation_id": f.c3, "status": "closed", "remove_tags": []string{"nonesuch"}}, "No tag named"},
 		{"unknown agent", map[string]any{"conversation_id": f.c3, "status": "closed", "assignee": "nobody@inbox.example.com"}, "No team member"},
 		{"bad status", map[string]any{"conversation_id": f.c3, "status": "done"}, "status"},
 		{"not a uuid", map[string]any{"conversation_id": "7", "status": "closed"}, "conversation_id"},
@@ -129,7 +129,7 @@ func TestToolsNeverReachAConversationOfAnotherWorkspace(t *testing.T) {
 		{"colliedesk_conversation_get", map[string]any{"conversation_id": f.otherConvID, "detail": "full"}},
 		{"colliedesk_conversation_update", map[string]any{"conversation_id": f.otherConvID, "status": "closed"}},
 		{"colliedesk_note_add", map[string]any{"conversation_id": f.otherConvID, "body": "not yours"}},
-		{"colliedesk_conversation_update", map[string]any{"conversation_id": f.c3, "add_tags": []string{"bravo-tag"}}},
+		{"colliedesk_conversation_update", map[string]any{"conversation_id": f.c3, "remove_tags": []string{"bravo-tag"}}},
 		{"colliedesk_conversation_update", map[string]any{"conversation_id": f.c3, "assignee": "admin@other.example.com"}},
 	}
 	for index, c := range calls {

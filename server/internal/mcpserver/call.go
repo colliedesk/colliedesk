@@ -72,17 +72,27 @@ func (c *call) tagList() ([]restTag, error) {
 	return c.tags, nil
 }
 
-// tagByName finds an existing tag, ignoring case, or says which tags exist.
-func (c *call) tagByName(name string) (restTag, error) {
+// findTag finds an existing tag by name, ignoring case and surrounding spaces.
+func (c *call) findTag(name string) (restTag, bool, error) {
 	tags, err := c.tagList()
 	if err != nil {
-		return restTag{}, err
+		return restTag{}, false, err
 	}
 	for _, tag := range tags {
 		if strings.EqualFold(tag.Name, strings.TrimSpace(name)) {
-			return tag, nil
+			return tag, true, nil
 		}
 	}
+	return restTag{}, false, nil
+}
+
+// tagByName finds an existing tag, or says which tags exist.
+func (c *call) tagByName(name string) (restTag, error) {
+	tag, found, err := c.findTag(name)
+	if err != nil || found {
+		return tag, err
+	}
+	tags, _ := c.tagList()
 	names := make([]string, len(tags))
 	for index, tag := range tags {
 		names[index] = tag.Name
@@ -91,6 +101,16 @@ func (c *call) tagByName(name string) (restTag, error) {
 		return restTag{}, &toolError{fmt.Sprintf("No tag named %q. This workspace has no tags yet.", name)}
 	}
 	return restTag{}, &toolError{fmt.Sprintf("No tag named %q. Existing tags: %s.", name, strings.Join(names, ", "))}
+}
+
+// createTag adds a tag to the workspace and remembers it for the rest of the call.
+func (c *call) createTag(name string) (restTag, error) {
+	var created restTag
+	if err := c.send(http.MethodPost, "/api/v1/tags", map[string]any{"name": strings.TrimSpace(name)}, &created); err != nil {
+		return restTag{}, err
+	}
+	c.tags = append(c.tags, created)
+	return created, nil
 }
 
 // contactsByID fetches the contacts with the given ids in one call.

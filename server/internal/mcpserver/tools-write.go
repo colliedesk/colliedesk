@@ -45,7 +45,7 @@ func conversationUpdate(c *call, arguments map[string]any) (any, error) {
 		}
 		changes["assignee_id"] = assignee
 	}
-	add, err := c.resolveTags(args.AddTags)
+	add, missing, err := c.splitNewTags(args.AddTags)
 	if err != nil {
 		return nil, err
 	}
@@ -61,6 +61,19 @@ func conversationUpdate(c *call, arguments map[string]any) (any, error) {
 		}
 	}
 	path := "/api/v1/conversations/" + url.PathEscape(args.ConversationID)
+	if len(missing) > 0 {
+		// A tag is created only for a conversation that exists, so a wrong id leaves nothing behind.
+		if err := c.get(path, nil, nil); err != nil {
+			return nil, err
+		}
+		for _, name := range missing {
+			tag, err := c.createTag(name)
+			if err != nil {
+				return nil, err
+			}
+			add = append(add, tag)
+		}
+	}
 	var latest restConversation
 	if len(changes) > 0 {
 		if err := c.send(http.MethodPatch, path, changes, &latest); err != nil {
@@ -126,6 +139,36 @@ func describeAgents(agents []restAgent) string {
 		parts[index] = agentName(agent) + " <" + agent.Email + ">"
 	}
 	return strings.Join(parts, ", ")
+}
+
+// splitNewTags sorts the names a caller wants on a conversation into tags that exist and names that
+// do not, each once and ignoring case. Nothing is created here.
+func (c *call) splitNewTags(names []string) (existing []restTag, missing []string, err error) {
+	seen := map[string]bool{}
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return nil, nil, &toolError{"A tag name cannot be empty."}
+		}
+		tag, found, err := c.findTag(name)
+		if err != nil {
+			return nil, nil, err
+		}
+		key := strings.ToLower(name)
+		if found {
+			key = tag.ID
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		if found {
+			existing = append(existing, tag)
+		} else {
+			missing = append(missing, name)
+		}
+	}
+	return existing, missing, nil
 }
 
 // resolveTags finds existing tags by name, each once.
