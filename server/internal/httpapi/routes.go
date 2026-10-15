@@ -15,7 +15,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.listAgents, a.updateWorkspaceTimezone, a.updateWorkspaceSlug, a.updateAgentTimezone,
 		a.listTags, a.createTag, a.updateTag, a.deleteTag,
 		a.retryMessageDelivery,
-		a.getEmailChannel, a.putEmailChannel, a.deleteEmailChannel, a.verifyEmailDomain, a.receiveInboundEmail, a.rotateEmailSecret,
+		a.getEmailChannel, a.putEmailChannel, a.deleteEmailChannel, a.verifyEmailDomain, a.receiveInboundEmail, a.checkInboundRecipient, a.rotateEmailSecret,
 		a.getBilling, a.createCheckout, a.createPortal, a.receivePolarWebhook,
 		a.exportWorkspace,
 		a.getWebForm, a.putWebForm, a.submitWebForm,

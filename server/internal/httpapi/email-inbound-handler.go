@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -116,19 +117,8 @@ func (a *API) platformWorkspace(ctx context.Context, parsed email.Inbound) (work
 	config := a.config.Email
 	if email.UnderDomain(parsed.EnvelopeTo, config.HostedMailDomain) {
 		// Only the envelope recipient counts: To and Cc are written by the sender.
-		slug := email.HostedSlug(parsed.EnvelopeTo, config.HostedMailDomain)
-		if slug == "" {
-			return "", true, nil
-		}
-		found, ok, err := a.store.WorkspaceForMailSlug(ctx, slug)
-		if err != nil || !ok {
-			return "", true, err
-		}
-		channel, err := a.store.GetEmailChannel(ctx, found)
-		if err != nil || channel == nil {
-			return "", true, err
-		}
-		return found, true, nil
+		workspaceID, err = a.hostedWorkspace(ctx, parsed.EnvelopeTo)
+		return workspaceID, true, err
 	}
 	token := email.PlatformReplyToken(parsed.Recipients, config.MailFromDomain)
 	if token == "" {
@@ -170,4 +160,49 @@ func (a *API) stashEmail(workspaceID string, raw []byte, files []email.File) sto
 		}
 		return stored, nil
 	}
+}
+
+// hostedWorkspace returns the workspace that receives mail at a hosted address, or "" when no workspace
+// with a connected email channel owns it.
+func (a *API) hostedWorkspace(ctx context.Context, recipient string) (string, error) {
+	slug := email.HostedSlug(recipient, a.config.Email.HostedMailDomain)
+	if slug == "" {
+		return "", nil
+	}
+	found, ok, err := a.store.WorkspaceForMailSlug(ctx, slug)
+	if err != nil || !ok {
+		return "", err
+	}
+	channel, err := a.store.GetEmailChannel(ctx, found)
+	if err != nil || channel == nil {
+		return "", err
+	}
+	return found, nil
+}
+
+// checkInboundRecipient answers the hosted-cloud MTA before it accepts RCPT TO: 204 when inbound would
+// route mail for this address, 404 when it would reject it. Refusing in the SMTP session means an
+// unknown address is never bounced afterwards to a sender that may be forged.
+func (a *API) checkInboundRecipient(response http.ResponseWriter, request *http.Request) {
+	if !a.isPlatformSecret(request.Header.Get(inboundSecretHeader)) {
+		writeError(response, http.StatusUnauthorized, "unauthorized", "The server-wide inbound secret is required.")
+		return
+	}
+	var body struct {
+		Recipient string `json:"recipient"`
+	}
+	if err := json.NewDecoder(io.LimitReader(request.Body, 4096)).Decode(&body); err != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "The body must be {\"recipient\": \"<address>\"}.")
+		return
+	}
+	workspaceID, err := a.hostedWorkspace(request.Context(), body.Recipient)
+	if err != nil {
+		writeInternalError(response, err)
+		return
+	}
+	if workspaceID == "" {
+		writeError(response, http.StatusNotFound, "unknown_recipient", "No connected workspace receives mail at this address.")
+		return
+	}
+	response.WriteHeader(http.StatusNoContent)
 }

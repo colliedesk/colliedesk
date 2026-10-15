@@ -25,6 +25,14 @@ func contractRequest(t *testing.T, method string, item contractCase, token, secr
 	if item.raw != "" {
 		return inboundRequest(t, item.raw, secret)
 	}
+	if item.path == recipientPath {
+		// The MTA authenticates with the server-wide secret; an empty secret exercises the 401.
+		req := newRequest(t, method, item.path, item.body, "", nil)
+		if secret != "" {
+			req.Header.Set("X-Colliedesk-Inbound-Secret", platformSecret)
+		}
+		return req
+	}
 	return newRequest(t, method, item.path, item.body, token, cookie)
 }
 
@@ -153,15 +161,17 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/channels/email/inbound": {path: inboundPath, status: 200, raw: mail([]string{
 			"From: Contract Customer <contract@customer.example>", "Subject: Contract mail", "Message-ID: <contract@customer.example>",
 		}, "Contract inbound.")},
-		"GET /api/v1/billing":                         {path: "/api/v1/billing", token: admin, status: 200},
-		"POST /api/v1/billing/checkout":               {path: "/api/v1/billing/checkout", body: map[string]any{"plan": "team_monthly"}, token: admin, status: 200},
-		"POST /api/v1/billing/portal":                 {path: "/api/v1/billing/portal", token: f.portalToken, status: 200},
-		"POST " + webhookPath:                         {path: webhookPath, raw: f.webhookBody, status: 200},
-		"GET /api/v1/conversations/{id}/time-entries": {path: "/api/v1/conversations/" + f.conversationID + "/time-entries", token: admin, status: 200},
-		"GET /api/v1/attachments/{id}":                {path: "/api/v1/attachments/" + f.attachmentID, token: admin, status: 200},
-		"GET /api/v1/export":                          {path: "/api/v1/export", token: admin, status: 200},
-		"GET /api/v1/channels/web-form":               {path: "/api/v1/channels/web-form", token: admin, status: 200},
-		"PUT /api/v1/channels/web-form":               {path: "/api/v1/channels/web-form", body: map[string]any{"enabled": true, "allowed_origins": []string{"https://contract.example.com"}}, token: admin, status: 200},
-		"POST /api/v1/public/forms/{workspace_slug}":  {path: "/api/v1/public/forms/contract-desk" /* the slug set by PATCH /api/v1/workspace/slug, which runs earlier */, body: map[string]any{"email": "visitor@contract.example.com", "source": "site:updates"}, status: 202},
+		// Routes run in order; PATCH /workspace/slug above renamed the workspace to contract-desk.
+		"POST /api/v1/channels/email/inbound/recipient": {path: recipientPath, body: map[string]any{"recipient": "support@contract-desk." + hostedDomain}, status: 204},
+		"GET /api/v1/billing":                           {path: "/api/v1/billing", token: admin, status: 200},
+		"POST /api/v1/billing/checkout":                 {path: "/api/v1/billing/checkout", body: map[string]any{"plan": "team_monthly"}, token: admin, status: 200},
+		"POST /api/v1/billing/portal":                   {path: "/api/v1/billing/portal", token: f.portalToken, status: 200},
+		"POST " + webhookPath:                           {path: webhookPath, raw: f.webhookBody, status: 200},
+		"GET /api/v1/conversations/{id}/time-entries":   {path: "/api/v1/conversations/" + f.conversationID + "/time-entries", token: admin, status: 200},
+		"GET /api/v1/attachments/{id}":                  {path: "/api/v1/attachments/" + f.attachmentID, token: admin, status: 200},
+		"GET /api/v1/export":                            {path: "/api/v1/export", token: admin, status: 200},
+		"GET /api/v1/channels/web-form":                 {path: "/api/v1/channels/web-form", token: admin, status: 200},
+		"PUT /api/v1/channels/web-form":                 {path: "/api/v1/channels/web-form", body: map[string]any{"enabled": true, "allowed_origins": []string{"https://contract.example.com"}}, token: admin, status: 200},
+		"POST /api/v1/public/forms/{workspace_slug}":    {path: "/api/v1/public/forms/contract-desk" /* the slug set by PATCH /api/v1/workspace/slug, which runs earlier */, body: map[string]any{"email": "visitor@contract.example.com", "source": "site:updates"}, status: 202},
 	}
 }

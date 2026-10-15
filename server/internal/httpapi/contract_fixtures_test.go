@@ -35,6 +35,7 @@ func newContractFixture(t *testing.T) contractFixture {
 	api, service, pool, dns := testAPIWithConfig(t, func(config *httpapi.Config) {
 		config.Attachments = storage
 		config.Billing = fakePolar.config()
+		hostedConfig(config)
 	})
 	adminToken := createSession(t, api, service, "Contract All", "admin@contract-all.example.com")
 	contactID := create(t, api, adminToken, "/api/v1/contacts", map[string]any{
