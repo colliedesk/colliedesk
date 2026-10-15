@@ -31,16 +31,23 @@ it, create a new token and revoke the old one. The agent sends it as `Authorizat
 
 | Scope | The agent can |
 |---|---|
-| `read` | Read conversations, messages, contacts, tags and agents |
-| `draft` | Everything in `read`, plus change status, priority, assignee and tags of a conversation and add private notes. Nothing reaches a customer. |
-| `send` | Everything in `draft`, plus send replies to customers, retry a failed reply, and create, rename or delete contacts, conversations and tags |
+| `read` | Read conversations, messages, contacts, tags and the team list |
+| `draft` | Everything in `read`, plus change status, priority, assignee and tags of a conversation, create a tag, and add private notes. Nothing reaches a customer. |
+| `send` | Everything in `draft`, plus send replies to customers, retry a failed reply, rename and delete tags, and create contacts and conversations |
 
-Start with `read` or `draft`. A tag must exist before a `draft` agent can put it on a conversation.
+Start with `read` or `draft`.
 
 Whatever the scope, a token cannot manage sessions, tokens or invites, and cannot change
-workspace, email channel, web form, billing or export settings. This holds when an admin creates
+workspace, email channel, web form, billing or export settings. It cannot read the lists of
+sessions and invites or the email and web form settings either. This holds when an admin creates
 the token: it has the agent role. A call outside the scope fails with HTTP 403 and the error code
 `scope_insufficient`. The message names the scope the action needs.
 
-A token works only in the `Authorization` header. A browser cookie that holds a token is
-refused. A token lasts 30 days and extends while the agent uses it.
+A token starts with `cdk_agent_` so that secret scanners recognise it if it ends up in a file by
+mistake. It works only in the `Authorization` header. A browser cookie that holds a token is
+refused. A token stops working 30 days after its last use, and in any case one year after you
+created it, however often it is used. Create a new token before that and revoke the old one.
+
+A note or a reply that an agent writes shows "by <your name> via <token label>" in the
+conversation, also after you revoked the token. Status, priority, assignee and tag changes do not
+show it yet.

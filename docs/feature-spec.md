@@ -46,8 +46,9 @@ it must keep its MIT notice in `THIRD-PARTY-NOTICES.md`.
    (browser/OS), created and last-seen times, 30-day sliding expiry, and can be revoked. A
    **Sessions** settings page lists the agent's own sessions (admins: the whole workspace) with
    Revoke. A rejected credential never falls back to another credential. An **agent token** is a
-   session for an AI agent with a scope (`read`, `draft` or `send`): bearer only, agent role, tier
-   enforced on every route (`docs/internals/auth.md`).
+   session for an AI agent with a scope (`read`, `draft` or `send`): bearer only (`cdk_agent_` prefix),
+   agent role, tier enforced on every route, 30-day sliding expiry and a one-year limit from creation
+   (`docs/internals/auth.md`).
 5. **Every route declares its permission.** Permissions: `conversations:read`, `conversations:write`,
    `contacts:read`, `contacts:write`, `access:read`, `access:write`, `workspace:export` (admins only: the bulk export of the whole workspace); `channels:inbound` marks channel routes authenticated by a channel secret instead of a session. Roles map to permission sets. A test
    enumerates every registered API route and fails if one has no declared permission.

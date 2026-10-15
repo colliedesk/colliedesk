@@ -15,29 +15,52 @@ path compares raw secrets or low-entropy values in application memory.
 ## Agent tokens
 
 An agent token is a `sessions` row with a non-null `scope` (`read`, `draft`, `send`); a null scope is
-a person's full session. It reuses the session machinery on purpose: SHA-256 lookup, `label`,
-`last_seen_at` (the "last used" time, refreshed by every call, which also slides the 30-day expiry),
-revoke. Code: `auth/scope.go`, `auth/tokens.go`, `httpapi/token-scope.go`.
+a person's full session. It reuses the session machinery on purpose: `label`, `last_seen_at` (the
+"last used" time, refreshed by every call), revoke. Code: `auth/token.go`, `auth/scope.go`,
+`auth/tokens.go`, `httpapi/token-scope.go`.
 
+- **Own prefix and hash domain.** The raw token is `cdk_agent_` plus 32 random bytes in base64url.
+  The stored `token_hash` is `sha256("colliedesk-agent-token\x00" + raw)`; a person's session token
+  keeps the plain `sha256(raw)`. `Authenticate` picks the derivation from the prefix
+  (`credentialHash`). Code older than the `scope` column hashes every bearer plainly, so it finds no
+  row for an agent token and answers 401. That is what keeps an image rollback from turning a
+  `read` token into a full agent session; `TestAgentTokenCannotBeFoundByThePlainHashAnOlderImageUses`
+  pins it. The down migration still revokes every token, as a second line of defence. The prefix also
+  lets a secret scanner (gitleaks custom rule, GitHub push protection) catch a token pasted into an
+  agent config: the pattern is `cdk_agent_[A-Za-z0-9_-]{43}`.
 - **Role.** A token always has `role_ceiling='agent'`, whoever creates it; a CHECK constraint
   enforces it. No tier can reach an admin-only permission.
 - **Tiers are a route table.** `tokenTiers` maps `"METHOD pattern"` to the lowest tier allowed. A route
   missing from it is closed to every token, so a new route stays out of reach until someone lists
-  it. `TestEveryRouteIsOpenToTokensOnlyFromItsTier` keeps its own hand-written copy of the table and
-  fails until both agree. Posting a message is gated by the handler: a note needs `draft`, an
-  outgoing reply needs `send`, and the 403 names that tier.
+  it. `TestEveryRouteIsOpenToTokensOnlyFromItsTier` keeps its own hand-written copy of the table,
+  fails until both agree, and checks that an allowed tier gets the route's success status. Posting a
+  message is gated by the handler: a note needs `draft`, an outgoing reply needs `send`, and the 403
+  names that tier.
 - **Order of checks.** Authenticate (a token presented as a cookie is a 401) → `refuseToken` → role
   permission → CSRF → locked workspace. The tier check runs before the role check so a closed route
   answers `scope_insufficient`, not a bare `forbidden`.
-- **What `draft` means.** Status, priority, assignee, applying and removing an existing tag, and
-  notes. Every other write needs `send`, including creating a tag, a contact or a conversation.
-  Changing it is one edit to `tokenTiers`.
+- **What each tier means.** `read`: conversations, messages, time entries, attachments, contacts,
+  tags and the team list. `draft`: also status, priority, assignee, applying and removing a tag,
+  creating a tag, and notes. `send`: also outgoing replies, retrying a reply, renaming and deleting
+  tags, and creating contacts and conversations. Changing a tier is one edit to `tokenTiers`.
 - **Closed for every tier:** revoking sessions (a token could sign its owner out), creating tokens (a
-  `read` token could mint a `send` token) and invites.
-- **Rollback trap.** Code older than the migration ignores `scope`, so a token would act as a full
-  agent session. The down migration revokes every token first. When you roll back the image only,
-  run this before starting the old image:
-  `UPDATE sessions SET revoked_at = now() WHERE scope IS NOT NULL AND revoked_at IS NULL;`
+  `read` token could mint a `send` token), invites, and the lists of sessions and invites and the
+  email and web form channel settings, which triage does not need and which would widen what a
+  prompt-injected agent can paste into a reply. `GET /agents` stays open: assignee names need it.
+- **Lifetime.** Thirty days of sliding expiry like a browser session, plus an absolute limit of 365
+  days from `created_at`: `Authenticate` clamps the slid `expires_at` to it and refuses from that
+  instant, however often the token is used. `insertAgentToken` takes `created_at` from the service
+  clock, so tests move one clock. After the limit the owner creates a new token.
+- **Attribution.** A message written with a token carries `messages.agent_token_id` (composite FK to
+  `sessions(workspace_id,id)`, so a message names only a token of its own workspace) and the API
+  returns it as `agent_token` (`id`, `label`, `scope`, `agent_name`). The web shows "by Ada via
+  Claude Code". The column stays after the token is revoked, so what a revoked token wrote can still
+  be told from what a person wrote. **Known limit:** only notes and replies are attributed. Status,
+  priority, assignee and tag changes, the creation of conversations, contacts and tags, tag rename and
+  delete, and retrying a reply record the agent but not the token. The repo has no conversation
+  change log (a person's change is not attributed either); adding one is the way to close this.
+- **Rollback.** An image older than the migration needs nothing from the operator any more: it
+  cannot find a token (see the first item). Do not rely on a manual `UPDATE` of `sessions`.
 - **MCP.** `/mcp` accepts a bearer only, authenticated by the same `Authenticate`, and each tool call
   runs through the REST handler with that bearer, so these tiers bind MCP tools without a second
   check (`docs/internals/mcp.md`). A new route a tool uses needs a `tokenTiers` row first.

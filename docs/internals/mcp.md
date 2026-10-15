@@ -38,6 +38,16 @@
 - **A new tool needs its route in `tokenTiers`** (and the hand-written copy in
   `agent_token_scope_api_test.go`), or every token gets `scope_insufficient`. The tool's tier in
   the catalog is only used to word the error and to list `tools_you_can_use`; REST decides.
+- **Tags are created by name.** `colliedesk_conversation_update` creates a name in `add_tags` that no
+  tag has (case ignored), because `POST /tags` is a `draft` route and triage must not stall on a
+  missing tag. Every other check runs first (assignee, unknown `remove_tags`, a tag in both lists,
+  the conversation exists), so a refused or wrong call leaves no tag behind
+  (`TestConversationUpdateCreatesNoTagWhenTheCallIsRefusedOrInvalid`). `remove_tags` never creates:
+  an unknown name there is a typo and the error lists the real tags. Two callers that create the
+  same name at once: the second gets "rejected the request" and its repeat finds the tag.
+- **Attribution is free.** A note a tool adds goes through `POST /messages` with the caller's bearer,
+  so it carries the token (`TestNoteAddedThroughMCPNamesTheTokenInTheTimeline`). The known limit
+  (changes other than notes are not attributed) is in `docs/internals/auth.md`.
 - **Size.** One in-process call buffers at most 16 MiB of REST answer; beyond that the tool says the
   answer is too large (`TestAnswerTooLargeForOneCallIsExplainedNotAnInternalError`) instead of
   reporting an internal problem. `detail=full` of a very long thread is the usual cause.
