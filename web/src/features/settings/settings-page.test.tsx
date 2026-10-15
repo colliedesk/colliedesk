@@ -92,3 +92,29 @@ test('shows why an invite was refused next to the invite form', () => {
     inviteError="The trial allows 10 agents, pending invites included." />);
   expect(screen.getByRole('alert')).toHaveTextContent(/trial allows 10 agents/i);
 });
+
+test('an agent token shows its tier and when it ends; a browser session shows neither', () => {
+  const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z' };
+  render(<SettingsPage invites={[]} timezone="UTC" sessions={[
+    { ...base, id: '11111111-1111-4111-8111-111111111111', label: 'Claude Code', scope: 'draft', expires_at: '2037-10-14T09:30:00Z', revoked_at: null },
+    { ...base, id: '22222222-2222-4222-8222-222222222222', label: 'Reader bot', scope: 'read', expires_at: '2037-11-02T18:00:00Z', revoked_at: null },
+    { ...base, id: '33333333-3333-4333-8333-333333333333', label: 'Sender bot', scope: 'send', expires_at: '2037-12-24T06:15:00Z', revoked_at: null },
+    { ...base, id: '44444444-4444-4444-8444-444444444444', label: 'Old bot', scope: 'draft', expires_at: '2037-10-14T09:30:00Z', revoked_at: '2026-10-14T00:01:00Z' },
+    { ...base, id: '55555555-5555-4555-8555-555555555556', label: 'Chrome', scope: null, expires_at: '2037-10-14T09:30:00Z', revoked_at: null },
+  ]} />);
+  const sessions = screen.getByRole('region', { name: 'Sessions' });
+  const row = (label: string) => within(sessions).getByText(label).closest('article') as HTMLElement;
+
+  expect(within(row('Claude Code')).getByText('draft')).toBeInTheDocument();
+  expect(row('Claude Code')).toHaveTextContent(/Expires Oct 14, 2037/);
+  expect(within(row('Reader bot')).getByText('read')).toBeInTheDocument();
+  expect(row('Reader bot')).toHaveTextContent(/Expires Nov 2, 2037/);
+  expect(within(row('Sender bot')).getByText('send')).toBeInTheDocument();
+  expect(row('Sender bot')).toHaveTextContent(/Expires Dec 24, 2037/);
+
+  // A revoked token keeps its tier but no longer has an end date to look forward to.
+  expect(within(row('Old bot')).getByText('draft')).toBeInTheDocument();
+  expect(row('Old bot')).not.toHaveTextContent(/Expires/);
+  // A browser session has no tier, and it slides forward, so a date would mislead.
+  expect(row('Chrome')).not.toHaveTextContent(/Expires|read|draft|send/);
+});

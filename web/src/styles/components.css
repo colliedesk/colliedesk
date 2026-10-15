@@ -193,6 +193,8 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .data-list strong { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .data-list span, .data-list time { min-width: 0; overflow: hidden; color: var(--text-3); text-overflow: ellipsis; white-space: nowrap; }
 .data-list time { font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
+.data-list .badge { color: var(--text-2); }
+.data-list .token-detail { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); font-size: var(--fs-label); }
 @media (max-width: 44rem) {
   .data-list article > div, .invite-form, .form-row { grid-template-columns: 1fr; gap: var(--space-2); }
 }

@@ -39,6 +39,8 @@ export const messages = {
   importFreshdeskURL: 'https://colliedesk.com/docs/import-freshdesk',
   inviteTeam: 'Invite your team',
   sessionStates: { active: 'Active', revoked: 'Revoked', expired: 'Expired' },
+  tokenTierTitle: 'Agent token tier',
+  tokenExpires: 'Expires',
   inviteStates: { pending: 'Pending', accepted: 'Accepted', revoked: 'Revoked', expired: 'Expired' },
   conversationList: 'Conversation list',
   timeline: 'Timeline',

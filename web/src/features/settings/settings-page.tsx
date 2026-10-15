@@ -74,7 +74,9 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
           const state = sessionState(session);
           return <article key={session.id}>
             <div><strong title={session.label}>{session.label}</strong><span>{session.agent_email}</span><span>{messages.sessionStates[state]}</span>
-              <time>{formatDate(session.last_seen_at, timezone)}</time></div>
+              <time>{formatDate(session.last_seen_at, timezone)}</time>
+              {session.scope && <span className="token-detail"><span className="badge" title={messages.tokenTierTitle}>{session.scope}</span>
+                {state === 'active' && <span>{messages.tokenExpires} <time dateTime={session.expires_at}>{formatDate(session.expires_at, timezone)}</time></span>}</span>}</div>
             {state === 'active' && <button type="button" className="danger-action" onClick={() => onRevokeSession?.(session.id)}>{messages.revoke}</button>}
           </article>;
         })}</div></div>
