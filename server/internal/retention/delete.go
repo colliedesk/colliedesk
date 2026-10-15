@@ -56,8 +56,14 @@ func (s *Service) remove(ctx context.Context, tx pgx.Tx, st state, now time.Time
 		Scan(&conversations, &messages, &files, &bytes, &agents); err != nil {
 		return ActionNone, false, nil, err
 	}
-	if undo, err = s.config.Storage.Trash(ctx, st.WorkspaceID, now); err != nil {
+	var found bool
+	if undo, found, err = s.config.Storage.Trash(ctx, st.WorkspaceID, now); err != nil {
 		return ActionNone, false, nil, err
+	}
+	if !found && files > 0 {
+		// The database lists files the storage does not have: most likely ATTACHMENTS_DIR points at
+		// the wrong place. Deleting the row now would leave the real files behind for good.
+		return ActionNone, false, nil, fmt.Errorf("the database lists %d attachment(s) but the workspace directory is missing from the attachment storage; check ATTACHMENTS_DIR; workspace kept", files)
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM workspaces WHERE id=$1`, st.WorkspaceID); err != nil {
 		return ActionNone, false, undo, err

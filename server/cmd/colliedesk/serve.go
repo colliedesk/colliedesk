@@ -86,11 +86,12 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	}
 	warnWithoutTrustedProxies(slog.Default(), trustedProxies)
 	if billing.Enabled() {
-		retentionService, _, err := newRetentionService(db, origin, billing)
+		retentionService, err := newRetentionService(db, origin, billing, retentionSettingsForServe(os.Getenv, slog.Default()))
 		if err != nil {
-			return err
+			slog.Error("workspace retention is not running", "error", err)
+		} else {
+			go sweepRetention(ctx, retentionService)
 		}
-		go sweepRetention(ctx, retentionService)
 	}
 	server := &http.Server{
 		Addr:              *address,

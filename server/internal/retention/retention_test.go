@@ -720,3 +720,120 @@ func TestDecide(t *testing.T) {
 		})
 	}
 }
+
+func (e *env) trashEntries(t *testing.T) int {
+	t.Helper()
+	entries, err := e.disk.ListTrash(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(entries)
+}
+
+func TestTrashEntryOfAnExistingWorkspaceIsRestoredNotPurged(t *testing.T) {
+	e := newEnv(t)
+	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
+	// A crash after the rename and before the commit: the row stayed, the files are in the trash.
+	if _, _, err := e.disk.Trash(context.Background(), a.ID, at("2027-01-01T00:00:00Z")); err != nil {
+		t.Fatal(err)
+	}
+	e.run(t, "2027-01-01T00:30:00Z") // a delete in another process may still be running
+	if e.blobExists(a.Keys[0]) || e.trashEntries(t) != 1 {
+		t.Fatal("a fresh trash entry must be left alone")
+	}
+	e.run(t, "2027-01-01T02:00:00Z")
+	if !e.blobExists(a.Keys[0]) || !e.blobExists(a.Keys[1]) || e.trashEntries(t) != 0 {
+		t.Fatalf("files not restored for the workspace that still exists (trash entries %d)", e.trashEntries(t))
+	}
+}
+
+func TestTrashEntryOfAnExistingWorkspaceIsNeverPurgedEvenWhenItCannotBeRestored(t *testing.T) {
+	e := newEnv(t)
+	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
+	if _, _, err := e.disk.Trash(context.Background(), a.ID, at("2027-01-01T00:00:00Z")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.disk.Put(context.Background(), a.ID, strings.NewReader("newer file"), -1); err != nil {
+		t.Fatal(err)
+	}
+	e.now = at("2027-03-01T00:00:00Z") // far past the 30 day window
+	if _, err := e.service.Run(context.Background()); err == nil {
+		t.Fatal("a trash entry that cannot be restored must be reported")
+	}
+	if e.trashEntries(t) != 1 {
+		t.Fatal("the entry of an existing workspace was purged")
+	}
+}
+
+func TestTrashOfADeletedWorkspaceIsPurgedAfterTheWindow(t *testing.T) {
+	e := newEnv(t)
+	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
+	e.run(t, "2027-10-02T00:00:00Z")
+	e.run(t, "2027-11-01T00:00:00Z")
+	if e.exists(t, a.ID) || e.trashEntries(t) != 1 {
+		t.Fatal("setup: deleted workspace should have one trash entry")
+	}
+	e.run(t, "2027-12-01T00:00:01Z")
+	if e.trashEntries(t) != 0 {
+		t.Fatal("trash of a deleted workspace must be purged after 30 days")
+	}
+}
+
+func TestRecoveryAfterAnAmbiguousCommitNeverResurrectsADeletedWorkspacesFiles(t *testing.T) {
+	e := newEnv(t)
+	gone := e.workspace(t, "Gone", "2026-11-01T00:00:00Z", "g@x.example")
+	kept := e.workspace(t, "Kept", "2026-11-01T00:00:00Z", "k@x.example")
+	ctx := context.Background()
+	undoGone, _, err := e.disk.Trash(ctx, gone.ID, at("2027-11-01T00:00:00Z"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	undoKept, _, err := e.disk.Trash(ctx, kept.ID, at("2027-11-01T00:00:00Z"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.exec(t, `DELETE FROM workspaces WHERE id=$1`, gone.ID) // the commit did reach the database
+	if err := e.service.RestoreUnlessDeleted(ctx, gone.ID, undoGone); err != nil {
+		t.Fatal(err)
+	}
+	if e.blobExists(gone.Keys[0]) || e.trashEntries(t) != 2 {
+		t.Fatal("files of a deleted workspace were moved back to a place nobody cleans")
+	}
+	if err := e.service.RestoreUnlessDeleted(ctx, kept.ID, undoKept); err != nil {
+		t.Fatal(err)
+	}
+	if !e.blobExists(kept.Keys[0]) {
+		t.Fatal("files of a workspace that still exists must come back")
+	}
+}
+
+func TestDeletionIsRefusedWhenTheAttachmentDirectoryIsNotWhereTheDatabaseSaysItIs(t *testing.T) {
+	e := newEnv(t)
+	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
+	e.run(t, "2027-10-02T00:00:00Z")
+	elsewhere, err := attachments.NewLocalDisk(t.TempDir()) // a wrong ATTACHMENTS_DIR
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrong := e.serviceWith(func(c *retention.Config) { c.Storage = elsewhere })
+	e.now = at("2027-11-01T00:00:00Z")
+	if got, err := wrong.Run(context.Background()); err == nil || got.Deleted != 0 || !e.exists(t, a.ID) {
+		t.Fatalf("deleted a workspace whose files it could not find: %+v err %v", got, err)
+	}
+	if !e.blobExists(a.Keys[0]) {
+		t.Fatal("files were touched")
+	}
+}
+
+func TestAWorkspaceWithoutAttachmentsDeletesEvenIfItHasNoDirectory(t *testing.T) {
+	e := newEnv(t)
+	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
+	e.exec(t, `DELETE FROM attachments WHERE workspace_id=$1`, a.ID)
+	if err := os.RemoveAll(filepath.Join(e.root, a.ID)); err != nil {
+		t.Fatal(err)
+	}
+	e.run(t, "2027-10-02T00:00:00Z")
+	if got := e.run(t, "2027-11-01T00:00:00Z"); got.Deleted != 1 || e.exists(t, a.ID) {
+		t.Fatalf("workspace with no files: %+v", got)
+	}
+}

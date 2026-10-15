@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -86,5 +87,47 @@ func TestRetentionRunNeedsYes(t *testing.T) {
 	env := newTrialEnv(t, "Old Shop")
 	if _, err := env.run("retention", "run"); err == nil || !strings.Contains(err.Error(), "--yes") {
 		t.Fatalf("retention run without --yes: %v, want a message naming --yes", err)
+	}
+}
+
+func TestServeRunsWithDeletionOffOnABadRetentionSetting(t *testing.T) {
+	env := func(values map[string]string) func(string) string {
+		return func(key string) string { return values[key] }
+	}
+	for _, values := range []map[string]string{
+		{"RETENTION_DELETE": "ON-secret-typo"},
+		{"RETENTION_DELETE": "on", "RETENTION_MAX_DELETIONS_PER_DAY": "many-secret-typo"},
+	} {
+		var logged bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&logged, nil))
+		settings := retentionSettingsForServe(env(values), logger)
+		if settings.DeleteEnabled || settings.MaxDeletionsPerDay != 0 {
+			t.Fatalf("settings = %+v for %v, want deletion off", settings, values)
+		}
+		if !strings.Contains(logged.String(), "level=ERROR") || !strings.Contains(logged.String(), "RETENTION_") || strings.Contains(logged.String(), "secret-typo") {
+			t.Fatalf("log must be an error naming the variable, not its value:\n%s", logged.String())
+		}
+	}
+	var quiet bytes.Buffer
+	good := retentionSettingsForServe(env(map[string]string{"RETENTION_DELETE": "on"}), slog.New(slog.NewTextHandler(&quiet, nil)))
+	if !good.DeleteEnabled || good.MaxDeletionsPerDay != 5 || quiet.Len() != 0 {
+		t.Fatalf("valid settings: %+v log %q", good, quiet.String())
+	}
+}
+
+func TestRetentionCommandFollowsTheBillingDecisionOfServe(t *testing.T) {
+	env := newTrialEnv(t, "Old Shop")
+	for key, value := range map[string]string{"POLAR_ACCESS_TOKEN": "polar_oat_x", "POLAR_WEBHOOK_SECRET": "whsec_x",
+		"POLAR_PRODUCT_TEAM_MONTHLY": "p1", "POLAR_PRODUCT_TEAM_YEARLY": "p2", "POLAR_PRODUCT_FOUNDING": "p3"} {
+		t.Setenv(key, value)
+	}
+	if lockedScreenShipped {
+		t.Skip("billing is on in this build; the refusal under test no longer applies")
+	}
+	for _, args := range [][]string{{"retention", "plan"}, {"retention", "run", "--yes"}} {
+		output, err := env.run(args...)
+		if err == nil || !strings.Contains(err.Error(), "hosted cloud only") || output != "" {
+			t.Fatalf("%v with billing configured but turned off by this build: output %q err %v; want a refusal", args, output, err)
+		}
 	}
 }

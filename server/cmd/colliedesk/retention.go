@@ -31,21 +31,32 @@ type retentionSettings struct {
 
 func retentionSettingsFromEnv(getenv func(string) string) (retentionSettings, error) {
 	settings := retentionSettings{MaxDeletionsPerDay: defaultMaxDeletionsPerDay}
-	switch value := getenv("RETENTION_DELETE"); value {
+	switch getenv("RETENTION_DELETE") {
 	case "", "off":
 	case "on":
 		settings.DeleteEnabled = true
 	default:
-		return retentionSettings{}, fmt.Errorf("RETENTION_DELETE must be on or off, got %q", value)
+		return retentionSettings{}, errors.New("RETENTION_DELETE must be on or off")
 	}
 	if value := getenv("RETENTION_MAX_DELETIONS_PER_DAY"); value != "" {
 		max, err := strconv.Atoi(value)
 		if err != nil || max < 0 {
-			return retentionSettings{}, fmt.Errorf("RETENTION_MAX_DELETIONS_PER_DAY must be a whole number of 0 or more, got %q", value)
+			return retentionSettings{}, errors.New("RETENTION_MAX_DELETIONS_PER_DAY must be a whole number of 0 or more")
 		}
 		settings.MaxDeletionsPerDay = max
 	}
 	return settings, nil
+}
+
+// retentionSettingsForServe never stops the server: a bad value is logged (variable name, never the
+// value) and the job runs with deletion off. Notices still go out.
+func retentionSettingsForServe(getenv func(string) string, logger *slog.Logger) retentionSettings {
+	settings, err := retentionSettingsFromEnv(getenv)
+	if err != nil {
+		logger.Error("retention settings are invalid; workspace deletion stays off", "error", err)
+		return retentionSettings{}
+	}
+	return settings
 }
 
 // retentionCommand is the ops view of the job that deletes workspaces locked for 12 months: plan
@@ -67,10 +78,15 @@ func retentionCommand(ctx context.Context, pool *pgxpool.Pool, origin string, ar
 	if err != nil {
 		return err
 	}
+	billing, _ = billingAtStart(billing, lockedScreenShipped)
 	if !billing.Enabled() {
 		return errors.New("retention applies to the hosted cloud only: billing is not configured on this instance, so no workspace is ever locked or deleted")
 	}
-	service, settings, err := newRetentionService(database.New(pool), origin, billing)
+	settings, err := retentionSettingsFromEnv(os.Getenv)
+	if err != nil {
+		return err
+	}
+	service, err := newRetentionService(database.New(pool), origin, billing, settings)
 	if err != nil {
 		return err
 	}
@@ -106,18 +122,14 @@ func runRetention(ctx context.Context, service *retention.Service, apply bool, o
 // newRetentionService opens the attachment store, the Polar client and, when SMTP and
 // MAIL_FROM_DOMAIN are set, the platform mailer. Without a mailer notices fail with a clear error
 // and nothing is deleted.
-func newRetentionService(db *database.DB, origin string, billing polar.Config) (*retention.Service, retentionSettings, error) {
-	settings, err := retentionSettingsFromEnv(os.Getenv)
-	if err != nil {
-		return nil, settings, err
-	}
+func newRetentionService(db *database.DB, origin string, billing polar.Config, settings retentionSettings) (*retention.Service, error) {
 	storage, err := attachmentStorage()
 	if err != nil {
-		return nil, settings, err
+		return nil, err
 	}
 	emailConfig, err := email.ConfigFromEnv(os.Getenv)
 	if err != nil {
-		return nil, settings, err
+		return nil, err
 	}
 	config := retention.Config{DB: db, Storage: storage, Origin: origin, Polar: polar.NewClient(billing),
 		DeleteEnabled: settings.DeleteEnabled, MaxDeletionsPerDay: settings.MaxDeletionsPerDay}
@@ -125,7 +137,7 @@ func newRetentionService(db *database.DB, origin string, billing polar.Config) (
 		config.Mailer = email.SMTPSender{Config: emailConfig.SMTP}
 		config.From = "noreply@" + emailConfig.MailFromDomain
 	}
-	return retention.New(config), settings, nil
+	return retention.New(config), nil
 }
 
 // sweepRetention runs the policy at start and then every hour until ctx ends.

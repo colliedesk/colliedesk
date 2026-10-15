@@ -177,7 +177,7 @@ func TestTrashMovesAWorkspaceAsideAndCanBeUndone(t *testing.T) {
 		t.Fatal(err)
 	}
 	at := time.Date(2027, 11, 1, 0, 0, 0, 0, time.UTC)
-	undo, err := disk.Trash(context.Background(), workspace, at)
+	undo, found, err := disk.Trash(context.Background(), workspace, at)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,6 +190,9 @@ func TestTrashMovesAWorkspaceAsideAndCanBeUndone(t *testing.T) {
 	if _, err := disk.Open(context.Background(), otherObject.Key); err != nil {
 		t.Fatalf("another workspace was touched: %v", err)
 	}
+	if !found {
+		t.Fatal("Trash must report the files it moved")
+	}
 	if err := undo(); err != nil {
 		t.Fatal(err)
 	}
@@ -200,38 +203,72 @@ func TestTrashMovesAWorkspaceAsideAndCanBeUndone(t *testing.T) {
 	reader.Close()
 }
 
-func TestTrashOfAWorkspaceWithoutFilesIsANoOp(t *testing.T) {
+func TestTrashOfAWorkspaceWithoutFilesReportsNothingFound(t *testing.T) {
 	disk, err := attachments.NewLocalDisk(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	undo, err := disk.Trash(context.Background(), "11111111-2222-3333-4444-555555555555", time.Now())
-	if err != nil || undo() != nil {
-		t.Fatalf("trash/undo of nothing: %v", err)
+	undo, found, err := disk.Trash(context.Background(), "11111111-2222-3333-4444-555555555555", time.Now())
+	if err != nil || found || undo() != nil {
+		t.Fatalf("trash of nothing: found %v err %v", found, err)
 	}
 }
 
-func TestPurgeTrashRemovesOnlyEntriesOlderThanTheCutoff(t *testing.T) {
+func TestTrashEntriesCanBeListedRestoredAndRemoved(t *testing.T) {
 	root := t.TempDir()
 	disk, err := attachments.NewLocalDisk(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for index, workspace := range []string{"11111111-2222-3333-4444-555555555555", "66666666-2222-3333-4444-555555555555"} {
+	const first, second = "11111111-2222-3333-4444-555555555555", "66666666-2222-3333-4444-555555555555"
+	for index, workspace := range []string{first, second} {
 		if _, err := disk.Put(context.Background(), workspace, strings.NewReader("x"), -1); err != nil {
 			t.Fatal(err)
 		}
 		// Trashed on 2027-11-01 and 2027-11-20.
-		if _, err := disk.Trash(context.Background(), workspace, time.Date(2027, 11, 1+19*index, 0, 0, 0, 0, time.UTC)); err != nil {
+		if _, _, err := disk.Trash(context.Background(), workspace, time.Date(2027, 11, 1+19*index, 0, 0, 0, 0, time.UTC)); err != nil {
 			t.Fatal(err)
 		}
 	}
-	purged, err := disk.PurgeTrash(context.Background(), time.Date(2027, 11, 10, 0, 0, 0, 0, time.UTC))
-	if err != nil || purged != 1 {
-		t.Fatalf("PurgeTrash = %d, %v; want 1 (the 11-01 entry only)", purged, err)
+	entries, err := disk.ListTrash(context.Background())
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("ListTrash = %+v, %v", entries, err)
 	}
-	entries, _ := os.ReadDir(filepath.Join(root, ".trash"))
-	if len(entries) != 1 || !strings.HasPrefix(entries[0].Name(), "66666666") {
-		t.Fatalf("remaining trash: %v", entries)
+	byID := map[string]attachments.TrashEntry{entries[0].WorkspaceID: entries[0], entries[1].WorkspaceID: entries[1]}
+	if got := byID[first].TrashedAt; !got.Equal(time.Date(2027, 11, 1, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("TrashedAt = %s", got)
+	}
+	if err := disk.RestoreTrash(context.Background(), byID[first]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, first)); err != nil {
+		t.Fatalf("not restored: %v", err)
+	}
+	// Restoring another workspace works; a place already taken is checked below.
+	if err := disk.RestoreTrash(context.Background(), byID[second]); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := disk.Trash(context.Background(), first, time.Date(2027, 12, 1, 0, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	again, _ := disk.ListTrash(context.Background())
+	var firstAgain attachments.TrashEntry
+	for _, entry := range again {
+		if entry.WorkspaceID == first {
+			firstAgain = entry
+		}
+	}
+	if _, err := disk.Put(context.Background(), first, strings.NewReader("new"), -1); err != nil {
+		t.Fatal(err)
+	}
+	if err := disk.RestoreTrash(context.Background(), firstAgain); err == nil {
+		t.Fatal("RestoreTrash must refuse when the workspace directory already exists")
+	}
+	if err := disk.RemoveTrash(context.Background(), firstAgain); err != nil {
+		t.Fatal(err)
+	}
+	left, _ := disk.ListTrash(context.Background())
+	if len(left) != 0 {
+		t.Fatalf("trash after remove: %+v", left)
 	}
 }

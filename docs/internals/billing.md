@@ -247,18 +247,26 @@ never deletes.
   - `RETENTION_DELETE=on` turns deletion on; unset or `off`, the pass sends notices and logs what it would
     delete (`held back` in the result). `retention plan` works either way.
   - `RETENTION_MAX_DELETIONS_PER_DAY` (default 5, `0` deletes nothing) caps deletions in any rolling
-    24 hours, counted in `retention_deletions` (one row per deletion: id, slug, time; no personal data).
+    24 hours, counted in `retention_deletions` (one row per deletion: id, slug, time; the slug is the workspace's address, usually a company name, and stays after the deletion).
   - Before each deletion Polar is asked (`GET /v1/subscriptions/?external_customer_id=<workspace id>`)
     whether the workspace has a paid subscription. A paid one, a Polar error or a missing client keeps the
     workspace and logs an error.
   - Decisions use the database clock (`SELECT now()`); a pass refuses to run when it differs from the
     application clock by more than 5 minutes (`ErrClockSkew`).
   - `colliedesk retention run` needs `--yes`; read `retention plan` first.
+- **Settings never stop `serve`.** A bad `RETENTION_DELETE` or `RETENTION_MAX_DELETIONS_PER_DAY` is logged as an
+  error (variable name, not the value) and the job runs with deletion off; the CLI is strict and refuses.
+  `retention plan|run` follow the same billing decision as `serve` (`billingAtStart`): while the build has no
+  locked screen, billing is off and both refuse.
 - **Delete** runs in one transaction under `FOR UPDATE` on the workspace row (the notice step takes only
   `FOR NO KEY UPDATE`, so a payment webhook is never blocked by a slow mail relay): the workspace
   directory is renamed to `<attachments>/.trash/<workspace id>-<unix time>` (atomic), then the row is
   deleted (cascade) and recorded in `retention_deletions`. When the transaction does not commit, the
-  directory is renamed back. Each pass purges trash entries older than 30 days, so an operator can undo a
+  directory is renamed back, but only while the workspace row still exists (a commit that reached the
+  database and failed on the way back leaves the files in the trash to be purged). A workspace that lists
+  attachments in the database but has no directory in the storage (wrong `ATTACHMENTS_DIR`) is not deleted.
+  After a crash between the rename and the commit, each pass moves a trash entry older than one hour back
+  when its workspace row still exists, and never purges such an entry. Each pass purges trash entries older than 30 days, so an operator can undo a
   deletion for 30 days by renaming the directory back and restoring the database rows from a backup.
 - Deleted data stays in the nightly database dumps and the attachment volume backup until they expire
   (collie-01 backup retention). Restoring one workspace from a full dump is a manual job.

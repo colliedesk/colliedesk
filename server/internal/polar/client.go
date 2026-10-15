@@ -6,11 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"io"
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 // ErrCustomerNotFound means Polar has no customer for the external id yet (nobody paid).

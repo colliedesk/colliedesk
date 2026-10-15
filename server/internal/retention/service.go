@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
@@ -33,8 +34,11 @@ type Mailer interface {
 // Storage is the attachment store as retention uses it: a workspace's files are moved to a trash
 // and purged after TrashWindow (see attachments.LocalDisk).
 type Storage interface {
-	Trash(ctx context.Context, workspaceID string, now time.Time) (undo func() error, err error)
-	PurgeTrash(ctx context.Context, before time.Time) (int, error)
+	// Trash moves the workspace's files aside; found is false when it had no directory.
+	Trash(ctx context.Context, workspaceID string, now time.Time) (undo func() error, found bool, err error)
+	ListTrash(ctx context.Context) ([]attachments.TrashEntry, error)
+	RestoreTrash(ctx context.Context, entry attachments.TrashEntry) error
+	RemoveTrash(ctx context.Context, entry attachments.TrashEntry) error
 }
 
 // PaidChecker asks the billing provider whether a workspace has a subscription that grants a plan
@@ -259,7 +263,7 @@ func (s *Service) Run(ctx context.Context) (Result, error) {
 		}
 	}
 	if s.config.Storage != nil {
-		if _, err := s.config.Storage.PurgeTrash(ctx, now.Add(-TrashWindow)); err != nil {
+		if err := s.maintainTrash(ctx, now); err != nil {
 			failures = append(failures, err)
 		}
 	}
@@ -307,7 +311,7 @@ func (s *Service) process(ctx context.Context, id string, now time.Time) (out ou
 		return err
 	})
 	if err != nil && undo != nil {
-		if restoreErr := undo(); restoreErr != nil {
+		if restoreErr := s.restoreUnlessDeleted(ctx, id, undo); restoreErr != nil {
 			err = errors.Join(err, restoreErr)
 		}
 	}
@@ -315,4 +319,77 @@ func (s *Service) process(ctx context.Context, id string, now time.Time) (out ou
 		out.done, out.held = ActionNone, false
 	}
 	return out, errors.Join(err, soft)
+}
+
+// restoreUnlessDeleted moves a failed delete's files back, but only while the workspace row exists.
+// When the commit reached the database and the client only saw an error, the workspace is gone and
+// its files stay in the trash to be purged; moving them back would leave files nobody cleans.
+// When the database cannot be asked, nothing moves; maintainTrash restores them later if the row
+// is there.
+func (s *Service) restoreUnlessDeleted(ctx context.Context, workspaceID string, undo func() error) error {
+	var exists bool
+	err := s.config.DB.Privileged(context.WithoutCancel(ctx), database.PrivilegeRetention, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=$1)`, workspaceID).Scan(&exists)
+	})
+	switch {
+	case err != nil:
+		return fmt.Errorf("could not tell whether workspace %s was deleted; its files stay in the trash: %w", workspaceID, err)
+	case !exists:
+		s.config.Logger.Warn("delete reported an error but the workspace is gone; files stay in the trash for purge", "workspace_id", workspaceID)
+		return nil
+	}
+	return undo()
+}
+
+// reconcileAfter is how old a trash entry must be before it can belong to a crashed delete rather
+// than one still running in another process.
+const reconcileAfter = time.Hour
+
+// maintainTrash puts back the files of a workspace that still exists (a delete that crashed after
+// the rename and before the commit) and purges the entries of deleted workspaces after TrashWindow.
+// An entry of an existing workspace is never purged, even when it cannot be put back.
+func (s *Service) maintainTrash(ctx context.Context, now time.Time) error {
+	entries, err := s.config.Storage.ListTrash(ctx)
+	if err != nil || len(entries) == 0 {
+		return err
+	}
+	ids := make([]string, len(entries))
+	for index, entry := range entries {
+		ids[index] = entry.WorkspaceID
+	}
+	existing := map[string]bool{}
+	err = s.config.DB.Privileged(ctx, database.PrivilegeRetention, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT id::text FROM workspaces WHERE id = ANY($1::uuid[])`, ids)
+		if err != nil {
+			return err
+		}
+		found, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		for _, id := range found {
+			existing[id] = true
+		}
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("check trash against workspaces: %w", err)
+	}
+	var failures []error
+	for _, entry := range entries {
+		switch {
+		case existing[entry.WorkspaceID]:
+			if now.Sub(entry.TrashedAt) < reconcileAfter {
+				continue
+			}
+			if err := s.config.Storage.RestoreTrash(ctx, entry); err != nil {
+				s.config.Logger.Error("trash entry of an existing workspace could not be restored; kept", "workspace_id", entry.WorkspaceID, "error", err)
+				failures = append(failures, err)
+				continue
+			}
+			s.config.Logger.Warn("files of a workspace that still exists were found in the trash and restored", "workspace_id", entry.WorkspaceID)
+		case entry.TrashedAt.Before(now.Add(-TrashWindow)):
+			if err := s.config.Storage.RemoveTrash(ctx, entry); err != nil {
+				failures = append(failures, err)
+			}
+		}
+	}
+	return errors.Join(failures...)
 }
