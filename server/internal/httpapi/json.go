@@ -12,6 +12,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func decodeJSON(request *http.Request, target any) error {
@@ -35,6 +36,11 @@ func writeError(response http.ResponseWriter, status int, code, message string) 
 
 func writeStoreError(response http.ResponseWriter, err error) {
 	if writePlanLimit(response, err) {
+		return
+	}
+	var database *pgconn.PgError
+	if errors.As(err, &database) && (database.Code == "40P01" || database.Code == "40001") {
+		writeError(response, http.StatusConflict, "conflict", "Another change was in progress on the same conversations. Nothing was changed; try again.")
 		return
 	}
 	if errors.Is(err, pgx.ErrNoRows) || strings.Contains(err.Error(), "not found") {

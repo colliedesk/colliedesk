@@ -24,7 +24,7 @@ type BulkConversationUpdate struct {
 // whole update with a "not found" error and changes nothing.
 func (s *Store) BulkUpdateConversations(ctx context.Context, workspaceID string, ids []string, update BulkConversationUpdate) (int, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (int, error) {
-		return bulkUpdateConversations(ctx, tx, workspaceID, distinct(ids), update)
+		return bulkUpdateConversations(ctx, tx, workspaceID, ids, update)
 	})
 }
 
@@ -32,38 +32,61 @@ func bulkUpdateConversations(ctx context.Context, tx pgx.Tx, workspaceID string,
 	if len(ids) > MaxBulkConversations {
 		return 0, fmt.Errorf("bulk update conversations: too many conversations")
 	}
-	tagIDs := distinct(append(append([]string{}, update.AddTagIDs...), update.RemoveTagIDs...))
-	var conversations, tags int
-	if err := tx.QueryRow(ctx, `SELECT
-		(SELECT count(*) FROM conversations WHERE workspace_id=$1 AND id=ANY($2::uuid[])),
-		(SELECT count(*) FROM tags WHERE workspace_id=$1 AND id=ANY($3::uuid[]))`,
-		workspaceID, ids, tagIDs).Scan(&conversations, &tags); err != nil {
-		return 0, fmt.Errorf("validate bulk conversation update: %w", err)
+	// Lock order, everywhere: agents row -> conversations (ORDER BY id) -> conversation_tags.
+	// Holding the conversation rows first also keeps a concurrent delete from making the count wrong.
+	locked, err := tx.Query(ctx, `SELECT id FROM conversations WHERE workspace_id=$1 AND id=ANY($2::uuid[])
+		ORDER BY id FOR NO KEY UPDATE`, workspaceID, ids)
+	if err != nil {
+		return 0, fmt.Errorf("lock conversations: %w", err)
 	}
-	if conversations != len(ids) {
+	found := 0
+	for locked.Next() {
+		found++
+	}
+	locked.Close()
+	if err := locked.Err(); err != nil {
+		return 0, fmt.Errorf("lock conversations: %w", err)
+	}
+	if found != len(ids) {
 		return 0, fmt.Errorf("bulk update conversations: not found")
+	}
+	tagIDs := distinct(append(append([]string{}, update.AddTagIDs...), update.RemoveTagIDs...))
+	var tags int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM tags WHERE workspace_id=$1 AND id=ANY($2::uuid[])`, workspaceID, tagIDs).Scan(&tags); err != nil {
+		return 0, fmt.Errorf("validate bulk conversation tags: %w", err)
 	}
 	if tags != len(tagIDs) {
 		return 0, fmt.Errorf("validate conversation tag: unknown tag")
 	}
-	if _, err := tx.Exec(ctx, `UPDATE conversations SET
-		status=COALESCE($3,status),
-		assignee_id=CASE WHEN $4 THEN $5::uuid ELSE assignee_id END,updated_at=now()
-		WHERE workspace_id=$1 AND id=ANY($2::uuid[])`,
-		workspaceID, ids, update.Status, update.AssigneeID != nil, nullableString(update.AssigneeID)); err != nil {
-		return 0, fmt.Errorf("bulk update conversations: %w", err)
+	if update.Status != nil || update.AssigneeID != nil {
+		if _, err := tx.Exec(ctx, `UPDATE conversations SET
+			status=COALESCE($3,status),
+			assignee_id=CASE WHEN $4 THEN $5::uuid ELSE assignee_id END,updated_at=now()
+			WHERE workspace_id=$1 AND id=ANY($2::uuid[])`,
+			workspaceID, ids, update.Status, update.AssigneeID != nil, nullableString(update.AssigneeID)); err != nil {
+			return 0, fmt.Errorf("bulk update conversations: %w", err)
+		}
 	}
+	// A tag change moves updated_at only on the conversations whose tags really changed.
 	if len(update.RemoveTagIDs) > 0 {
-		if _, err := tx.Exec(ctx, `DELETE FROM conversation_tags
-			WHERE workspace_id=$1 AND conversation_id=ANY($2::uuid[]) AND tag_id=ANY($3::uuid[])`,
+		if _, err := tx.Exec(ctx, `WITH removed AS (
+				DELETE FROM conversation_tags
+				WHERE workspace_id=$1 AND conversation_id=ANY($2::uuid[]) AND tag_id=ANY($3::uuid[])
+				RETURNING conversation_id)
+			UPDATE conversations SET updated_at=now()
+			WHERE workspace_id=$1 AND id IN (SELECT conversation_id FROM removed)`,
 			workspaceID, ids, update.RemoveTagIDs); err != nil {
 			return 0, fmt.Errorf("bulk remove conversation tags: %w", err)
 		}
 	}
 	if len(update.AddTagIDs) > 0 {
-		if _, err := tx.Exec(ctx, `INSERT INTO conversation_tags(workspace_id,conversation_id,tag_id)
-			SELECT $1,c,t FROM unnest($2::uuid[]) AS c CROSS JOIN unnest($3::uuid[]) AS t
-			ON CONFLICT DO NOTHING`, workspaceID, ids, update.AddTagIDs); err != nil {
+		if _, err := tx.Exec(ctx, `WITH added AS (
+				INSERT INTO conversation_tags(workspace_id,conversation_id,tag_id)
+				SELECT $1,c,t FROM unnest($2::uuid[]) AS c CROSS JOIN unnest($3::uuid[]) AS t
+				ON CONFLICT DO NOTHING RETURNING conversation_id)
+			UPDATE conversations SET updated_at=now()
+			WHERE workspace_id=$1 AND id IN (SELECT conversation_id FROM added)`,
+			workspaceID, ids, update.AddTagIDs); err != nil {
 			return 0, fmt.Errorf("bulk add conversation tags: %w", err)
 		}
 	}

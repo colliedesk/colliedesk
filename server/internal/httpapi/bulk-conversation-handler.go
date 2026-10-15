@@ -22,6 +22,14 @@ func (a *API) bulkUpdateConversations(response http.ResponseWriter, request *htt
 		return
 	}
 	changes := input.Changes
+	seen := make(map[string]bool, len(input.IDs))
+	for _, id := range input.IDs {
+		if seen[id] {
+			writeError(response, http.StatusBadRequest, "invalid_request", "Each conversation can be listed once.")
+			return
+		}
+		seen[id] = true
+	}
 	if len(input.IDs) == 0 || len(input.IDs) > store.MaxBulkConversations {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Choose between 1 and 50 conversations.")
 		return
