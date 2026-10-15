@@ -759,7 +759,7 @@ paths:
         billing data are never exported. The archive is built while it is sent; if the server
         cannot finish it (for example a stored file is lost) the connection is aborted, so a
         truncated ZIP without `manifest.json` means the export failed. A client that stops reading
-        is cut off after a write timeout (60 s by default). Only one export of a workspace runs at
+        is cut off after a write timeout (60 s by default), and no export runs longer than 2 hours. Only one export of a workspace runs at
         a time (409 until it has sent its last byte), and a server runs at most two exports at once
         (429 with `Retry-After`).
       responses:

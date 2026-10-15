@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -31,7 +32,12 @@ func (a *API) exportWorkspace(response http.ResponseWriter, request *http.Reques
 	defer release()
 
 	exportedAt := a.now().UTC()
-	out := &lazyHeaderWriter{ResponseWriter: response, controller: http.NewResponseController(response), timeout: a.exportWriteTimeout(), header: func(h http.Header) {
+	// A client that trickles bytes in just fast enough for the write deadline must still not hold
+	// a slot and a snapshot for ever.
+	ctx, cancel := context.WithTimeout(request.Context(), a.exportTotalTimeout())
+	defer cancel()
+	deadline, _ := ctx.Deadline()
+	out := &lazyHeaderWriter{ResponseWriter: response, ctx: ctx, controller: http.NewResponseController(response), timeout: a.exportWriteTimeout(), limit: deadline, header: func(h http.Header) {
 		h.Set("Content-Type", "application/zip")
 		h.Set("Content-Disposition", `attachment; filename="colliedesk-`+workspace.Slug+`-`+exportedAt.Format("20060102T150405Z")+`.zip"`)
 		h.Set("X-Content-Type-Options", "nosniff")
@@ -45,9 +51,9 @@ func (a *API) exportWorkspace(response http.ResponseWriter, request *http.Reques
 	}
 	writer := export.NewWriter(out, opener, workspace.ID, exportedAt)
 	defer writer.Close()
-	err := a.store.ExportWorkspace(request.Context(), workspace.ID, writer, store.ExportLimits{})
+	err := a.store.ExportWorkspace(ctx, workspace.ID, writer, store.ExportLimits{})
 	if err == nil {
-		err = writer.Finish(request.Context())
+		err = writer.Finish(ctx)
 	}
 	switch {
 	case err == nil:
@@ -69,31 +75,52 @@ func (a *API) exportWriteTimeout() time.Duration {
 	return defaultExportWriteTimeout * time.Second
 }
 
+func (a *API) exportTotalTimeout() time.Duration {
+	if a.config.ExportTimeout > 0 {
+		return a.config.ExportTimeout
+	}
+	return defaultExportTotalTimeout
+}
+
 // lazyHeaderWriter sets the download headers and the 200 status only when the first byte is
 // written, so an error that happens earlier can still be answered with a proper status. Each
 // write gets a fresh deadline: progress is allowed, a stalled reader is not.
 type lazyHeaderWriter struct {
 	http.ResponseWriter
+	ctx        context.Context
 	controller *http.ResponseController
 	timeout    time.Duration
+	limit      time.Time // the whole export must end by then
 	header     func(http.Header)
 	started    bool
 }
 
+// extend gives the next write a fresh deadline, never later than the end of the whole export.
+func (w *lazyHeaderWriter) extend() {
+	next := time.Now().Add(w.timeout)
+	if next.After(w.limit) {
+		next = w.limit
+	}
+	// Servers that cannot set deadlines (test recorders) return ErrNotSupported; nothing to bound there.
+	_ = w.controller.SetWriteDeadline(next)
+}
+
 func (w *lazyHeaderWriter) Write(p []byte) (int, error) {
+	if err := w.ctx.Err(); err != nil {
+		return 0, err
+	}
 	if !w.started {
 		w.started = true
 		w.header(w.Header())
 		w.WriteHeader(http.StatusOK)
 	}
-	// Servers that cannot set deadlines (test recorders) return ErrNotSupported; nothing to bound there.
-	_ = w.controller.SetWriteDeadline(time.Now().Add(w.timeout))
+	w.extend()
 	return w.ResponseWriter.Write(p)
 }
 
 func (w *lazyHeaderWriter) Flush() {
 	if w.started {
-		_ = w.controller.SetWriteDeadline(time.Now().Add(w.timeout))
+		w.extend()
 		_ = w.controller.Flush()
 	}
 }

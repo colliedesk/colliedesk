@@ -1,11 +1,15 @@
 package httpapi
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 const (
 	defaultMaxExports         = 2
 	exportRetryAfterSeconds   = "30"
 	defaultExportWriteTimeout = 60
+	defaultExportTotalTimeout = 2 * time.Hour
 )
 
 // exportLimiter admits a bounded number of exports at once, one per workspace. A slot is held from

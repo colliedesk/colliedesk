@@ -226,3 +226,48 @@ func TestExportTransactionIsEndedByTheDatabaseWhenItIdlesTooLong(t *testing.T) {
 		t.Fatalf("export after the idle one was ended (lock must be gone): %v", err)
 	}
 }
+
+func TestClientThatTricklesIsCutOffByTheTotalDeadline(t *testing.T) {
+	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
+		config.ExportTimeout = 400 * time.Millisecond
+	})
+	slow := createSession(t, api, service, "Trickle Alpha", "admin@trickle-alpha.example.com")
+	seedConversations(t, pool, workspaceID(t, api, slow), 400, 3)
+	server := httptest.NewServer(api)
+	defer server.Close()
+	client := smallBuffers(server)
+
+	req, _ := http.NewRequest(http.MethodGet, server.URL+"/api/v1/export", nil)
+	req.Header.Set("Authorization", "Bearer "+slow)
+	response, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	// One byte every 50 ms keeps every single write inside the 60 s write deadline.
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		one := make([]byte, 1)
+		for {
+			select {
+			case <-stop:
+				return
+			case <-time.After(50 * time.Millisecond):
+				if _, err := response.Body.Read(one); err != nil {
+					return
+				}
+			}
+		}
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for pool.Stat().AcquiredConns() != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d connections still held by an export past its total deadline", pool.Stat().AcquiredConns())
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if got := request(t, api, http.MethodGet, "/api/v1/export", nil, slow, nil).Code; got != http.StatusOK {
+		t.Fatalf("export after the deadline: status=%d, want 200 (slot freed)", got)
+	}
+}

@@ -27,7 +27,8 @@ first one has sent its last byte. A server also runs at most two exports at once
 gets "429 Too Many Requests" with a `Retry-After` header. Wait and try again.
 
 Keep reading while the file downloads. If your client stops reading for more than 60 seconds, the
-server cancels the export and frees its resources; start it again.
+server cancels the export and frees its resources; start it again. One export may run for at most
+2 hours in total, however fast the client reads.
 
 ## Check that the file is complete
 

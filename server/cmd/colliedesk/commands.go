@@ -39,7 +39,7 @@ func run(ctx context.Context, args []string, output io.Writer, databaseURL, orig
 	if databaseURL == "" {
 		return fmt.Errorf("DATABASE_URL is required")
 	}
-	pool, err := pgxpool.New(ctx, databaseURL)
+	pool, err := openPool(ctx, databaseURL)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}

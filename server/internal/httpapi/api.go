@@ -38,6 +38,9 @@ type Config struct {
 	// (default 60 s) before the export is aborted and its database connection released.
 	MaxConcurrentExports int
 	ExportWriteTimeout   time.Duration
+	// ExportTimeout is the longest one export may run in total (default 2 h), however slowly the
+	// client keeps reading.
+	ExportTimeout time.Duration
 }
 
 type Route struct {
