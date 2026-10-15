@@ -143,13 +143,15 @@ type MessageDelivery struct {
 const (
 	ViaPlatform  = "platform"
 	ViaWorkspace = "workspace"
+	// ViaWebForm marks a message typed into the public web form: the address was never verified.
+	ViaWebForm = "web_form"
 )
 
 // IncomingEmail is the envelope of a message that arrived by email.
 type IncomingEmail struct {
 	From           string `json:"from"`
 	Authentication string `json:"authentication"`
-	// Via is how the message arrived: ViaPlatform or ViaWorkspace. Mail stored before this field
+	// Via is how the message arrived: ViaPlatform, ViaWorkspace or ViaWebForm. Mail stored before this field
 	// existed has none.
 	Via         string            `json:"via,omitempty"`
 	Attachments []EmailAttachment `json:"attachments"`
@@ -173,6 +175,15 @@ type EmailChannel struct {
 	DNSRecordValue   string     `json:"dns_record_value"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
+}
+
+// WebForm is the workspace's public website form channel. Off until an admin turns it on.
+type WebForm struct {
+	Enabled bool `json:"enabled"`
+	// AllowedOrigins are the exact origins (scheme://host[:port]) whose pages may call the form.
+	AllowedOrigins []string `json:"allowed_origins"`
+	// SubmitPath is the path a website posts to; the host is the instance's own.
+	SubmitPath string `json:"submit_path"`
 }
 
 func UTC(value time.Time) time.Time { return value.UTC() }

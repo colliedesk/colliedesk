@@ -10,6 +10,8 @@ User page: `docs/user/billing.md`.
 Billing is on only when every `POLAR_*` variable is set. None set means self-hosted: the billing
 routes are not registered (404), `/api/v1/config` says `billing.enabled=false`, the UI hides the page.
 Some set but not all stops `serve` at startup and names the missing keys (never the values).
+All set on a build without the locked screen (`lockedScreenShipped` false) starts `serve` with billing
+off and logs why, so an image older than its configuration never stops the inboxes.
 
 | Variable | Meaning |
 |---|---|

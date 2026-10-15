@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -42,8 +41,9 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err != nil {
 		return err
 	}
-	if err := requireLockedScreen(billing, lockedScreenShipped); err != nil {
-		return err
+	billing, billingWarning := billingAtStart(billing, lockedScreenShipped)
+	if billingWarning != "" {
+		slog.Error(billingWarning)
 	}
 	requestPool := pool
 	if requestURL := os.Getenv("DATABASE_REQUEST_URL"); requestURL != "" {
@@ -64,10 +64,11 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	}
 	signupKey := os.Getenv("SIGNUP_HASH_KEY")
 	cloudAuth := cloudAuthConfig()
-	if err := requireSignupConfig(cloudAuth.Enabled(), billing.Enabled(), trustedProxies, signupKey); err != nil {
-		return err
+	signupWarning := signupProblem(cloudAuth.Enabled(), billing.Enabled(), trustedProxies, signupKey)
+	if signupWarning != "" {
+		slog.Error(signupWarning)
 	}
-	if cloudAuth.Enabled() && billing.Enabled() {
+	if cloudAuth.Enabled() && billing.Enabled() && signupWarning == "" {
 		go sweepSignupAddresses(ctx, auth.NewWithDB(db, origin))
 	}
 	storage, err := attachmentStorage()
@@ -83,6 +84,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain})
 		go worker.Run(ctx, 5*time.Second)
 	}
+	warnWithoutTrustedProxies(slog.Default(), trustedProxies)
 	if billing.Enabled() {
 		retentionService, _, err := newRetentionService(db, origin, billing)
 		if err != nil {
@@ -92,7 +94,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	}
 	server := &http.Server{
 		Addr:              *address,
-		Handler:           webui.Handler(httpapi.New(pool, httpapi.Config{Origin: origin, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey})),
+		Handler:           webui.Handler(httpapi.New(pool, httpapi.Config{Origin: origin, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != ""})),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	done := make(chan error, 1)
@@ -116,22 +118,23 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 // minSignupKeyBytes is the shortest SIGNUP_HASH_KEY accepted.
 const minSignupKeyBytes = 32
 
-// requireSignupConfig refuses to start the hosted cloud (cloud sign-in and billing both on, which
-// is when public sign-up exists) without the two settings its abuse controls rest on: the key of the
-// sign-up record hashes, and the trusted proxies that reveal the client address. Without the second,
-// every client shares the proxy's address and the fourth sign-up of the day is refused for everyone.
-// Error text names variables, never values.
-func requireSignupConfig(cloudSignIn, billing bool, trustedProxies []netip.Prefix, key string) error {
+// signupProblem explains why public sign-up must stay off on the hosted cloud (cloud sign-in and
+// billing both on, which is when sign-up exists): it needs the key of the sign-up record hashes and
+// the trusted proxies that reveal the client address. Without the second, every client shares the
+// proxy's address and the fourth sign-up of the day is refused for everyone. A missing setting turns
+// sign-up off with a logged reason instead of stopping the server, so the agents already working in
+// their inboxes are never taken down by it. The text names variables, never values.
+func signupProblem(cloudSignIn, billing bool, trustedProxies []netip.Prefix, key string) string {
 	if !cloudSignIn || !billing {
-		return nil
+		return ""
 	}
 	if len(key) < minSignupKeyBytes {
-		return fmt.Errorf("cloud sign-up is enabled: set SIGNUP_HASH_KEY to at least %d random characters (keeps the trial records pseudonymous; changing it later forgets who had a trial)", minSignupKeyBytes)
+		return fmt.Sprintf("cloud sign-up is turned off: set SIGNUP_HASH_KEY to at least %d random characters (keeps the trial records pseudonymous; changing it later forgets who had a trial)", minSignupKeyBytes)
 	}
 	if len(trustedProxies) == 0 {
-		return errors.New("cloud sign-up is enabled: set TRUSTED_PROXIES to the address of the reverse proxy as the server sees it (for example the Docker gateway, 172.18.0.1/32); without it every sign-up shares one client address")
+		return "cloud sign-up is turned off: set TRUSTED_PROXIES to the address of the reverse proxy as the server sees it (for example the Docker gateway, 172.18.0.1/32); without it every sign-up shares one client address"
 	}
-	return nil
+	return ""
 }
 
 // sweepSignupAddresses clears old client-address hashes at start and then every hour until ctx ends.
@@ -171,15 +174,16 @@ func cloudAuthConfig() cloudauth.Config {
 }
 
 // lockedScreenShipped says the web app shows a locked workspace (trial over, nothing paid) instead
-// of a broken inbox. Billing locks workspaces, so it stays off in production until this is true.
+// of a broken inbox. Billing locks workspaces, so serve keeps it off (and says so) until this is true.
 const lockedScreenShipped = false
 
-// requireLockedScreen refuses to start with billing on while the web app cannot show the lock.
-func requireLockedScreen(billing polar.Config, shipped bool) error {
+// billingAtStart keeps billing off while the web app cannot show the lock, and says why. The server
+// still starts: an image older than its configuration must never take the inboxes down.
+func billingAtStart(billing polar.Config, shipped bool) (polar.Config, string) {
 	if billing.Enabled() && !shipped {
-		return errors.New("billing is configured but this build has no locked screen yet: workspaces would lock with no explanation in the web app; unset every POLAR_* variable")
+		return polar.Config{}, "billing is configured but turned off: this build has no locked screen yet, so workspaces would lock with no explanation in the web app"
 	}
-	return nil
+	return billing, ""
 }
 
 // defaultPoolConns is the pool size when the database URL has no pool_max_conns. pgx would pick

@@ -604,6 +604,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channels/web-form": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description State of the public web form channel. A workspace that never set it up has it off. */
+        get: operations["getWebForm"];
+        /** @description Turn the public web form on or off and replace its allowed origins. Turning it off keeps the origins, so turning it on again needs nothing else. Origins are exact (`scheme://host[:port]`, http or https), at most 20, with no path, wildcard or credentials; they are lowercased and de-duplicated. */
+        put: operations["putWebForm"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/forms/{workspace_slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_slug: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Public, unauthenticated. A website posts a visitor's email (and optionally a message) and the workspace gets a conversation: the visitor becomes a contact (found by email), the text is an incoming message, the subject is `Web form: <source>` (or `Web form`) and the tag is `web-form`. Nothing is sent to the visitor. The body must be `application/json`. A filled `website` field is a bot trap: the answer is the same 202 and nothing is stored. An unknown workspace, a form that is off and a locked workspace all answer the same 404. Browsers may read the answer only from an origin on the workspace's allowed list (CORS). At most 5 submissions per client address and workspace per minute, and 30 requests per client address per minute across all forms; a workspace also accepts at most 50 form conversations per 10 minutes, counted apart from email. Fields the form does not know are ignored. The message is marked `email.via = web_form` with authentication `none` (unverified address). */
+        post: operations["submitWebForm"];
+        delete?: never;
+        /** @description CORS preflight. 204 with the allow headers for an allowed origin; every other case is the same 404 as a missing form. */
+        options: operations["preflightWebForm"];
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -905,10 +943,10 @@ export interface components {
             from: string;
             authentication: components["schemas"]["EmailAuthentication"];
             /**
-             * @description Door the message came through; absent on mail stored before this was recorded. Trial replies need `platform`.
+             * @description Door the message came through; absent on mail stored before this was recorded. `web_form` is text typed into the public web form: the address is unverified (authentication `none`). Trial replies need `platform`.
              * @enum {string}
              */
-            via?: "platform" | "workspace";
+            via?: "platform" | "workspace" | "web_form";
             /**
              * Format: uuid
              * @description Attachment holding the complete raw message, gzip-compressed (original-message.eml.gz). Null for mail received before raw messages were kept.
@@ -971,10 +1009,20 @@ export interface components {
             message_id: string | null;
             authentication: components["schemas"]["EmailAuthentication"];
         };
+        WebFormSettings: {
+            enabled: boolean;
+            allowed_origins: string[];
+            /** @description Path a website posts to; the host is this instance */
+            submit_path: string;
+        };
         Error: {
             error: {
                 code: string;
                 message: string;
+                /** @description Present on validation errors (422), one message per bad field name */
+                fields?: {
+                    [key: string]: string;
+                };
                 /** @description Only on trial_outbound_limit: seconds until a reply can be sent. */
                 retry_after_seconds?: number;
             };
@@ -1061,6 +1109,15 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Web form channel state */
+        WebFormSettings: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["WebFormSettings"];
             };
         };
         /** @description Per-contact inbound rate limit reached; the forwarder should retry later */
@@ -1266,6 +1323,15 @@ export interface operations {
             422: components["responses"]["NameNotAllowed"];
             /** @description Error code `rate_limited`. This client address already started 3 trials in the last 24 hours. */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Error code `signup_unavailable`. Sign-up is off because SIGNUP_HASH_KEY or TRUSTED_PROXIES is missing on the server (logged at start). */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2339,6 +2405,137 @@ export interface operations {
                 };
             };
             500: components["responses"]["InternalError"];
+        };
+    };
+    getWebForm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["WebFormSettings"];
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    putWebForm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    enabled: boolean;
+                    allowed_origins: string[];
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["WebFormSettings"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    submitWebForm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    email: string;
+                    message?: string;
+                    /** @description Where the form sits, for example site:updates */
+                    source?: string;
+                    /** @description Honeypot; leave empty */
+                    website?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Accepted (also for a honeypot hit) */
+            202: {
+                headers: {
+                    /** @description Set only for an allowed origin */
+                    "Access-Control-Allow-Origin"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        ok: boolean;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            /** @description The body is not application/json */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid input; `error.fields` names each bad field */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many submissions; retry after the `Retry-After` seconds */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    preflightWebForm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preflight accepted */
+            204: {
+                headers: {
+                    "Access-Control-Allow-Origin"?: string;
+                    "Access-Control-Allow-Methods"?: string;
+                    "Access-Control-Allow-Headers"?: string;
+                    "Access-Control-Max-Age"?: number;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
         };
     };
 }

@@ -338,3 +338,16 @@ func TestSlugRenameRefusesBrandsOnTheCloudOnly(t *testing.T) {
 	selfHosted := newLimitsFixture(t, false)
 	wantResponse(t, request(t, selfHosted.api, http.MethodPatch, "/api/v1/workspace/slug", map[string]any{"slug": "paypal-help"}, selfHosted.adminA, nil), http.StatusOK, "")
 }
+
+// A cloud whose sign-up settings are missing keeps serving everyone else and answers sign-up with a
+// clear refusal instead of a 500 or a crash-looping server.
+func TestSignupTurnedOffAtStartIsRefusedClearly(t *testing.T) {
+	f := newSignupFixture(t, func(config *httpapi.Config) { config.SignupDisabled = true })
+	response := f.signUp(t, "ana@example.com", "Northwind Help", "203.0.113.7")
+	wantResponse(t, response, http.StatusServiceUnavailable, "signup_unavailable")
+	for _, table := range []string{"workspaces", "agents", "cloud_signups"} {
+		if got := f.count(t, table); got != "0" {
+			t.Fatalf("%s after a refused sign-up = %s, want 0", table, got)
+		}
+	}
+}
