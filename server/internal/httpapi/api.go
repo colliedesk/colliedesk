@@ -147,6 +147,7 @@ func Routes() []Route {
 		{http.MethodDelete, "/api/v1/channels/email", auth.PermissionAccessWrite},
 		{http.MethodPost, "/api/v1/channels/email/domain-verification", auth.PermissionAccessWrite},
 		{http.MethodPost, "/api/v1/channels/email/inbound", auth.PermissionChannelInbound},
+		{http.MethodPost, "/api/v1/channels/email/inbound/recipient", auth.PermissionChannelInbound},
 		{http.MethodPost, "/api/v1/channels/email/secret", auth.PermissionAccessWrite},
 		{http.MethodGet, "/api/v1/billing", auth.PermissionBillingManage},
 		{http.MethodPost, "/api/v1/billing/checkout", auth.PermissionBillingManage},

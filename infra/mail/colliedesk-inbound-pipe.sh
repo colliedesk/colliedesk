@@ -7,6 +7,8 @@
 #   75 EX_TEMPFAIL: the MTA keeps the message and retries (429, 5xx, 401, network or configuration error)
 #   65 EX_DATAERR: the MTA bounces it (400 not an email, 403 locked workspace that no longer takes
 #      mail, 413 larger than 25 MiB)
+#   67 EX_NOUSER: the MTA bounces it as an unknown user (404: no workspace receives mail there; the
+#      hosted MTA normally refuses such a recipient at RCPT time already)
 set -u
 
 CURL=${CURL:-curl}
@@ -33,6 +35,10 @@ STATUS=$("$CURL" --silent --show-error --max-time 120 --output /dev/null --write
 
 case $STATUS in
   2??) exit 0 ;;
+  404)
+    echo 'colliedesk-inbound-pipe: no workspace receives mail at this address' >&2
+    exit 67
+    ;;
   400 | 403 | 413)
     echo "colliedesk-inbound-pipe: Colliedesk rejected the message (HTTP $STATUS)" >&2
     exit 65
