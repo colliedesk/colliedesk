@@ -132,6 +132,8 @@ services:
       EMAIL_TRUSTED_AUTHSERV_ID: ${EMAIL_TRUSTED_AUTHSERV_ID:-}
       TRUSTED_PROXIES: ${TRUSTED_PROXIES-127.0.0.0/8,::1/128,172.16.0.0/12}
       ATTACHMENTS_DIR: /data/attachments
+      DISABLE_TELEMETRY: ${DISABLE_TELEMETRY:-}
+      DO_NOT_TRACK: ${DO_NOT_TRACK:-}
     volumes:
       - attachments-data:/data/attachments
     ports:

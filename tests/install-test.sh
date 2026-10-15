@@ -83,6 +83,9 @@ if grep -F 'COLLIEDESK_OWNER_PASSWORD"' "$fresh/initdb/10-colliedesk-owner.sh" >
 fi
 grep -F './initdb:/docker-entrypoint-initdb.d:ro' "$fresh/compose.yaml" >/dev/null
 grep -F 'DATABASE_REQUEST_URL: ${DATABASE_REQUEST_URL:-}' "$fresh/compose.yaml" >/dev/null
+# The usage report opt-out set in .env (or the shell) must reach the server container.
+grep -F 'DISABLE_TELEMETRY: ${DISABLE_TELEMETRY:-}' "$fresh/compose.yaml" >/dev/null
+grep -F 'DO_NOT_TRACK: ${DO_NOT_TRACK:-}' "$fresh/compose.yaml" >/dev/null
 # Installs whose .env predates the request login keep connecting as before.
 grep -F 'DATABASE_URL: ${DATABASE_URL:-postgres://colliedesk:${POSTGRES_PASSWORD}@postgres:5432/colliedesk?sslmode=disable}' "$existing/compose.yaml" >/dev/null
 grep -F 'POSTGRES_USER: ${POSTGRES_USER:-colliedesk}' "$existing/compose.yaml" >/dev/null
