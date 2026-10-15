@@ -659,3 +659,34 @@ func TestPanickingCallbackReleasesConnectionAndLocks(t *testing.T) {
 		}
 	}
 }
+
+func TestBeginWorkspaceTxAppliesTheWorkspaceScopeWithNonDefaultOptions(t *testing.T) {
+	pool := testPool(t)
+	if err := Migrate(context.Background(), pool); err != nil {
+		t.Fatal(err)
+	}
+	ids := seedTwoWorkspaces(t, pool)
+	ctx := context.Background()
+	tx, err := New(pool).BeginWorkspaceTx(ctx, ids.a, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	var user, isolation, readOnly, scope string
+	var contacts int
+	err = tx.QueryRow(ctx, `SELECT current_user::text,current_setting('transaction_isolation'),current_setting('transaction_read_only'),
+		current_setting('app.workspace_id'),(SELECT count(*) FROM contacts)`).Scan(&user, &isolation, &readOnly, &scope, &contacts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The count has no WHERE clause: only row-level security can make it 1.
+	if user != policyRole(t, pool) || scope != ids.a || contacts != 1 {
+		t.Fatalf("user=%s scope=%s contacts=%d, want the app role scoped to workspace alpha with 1 visible contact", user, scope, contacts)
+	}
+	if isolation != "repeatable read" || readOnly != "on" {
+		t.Fatalf("isolation=%q read_only=%q, want the requested options", isolation, readOnly)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO tags(workspace_id,name) VALUES($1,'blocked')`, ids.a); err == nil {
+		t.Fatal("a read-only workspace transaction accepted a write")
+	}
+}

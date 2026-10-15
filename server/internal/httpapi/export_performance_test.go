@@ -7,32 +7,37 @@ import (
 	"net/http/httptest"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-// A 5,000-conversation workspace with 20,000 messages of about 3 KiB each exports to tens of
+// A 2,000-conversation workspace with 23,000 messages, one 3,000-message HTML thread and 4,000 attachments exports to tens of
 // megabytes; the server must start answering at once and never hold the archive in memory.
 func TestExportOfALargeWorkspaceStartsFastAndStaysInConstantMemory(t *testing.T) {
 	if testing.Short() {
 		t.Skip("seeds a large workspace")
 	}
-	api, service, pool, _ := testAPIWithStorage(t)
+	api, service, pool, storage := testAPIWithStorage(t)
 	admin := createSession(t, api, service, "Export Large", "admin@export-large.example.com")
 	workspace := workspaceID(t, api, admin)
 	ctx := context.Background()
-	if _, err := pool.Exec(ctx, `INSERT INTO contacts(workspace_id,name,email) SELECT $1,'Customer '||n,'c'||n||'@large.example.com' FROM generate_series(1,5000) n`, workspace); err != nil {
+	seedConversations(t, pool, workspace, 2000, 4)
+	// One endless thread of HTML mails: held in memory it would cost tens of megabytes.
+	if _, err := pool.Exec(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,body_html)
+		SELECT $1,(SELECT id FROM conversations WHERE workspace_id=$1 ORDER BY id LIMIT 1),'incoming','long thread '||n,repeat('<p>quoted reply '||n||'</p>',400)
+		FROM generate_series(1,3000) n`, workspace); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject)
-		SELECT $1,id,'Ticket '||name FROM contacts WHERE workspace_id=$1`, workspace); err != nil {
+	// 4,000 attachments of 4 KiB; storage is content-addressed, so they share one stored file.
+	object, err := storage.Put(ctx, workspace, strings.NewReader(strings.Repeat("x", 4096)), 4096)
+	if err != nil {
 		t.Fatal(err)
 	}
-	// Distinct pseudo-random text per message so ZIP compression cannot hide the volume.
-	if _, err := pool.Exec(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body)
-		SELECT $1,c.id,'note',(SELECT string_agg(md5(c.id::text||n||k),'') FROM generate_series(1,96) k)
-		FROM conversations c CROSS JOIN generate_series(1,4) n WHERE c.workspace_id=$1`, workspace); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO attachments(workspace_id,message_id,filename,content_type,size,sha256,storage_key)
+		SELECT $1,id,'file-'||row_number() OVER ()||'.bin','application/octet-stream',$2,$3,$4
+		FROM (SELECT id FROM messages WHERE workspace_id=$1 ORDER BY id LIMIT 4000) m`, workspace, object.Size, object.SHA256, object.Key); err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(api)
@@ -89,7 +94,7 @@ func TestExportOfALargeWorkspaceStartsFastAndStaysInConstantMemory(t *testing.T)
 	if firstByte > 200*time.Millisecond {
 		t.Errorf("first byte after %v, budget 200ms", firstByte)
 	}
-	if total < 24<<20 {
+	if total < 20<<20 {
 		t.Fatalf("archive is only %d bytes; the fixture is too small to prove streaming", total)
 	}
 	if growth > 12<<20 {

@@ -64,28 +64,36 @@ type Message struct {
 	Attachments    []Attachment          `json:"attachments"`
 }
 
+// ConversationHead holds the fields of a conversation line that precede its messages.
+type ConversationHead struct {
+	ID         string                     `json:"id"`
+	ContactID  string                     `json:"contact_id"`
+	Subject    string                     `json:"subject"`
+	Status     string                     `json:"status"`
+	Priority   string                     `json:"priority"`
+	AssigneeID *string                    `json:"assignee_id"`
+	Origin     *domain.ConversationOrigin `json:"origin"`
+	TagIDs     []string                   `json:"tag_ids"`
+	CreatedAt  time.Time                  `json:"created_at"`
+	UpdatedAt  time.Time                  `json:"updated_at"`
+}
+
 // Conversation is one line of conversations.ndjson with everything that hangs off it.
 type Conversation struct {
-	ID          string                     `json:"id"`
-	ContactID   string                     `json:"contact_id"`
-	Subject     string                     `json:"subject"`
-	Status      string                     `json:"status"`
-	Priority    string                     `json:"priority"`
-	AssigneeID  *string                    `json:"assignee_id"`
-	Origin      *domain.ConversationOrigin `json:"origin"`
-	TagIDs      []string                   `json:"tag_ids"`
-	CreatedAt   time.Time                  `json:"created_at"`
-	UpdatedAt   time.Time                  `json:"updated_at"`
-	Messages    []Message                  `json:"messages"`
-	TimeEntries []domain.TimeEntry         `json:"time_entries"`
+	ConversationHead
+	Messages    []Message          `json:"messages"`
+	TimeEntries []domain.TimeEntry `json:"time_entries"`
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// Tag*, Conversation*. Writer is the Sink that builds the archive.
+// Tag*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
 	Agent(Agent) error
 	Contact(Contact) error
 	Tag(Tag) error
-	Conversation(Conversation) error
+	BeginConversation(ConversationHead) error
+	Message(Message) error
+	EndConversation(timeEntries []domain.TimeEntry) error
 }

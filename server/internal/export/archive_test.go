@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -41,8 +42,8 @@ func attachment(id, filename, content, sha string) export.Attachment {
 
 func conversationWith(attachments ...export.Attachment) export.Conversation {
 	return export.Conversation{
-		ID: "c1", ContactID: "k1", Subject: "s", Status: "open", Priority: "normal", TagIDs: []string{},
-		Messages: []export.Message{{ID: "m1", ConversationID: "c1", Kind: "note", Body: "b", Attachments: attachments}},
+		ConversationHead: export.ConversationHead{ID: "c1", ContactID: "k1", Subject: "s", Status: "open", Priority: "normal", TagIDs: []string{}},
+		Messages:         []export.Message{{ID: "m1", ConversationID: "c1", Kind: "note", Body: "b", Attachments: attachments}},
 	}
 }
 
@@ -212,4 +213,81 @@ func keys(m map[string]string) []string {
 		result = append(result, key)
 	}
 	return result
+}
+
+func TestConversationCanBeStreamedMessageByMessage(t *testing.T) {
+	var buf bytes.Buffer
+	writer := newWriter(t, &buf, memoryStorage{})
+	head := export.ConversationHead{ID: "c1", ContactID: "k1", Subject: "s <&>", Status: "open", Priority: "normal", TagIDs: []string{"t1"}}
+	if err := writer.BeginConversation(head); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"m1", "m2"} {
+		if err := writer.Message(export.Message{ID: id, ConversationID: "c1", Kind: "note", Body: "b"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.EndConversation([]domain.TimeEntry{{ID: "e1", ConversationID: "c1", Minutes: 5}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Finish(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	content := names(t, buf.Bytes())["conversations.ndjson"]
+	if strings.Count(content, "\n") != 1 {
+		t.Fatalf("a conversation must be exactly one line, got %q", content)
+	}
+	var line struct {
+		ID       string   `json:"id"`
+		Subject  string   `json:"subject"`
+		TagIDs   []string `json:"tag_ids"`
+		Messages []struct {
+			ID string `json:"id"`
+		} `json:"messages"`
+		TimeEntries []struct {
+			ID string `json:"id"`
+		} `json:"time_entries"`
+	}
+	if err := json.Unmarshal([]byte(content), &line); err != nil {
+		t.Fatalf("not valid JSON: %v\n%s", err, content)
+	}
+	if line.ID != "c1" || line.Subject != "s <&>" || len(line.TagIDs) != 1 || len(line.Messages) != 2 || line.Messages[1].ID != "m2" || len(line.TimeEntries) != 1 {
+		t.Fatalf("line = %+v", line)
+	}
+}
+
+func TestAttachmentListSpillsToDiskAndIsRemovedAfterwards(t *testing.T) {
+	spill := t.TempDir()
+	t.Setenv("TMPDIR", spill)
+	storage := memoryStorage{workspaceID + "/2c/" + helloSHA: "hello"}
+	var buf bytes.Buffer
+	writer := newWriter(t, &buf, storage)
+	if err := writer.Conversation(conversationWith(attachment("a1", "hello.txt", "hello", helloSHA))); err != nil {
+		t.Fatal(err)
+	}
+	if entries, _ := os.ReadDir(spill); len(entries) != 1 {
+		t.Fatalf("the attachment list should live in one temp file while the export runs, found %d", len(entries))
+	}
+	if err := writer.Finish(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if entries, _ := os.ReadDir(spill); len(entries) != 0 {
+		t.Fatalf("temp file left behind after Finish: %v", entries)
+	}
+}
+
+func TestCloseRemovesTheSpillFileOfAnAbortedExport(t *testing.T) {
+	spill := t.TempDir()
+	t.Setenv("TMPDIR", spill)
+	var buf bytes.Buffer
+	writer := newWriter(t, &buf, memoryStorage{})
+	if err := writer.Conversation(conversationWith(attachment("a1", "hello.txt", "hello", helloSHA))); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if entries, _ := os.ReadDir(spill); len(entries) != 0 {
+		t.Fatalf("temp file left behind after Close: %v", entries)
+	}
 }

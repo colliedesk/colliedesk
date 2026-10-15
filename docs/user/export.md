@@ -23,7 +23,11 @@ The server builds the ZIP while it sends it, so the download starts at once and 
 do not need extra memory. The file is named `colliedesk-<workspace slug>-<UTC time>.zip`.
 
 Only one export of a workspace runs at a time. A second request gets "409 Conflict" until the
-first one ends.
+first one has sent its last byte. A server also runs at most two exports at once; another one
+gets "429 Too Many Requests" with a `Retry-After` header. Wait and try again.
+
+Keep reading while the file downloads. If your client stops reading for more than 60 seconds, the
+server cancels the export and frees its resources; start it again.
 
 ## Check that the file is complete
 
@@ -70,5 +74,7 @@ email delivery state, and billing records. They are credentials or server intern
 ## Limits
 
 The rows are read in one snapshot, so a conversation and its messages always agree. Changes made
-after the export starts are not in the file. For a very large workspace the snapshot stays open
-until the last conversation is sent.
+after the export starts are not in the file. The snapshot is open only while the records are sent;
+the attachment files follow without it. Messages are sent one at a time, so a very long thread
+does not need extra memory. The list of attachment files is kept in a temporary file on the
+server, so the server needs a writable temp directory.

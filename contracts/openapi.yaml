@@ -758,8 +758,10 @@ paths:
         plan state, including a read-only workspace. Sessions, pairing links, channel secrets and
         billing data are never exported. The archive is built while it is sent; if the server
         cannot finish it (for example a stored file is lost) the connection is aborted, so a
-        truncated ZIP without `manifest.json` means the export failed. Only one export of a
-        workspace runs at a time.
+        truncated ZIP without `manifest.json` means the export failed. A client that stops reading
+        is cut off after a write timeout (60 s by default). Only one export of a workspace runs at
+        a time (409 until it has sent its last byte), and a server runs at most two exports at once
+        (429 with `Retry-After`).
       responses:
         '200':
           description: The workspace archive
@@ -771,6 +773,11 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '429':
+          description: The server is already running as many exports as it allows; retry later
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '500': {$ref: '#/components/responses/InternalError'}
 components:
   securitySchemes:

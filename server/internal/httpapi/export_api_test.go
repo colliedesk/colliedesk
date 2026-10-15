@@ -315,3 +315,24 @@ func TestLostAttachmentFileAbortsTheStreamInsteadOfSucceeding(t *testing.T) {
 		t.Fatalf("handler ended with %v, want the connection to be aborted", aborted)
 	}
 }
+
+func TestLockedWorkspaceAdminCanStillExport(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	f.conversationA(t)
+	f.clock.set(trialEnd)
+	read := request(t, f.api, http.MethodGet, "/api/v1/conversations", nil, f.adminA, nil)
+	wantLocked(t, &responseView{Code: read.Code, Body: read.Body.String()}, "a normal read of the locked workspace")
+	response := request(t, f.api, http.MethodGet, "/api/v1/export", nil, f.adminA, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("export of a locked workspace: status=%d body=%s, want 200", response.Code, response.Body.String())
+	}
+	var manifest struct {
+		Counts map[string]int `json:"counts"`
+	}
+	if err := json.Unmarshal(unzip(t, response.Body.Bytes())["manifest.json"], &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Counts["conversations"] != 1 || manifest.Counts["messages"] != 1 {
+		t.Fatalf("counts = %v, want the one received conversation with its message", manifest.Counts)
+	}
+}
