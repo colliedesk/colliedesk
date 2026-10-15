@@ -88,7 +88,7 @@ it must keep its MIT notice in `THIRD-PARTY-NOTICES.md`.
 | Time tracking | Time entries per conversation, CSV export (MSP need) | v0.4 |
 | CSAT and reports | Rating after resolve; response/resolution times, volume per agent | v0.5 |
 | Live chat widget | Embeddable website chat into the same inbox | later |
-| MCP + Agent Skills | Agents (Claude, Codex) work the queue through MCP | later |
+| MCP + Agent Skills | Agents (Claude, Codex) work the queue through MCP: `/mcp` serves read and triage tools today (`docs/user/mcp.md`); reply drafts and skills come later | in progress |
 | Billing | Polar subscription gates workspace status | cloud only |
 
 ## v0.1 acceptance

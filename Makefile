@@ -1,4 +1,4 @@
-.PHONY: test build e2e dev clean
+.PHONY: test build e2e dev clean sync-user-docs
 
 GO_ENV := GOPATH=/tmp/colliedesk-gopath GOMODCACHE=/tmp/colliedesk-gopath/pkg/mod GOCACHE=/tmp/colliedesk-go-cache
 TEST_DATABASE_URL ?= postgres://colliedesk:colliedesk@127.0.0.1:55441/colliedesk_test?sslmode=disable
@@ -25,6 +25,12 @@ build:
 e2e:
 	cd web && corepack pnpm build
 	cd web && TEST_DATABASE_URL='$(TEST_DATABASE_URL)' corepack pnpm e2e $(E2E_ARGS)
+
+# The server embeds a copy of docs/user for its documentation search tool (go:embed cannot reach
+# outside the Go module). Run this after editing a guide; a Go test fails when the copy is stale.
+sync-user-docs:
+	rm -f server/internal/mcpserver/userdocs/*.md
+	cp docs/user/*.md server/internal/mcpserver/userdocs/
 
 dev:
 	docker compose up --build

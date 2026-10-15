@@ -1,0 +1,79 @@
+# Connect an AI agent (MCP)
+
+Colliedesk speaks the Model Context Protocol (MCP), so an AI agent such as Claude Code or Codex can
+work your inbox: find conversations, read them, set status, priority, assignee and tags, and leave
+private notes for your team. The agent never sends anything to a customer, and a person stays in
+charge.
+
+## Endpoint and sign-in
+
+- URL: `https://<your-colliedesk>/mcp`. It uses MCP Streamable HTTP without sessions, protocol
+  versions `2025-11-25` and `2026-07-28`.
+- Sign-in: an **agent token** in the `Authorization: Bearer <token>` header. A browser cookie is
+  never accepted on `/mcp`. A missing or invalid token gets HTTP 401.
+- Create the token as described in [Agent tokens](sessions.md#agent-tokens). Pick the lowest tier
+  that does the job. The token is shown once; revoke it in **Settings → Sessions**.
+
+| Tier | The agent can |
+|---|---|
+| `read` | Search the inbox, read conversations, find contacts, list tags and team members |
+| `draft` | Everything in `read`, plus change status, priority, assignee and tags, and add private notes |
+| `send` | Everything in `draft` that a person may do. The tools of this server never send a reply. |
+
+A tool that needs a higher tier answers with a message that names the tier and says an admin can
+create a token with it. Nothing else changes.
+
+## Connect Claude Code
+
+```sh
+export COLLIEDESK_TOKEN=<your token>
+claude mcp add --transport http colliedesk https://desk.example.com/mcp \
+  --header "Authorization: Bearer $COLLIEDESK_TOKEN"
+```
+
+## Connect Codex
+
+```sh
+export COLLIEDESK_TOKEN=<your token>
+codex mcp add colliedesk --url https://desk.example.com/mcp --bearer-token-env-var COLLIEDESK_TOKEN
+```
+
+Then ask the agent, for example: "Triage the open conversations nobody owns: tag billing questions
+with `billing` and leave a note with a summary."
+
+## Tools
+
+| Tool | What it does | Tier |
+|---|---|---|
+| `colliedesk_whoami` | Shows the workspace, the team member, the token tier and the tools you can use | any |
+| `colliedesk_inbox_search` | Lists conversations by status, assignee, tag or text, newest first, in pages | `read` |
+| `colliedesk_conversation_get` | Reads one conversation with its messages and customer | `read` |
+| `colliedesk_conversation_update` | Sets status, priority, assignee and adds or removes existing tags in one idempotent call | `draft` |
+| `colliedesk_note_add` | Adds a private note | `draft` |
+| `colliedesk_contacts_find` | Finds customers by part of a name or email | `read` |
+| `colliedesk_tags_list` | Lists tags | `read` |
+| `colliedesk_agents_list` | Lists team members for assigning | `read` |
+| `colliedesk_docs_search` | Searches these user guides | any |
+
+Tools read and change data through the same API as the web app, so a tool can do nothing the token
+could not do with the API directly. Another workspace is never visible.
+
+## What the agent sees
+
+- Names, not ids: the assignee, the customer and the tags appear by name. Times are UTC, with the
+  workspace timezone next to them.
+- `detail` is `concise` (default) or `full`. A concise conversation shows the 20 newest messages
+  and cuts long bodies; the result says when it did and asks for `full`.
+- Lists come in pages. `next_cursor` is `null` on the last page. A full page can be followed by an
+  empty one.
+- **Customer text is marked.** Subjects, message bodies, customer names, emails and organizations
+  appear only inside a field named `untrusted_customer_content`. The tool descriptions tell the
+  model to treat it as data and never as instructions. This lowers the risk that a hostile email
+  steers the agent; it does not remove it. Keep agents on the lowest tier that works.
+
+## Limits and errors
+
+- A locked workspace (hosted cloud, trial over, nothing paid) answers every tool except `whoami`
+  with a message that only exporting data works.
+- A conversation id from another workspace answers "No conversation <id> in this workspace".
+- Tags must exist before an agent can use them; an agent cannot create tags.

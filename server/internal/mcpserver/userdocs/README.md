@@ -1,0 +1,17 @@
+# Colliedesk user guides
+
+One page per feature. Each page says what the feature does, how to use it, and its limits.
+
+- [Install and create a workspace](install.md)
+- [Sign in without passwords](sign-in.md)
+- [Invite your team](invites.md)
+- [Work the inbox](inbox.md)
+- [Email channel](email-channel.md)
+- [Web form](web-form.md)
+- [Plan and billing](billing.md) (hosted cloud only)
+- [Tags](tags.md)
+- [Timezones](timezones.md)
+- [Sessions and devices](sessions.md)
+- [Connect an AI agent (MCP)](mcp.md)
+- [Import from Freshdesk](import-freshdesk.md)
+- [Export all your data](export.md)

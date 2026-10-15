@@ -38,6 +38,9 @@ revoke. Code: `auth/scope.go`, `auth/tokens.go`, `httpapi/token-scope.go`.
   agent session. The down migration revokes every token first. When you roll back the image only,
   run this before starting the old image:
   `UPDATE sessions SET revoked_at = now() WHERE scope IS NOT NULL AND revoked_at IS NULL;`
+- **MCP.** `/mcp` accepts a bearer only, authenticated by the same `Authenticate`, and each tool call
+  runs through the REST handler with that bearer, so these tiers bind MCP tools without a second
+  check (`docs/internals/mcp.md`). A new route a tool uses needs a `tokenTiers` row first.
 - The CLI (`colliedesk token create`) resolves the workspace by slug through
   `PrivilegeWorkspaceBySlug`, like `pair`.
 
