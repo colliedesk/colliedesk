@@ -113,10 +113,8 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
   gets a bounce and nothing is stored.
 - `GET /api/v1/auth/me` carries `plan` (`plan`, `trial_ends_at`, `locked`) so agents, who cannot read
   `/billing`, see the trial banner and the locked page.
-- The old Free-plan hold (`conversations.held_at`, the monthly quota, `held_count`) is gone. The column and
-  its index are dropped by the `drop-conversation-holds` migration. The image in production when this was
-  written (`be97d70`) has no hold code and no `held_at` (checked with `git grep held_at be97d70`), so that
-  migration does not constrain rollback.
+- The old Free-plan hold (`conversations.held_at`, the monthly quota, `held_count`) is gone from the code. The column
+  stays in the database until the cleanup pull request that drops it (see "Rollback of the cleanup").
 
 ### Web app
 
@@ -153,13 +151,17 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
 
 ### Rollback of the cleanup
 
-`workspaces.trial_ends_at` keeps its database default (`now() + 14 days`) on purpose: an image from before
-the trial code inserts workspaces without the column, and without the default every `create-workspace`
-would fail after a rollback by digest. The migration that drops the default (`drop-trial-ends-at-default`)
-ships in its own pull request, to be merged only after an image with the trial code has run in production.
-It must also change the test fixtures that insert workspaces so they set `trial_ends_at`, and add a test
-that an insert without it fails. Rolling back past that migration needs the pre-migration dump
-(the dump taken before every migrating deploy).
+Two cleanup migrations ship in their own pull request, to be merged only after no image older than the trial
+code can be rolled back to (the rollback target on 2026-10-15 was `f2d22dd`, digest `47edf4e7`, found in the
+infra pins):
+
+- `drop-conversation-holds` drops `conversations.held_at` and its index. The old image reads the column in the
+  inbox list and writes it for inbound mail, so without the column both fail.
+- `drop-trial-ends-at-default` drops the default of `workspaces.trial_ends_at`. The old image inserts workspaces
+  without it, so workspace creation fails.
+
+Fixtures that insert workspaces set `trial_ends_at`, and a test asserts an insert without it fails. Rolling back
+past either migration needs the dump taken before the migrating deploy.
 
 ### Trial outbound controls
 
