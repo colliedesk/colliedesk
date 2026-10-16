@@ -86,6 +86,14 @@ Run locally: `docker compose --profile test up -d postgres mailpit`, then
 `make e2e E2E_ARGS='--grep @onboarding'`; for the installer,
 `docker build -t colliedesk:smoke -f server/Dockerfile . && COLLIE_DESK_IMAGE=colliedesk:smoke sh tests/install-smoke.sh`.
 
+## Releases
+
+Colliedesk is **alpha**: releases are tagged `v0.0.N` (next number after the newest tag) on a
+`main` commit whose CI passed, with a `CHANGELOG.md` entry. `latest` follows the newest release.
+Never call a release, page or doc "beta", and never tag `v0.1.0` or higher, until the HC Labs
+owner announces beta. `release.yml` refuses other tags through `.github/scripts/release-tag-check.sh`;
+the PR that widens that check must quote the owner's announcement.
+
 ## Clean room
 
 Do not open, copy, translate or paraphrase the source code of other helpdesks, especially
