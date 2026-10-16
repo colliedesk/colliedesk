@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { fallbackTimezones } from '../../lib/fallback-timezones';
 import { messages } from '../../messages';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
@@ -24,7 +25,7 @@ function canonical(zone: string): string {
 // (Asia/Saigon for Asia/Ho_Chi_Minh): the stored name replaces its alias instead of appearing twice,
 // and a stored zone the browser does not know at all is still offered as the current choice.
 function zones(current: string): string[] {
-  const known = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [];
+  const known = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : fallbackTimezones;
   const alias = current ? canonical(current) : '';
   const listed = known.map((zone) => (zone === alias ? current : zone));
   return [...new Set(['UTC', ...listed, ...(current ? [current] : [])])].sort((a, b) => (a === 'UTC' ? -1 : b === 'UTC' ? 1 : a.localeCompare(b)));

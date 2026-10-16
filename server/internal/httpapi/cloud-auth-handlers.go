@@ -45,6 +45,7 @@ func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.R
 	}
 	var input struct {
 		WorkspaceSlug string `json:"workspace_slug"`
+		Label         string `json:"label"`
 	}
 	if request.ContentLength != 0 {
 		if err := decodeJSON(request, &input); err != nil {
@@ -57,7 +58,11 @@ func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.R
 		writeError(response, http.StatusUnauthorized, "unauthorized", "A valid cloud session is required.")
 		return
 	}
-	result, choices, err := a.auth.ExchangeCloud(request.Context(), email, input.WorkspaceSlug, "Cloud sign-in")
+	label := input.Label
+	if label == "" {
+		label = "Cloud sign-in"
+	}
+	result, choices, err := a.auth.ExchangeCloud(request.Context(), email, input.WorkspaceSlug, label)
 	if errors.Is(err, auth.ErrCloudAgentNotFound) {
 		writeError(response, http.StatusForbidden, "forbidden", "This email is not an agent of the requested workspace.")
 		return

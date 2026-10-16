@@ -48,7 +48,8 @@ test('any agent adds one; the form closes once it is saved', async () => {
   fireEvent.click(add);
   expect(actions.onCreate).toHaveBeenCalledWith('Closing', 'Thanks for writing.');
   await waitFor(() => expect(screen.queryByLabelText('Title')).not.toBeInTheDocument());
-  expect(screen.getByRole('button', { name: 'New saved reply' })).toHaveFocus();
+  // Focus returns in an effect after the form unmounts.
+  await waitFor(() => expect(screen.getByRole('button', { name: 'New saved reply' })).toHaveFocus());
   fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
   expect(screen.getByLabelText('Title')).toHaveValue('');
   expect(screen.getByLabelText('Text')).toHaveValue('');

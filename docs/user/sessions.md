@@ -2,7 +2,8 @@
 
 **Settings → Sessions** lists every browser or client signed in to your account, with when it
 was last used. A browser is named by its browser and system, for example **Chrome on Linux**; the
-browser you are using is marked **This device**.
+browser you are using is marked **This device**. This applies to pairing links and cloud sign-in alike;
+a client that sends no browser name shows **Browser session** or **Cloud sign-in**.
 
 - Select **Revoke** to sign a device out immediately. The device stays in the list as **Revoked**;
   a session that ran out shows **Expired**.

@@ -41,6 +41,9 @@ paths:
               type: object
               properties:
                 workspace_slug: {type: string, minLength: 1}
+                label:
+                  type: string
+                  description: Names the device in the session list, usually the browser user agent. Defaults to "Cloud sign-in".
       responses:
         '200': {$ref: '#/components/responses/Redeemed'}
         '401': {$ref: '#/components/responses/Unauthorized'}

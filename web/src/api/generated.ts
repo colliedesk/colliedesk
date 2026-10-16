@@ -1568,6 +1568,8 @@ export interface operations {
             content: {
                 "application/json": {
                     workspace_slug?: string;
+                    /** @description Names the device in the session list, usually the browser user agent. Defaults to "Cloud sign-in". */
+                    label?: string;
                 };
             };
         };

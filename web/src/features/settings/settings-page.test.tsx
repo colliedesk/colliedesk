@@ -213,3 +213,16 @@ test('after a failed timezone save, leaving the list again retries it', () => {
   fireEvent.blur(select);
   expect(onSetAgentTimezone.mock.calls).toEqual([['Asia/Tokyo'], ['Asia/Tokyo']]);
 });
+
+test('a browser that cannot list timezones still offers the common ones', () => {
+  const original = Intl.supportedValuesOf;
+  // @ts-expect-error older browsers (Safari before 15.4) have no Intl.supportedValuesOf
+  delete Intl.supportedValuesOf;
+  try {
+    render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" />);
+    const options = within(screen.getByRole('combobox', { name: 'Your timezone' })).getAllByRole('option').map((option) => option.getAttribute('value'));
+    for (const zone of ['UTC', 'America/New_York', 'Europe/London', 'Asia/Ho_Chi_Minh', 'Australia/Sydney']) expect(options).toContain(zone);
+  } finally {
+    Intl.supportedValuesOf = original;
+  }
+});

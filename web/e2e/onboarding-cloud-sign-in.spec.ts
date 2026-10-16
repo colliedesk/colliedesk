@@ -59,5 +59,6 @@ test('cloud sign-in: a verified identity of an existing agent gets a Colliedesk 
   await page.goto(baseURL);
   await expect(appNavigationWith(page, `Cloud Desk ${suffix}`)).toHaveCount(1);
   await page.goto(`${baseURL}/settings`);
-  await expect(page.getByRole('region', { name: 'Sessions' })).toContainText('Cloud sign-in');
+  // The cloud session carries this browser's user agent, so Settings names it and marks it as this device.
+  await expect(page.getByRole('region', { name: 'Sessions' })).toContainText('This device');
 });
