@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import type { CheckoutPlan, Me } from '../../api/schemas';
+import { openCheckout } from '../billing/open-checkout';
 import { ExportAllData } from '../settings/export-all-data';
 import { LockedScreen } from './locked-screen';
 
@@ -9,7 +10,7 @@ export function LockedRoute({ me }: { me: Me }) {
   const client = useQueryClient();
   const isAdmin = me.agent.role === 'admin';
   const billing = useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: isAdmin });
-  const checkout = useMutation({ mutationFn: (plan: CheckoutPlan) => api.startCheckout(plan), onSuccess: (link) => window.location.assign(link.url) });
+  const checkout = useMutation({ mutationFn: (plan: CheckoutPlan) => api.startCheckout(plan), onSuccess: (link) => openCheckout(link.url) });
   const portal = useMutation({ mutationFn: () => api.openBillingPortal(), onSuccess: (link) => window.location.assign(link.url) });
   // The session is gone once the call succeeds; refetching me switches the shell to the signed-out state.
   const signOut = useMutation({ mutationFn: api.logout, onSuccess: () => client.invalidateQueries({ queryKey: ['me'] }) });

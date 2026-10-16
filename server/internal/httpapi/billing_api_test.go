@@ -94,6 +94,9 @@ func TestCheckoutUsesTheSessionsWorkspaceCustomerAndThePlansProduct(t *testing.T
 			if success, _ := body["success_url"].(string); success != testOrigin+"/settings/billing?checkout=success" {
 				t.Fatalf("success_url=%q", success)
 			}
+			if embed, _ := body["embed_origin"].(string); embed != testOrigin {
+				t.Fatalf("embed_origin=%q, want %q", embed, testOrigin)
+			}
 		})
 	}
 }

@@ -60,7 +60,8 @@ func TestCreateCheckoutSendsProductAndExternalCustomer(t *testing.T) {
 	fake := newFakePolar(t, http.StatusCreated, `{"id":"co_1","url":"https://polar.test/checkout/co_1"}`)
 	url, err := fake.client().CreateCheckout(context.Background(), polar.CheckoutRequest{
 		ProductID: "prod-1", CustomerID: "cus-1",
-		SuccessURL: "https://desk.example.com/settings/billing?checkout=success",
+		SuccessURL:  "https://desk.example.com/settings/billing?checkout=success",
+		EmbedOrigin: "https://desk.example.com",
 	})
 	if err != nil || url != "https://polar.test/checkout/co_1" {
 		t.Fatalf("url=%q err=%v", url, err)
@@ -71,6 +72,9 @@ func TestCreateCheckoutSendsProductAndExternalCustomer(t *testing.T) {
 	products, _ := fake.body["products"].([]any)
 	if len(products) != 1 || products[0] != "prod-1" {
 		t.Fatalf("products=%v", fake.body["products"])
+	}
+	if fake.body["embed_origin"] != "https://desk.example.com" {
+		t.Fatalf("embed_origin=%v", fake.body["embed_origin"])
 	}
 	if fake.body["customer_id"] != "cus-1" || fake.body["success_url"] != "https://desk.example.com/settings/billing?checkout=success" {
 		t.Fatalf("body=%v", fake.body)

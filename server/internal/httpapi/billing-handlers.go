@@ -101,7 +101,7 @@ func (a *API) createCheckout(response http.ResponseWriter, request *http.Request
 		return
 	}
 	url, err := a.polar.CreateCheckout(request.Context(), polar.CheckoutRequest{
-		ProductID: product, CustomerID: customerID, SuccessURL: a.config.Origin + "/settings/billing?checkout=success",
+		ProductID: product, CustomerID: customerID, SuccessURL: a.config.Origin + "/settings/billing?checkout=success", EmbedOrigin: a.config.Origin,
 	})
 	if err != nil {
 		writeBillingProviderError(response, err)

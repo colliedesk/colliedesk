@@ -91,10 +91,14 @@ trial (or the subscription) has ended, instead of the inbox.
 
 1. Open **Billing** (or select **Choose a plan** in the banner or on the locked page).
 2. Select a plan under **Upgrade**.
-3. Pay on the page that opens. It is hosted by our payment provider, Polar; Colliedesk never sees
-   your card.
+3. Pay in the window that opens on top of Colliedesk. It is run by our payment provider, Polar;
+   Colliedesk never sees your card. Pay by card. Apple Pay and Google Pay come later. If you
+   close the window, you stay on the page and can start again.
 4. You return to **Billing**. The plan updates within a few moments, once the provider confirms
    the payment.
+
+If the window cannot open (for example a browser extension blocks it), Colliedesk opens the same
+checkout as a full page instead.
 
 A workspace that already pays cannot start a second checkout. Change or cancel in the portal.
 If two checkouts ever run at once, the page warns that the workspace pays twice; cancel the extra

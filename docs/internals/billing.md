@@ -33,6 +33,18 @@ the API.
   checkout with that `customer_id`. Events come back with `customer.external_id`, which names the
   workspace. The client sends only the plan name; any other field is rejected, so a browser can
   neither pay for nor link to another workspace.
+- **The checkout opens as an overlay in the app.** The server sends `embed_origin` (`APP_ORIGIN`)
+  on every checkout session it creates; Polar refuses to embed a session without it. `success_url`
+  stays, because the fallback and the provider's own redirect still use it. The web app
+  (`web/src/features/billing/open-checkout.ts`, used by the billing page and the locked screen)
+  loads `@polar-sh/checkout/embed` lazily, so the inbox does not pay for it. On `success` it
+  prevents Polar's redirect and goes to `/settings/billing?checkout=success`. That event only
+  changes what the page shows: the plan changes only when the webhook arrives, as before. A
+  script that fails to load or a `create` that rejects falls back to
+  `window.location.assign(<checkout url>)`, so no purchase is lost. Setup in Polar: Settings,
+  Embedding, Embed hosts must list the app host without a scheme (`app.colliedesk.com`); a host
+  not listed makes the overlay fail and the fallback take over. Apple Pay and Google Pay stay off
+  in embeds until Polar validates the domain (a request to Polar support).
 - **Polar customers are unique by email too.** The customer is created with the admin's real email,
   so receipts reach them. If Polar refuses the create (422, the email belongs to another customer:
   the same person pays for a second workspace), the server retries once with the address tagged
