@@ -2,10 +2,13 @@ package httpapi_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
 type activityBody struct {
@@ -308,5 +311,57 @@ func TestInboxActivityUpdatedStaysInsideTheWorkspaceAndTheLookback(t *testing.T)
 	}
 	if got := inboxActivity(t, api, tokenA, time.Now().UTC()); func() bool { _, found := updatedByID(got.Updated, conversationA); return found }() {
 		t.Fatalf("an update older than the lookback was listed: %+v", got.Updated)
+	}
+}
+
+func TestInboxActivityKeepsACustomerReplyWhenABulkChangeFillsTheList(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "Activity Bulk", "admin@activity-bulk.example.com")
+	secret := connectEmail(t, api, admin, "support@activity-bulk.example.com")
+	first := inboundOK(t, api, secret, mail([]string{"From: Ada <ada@customer.example>", "To: support@activity-bulk.example.com", "Subject: Printer", "Message-ID: <bulk-first@customer.example>"}, "It is on fire."))
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Grace", "email": "grace@activity-bulk.example.com"})
+	others := make([]string, 0, store.MaxBulkConversations)
+	for index := 0; index < store.MaxBulkConversations; index++ {
+		others = append(others, create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": fmt.Sprintf("Old %d", index)}))
+	}
+	cursor := inboxActivity(t, api, admin, time.Time{}).Now
+
+	inboundOK(t, api, secret, mail([]string{"From: Ada <ada@customer.example>", "To: support@activity-bulk.example.com", "Subject: Re: Printer",
+		"Message-ID: <bulk-second@customer.example>", "In-Reply-To: <bulk-first@customer.example>", "References: <bulk-first@customer.example>"}, "Still on fire."))
+	if response := request(t, api, http.MethodPatch, "/api/v1/conversations", map[string]any{"ids": others, "changes": map[string]any{"status": "resolved"}}, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("bulk status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	got := inboxActivity(t, api, admin, cursor)
+	item, found := updatedByID(got.Updated, *first.ConversationID)
+	if !found || item.IncomingAt == nil {
+		t.Fatalf("the replied conversation is missing from updated (%d items) or has no incoming time: %+v", len(got.Updated), item)
+	}
+	if len(got.Updated) > store.InboxActivityLimit {
+		t.Fatalf("updated has %d items, cap is %d", len(got.Updated), store.InboxActivityLimit)
+	}
+}
+
+func TestInboxActivityIgnoresACursorOlderThanTenMinutes(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Activity Old Cursor", "admin@activity-old-cursor.example.com")
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Grace", "email": "grace@activity-old-cursor.example.com"})
+	old := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Last month"})
+	recent := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Just now"})
+	if _, err := pool.Exec(context.Background(), `UPDATE conversations SET created_at=now()-interval '20 minutes', updated_at=now()-interval '20 minutes' WHERE id=$1::uuid`, old); err != nil {
+		t.Fatal(err)
+	}
+
+	got := inboxActivity(t, api, admin, time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC))
+	created := map[string]bool{}
+	for _, item := range got.NewConversations {
+		created[item.ID] = true
+	}
+	_, oldUpdated := updatedByID(got.Updated, old)
+	if created[old] || oldUpdated {
+		t.Fatalf("a cursor from 1970 listed a conversation from 20 minutes ago: new=%+v updated=%+v", got.NewConversations, got.Updated)
+	}
+	if !created[recent] {
+		t.Fatalf("the recent conversation is missing: %+v", got.NewConversations)
 	}
 }

@@ -94,6 +94,8 @@ export function useInboxActivity(enabled = true, agentId?: string) {
     // A timeline with an observer is on screen: the agent is reading that conversation.
     const viewing = (id: string) => (client.getQueryCache().find({ queryKey: ['messages', id], exact: true })?.getObserversCount() ?? 0) > 0;
     const items = alerts(unseen, replies, agentId, viewing);
+    // An update does not say who made it, so the caller's own change also refreshes the list once
+    // more. That costs at most one list fetch per poll and keeps the server row free of an actor field.
     if (items.length > 0 || changes.length > 0) void client.invalidateQueries({ queryKey: ['conversations'] });
     for (const item of changes) void client.invalidateQueries({ queryKey: ['messages', item.id] });
     if (items.length === 0) return;

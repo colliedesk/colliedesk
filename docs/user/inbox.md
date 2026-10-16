@@ -35,7 +35,7 @@ cannot be loaded, it says so with **Try again** instead.
 - A customer message on a conversation that is assigned to you, assigned to nobody, or open on your
   screen counts as a new item and can raise a notification. A message on any other teammate's
   conversation updates the screen quietly.
-  Your own replies, notes and changes never count.
+  Your own replies, notes and changes never raise a notification or a count; they only refresh the screen.
 - When the tab is in the background, its title shows the number of new items, for example
   `(2) Colliedesk`. The count clears when you return to the tab.
 - To also get a desktop notification, select the bell in the left rail: **Enable desktop

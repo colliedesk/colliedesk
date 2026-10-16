@@ -19,7 +19,7 @@ const (
 // TestInboxActivityLatencyBudget times the store query behind GET /api/v1/inbox/activity, which every
 // open inbox tab polls. The HTTP and session lookup hops are shared with every endpoint and measured
 // by the inbox list budget; timing the query itself keeps a noisy CI runner from failing a budget it
-// does not own. The fixture is a busy workspace: 5,000 conversations spread over a week, a tenth of
+// does not own. The fixture is a busy workspace: 5,000 conversations, one every 20 seconds, a tenth of
 // them assigned to the caller by a teammate, a customer message on every third of them, plus a second workspace of the same size.
 func TestInboxActivityLatencyBudget(t *testing.T) {
 	api, service, pool := testAPIWithPool(t)
@@ -81,9 +81,9 @@ func seedActivityFixture(t *testing.T, pool *pgxpool.Pool, workspaceName, caller
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,assignee_id,assigned_at,assigned_by_agent_id)
-		SELECT $1,$2,'Fixture conversation '||n,now()-(n*2||' minutes')::interval,now()-(n*2||' minutes')::interval,
+		SELECT $1,$2,'Fixture conversation '||n,now()-(n*20||' seconds')::interval,now()-(n*20||' seconds')::interval,
 			CASE WHEN $3<>'' AND n%10=0 THEN $3::uuid END,
-			CASE WHEN $3<>'' AND n%10=0 THEN now()-(n*2||' minutes')::interval END,
+			CASE WHEN $3<>'' AND n%10=0 THEN now()-(n*20||' seconds')::interval END,
 			CASE WHEN $3<>'' AND n%10=0 THEN $4::uuid END
 		FROM generate_series(1,5000) AS n`, workspace, contact, caller, nullIfEmpty(teammate)); err != nil {
 		t.Fatal(err)
