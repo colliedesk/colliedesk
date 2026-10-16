@@ -4,7 +4,19 @@
 .app-content { flex: 1; min-width: 0; min-height: 0; overflow: auto; }
 .app-content > .inbox-shell { height: 100%; }
 .app-content > .redeem-page { min-height: 100%; }
-.rail-avatar { margin-top: auto; }
+/* The avatar opens the account menu; on a wide screen it sits at the foot of the rail. */
+.account-menu { position: relative; margin-top: auto; }
+.rail-avatar { width: 40px; padding: 0; border-color: transparent; background: transparent; box-shadow: none; border-radius: 999px; }
+.rail-avatar:hover:not(:disabled) { border-color: transparent; background: var(--surface-2); }
+.account-popover {
+  position: absolute; z-index: 20; left: calc(100% + var(--space-2)); bottom: 0; width: 16rem; display: grid; gap: var(--space-3);
+  border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-3);
+}
+.account-popover p { display: grid; gap: 2px; margin: 0; min-width: 0; }
+.account-popover strong, .account-popover span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-popover span { color: var(--text-3); font-size: var(--fs-small); }
+.account-popover button { width: 100%; }
+.rail-label { display: none; }
 /* Always visible, never a tooltip: it is what tells a person which workspace this browser acts in. */
 .identity-bar {
   flex: none; display: flex; align-items: baseline; gap: var(--space-2); min-width: 0;
@@ -102,9 +114,12 @@
   .rail-brand { margin: 0 var(--space-2) 0 0; }
   .rail-links { flex-direction: row; }
   .rail-brand[data-tip]::after, .rail-link[data-tip]::after { display: none; }
-  .rail-link { width: var(--touch); height: var(--touch); }
+  .rail-link { width: auto; height: var(--touch); grid-auto-flow: column; gap: var(--space-2); padding: 0 var(--space-3); }
+  .rail-label { display: inline; font-size: var(--fs-small); font-weight: 500; }
   .app-main, .app-content { overflow: visible; }
-  .rail-avatar { margin: 0 0 0 auto; }
+  .account-menu { margin: 0 0 0 auto; }
+  .rail-avatar { width: var(--touch); height: var(--touch); }
+  .account-popover { left: auto; right: 0; bottom: auto; top: calc(100% + var(--space-2)); }
   .identity-bar { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
   .app-content > .inbox-shell { height: auto; }
   .inbox-shell { height: auto; grid-template-columns: 1fr; gap: 0; padding: 0; }

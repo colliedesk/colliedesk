@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { Link, Outlet, createRootRoute, redirect, createRoute, createRouter, useRouterState } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
@@ -10,7 +10,6 @@ import { clearCheckoutIntent, rememberCheckoutIntent } from './features/settings
 import { SettingsRoute } from './features/settings/settings-route';
 import { AppShell } from './features/shell/app-shell';
 import { LockedRoute } from './features/shell/locked-route';
-import { NotificationToggle } from './features/shell/notification-toggle';
 import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
 import { CreditCardIcon, InboxIcon, SettingsIcon } from './ui/icons';
@@ -22,6 +21,9 @@ function AppLayout() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: !onSignIn });
   const signedOut = !onSignIn && me.error instanceof UnauthorizedError;
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config, enabled: !onSignIn });
+  const client = useQueryClient();
+  // After sign out /auth/me answers 401, which turns the view into the signed-out screen.
+  const signOut = useMutation({ mutationFn: api.logout, onSuccess: () => client.invalidateQueries({ queryKey: ['me'] }) });
   const locked = me.data?.plan?.locked === true;
   // A locked workspace chooses its plan on the locked screen, so a remembered plan must not fire later.
   useEffect(() => { if (locked) clearCheckoutIntent(); }, [locked]);
@@ -37,12 +39,12 @@ function AppLayout() {
   const inSettings = path.startsWith('/settings') && !inBilling;
   return <AppShell me={me.data} signedOut={signedOut} signIn={signIn}
     notice={me.data && <PlanNotices me={me.data} />} lockedScreen={locked && me.data ? <LockedRoute me={me.data} /> : undefined}
-    brand={<Link to="/" className="rail-brand" aria-label={messages.brand} data-tip={messages.brand}><LogoMark /></Link>}
+    onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError}
+    brand={<span className="rail-brand" role="img" aria-label={messages.brand}><LogoMark /></span>}
     links={locked ? undefined : <>
-      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inBilling ? undefined : 'page'}><InboxIcon /></Link>
-      <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}><SettingsIcon /></Link>
-      {showBilling && <Link to="/settings/billing" search={{ checkout: '' }} className="rail-link" data-tip={messages.billing} aria-label={messages.billing} aria-current={inBilling ? 'page' : undefined}><CreditCardIcon /></Link>}
-      <NotificationToggle />
+      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inBilling ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
+      <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}><SettingsIcon /><span className="rail-label" aria-hidden="true">{messages.settings}</span></Link>
+      {showBilling && <Link to="/settings/billing" search={{ checkout: '' }} className="rail-link" data-tip={messages.billing} aria-label={messages.billing} aria-current={inBilling ? 'page' : undefined}><CreditCardIcon /><span className="rail-label" aria-hidden="true">{messages.billing}</span></Link>}
     </>}>
     <Outlet />
   </AppShell>;
