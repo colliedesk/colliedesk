@@ -251,12 +251,24 @@ jobs:
     permissions:
       contents: read
       issues: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: ROADMAP.md matches the issue tracker
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 -I .github/scripts/roadmap-check.py ROADMAP.md
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          # Issues this PR closes ("Closes #N" in its description) must leave the roadmap in this PR.
+          if [ -n "$PR_NUMBER" ]; then
+            ROADMAP_CLOSING=$(gh pr view "$PR_NUMBER" --repo "$REPO" \
+              --json closingIssuesReferences --jq '[.closingIssuesReferences[].number] | map(tostring) | join(" ")')
+            export ROADMAP_CLOSING
+            echo "closes: ${ROADMAP_CLOSING:-none}"
+          fi
+          python3 -I .github/scripts/roadmap-check.py ROADMAP.md
 
   ci-ok:
     if: ${{ !cancelled() }}
