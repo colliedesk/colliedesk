@@ -70,7 +70,7 @@ test('the inbox activity poll runs on every signed-in page, not only in the inbo
   serve({
     '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false })),
     '/api/v1/config': () => json(200, config),
-    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [] }),
+    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
   });
   open('/settings');
   await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/inbox/activity'))).toBe(true));
@@ -106,7 +106,7 @@ test('the billing link with buy=founding starts the founding checkout for a sign
     '/api/v1/config': () => json(200, config),
     '/api/v1/billing': () => json(200, trialBilling),
     '/api/v1/billing/checkout': () => json(200, { url: 'https://polar.example/checkout/founding' }),
-    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [] }),
+    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
   });
   open('/settings/billing?buy=founding');
   await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => String(url) === '/api/v1/billing/checkout')).toHaveLength(1));
@@ -123,7 +123,7 @@ test('after signing in with a pairing link the remembered intent leads to the bi
     '/api/v1/config': () => json(200, config),
     '/api/v1/billing': () => json(200, trialBilling),
     '/api/v1/billing/checkout': () => json(200, { url: 'https://polar.example/checkout/founding' }),
-    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [] }),
+    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
   });
   open('/sign-in?token=pairing-token');
   fireEvent.click(await screen.findByRole('button', { name: /sign in|continue|open/i }));
@@ -149,7 +149,7 @@ test('going back to the billing page after the checkout was started does not sta
     '/api/v1/config': () => json(200, config),
     '/api/v1/billing': () => json(200, trialBilling),
     '/api/v1/billing/checkout': () => json(200, { url: 'https://polar.example/checkout/founding' }),
-    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [] }),
+    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
   });
   const history = createMemoryHistory({ initialEntries: ['/settings/billing?buy=founding'] });
   const router = createRouter({ routeTree, history });
