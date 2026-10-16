@@ -113,9 +113,9 @@ test('a trial shows its attachment storage and replies, and warns from 80 percen
   const withStorage = (bytes: number): Billing => ({ ...free, usage: { ...free.usage, storage_bytes: bytes, replies_last_24h: 12 } });
   const { rerender } = render(<BillingPage billing={withStorage(1.7 * GiB)} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
   expect(screen.getByText(/storage: 1\.7 GiB of 2\.0 GiB/i)).toBeInTheDocument();
-  expect(screen.getByText(/12 of 200 replies in the last 24 hours/i)).toBeInTheDocument();
+  expect(screen.getByText(/12 of 200 people emailed in the last 24 hours/i)).toBeInTheDocument();
   rerender(<BillingPage billing={{ ...withStorage(1.7 * GiB), limits: { ...free.limits, replies_per_24h: 150 } }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
-  expect(screen.getByText(/12 of 150 replies/i)).toBeInTheDocument();
+  expect(screen.getByText(/12 of 150 people emailed/i)).toBeInTheDocument();
   rerender(<BillingPage billing={withStorage(1.7 * GiB)} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
   expect(screen.getByRole('status')).toHaveTextContent(/storage is 85% full/i);
   rerender(<BillingPage billing={withStorage(1.5 * GiB)} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
@@ -125,5 +125,5 @@ test('a trial shows its attachment storage and replies, and warns from 80 percen
 test('a paid plan shows its storage cap and no reply cap', () => {
   render(<BillingPage billing={team} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
   expect(screen.getByText('Attachment storage: 0 B of 100.0 GiB')).toBeInTheDocument();
-  expect(screen.queryByText(/replies in the last 24 hours/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/people emailed in the last 24 hours/i)).not.toBeInTheDocument();
 });

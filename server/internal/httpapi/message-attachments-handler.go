@@ -38,7 +38,11 @@ var (
 )
 
 // messageFields are the text fields of a multipart message request.
-type messageFields struct{ kind, body string }
+type messageFields struct {
+	kind, body string
+	// cc holds the cc fields as sent, one address each.
+	cc []string
+}
 
 func (f messageFields) validate() error {
 	if (f.kind != "outgoing" && f.kind != "note") || strings.TrimSpace(f.body) == "" {
@@ -81,7 +85,12 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 		a.writeUploadError(response, err)
 		return
 	}
-	item, err := a.store.CreateMessage(request.Context(), workspaceID, conversationID, identity.Agent.ID, fields.kind, fields.body, files...)
+	cc, refusal := a.cleanCC(request.Context(), workspaceID, fields.kind, fields.cc)
+	if refusal != nil {
+		a.writeUploadError(response, refusal)
+		return
+	}
+	item, err := a.store.CreateMessageWithCC(request.Context(), workspaceID, conversationID, identity.Agent.ID, fields.kind, fields.body, cc, files...)
 	if errors.Is(err, store.ErrObjectMissing) {
 		writeError(response, http.StatusInternalServerError, "internal_error", "A file was lost while the message was saved. Nothing was sent; try again.")
 		return
@@ -135,15 +144,21 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 			return fields, nil, invalidUpload(err)
 		}
 		switch name := part.FormName(); {
-		case name == "kind" || name == "body":
+		case name == "kind" || name == "body" || name == "cc":
 			text, err := readField(part)
 			if err != nil {
 				return fields, nil, err
 			}
-			if name == "kind" {
+			switch name {
+			case "kind":
 				fields.kind = text
-			} else {
+			case "body":
 				fields.body = text
+			default:
+				if len(fields.cc) > maxCC {
+					return fields, nil, a.invalidCC("A reply can be copied to at most 10 addresses.")
+				}
+				fields.cc = append(fields.cc, text)
 			}
 		case name == "files" && part.FileName() != "":
 			// Fields come first, so a refusal that does not depend on the bytes is given before reading any.
@@ -151,7 +166,11 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 				if err := fields.validate(); err != nil {
 					return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "Send kind and body before the files."}
 				}
-				if err := a.store.CheckAttachmentAdmission(ctx, workspaceID, conversationID, fields.kind); err != nil {
+				cc, refusal := a.cleanCC(ctx, workspaceID, fields.kind, fields.cc)
+				if refusal != nil {
+					return fields, nil, refusal
+				}
+				if err := a.store.CheckAttachmentAdmission(ctx, workspaceID, conversationID, fields.kind, cc); err != nil {
 					return fields, nil, err
 				}
 				admitted = true
@@ -168,7 +187,7 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 			}
 			*stored = append(*stored, store.NewAttachment{Filename: cleanFilename(part.FileName()), ContentType: cleanContentType(part.Header.Get("Content-Type")), Object: object})
 		default:
-			return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "Send kind, body and files only; every file needs a filename."}
+			return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "Send kind, body, cc and files only; every file needs a filename."}
 		}
 	}
 }

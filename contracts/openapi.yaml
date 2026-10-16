@@ -356,6 +356,19 @@ paths:
         `limits.outgoing_attachments_files` files and `limits.outgoing_attachments_bytes` bytes in total
         (both from `GET /api/v1/config`); more answers 413 and nothing is stored. A reply emails its
         files as attachments; a note never leaves the workspace.
+
+
+        A reply may copy other people with `cc`: at most 10 plain addresses (`name@example.com`, no
+        display name), stored lowercase without duplicates. The conversation contact stays the only
+        `To` recipient and is dropped from `cc`; our own support, forwarding and sending addresses are
+        refused with 400, and so is `cc` on a note. In `multipart/form-data` send one `cc` field per
+        address, before the files. On the trial, `cc` may name only addresses the customer wrote from or
+        copied (customer mail through the platform forwarder that did not fail authentication, or
+        imported history) unless the sending domain is verified;
+        another address answers 403 `trial_outbound_restricted` with `refused_cc` listing every
+        refused address, and nothing is stored. Each reply counts its contact and every `cc` address
+        against the trial's 200 people a day. A retry of a
+        failed delivery sends to the same stored list. There is no Bcc.
       requestBody:
         required: true
         content:
@@ -366,6 +379,7 @@ paths:
               properties:
                 kind: {type: string, enum: [outgoing, note]}
                 body: {type: string, minLength: 1, description: Markdown source}
+                cc: {$ref: '#/components/schemas/CopiedAddresses'}
           multipart/form-data:
             schema:
               type: object
@@ -373,6 +387,7 @@ paths:
               properties:
                 kind: {type: string, enum: [outgoing, note]}
                 body: {type: string, minLength: 1, description: Markdown source}
+                cc: {$ref: '#/components/schemas/CopiedAddresses'}
                 files:
                   type: array
                   maxItems: 10
@@ -1351,9 +1366,10 @@ components:
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     TrialOutboundLimit:
       description: >
-        A trial workspace already sent 200 replies in the last 24 hours (error code
-        `trial_outbound_limit`, with `retry_after_seconds` and a `Retry-After` header: the time until
-        the oldest counted reply leaves the window). Nothing was stored. Paid plans have no such limit.
+        Sending this reply would take a trial workspace past 200 people emailed in the last 24 hours,
+        where each reply counts its contact and every Cc address (error code `trial_outbound_limit`,
+        with `retry_after_seconds` and a `Retry-After` header: the time until enough counted replies
+        leave the window). Nothing was stored. Paid plans have no such limit.
       headers:
         Retry-After: {schema: {type: integer}}
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
@@ -1385,7 +1401,8 @@ components:
       description: >
         Permission or CSRF check failed. On `POST /conversations/{id}/messages` a trial workspace gets
         error code `trial_outbound_restricted` for a reply to a conversation the customer did not
-        start (unless it verified its sending domain); nothing was stored.
+        start (unless it verified its sending domain), or for a `cc` address the customer never wrote
+        from or copied (then `refused_cc` lists them); nothing was stored.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error404:
       description: Resource not found in this workspace
@@ -1480,7 +1497,7 @@ components:
           required: [agents, storage_bytes, storage_warn_bytes, replies_per_24h]
           properties:
             agents: {type: integer, description: 'Seats of the plan; 0 when locked.'}
-            replies_per_24h: {type: [integer, 'null'], description: 'Emailed replies allowed in any 24 hours on the trial; null on every other plan and self-hosted.'}
+            replies_per_24h: {type: [integer, 'null'], description: 'People that emailed replies may reach in any 24 hours on the trial, each reply counting its contact and every Cc address; null on every other plan and self-hosted.'}
             storage_bytes:
               type: [integer, 'null']
               format: int64
@@ -1500,7 +1517,7 @@ components:
               description: Attachment bytes counted against `limits.storage_bytes`. On the trial files of imported messages are not counted; on the Founding plan every file is, imported ones included.
             replies_last_24h:
               type: integer
-              description: Emailed replies of the last 24 hours that count against the trial cap of 200; 0 on other plans.
+              description: People reached by the emailed replies of the last 24 hours (the contact plus every Cc address of each reply), which count against the trial cap of 200; 0 on other plans.
             pending_invites:
               type: integer
               description: Unused, unrevoked, unexpired invites. Each holds an agent seat, so agents plus pending invites is compared with `limits.agents`.
@@ -1753,7 +1770,7 @@ components:
                 description: Time of the newest customer message inside the polled window, or null when the change was not a customer message.
     Message:
       type: object
-      required: [id, conversation_id, author_agent_id, author_name, kind, body, body_html, origin, attachments, created_at, delivery, email]
+      required: [id, conversation_id, author_agent_id, author_name, kind, body, body_html, origin, attachments, cc, created_at, delivery, email]
       properties:
         id: {type: string, format: uuid}
         conversation_id: {type: string, format: uuid}
@@ -1772,6 +1789,9 @@ components:
             - {type: 'null'}
             - {$ref: '#/components/schemas/MessageOrigin'}
         attachments: {type: array, items: {$ref: '#/components/schemas/Attachment'}}
+        cc:
+          description: Addresses an outgoing reply was copied to; empty for every other message.
+          allOf: [{$ref: '#/components/schemas/CopiedAddresses'}]
         created_at: {type: string, format: date-time}
         delivery:
           description: Email delivery of an outgoing reply; null when the reply was not emailed.
@@ -1783,6 +1803,11 @@ components:
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/IncomingEmail'}
+    CopiedAddresses:
+      type: array
+      maxItems: 10
+      description: Plain email addresses copied on a reply, lowercase, without duplicates.
+      items: {type: string}
     MessageOrigin:
       type: object
       required: [system, external_id, kind, from, to, cc, bcc]
@@ -1829,7 +1854,12 @@ components:
       properties:
         status: {$ref: '#/components/schemas/DeliveryStatus'}
         attempts: {type: integer, minimum: 0}
-        last_error: {type: [string, 'null']}
+        last_error:
+          type: [string, 'null']
+          description: >
+            Why a failed or retried delivery did not go out. On a sent reply, names the copied (Cc)
+            addresses it did not reach: refused by the relay or bounced later. A copy that misses
+            never fails the reply to the contact.
         sent_at: {type: [string, 'null'], format: date-time}
     EmailAuthentication:
       type: string
@@ -1848,6 +1878,12 @@ components:
             Door the message came through; absent on mail stored before this was recorded. `web_form`
             is text typed into the public web form: the address is unverified (authentication `none`).
             Trial replies need `platform`.
+        cc:
+          type: array
+          description: >-
+            Other addresses on the Cc line of the email (not the sender, not our own addresses), as the
+            reply box offers them to copy. Absent on mail stored before Cc was kept.
+          items: {type: string}
         original_attachment_id:
           type: [string, 'null']
           format: uuid
@@ -1941,3 +1977,7 @@ components:
               description: 'Present on validation errors (422), one message per bad field name'
               additionalProperties: {type: string}
             retry_after_seconds: {type: integer, description: 'Only on trial_outbound_limit: seconds until a reply can be sent.'}
+            refused_cc:
+              type: array
+              items: {type: string}
+              description: 'Only on trial_outbound_restricted caused by Cc: exactly the addresses the trial refused to copy.'

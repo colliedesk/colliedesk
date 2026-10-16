@@ -156,6 +156,23 @@ func PlusAddress(address, token string) string {
 	return address[:at] + "+r-" + token + address[at:]
 }
 
+// SameMailbox reports whether address reaches the mailbox of mailbox: the same domain and the same
+// local part once a "+tag" is removed, compared without case. support+r-token@example.com is the
+// support address support@example.com.
+func SameMailbox(address, mailbox string) bool {
+	base := func(value string) (string, bool) {
+		at := strings.LastIndex(value, "@")
+		if at < 1 {
+			return "", false
+		}
+		local, _, _ := strings.Cut(value[:at], "+")
+		return strings.ToLower(local + value[at:]), local != ""
+	}
+	left, ok := base(address)
+	right, okMailbox := base(mailbox)
+	return ok && okMailbox && left == right
+}
+
 // Domain returns the part after the last @.
 func Domain(address string) string {
 	return address[strings.LastIndex(address, "@")+1:]

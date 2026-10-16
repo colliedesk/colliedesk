@@ -28,16 +28,20 @@ const (
 	maxReferences   = 50
 	maxInReplyTo    = 10
 	maxMessageIDLen = 255
+	// maxStoredCc bounds the Cc addresses kept from one message; a composer offers at most ten.
+	maxStoredCc = 50
 )
 
 // Inbound is the part of a received message Colliedesk stores or uses for threading.
 type Inbound struct {
-	MessageID      string
-	InReplyTo      []string
-	References     []string
-	FromAddress    string
-	FromName       string
-	Recipients     []string
+	MessageID   string
+	InReplyTo   []string
+	References  []string
+	FromAddress string
+	FromName    string
+	Recipients  []string
+	// Cc are the addresses in the Cc headers: lowercased, without duplicates, in header order.
+	Cc             []string
 	Subject        string
 	Body           string
 	Attachments    []domain.EmailAttachment
@@ -48,6 +52,9 @@ type Inbound struct {
 	DropReason string
 	// BouncedMessageIDs are the Message-IDs named in a delivery status report's returned headers.
 	BouncedMessageIDs []string
+	// BouncedRecipients are the addresses a delivery status report says failed, lowercased; empty when
+	// the report names none.
+	BouncedRecipients []string
 	// Files holds every attachment, inline image and embedded message with its bytes.
 	Files []File
 	// BodyHTML is the HTML part with inline images embedded; empty when the message has no HTML.
@@ -84,6 +91,7 @@ func Parse(raw []byte, trustedAuthServID string) (Inbound, error) {
 		FromAddress: strings.ToLower(from.Address),
 		FromName:    cleanLine(from.Name),
 		Recipients:  recipients(header),
+		Cc:          firstN(ccAddresses(header), maxStoredCc),
 		EnvelopeTo:  envelopeTo(header),
 		RawBytes:    len(raw),
 		Subject:     cleanLine(decodeHeader(header.Get("Subject"))),
@@ -95,6 +103,7 @@ func Parse(raw []byte, trustedAuthServID string) (Inbound, error) {
 	parsed.Body = content.text()
 	parsed.Attachments = content.attachments
 	parsed.BouncedMessageIDs = content.bouncedIDs
+	parsed.BouncedRecipients = content.bouncedRecipients
 	parsed.Files = content.files
 	if strings.TrimSpace(content.html) != "" {
 		parsed.BodyHTML = strings.ToValidUTF8(strings.ReplaceAll(inlineImages(content.html, content.files), "\x00", ""), "")
@@ -169,6 +178,27 @@ func recipients(header mail.Header) []string {
 			}
 			for _, address := range list {
 				result = append(result, strings.ToLower(address.Address))
+			}
+		}
+	}
+	return result
+}
+
+// ccAddresses lists the addresses of every Cc header, lowercased and without duplicates. A header that
+// cannot be read is skipped: mail with a broken Cc is still mail.
+func ccAddresses(header mail.Header) []string {
+	var result []string
+	seen := map[string]bool{}
+	for _, value := range header["Cc"] {
+		list, err := addressParser.ParseList(value)
+		if err != nil {
+			continue
+		}
+		for _, address := range list {
+			lower := strings.ToLower(address.Address)
+			if !seen[lower] {
+				seen[lower] = true
+				result = append(result, lower)
 			}
 		}
 	}

@@ -109,18 +109,20 @@ type TimeEntry struct {
 }
 
 type Message struct {
-	ID             string           `json:"id"`
-	ConversationID string           `json:"conversation_id"`
-	AuthorAgentID  *string          `json:"author_agent_id"`
-	AuthorName     *string          `json:"author_name"`
-	Kind           string           `json:"kind"`
-	Body           string           `json:"body"`
-	BodyHTML       *string          `json:"body_html"`
-	Origin         *MessageOrigin   `json:"origin"`
-	Attachments    []Attachment     `json:"attachments"`
-	CreatedAt      time.Time        `json:"created_at"`
-	Delivery       *MessageDelivery `json:"delivery"`
-	Email          *IncomingEmail   `json:"email"`
+	ID             string         `json:"id"`
+	ConversationID string         `json:"conversation_id"`
+	AuthorAgentID  *string        `json:"author_agent_id"`
+	AuthorName     *string        `json:"author_name"`
+	Kind           string         `json:"kind"`
+	Body           string         `json:"body"`
+	BodyHTML       *string        `json:"body_html"`
+	Origin         *MessageOrigin `json:"origin"`
+	Attachments    []Attachment   `json:"attachments"`
+	// CC lists the addresses an outgoing reply was copied to; empty for every other message.
+	CC        []string         `json:"cc"`
+	CreatedAt time.Time        `json:"created_at"`
+	Delivery  *MessageDelivery `json:"delivery"`
+	Email     *IncomingEmail   `json:"email"`
 }
 
 type Attachment struct {
@@ -153,6 +155,8 @@ const (
 type IncomingEmail struct {
 	From           string `json:"from"`
 	Authentication string `json:"authentication"`
+	// CC are the other addresses on the Cc line, without our own; mail stored before they were kept has none.
+	CC []string `json:"cc,omitempty"`
 	// Via is how the message arrived: ViaPlatform, ViaWorkspace or ViaWebForm. Mail stored before this field
 	// existed has none.
 	Via         string            `json:"via,omitempty"`

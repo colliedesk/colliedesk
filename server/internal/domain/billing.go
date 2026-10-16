@@ -40,7 +40,8 @@ type PlanLimits struct {
 	StorageBytes *int64 `json:"storage_bytes"`
 	// StorageWarnBytes is the usage at which the web app warns, nil when StorageBytes is nil.
 	StorageWarnBytes *int64 `json:"storage_warn_bytes"`
-	// RepliesPer24h is the cap on emailed replies in any 24 hours, nil when the plan has none (trial only).
+	// RepliesPer24h is the cap on people emailed in any 24 hours (each reply counts its contact and every
+	// Cc address), nil when the plan has none (trial only).
 	RepliesPer24h *int `json:"replies_per_24h"`
 }
 
@@ -99,8 +100,8 @@ func LimitsForStorage(plan string, storageCap int64) PlanLimits {
 		limits.Agents = 25
 	}
 	if plan == PlanTrial {
-		replies := TrialRepliesPerDay
-		limits.RepliesPer24h = &replies
+		recipients := TrialRecipientsPerDay
+		limits.RepliesPer24h = &recipients
 	}
 	if storageCap > 0 {
 		limit, warn := storageCap, storageCap*StorageWarnPercent/100
@@ -153,8 +154,9 @@ type BillingUsage struct {
 	Agents int `json:"agents"`
 	// PendingInvites are unused, unrevoked, unexpired invites; each holds an agent seat.
 	PendingInvites int `json:"pending_invites"`
-	// RepliesLast24h counts the emailed replies of the last 24 hours that count against the
-	// trial's daily cap; it is 0 on every other plan.
+	// RepliesLast24h counts the people the emailed replies of the last 24 hours reached (the contact
+	// plus every Cc address of each reply), which is what the trial's daily cap limits; it is 0 on
+	// every other plan.
 	RepliesLast24h int `json:"replies_last_24h"`
 	// StorageBytes is the attachment bytes the storage cap counts: every file except imported ones,
 	// or every file including imported ones on a paid plan.
@@ -222,17 +224,19 @@ func (e *PlanLimitError) Error() string {
 }
 
 // Trial outbound controls: during the trial email goes only to customers who wrote first (unless
-// the workspace verified its own sending domain), and at most TrialRepliesPerDay replies leave in
-// any rolling 24 hours.
+// the workspace verified its own sending domain), and replies reach at most TrialRecipientsPerDay
+// people in any rolling 24 hours, counting the contact and every Cc address of each reply.
 const (
-	TrialRepliesPerDay = 200
-	TrialReplyWindow   = 24 * time.Hour
+	TrialRecipientsPerDay = 200
+	TrialReplyWindow      = 24 * time.Hour
 )
 
 // TrialOutboundError refuses a reply the trial does not allow. Nothing was stored.
 type TrialOutboundError struct {
 	// RetryAfter is set when the daily cap is the reason: the time until a slot frees.
 	RetryAfter time.Duration
+	// RefusedCC names the Cc addresses the trial does not allow, when they are the reason.
+	RefusedCC []string
 }
 
 // Limited reports whether the daily cap, not the first-contact rule, refused the reply.
@@ -240,7 +244,11 @@ func (e *TrialOutboundError) Limited() bool { return e.RetryAfter > 0 }
 
 func (e *TrialOutboundError) Error() string {
 	if e.Limited() {
-		return fmt.Sprintf("The trial sends up to %d replies in 24 hours. Try again later, or upgrade to remove this limit.", TrialRepliesPerDay)
+		return fmt.Sprintf("The trial emails up to %d people in 24 hours, counting everyone copied. Try again later, or upgrade to remove this limit.", TrialRecipientsPerDay)
+	}
+	if len(e.RefusedCC) > 0 {
+		return "During the trial, a reply can copy only people the customer wrote from or copied. Not allowed: " + strings.Join(e.RefusedCC, ", ") +
+			". Remove them, or verify your sending domain in Settings or upgrade."
 	}
 	return "During the trial, email goes only to customers who wrote to you first. Verify your sending domain in Settings or upgrade to start new conversations."
 }

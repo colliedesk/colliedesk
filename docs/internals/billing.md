@@ -208,6 +208,15 @@ and workspaces without an email channel never reach it.
   that is imported history (`origin IS NOT NULL`) or inbound mail that came through the platform
   forwarder (`email_meta.via = 'platform'`) and whose authentication verdict is not `fail`.
   Refusal: HTTP 403 `trial_outbound_restricted`.
+- **Cc addresses are recipients too.** A trial reply with an unverified domain may copy only
+  addresses found on mail that qualifies above: its sender or its Cc line (`email_meta.from`,
+  `email_meta.cc`), or the `from` and `cc` of imported history. Anything else is the same 403
+  `trial_outbound_restricted`, and the refusal names the refused addresses. Code: `checkTrialCC`
+  in `store/message-cc.go`, run beside `checkTrialOutbound`. Workspace-posted mail and `fail` mail
+  add no addresses. This rule does not stop a determined sender: the Cc line is written by whoever
+  sends the mail, so a trial user can mail their own hosted address (verdict `none` or `pass`) with
+  strangers in Cc and then copy all of them. What bounds that is the daily cap below, which counts
+  every recipient, not every reply.
 - **Mail posted to a workspace's own inbound secret never qualifies.** The admin writes that whole
   message, `Authentication-Results` included, so it proves nothing about the sender. `IngestEmail`
   records the door in `email_meta.via` (`platform` or `workspace`). Mail stored before `via`
@@ -215,16 +224,27 @@ and workspaces without an email channel never reach it.
 - **Spoof-From trade-off.** A trial user can send a forged `From: victim@...` through the hosted
   address and then reply to the victim through our relay. `fail` is refused. `none` is allowed for
   now because many small senders publish no DMARC and refusing it would block real customers; the
-  200/day cap, the hourly 300 worker limit and the signup controls bound the abuse. "Require
+  200-recipient daily cap, the hourly 300 worker limit and the signup controls bound the abuse. "Require
   `pass`" is not the hardening: without a DMARC record, any `spf=pass` or `dkim=pass`, even for an
   unrelated domain, makes the verdict `pass`. The real step is requiring an *aligned* `dmarc=pass`,
   which needs the parser to record the DMARC result on its own.
-- **200 replies per rolling 24 h per workspace**, counted from `email_outbox.created_at > now-24h`
-  with `status <> 'failed'` (a failed delivery never left). A row exactly 24 h old no longer counts.
-  Refusal: HTTP 429 `trial_outbound_limit`, with `Retry-After` and `retry_after_seconds` (time until
-  the 200th newest counted reply leaves the window). The existing 300/hour worker limit stays.
+- **200 recipients per rolling 24 h per workspace**: the sum of `email_outbox.recipients` (the
+  contact plus every Cc address of the reply, set at enqueue) over rows with
+  `created_at > now-24h` that are queued, sent, or failed after they were handed to the relay
+  (`status <> 'failed' OR sent_at IS NOT NULL`). A delivery that failed before leaving does not
+  count. A failure after `sent_at` never frees the slot: a delivery report fails the reply, and
+  anyone can post a forged report to the workspace's inbound address, so counting only
+  non-failed rows would let a trial user reset the cap at will. A row exactly
+  24 h old no longer counts. A reply is refused when it would take the sum past 200, so a reply
+  copying ten people costs 11 and at most 200 people are reached a day however the Cc lists are
+  built. Refusal: HTTP 429 `trial_outbound_limit`, with `Retry-After` and `retry_after_seconds`
+  (time until enough counted rows leave the window for this reply). The existing 300/hour worker
+  limit stays.
 - Both a new reply and the retry of a failed delivery pass `checkTrialCap`, because a retried row
-  counts again once it is queued (429 on retry too).
+  counts again once it is queued (429 on retry too). The retry moves the row's `created_at` to the
+  retry time. When the row had already left (`sent_at`) inside the window, its earlier people are
+  added to the retry's (`recipients` grows); the sum then lasts a full window from the retry. This
+  counts too much rather than too little, so forged-bounce-and-retry loops still fill the cap.
 - Both checks run under `pg_advisory_xact_lock("outbound-cap:<workspace>")` inside the message
   transaction, so two replies racing for the last slot admit exactly one, and a refusal rolls back
   the whole message (no orphan reply in the timeline).
@@ -234,12 +254,15 @@ and workspaces without an email channel never reach it.
 - Index `email_outbox_workspace_created_idx (workspace_id, created_at)` serves the count;
   `TestTrialCapCountStaysFastOnALargeOutbox` asserts the plan uses it and a reply takes under
   200 ms with 200k outbox rows (measured ~12 ms).
-- `GET /billing` reports `usage.replies_last_24h` (0 off-trial).
-- Imported history qualifies. Imports run only through the operator CLI today; if import becomes
-  self-service for trial workspaces, this gate must be revisited (a Freshdesk trial could invent
-  tickets for any address).
-- There is no Cc support yet, so nothing to restrict. When reply Cc lands, it must be refused in
-  trial unless the domain is verified, with the same `trial_outbound_restricted` code.
+- `GET /billing` reports `usage.replies_last_24h` (0 off-trial). Despite the name it is the people
+  reached, the number the cap compares; `limits.replies_per_24h` is the cap. The field names predate Cc.
+- Imported history qualifies, for the contact and for Cc. Imports run only through the operator CLI
+  today; if import becomes self-service for trial workspaces, this gate must be revisited: a trial
+  user could import from their own Freshdesk trial, where they create tickets with any requester and
+  any Cc, and every imported address would become copyable. Until then the recipient cap bounds it.
+- Cc addresses also count from platform mail whose verdict is `none`, the same trust as the contact
+  rule; only `fail` is refused. The web composer prefills Cc only from `pass` mail. Requiring an
+  aligned `dmarc=pass` is the planned hardening for both rules.
 
 ### Storage cap
 

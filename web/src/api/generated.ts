@@ -240,7 +240,11 @@ export interface paths {
         };
         get: operations["listMessages"];
         put?: never;
-        /** @description Send JSON for a text-only message, or `multipart/form-data` to attach files: fields `kind` and `body` plus repeated `files` parts, each with a filename. A message carries at most `limits.outgoing_attachments_files` files and `limits.outgoing_attachments_bytes` bytes in total (both from `GET /api/v1/config`); more answers 413 and nothing is stored. A reply emails its files as attachments; a note never leaves the workspace. */
+        /**
+         * @description Send JSON for a text-only message, or `multipart/form-data` to attach files: fields `kind` and `body` plus repeated `files` parts, each with a filename. A message carries at most `limits.outgoing_attachments_files` files and `limits.outgoing_attachments_bytes` bytes in total (both from `GET /api/v1/config`); more answers 413 and nothing is stored. A reply emails its files as attachments; a note never leaves the workspace.
+         *
+         *     A reply may copy other people with `cc`: at most 10 plain addresses (`name@example.com`, no display name), stored lowercase without duplicates. The conversation contact stays the only `To` recipient and is dropped from `cc`; our own support, forwarding and sending addresses are refused with 400, and so is `cc` on a note. In `multipart/form-data` send one `cc` field per address, before the files. On the trial, `cc` may name only addresses the customer wrote from or copied (customer mail through the platform forwarder that did not fail authentication, or imported history) unless the sending domain is verified; another address answers 403 `trial_outbound_restricted` with `refused_cc` listing every refused address, and nothing is stored. Each reply counts its contact and every `cc` address against the trial's 200 people a day. A retry of a failed delivery sends to the same stored list. There is no Bcc.
+         */
         post: operations["createMessage"];
         delete?: never;
         options?: never;
@@ -878,7 +882,7 @@ export interface components {
             limits: {
                 /** @description Seats of the plan; 0 when locked. */
                 agents: number;
-                /** @description Emailed replies allowed in any 24 hours on the trial; null on every other plan and self-hosted. */
+                /** @description People that emailed replies may reach in any 24 hours on the trial, each reply counting its contact and every Cc address; null on every other plan and self-hosted. */
                 replies_per_24h: number | null;
                 /**
                  * Format: int64
@@ -898,7 +902,7 @@ export interface components {
                  * @description Attachment bytes counted against `limits.storage_bytes`. On the trial files of imported messages are not counted; on the Founding plan every file is, imported ones included.
                  */
                 storage_bytes: number;
-                /** @description Emailed replies of the last 24 hours that count against the trial cap of 200; 0 on other plans. */
+                /** @description People reached by the emailed replies of the last 24 hours (the contact plus every Cc address of each reply), which count against the trial cap of 200; 0 on other plans. */
                 replies_last_24h: number;
                 /** @description Unused, unrevoked, unexpired invites. Each holds an agent seat, so agents plus pending invites is compared with `limits.agents`. */
                 pending_invites: number;
@@ -1152,6 +1156,8 @@ export interface components {
             /** @description Where an imported message came from; null for messages written in Colliedesk. */
             origin: null | components["schemas"]["MessageOrigin"];
             attachments: components["schemas"]["Attachment"][];
+            /** @description Addresses an outgoing reply was copied to; empty for every other message. */
+            cc: components["schemas"]["CopiedAddresses"];
             /** Format: date-time */
             created_at: string;
             /** @description Email delivery of an outgoing reply; null when the reply was not emailed. */
@@ -1159,6 +1165,8 @@ export interface components {
             /** @description Envelope details of an incoming email; null for messages that did not arrive by email. */
             email: null | components["schemas"]["IncomingEmail"];
         };
+        /** @description Plain email addresses copied on a reply, lowercase, without duplicates. */
+        CopiedAddresses: string[];
         MessageOrigin: {
             system: string;
             external_id: string;
@@ -1203,6 +1211,7 @@ export interface components {
         MessageDelivery: {
             status: components["schemas"]["DeliveryStatus"];
             attempts: number;
+            /** @description Why a failed or retried delivery did not go out. On a sent reply, names the copied (Cc) addresses it did not reach: refused by the relay or bounced later. A copy that misses never fails the reply to the contact. */
             last_error: string | null;
             /** Format: date-time */
             sent_at: string | null;
@@ -1220,6 +1229,8 @@ export interface components {
              * @enum {string}
              */
             via?: "platform" | "workspace" | "web_form";
+            /** @description Other addresses on the Cc line of the email (not the sender, not our own addresses), as the reply box offers them to copy. Absent on mail stored before Cc was kept. */
+            cc?: string[];
             /**
              * Format: uuid
              * @description Attachment holding the complete raw message, gzip-compressed (original-message.eml.gz). Null for mail received before raw messages were kept.
@@ -1298,6 +1309,8 @@ export interface components {
                 };
                 /** @description Only on trial_outbound_limit: seconds until a reply can be sent. */
                 retry_after_seconds?: number;
+                /** @description Only on trial_outbound_restricted caused by Cc: exactly the addresses the trial refused to copy. */
+                refused_cc?: string[];
             };
         };
     };
@@ -1448,7 +1461,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description A trial workspace already sent 200 replies in the last 24 hours (error code `trial_outbound_limit`, with `retry_after_seconds` and a `Retry-After` header: the time until the oldest counted reply leaves the window). Nothing was stored. Paid plans have no such limit. */
+        /** @description Sending this reply would take a trial workspace past 200 people emailed in the last 24 hours, where each reply counts its contact and every Cc address (error code `trial_outbound_limit`, with `retry_after_seconds` and a `Retry-After` header: the time until enough counted replies leave the window). Nothing was stored. Paid plans have no such limit. */
         TrialOutboundLimit: {
             headers: {
                 "Retry-After"?: number;
@@ -1494,7 +1507,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Permission or CSRF check failed. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain); nothing was stored. */
+        /** @description Permission or CSRF check failed. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them); nothing was stored. */
         Error403: {
             headers: {
                 [name: string]: unknown;
@@ -2031,12 +2044,14 @@ export interface operations {
                     kind: "outgoing" | "note";
                     /** @description Markdown source */
                     body: string;
+                    cc?: components["schemas"]["CopiedAddresses"];
                 };
                 "multipart/form-data": {
                     /** @enum {string} */
                     kind: "outgoing" | "note";
                     /** @description Markdown source */
                     body: string;
+                    cc?: components["schemas"]["CopiedAddresses"];
                     files?: string[];
                 };
             };

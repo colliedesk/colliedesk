@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 )
 
 // messageSelect returns timeline rows with their email delivery (outgoing) and envelope (incoming).
-const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_id::text,m.author_name,m.kind,m.body,m.body_html,m.origin,m.created_at,m.email_meta,
+const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_id::text,m.author_name,m.kind,m.body,m.body_html,m.origin,m.created_at,m.email_meta,m.cc,
 	o.status,o.attempts,o.last_error,o.sent_at
 	FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
 	LEFT JOIN email_outbox o ON o.workspace_id=m.workspace_id AND o.message_id=m.id`
@@ -27,11 +28,14 @@ func scanMessage(row rowScanner) (domain.Message, error) {
 	var attempts *int32
 	var sentAt *time.Time
 	if err := row.Scan(&message.ID, &message.ConversationID, &message.AuthorAgentID, &message.AuthorName, &message.Kind, &message.Body,
-		&message.BodyHTML, &message.Origin, &message.CreatedAt, &meta, &status, &attempts, &lastError, &sentAt); err != nil {
+		&message.BodyHTML, &message.Origin, &message.CreatedAt, &meta, &message.CC, &status, &attempts, &lastError, &sentAt); err != nil {
 		return domain.Message{}, err
 	}
 	message.CreatedAt = domain.UTC(message.CreatedAt)
 	message.Attachments = []domain.Attachment{}
+	if message.CC == nil {
+		message.CC = []string{}
+	}
 	if status != nil && attempts != nil {
 		message.Delivery = &domain.MessageDelivery{Status: *status, Attempts: int(*attempts), LastError: lastError, SentAt: domain.UTCOptional(sentAt)}
 	}
@@ -95,15 +99,35 @@ func getMessage(ctx context.Context, query messageQuerier, workspaceID, messageI
 // Filename, ContentType and Object are read). A reply is queued for email when the workspace has an
 // email channel; a note never is. When it fails, the caller owns the stored bytes.
 func (s *Store) CreateMessage(ctx context.Context, workspaceID, conversationID, agentID, kind, body string, files ...NewAttachment) (domain.Message, error) {
+	return s.CreateMessageWithCC(ctx, workspaceID, conversationID, agentID, kind, body, nil, files...)
+}
+
+// ErrCCOnNote means a Cc list came with a private note: only a reply is emailed.
+var ErrCCOnNote = errors.New("only a reply can be copied to other addresses")
+
+// CreateMessageWithCC is CreateMessage for a reply copied to the given addresses. The caller has
+// validated and de-duplicated them; the list is stored with the reply so every delivery attempt
+// sends to the same people. On the trial it may name only addresses the customer already wrote from
+// or copied.
+func (s *Store) CreateMessageWithCC(ctx context.Context, workspaceID, conversationID, agentID, kind, body string, cc []string, files ...NewAttachment) (domain.Message, error) {
+	if len(cc) > 0 && kind != "outgoing" {
+		return domain.Message{}, ErrCCOnNote
+	}
+	if len(cc) == 0 {
+		cc = nil
+	}
 	tx, err := s.db.BeginWorkspace(ctx, workspaceID)
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("begin message creation: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+	if cc, err = withoutContact(ctx, tx, workspaceID, conversationID, cc); err != nil {
+		return domain.Message{}, err
+	}
 	var messageID string
-	err = tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,author_agent_id,kind,body)
-		SELECT $1,c.id,$3,$4,$5 FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2
-		RETURNING id::text`, workspaceID, conversationID, agentID, kind, body).Scan(&messageID)
+	err = tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,author_agent_id,kind,body,cc)
+		SELECT $1,c.id,$3,$4,$5,$6 FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2
+		RETURNING id::text`, workspaceID, conversationID, agentID, kind, body, cc).Scan(&messageID)
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("create message: %w", err)
 	}
@@ -114,7 +138,7 @@ func (s *Store) CreateMessage(ctx context.Context, workspaceID, conversationID, 
 		return domain.Message{}, err
 	}
 	if kind == "outgoing" {
-		if err := s.enqueueReply(ctx, tx, workspaceID, conversationID, messageID); err != nil {
+		if err := s.enqueueReply(ctx, tx, workspaceID, conversationID, messageID, cc); err != nil {
 			return domain.Message{}, err
 		}
 	}

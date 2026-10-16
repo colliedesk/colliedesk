@@ -59,6 +59,7 @@ export function MessageItem({ item, timezone, onRetryDelivery }: MessageItemProp
       {item.origin && <OriginLine origin={item.origin} />}
       <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} /> : <Markdown>{item.body}</Markdown>}</div>
       {files.length > 0 && <AttachmentList items={files} />}
+      {item.kind === 'outgoing' && item.cc.length > 0 && <div className="message-envelope"><span>{messages.ccLine(item.cc)}</span></div>}
       <DeliveryStatus item={item} onRetry={onRetryDelivery} />
       {item.body_html && (
         <div className="message-original">
@@ -84,6 +85,7 @@ function EmailEnvelope({ email, storedFiles }: { email: NonNullable<Message['ema
   return (
     <div className="message-envelope">
       <span>{email.from}</span>
+      {email.cc && email.cc.length > 0 && <span>{messages.ccLine(email.cc)}</span>}
       {warning && <span className={`badge badge-${email.authentication}`}>{warning}</span>}
       {email.attachments.length > 0 && storedFiles === 0 && <span>{messages.attachmentsNotImported(email.attachments.map((item) => item.filename))}</span>}
       {email.original_attachment_id && <a href={`/api/v1/attachments/${email.original_attachment_id}`} download="original-message.eml.gz">{messages.downloadOriginalEmail}</a>}
@@ -98,6 +100,7 @@ function DeliveryStatus({ item, onRetry }: { item: Message; onRetry?: (messageId
     <div className="message-envelope">
       <span className={`badge badge-delivery-${status}`} title={lastError ?? undefined}>{messages.deliveryStatuses[status]}</span>
       {status === 'failed' && <button type="button" className="link-action" onClick={() => onRetry?.(item.id)}>{messages.retryDelivery}</button>}
+      {status === 'sent' && lastError && <span>{lastError}</span>}
     </div>
   );
 }

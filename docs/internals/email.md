@@ -48,10 +48,13 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   every attempt (crash loop) fails without sending. Backoff 30 s doubling to 1 h, 8 attempts,
   any 5xx fails at once.
 - **Per-workspace hourly send limit (300).** Over the limit, the row is deferred 10 minutes
-  without spending the attempt. Trial workspaces also have a 200 replies per 24 h cap and may
+  without spending the attempt. Trial workspaces also have a cap of 200 recipients (To + Cc) per 24 h and may
   reply only to customers who wrote first; see "Trial outbound controls" in `billing.md`.
 - **Bounces.** A delivery report (`multipart/report`, `MAILER-DAEMON`) is still dropped, but the
-  Message-IDs in its returned headers mark our matching replies `failed`. This works only when the
+  Message-IDs in its returned headers mark our matching replies `failed`. When its
+  `message/delivery-status` part names the failed recipients (`Final-Recipient` with
+  `Action: failed`) and every one is in the reply's `cc`, the delivery keeps its status and the
+  addresses are appended to `last_error`: the customer got the reply. This works only when the
   relay keeps our Message-ID and the DSN reaches `reply+...`. Resend and SES rewrite the Message-ID
   and take the envelope sender, so their DSNs never arrive here. For Resend, `POST
   /api/v1/webhooks/resend` (Svix signature, `RESEND_WEBHOOK_SECRET`) fails the reply instead. Each
@@ -169,6 +172,28 @@ unchanged; the workspace's Support address stays the identity customers see.
     instead of accepting it unwashed.
   - A wildcard MX does not apply to names that already have records (`app`, `www`, `send`, `rsend`, `mx`),
     which is why those slugs are reserved.
+
+## Cc on replies
+
+- `messages.cc text[]` (NULL = none, 1 to 10 entries) holds the list of an outgoing reply; the outbox
+  reads it from the message, so a retry or a re-sent lease goes to the same people. Envelope
+  recipients are the contact plus `cc`; the header is `Cc:`. There is no Bcc anywhere.
+- Validation is in `httpapi/message-cc.go`: plain addr-spec, at most 10, lowercase, de-duplicated,
+  refuses the workspace support address and its plus forms (`support+r-…@`, `email.SameMailbox`)
+  and anything under `HOSTED_MAIL_DOMAIN` or `MAIL_FROM_DOMAIN`
+  (a Cc to those would loop the reply back in). The store drops the conversation contact.
+  `email.Compose` re-checks every address, so a stored value can never write a header line.
+- A Cc address never fails the reply to the contact. The worker leaves out a stored address that is
+  not a plain addr-spec, and `SMTPSender.SendCopying` skips a copy refused at `RCPT TO` (temporary
+  refusals too: a retry would send the customer a second copy). The reply is `sent` and
+  `last_error` names the missed copies; the web timeline shows that line under a sent reply.
+  A refused contact still fails the delivery.
+- Inbound Cc is stored in `email_meta.cc` (sender and own addresses removed, at most 50) and feeds the
+  composer default only when that message's `authentication` is `pass` and, on the hosted cloud
+  (`billing.enabled`), its `via` is `platform` (`suggestedCc` in the web app), so it never prefills an
+  address the trial rule would refuse. It is a suggestion; the server never trusts it on send.
+- A copied person's reply-all threads by `In-Reply-To`/`References` like any reply. It never changes
+  the conversation contact, which is set when the conversation is created.
 
 ## Open
 
