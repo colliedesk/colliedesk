@@ -61,7 +61,9 @@ or a coding agent.
 
 Colliedesk uses [Semantic Versioning](https://semver.org). While it is alpha, releases are
 `0.0.x`: any release may change the interface or the database schema. Beta starts at `0.1.0`,
-when HC Labs announces it. Changes per release are in the [changelog](CHANGELOG.md).
+when HC Labs announces it. Merging to `main` does not make a release: HC Labs cuts one by hand,
+from the build that already runs on Colliedesk Cloud. Changes per release are on the
+[releases page](https://github.com/colliedesk/colliedesk/releases).
 
 Container image tags:
 

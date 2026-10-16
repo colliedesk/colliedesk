@@ -1357,6 +1357,7 @@ components:
       type: object
       required: [cloud_sign_in, billing, signup, limits]
       properties:
+        version: {type: string, description: 'The running build: a release tag such as `v0.0.1`, `edge-<commit>` for a main build, or `dev`.'}
         limits:
           type: object
           required: [outgoing_attachments_bytes, outgoing_attachments_files]

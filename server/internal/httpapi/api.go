@@ -22,7 +22,9 @@ import (
 const sessionCookie = "colliedesk_session"
 
 type Config struct {
-	Origin      string
+	Origin string
+	// Version is the build stamped into the binary, reported by GET /api/v1/config; empty reports "dev".
+	Version     string
 	CloudAuth   cloudauth.Config
 	Email       email.Config
 	Attachments attachments.Storage

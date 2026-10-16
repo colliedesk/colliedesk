@@ -15,7 +15,12 @@ func (a *API) getConfig(response http.ResponseWriter, _ *http.Request) {
 	if enabled {
 		publishableKey = &a.config.CloudAuth.PublishableKey
 	}
+	version := a.config.Version
+	if version == "" {
+		version = "dev"
+	}
 	writeJSON(response, http.StatusOK, map[string]any{
+		"version":       version,
 		"cloud_sign_in": map[string]any{"enabled": enabled, "publishable_key": publishableKey},
 		"billing":       map[string]any{"enabled": a.polar != nil},
 		// Same condition as signUpCloud: 404 unless both are configured, 503 while its settings are missing.
