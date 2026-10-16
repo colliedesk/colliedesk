@@ -1569,12 +1569,15 @@ components:
                 trial_extended: {type: boolean, description: True when a Freshdesk import already extended the trial.}
     Session:
       type: object
-      required: [id, agent_id, agent_email, label, created_at, last_seen_at, expires_at, revoked_at]
+      required: [id, agent_id, agent_email, label, current, created_at, last_seen_at, expires_at, revoked_at]
       properties:
         id: {type: string, format: uuid}
         agent_id: {type: string, format: uuid}
         agent_email: {type: string, format: email}
         label: {type: string}
+        current:
+          type: boolean
+          description: True for the session that made this request, so a client can mark "this device".
         created_at: {type: string, format: date-time}
         last_seen_at: {type: string, format: date-time}
         expires_at: {type: string, format: date-time}

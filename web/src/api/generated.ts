@@ -970,6 +970,8 @@ export interface components {
             /** Format: email */
             agent_email: string;
             label: string;
+            /** @description True for the session that made this request, so a client can mark "this device". */
+            current: boolean;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */

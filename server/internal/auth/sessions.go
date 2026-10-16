@@ -74,6 +74,9 @@ func (s *Service) ListSessions(ctx context.Context, principal Principal) ([]doma
 		sessions, err = listSessions(ctx, tx, query, args)
 		return err
 	})
+	for index := range sessions {
+		sessions[index].Current = sessions[index].ID == principal.SessionID
+	}
 	return sessions, err
 }
 

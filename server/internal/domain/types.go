@@ -18,10 +18,12 @@ type Agent struct {
 }
 
 type Session struct {
-	ID         string     `json:"id"`
-	AgentID    string     `json:"agent_id"`
-	AgentEmail string     `json:"agent_email"`
-	Label      string     `json:"label"`
+	ID         string `json:"id"`
+	AgentID    string `json:"agent_id"`
+	AgentEmail string `json:"agent_email"`
+	Label      string `json:"label"`
+	// Current marks the session that made the request; it is not stored.
+	Current    bool       `json:"current"`
 	CreatedAt  time.Time  `json:"created_at"`
 	LastSeenAt time.Time  `json:"last_seen_at"`
 	ExpiresAt  time.Time  `json:"expires_at"`
