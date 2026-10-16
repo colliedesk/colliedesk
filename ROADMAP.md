@@ -29,6 +29,8 @@ Beta starts when HC Labs announces it. Before that:
 
 - Copy other people on a reply (Cc) and start a new conversation from the inbox.
 - Contact history: every conversation of a customer in one place.
+- Connect a Gmail / Google Workspace or Microsoft 365 mailbox with one click (OAuth); replies
+  leave from your own address. Forwarding keeps working.
 - An upgrade guide, and upgrades tested from the previous release on real data.
 - Import from Freshdesk inside the app, recent tickets first, with the reconcile report on screen
   ([#97](https://github.com/colliedesk/colliedesk/issues/97)).
