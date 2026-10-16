@@ -16,9 +16,6 @@ import (
 
 const (
 	resendWebhookPath = "/api/v1/webhooks/resend"
-	// relayClockSkew covers the gap between the relay creating its record of an email and the outbox
-	// recording the reply as sent, which happens after the relay answered.
-	relayClockSkew = 2 * time.Minute
 	// reasonNotDeliveryFailure is an event the webhook does not act on (delivered, opened, a
 	// temporary bounce); it is not logged.
 	reasonNotDeliveryFailure = "not a delivery failure"
@@ -26,14 +23,12 @@ const (
 
 // resendEvent is the part of a Resend email event the bounce handling reads.
 type resendEvent struct {
-	Type      string    `json:"type"`
-	CreatedAt time.Time `json:"created_at"`
-	Data      struct {
-		EmailID   string    `json:"email_id"`
-		MessageID string    `json:"message_id"`
-		From      string    `json:"from"`
-		To        []string  `json:"to"`
-		CreatedAt time.Time `json:"created_at"`
+	Type string `json:"type"`
+	Data struct {
+		EmailID   string   `json:"email_id"`
+		MessageID string   `json:"message_id"`
+		From      string   `json:"from"`
+		To        []string `json:"to"`
 		Bounce    *struct {
 			Type string `json:"type"`
 		} `json:"bounce"`
@@ -42,9 +37,9 @@ type resendEvent struct {
 
 // receiveResendWebhook marks a reply failed when Resend reports it bounced or was marked as spam.
 // Resend owns the envelope sender and rewrites the Message-ID, so its bounces never reach
-// MAIL_FROM_DOMAIN. The reply is found from the reply+<token>@MAIL_FROM_DOMAIN address it was sent
-// from; a reply sent as a verified support address cannot be matched and is ignored. The Svix
-// signature is the only credential: nothing is read from the database until it verifies.
+// MAIL_FROM_DOMAIN. The reply is the one named by its reply+<token>-<reply id>@MAIL_FROM_DOMAIN sender;
+// a reply sent as a verified support address cannot be matched and is ignored. The Svix signature is
+// the only credential: nothing is read from the database until it verifies.
 func (a *API) receiveResendWebhook(response http.ResponseWriter, request *http.Request) {
 	body, err := io.ReadAll(http.MaxBytesReader(response, request.Body, maxWebhookBytes))
 	if err != nil {
@@ -52,7 +47,8 @@ func (a *API) receiveResendWebhook(response http.ResponseWriter, request *http.R
 		return
 	}
 	header := request.Header
-	if err := standardwebhooks.Verify(a.config.Email.ResendWebhookSecret, header.Get("svix-id"), header.Get("svix-timestamp"),
+	webhookID := header.Get("svix-id")
+	if err := standardwebhooks.Verify(a.config.Email.ResendWebhookSecret, webhookID, header.Get("svix-timestamp"),
 		header.Get("svix-signature"), body, time.Now()); err != nil {
 		writeError(response, http.StatusUnauthorized, "unauthorized", "A valid webhook signature is required.")
 		return
@@ -62,62 +58,64 @@ func (a *API) receiveResendWebhook(response http.ResponseWriter, request *http.R
 		writeError(response, http.StatusBadRequest, "invalid_request", "The webhook body is not a Resend event.")
 		return
 	}
-	bounce, workspaceID, reason, err := a.relayBounceFromEvent(request, event)
-	if err == nil && reason == "" {
-		var matched bool
-		matched, err = a.store.MarkRelayBounce(request.Context(), workspaceID, bounce)
-		if !matched {
-			reason = "no sent reply to that recipient"
-		}
-	}
+	status, reason, err := a.applyResendEvent(request, webhookID, event)
 	if err != nil {
 		// 500 makes Resend redeliver; nothing was recorded, so the retry is applied.
 		writeInternalError(response, err)
 		return
 	}
-	if reason == "" {
-		writeJSON(response, http.StatusOK, map[string]string{"status": "applied"})
-		return
+	if reason != "" && reason != reasonNotDeliveryFailure {
+		// A delivery failure nobody will see in the inbox. Ids only: the addresses are customer data.
+		slog.Warn("resend event ignored", "reason", reason, "event", event.Type, "email_id", event.Data.EmailID, "webhook_id", webhookID)
 	}
-	if reason != reasonNotDeliveryFailure {
-		// Ids only: the addresses are customer data.
-		slog.Info("resend event ignored", "reason", reason, "event", event.Type, "email_id", event.Data.EmailID, "webhook_id", header.Get("svix-id"))
-	}
-	writeJSON(response, http.StatusOK, map[string]string{"status": webhookIgnored})
+	writeJSON(response, http.StatusOK, map[string]string{"status": status})
 }
 
-// relayBounceFromEvent returns the bounce to record and its workspace, or the reason the event changes
-// nothing.
-func (a *API) relayBounceFromEvent(request *http.Request, event resendEvent) (store.RelayBounce, string, string, error) {
+// applyResendEvent records a bounce or complaint and returns the webhook status, with the reason when
+// the event changed nothing.
+func (a *API) applyResendEvent(request *http.Request, webhookID string, event resendEvent) (string, string, error) {
 	data := event.Data
 	complaint := event.Type == "email.complained"
 	if event.Type != "email.bounced" && !complaint {
-		return store.RelayBounce{}, "", reasonNotDeliveryFailure, nil
+		return webhookIgnored, reasonNotDeliveryFailure, nil
 	}
 	if data.Bounce != nil && data.Bounce.Type != "" && !strings.EqualFold(data.Bounce.Type, "Permanent") {
-		return store.RelayBounce{}, "", reasonNotDeliveryFailure, nil
+		return webhookIgnored, reasonNotDeliveryFailure, nil
 	}
-	from, err := mail.ParseAddress(data.From)
-	if err != nil {
-		return store.RelayBounce{}, "", "sender is not an address", nil
+	token, replyID := "", ""
+	if from, err := mail.ParseAddress(data.From); err == nil {
+		token, replyID = email.PlatformReplyAddress(from.Address, a.config.Email.MailFromDomain)
 	}
-	token := email.PlatformReplyToken([]string{from.Address}, a.config.Email.MailFromDomain)
 	if token == "" {
-		return store.RelayBounce{}, "", "not sent from a reply address", nil
+		return webhookIgnored, "not sent from a reply address", nil
 	}
 	workspaceID, found, err := a.store.WorkspaceForReplyToken(request.Context(), token)
 	if err != nil || !found {
-		return store.RelayBounce{}, "", "unknown reply token", err
+		return webhookIgnored, "unknown reply token", err
 	}
-	createdAt := data.CreatedAt
-	if createdAt.IsZero() {
-		createdAt = event.CreatedAt
+	result, err := a.store.MarkRelayBounce(request.Context(), workspaceID, store.RelayBounce{
+		WebhookID: webhookID, EventType: event.Type, ReplyToken: token, ReplyID: replyID,
+		MessageID: strings.Trim(strings.TrimSpace(data.MessageID), "<>"), Recipients: bareAddresses(data.To), Complaint: complaint,
+	})
+	switch {
+	case err != nil:
+		return "", "", err
+	case result == store.RelayBounceApplied:
+		return "applied", "", nil
+	case result == store.RelayBounceDuplicate:
+		return "duplicate", "", nil
 	}
-	if createdAt.IsZero() {
-		createdAt = time.Now()
+	return webhookIgnored, string(result), nil
+}
+
+// bareAddresses drops display names; an entry that does not parse is kept as it is.
+func bareAddresses(list []string) []string {
+	result := make([]string, 0, len(list))
+	for _, entry := range list {
+		if parsed, err := mail.ParseAddress(entry); err == nil {
+			entry = parsed.Address
+		}
+		result = append(result, entry)
 	}
-	return store.RelayBounce{
-		ReplyToken: token, MessageID: strings.Trim(strings.TrimSpace(data.MessageID), "<>"), Recipients: data.To,
-		SentBefore: createdAt.Add(relayClockSkew), Complaint: complaint,
-	}, workspaceID, "", nil
+	return result
 }

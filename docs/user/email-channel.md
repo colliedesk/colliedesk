@@ -228,13 +228,16 @@ Resend keeps bounces and complaints and reports them by webhook instead. To show
 2. Set `RESEND_WEBHOOK_SECRET` on the server to the webhook's signing secret (`whsec_...`).
    It needs `MAIL_FROM_DOMAIN`. Without the secret the endpoint does not exist.
 
-A bounce or a spam complaint marks the reply sent to that recipient **Delivery failed**, with the
-reason. Limits:
+A bounce or a spam complaint marks the reply it is about **Delivery failed**, with the reason.
+Each reply is sent from its own address, `reply+<token>-<reply id>@MAIL_FROM_DOMAIN`, so the event
+names exactly one reply; a customer who answers that address still reaches the conversation. Limits:
 
-- Only replies sent from `reply+<token>@MAIL_FROM_DOMAIN` are matched. A reply sent as a verified
-  support address is not, because that address does not name a conversation.
-- A reply goes to the conversation's contact only, so an event for any other address is ignored.
+- Only replies sent from the platform domain are matched. A reply sent as a verified support address
+  is not, because that address does not name a conversation. Replies sent before each reply had its
+  own address are matched only when Resend kept the Message-ID.
+- The event must name the conversation's contact and nobody else; otherwise the reply is left as it is.
 - A temporary bounce or an `email.delivery_delayed` event changes nothing; the relay keeps trying.
+- Resend sends an event again until it gets an answer; a repeated event changes nothing.
 
 ## What you see in the inbox
 

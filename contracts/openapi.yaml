@@ -1018,12 +1018,13 @@ paths:
         bounces never reach `MAIL_FROM_DOMAIN`; this webhook is how a reply sent through it shows
         **Delivery failed**. Authenticated by the Svix signature (`svix-id`, `svix-timestamp`,
         `svix-signature`), not by a session; a missing, wrong or stale signature is 401 and nothing is
-        read. `email.bounced` (permanent) and `email.complained` fail the reply sent from
-        `reply+<token>@MAIL_FROM_DOMAIN` to the bounced recipient: the one with that Message-ID if the
-        relay kept it, otherwise the latest one sent before the event's email was created. Every
-        understood event is 200 so Resend stops retrying; `status` is `applied` or `ignored` (other
-        event types, a reply sent as a verified support address, a recipient the reply was not sent
-        to, a redelivery). Only present when `RESEND_WEBHOOK_SECRET` is set.
+        read. `email.bounced` (permanent) and `email.complained` fail the one reply named by the sender
+        `reply+<token>-<reply id>@MAIL_FROM_DOMAIN` (for the older `reply+<token>@` form, only the reply
+        whose Message-ID the relay kept), and only when the event names the conversation's contact and
+        nobody else. Every understood event is 200 so Resend stops retrying; `status` is `applied`,
+        `duplicate` (this `svix-id` was already applied) or `ignored` (other event types, a reply sent as
+        a verified support address, no matching reply, another recipient). Only present when
+        `RESEND_WEBHOOK_SECRET` is set.
       requestBody:
         required: true
         content:
