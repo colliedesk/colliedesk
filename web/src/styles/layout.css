@@ -35,7 +35,7 @@
 .rail-link:hover { background: var(--surface-2); color: var(--text-1); }
 .rail-link[aria-current="page"] { background: var(--surface-1); color: var(--accent-text); box-shadow: var(--shadow-1), 0 0 0 1px var(--line); }
 .rail-link svg { width: 20px; height: 20px; }
-.rail-brand[data-tip]::after, .rail-link[data-tip]::after { left: calc(100% + var(--space-2)); top: 50%; translate: 0 -50%; }
+.rail-link[data-tip]::after { left: calc(100% + var(--space-2)); top: 50%; translate: 0 -50%; }
 
 /* A panel is the white working surface: list, thread, details, settings. */
 .panel { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); }
@@ -129,8 +129,9 @@
   .app-shell { height: auto; min-height: 100dvh; grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .app-rail { position: sticky; top: 0; z-index: 2; flex-direction: row; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
   .rail-brand { margin: 0 var(--space-2) 0 0; }
-  .rail-links { flex-direction: row; }
-  .rail-brand[data-tip]::after, .rail-link[data-tip]::after { display: none; }
+  /* Three labelled links (cloud admins also get Billing) can be wider than a phone: scroll, never push the page. */
+  .rail-links { flex: 1 1 auto; min-width: 0; flex-direction: row; overflow-x: auto; scrollbar-width: none; }
+  .rail-link[data-tip]::after { display: none; }
   .rail-link { width: auto; height: var(--touch); grid-auto-flow: column; gap: var(--space-2); padding: 0 var(--space-3); }
   .rail-label { display: inline; font-size: var(--fs-small); font-weight: 500; }
   .app-main, .app-content { overflow: visible; }

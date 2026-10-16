@@ -17,6 +17,7 @@ interface AppShellProps {
   lockedScreen?: ReactNode;
   onSignOut?: () => void;
   signOutFailed?: boolean;
+  signingOut?: boolean;
   children: ReactNode;
 }
 
@@ -41,7 +42,7 @@ function useDismissibleTooltips() {
   }, []);
 }
 
-export function AppShell({ me, signedOut = false, brand, links, signIn, notice, lockedScreen, onSignOut, signOutFailed, children }: AppShellProps) {
+export function AppShell({ me, signedOut = false, brand, links, signIn, notice, lockedScreen, onSignOut, signOutFailed, signingOut, children }: AppShellProps) {
   useDismissibleTooltips();
   const view = signedOut
     ? <main className="redeem-page"><section className="redeem-panel">
@@ -55,7 +56,7 @@ export function AppShell({ me, signedOut = false, brand, links, signIn, notice, 
         {brand}
         {/* Signed out, every destination ends on the same screen, so the rail offers none. */}
         {!signedOut && <div className="rail-links">{links}</div>}
-        {me && !signedOut && <AccountMenu me={me} onSignOut={onSignOut} signOutFailed={signOutFailed} />}
+        {me && !signedOut && <AccountMenu me={me} onSignOut={onSignOut} signOutFailed={signOutFailed} signingOut={signingOut} />}
       </nav>
       <div className="app-main">
         {me && <section className="identity-bar" aria-label={messages.signedInAs}>

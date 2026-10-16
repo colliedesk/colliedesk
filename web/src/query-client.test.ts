@@ -50,3 +50,14 @@ test('a lock on an instance without plans (me.plan is null) never invents a tria
   await client.fetchQuery({ queryKey: ['x'], queryFn: () => Promise.reject(new WorkspaceLockedError('locked')), retryDelay: 0 }).catch(() => {});
   expect(client.getQueryData(['me'])).toEqual(me);
 });
+
+test('once me is refused, every cached workspace query is dropped so the next person never sees it', async () => {
+  const client = createQueryClient();
+  client.setQueryData(['conversations', { status: 'open' }], { items: [{ id: 'from-workspace-a' }] });
+  client.setQueryData(['saved-replies'], { items: [] });
+  client.setQueryData(['public-config'], { billing: { enabled: true } });
+  await client.fetchQuery({ queryKey: ['me'], queryFn: () => Promise.reject(new UnauthorizedError()) }).catch(() => {});
+  expect(client.getQueryData(['conversations', { status: 'open' }])).toBeUndefined();
+  expect(client.getQueryData(['saved-replies'])).toBeUndefined();
+  expect(client.getQueryData(['public-config'])).toEqual({ billing: { enabled: true } });
+});

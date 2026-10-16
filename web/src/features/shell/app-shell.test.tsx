@@ -81,3 +81,16 @@ test('a failed sign out says so in the menu', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Account' }));
   expect(screen.getByRole('alert')).toHaveTextContent('Sign out failed. Try again.');
 });
+
+test('the account menu closes when focus moves out of it', () => {
+  render(<AppShell me={me} onSignOut={() => {}}><button type="button">elsewhere</button></AppShell>);
+  fireEvent.click(screen.getByRole('button', { name: 'Account' }));
+  fireEvent.blur(screen.getByRole('button', { name: 'Sign out' }), { relatedTarget: screen.getByRole('button', { name: 'elsewhere' }) });
+  expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
+});
+
+test('Sign out cannot be sent twice while the first request runs', () => {
+  render(<AppShell me={me} onSignOut={() => {}} signingOut><p>inbox</p></AppShell>);
+  fireEvent.click(screen.getByRole('button', { name: 'Account' }));
+  expect(screen.getByRole('button', { name: 'Sign out' })).toBeDisabled();
+});
