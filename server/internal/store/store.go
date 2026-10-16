@@ -18,8 +18,8 @@ type Store struct {
 	// limits turns on the trial, lock and agent cap of the hosted cloud; the zero value (self-hosted) has none.
 	limits bool
 	clock  func() time.Time
-	// foundingStorage replaces the Founding plan's storage cap when above zero; tests use a small one.
-	foundingStorage int64
+	// paidStorage replaces the storage cap of plans that count imported files when above zero; tests use a small one.
+	paidStorage int64
 	// objects is attachment storage, used to verify and discard objects; nil skips both.
 	objects attachments.Storage
 }
@@ -56,11 +56,11 @@ func (s *Store) WithPlanLimits(enabled bool) *Store {
 	return &copy
 }
 
-// WithFoundingStorageBytes returns a store that applies cap instead of the Founding plan's 20 GiB.
+// WithPaidStorageBytes returns a store that applies cap instead of the attachment cap of any plan that counts imported files.
 // Zero keeps the default.
-func (s *Store) WithFoundingStorageBytes(cap int64) *Store {
+func (s *Store) WithPaidStorageBytes(cap int64) *Store {
 	copy := *s
-	copy.foundingStorage = cap
+	copy.paidStorage = cap
 	return &copy
 }
 

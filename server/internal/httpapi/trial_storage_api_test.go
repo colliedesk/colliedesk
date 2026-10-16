@@ -111,7 +111,7 @@ func TestTrialStorageCapCountsOnlyOwnFiles(t *testing.T) {
 	}
 }
 
-func TestPaidWorkspaceHasNoStorageCap(t *testing.T) {
+func TestPaidWorkspaceIsNotHeldToTheTrialStorageCap(t *testing.T) {
 	f := newLimitsFixture(t, true)
 	f.receive(t, false, 1, "First")
 	f.upgrade(t, f.workspaceA, "sub_storage")
@@ -120,8 +120,8 @@ func TestPaidWorkspaceHasNoStorageCap(t *testing.T) {
 		t.Fatalf("paid workspace at 3 GiB: status=%d body=%s, want 200", got.Code, got.Body.String())
 	}
 	view := f.usage(t, f.adminA)
-	if view.Limits.StorageBytes != nil || view.Limits.StorageWarnBytes != nil {
-		t.Fatalf("limits=%+v, want no storage cap on a paid plan", view.Limits)
+	if view.Limits.StorageBytes == nil || *view.Limits.StorageBytes != teamCap {
+		t.Fatalf("limits=%+v, want the 100 GiB Team cap, not the trial's 2 GiB", view.Limits)
 	}
 }
 

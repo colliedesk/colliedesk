@@ -15,25 +15,34 @@ import (
 // adds a few more tries, with the same backoff, for a ticket that keeps failing.
 const sizingAttempts = 3
 
-// StorageCapError means a Founding workspace cannot take this import: its attachments would pass the
-// plan's storage cap. Nothing was written.
+// StorageCapError means a workspace cannot take this import: its attachments would pass the plan's
+// storage cap, which counts imported files. Nothing was written.
 type StorageCapError struct {
+	Plan                string
 	Needed, Used, Limit int64
 }
 
 func (e *StorageCapError) Error() string {
-	return fmt.Sprintf("this import needs %s of attachments, but only %s is free under the %s attachment cap of the Founding plan. "+
-		"Nothing was imported. Upgrade to the Team plan (Billing > Manage billing) to remove the cap, or import a smaller slice with --since.",
-		domain.FormatBytes(e.Needed), domain.FormatBytes(max(e.Limit-e.Used, 0)), domain.FormatBytes(e.Limit))
+	remedy := "Contact us for more storage"
+	name := "Team"
+	switch e.Plan {
+	case domain.PlanFounding:
+		remedy, name = "Upgrade to the Team plan (Billing > Manage billing) for a higher cap", "Founding"
+	case domain.PlanTeam25:
+		name = "Team 25"
+	}
+	return fmt.Sprintf("this import needs %s of attachments, but only %s is free under the %s attachment cap of the %s plan. "+
+		"Nothing was imported. %s, or import a smaller slice with --since.",
+		domain.FormatBytes(e.Needed), domain.FormatBytes(max(e.Limit-e.Used, 0)), domain.FormatBytes(e.Limit), name, remedy)
 }
 
 func (r *run) storeWithPlanLimits() *store.Store {
-	return store.NewWithDB(r.db).WithPlanLimits(true).WithFoundingStorageBytes(r.opts.FoundingStorageBytes)
+	return store.NewWithDB(r.db).WithPlanLimits(true).WithPaidStorageBytes(r.opts.PaidStorageBytes)
 }
 
-// foundingRoom returns the Founding room of the workspace, or ok false when the storage cap does not
-// apply to this run (self-hosted, trial, Team).
-func (r *run) foundingRoom(ctx context.Context) (room store.StorageRoom, ok bool, err error) {
+// cappedRoom returns the storage room of the workspace, or ok false when no cap that counts imported
+// files applies to this run (self-hosted, trial).
+func (r *run) cappedRoom(ctx context.Context) (room store.StorageRoom, ok bool, err error) {
 	if !r.opts.Cloud {
 		return store.StorageRoom{}, false, nil
 	}
@@ -44,8 +53,8 @@ func (r *run) foundingRoom(ctx context.Context) (room store.StorageRoom, ok bool
 	return room, room.Capped && domain.StorageCountsImports(room.Plan), nil
 }
 
-// guardFoundingStorage runs before the first write. On the Founding plan imported files count toward
-// the 20 GiB cap, so it sizes every attachment the run would bring in and refuses the whole import
+// guardStorage runs before the first write. On a paid plan imported files count toward
+// the storage cap, so it sizes every attachment the run would bring in and refuses the whole import
 // when they do not fit: a partial import is a failure. This is the only cap check. An import that
 // passes it is admitted and never stopped by the cap afterwards: customer mail that arrives while it
 // runs, or a file added at the source after the sizing, may take usage a little past the cap, which is
@@ -55,8 +64,8 @@ func (r *run) foundingRoom(ctx context.Context) (room store.StorageRoom, ok bool
 // the dry-run listing and id probing, then one read of each ticket and of its conversations. It
 // repeats the listing and probing of the real run and costs a second round of API calls, once, and
 // only for a Founding workspace. Trial, Team and self-hosted runs skip it.
-func (r *run) guardFoundingStorage(ctx context.Context) error {
-	if _, ok, err := r.foundingRoom(ctx); err != nil || !ok {
+func (r *run) guardStorage(ctx context.Context) error {
+	if _, ok, err := r.cappedRoom(ctx); err != nil || !ok {
 		return err
 	}
 	r.progress.phase("sizing attachments")
@@ -65,20 +74,20 @@ func (r *run) guardFoundingStorage(ctx context.Context) error {
 		return err
 	}
 	// The sizing can take hours on a large account: judge against the room as it is now.
-	room, ok, err := r.foundingRoom(ctx)
+	room, ok, err := r.cappedRoom(ctx)
 	if err != nil || !ok {
 		return err
 	}
 	if room.Used+needed > room.Limit {
-		return &StorageCapError{Needed: needed, Used: room.Used, Limit: room.Limit}
+		return &StorageCapError{Plan: room.Plan, Needed: needed, Used: room.Used, Limit: room.Limit}
 	}
 	return nil
 }
 
-// checkDryRunStorage fills the report of a dry run on a Founding workspace with what the real run
+// checkDryRunStorage fills the report of a dry run on a capped workspace with what the real run
 // would do, using the tickets the dry run already listed.
 func (r *run) checkDryRunStorage(ctx context.Context, report *Report) error {
-	room, ok, err := r.foundingRoom(ctx)
+	room, ok, err := r.cappedRoom(ctx)
 	if err != nil || !ok {
 		return err
 	}
@@ -88,7 +97,7 @@ func (r *run) checkDryRunStorage(ctx context.Context, report *Report) error {
 		return err
 	}
 	free := max(room.Limit-room.Used, 0)
-	report.StorageCap = &StorageCapCheck{LimitBytes: room.Limit, UsedBytes: room.Used, NeededBytes: needed, FreeBytes: free, WouldRefuse: needed > free, SkippedTickets: skipped}
+	report.StorageCap = &StorageCapCheck{Plan: room.Plan, LimitBytes: room.Limit, UsedBytes: room.Used, NeededBytes: needed, FreeBytes: free, WouldRefuse: needed > free, SkippedTickets: skipped}
 	return nil
 }
 

@@ -1361,7 +1361,7 @@ components:
       properties:
         url: {type: string, description: 'Path on this server, for example /api/v1/export/download/<token>.'}
         expires_in_seconds: {type: integer}
-    CheckoutPlan: {type: string, enum: [team_monthly, team_yearly, founding]}
+    CheckoutPlan: {type: string, enum: [team_monthly, team_yearly, team25_monthly, team25_yearly, founding], description: '`team25_*` is refused with 400 on a server that has no Polar product for it.'}
     WebhookResult:
       type: object
       required: [status]
@@ -1373,7 +1373,7 @@ components:
       properties:
         plan:
           type: string
-          enum: [trial, team, founding, none]
+          enum: [trial, team, team25, founding, none]
           description: The plan in effect now. `trial` is the free trial; `none` means the trial is over and nothing is paid.
         trial_ends_at: {type: string, format: date-time, description: 'When the free trial ends or ended, whatever the plan.'}
         locked: {type: boolean, description: 'True when `plan` is `none`; the workspace refuses every route outside the locked allowlist.'}
@@ -1505,7 +1505,7 @@ components:
             - type: object
               required: [plan, trial_ends_at, locked, trial_extended]
               properties:
-                plan: {type: string, enum: [trial, team, founding, none]}
+                plan: {type: string, enum: [trial, team, team25, founding, none]}
                 trial_ends_at: {type: string, format: date-time}
                 locked: {type: boolean}
                 trial_extended: {type: boolean, description: True when a Freshdesk import already extended the trial.}

@@ -28,9 +28,11 @@ const (
 	billingWebhookSecret = "whsec_Y29sbGllZGVzay10ZXN0LXNpZ25pbmcta2V5LTMyYnk="
 	billingWebhookKey    = "colliedesk-test-signing-key-32by"
 
-	productMonthly  = "prod-team-monthly"
-	productYearly   = "prod-team-yearly"
-	productFounding = "prod-founding"
+	productMonthly       = "prod-team-monthly"
+	productYearly        = "prod-team-yearly"
+	productFounding      = "prod-founding"
+	productTeam25Monthly = "prod-team25-monthly"
+	productTeam25Yearly  = "prod-team25-yearly"
 )
 
 // polarCall is one request the server made to the fake Polar API.
@@ -146,7 +148,7 @@ func (f *fakePolarAPI) recorded() []polarCall {
 func (f *fakePolarAPI) config() polar.Config {
 	return polar.Config{
 		AccessToken: "polar-token-for-test", WebhookSecret: billingWebhookSecret, APIURL: f.server.URL,
-		Products: polar.Products{TeamMonthly: productMonthly, TeamYearly: productYearly, Founding: productFounding},
+		Products: polar.Products{TeamMonthly: productMonthly, TeamYearly: productYearly, Founding: productFounding, Team25Monthly: productTeam25Monthly, Team25Yearly: productTeam25Yearly},
 	}
 }
 

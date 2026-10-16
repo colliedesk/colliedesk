@@ -36,9 +36,9 @@ type Options struct {
 	// Cloud is true on Colliedesk Cloud, the only place a trial exists. A self-hosted run still
 	// moves the stored end (nothing reads it) but reports nothing about it.
 	Cloud bool
-	// FoundingStorageBytes replaces the Founding plan's 20 GiB attachment cap when above zero; tests
+	// PaidStorageBytes replaces the attachment cap of every plan that counts imports when above zero; tests
 	// use a small one.
-	FoundingStorageBytes int64
+	PaidStorageBytes int64
 	// Now is the clock of the trial extension; nil means time.Now.
 	Now func() time.Time
 

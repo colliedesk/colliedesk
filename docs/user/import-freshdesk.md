@@ -126,16 +126,16 @@ damaged on disk after the import is detected by the next run and downloaded agai
 On Colliedesk Cloud, the first import into a workspace that is still in its trial extends the trial
 to 30 days in total from when it started.
 
-On a Colliedesk Cloud **Founding** workspace, imported attachments count toward the 20 GiB storage
-limit. Before it writes anything, the import adds up the size of the attachments it would bring in
+On a Colliedesk Cloud workspace on a paid plan (Founding, Team or Team 25), imported attachments
+count toward the storage limit of the plan (20, 100 or 250 GiB). Before it writes anything, the import adds up the size of the attachments it would bring in
 and compares it with the room left. If they do not fit, it stops with a message that gives the bytes
-needed, the bytes free and the limit, and nothing is imported: no contact, ticket or file. Switch to
-the Team plan under **Billing > Manage billing** and run it again, or import a smaller slice with
+needed, the bytes free and the limit, and nothing is imported: no contact, ticket or file. Contact us for more storage (on Founding, switch to
+the Team plan under **Billing > Manage billing**) and run it again, or import a smaller slice with
 `--since`.
 
 The check is the only place the limit applies to an import. An import that passes it is admitted and
 runs to the end: customer email that arrives meanwhile, or a file added in Freshdesk after the check,
-can take usage past 20 GiB, and the import is not stopped for that. The overshoot is whatever
+can take usage past the limit, and the import is not stopped for that. The overshoot is whatever
 arrives while the import runs. Tickets created in Freshdesk during the check are imported without
 being counted beforehand, so on a busy account it can be more than a few files. That is accepted.
 There is no partial import because of the storage limit. A file counts each time it is attached, so the same file on two
@@ -145,11 +145,11 @@ To do this the import has to know the sizes first. Freshdesk's ticket list does 
 before it writes anything the import lists the tickets and probes the ticket numbers (the same calls as
 the real run, and as `--dry-run`), then reads every ticket and its conversations (conversations come
 in pages, so that is at least two calls per ticket). The real run repeats all of it. Expect about
-twice the API calls and time of an import without the check, once, on a Founding workspace only. A
+twice the API calls and time of an import without the check, once, on a paid workspace only. A
 ticket that cannot be read is tried three times (each try retries the usual way); if it still fails,
 the import stops before writing anything and names the ticket. Run the same command again.
 
-`--dry-run` on a Founding workspace tells you in advance: the report says whether the import
+`--dry-run` on a paid workspace tells you in advance: the report says whether the import
 **would be refused**, with the bytes it needs and the bytes free. `import undo` removes the imported
 files and gives the space back.
 

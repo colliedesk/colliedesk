@@ -83,13 +83,8 @@ func (a *API) subscriptionFromEvent(event polar.Event) (domain.Subscription, str
 	if !workspaceIDPattern.MatchString(sub.ExternalCustomerID) {
 		return domain.Subscription{}, "", "customer has no workspace id as external id"
 	}
-	var plan string
-	switch products := a.config.Billing.Products; sub.ProductID {
-	case products.TeamMonthly, products.TeamYearly:
-		plan = domain.PlanTeam
-	case products.Founding:
-		plan = domain.PlanFounding
-	default:
+	plan := a.planOfProduct(sub.ProductID)
+	if plan == "" {
 		return domain.Subscription{}, "", "product is not sold here"
 	}
 	status := sub.Status
@@ -101,4 +96,21 @@ func (a *API) subscriptionFromEvent(event polar.Event) (domain.Subscription, str
 		Plan: plan, SubscriptionID: sub.ID, CustomerID: sub.CustomerID, Status: status,
 		CurrentPeriodEnd: sub.CurrentPeriodEnd, CancelAtPeriodEnd: sub.CancelAtPeriodEnd, EndedAt: sub.EndedAt, ModifiedAt: sub.ModifiedAt,
 	}, sub.ExternalCustomerID, ""
+}
+
+// planOfProduct is the plan a Polar product buys, or "" when the product is not sold here. An
+// unset product id never matches, so an unconfigured plan cannot claim an event.
+func (a *API) planOfProduct(productID string) string {
+	if productID == "" {
+		return ""
+	}
+	switch products := a.config.Billing.Products; productID {
+	case products.TeamMonthly, products.TeamYearly:
+		return domain.PlanTeam
+	case products.Team25Monthly, products.Team25Yearly:
+		return domain.PlanTeam25
+	case products.Founding:
+		return domain.PlanFounding
+	}
+	return ""
 }

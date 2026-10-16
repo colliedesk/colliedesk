@@ -34,6 +34,10 @@ func (a *API) checkoutProduct(plan string) (string, bool) {
 		return products.TeamYearly, true
 	case "founding":
 		return products.Founding, true
+	case "team25_monthly":
+		return products.Team25Monthly, products.Team25Monthly != ""
+	case "team25_yearly":
+		return products.Team25Yearly, products.Team25Yearly != ""
 	}
 	return "", false
 }
@@ -58,12 +62,12 @@ func (a *API) createCheckout(response http.ResponseWriter, request *http.Request
 		Plan string `json:"plan"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "plan must be team_monthly, team_yearly or founding.")
+		writeError(response, http.StatusBadRequest, "invalid_request", "plan must be team_monthly, team_yearly, team25_monthly, team25_yearly or founding.")
 		return
 	}
 	product, ok := a.checkoutProduct(input.Plan)
 	if !ok {
-		writeError(response, http.StatusBadRequest, "invalid_request", "plan must be team_monthly, team_yearly or founding.")
+		writeError(response, http.StatusBadRequest, "invalid_request", "plan must be team_monthly, team_yearly, team25_monthly, team25_yearly or founding.")
 		return
 	}
 	who := principal(request)

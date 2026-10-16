@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"net/http"
 	"strings"
 	"testing"
@@ -56,7 +57,7 @@ func TestBillingFromOneWorkspaceNeverShowsAnothers(t *testing.T) {
 }
 
 func TestCheckoutUsesTheSessionsWorkspaceCustomerAndThePlansProduct(t *testing.T) {
-	for plan, product := range map[string]string{"team_monthly": productMonthly, "team_yearly": productYearly, "founding": productFounding} {
+	for plan, product := range map[string]string{"team_monthly": productMonthly, "team_yearly": productYearly, "founding": productFounding, "team25_monthly": productTeam25Monthly, "team25_yearly": productTeam25Yearly} {
 		t.Run(plan, func(t *testing.T) {
 			f := newBillingFixture(t)
 			response := request(t, f.api, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": plan}, f.adminA, nil)
@@ -158,6 +159,24 @@ func TestCheckoutRejectsUnknownPlans(t *testing.T) {
 	}
 	if calls := f.fake.recorded(); len(calls) != 0 {
 		t.Fatalf("invalid requests reached Polar: %v", calls)
+	}
+}
+
+func TestCheckoutTeam25NeedsItsProductsConfigured(t *testing.T) {
+	fake := newFakePolarAPI(t)
+	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
+		config.Billing = fake.config()
+		config.Billing.Products.Team25Monthly, config.Billing.Products.Team25Yearly = "", ""
+	})
+	admin := createSession(t, api, service, "Billing Alpha", "admin@billing-alpha.example.com")
+	for _, plan := range []string{"team25_monthly", "team25_yearly"} {
+		response := request(t, api, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": plan}, admin, nil)
+		if response.Code != http.StatusBadRequest {
+			t.Errorf("%s without a Polar product: status=%d body=%s, want 400 as for an unknown plan", plan, response.Code, response.Body.String())
+		}
+	}
+	if calls := fake.recorded(); len(calls) != 0 {
+		t.Fatalf("an unconfigured plan reached Polar: %v", calls)
 	}
 }
 
