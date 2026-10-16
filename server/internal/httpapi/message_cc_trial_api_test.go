@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -156,5 +157,87 @@ func TestTrialCopyRefusalNamesEveryRefusedAddress(t *testing.T) {
 	wantStatus(t, refusedContact, http.StatusForbidden, restrictedCode, "reply in an agent-started conversation")
 	if strings.Contains(refusedContact.Body, "refused_cc") {
 		t.Fatalf("a refusal about the contact names no Cc address: %s", refusedContact.Body)
+	}
+}
+
+// Anyone can post a delivery status report to the workspace's own inbound endpoint. Failing a reply
+// that already left must not hand its recipients back to the daily cap.
+func TestABouncedReplyStillCountsOnTheTrialCap(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	victims := make([]string, 10)
+	for i := range victims {
+		victims[i] = fmt.Sprintf("victim%d@elsewhere.example", i+1)
+	}
+	conversation := f.receiveCopied(t, strings.Join(victims, ", "))
+	var last string
+	for i := range 18 {
+		got := f.replyCopying(t, conversation, victims...)
+		if got.Code != http.StatusCreated {
+			t.Fatalf("reply %d: status=%d body=%s", i+1, got.Code, got.Body)
+		}
+		var created struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal([]byte(got.Body), &created); err != nil {
+			t.Fatal(err)
+		}
+		last = created.ID
+	}
+	if _, err := f.pool.Exec(context.Background(), `UPDATE email_outbox SET status='sent',sent_at=$2,attempts=1 WHERE workspace_id=$1`,
+		f.workspaceA, f.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	ourID := queryString(t, f.pool, `SELECT email_message_id FROM messages WHERE id=$1`, last)
+	inboundOK(t, f.api, f.secretA, mail([]string{
+		"From: Mail Delivery System <MAILER-DAEMON@mx.customer.example>", "Subject: Undelivered Mail Returned to Sender",
+		"Message-ID: <forged-dsn@mx.customer.example>", "MIME-Version: 1.0",
+		`Content-Type: multipart/report; report-type=delivery-status; boundary="r1"`,
+	}, "--r1\nContent-Type: message/delivery-status\n\nReporting-MTA: dns; mx.customer.example\n\n"+
+		"Final-Recipient: rfc822; customer1@customer.example\nAction: failed\nStatus: 5.1.1\n"+
+		"--r1\nContent-Type: text/rfc822-headers\n\nMessage-ID: <"+ourID+">\n--r1--\n"))
+	if status := queryString(t, f.pool, `SELECT status FROM email_outbox WHERE message_id=$1`, last); status != "failed" {
+		t.Fatalf("fixture: the forged report must fail the reply, status=%s", status)
+	}
+	if usage := f.usage(t, f.adminA); usage.Usage.RepliesLast24h != 198 {
+		t.Fatalf("usage.replies_last_24h=%d, want 198: a reply that left still reached its 11 people", usage.Usage.RepliesLast24h)
+	}
+	wantStatus(t, f.replyCopying(t, conversation, victims...), http.StatusTooManyRequests, limitCode, "a reply past 200 after a forged bounce")
+}
+
+// A retry sends the reply to everyone again, so it counts from the moment it is queued, on top of the
+// earlier send it repeats while that one is still in the window.
+func TestARetriedReplyCountsAgainFromItsOwnSendTime(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	conversation := f.receiveCopied(t, "boss@customer.example, ops@customer.example")
+	got := f.replyCopying(t, conversation, "boss@customer.example", "ops@customer.example")
+	if got.Code != http.StatusCreated {
+		t.Fatalf("reply: status=%d body=%s", got.Code, got.Body)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(got.Body), &created); err != nil {
+		t.Fatal(err)
+	}
+	bounce := func() {
+		t.Helper()
+		if _, err := f.pool.Exec(context.Background(), `UPDATE email_outbox SET status='failed',sent_at=$2,last_error='bounced' WHERE message_id=$1`,
+			created.ID, f.clock.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	start := f.clock.Now()
+	bounce()
+	f.clock.set(start.Add(23 * time.Hour))
+	if got := f.retry(t, conversation, created.ID); got.Code != http.StatusOK {
+		t.Fatalf("retry: status=%d body=%s", got.Code, got.Body)
+	}
+	if usage := f.usage(t, f.adminA); usage.Usage.RepliesLast24h != 6 {
+		t.Fatalf("after the retry usage=%d, want 6: the first send and the resend each reached 3 people", usage.Usage.RepliesLast24h)
+	}
+	bounce()
+	f.clock.set(start.Add(25 * time.Hour))
+	if usage := f.usage(t, f.adminA); usage.Usage.RepliesLast24h == 0 {
+		t.Fatal("two hours after the resend it must still count")
 	}
 }

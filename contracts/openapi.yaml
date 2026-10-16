@@ -363,7 +363,8 @@ paths:
         `To` recipient and is dropped from `cc`; our own support, forwarding and sending addresses are
         refused with 400, and so is `cc` on a note. In `multipart/form-data` send one `cc` field per
         address, before the files. On the trial, `cc` may name only addresses the customer wrote from or
-        copied (verified customer mail or imported history) unless the sending domain is verified;
+        copied (customer mail through the platform forwarder that did not fail authentication, or
+        imported history) unless the sending domain is verified;
         another address answers 403 `trial_outbound_restricted` with `refused_cc` listing every
         refused address, and nothing is stored. Each reply counts its contact and every `cc` address
         against the trial's 200 people a day. A retry of a

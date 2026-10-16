@@ -117,15 +117,22 @@ func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conve
 		return domain.Message{}, fmt.Errorf("%w: %s", ErrOutboundNotReady, reason)
 	}
 	now := s.now()
+	recipients := 1 + len(message.CC)
 	if trial, err := s.onTrial(ctx, tx, workspaceID, now); err != nil {
 		return domain.Message{}, err
 	} else if trial {
-		if err := s.checkTrialCap(ctx, tx, workspaceID, now, 1+len(message.CC)); err != nil {
+		if err := s.checkTrialCap(ctx, tx, workspaceID, now, recipients); err != nil {
 			return domain.Message{}, err
 		}
 	}
+	// The resend reaches everyone again, so it counts from now. While the earlier send of the row is
+	// still in the cap window its people stay counted with it; the total then lasts a full window from
+	// the resend, which errs on counting too much, never too little.
 	result, err := tx.Exec(ctx, `UPDATE email_outbox SET status='queued',attempts=0,next_attempt_at=now(),locked_until=NULL,
-		claim_token=NULL,last_error=NULL,updated_at=now() WHERE workspace_id=$1 AND message_id=$2 AND status='failed'`, workspaceID, messageID)
+		claim_token=NULL,last_error=NULL,updated_at=now(),
+		recipients=CASE WHEN sent_at IS NOT NULL AND created_at > $4 THEN recipients + $5 ELSE $5 END, created_at=$3
+		WHERE workspace_id=$1 AND message_id=$2 AND status='failed'`,
+		workspaceID, messageID, now, now.Add(-domain.TrialReplyWindow), recipients)
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("retry delivery: %w", err)
 	}

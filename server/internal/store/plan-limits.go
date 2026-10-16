@@ -74,9 +74,15 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 	return nil
 }
 
-// recipientsInWindow sums the people reached by the deliveries that use up the trial's daily cap:
-// the contact plus every Cc address of each reply. Failed deliveries never left and do not count.
-const recipientsInWindow = `SELECT COALESCE(sum(recipients),0) FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND status <> 'failed'`
+// countedDelivery is a delivery that uses up the trial's daily cap: queued, sent, or failed after it
+// was handed to the relay (sent_at set). A delivery report can fail a reply that already reached its
+// people, and anyone can post one to the workspace's inbound address, so a later failure never gives
+// them back. Only a delivery that failed before leaving does not count.
+const countedDelivery = `(status <> 'failed' OR sent_at IS NOT NULL)`
+
+// recipientsInWindow sums the people reached by the counted deliveries in the window: the contact plus
+// every Cc address of each reply.
+const recipientsInWindow = `SELECT COALESCE(sum(recipients),0) FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND ` + countedDelivery
 
 // customerWroteFirst is true for a conversation that holds a message from the customer: an
 // imported one, or inbound mail that came through the platform forwarder and whose authentication
@@ -145,7 +151,7 @@ func (s *Store) checkTrialCap(ctx context.Context, tx pgx.Tx, workspaceID string
 	var frees time.Time
 	if err := tx.QueryRow(ctx, `SELECT created_at FROM (
 			SELECT created_at, sum(recipients) OVER (ORDER BY created_at DESC, id ROWS UNBOUNDED PRECEDING) AS total
-			FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND status <> 'failed') counted
+			FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND `+countedDelivery+`) counted
 		WHERE total > $3 ORDER BY total LIMIT 1`, workspaceID, windowStart, room).Scan(&frees); err != nil {
 		return fmt.Errorf("find next free slot: %w", err)
 	}
