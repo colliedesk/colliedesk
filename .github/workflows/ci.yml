@@ -46,6 +46,8 @@ jobs:
         run: sh tests/release-tag-test.sh
       - name: Release button picks the Cloud commit and the next tag
         run: sh tests/release-next-test.sh
+      - name: Roadmap gate rules (stubbed issue lookup)
+        run: python3 -I tests/roadmap-check-test.py
       - name: Mail pipe wrapper exit codes
         run: sh tests/mail-pipe-test.sh
       - name: MTA recipient policy answers
@@ -242,9 +244,23 @@ jobs:
     with:
       upload-sarif: false
 
+  # ROADMAP.md is read by people deciding whether to move to Colliedesk: every linked item must be
+  # an open issue labelled for its section (.github/scripts/roadmap-check.py).
+  roadmap:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: ROADMAP.md matches the issue tracker
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I .github/scripts/roadmap-check.py ROADMAP.md
+
   ci-ok:
     if: ${{ !cancelled() }}
-    needs: [go, web, e2e, onboarding, image, compose-smoke, osv-scan]
+    needs: [go, web, e2e, onboarding, image, compose-smoke, osv-scan, roadmap]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

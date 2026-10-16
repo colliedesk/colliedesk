@@ -1,0 +1,32 @@
+name: Issue labels
+
+# Keeps the triage labels that ROADMAP.md and the issue templates rely on.
+# needs-triage: new, not looked at. accepted: belongs in Colliedesk, not scheduled.
+# planned: on ROADMAP.md under Next or Then (enforced by the roadmap job in ci.yml).
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/issue-labels.yml
+      - .github/ISSUE_TEMPLATE/**
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create or update managed labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          label() { gh label create "$1" --repo "$REPO" --color "$2" --description "$3" --force; }
+          label bug d73a4a "Something does not work as documented."
+          label enhancement a2eeef "New capability or improvement."
+          label needs-triage fbca04 "New; a maintainer has not looked at it yet."
+          label accepted 0e8a16 "We agree it belongs in Colliedesk; not scheduled yet."
+          label planned 1d76db "On ROADMAP.md under Next or Then; we intend to ship it."

@@ -1,5 +1,11 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Feature idea
+    url: https://github.com/colliedesk/colliedesk/discussions/categories/ideas
+    about: Share an idea or upvote an existing one in Discussions. Ideas we agree with become issues.
+  - name: Question
+    url: https://github.com/colliedesk/colliedesk/discussions/categories/q-a
+    about: Ask how to install, import or use Colliedesk.
   - name: Report a security vulnerability
     url: https://github.com/colliedesk/colliedesk/security/advisories/new
     about: Report privately. Do not open a public issue for a security problem.
