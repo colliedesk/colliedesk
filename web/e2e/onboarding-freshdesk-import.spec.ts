@@ -19,7 +19,8 @@ interface Report {
   messages: { source: number; imported: number };
   attachments: { source: number; imported: number; source_bytes: number; imported_bytes: number; checksum_verified: number };
   time_entries: { source: number; imported: number };
-  verification: { tickets: { verified: boolean; detail: string }; contacts: { verified: boolean } };
+  saved_replies: { source: number; imported: number; failed: number; not_available: boolean; personal_not_imported: string[]; unmapped_placeholders: Record<string, string[]> };
+  verification: { tickets: { verified: boolean; detail: string }; contacts: { verified: boolean }; saved_replies: { verified: boolean } };
   failures: unknown[];
 }
 
@@ -61,8 +62,13 @@ test('freshdesk import: reconcile OK with exact counts, tickets searchable with 
       messages: { source: 960, imported: 960 },
       attachments: { source: 40, imported: 40, checksum_verified: 40 },
       time_entries: { source: 15, imported: 15 },
-      verification: { tickets: { verified: true }, contacts: { verified: true } },
+      verification: { tickets: { verified: true }, contacts: { verified: true }, saved_replies: { verified: true } },
+      // The personal folder is listed, not imported; a placeholder Colliedesk has no variable for is reported.
+      saved_replies: { source: fixture.savedReplies, imported: fixture.savedReplies, failed: 0, not_available: false, personal_not_imported: ['9103'], unmapped_placeholders: { 'ticket.url': ['9102'] } },
     });
+    const savedReplies = await (await page.request.get(`${baseURL}/api/v1/saved-replies`)).json() as { items: Array<{ title: string; body: string }> };
+    expect(savedReplies.items.map((item) => item.title)).toEqual(['General / Greeting', 'General / Track your parcel']);
+    expect(savedReplies.items[0].body).toBe('Hi {{customer.name}}, thanks for writing.\n{{agent.name}}');
     expect(first.report?.attachments.imported_bytes).toBe(first.report?.attachments.source_bytes);
     expect(fake.count(`/api/v2/tickets/archived/${fixture.archivedTicket}/conversations`)).toBeGreaterThanOrEqual(1);
 
@@ -105,16 +111,33 @@ test('freshdesk import: reconcile OK with exact counts, tickets searchable with 
     const preview = colliedesk(['import', 'undo', '--workspace', workspace.slug, '--dry-run']);
     expect(preview.status, preview.stderr).toBe(0);
     expect(Date.now() - startedUndo, 'undo --dry-run right after an import').toBeLessThan(10_000);
-    expect(preview.stdout).toContain('Would remove from freshdesk:account:4242: 299 conversations, 119 contacts, 2 tags, 40 stored files.');
+    expect(preview.stdout).toContain('Would remove from freshdesk:account:4242: 299 conversations, 119 contacts, 2 tags, 2 saved replies, 40 stored files.');
     const undo = colliedesk(['import', 'undo', '--workspace', workspace.slug]);
     expect(undo.status, undo.stderr).toBe(0);
-    expect(undo.stdout).toContain('Removed from freshdesk:account:4242: 299 conversations, 119 contacts, 2 tags, 40 stored files.');
+    expect(undo.stdout).toContain('Removed from freshdesk:account:4242: 299 conversations, 119 contacts, 2 tags, 2 saved replies, 40 stored files.');
     expect(undo.stdout).toContain('(Freshdesk ticket ids): 42');
+    expect((await (await page.request.get(`${baseURL}/api/v1/saved-replies`)).json() as { items: unknown[] }).items).toEqual([]);
 
     const left = await (await page.request.get(`${baseURL}/api/v1/conversations?page_size=100`)).json() as { items: Array<{ subject: string }> };
     expect(left.items.map((item) => item.subject).sort()).toEqual([`Fixture ticket 42: parcel stuck in ${fixture.searchableWord}`, `Pre-import ${suffix}`]);
     const contacts = await (await page.request.get(`${baseURL}/api/v1/contacts`)).json() as { items: Array<{ email: string }> };
     expect(contacts.items.map((item) => item.email).sort()).toEqual(['customer42@shop6.example', `walkin-${suffix}@example.com`]);
+  } finally {
+    await fake.stop();
+  }
+});
+
+test('freshdesk import: an account without canned responses still migrates its tickets and says so', { tag: '@onboarding' }, async () => {
+  test.setTimeout(180_000);
+  const suffix = uniqueSuffix();
+  const workspace = createWorkspaceWithSlug(`No Canned ${suffix}`, `alice-${suffix}@acme.example`);
+  const fake = new FakeFreshdesk({ apiKey, agentEmail: `alice-${suffix}@acme.example`, cannedUnavailable: true });
+  await fake.start();
+  try {
+    const run = await importFreshdesk(fake, workspace.slug);
+    expect(run.status, run.stderr).toBe(0);
+    expect(run.stdout).toContain('Status: OK');
+    expect(run.report).toMatchObject({ status: 'OK', saved_replies: { source: 0, imported: 0, not_available: true }, verification: { saved_replies: { verified: true } } });
   } finally {
     await fake.stop();
   }

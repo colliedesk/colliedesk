@@ -5,6 +5,7 @@ import { InboxPage } from './inbox-page';
 const conversation = {
   id: '11111111-1111-4111-8111-111111111111',
   contact_id: '22222222-2222-4222-8222-222222222222',
+  contact_name: 'Mai Linh',
   subject: 'Example request',
   status: 'open' as const,
   priority: 'normal' as const,

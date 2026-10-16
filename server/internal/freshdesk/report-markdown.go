@@ -2,6 +2,7 @@ package freshdesk
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -38,7 +39,7 @@ func (r *Report) Markdown() string {
 	for _, row := range []struct {
 		name  string
 		count EntityCount
-	}{{"Contacts", r.Contacts}, {"Tickets", r.Tickets.EntityCount}, {"Messages", r.Messages}, {"Attachments", r.Attachments.EntityCount}, {"Time entries", r.TimeEntries}} {
+	}{{"Contacts", r.Contacts}, {"Tickets", r.Tickets.EntityCount}, {"Messages", r.Messages}, {"Attachments", r.Attachments.EntityCount}, {"Time entries", r.TimeEntries}, {"Saved replies", r.SavedReplies.EntityCount}} {
 		fmt.Fprintf(&b, "| %s | %d | %d | %d |\n", row.name, row.count.Source, row.count.Imported, row.count.Failed)
 	}
 	fmt.Fprintf(&b, "\nAttachment bytes: %d in Freshdesk, %d stored. SHA-256 re-verified from storage: %d.\n",
@@ -54,13 +55,18 @@ func (r *Report) Markdown() string {
 	if n := len(r.Tickets.UnresolvedIDs); n > 0 {
 		fmt.Fprintf(&b, "Ticket ids unresolved: %d (listed below). Each may be deleted or archived in Freshdesk.\n", n)
 	}
+	if r.SavedReplies.NotAvailable {
+		b.WriteString("Saved replies: Canned responses are not available on this Freshdesk account, so none were imported. This does not affect the ticket import.\n")
+	}
+	fmt.Fprintf(&b, "Saved replies: %d canned response folders; %d canned responses had no text and were skipped; %d files on canned responses were not imported.\n",
+		r.SavedReplies.Folders, len(r.SavedReplies.EmptySkipped), r.SavedReplies.AttachmentsNotImported)
 	fmt.Fprintf(&b, "Rate limiting: %d pause(s) after X-Ratelimit-Remaining 0, %d HTTP 429 response(s), %s waited in total.\n",
 		r.RateLimit.Pauses, r.RateLimit.Throttled, (time.Duration(r.RateLimit.WaitSeconds * float64(time.Second))).Round(time.Second))
 	b.WriteString("\n## How the totals were verified\n\n")
 	for _, row := range []struct {
 		name string
 		v    Verification
-	}{{"Tickets", r.Verification.Tickets}, {"Contacts", r.Verification.Contacts}} {
+	}{{"Tickets", r.Verification.Tickets}, {"Contacts", r.Verification.Contacts}, {"Saved replies", r.Verification.SavedReplies}} {
 		verdict := "verified"
 		if !row.v.Verified {
 			verdict = "NOT verified"
@@ -78,6 +84,10 @@ func (r *Report) Markdown() string {
 			fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", failure.Entity, failure.FreshdeskID, failure.TicketID, strings.ReplaceAll(failure.Error, "|", "/"))
 		}
 	}
+	writeList(&b, "Canned responses with no text, not imported (Freshdesk ids)", r.SavedReplies.EmptySkipped)
+	writeList(&b, "Canned responses in personal folders, not imported (Freshdesk ids; run again with --include-personal-canned-responses to share them)", r.SavedReplies.PersonalNotImported)
+	writeList(&b, "Canned responses whose files were not imported (Freshdesk ids)", r.SavedReplies.ResponsesWithAttachments)
+	writeList(&b, "Freshdesk placeholders left as written in saved replies (canned response ids)", placeholderLines(r.SavedReplies.UnmappedPlaceholders))
 	writeList(&b, "Ticket ids that could not be resolved (archive unavailable)", r.Tickets.UnresolvedIDs)
 	writeList(&b, "Deleted in Freshdesk during the import (ticket ids)", r.Tickets.DeletedAtSource)
 	writeList(&b, "In Freshdesk Trash, not imported (ticket ids)", r.Tickets.Trashed)
@@ -114,4 +124,17 @@ func idSuffix(ids []string) string {
 		return fmt.Sprintf(" (ids: %s, … %d more in JSON)", strings.Join(ids[:20], ", "), len(ids)-20)
 	}
 	return " (ids: " + strings.Join(ids, ", ") + ")"
+}
+
+func placeholderLines(placeholders map[string][]string) []string {
+	names := make([]string, 0, len(placeholders))
+	for name := range placeholders {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	lines := make([]string, 0, len(names))
+	for _, name := range names {
+		lines = append(lines, "{{"+name+"}}"+idSuffix(placeholders[name]))
+	}
+	return lines
 }

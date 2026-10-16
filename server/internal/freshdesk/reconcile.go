@@ -24,7 +24,7 @@ func (r *run) reconcile(ctx context.Context, report *Report) (*Report, error) {
 	report.Tickets.HighestID, report.Tickets.HighestProbedID, report.Tickets.ProbedIDs = r.highestExisting, r.highestProbed, r.probed
 	report.Verification = r.verification
 	report.RateLimit = r.client.rateLimitStats()
-	steps := []func(context.Context, *Report, []string, []string) error{r.countTickets, r.countChildren, r.collectFailures}
+	steps := []func(context.Context, *Report, []string, []string) error{r.countTickets, r.countChildren, r.collectFailures, r.countSavedReplies}
 	if !r.opts.DryRun {
 		// Verify first: a damaged file turns its ledger rows back to failed.
 		steps = append([]func(context.Context, *Report, []string, []string) error{r.verifyAttachments}, steps...)
@@ -41,7 +41,7 @@ func (r *run) reconcile(ctx context.Context, report *Report) (*Report, error) {
 		report.Status = StatusDryRun
 	case len(report.Missing) > 0 || len(report.Failures) > 0:
 		report.Status = StatusFailed
-	case !report.Verification.Tickets.Verified || !report.Verification.Contacts.Verified:
+	case !report.Verification.Tickets.Verified || !report.Verification.Contacts.Verified || !report.Verification.SavedReplies.Verified:
 		report.Status = StatusUnverified
 	default:
 		report.Status = StatusOK
@@ -190,7 +190,7 @@ func missing(report *Report) []string {
 		name  string
 		count EntityCount
 	}{{"contacts", report.Contacts}, {"tickets", report.Tickets.EntityCount}, {"messages", report.Messages},
-		{"attachments", report.Attachments.EntityCount}, {"time entries", report.TimeEntries}} {
+		{"attachments", report.Attachments.EntityCount}, {"time entries", report.TimeEntries}, {"saved replies", report.SavedReplies.EntityCount}} {
 		if !report.DryRun && row.count.Imported < row.count.Source {
 			out = append(out, fmt.Sprintf("%s: %d of %d not imported", row.name, row.count.Source-row.count.Imported, row.count.Source))
 		}
@@ -202,4 +202,47 @@ func missing(report *Report) []string {
 		out = append(out, fmt.Sprintf("attachments: %d stored files no longer match their recorded SHA-256", n))
 	}
 	return out
+}
+
+// countSavedReplies reports the canned responses the run saw against the ledger, and adds the
+// failed ones (and unreadable folders) to the failures.
+func (r *run) countSavedReplies(ctx context.Context, report *Report, _, _ []string) error {
+	ids := uniqueSorted(r.cannedIDs)
+	report.SavedReplies = SavedReplyCount{Folders: r.cannedFolders, NotAvailable: r.cannedUnavailable, EmptySkipped: uniqueSorted(r.cannedEmpty), PersonalNotImported: uniqueSorted(r.cannedPersonal),
+		AttachmentsNotImported: r.cannedAttachments, ResponsesWithAttachments: uniqueSorted(r.cannedWithFiles), UnmappedPlaceholders: map[string][]string{}}
+	report.SavedReplies.Source = len(ids)
+	for name, used := range r.cannedPlaceholders {
+		report.SavedReplies.UnmappedPlaceholders[name] = uniqueSorted(used)
+	}
+	if report.Failures == nil {
+		report.Failures = []Failure{}
+	}
+	if r.cannedListError != "" {
+		report.Failures = append(report.Failures, Failure{Entity: entityCannedFolder, FreshdeskID: "all", Error: r.cannedListError})
+	}
+	tx, err := r.begin(ctx)
+	if err != nil {
+		return fmt.Errorf("reconcile saved replies: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // read only
+	rows, err := tx.Query(ctx, `SELECT entity,source_id,status,error FROM import_items WHERE workspace_id=$1 AND source=$2
+		AND ((entity=$3 AND source_id=ANY($4)) OR (entity=$5 AND source_id=ANY($6) AND status='failed'))
+		ORDER BY entity,length(source_id),source_id`, r.workspaceID, r.ledger.source, entitySavedReply, ids, entityCannedFolder, r.cannedUnreadable)
+	if err != nil {
+		return fmt.Errorf("reconcile saved replies: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var entity, id, status, message string
+		if err := rows.Scan(&entity, &id, &status, &message); err != nil {
+			return fmt.Errorf("reconcile saved replies: %w", err)
+		}
+		if entity == entitySavedReply {
+			addStatus(&report.SavedReplies.EntityCount, status)
+		}
+		if status == ledgerFailed {
+			report.Failures = append(report.Failures, Failure{Entity: entity, FreshdeskID: id, Error: message})
+		}
+	}
+	return rows.Err()
 }

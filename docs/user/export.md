@@ -51,6 +51,7 @@ not match its recorded checksum, it aborts the download. You then get a broken Z
 | `agents.ndjson` | One agent per line: `id`, `email`, `display_name`, `role`, `timezone_override`, `created_at`, `deactivated_at` (`null` for an active agent) |
 | `contacts.ndjson` | One contact per line: `id`, `name`, `email`, `organization`, `created_at`, `updated_at` |
 | `tags.ndjson` | One tag per line: `id`, `name`, `color`, `created_at` |
+| `saved-replies.ndjson` | One saved reply per line: `id`, `title`, `body`, `created_by_agent_id` (an agent id or `null`), `created_at`, `updated_at`. The body keeps the variables `{{customer.name}}` and `{{agent.name}}` unfilled |
 | `conversations.ndjson` | One conversation per line, with its messages and time entries |
 | `attachments/<attachment id>/<file name>` | The original bytes of each attachment |
 

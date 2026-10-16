@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   createInvite: vi.fn(), revokeInvite: vi.fn(), revokeSession: vi.fn(), updateWorkspaceTimezone: vi.fn(), updateAgentTimezone: vi.fn(),
   saveEmailChannel: vi.fn(), updateWorkspaceSlug: vi.fn(), rotateEmailSecret: vi.fn(), verifyEmailDomain: vi.fn(), disconnectEmailChannel: vi.fn(),
   exportWorkspace: vi.fn(), webForm: vi.fn(), saveWebForm: vi.fn(),
+  savedReplies: vi.fn(), createSavedReply: vi.fn(), updateSavedReply: vi.fn(), deleteSavedReply: vi.fn(),
 }));
 vi.mock('../../api/client', () => ({ api, PlanLimitError: class extends Error {}, InvalidRequestError: class extends Error {} }));
 
@@ -28,6 +29,7 @@ function show(role: 'admin' | 'agent') {
   api.agents.mockResolvedValue({ items: [teammate(SAM, 'sam@example.com', { role }), teammate(ANN, 'ann@example.com', { open_conversations: 1 })] });
   api.updateAgent.mockResolvedValue(teammate(ANN, 'ann@example.com', { deactivated_at: '2026-10-15T10:00:00Z' }));
   api.sessions.mockResolvedValue({ items: [] });
+  api.savedReplies.mockResolvedValue({ items: [] });
   api.invites.mockResolvedValue({ items: [] });
   api.webForm.mockResolvedValue({ enabled: false, allowed_origins: [], submit_path: '/api/v1/public/forms/beta-desk' });
   api.emailChannel.mockResolvedValue({ channel: null, inbound_url: 'https://desk.example.com/x', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null });
@@ -96,4 +98,24 @@ test('Settings shows the loading status until its data arrives', async () => {
   api.me.mockReturnValue(new Promise(() => {}));
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><SettingsRoute /></QueryClientProvider>);
   expect(screen.getAllByRole('status')[0]).toHaveTextContent('Loading workspace…');
+});
+
+test('a plain agent manages the shared saved replies and the list reloads after each change', async () => {
+  const stored = { id: '88888888-8888-4888-8888-888888888888', title: 'Closing', body: 'Thanks.', created_by_agent_id: null, created_at: '2026-10-15T00:00:00Z', updated_at: '2026-10-15T00:00:00Z' };
+  show('agent');
+  api.createSavedReply.mockResolvedValue(stored);
+  api.deleteSavedReply.mockResolvedValue(undefined);
+  await screen.findByRole('heading', { name: 'Saved replies' });
+  expect(screen.getByRole('button', { name: 'Add saved reply' })).toBeInTheDocument();
+  api.savedReplies.mockResolvedValue({ items: [stored] });
+  fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Closing' } });
+  fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Thanks.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add saved reply' }));
+  await waitFor(() => expect(api.createSavedReply).toHaveBeenCalledWith('Closing', 'Thanks.'));
+  expect(await screen.findByText('Thanks.')).toBeInTheDocument();
+  api.savedReplies.mockResolvedValue({ items: [] });
+  fireEvent.click(screen.getByRole('button', { name: 'Delete Closing' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+  await waitFor(() => expect(api.deleteSavedReply).toHaveBeenCalledWith(stored.id));
+  expect(await screen.findByText('No saved replies yet.')).toBeInTheDocument();
 });

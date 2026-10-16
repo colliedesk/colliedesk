@@ -39,6 +39,16 @@ type Tag struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// SavedReply is a reply the team shares; its body may hold the variables {{customer.name}} and {{agent.name}}.
+type SavedReply struct {
+	ID               string    `json:"id"`
+	Title            string    `json:"title"`
+	Body             string    `json:"body"`
+	CreatedByAgentID *string   `json:"created_by_agent_id"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
 // Attachment describes one file. Path is its location in the archive; StorageKey is where the
 // server reads the bytes from and never leaves the server.
 type Attachment struct {
@@ -89,13 +99,14 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// Tag*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// Tag*, SavedReply*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
 	Agent(Agent) error
 	Contact(Contact) error
 	Tag(Tag) error
+	SavedReply(SavedReply) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error
 	EndConversation(timeEntries []domain.TimeEntry) error

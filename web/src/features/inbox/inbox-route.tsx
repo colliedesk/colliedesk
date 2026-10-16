@@ -29,6 +29,8 @@ export function InboxRoute() {
     placeholderData: keepPreviousData });
   const agents = useQuery({ queryKey: ['agents'], queryFn: api.agents });
   const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags });
+  // Fetched once and shared with Settings, so the picker opens from memory.
+  const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
   const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
   // Shared with the app shell, so the limits cost no extra request.
   const limits = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data?.limits;
@@ -79,6 +81,10 @@ export function InboxRoute() {
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body, files) => message.mutateAsync({ kind, body, files })}
+    savedReplies={savedReplies.data?.items} customerName={selected?.contact_name} agentName={me.data?.agent?.display_name}
+    savedRepliesState={savedReplies.isPending ? 'loading' : savedReplies.isError ? 'failed' : 'ready'}
+    // A new tab, so the draft and the files in this reply box stay where they are.
+    onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
     outboundNotice={outboundNotice} deliveryNotice={retryError ? retryRefusalText(retryError) : undefined} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}

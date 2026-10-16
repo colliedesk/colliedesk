@@ -22,3 +22,4 @@ export const ArrowUpIcon = () => <Icon><path d="M12 19V5M5 12l7-7 7 7" /></Icon>
 export const ReplyIcon = () => <Icon><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></Icon>;
 export const FilterIcon = () => <Icon><path d="M3 6h18M7 12h10M10 18h4" /></Icon>;
 export const XIcon = () => <Icon><path d="M18 6 6 18M6 6l12 12" /></Icon>;
+export const BookmarkIcon = () => <Icon><path d="M19 21 12 16 5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z" /></Icon>;

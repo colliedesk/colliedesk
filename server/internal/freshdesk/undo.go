@@ -21,10 +21,13 @@ type UndoOptions struct {
 }
 
 type UndoResult struct {
-	Source                  string   `json:"source"`
-	Conversations           int      `json:"conversations"`
-	Contacts                int      `json:"contacts"`
-	Tags                    int      `json:"tags"`
+	Source        string `json:"source"`
+	Conversations int    `json:"conversations"`
+	Contacts      int    `json:"contacts"`
+	Tags          int    `json:"tags"`
+	SavedReplies  int    `json:"saved_replies"`
+	// KeptSavedReplies are the Freshdesk ids of imported saved replies an agent edited since; they stay.
+	KeptSavedReplies        []string `json:"kept_saved_replies"`
 	Files                   int      `json:"files"`
 	KeptConversationTickets []string `json:"kept_conversation_tickets"`
 }
@@ -38,6 +41,7 @@ const targetExists = `CASE i.entity
 	WHEN 'time_entry' THEN EXISTS(SELECT 1 FROM time_entries x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'contact' THEN EXISTS(SELECT 1 FROM contacts x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'tag' THEN EXISTS(SELECT 1 FROM tags x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
+	WHEN 'saved_reply' THEN EXISTS(SELECT 1 FROM saved_replies x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	ELSE false END`
 
 // Undo removes what one import created in a workspace: its conversations
@@ -58,7 +62,7 @@ func Undo(ctx context.Context, pool *pgxpool.Pool, storage attachments.Storage, 
 	defer release()
 	// Undo usually follows an import within minutes, before autovacuum has analyzed the rows it
 	// wrote; with stale statistics the keep query below took 37 s for a 300-ticket import.
-	if err := db.RefreshStatistics(ctx, "import_items", "conversations", "messages", "attachments", "contacts", "tags", "conversation_tags", "time_entries"); err != nil {
+	if err := db.RefreshStatistics(ctx, "import_items", "conversations", "messages", "attachments", "contacts", "tags", "conversation_tags", "time_entries", "saved_replies"); err != nil {
 		return UndoResult{}, err
 	}
 	tx, err := db.BeginWorkspace(ctx, workspaceID)
@@ -115,7 +119,7 @@ func undoSource(ctx context.Context, tx pgx.Tx, workspaceID, requested string) (
 }
 
 func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoResult, []string, error) {
-	result := UndoResult{Source: source, KeptConversationTickets: []string{}}
+	result := UndoResult{Source: source, KeptConversationTickets: []string{}, KeptSavedReplies: []string{}}
 	rows, err := tx.Query(ctx, `SELECT i.source_id FROM import_items i JOIN conversations c ON c.workspace_id=i.workspace_id AND c.id=i.target_id
 		WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='ticket' AND EXISTS (
 			SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND NOT EXISTS (
@@ -127,6 +131,15 @@ func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoR
 	if result.KeptConversationTickets, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
 		return result, nil, fmt.Errorf("find conversations to keep: %w", err)
 	}
+	rows, err = tx.Query(ctx, `SELECT i.source_id FROM import_items i JOIN saved_replies s ON s.workspace_id=i.workspace_id AND s.id=i.target_id
+		WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='saved_reply' AND s.updated_at > s.created_at
+		ORDER BY length(i.source_id),i.source_id`, workspaceID, source)
+	if err != nil {
+		return result, nil, fmt.Errorf("find saved replies to keep: %w", err)
+	}
+	if result.KeptSavedReplies, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
+		return result, nil, fmt.Errorf("find saved replies to keep: %w", err)
+	}
 	steps := []struct {
 		count *int
 		sql   string
@@ -137,6 +150,8 @@ func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoR
 		{&result.Contacts, `DELETE FROM contacts c USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='contact'
 			AND (i.meta->>'created')::boolean AND c.workspace_id=i.workspace_id AND c.id=i.target_id
 			AND NOT EXISTS (SELECT 1 FROM conversations v WHERE v.workspace_id=c.workspace_id AND v.contact_id=c.id)`, []any{workspaceID, source}},
+		{&result.SavedReplies, `DELETE FROM saved_replies s USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='saved_reply'
+			AND s.workspace_id=i.workspace_id AND s.id=i.target_id AND i.source_id <> ALL($3)`, []any{workspaceID, source, result.KeptSavedReplies}},
 		{&result.Tags, `DELETE FROM tags t USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='tag'
 			AND (i.meta->>'created')::boolean AND t.workspace_id=i.workspace_id AND t.id=i.target_id
 			AND NOT EXISTS (SELECT 1 FROM conversation_tags ct WHERE ct.workspace_id=t.workspace_id AND ct.tag_id=t.id)`, []any{workspaceID, source}},

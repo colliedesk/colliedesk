@@ -42,6 +42,10 @@ export const teamMemberSchema = z.object({
   role: roleSchema, timezone_override: z.string().nullable(),
   deactivated_at: z.string().datetime().nullable(), last_active_at: z.string().datetime().nullable(), open_conversations: z.number().int(),
 }) satisfies z.ZodType<Generated<'TeamMember'>>;
+export const savedReplySchema = z.object({
+  id: z.string().uuid(), title: z.string(), body: z.string(), created_by_agent_id: z.string().uuid().nullable(),
+  created_at: z.string().datetime(), updated_at: z.string().datetime(),
+}) satisfies z.ZodType<Generated<'SavedReply'>>;
 export const tagSchema = z.object({ id: z.string().uuid(), name: z.string(), color: z.string() }) satisfies z.ZodType<Generated<'Tag'>>;
 export const contactSchema = z.object({
   id: z.string().uuid(), name: z.string(), email: z.string().email(), organization: z.string().nullable(),
@@ -62,7 +66,7 @@ export const timeEntrySchema = z.object({
   minutes: z.number().int().nonnegative(), note: z.string(), billable: z.boolean(), executed_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TimeEntry'>>;
 export const conversationSchema = z.object({
-  id: z.string().uuid(), contact_id: z.string().uuid(), subject: z.string(),
+  id: z.string().uuid(), contact_id: z.string().uuid(), contact_name: z.string(), subject: z.string(),
   status: statusSchema, priority: prioritySchema, assignee_id: z.string().uuid().nullable(),
   tags: z.array(tagSchema), origin: conversationOriginSchema.nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'Conversation'>>;
@@ -129,6 +133,7 @@ export const messageListSchema = z.object({ items: z.array(messageSchema) }) sat
 export const contactListSchema = z.object({ items: z.array(contactSchema) }) satisfies z.ZodType<JsonResponse<'listContacts', 200>>;
 export const agentListSchema = z.object({ items: z.array(teamMemberSchema) }) satisfies z.ZodType<JsonResponse<'listAgents', 200>>;
 export const timeEntryListSchema = z.object({ items: z.array(timeEntrySchema) }) satisfies z.ZodType<JsonResponse<'listTimeEntries', 200>>;
+export const savedReplyListSchema = z.object({ items: z.array(savedReplySchema) }) satisfies z.ZodType<JsonResponse<'listSavedReplies', 200>>;
 export const bulkUpdateResultSchema = z.object({ updated: z.number().int() }) satisfies z.ZodType<JsonResponse<'bulkUpdateConversations', 200>>;
 export const tagListSchema = z.object({ items: z.array(tagSchema) }) satisfies z.ZodType<JsonResponse<'listTags', 200>>;
 
@@ -149,3 +154,4 @@ export type EmailChannelSettings = Generated<'EmailChannelSettings'>;
 export type WebFormSettings = Generated<'WebFormSettings'>;
 export type Session = Generated<'Session'>;
 export type Tag = Generated<'Tag'>;
+export type SavedReply = Generated<'SavedReply'>;

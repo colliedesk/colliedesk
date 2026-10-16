@@ -58,8 +58,28 @@ type Verification struct {
 }
 
 type Verifications struct {
-	Tickets  Verification `json:"tickets"`
-	Contacts Verification `json:"contacts"`
+	Tickets      Verification `json:"tickets"`
+	Contacts     Verification `json:"contacts"`
+	SavedReplies Verification `json:"saved_replies"`
+}
+
+// SavedReplyCount counts canned responses. A response with no text is not counted in Source: it is
+// listed in EmptySkipped, so the counts stay comparable.
+type SavedReplyCount struct {
+	EntityCount
+	Folders int `json:"folders"`
+	// NotAvailable is true when the Freshdesk account has no canned responses to read (the folder
+	// list answered 403 or 404). That is a fact about the account, not a failure of the import.
+	NotAvailable bool     `json:"not_available"`
+	EmptySkipped []string `json:"empty_skipped"`
+	// PersonalNotImported are canned responses in personal folders, left out unless asked for.
+	PersonalNotImported []string `json:"personal_not_imported"`
+	// AttachmentsNotImported counts files on canned responses; saved replies carry none.
+	AttachmentsNotImported   int      `json:"attachments_not_imported"`
+	ResponsesWithAttachments []string `json:"responses_with_attachments"`
+	// UnmappedPlaceholders maps a Freshdesk placeholder with no Colliedesk equivalent to the canned
+	// responses holding it; it stays in the text as written.
+	UnmappedPlaceholders map[string][]string `json:"unmapped_placeholders"`
 }
 
 type AttachmentCount struct {
@@ -112,6 +132,7 @@ type Report struct {
 	Messages     EntityCount     `json:"messages"`
 	Attachments  AttachmentCount `json:"attachments"`
 	TimeEntries  EntityCount     `json:"time_entries"`
+	SavedReplies SavedReplyCount `json:"saved_replies"`
 	Verification Verifications   `json:"verification"`
 	RateLimit    RateLimitStats  `json:"rate_limit"`
 	Missing      []string        `json:"missing"`
@@ -146,7 +167,8 @@ var notImported = []string{
 	"Contact phone numbers, other emails, addresses, job titles and social handles",
 	"Companies other than their name (domains, notes, custom fields)",
 	"Message structured_body, support_email, notified_to and edit history (last_edited_*)",
-	"Satisfaction ratings, SLA policies, canned responses, automations",
+	"Satisfaction ratings, SLA policies, automations",
+	"Files attached to canned responses (saved replies hold text only; the report lists the canned responses that had files)",
 	"Solution (knowledge base) articles",
 	"Inline images inside message HTML stay links to Freshdesk; the original HTML is kept (see warnings)",
 	"Tickets in Freshdesk Trash or Spam (listed by id in this report)",

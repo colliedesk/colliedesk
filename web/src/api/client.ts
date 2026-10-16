@@ -8,7 +8,7 @@ import {
   agentListSchema, agentSchema, contactDetailSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, emailChannelSettingsSchema, inboundSecretSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, messageListSchema, messageSchema, timeEntryListSchema,
-  billingLinkSchema, bulkUpdateResultSchema, billingSchema, publicConfigSchema, redeemedSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
+  billingLinkSchema, bulkUpdateResultSchema, billingSchema, publicConfigSchema, redeemedSchema, savedReplyListSchema, savedReplySchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
 import type { WorkspaceChoice } from './schemas';
 
@@ -55,10 +55,19 @@ export class ConflictError extends InvalidRequestError {
   }
 }
 
+// ChangedElsewhereError means someone saved the same saved reply after this client read it (HTTP 409).
+export class ChangedElsewhereError extends ConflictError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ChangedElsewhereError';
+  }
+}
+
 async function invalidRequest(response: Response): Promise<Error> {
   try {
-    const body = await response.json() as { error?: { message?: unknown } };
+    const body = await response.json() as { error?: { code?: unknown; message?: unknown } };
     if (typeof body.error?.message === 'string' && body.error.message) {
+      if (response.status === 409 && body.error.code === 'changed_elsewhere') return new ChangedElsewhereError(body.error.message);
       return response.status === 409 ? new ConflictError(body.error.message) : new InvalidRequestError(body.error.message);
     }
   } catch {
@@ -222,4 +231,8 @@ export const api = {
   agents: () => request('/api/v1/agents', agentListSchema),
   tags: () => request('/api/v1/tags', tagListSchema),
   createTag: (name: string) => request('/api/v1/tags', tagSchema, { method: 'POST', body: json<'createTag'>({ name }) }),
+  savedReplies: () => request('/api/v1/saved-replies', savedReplyListSchema),
+  createSavedReply: (title: string, body: string) => request('/api/v1/saved-replies', savedReplySchema, { method: 'POST', body: json<'createSavedReply'>({ title, body }) }),
+  updateSavedReply: (id: string, value: RequestBody<'updateSavedReply'>) => request(`/api/v1/saved-replies/${id}`, savedReplySchema, { method: 'PATCH', body: json<'updateSavedReply'>(value) }),
+  deleteSavedReply: (id: string) => requestNoContent(`/api/v1/saved-replies/${id}`, { method: 'DELETE' }),
 };

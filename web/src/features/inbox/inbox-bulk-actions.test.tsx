@@ -4,7 +4,7 @@ import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
 
 const row = (id: string, subject: string): Conversation => ({
-  id, contact_id: '22222222-2222-4222-8222-222222222222', subject, status: 'open', priority: 'normal',
+  id, contact_id: '22222222-2222-4222-8222-222222222222', contact_name: 'Mai Linh', subject, status: 'open', priority: 'normal',
   assignee_id: null, tags: [], origin: null, created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z',
 });
 const alpha = row('11111111-1111-4111-8111-111111111111', 'Alpha request');

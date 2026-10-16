@@ -21,6 +21,9 @@ type Options struct {
 	// Freshdesk; the id probe always covers at least this far.
 	LastTicketID int64
 	DryRun       bool
+	// IncludePersonalCannedResponses also imports canned responses from personal folders. They become
+	// shared with the whole workspace, so the default leaves them out and lists their ids.
+	IncludePersonalCannedResponses bool
 	// Storage receives attachment bytes; not needed for a dry run.
 	Storage attachments.Storage
 	// Sleep waits between rate-limited requests; tests replace it.

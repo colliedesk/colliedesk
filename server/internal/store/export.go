@@ -73,6 +73,9 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string, sink ex
 	if err := exportTags(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
+	if err := exportSavedReplies(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
 	return exportConversations(ctx, tx, workspaceID, sink)
 }
 
@@ -144,6 +147,26 @@ func exportTags(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.
 		}
 	}
 	return rowsError("export tags", rows)
+}
+
+func exportSavedReplies(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	rows, err := tx.Query(ctx, `SELECT id::text,title,body,created_by_agent_id::text,created_at,updated_at
+		FROM saved_replies WHERE workspace_id=$1 ORDER BY id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export saved replies: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var record export.SavedReply
+		if err := rows.Scan(&record.ID, &record.Title, &record.Body, &record.CreatedByAgentID, &record.CreatedAt, &record.UpdatedAt); err != nil {
+			return fmt.Errorf("export saved replies: %w", err)
+		}
+		record.CreatedAt, record.UpdatedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt)
+		if err := sink.SavedReply(record); err != nil {
+			return err
+		}
+	}
+	return rowsError("export saved replies", rows)
 }
 
 func rowsError(what string, rows pgx.Rows) error {

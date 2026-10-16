@@ -45,9 +45,9 @@ func (s *Store) GetConversation(ctx context.Context, workspaceID, id string) (do
 
 func getConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string) (domain.Conversation, error) {
 	var item domain.Conversation
-	err := tx.QueryRow(ctx, `SELECT id::text,contact_id::text,subject,status,priority,assignee_id::text,origin,created_at,updated_at
-		FROM conversations WHERE workspace_id=$1 AND id=$2`, workspaceID, id).
-		Scan(&item.ID, &item.ContactID, &item.Subject, &item.Status, &item.Priority, &item.AssigneeID, &item.Origin, &item.CreatedAt, &item.UpdatedAt)
+	err := tx.QueryRow(ctx, `SELECT c.id::text,c.contact_id::text,k.name,c.subject,c.status,c.priority,c.assignee_id::text,c.origin,c.created_at,c.updated_at
+		FROM conversations c JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id WHERE c.workspace_id=$1 AND c.id=$2`, workspaceID, id).
+		Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Subject, &item.Status, &item.Priority, &item.AssigneeID, &item.Origin, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return domain.Conversation{}, fmt.Errorf("get conversation: %w", err)
 	}
@@ -95,9 +95,10 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 		return ConversationPage{Items: []domain.Conversation{}, Page: filter.Page, Size: filter.PageSize}, nil
 	}
 
-	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,
+	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,k.name,c.subject,c.status,c.priority,
 		c.assignee_id::text,c.origin,c.created_at,c.updated_at,COALESCE(tag_data.tags,'[]'::jsonb)
 		FROM conversations c
+		JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id
 		LEFT JOIN LATERAL (
 			SELECT jsonb_agg(jsonb_build_object('id',t.id::text,'name',t.name,'color',t.color) ORDER BY t.name) AS tags
 			FROM conversation_tags ct JOIN tags t ON t.id=ct.tag_id AND t.workspace_id=ct.workspace_id
@@ -113,7 +114,7 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 	for rows.Next() {
 		var item domain.Conversation
 		var tagsJSON []byte
-		if err := rows.Scan(&item.ID, &item.ContactID, &item.Subject, &item.Status, &item.Priority,
+		if err := rows.Scan(&item.ID, &item.ContactID, &item.ContactName, &item.Subject, &item.Status, &item.Priority,
 			&item.AssigneeID, &item.Origin, &item.CreatedAt, &item.UpdatedAt, &tagsJSON); err != nil {
 			return ConversationPage{}, fmt.Errorf("scan conversation: %w", err)
 		}

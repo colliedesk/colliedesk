@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   me: vi.fn(), conversations: vi.fn(), conversation: vi.fn(), agents: vi.fn(), tags: vi.fn(), messages: vi.fn(), timeEntries: vi.fn(),
   updateConversation: vi.fn(), bulkUpdateConversations: vi.fn(), createMessage: vi.fn(), createTag: vi.fn(), config: vi.fn(),
   addConversationTag: vi.fn(), removeConversationTag: vi.fn(), retryDelivery: vi.fn(),
+  savedReplies: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })), contact: vi.fn(),
   emailChannel: vi.fn(async () => ({ channel: null, inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null })),
 }));
 
@@ -15,7 +16,7 @@ vi.mock('../../api/client', () => ({ api }));
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn(), useParams: () => ({}) }));
 
 const conversation = (id: string, subject: string) => ({
-  id, contact_id: '22222222-2222-4222-8222-222222222222', subject,
+  id, contact_id: '22222222-2222-4222-8222-222222222222', contact_name: 'Mai Linh', subject,
   status: 'open' as const, priority: 'normal' as const, assignee_id: null, tags: [], origin: null,
   created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z',
 });
@@ -310,4 +311,43 @@ test('the server limit from the config warns about oversized files before anythi
   expect(await screen.findByRole('alert')).toHaveTextContent('1.0 KiB');
   fireEvent.keyDown(screen.getByLabelText('Message body'), { key: 'Enter', ctrlKey: true });
   expect(api.createMessage).not.toHaveBeenCalled();
+});
+
+test('a saved reply inserted the moment a conversation is selected already has the customer name, with no extra request', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.contact.mockReset();
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', display_name: 'Chinh', role: 'agent' } });
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  api.savedReplies.mockResolvedValue({ items: [{ id: '77777777-7777-4777-8777-777777777777', title: 'Greeting', body: 'Hi {{customer.name}}, {{agent.name}} here.',
+    created_by_agent_id: null, created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z' }] });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Insert saved reply' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Insert saved reply' }));
+  fireEvent.click(await screen.findByRole('option', { name: 'Greeting' }));
+  expect(screen.getByLabelText('Message body')).toHaveValue('Hi Mai Linh, Chinh here.');
+  expect(api.contact).not.toHaveBeenCalled();
+});
+
+test('Manage saved replies opens Settings in a new tab, so a draft is not lost', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const open = vi.spyOn(window, 'open').mockReturnValue(null);
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', display_name: 'Chinh', role: 'agent' } });
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  api.savedReplies.mockResolvedValue({ items: [] });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Insert saved reply' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Insert saved reply' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Manage saved replies' }));
+  expect(open).toHaveBeenCalledExactlyOnceWith('/settings', '_blank', 'noopener');
+  open.mockRestore();
 });
