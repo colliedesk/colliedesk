@@ -364,7 +364,9 @@ paths:
         refused with 400, and so is `cc` on a note. In `multipart/form-data` send one `cc` field per
         address, before the files. On the trial, `cc` may name only addresses the customer wrote from or
         copied (verified customer mail or imported history) unless the sending domain is verified;
-        another address answers 403 `trial_outbound_restricted` and nothing is stored. A retry of a
+        another address answers 403 `trial_outbound_restricted` with `refused_cc` listing every
+        refused address, and nothing is stored. Each reply counts its contact and every `cc` address
+        against the trial's 200 people a day. A retry of a
         failed delivery sends to the same stored list. There is no Bcc.
       requestBody:
         required: true
@@ -1360,7 +1362,8 @@ components:
       description: >
         Permission or CSRF check failed. On `POST /conversations/{id}/messages` a trial workspace gets
         error code `trial_outbound_restricted` for a reply to a conversation the customer did not
-        start (unless it verified its sending domain); nothing was stored.
+        start (unless it verified its sending domain), or for a `cc` address the customer never wrote
+        from or copied (then `refused_cc` lists them); nothing was stored.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error404:
       description: Resource not found in this workspace
@@ -1919,3 +1922,7 @@ components:
               description: 'Present on validation errors (422), one message per bad field name'
               additionalProperties: {type: string}
             retry_after_seconds: {type: integer, description: 'Only on trial_outbound_limit: seconds until a reply can be sent.'}
+            refused_cc:
+              type: array
+              items: {type: string}
+              description: 'Only on trial_outbound_restricted caused by Cc: exactly the addresses the trial refused to copy.'

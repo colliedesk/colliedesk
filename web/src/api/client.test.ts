@@ -3,6 +3,7 @@ import { api, ConflictError, PlanLimitError, WorkspaceLockedError } from './clie
 import { AttachmentsTooLargeError, AttachmentStorageError } from './attachments-error';
 import { NotAnAgentError, SignupError } from './cloud-signup';
 import { ExportRefusedError } from './workspace-export';
+import { OutboundRefusedError } from './outbound-error';
 
 const reply = (status: number, body: unknown = {}, headers: Record<string, string> = {}) =>
   new Response(typeof body === 'string' ? body : JSON.stringify(body), { status, headers });
@@ -146,6 +147,13 @@ test('a trial refusal on a message is still an outbound refusal, not a storage e
   fetchMock.mockResolvedValue(reply(403, apiError('trial_outbound_restricted', 'Verify your domain.')));
   const error = await api.createMessage('11111111-1111-4111-8111-111111111111', 'outgoing', 'Hi').catch((caught: unknown) => caught);
   expect(error).not.toBeInstanceOf(AttachmentStorageError);
+});
+
+test('a trial refusal of copied addresses keeps the list of refused addresses', async () => {
+  fetchMock.mockResolvedValue(reply(403, { error: { code: 'trial_outbound_restricted', message: 'Not allowed.', refused_cc: ['one@elsewhere.example', 'two@elsewhere.example'] } }));
+  const error = await api.createMessage('11111111-1111-4111-8111-111111111111', 'outgoing', 'Hi', [], ['one@elsewhere.example']).catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(OutboundRefusedError);
+  expect((error as OutboundRefusedError).refusedCc).toEqual(['one@elsewhere.example', 'two@elsewhere.example']);
 });
 
 test('a reply that copies people sends one JSON list, and a note sends none', async () => {

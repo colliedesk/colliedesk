@@ -346,6 +346,7 @@ export const messages = {
   trialReplyRestricted: 'During the trial, email goes only to customers who wrote to you first. Verify your sending domain in Settings or choose a plan to start new conversations. Your text is still here.',
   trialReplyLimit: (wait: string) => `The trial emails up to 200 people in 24 hours, counting everyone copied. Try again in about ${wait}, or choose a plan to remove the limit. Your text is still here.`,
   retryNotSent: 'The delivery could not be retried. Try again.',
+  trialCcRestricted: (addresses: string[]) => `During the trial, a reply can copy only people the customer wrote from or copied. Not allowed: ${addresses.join(', ')}. Remove them and send again, or verify your sending domain in Settings. Your text is still here.`,
   trialRetryRestricted: 'During the trial, email goes only to customers who wrote to you first. Verify your sending domain in Settings or choose a plan.',
   trialRetryLimit: (wait: string) => `The trial emails up to 200 people in 24 hours, counting everyone copied. Try again in about ${wait}, or choose a plan to remove the limit.`,
   hours: (count: number) => `${count} hour${count === 1 ? '' : 's'}`,

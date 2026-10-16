@@ -1,8 +1,10 @@
 package httpapi_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -38,7 +40,7 @@ func TestTrialCopiesOnlyAddressesTheCustomerAlreadyNamed(t *testing.T) {
 	messages, outbox := f.messageCount(t, f.workspaceA), f.outboxCount(t, f.workspaceA)
 	got := f.replyCopying(t, conversation, "boss@customer.example", "stranger@elsewhere.example")
 	wantStatus(t, got, http.StatusForbidden, restrictedCode, "copying an address the customer never wrote")
-	if !strings.Contains(got.Body, "wrote to you first") {
+	if !strings.Contains(got.Body, "copy only people the customer wrote from or copied. Not allowed: stranger@elsewhere.example.") {
 		t.Fatalf("message must say why: %s", got.Body)
 	}
 	if f.messageCount(t, f.workspaceA) != messages || f.outboxCount(t, f.workspaceA) != outbox {
@@ -127,5 +129,32 @@ func TestTrialCapCountsEveryRecipientNotEveryReply(t *testing.T) {
 	wantStatus(t, f.replyCopying(t, conversation, victims[0]), http.StatusTooManyRequests, limitCode, "a reply to 2 people with 1 left")
 	if usage := f.usage(t, f.adminA); usage.Usage.RepliesLast24h != 199 {
 		t.Fatalf("usage.replies_last_24h=%d, want the 199 people reached", usage.Usage.RepliesLast24h)
+	}
+}
+
+func TestTrialCopyRefusalNamesEveryRefusedAddress(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	conversation := f.receiveCopied(t, "boss@customer.example")
+	got := f.replyCopying(t, conversation, "boss@customer.example", "one@elsewhere.example", "two@elsewhere.example")
+	wantStatus(t, got, http.StatusForbidden, restrictedCode, "copying two strangers")
+	var body struct {
+		Error struct {
+			Message   string   `json:"message"`
+			RefusedCC []string `json:"refused_cc"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(got.Body), &body); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"one@elsewhere.example", "two@elsewhere.example"}; !reflect.DeepEqual(body.Error.RefusedCC, want) {
+		t.Fatalf("refused_cc=%v, want %v", body.Error.RefusedCC, want)
+	}
+	if !strings.Contains(body.Error.Message, "one@elsewhere.example, two@elsewhere.example") || strings.Contains(body.Error.Message, "boss@") {
+		t.Fatalf("the message must name exactly the refused addresses: %q", body.Error.Message)
+	}
+	refusedContact := f.reply(t, f.adminA, f.agentStarted(t))
+	wantStatus(t, refusedContact, http.StatusForbidden, restrictedCode, "reply in an agent-started conversation")
+	if strings.Contains(refusedContact.Body, "refused_cc") {
+		t.Fatalf("a refusal about the contact names no Cc address: %s", refusedContact.Body)
 	}
 }

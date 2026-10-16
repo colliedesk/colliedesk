@@ -76,6 +76,18 @@ test('a refused reply keeps the typed text and says how to continue', async () =
   expect(body).toHaveValue('Hello there');
 });
 
+test('a refused Cc names exactly the addresses the trial would not copy', async () => {
+  const onSubmit = vi.fn().mockRejectedValue(new OutboundRefusedError('trial_outbound_restricted', 'server text', undefined, ['one@elsewhere.example', 'two@elsewhere.example']));
+  render(<ReplyComposer onSubmit={onSubmit} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Hello all' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent(/not allowed: one@elsewhere\.example, two@elsewhere\.example/i);
+  expect(alert).not.toHaveTextContent(/wrote to you first/i);
+  expect(body).toHaveValue('Hello all');
+});
+
 test('a reply over the daily cap says when to retry and keeps the text', async () => {
   const onSubmit = vi.fn().mockRejectedValue(new OutboundRefusedError('trial_outbound_limit', 'cap', 5400));
   render(<ReplyComposer onSubmit={onSubmit} />);

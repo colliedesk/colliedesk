@@ -243,7 +243,7 @@ export interface paths {
         /**
          * @description Send JSON for a text-only message, or `multipart/form-data` to attach files: fields `kind` and `body` plus repeated `files` parts, each with a filename. A message carries at most `limits.outgoing_attachments_files` files and `limits.outgoing_attachments_bytes` bytes in total (both from `GET /api/v1/config`); more answers 413 and nothing is stored. A reply emails its files as attachments; a note never leaves the workspace.
          *
-         *     A reply may copy other people with `cc`: at most 10 plain addresses (`name@example.com`, no display name), stored lowercase without duplicates. The conversation contact stays the only `To` recipient and is dropped from `cc`; our own support, forwarding and sending addresses are refused with 400, and so is `cc` on a note. In `multipart/form-data` send one `cc` field per address, before the files. On the trial, `cc` may name only addresses the customer wrote from or copied (verified customer mail or imported history) unless the sending domain is verified; another address answers 403 `trial_outbound_restricted` and nothing is stored. A retry of a failed delivery sends to the same stored list. There is no Bcc.
+         *     A reply may copy other people with `cc`: at most 10 plain addresses (`name@example.com`, no display name), stored lowercase without duplicates. The conversation contact stays the only `To` recipient and is dropped from `cc`; our own support, forwarding and sending addresses are refused with 400, and so is `cc` on a note. In `multipart/form-data` send one `cc` field per address, before the files. On the trial, `cc` may name only addresses the customer wrote from or copied (verified customer mail or imported history) unless the sending domain is verified; another address answers 403 `trial_outbound_restricted` with `refused_cc` listing every refused address, and nothing is stored. Each reply counts its contact and every `cc` address against the trial's 200 people a day. A retry of a failed delivery sends to the same stored list. There is no Bcc.
          */
         post: operations["createMessage"];
         delete?: never;
@@ -1277,6 +1277,8 @@ export interface components {
                 };
                 /** @description Only on trial_outbound_limit: seconds until a reply can be sent. */
                 retry_after_seconds?: number;
+                /** @description Only on trial_outbound_restricted caused by Cc: exactly the addresses the trial refused to copy. */
+                refused_cc?: string[];
             };
         };
     };
@@ -1473,7 +1475,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Permission or CSRF check failed. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain); nothing was stored. */
+        /** @description Permission or CSRF check failed. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them); nothing was stored. */
         Error403: {
             headers: {
                 [name: string]: unknown;

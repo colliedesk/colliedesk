@@ -26,10 +26,14 @@ func (s *Store) checkTrialCC(ctx context.Context, tx pgx.Tx, workspaceID, conver
 	if err != nil {
 		return err
 	}
+	var refused []string
 	for _, address := range cc {
 		if !known[strings.ToLower(address)] {
-			return &domain.TrialOutboundError{}
+			refused = append(refused, address)
 		}
+	}
+	if len(refused) > 0 {
+		return &domain.TrialOutboundError{RefusedCC: refused}
 	}
 	return nil
 }

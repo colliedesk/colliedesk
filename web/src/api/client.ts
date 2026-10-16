@@ -95,11 +95,12 @@ async function planLimitFailure(response: Response): Promise<PlanLimitError> {
 
 async function outboundRefusal(response: Response): Promise<Error> {
   try {
-    const body = await response.json() as { error?: { code?: unknown; message?: unknown; retry_after_seconds?: unknown } };
-    const { code, message, retry_after_seconds: retry } = body.error ?? {};
+    const body = await response.json() as { error?: { code?: unknown; message?: unknown; retry_after_seconds?: unknown; refused_cc?: unknown } };
+    const { code, message, retry_after_seconds: retry, refused_cc: refused } = body.error ?? {};
     if (code === 'storage_limit_reached' && typeof message === 'string' && message) return new AttachmentStorageError(message);
     if (code === 'trial_outbound_restricted' || code === 'trial_outbound_limit') {
-      return new OutboundRefusedError(code, typeof message === 'string' ? message : '', typeof retry === 'number' ? retry : undefined);
+      const refusedCc = Array.isArray(refused) ? refused.filter((item): item is string => typeof item === 'string') : [];
+      return new OutboundRefusedError(code, typeof message === 'string' ? message : '', typeof retry === 'number' ? retry : undefined, refusedCc);
     }
   } catch {
     // An unreadable body is an ordinary failure.
