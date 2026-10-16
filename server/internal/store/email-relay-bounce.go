@@ -21,8 +21,9 @@ const (
 	RelayBounceDuplicate RelayBounceResult = "duplicate"
 	// RelayBounceNoReply means the event names no reply of this conversation.
 	RelayBounceNoReply RelayBounceResult = "no reply"
-	// RelayBounceOtherRecipient means the event names someone besides the conversation's contact, the
-	// only recipient of a reply, so it cannot say that the contact's copy failed.
+	// RelayBounceOtherRecipient means the event names someone besides the conversation's contact, such
+	// as a Cc recipient. A copy that did not reach a Cc recipient does not fail the reply, and an event
+	// that names the contact next to others cannot say which copy failed, so neither changes the reply.
 	RelayBounceOtherRecipient RelayBounceResult = "other recipient"
 	// RelayBounceAlreadyFailed means the reply is already failed.
 	RelayBounceAlreadyFailed RelayBounceResult = "already failed"
@@ -44,7 +45,7 @@ type RelayBounce struct {
 
 // MarkRelayBounce fails the delivery of the reply the relay event names, once per webhook id. A reply
 // still being sent (the relay may report a suppressed address before the worker records the send) is
-// failed too.
+// failed too. sent_at is kept: the reply was handed to the relay, and send caps count it.
 func (s *Store) MarkRelayBounce(ctx context.Context, workspaceID string, bounce RelayBounce) (RelayBounceResult, error) {
 	reason := bounceReason
 	if bounce.Complaint {

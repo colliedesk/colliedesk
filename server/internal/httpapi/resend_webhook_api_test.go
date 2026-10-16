@@ -117,6 +117,10 @@ func TestResendBounceMarksTheReplyDeliveryFailed(t *testing.T) {
 	if _, lastError := deliveryOf(t, pool, reply); !strings.Contains(lastError, "bounced") {
 		t.Fatalf("bounce reason not recorded: %q", lastError)
 	}
+	// The relay took the reply, so it still counts against send caps.
+	if sentAt := queryString(t, pool, `SELECT COALESCE(sent_at::text,'') FROM email_outbox WHERE message_id=$1`, reply); sentAt == "" {
+		t.Fatal("marking the reply failed cleared sent_at")
+	}
 }
 
 func TestResendComplaintFailsOnlyTheReplyItNames(t *testing.T) {
@@ -221,8 +225,8 @@ func TestResendEventsThatNameNoReplyOfOursChangeNothing(t *testing.T) {
 	ourIDB := queryString(t, pool, `SELECT email_message_id FROM messages WHERE id=$1`, replyB)
 
 	for name, body := range map[string][]byte{
-		// A reply goes to the conversation's contact; a bounce that names anyone else, alone or next
-		// to the contact, cannot say the contact's copy failed.
+		// A bounce for a Cc copy never fails the reply; one that names the contact next to someone
+		// else cannot say which copy failed.
 		"recipient we never sent to":     resendEvent("email.bounced", fromA, []string{"cc@customer.example"}, "", time.Now()),
 		"contact next to a cc recipient": resendEvent("email.bounced", fromA, []string{"z@customer.example", "cc@customer.example"}, "", time.Now()),
 		"no recipient":                   resendEvent("email.bounced", fromA, nil, "", time.Now()),
