@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { Link, Outlet, createRootRoute, createRoute, createRouter, useRouterState } from '@tanstack/react-router';
+import { Link, Outlet, createRootRoute, redirect, createRoute, createRouter, useRouterState } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
 import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
@@ -61,7 +61,12 @@ const billingRoute = createRoute({
     ...(typeof search.buy === 'string' && search.buy !== '' ? { buy: search.buy } : {}),
   }),
   // Runs before sign-in is known, so the plan is kept through the sign-in and sign-up round trip.
-  beforeLoad: ({ search }) => { if (search.buy) rememberCheckoutIntent(search.buy); },
+  // `buy` is then removed from the address: Back or a reload after the checkout must not start another.
+  beforeLoad: ({ search }) => {
+    if (!search.buy) return;
+    rememberCheckoutIntent(search.buy);
+    throw redirect({ to: '/settings/billing', search: { checkout: search.checkout }, replace: true });
+  },
   component: () => <BillingRoute checkoutReturned={billingRoute.useSearch().checkout === 'success'} />,
 });
 const signInRoute = createRoute({

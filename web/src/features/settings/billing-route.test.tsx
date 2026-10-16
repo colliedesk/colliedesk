@@ -132,3 +132,13 @@ test('a failed intent checkout is not retried', async () => {
   expect(api.startCheckout).toHaveBeenCalledTimes(1);
   expect(readCheckoutIntent()).toBeUndefined();
 });
+
+test('an intent is dropped when the billing data cannot be loaded', async () => {
+  rememberCheckoutIntent('founding');
+  api.me.mockResolvedValue(me('admin'));
+  api.billing.mockRejectedValue(new Error('API 500'));
+  renderRoute();
+  expect(await screen.findByRole('alert')).toHaveTextContent(/billing action failed/i);
+  expect(api.startCheckout).not.toHaveBeenCalled();
+  expect(readCheckoutIntent()).toBeUndefined();
+});

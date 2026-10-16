@@ -30,7 +30,7 @@ export function BillingRoute({ checkoutReturned = false }: BillingRouteProps) {
   // other outcome drops it, so it can never fire later or loop.
   const intentHandled = useRef(false);
   const unpaid = billing.data?.plan === 'trial' || billing.data?.plan === 'none';
-  const cannotBuy = (config.data && !enabled) || (me.data && !isAdmin);
+  const cannotBuy = (config.data && !enabled) || (me.data && !isAdmin) || billing.isError;
   const { mutate: startCheckout } = checkout;
   useEffect(() => {
     if (intentHandled.current || !(cannotBuy || billing.data)) return;

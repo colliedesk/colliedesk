@@ -142,3 +142,23 @@ test('a locked workspace drops the remembered plan and shows its own plan choice
   await waitFor(() => expect(readCheckoutIntent()).toBeUndefined());
   expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/v1/billing/checkout')).toBe(false);
 });
+
+test('going back to the billing page after the checkout was started does not start another one', async () => {
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('admin', trialPlan)),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/billing': () => json(200, trialBilling),
+    '/api/v1/billing/checkout': () => json(200, { url: 'https://polar.example/checkout/founding' }),
+    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [] }),
+  });
+  const history = createMemoryHistory({ initialEntries: ['/settings/billing?buy=founding'] });
+  const router = createRouter({ routeTree, history });
+  const checkouts = () => fetchMock.mock.calls.filter(([url]) => String(url) === '/api/v1/billing/checkout').length;
+  const view = render(<QueryClientProvider client={createQueryClient()}><RouterProvider router={router} /></QueryClientProvider>);
+  await waitFor(() => expect(checkouts()).toBe(1));
+  expect(router.state.location.search).not.toHaveProperty('buy');
+  view.unmount();
+  render(<QueryClientProvider client={createQueryClient()}><RouterProvider router={createRouter({ routeTree, history })} /></QueryClientProvider>);
+  await screen.findByRole('button', { name: /team, \$49 per month/i });
+  expect(checkouts()).toBe(1);
+});
