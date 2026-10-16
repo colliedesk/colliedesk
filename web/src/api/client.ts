@@ -164,7 +164,8 @@ export class CloudWorkspaceChoiceError extends Error {
 }
 
 async function exchangeCloudSession(token: string, workspaceSlug?: string) {
-  const body: RequestBody<'exchangeCloudSession'> = workspaceSlug ? { workspace_slug: workspaceSlug } : {};
+  // The user agent names this device in Settings → Sessions, as it does for a pairing link.
+  const body: RequestBody<'exchangeCloudSession'> = { label: navigator.userAgent, ...(workspaceSlug ? { workspace_slug: workspaceSlug } : {}) };
   const response = await fetch('/api/v1/auth/cloud/exchange', {
     method: 'POST', credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

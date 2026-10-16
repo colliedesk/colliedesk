@@ -12,8 +12,9 @@ until you select **Apply**. The change applies to new requests at once. Demoting
 their unused admin invites. A person who is already signed in keeps the access their sign-in link gave them; they sign in
 again to use a higher role.
 
-A workspace always keeps at least one active admin. Demoting or deactivating the last one is refused
-with the message "A workspace needs at least one active admin"; make someone else an admin first.
+A workspace always keeps at least one active admin. For the last one, the role list is locked and
+**Deactivate** is not offered; make someone else an admin first. The server also refuses it ("A
+workspace needs at least one active admin").
 
 ## Deactivate someone
 

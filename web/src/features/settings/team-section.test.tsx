@@ -99,7 +99,8 @@ test('someone with no open work gets a plain confirmation and nothing to move', 
 });
 
 test('deactivating yourself warns that you will be signed out', () => {
-  render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" />);
+  // A second admin exists: the last active admin is never offered Deactivate.
+  render(<TeamSection members={[admin, { ...ann, role: 'admin' }]} currentAgentId={admin.id} canManage timezone="UTC" />);
   fireEvent.click(screen.getByRole('button', { name: 'Deactivate Ada Admin' }));
   expect(screen.getByRole('group', { name: 'Deactivate Ada Admin?' })).toHaveTextContent('You will be signed out');
 });
@@ -137,4 +138,14 @@ test('confirming leaves focus on the row, not on the page body', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Deactivate ann@example.com' }));
   fireEvent.click(screen.getByRole('button', { name: 'Yes, deactivate' }));
   expect(row('ann@example.com')).toHaveFocus();
+});
+
+test('the only active admin cannot deactivate or demote themself; with a second admin they can', () => {
+  const { rerender } = render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" />);
+  expect(screen.queryByRole('button', { name: 'Deactivate Ada Admin' })).not.toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: 'Role of Ada Admin' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Deactivate ann@example.com' })).toBeInTheDocument();
+  rerender(<TeamSection members={[admin, { ...ann, role: 'admin' }]} currentAgentId={admin.id} canManage timezone="UTC" />);
+  expect(screen.getByRole('button', { name: 'Deactivate Ada Admin' })).toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: 'Role of Ada Admin' })).toBeEnabled();
 });

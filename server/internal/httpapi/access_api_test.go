@@ -119,3 +119,62 @@ func TestInviteRoleCeilingAndSessionRevocation(t *testing.T) {
 		t.Fatalf("revoked bearer status=%d, want 401", me.Code)
 	}
 }
+
+// The session list marks the one making the request, so the UI can say "This device" and warn
+// that revoking it signs this browser out.
+func TestSessionListMarksTheCallersSession(t *testing.T) {
+	api, authService := testAPI(t)
+	adminToken := createSession(t, api, authService, "Current Desk", "admin@current.example.com")
+	created := request(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{
+		"email": "agent@current.example.com", "role_ceiling": "agent",
+	}, adminToken, nil)
+	var invite struct {
+		URL string `json:"url"`
+	}
+	decode(t, created, &invite)
+	redeemed := request(t, api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{
+		"token": linkToken(t, invite.URL), "requested_role": "agent", "label": "Agent laptop",
+	}, "", nil)
+	var agentSession struct {
+		Token string `json:"token"`
+	}
+	decode(t, redeemed, &agentSession)
+
+	current := func(token string) map[string]bool {
+		listed := request(t, api, http.MethodGet, "/api/v1/auth/sessions", nil, token, nil)
+		if listed.Code != http.StatusOK {
+			t.Fatalf("sessions status=%d body=%s", listed.Code, listed.Body.String())
+		}
+		var body struct {
+			Items []struct {
+				Label   string `json:"label"`
+				Current *bool  `json:"current"`
+			} `json:"items"`
+		}
+		decode(t, listed, &body)
+		marks := map[string]bool{}
+		for _, item := range body.Items {
+			if item.Current == nil {
+				t.Fatalf("session %q has no current field", item.Label)
+			}
+			marks[item.Label] = *item.Current
+		}
+		return marks
+	}
+	adminView := current(adminToken)
+	if adminView["Agent laptop"] || len(adminView) != 2 {
+		t.Fatalf("admin view marks=%v, want two sessions and the agent's not current", adminView)
+	}
+	trueCount := 0
+	for _, mark := range adminView {
+		if mark {
+			trueCount++
+		}
+	}
+	if trueCount != 1 {
+		t.Fatalf("admin view marks=%v, want exactly one current session", adminView)
+	}
+	if agentView := current(agentSession.Token); !agentView["Agent laptop"] || len(agentView) != 1 {
+		t.Fatalf("agent view marks=%v, want only its own session, marked current", agentView)
+	}
+}

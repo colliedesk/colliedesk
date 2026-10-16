@@ -25,9 +25,21 @@ test('says so when there are none', () => {
   expect(screen.getByText('No saved replies yet.')).toBeInTheDocument();
 });
 
-test('any agent adds one; the form clears once it is saved', async () => {
+test('the add form stays closed until New saved reply, and Cancel closes it again', () => {
+  render(<SavedRepliesSection replies={replies} {...handlers()} />);
+  expect(screen.queryByLabelText('Title')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
+  expect(screen.getByLabelText('Title')).toHaveFocus();
+  expect(screen.queryByRole('button', { name: 'New saved reply' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(screen.queryByLabelText('Title')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'New saved reply' })).toHaveFocus();
+});
+
+test('any agent adds one; the form closes once it is saved', async () => {
   const actions = handlers();
   render(<SavedRepliesSection replies={[]} {...actions} />);
+  fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
   const add = screen.getByRole('button', { name: 'Add saved reply' });
   expect(add).toBeDisabled();
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Closing' } });
@@ -35,7 +47,11 @@ test('any agent adds one; the form clears once it is saved', async () => {
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Thanks for writing.' } });
   fireEvent.click(add);
   expect(actions.onCreate).toHaveBeenCalledWith('Closing', 'Thanks for writing.');
-  await waitFor(() => expect(screen.getByLabelText('Title')).toHaveValue(''));
+  await waitFor(() => expect(screen.queryByLabelText('Title')).not.toBeInTheDocument());
+  // Focus returns in an effect after the form unmounts.
+  await waitFor(() => expect(screen.getByRole('button', { name: 'New saved reply' })).toHaveFocus());
+  fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
+  expect(screen.getByLabelText('Title')).toHaveValue('');
   expect(screen.getByLabelText('Text')).toHaveValue('');
 });
 
@@ -43,6 +59,7 @@ test('a refused add keeps what was typed and shows the server reason', async () 
   const actions = handlers();
   actions.onCreate.mockRejectedValue(new InvalidRequestError('A saved reply with this title already exists. Titles are compared ignoring case.'));
   render(<SavedRepliesSection replies={replies} {...actions} />);
+  fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'greeting' } });
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Again' } });
   fireEvent.click(screen.getByRole('button', { name: 'Add saved reply' }));
@@ -55,6 +72,7 @@ test('a failure without a reason from the server shows a generic message', async
   const actions = handlers();
   actions.onCreate.mockRejectedValue(new Error('500'));
   render(<SavedRepliesSection replies={[]} {...actions} />);
+  fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'A' } });
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'B' } });
   fireEvent.click(screen.getByRole('button', { name: 'Add saved reply' }));

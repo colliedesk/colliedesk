@@ -987,6 +987,8 @@ export interface components {
             /** Format: email */
             agent_email: string;
             label: string;
+            /** @description True for the session that made this request, so a client can mark "this device". */
+            current: boolean;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1566,6 +1568,8 @@ export interface operations {
             content: {
                 "application/json": {
                     workspace_slug?: string;
+                    /** @description Names the device in the session list, usually the browser user agent. Defaults to "Cloud sign-in". */
+                    label?: string;
                 };
             };
         };

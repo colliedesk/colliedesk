@@ -171,3 +171,9 @@ test('a reply with files and copies sends one cc field per address, before the f
   expect(form.getAll('cc')).toEqual(['a@customer.example', 'b@customer.example']);
   expect([...form.keys()]).toEqual(['kind', 'body', 'cc', 'cc', 'files']);
 });
+
+test('the cloud exchange names this device by its user agent, like a pairing link', async () => {
+  fetchMock.mockResolvedValueOnce(reply(403, apiError('forbidden')));
+  await api.exchangeCloudSession('t', 'acme').catch(() => {});
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ label: navigator.userAgent, workspace_slug: 'acme' });
+});

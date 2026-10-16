@@ -24,11 +24,11 @@ const teammate = (id: string, email: string, overrides = {}) => ({
 const SAM = '11111111-1111-4111-8111-111111111111';
 const ANN = '33333333-3333-4333-8333-333333333333';
 
-function show(role: 'admin' | 'agent') {
+function show(role: 'admin' | 'agent', sessions: unknown[] = []) {
   api.me.mockResolvedValue(me(role));
   api.agents.mockResolvedValue({ items: [teammate(SAM, 'sam@example.com', { role }), teammate(ANN, 'ann@example.com', { open_conversations: 1 })] });
   api.updateAgent.mockResolvedValue(teammate(ANN, 'ann@example.com', { deactivated_at: '2026-10-15T10:00:00Z' }));
-  api.sessions.mockResolvedValue({ items: [] });
+  api.sessions.mockResolvedValue({ items: sessions });
   api.savedReplies.mockResolvedValue({ items: [] });
   api.invites.mockResolvedValue({ items: [] });
   api.webForm.mockResolvedValue({ enabled: false, allowed_origins: [], submit_path: '/api/v1/public/forms/beta-desk' });
@@ -62,25 +62,28 @@ test('an agent sees the team but no controls', async () => {
   expect(within(team).queryByRole('button')).not.toBeInTheDocument();
 });
 
-test('a timezone save shows Saving…, accepts one request, then Saved', async () => {
+test('a chosen timezone saves once, shows Saving…, then Saved', async () => {
   show('admin');
   let finish: () => void = () => {};
   api.updateWorkspaceTimezone.mockReturnValue(new Promise<void>((resolve) => { finish = resolve; }));
-  const save = await screen.findByRole('button', { name: /save workspace timezone/i });
-  fireEvent.click(save);
-  const saving = (await screen.findAllByRole('button', { name: 'Saving…' }))[0];
-  expect(saving).toBeDisabled();
-  fireEvent.click(saving);
+  const select = await screen.findByRole('combobox', { name: 'Workspace timezone' });
+  fireEvent.change(select, { target: { value: 'Asia/Tokyo' } });
+  fireEvent.blur(select);
+  expect(await screen.findByText('Saving…')).toBeInTheDocument();
+  fireEvent.blur(select);
   expect(api.updateWorkspaceTimezone).toHaveBeenCalledTimes(1);
+  expect(api.updateWorkspaceTimezone.mock.calls[0][0]).toBe('Asia/Tokyo');
   finish();
   expect(await screen.findByText('Saved')).toHaveAttribute('role', 'status');
-  expect(screen.getByRole('button', { name: /save workspace timezone/i })).toBeEnabled();
+  expect(select).toBeEnabled();
 });
 
-test('a failed timezone save shows the failure next to its form', async () => {
+test('a failed timezone save shows the failure next to its control', async () => {
   show('admin');
   api.updateWorkspaceTimezone.mockRejectedValue(new Error('boom'));
-  fireEvent.click(await screen.findByRole('button', { name: /save workspace timezone/i }));
+  const zone = await screen.findByRole('combobox', { name: 'Workspace timezone' });
+  fireEvent.change(zone, { target: { value: 'Asia/Tokyo' } });
+  fireEvent.blur(zone);
   const alert = await screen.findByRole('alert');
   expect(alert).toHaveTextContent('The settings action failed. Try again.');
   expect(alert.closest('.settings-card')).toHaveTextContent('Workspace timezone');
@@ -106,7 +109,7 @@ test('a plain agent manages the shared saved replies and the list reloads after 
   api.createSavedReply.mockResolvedValue(stored);
   api.deleteSavedReply.mockResolvedValue(undefined);
   await screen.findByRole('heading', { name: 'Saved replies' });
-  expect(screen.getByRole('button', { name: 'Add saved reply' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
   api.savedReplies.mockResolvedValue({ items: [stored] });
   fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Closing' } });
   fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Thanks.' } });
@@ -118,4 +121,15 @@ test('a plain agent manages the shared saved replies and the list reloads after 
   fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
   await waitFor(() => expect(api.deleteSavedReply).toHaveBeenCalledWith(stored.id));
   expect(await screen.findByText('No saved replies yet.')).toBeInTheDocument();
+});
+
+test('signing out this device from Sessions reloads who is signed in, so the signed-out screen follows', async () => {
+  show('agent', [{ id: '44444444-4444-4444-8444-444444444444', agent_id: SAM, agent_email: 'sam@example.com', label: 'Cloud sign-in',
+    current: true, created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z', expires_at: '2099-01-01T00:00:00Z', revoked_at: null }]);
+  api.revokeSession.mockResolvedValue(undefined);
+  const sessions = await screen.findByRole('region', { name: 'Sessions' });
+  const signOut = await within(sessions).findByRole('button', { name: 'Sign out' });
+  const before = api.me.mock.calls.length;
+  fireEvent.click(signOut);
+  await waitFor(() => expect(api.me.mock.calls.length).toBeGreaterThan(before));
 });

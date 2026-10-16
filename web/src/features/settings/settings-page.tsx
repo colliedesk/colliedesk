@@ -1,12 +1,11 @@
-import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { Invite, Session } from '../../api/schemas';
-import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
-import { AppearanceSection } from './appearance-section';
-import { NotificationsSection } from './notifications-section';
-import { useSaveFeedback } from './save-feedback';
+import { InvitesSection } from './invites-section';
+import { PreferencesSection } from './preferences-section';
 import type { SaveState } from './save-feedback';
+import { SessionsSection } from './sessions-section';
+import { TimezoneSelect } from './timezone-select';
 
 interface SettingsPageProps {
   sessions: Session[];
@@ -28,7 +27,7 @@ interface SettingsPageProps {
   personalTimezoneSave?: SaveState;
   // inviteError explains a refused invite, for example a full agent cap.
   inviteError?: string;
-  // teamSection lists the agents; it comes before sessions and invites, which belong to the same people.
+  // teamSection lists the agents; invites and sessions follow it, as they belong to the same people.
   teamSection?: ReactNode;
   emailSection?: ReactNode;
   // savedRepliesSection is for every agent, not only admins.
@@ -38,88 +37,69 @@ interface SettingsPageProps {
   webFormSection?: ReactNode;
 }
 
-function sessionState(session: Session): keyof typeof messages.sessionStates {
-  if (session.revoked_at) return 'revoked';
-  return Date.parse(session.expires_at) <= Date.now() ? 'expired' : 'active';
-}
+interface NavEntry { label: string; target: string; shown: boolean }
 
-// inviteState makes every way an invite can end visible: used, revoked or expired.
-function inviteState(invite: Invite): keyof typeof messages.inviteStates {
-  if (invite.used_at) return 'accepted';
-  if (invite.revoked_at) return 'revoked';
-  return Date.parse(invite.expires_at) <= Date.now() ? 'expired' : 'pending';
-}
-
+// SettingsPage is one page in two groups: what belongs to the person signed in, then what the whole
+// workspace shares. A section nav jumps to each; it lists only the sections this person can see.
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
   workspaceTimezone = 'UTC', timezoneOverride = null, createdInviteUrl, onCreateInvite, onRevokeInvite,
   onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, emailSection, savedRepliesSection, webFormSection, exportSection }: SettingsPageProps) {
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'admin' | 'agent'>('agent');
-  const [workspaceZone, setWorkspaceZone] = useState(workspaceTimezone);
-  const [agentZone, setAgentZone] = useState(timezoneOverride ?? '');
-  useEffect(() => setWorkspaceZone(workspaceTimezone), [workspaceTimezone]);
-  useEffect(() => setAgentZone(timezoneOverride ?? ''), [timezoneOverride]);
-  const workspaceFeedback = useSaveFeedback(workspaceTimezoneSave);
-  const personalFeedback = useSaveFeedback(personalTimezoneSave);
+  const groups: { label: string; entries: NavEntry[] }[] = [
+    { label: messages.settingsYourAccount, entries: [
+      { label: messages.profile, target: 'profile-heading', shown: true },
+      { label: messages.preferences, target: 'preferences-heading', shown: true },
+    ] },
+    { label: messages.settingsWorkspace, entries: [
+      { label: messages.general, target: 'general-heading', shown: canManageWorkspace },
+      { label: messages.team, target: 'team-heading', shown: Boolean(teamSection) },
+      { label: messages.invites, target: 'invites-heading', shown: true },
+      { label: messages.sessions, target: 'sessions-heading', shown: true },
+      { label: messages.emailChannel, target: 'email-channel-heading', shown: Boolean(emailSection) },
+      { label: messages.webForm, target: 'web-form-heading', shown: Boolean(webFormSection) },
+      { label: messages.savedReplies, target: 'saved-replies-heading', shown: Boolean(savedRepliesSection) },
+      { label: messages.exportHeading, target: 'export-heading', shown: Boolean(exportSection) },
+    ] },
+  ];
   return (
     <main className="settings-page panel">
-      <header><h1>{messages.settings}</h1><p>{messages.workspaceSettings}</p></header>
-      {loading ? <p role="status" className="empty-copy">{messages.loading}</p> : <>
-      {error && <p role="alert" className="error-copy">{error}</p>}
-      <section className="settings-card"><div className="section-heading"><h2>{messages.timezoneSettings}</h2><p>{messages.timezoneDescription}</p></div>
-        <div className="settings-body">
-          {canManageWorkspace && <label className="field"><span>{messages.workspaceTimezone}</span><span className="input-with-actions"><input value={workspaceZone} onChange={(event) => { workspaceFeedback.touch(); setWorkspaceZone(event.target.value); }} />
-            <button type="button" disabled={workspaceFeedback.pending} onClick={() => { if (!workspaceFeedback.pending) onSetWorkspaceTimezone?.(workspaceZone); }}>{workspaceFeedback.saveLabel(messages.saveWorkspaceTimezone)}</button>{workspaceFeedback.status}</span></label>}
-          <label className="field"><span>{messages.personalTimezoneOverride}</span><span className="input-with-actions"><input value={agentZone} placeholder={workspaceTimezone} onChange={(event) => { personalFeedback.touch(); setAgentZone(event.target.value); }} />
-            <button type="button" disabled={personalFeedback.pending} onClick={() => { if (!personalFeedback.pending) onSetAgentTimezone?.(agentZone); }}>{personalFeedback.saveLabel(messages.savePersonalTimezone)}</button>
-              <button type="button" disabled={personalFeedback.pending} onClick={() => { if (personalFeedback.pending) return; setAgentZone(''); onSetAgentTimezone?.(null); }}>{messages.clearPersonalTimezone}</button>{personalFeedback.status}</span></label>
+      <header><h1>{messages.settings}</h1><p>{messages.settingsDescription}</p></header>
+      {loading ? <p role="status" className="empty-copy">{messages.loading}</p> : <div className="settings-layout">
+        <nav className="settings-nav" aria-label={messages.settingsSections}>
+          {groups.map((group) => <div key={group.label}><p className="settings-group-label">{group.label}</p>
+            <ul>{group.entries.filter((entry) => entry.shown).map((entry) => <li key={entry.target}><a href={`#${entry.target}`}>{entry.label}</a></li>)}</ul>
+          </div>)}
+        </nav>
+        <div className="settings-sections">
+          {error && <p role="alert" className="error-copy">{error}</p>}
+          <p className="settings-group-label">{messages.settingsYourAccount}</p>
+          <section className="settings-card" aria-labelledby="profile-heading">
+            <div className="section-heading"><h2 id="profile-heading">{messages.profile}</h2><p>{messages.profileDescription}</p></div>
+            <div className="settings-body">
+              <TimezoneSelect label={messages.yourTimezone} value={timezoneOverride ?? ''} emptyOption={messages.sameAsWorkspace(workspaceTimezone)}
+                save={personalTimezoneSave} onChange={(value) => onSetAgentTimezone?.(value || null)} />
+            </div>
+          </section>
+          <PreferencesSection />
+          <p className="settings-group-label">{messages.settingsWorkspace}</p>
+          {canManageWorkspace && <section className="settings-card" aria-labelledby="general-heading">
+            <div className="section-heading"><h2 id="general-heading">{messages.general}</h2><p>{messages.generalDescription}</p></div>
+            <div className="settings-body">
+              <TimezoneSelect label={messages.workspaceTimezone} value={workspaceTimezone} save={workspaceTimezoneSave} onChange={(value) => onSetWorkspaceTimezone?.(value)} />
+            </div>
+          </section>}
+          {teamSection}
+          <InvitesSection invites={invites} timezone={timezone} canCreateInvites={canCreateInvites} createdInviteUrl={createdInviteUrl}
+            inviteError={inviteError} onCreateInvite={onCreateInvite} onRevokeInvite={onRevokeInvite} />
+          <SessionsSection sessions={sessions} timezone={timezone} onRevokeSession={onRevokeSession} />
+          {emailSection}
+          {webFormSection}
+          {savedRepliesSection}
+          {exportSection && <section className="settings-card" aria-labelledby="export-heading">
+            <div className="section-heading"><h2 id="export-heading">{messages.exportHeading}</h2><p>{messages.exportDescription}</p></div>
+            <div className="settings-body">{exportSection}</div>
+          </section>}
         </div>
-      </section>
-      {teamSection}
-      {savedRepliesSection}
-      {emailSection}
-      {webFormSection}
-      <AppearanceSection />
-      <NotificationsSection />
-      {exportSection && <section className="settings-card" aria-labelledby="export-heading">
-        <div className="section-heading"><h2 id="export-heading">{messages.exportHeading}</h2><p>{messages.exportDescription}</p></div>
-        <div className="settings-body">{exportSection}</div>
-      </section>}
-      <section className="settings-card" aria-labelledby="sessions-heading"><div className="section-heading"><h2 id="sessions-heading">{messages.sessions}</h2><p>{messages.sessionsDescription}</p></div>
-        <div className="settings-body"><div className="data-list">{sessions.map((session) => {
-          const state = sessionState(session);
-          return <article key={session.id}>
-            <div><strong title={session.label}>{session.label}</strong><span>{session.agent_email}</span><span>{messages.sessionStates[state]}</span>
-              <time>{formatDate(session.last_seen_at, timezone)}</time></div>
-            {state === 'active' && <button type="button" className="danger-action" onClick={() => onRevokeSession?.(session.id)}>{messages.revoke}</button>}
-          </article>;
-        })}</div></div>
-      </section>
-      <section className="settings-card" aria-labelledby="invites-heading"><div className="section-heading"><h2 id="invites-heading">{messages.invites}</h2><p>{messages.invitesDescription}</p></div>
-        <div className="settings-body">
-          {canCreateInvites && <form className="invite-form" onSubmit={(event) => { event.preventDefault(); onCreateInvite?.(email, role); }}>
-            <label className="field"><span>{messages.inviteEmail}</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
-            <label className="field"><span>{messages.roleCeiling}</span><select value={role} onChange={(event) => setRole(event.target.value as 'admin' | 'agent')}>
-              <option value="agent">{messages.roles.agent}</option><option value="admin">{messages.roles.admin}</option>
-            </select></label>
-            <button className="primary-action" type="submit">{messages.createInvite}</button>
-          </form>}
-          {canCreateInvites && inviteError && <p role="alert" className="error-copy">{inviteError}</p>}
-          {canCreateInvites && createdInviteUrl && <label className="invite-link"><span className="field-label">{messages.inviteLink}</span>
-            <input aria-label={messages.inviteLink} readOnly value={createdInviteUrl} />
-            <small>{messages.inviteLinkNotice}</small>
-          </label>}
-          {invites.length > 0 && <div className="data-list">{invites.map((invite) => {
-            const state = inviteState(invite);
-            return <article key={invite.id}>
-              <div><strong>{invite.email}</strong><span>{messages.roles[invite.role_ceiling]}</span>
-                <span>{messages.inviteStates[state]}</span><time>{formatDate(invite.expires_at, timezone)}</time></div>
-              {canCreateInvites && state === 'pending' && <button type="button" className="danger-action" onClick={() => onRevokeInvite?.(invite.id)}>{messages.revoke}</button>}
-            </article>;
-          })}</div>}
-        </div>
-      </section>
-      </>}
+      </div>}
     </main>
   );
 }

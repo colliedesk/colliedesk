@@ -159,3 +159,17 @@ test('the address name save shows Saving… and Saved separately from the suppor
   rerender(<EmailChannelSection settings={hosted} timezone="UTC" canManage workspaceSlug="acme" slugSave={{ saved: true }} />);
   expect(screen.getByRole('status')).toHaveTextContent('Saved');
 });
+
+test('the inbound URL has its own copy button', async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  render(<EmailChannelSection settings={disconnected} timezone="UTC" canManage />);
+  fireEvent.click(screen.getByRole('button', { name: 'Copy inbound URL' }));
+  expect(writeText).toHaveBeenCalledWith(disconnected.inbound_url);
+  expect(await screen.findByText(/copied/i)).toBeInTheDocument();
+});
+
+test('outgoing email that is not configured reads as a warning, not a footnote', () => {
+  render(<EmailChannelSection settings={disconnected} timezone="UTC" canManage />);
+  expect(screen.getByRole('note')).toHaveTextContent(/outgoing email is not configured/i);
+});
