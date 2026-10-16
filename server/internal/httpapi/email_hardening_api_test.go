@@ -196,3 +196,39 @@ func TestEmailStorageFailuresAreServerErrors(t *testing.T) {
 		}
 	}
 }
+
+// dsnFor is a delivery status report that returns ourID and names recipient as the address that failed.
+func dsnFor(ourID, recipient string) string {
+	return mail([]string{
+		"From: Mail Delivery System <MAILER-DAEMON@mx.customer.example>", "Subject: Undelivered Mail Returned to Sender",
+		"Message-ID: <dsn-" + recipient + ">", "MIME-Version: 1.0",
+		`Content-Type: multipart/report; report-type=delivery-status; boundary="r1"`,
+	}, "--r1\nContent-Type: text/plain\n\nThe mailbox does not exist.\n--r1\nContent-Type: message/delivery-status\n\n"+
+		"Reporting-MTA: dns; mx.customer.example\n\nFinal-Recipient: rfc822; "+recipient+"\nAction: failed\nStatus: 5.1.1\n"+
+		"--r1\nContent-Type: text/rfc822-headers\n\nFrom: support@bounce.example.com\nMessage-ID: <"+ourID+">\nSubject: Re: Bounce\n--r1--\n")
+}
+
+func TestABounceFromACopiedAddressDoesNotFailTheReply(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Bounce Cc Desk", "admin@bounce.example.com")
+	secret := connectEmail(t, api, admin, "support@bounce.example.com")
+	thread := inboundOK(t, api, secret, mail([]string{"From: s@customer.example", "Subject: Bounce", "Message-ID: <bounce-cc@customer.example>"}, "Hi."))
+	reply := create(t, api, admin, "/api/v1/conversations/"+*thread.ConversationID+"/messages",
+		map[string]any{"kind": "outgoing", "body": "Answer.", "cc": []string{"gone@customer.example"}})
+	ourID := queryString(t, pool, `SELECT email_message_id FROM messages WHERE id=$1`, reply)
+	if _, err := pool.Exec(t.Context(), `UPDATE email_outbox SET status='sent',sent_at=now(),attempts=1`); err != nil {
+		t.Fatal(err)
+	}
+	inboundOK(t, api, secret, dsnFor(ourID, "gone@customer.example"))
+	items := timeline(t, api, admin, *thread.ConversationID)
+	if items[1].Delivery == nil || items[1].Delivery.Status != "sent" {
+		t.Fatalf("a bounce from a copied address failed the whole reply: %+v", items[1].Delivery)
+	}
+	if lastError := queryString(t, pool, `SELECT COALESCE(last_error,'') FROM email_outbox`); !strings.Contains(lastError, "gone@customer.example") {
+		t.Fatalf("the bounced copy must be named on the delivery: %q", lastError)
+	}
+	inboundOK(t, api, secret, dsnFor(ourID, "S@customer.example"))
+	if items := timeline(t, api, admin, *thread.ConversationID); items[1].Delivery.Status != "failed" {
+		t.Fatalf("a bounce from the contact must fail the reply: %+v", items[1].Delivery)
+	}
+}

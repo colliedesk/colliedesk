@@ -59,11 +59,23 @@ func findThread(ctx context.Context, tx pgx.Tx, workspaceID string, in email.Inb
 	return conversationID, nil
 }
 
-// markBounced fails the deliveries of our replies named in a delivery status report.
-func markBounced(ctx context.Context, tx pgx.Tx, workspaceID string, messageIDs []string) error {
-	if _, err := tx.Exec(ctx, `UPDATE email_outbox o SET status='failed',last_error=$3,locked_until=NULL,claim_token=NULL,updated_at=now()
+// markBounced fails the deliveries of our replies named in a delivery status report. When the report
+// names its failed recipients and every one of them is a Cc address of the reply, the customer still
+// got it: the delivery stays as it is and the bounced copies are added to its note instead.
+func markBounced(ctx context.Context, tx pgx.Tx, workspaceID string, messageIDs, recipients []string) error {
+	const onlyCopies = `cardinality($3::text[]) > 0 AND (SELECT bool_and(r = ANY(COALESCE(m.cc,'{}'))) FROM unnest($3::text[]) r)`
+	if recipients == nil {
+		recipients = []string{}
+	}
+	if _, err := tx.Exec(ctx, `UPDATE email_outbox o SET last_error=concat_ws('; ',o.last_error,'Bounced from copied address: '||array_to_string($3::text[],', ')),
+			updated_at=now()
 		FROM messages m WHERE o.workspace_id=$1 AND m.workspace_id=o.workspace_id AND m.id=o.message_id
-		AND m.kind='outgoing' AND m.email_message_id=ANY($2)`, workspaceID, messageIDs, bounceReason); err != nil {
+		AND m.kind='outgoing' AND m.email_message_id=ANY($2) AND o.status<>'failed' AND `+onlyCopies, workspaceID, messageIDs, recipients); err != nil {
+		return fmt.Errorf("record copy bounce: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE email_outbox o SET status='failed',last_error=$4,locked_until=NULL,claim_token=NULL,updated_at=now()
+		FROM messages m WHERE o.workspace_id=$1 AND m.workspace_id=o.workspace_id AND m.id=o.message_id
+		AND m.kind='outgoing' AND m.email_message_id=ANY($2) AND NOT (`+onlyCopies+`)`, workspaceID, messageIDs, recipients, bounceReason); err != nil {
 		return fmt.Errorf("record bounce: %w", err)
 	}
 	return nil

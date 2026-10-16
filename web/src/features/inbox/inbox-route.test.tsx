@@ -109,14 +109,14 @@ test('a retry the trial refuses says why instead of doing nothing', async () => 
   api.timeEntries.mockResolvedValue({ items: [] });
   api.messages.mockResolvedValue({ items: [{
     id: '33333333-3333-4333-8333-333333333333', conversation_id: alpha.id, author_agent_id: null, author_name: null, kind: 'outgoing', body: 'Answer.',
-    body_html: null, origin: null, attachments: [], created_at: '2026-10-14T00:00:00Z', email: null,
+    body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', email: null,
     delivery: { status: 'failed', attempts: 1, last_error: 'x', sent_at: null },
   }] });
   api.retryDelivery.mockRejectedValue(new OutboundRefusedError('trial_outbound_limit', 'server text', 7200));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
   fireEvent.click(await screen.findByRole('button', { name: /retry delivery/i }));
-  expect(await screen.findByRole('alert')).toHaveTextContent(/200 replies in 24 hours.*about 2 hours/i);
+  expect(await screen.findByRole('alert')).toHaveTextContent(/200 people in 24 hours, counting everyone copied.*about 2 hours/i);
 });
 
 test('typing in search keeps the previous rows until the new response arrives', async () => {

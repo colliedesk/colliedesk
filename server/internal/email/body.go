@@ -31,6 +31,7 @@ type content struct {
 	attachments                   []domain.EmailAttachment
 	files                         []File
 	bouncedIDs                    []string
+	bouncedRecipients             []string
 }
 
 func (c *content) addFile(file File) {
@@ -79,6 +80,14 @@ func walk(header textproto.MIMEHeader, body io.Reader, depth int, result *conten
 			walk(part.Header, part, depth+1, result)
 		}
 	}
+	if mediaType == "message/delivery-status" {
+		// The report is kept as a file like any other part; its recipient groups name who failed.
+		var report bytes.Buffer
+		body = io.TeeReader(io.LimitReader(body, maxDeliveryStatusBytes), &report)
+		defer func() {
+			result.bouncedRecipients = append(result.bouncedRecipients, failedRecipients(report.Bytes())...)
+		}()
+	}
 	if mediaType == "message/rfc822" || mediaType == "text/rfc822-headers" || mediaType == "message/rfc822-headers" {
 		data := decodeFile(header.Get("Content-Transfer-Encoding"), body)
 		// A delivery status report returns the headers of the message that bounced.
@@ -111,6 +120,31 @@ func walk(header textproto.MIMEHeader, body io.Reader, depth int, result *conten
 	}
 	if mediaType == "text/html" && result.html == "" {
 		result.html, result.htmlTruncated = text, truncated
+	}
+}
+
+// maxDeliveryStatusBytes bounds the delivery status part a report may carry; real ones are a few KiB.
+const maxDeliveryStatusBytes = 64 << 10
+
+// failedRecipients reads the per-recipient groups of a message/delivery-status body (RFC 3464) and
+// returns, lowercased, the Final-Recipient of each group whose Action is failed.
+func failedRecipients(report []byte) []string {
+	var failed []string
+	reader := textproto.NewReader(bufio.NewReader(bytes.NewReader(report)))
+	for {
+		group, err := reader.ReadMIMEHeader()
+		if strings.EqualFold(strings.TrimSpace(group.Get("Action")), "failed") {
+			recipient := group.Get("Final-Recipient")
+			if _, address, ok := strings.Cut(recipient, ";"); ok {
+				recipient = address
+			}
+			if recipient = strings.ToLower(strings.TrimSpace(recipient)); recipient != "" {
+				failed = append(failed, recipient)
+			}
+		}
+		if err != nil {
+			return failed
+		}
 	}
 }
 

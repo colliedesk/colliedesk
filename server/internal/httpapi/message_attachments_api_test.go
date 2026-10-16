@@ -26,7 +26,8 @@ type upload struct {
 	data              []byte
 }
 
-func multipartMessage(t *testing.T, conversationID, token, kind, body string, files []upload) *http.Request {
+// multipartMessage builds a message request; each cc address is its own field, ahead of the files.
+func multipartMessage(t *testing.T, conversationID, token, kind, body string, files []upload, cc ...string) *http.Request {
 	t.Helper()
 	var buffer bytes.Buffer
 	writer := multipart.NewWriter(&buffer)
@@ -35,6 +36,11 @@ func multipartMessage(t *testing.T, conversationID, token, kind, body string, fi
 	}
 	if err := writer.WriteField("body", body); err != nil {
 		t.Fatal(err)
+	}
+	for _, address := range cc {
+		if err := writer.WriteField("cc", address); err != nil {
+			t.Fatal(err)
+		}
 	}
 	for _, file := range files {
 		header := textproto.MIMEHeader{}

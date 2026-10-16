@@ -85,7 +85,11 @@ func writePlanLimit(response http.ResponseWriter, err error) bool {
 // customer did not write first) and 429 trial_outbound_limit, with Retry-After, for the daily cap.
 func writeTrialOutbound(response http.ResponseWriter, refusal *domain.TrialOutboundError) {
 	if !refusal.Limited() {
-		writeError(response, http.StatusForbidden, "trial_outbound_restricted", refusal.Error())
+		body := map[string]any{"code": "trial_outbound_restricted", "message": refusal.Error()}
+		if len(refusal.RefusedCC) > 0 {
+			body["refused_cc"] = refusal.RefusedCC
+		}
+		writeJSON(response, http.StatusForbidden, map[string]any{"error": body})
 		return
 	}
 	seconds := int((refusal.RetryAfter + time.Second - 1) / time.Second)

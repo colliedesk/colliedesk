@@ -63,10 +63,10 @@ A conversation line has `id`, `contact_id`, `subject`, `status`, `priority`, `as
 
 Each message has `id`, `conversation_id`, `author_agent_id`, `author_name`, `kind`
 (`incoming`, `outgoing` or `note`), `body`, `body_html`, `origin`, `email_message_id`,
-`email_meta` (the sender, authentication result, `via` and attachment names of a received message;
-`via` is `platform` or `workspace` for email and `web_form` for text typed into the web form, whose
-sender address is unverified and whose `authentication` is `none`),
-`created_at` and `attachments`. Each attachment entry has `id`, `filename`, `content_type`,
+`email_meta` (the sender, authentication result, `via`, Cc addresses and attachment names of a
+received message; `via` is `platform` or `workspace` for email and `web_form` for text typed into
+the web form, whose sender address is unverified and whose `authentication` is `none`), `cc` (the
+addresses a reply was copied to, or `null`), `created_at` and `attachments`. Each attachment entry has `id`, `filename`, `content_type`,
 `size`, `sha256`, `created_at` and `path`, the file's location in the ZIP.
 
 Each time entry has `id`, `conversation_id`, `agent_id`, `agent_name`, `minutes`, `note`,

@@ -21,12 +21,14 @@ type Outgoing struct {
 	ReplyToName string
 	ToName      string
 	ToAddress   string
-	Subject     string
-	Body        string
-	MessageID   string
-	InReplyTo   string
-	References  []string
-	Date        time.Time
+	// Cc are plain addresses copied on the message; there is no Bcc.
+	Cc         []string
+	Subject    string
+	Body       string
+	MessageID  string
+	InReplyTo  string
+	References []string
+	Date       time.Time
 	// Files are attached to the message; with none, the message is a single text part.
 	Files []File
 	// Standalone keeps Subject as written; a reply gets "Re: " in front.
@@ -42,6 +44,11 @@ func Compose(message Outgoing) ([]byte, error) {
 	if !validAddress(message.FromAddress) || !validAddress(message.ToAddress) || (message.ReplyTo != "" && !validAddress(message.ReplyTo)) {
 		return nil, fmt.Errorf("compose: from, to and reply-to must be plain addresses")
 	}
+	for _, copied := range message.Cc {
+		if !validAddress(copied) {
+			return nil, fmt.Errorf("compose: cc must be plain addresses")
+		}
+	}
 	var buffer bytes.Buffer
 	header := func(name, value string) {
 		if value != "" {
@@ -51,6 +58,7 @@ func Compose(message Outgoing) ([]byte, error) {
 	from := &mail.Address{Name: cleanLine(message.FromName), Address: message.FromAddress}
 	header("From", from.String())
 	header("To", (&mail.Address{Name: cleanLine(message.ToName), Address: message.ToAddress}).String())
+	header("Cc", strings.Join(message.Cc, ", "))
 	if message.ReplyTo != "" {
 		name := from.Name
 		if message.ReplyToName != "" {
@@ -179,6 +187,9 @@ func NewToken() (string, error) {
 	}
 	return hex.EncodeToString(raw), nil
 }
+
+// ValidAddress reports whether address is a plain addr-spec that a header can carry as written.
+func ValidAddress(address string) bool { return validAddress(address) }
 
 func validAddress(address string) bool {
 	parsed, err := mail.ParseAddress(address)

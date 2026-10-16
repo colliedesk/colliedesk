@@ -73,8 +73,10 @@ type Message struct {
 	Origin         *domain.MessageOrigin `json:"origin"`
 	EmailMessageID *string               `json:"email_message_id"`
 	EmailMeta      json.RawMessage       `json:"email_meta"`
-	CreatedAt      time.Time             `json:"created_at"`
-	Attachments    []Attachment          `json:"attachments"`
+	// CC is the list a reply was copied to; null when it copied no one.
+	CC          []string     `json:"cc"`
+	CreatedAt   time.Time    `json:"created_at"`
+	Attachments []Attachment `json:"attachments"`
 }
 
 // ConversationHead holds the fields of a conversation line that precede its messages.

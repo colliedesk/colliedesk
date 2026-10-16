@@ -74,8 +74,15 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 	return nil
 }
 
-// repliesInWindow counts the deliveries that use up the trial's daily cap: failed ones never left.
-const repliesInWindow = `SELECT count(*) FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND status <> 'failed'`
+// countedDelivery is a delivery that uses up the trial's daily cap: queued, sent, or failed after it
+// was handed to the relay (sent_at set). A delivery report can fail a reply that already reached its
+// people, and anyone can post one to the workspace's inbound address, so a later failure never gives
+// them back. Only a delivery that failed before leaving does not count.
+const countedDelivery = `(status <> 'failed' OR sent_at IS NOT NULL)`
+
+// recipientsInWindow sums the people reached by the counted deliveries in the window: the contact plus
+// every Cc address of each reply.
+const recipientsInWindow = `SELECT COALESCE(sum(recipients),0) FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND ` + countedDelivery
 
 // customerWroteFirst is true for a conversation that holds a message from the customer: an
 // imported one, or inbound mail that came through the platform forwarder and whose authentication
@@ -102,8 +109,9 @@ func (s *Store) onTrial(ctx context.Context, tx pgx.Tx, workspaceID string, now 
 }
 
 // checkTrialOutbound refuses a new reply the trial does not allow with a *domain.TrialOutboundError:
-// first the customer-wrote-first rule, then the daily cap.
-func (s *Store) checkTrialOutbound(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, domainVerified bool) error {
+// first the customer-wrote-first rule, then the daily cap. recipients is how many people the reply
+// reaches (the contact plus its Cc list).
+func (s *Store) checkTrialOutbound(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, domainVerified bool, recipients int) error {
 	now := s.now()
 	if trial, err := s.onTrial(ctx, tx, workspaceID, now); err != nil || !trial {
 		return err
@@ -117,41 +125,46 @@ func (s *Store) checkTrialOutbound(ctx context.Context, tx pgx.Tx, workspaceID, 
 			return &domain.TrialOutboundError{}
 		}
 	}
-	return s.checkTrialCap(ctx, tx, workspaceID, now)
+	return s.checkTrialCap(ctx, tx, workspaceID, now, recipients)
 }
 
-// checkTrialCap refuses with a *domain.TrialOutboundError carrying RetryAfter when the workspace
-// already has TrialRepliesPerDay deliveries in the window. Both a new reply and the retry of a
-// failed one (which counts again once queued) pass through it. A workspace-wide advisory lock makes
-// two concurrent callers see each other's row before the cap is compared.
-func (s *Store) checkTrialCap(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) error {
+// checkTrialCap refuses with a *domain.TrialOutboundError carrying RetryAfter when sending to
+// recipients more people would take the workspace past TrialRecipientsPerDay in the window. Both a new
+// reply and the retry of a failed one (which counts again once queued) pass through it. A
+// workspace-wide advisory lock makes two concurrent callers see each other's row before the cap is
+// compared.
+func (s *Store) checkTrialCap(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time, recipients int) error {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "outbound-cap:"+workspaceID); err != nil {
 		return fmt.Errorf("lock outbound cap: %w", err)
 	}
 	windowStart := now.Add(-domain.TrialReplyWindow)
-	var sent int
-	if err := tx.QueryRow(ctx, repliesInWindow, workspaceID, windowStart).Scan(&sent); err != nil {
-		return fmt.Errorf("count recent replies: %w", err)
+	var reached int
+	if err := tx.QueryRow(ctx, recipientsInWindow, workspaceID, windowStart).Scan(&reached); err != nil {
+		return fmt.Errorf("count recent recipients: %w", err)
 	}
-	if sent < domain.TrialRepliesPerDay {
+	room := domain.TrialRecipientsPerDay - recipients
+	if reached <= room {
 		return nil
 	}
-	// The cap-th newest counted reply is the one whose leaving the window frees a slot.
+	// Walking from the newest delivery back, the first one at which the running total passes room is
+	// the one whose leaving the window frees enough for this reply.
 	var frees time.Time
-	if err := tx.QueryRow(ctx, `SELECT created_at FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND status <> 'failed'
-		ORDER BY created_at DESC OFFSET $3 LIMIT 1`, workspaceID, windowStart, domain.TrialRepliesPerDay-1).Scan(&frees); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT created_at FROM (
+			SELECT created_at, sum(recipients) OVER (ORDER BY created_at DESC, id ROWS UNBOUNDED PRECEDING) AS total
+			FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND `+countedDelivery+`) counted
+		WHERE total > $3 ORDER BY total LIMIT 1`, workspaceID, windowStart, room).Scan(&frees); err != nil {
 		return fmt.Errorf("find next free slot: %w", err)
 	}
 	return &domain.TrialOutboundError{RetryAfter: frees.Add(domain.TrialReplyWindow).Sub(now)}
 }
 
-// repliesLast24h is the trial's cap usage as the admin sees it.
+// repliesLast24h is the trial's cap usage as the admin sees it: the people reached in the window.
 func repliesLast24h(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (int, error) {
-	var sent int
-	if err := tx.QueryRow(ctx, repliesInWindow, workspaceID, now.Add(-domain.TrialReplyWindow)).Scan(&sent); err != nil {
-		return 0, fmt.Errorf("count recent replies: %w", err)
+	var reached int
+	if err := tx.QueryRow(ctx, recipientsInWindow, workspaceID, now.Add(-domain.TrialReplyWindow)).Scan(&reached); err != nil {
+		return 0, fmt.Errorf("count recent recipients: %w", err)
 	}
-	return sent, nil
+	return reached, nil
 }
 
 // ownStorageBytes is what the trial's storage cap counts: the bytes of every attachment except those of

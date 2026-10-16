@@ -16,6 +16,8 @@ type smtpServer struct {
 	mu       sync.Mutex
 	replies  []string
 	received []receivedMail
+	// refused maps a recipient address to the reply its RCPT TO gets instead of 250.
+	refused map[string]string
 }
 
 type receivedMail struct {
@@ -75,7 +77,12 @@ func (s *smtpServer) handle(conn net.Conn) {
 			current = receivedMail{From: strings.Trim(strings.TrimSpace(line)[10:], "<>")}
 			write("250 OK")
 		case strings.HasPrefix(command, "RCPT TO:"):
-			current.To = append(current.To, strings.Trim(strings.TrimSpace(line)[8:], "<>"))
+			recipient := strings.Trim(strings.TrimSpace(line)[8:], "<>")
+			if reply := s.refusal(recipient); reply != "" {
+				write(reply)
+				continue
+			}
+			current.To = append(current.To, recipient)
 			write("250 OK")
 		case command == "DATA":
 			write("354 End data with <CR><LF>.<CR><LF>")
@@ -101,6 +108,22 @@ func (s *smtpServer) handle(conn net.Conn) {
 			write("502 Command not implemented")
 		}
 	}
+}
+
+// refuseRecipient makes RCPT TO for address answer reply.
+func (s *smtpServer) refuseRecipient(address, reply string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.refused == nil {
+		s.refused = map[string]string{}
+	}
+	s.refused[address] = reply
+}
+
+func (s *smtpServer) refusal(address string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.refused[address]
 }
 
 func (s *smtpServer) reply(mail receivedMail) string {

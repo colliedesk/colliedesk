@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Conversation, Message, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import { BulkActionBar } from './bulk-action-bar';
@@ -7,10 +7,13 @@ import { DetailsPanel } from './details-panel';
 import { InboxFilters, defaultInboxFilters } from './inbox-filters';
 import type { AttachmentLimits } from './attachment-picker';
 import { ReplyComposer } from './reply-composer';
+import { suggestedCc } from './suggested-cc';
 import { TimelinePanel } from './timeline-panel';
 import { messages } from '../../messages';
 
 interface InboxPageProps {
+  // The hosted cloud, where the server trusts a Cc line only on mail from the platform forwarder.
+  hosted?: boolean;
   conversations?: Conversation[];
   selected?: Conversation;
   timeline?: Message[];
@@ -20,7 +23,7 @@ interface InboxPageProps {
   timezone?: string;
   onSelect?: (id: string) => void;
   onFilters?: (filters: Record<string, string>) => void;
-  onMessage?: (kind: 'outgoing' | 'note', body: string, files?: File[]) => void | Promise<unknown>;
+  onMessage?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[]) => void | Promise<unknown>;
   attachmentLimits?: AttachmentLimits;
   savedReplies?: SavedReply[];
   // The names the composer fills into a saved reply: the selected customer and the signed-in agent.
@@ -53,7 +56,7 @@ interface InboxPageProps {
   onBulkUpdate?: (ids: string[], changes: BulkConversationChanges) => Promise<unknown>;
 }
 
-export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate }: InboxPageProps) {
+export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Filters are an uncontrolled form; clearing remounts it so every field returns to its default.
@@ -97,6 +100,7 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
       setBulkBusy(false);
     }
   };
+  const copied = useMemo(() => suggestedCc(timeline, { hosted }), [timeline, hosted]);
   const closeDetails = () => { setDetailsOpen(false); (detailsToggle.current ?? listPane.current)?.focus(); };
   // The drawer belongs to one conversation: a new selection or none closes it. Without a toggle left
   // to return to, focus goes to the list pane instead of falling back to the page.
@@ -140,7 +144,7 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}</p>}
         {deliveryNotice && <p role="alert" className="composer-notice">{deliveryNotice}</p>}
         {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
-        <ReplyComposer key={selected?.id} disabled={!selected} onSubmit={onMessage} attachmentLimits={attachmentLimits}
+        <ReplyComposer key={selected?.id} disabled={!selected} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
           savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState} />
       </div>
       <DetailsPanel conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate}

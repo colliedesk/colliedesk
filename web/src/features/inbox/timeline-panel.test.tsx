@@ -4,7 +4,7 @@ import type { Message } from '../../api/schemas';
 import { TimelinePanel } from './timeline-panel';
 
 const base = { conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, body_html: null, origin: null,
-  attachments: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null };
+  attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null };
 const incoming: Message = {
   ...base, id: '22222222-2222-4222-8222-222222222222', kind: 'incoming', body: 'Please help.',
   email: { from: 'ceo@customer.example', authentication: 'fail', attachments: [{ filename: 'invoice.pdf', content_type: 'application/pdf' }], original_attachment_id: null },
@@ -88,4 +88,25 @@ test('an outgoing reply lists the files that went with it as downloads', () => {
   const link = within(screen.getByRole('list', { name: 'Attachments' })).getByRole('link', { name: 'invoice.pdf' });
   expect(link).toHaveAttribute('href', '/api/v1/attachments/77777777-7777-4777-8777-777777777777');
   expect(screen.getByText('2.0 KiB')).toBeInTheDocument();
+});
+
+test('shows who a reply was copied to and who the customer copied', () => {
+  const copied: Message = { ...failed, id: '66666666-6666-4666-8666-666666666666', cc: ['boss@customer.example', 'ops@customer.example'] };
+  const customer: Message = { ...incoming, id: '77777777-7777-4777-8777-777777777777', email: { ...incoming.email!, cc: ['legal@customer.example'] } };
+  render(<TimelinePanel items={[customer, copied, queued]} timezone="UTC" />);
+  const [customerItem, copiedItem, plainItem] = screen.getAllByRole('article');
+  expect(within(copiedItem).getByText('Cc: boss@customer.example, ops@customer.example')).toBeInTheDocument();
+  expect(within(customerItem).getByText('Cc: legal@customer.example')).toBeInTheDocument();
+  expect(within(plainItem).queryByText(/^Cc:/)).not.toBeInTheDocument();
+});
+
+test('a sent reply that missed a copied address says which one, without offering a retry', () => {
+  const partly: Message = {
+    ...base, id: '66666666-6666-4666-8666-666666666666', kind: 'outgoing', body: 'Copying your team.', cc: ['gone@customer.example'],
+    delivery: { status: 'sent', attempts: 1, last_error: 'Sent to the customer, but not to: gone@customer.example (550 5.1.1 No such user)', sent_at: '2026-10-14T00:01:00Z' },
+  };
+  render(<TimelinePanel items={[partly]} timezone="UTC" onRetryDelivery={vi.fn()} />);
+  const item = screen.getByRole('article');
+  expect(within(item).getByText(/not to: gone@customer\.example/i)).toBeInTheDocument();
+  expect(within(item).queryByRole('button', { name: /retry delivery/i })).not.toBeInTheDocument();
 });
