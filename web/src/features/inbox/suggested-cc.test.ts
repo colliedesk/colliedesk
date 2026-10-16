@@ -5,9 +5,9 @@ import { suggestedCc } from './suggested-cc';
 const base = { conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, body_html: null, origin: null,
   attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null };
 let counter = 0;
-const incoming = (from: string, cc?: string[]): Message => ({
+const incoming = (from: string, cc?: string[], authentication: 'pass' | 'fail' | 'none' = 'pass'): Message => ({
   ...base, id: `00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`, kind: 'incoming', body: 'Hi',
-  email: { from, authentication: 'pass', attachments: [], original_attachment_id: null, ...(cc ? { cc } : {}) },
+  email: { from, authentication, attachments: [], original_attachment_id: null, ...(cc ? { cc } : {}) },
 });
 const outgoing = (cc: string[]): Message => ({ ...base, id: `00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`, kind: 'outgoing', body: 'Re', email: null, cc });
 
@@ -39,4 +39,11 @@ test('mail kept before Cc was recorded, notes and web form text offer nothing', 
 test('offers at most ten addresses', () => {
   const many = Array.from({ length: 14 }, (_, index) => `p${index}@customer.example`);
   expect(suggestedCc([incoming('ada@customer.example', many)])).toEqual(many.slice(0, 10));
+});
+
+test('mail whose sender was not verified offers nothing: anyone can write its Cc line', () => {
+  expect(suggestedCc([incoming('ada@customer.example', ['boss@customer.example'], 'none')])).toEqual([]);
+  expect(suggestedCc([incoming('ada@customer.example', ['boss@customer.example'], 'fail')])).toEqual([]);
+  const latestUnverified = [incoming('ada@customer.example', ['boss@customer.example']), incoming('mallory@elsewhere.example', ['victim@elsewhere.example'], 'none')];
+  expect(suggestedCc(latestUnverified)).toEqual([]);
 });

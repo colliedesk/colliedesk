@@ -251,7 +251,8 @@ on their side.
   empty box to remove the last one.
 - The box opens with the people the customer copied on their latest message (and a copied colleague
   who answered with reply-all). Remove any of them before you send. Mail received before Colliedesk
-  kept Cc lines offers nothing.
+  kept Cc lines offers nothing, and so does mail whose sender did not pass verification: anyone can
+  write a Cc line, so you add those people yourself if you mean to.
 - The reply goes to the conversation contact in **To** and to every Cc address. There is no Bcc.
   The timeline shows **Cc: …** under the reply, and under customer mail that copied someone.
 - At most 10 addresses per reply. Plain addresses only (`name@example.com`, no display names). You

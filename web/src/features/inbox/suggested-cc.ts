@@ -4,11 +4,12 @@ import { maxCc } from './cc-field';
 // suggestedCc lists who to copy on a reply by default: the people on the Cc line of the customer's
 // latest message, and that message's sender when it is not the person who opened the conversation (a
 // copied colleague who answered with reply-all). The person who opened the conversation already gets
-// the reply in To. Older mail has no Cc, so it offers nothing.
+// the reply in To. Older mail has no Cc, so it offers nothing. The sender writes the Cc line, so mail
+// whose authentication did not pass offers nothing either: it would prefill whoever a forger named.
 export function suggestedCc(timeline: Message[]): string[] {
   const received = timeline.filter((item) => item.kind === 'incoming' && item.email);
   const latest = received.at(-1)?.email;
-  if (!latest) return [];
+  if (!latest || latest.authentication !== 'pass') return [];
   const opener = received[0]?.email?.from.toLowerCase();
   const offered: string[] = [];
   for (const address of [latest.from, ...(latest.cc ?? [])].map((item) => item.toLowerCase())) {
