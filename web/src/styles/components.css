@@ -282,7 +282,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .cloud-signup .primary-action { --control: 44px; }
 @media (max-width: 44rem) {
   .plan-banner { margin-right: var(--space-2); padding-inline: var(--space-3); }
-  .plan-banner button { margin-left: 0; width: 100%; --control: var(--touch); }
+  .plan-banner button { margin-left: 0; --control: var(--touch); }
   .locked-screen { padding: var(--space-6) var(--space-4); }
   .locked-screen .button-row button { flex: 1 1 100%; --control: var(--touch); }
 }
@@ -329,3 +329,17 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .data-list .session-name { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .data-list .session-name .badge { flex: none; color: var(--accent-text); background: var(--accent-soft); font-size: var(--fs-label); }
 .stacked-form { display: grid; gap: var(--space-3); }
+
+/* Billing: usage bars and one card per plan. */
+.current-plan { display: grid; gap: var(--space-1); }
+.current-plan p { margin: 0; }
+.usage-list { display: grid; gap: var(--space-3); max-width: 28rem; }
+.usage { display: grid; gap: var(--space-1); font-size: var(--fs-small); color: var(--text-2); }
+.usage-bar { height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.usage-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+.usage-bar[data-level="high"] > span { background: var(--warn); }
+.plan-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: var(--space-3); }
+.plan-card { display: grid; grid-template-rows: auto 1fr auto; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-4); }
+.plan-card h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.plan-card ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; color: var(--text-2); font-size: var(--fs-small); }
+.plan-prices { display: flex; flex-wrap: wrap; gap: var(--space-2); }

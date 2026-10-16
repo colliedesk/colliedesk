@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import type { Billing } from '../../api/schemas';
 import { BillingPage } from './billing-page';
@@ -30,7 +30,8 @@ test('a trial workspace sees when the trial ends, its usage and five ways to sub
 
 test('a server without the Team 25 products offers only the plans it can sell', () => {
   render(<BillingPage billing={{ ...free, checkout_plans: ['team_monthly', 'team_yearly', 'founding'] }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
-  expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['Team, $49 per month', 'Team, $490 per year', 'Founding, $100 per year for life']);
+  expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Team, $49 per month', 'Team, $490 per year', 'Founding, $100 per year for life']);
+  expect(screen.queryByRole('article', { name: 'Team 25' })).not.toBeInTheDocument();
 });
 
 test('a paying workspace sees renewal, no upgrade buttons and a way to manage billing', () => {
@@ -126,4 +127,36 @@ test('a paid plan shows its storage cap and no reply cap', () => {
   render(<BillingPage billing={team} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
   expect(screen.getByText('Attachment storage: 0 B of 100.0 GiB')).toBeInTheDocument();
   expect(screen.queryByText(/people emailed in the last 24 hours/i)).not.toBeInTheDocument();
+});
+
+test('each plan is a card that says what it includes, with one compact button per price', () => {
+  render(<BillingPage billing={free} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  const card = (name: string) => screen.getByRole('article', { name });
+  expect(card('Team')).toHaveTextContent('Up to 10 agents');
+  expect(card('Team')).toHaveTextContent('100 GiB attachment storage');
+  expect(within(card('Team')).getAllByRole('button').map((button) => button.textContent)).toEqual(['$49 per month', '$490 per year']);
+  expect(card('Team 25')).toHaveTextContent('Up to 25 agents');
+  expect(card('Team 25')).toHaveTextContent('250 GiB attachment storage');
+  expect(card('Founding')).toHaveTextContent('20 GiB attachment storage');
+  expect(card('Founding')).toHaveTextContent('10 workspaces only');
+  expect(within(card('Founding')).getAllByRole('button').map((button) => button.textContent)).toEqual(['$100 per year for life']);
+  // Price buttons are secondary: the page does not shout five primary buttons.
+  expect(screen.getAllByRole('button').filter((button) => button.classList.contains('primary-action'))).toHaveLength(0);
+});
+
+test('usage reads as meters with their numbers', () => {
+  render(<BillingPage billing={free} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  const agents = screen.getByRole('meter', { name: 'Agents' });
+  expect(agents).toHaveAttribute('aria-valuenow', '2');
+  expect(agents).toHaveAttribute('aria-valuemax', '10');
+  expect(screen.getByRole('meter', { name: 'Attachment storage' })).toHaveAttribute('aria-valuenow', '0');
+  expect(screen.getByRole('meter', { name: 'People emailed in 24 hours' })).toHaveAttribute('aria-valuemax', '200');
+});
+
+test('trial and renewal dates are days, not times', () => {
+  const { rerender } = render(<BillingPage billing={free} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.getByText(/trial ends Oct 15, 2026\./)).toBeInTheDocument();
+  expect(screen.queryByText(/\d:\d\d/)).not.toBeInTheDocument();
+  rerender(<BillingPage billing={team} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.getByText('Renews Nov 15, 2026.')).toBeInTheDocument();
 });

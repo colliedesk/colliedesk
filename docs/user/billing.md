@@ -90,7 +90,8 @@ trial (or the subscription) has ended, instead of the inbox.
 ## Upgrade
 
 1. Open **Billing** (or select **Choose a plan** in the banner or on the locked page).
-2. Select a plan under **Upgrade**.
+2. Under **Choose a plan**, each plan is a card with its agents and attachment storage. Select a
+   price on the card: monthly or yearly (yearly costs two months less), or Founding.
 3. Pay in the window that opens on top of Colliedesk. It is run by our payment provider, Polar;
    Colliedesk never sees your card. Pay by card. Apple Pay and Google Pay come later. If you
    close the window, you stay on the page and can start again.

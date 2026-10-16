@@ -38,12 +38,13 @@ function AppLayout() {
   const inBilling = path.startsWith('/settings/billing');
   const inSettings = path.startsWith('/settings') && !inBilling;
   return <AppShell me={me.data} signedOut={signedOut} signIn={signIn}
-    notice={me.data && <PlanNotices me={me.data} />} lockedScreen={locked && me.data ? <LockedRoute me={me.data} /> : undefined}
+    notice={me.data && <PlanNotices me={me.data} onBillingPage={inBilling} />} lockedScreen={locked && me.data ? <LockedRoute me={me.data} /> : undefined}
     onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending}
     brand={<span className="rail-brand" role="img" aria-label={messages.brand}><LogoMark /></span>}
     links={locked ? undefined : <>
       <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inBilling ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
-      <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}><SettingsIcon /><span className="rail-label" aria-hidden="true">{messages.settings}</span></Link>
+      {/* exact: the router would otherwise also mark Settings current on /settings/billing. */}
+      <Link to="/settings" activeOptions={{ exact: true }} className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}><SettingsIcon /><span className="rail-label" aria-hidden="true">{messages.settings}</span></Link>
       {showBilling && <Link to="/settings/billing" search={{ checkout: '' }} className="rail-link" data-tip={messages.billing} aria-label={messages.billing} aria-current={inBilling ? 'page' : undefined}><CreditCardIcon /><span className="rail-label" aria-hidden="true">{messages.billing}</span></Link>}
     </>}>
     <Outlet />

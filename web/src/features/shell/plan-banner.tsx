@@ -9,7 +9,8 @@ interface PlanBannerProps {
   // billing is read by admins only; without it the storage warning cannot be shown.
   billing?: Billing;
   now?: Date;
-  onChoosePlan: () => void;
+  // onChoosePlan is left out where the plan choice is already on screen.
+  onChoosePlan?: () => void;
 }
 
 const dayMs = 24 * 60 * 60 * 1000;
@@ -37,7 +38,7 @@ export function PlanBanner({ plan, isAdmin, billing, now, onChoosePlan }: PlanBa
       {storageFull && <p role="status" className="plan-banner-warning">
         {messages.storageWarning(Math.floor((used / limit) * 100), formatBytes(used), formatBytes(limit))}
       </p>}
-      {isAdmin && <button type="button" className="primary-action" onClick={onChoosePlan}>{messages.choosePlan}</button>}
+      {isAdmin && onChoosePlan && <button type="button" className="primary-action" onClick={onChoosePlan}>{messages.choosePlan}</button>}
     </section>
   );
 }
