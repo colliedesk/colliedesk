@@ -28,7 +28,7 @@ Two variables are filled in when you insert a reply:
 | Variable | Filled with |
 |---|---|
 | `{{customer.name}}` | The name of the contact of the conversation you are in |
-| `{{agent.name}}` | Your own name (the display name on your account) |
+| `{{agent.name}}` | Your own name (the display name on your account). If your account has no display name yet, the part of your email address before the `@` (without a `+tag`) |
 
 Spaces inside the braces are fine: `{{ customer.name }}`. If a name is not known, the variable is
 removed together with the space before it, so `Hi {{customer.name}}, thanks` becomes `Hi, thanks`. A

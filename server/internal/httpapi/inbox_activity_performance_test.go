@@ -19,8 +19,8 @@ const (
 // TestInboxActivityLatencyBudget times the store query behind GET /api/v1/inbox/activity, which every
 // open inbox tab polls. The HTTP and session lookup hops are shared with every endpoint and measured
 // by the inbox list budget; timing the query itself keeps a noisy CI runner from failing a budget it
-// does not own. The fixture is a busy workspace: 5,000 conversations spread over a week, a tenth of
-// them assigned to the caller by a teammate, plus a second workspace of the same size.
+// does not own. The fixture is a busy workspace: 5,000 conversations, one every 20 seconds, a tenth of
+// them assigned to the caller by a teammate, a customer message on every third of them, plus a second workspace of the same size.
 func TestInboxActivityLatencyBudget(t *testing.T) {
 	api, service, pool := testAPIWithPool(t)
 	tokenA := createSession(t, api, service, "Activity Budget A", "admin-a@activity-budget.example.com")
@@ -33,6 +33,9 @@ func TestInboxActivityLatencyBudget(t *testing.T) {
 	seedActivityFixture(t, pool, "Activity Budget A", caller, teammate)
 	seedActivityFixture(t, pool, "Activity Budget B", "", "")
 	if _, err := pool.Exec(ctx, `ANALYZE conversations`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `ANALYZE messages`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -55,12 +58,12 @@ func TestInboxActivityLatencyBudget(t *testing.T) {
 	for index := range durations {
 		sample, durations[index] = poll()
 	}
-	if len(sample.NewConversations) == 0 || len(sample.NewConversations) >= store.InboxActivityLimit || len(sample.AssignedToMe) == 0 {
-		t.Fatalf("fixture is not realistic: new=%d assigned=%d", len(sample.NewConversations), len(sample.AssignedToMe))
+	if len(sample.NewConversations) == 0 || len(sample.NewConversations) >= store.InboxActivityLimit || len(sample.AssignedToMe) == 0 || len(sample.Updated) == 0 || len(sample.Updated) >= store.InboxActivityLimit {
+		t.Fatalf("fixture is not realistic: new=%d assigned=%d updated=%d", len(sample.NewConversations), len(sample.AssignedToMe), len(sample.Updated))
 	}
 	sort.Slice(durations, func(left, right int) bool { return durations[left] < durations[right] })
 	p95 := durations[activitySamples*95/100-1]
-	t.Logf("inbox activity p95=%s (new=%d assigned=%d)", p95, len(sample.NewConversations), len(sample.AssignedToMe))
+	t.Logf("inbox activity p95=%s (new=%d assigned=%d updated=%d)", p95, len(sample.NewConversations), len(sample.AssignedToMe), len(sample.Updated))
 	if p95 > activityLatencyBudget {
 		t.Fatalf("inbox activity p95 exceeds %s: %s", activityLatencyBudget, p95)
 	}
@@ -78,11 +81,17 @@ func seedActivityFixture(t *testing.T, pool *pgxpool.Pool, workspaceName, caller
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,assignee_id,assigned_at,assigned_by_agent_id)
-		SELECT $1,$2,'Fixture conversation '||n,now()-(n*2||' minutes')::interval,now()-(n*2||' minutes')::interval,
+		SELECT $1,$2,'Fixture conversation '||n,now()-(n*20||' seconds')::interval,now()-(n*20||' seconds')::interval,
 			CASE WHEN $3<>'' AND n%10=0 THEN $3::uuid END,
-			CASE WHEN $3<>'' AND n%10=0 THEN now()-(n*2||' minutes')::interval END,
+			CASE WHEN $3<>'' AND n%10=0 THEN now()-(n*20||' seconds')::interval END,
 			CASE WHEN $3<>'' AND n%10=0 THEN $4::uuid END
 		FROM generate_series(1,5000) AS n`, workspace, contact, caller, nullIfEmpty(teammate)); err != nil {
+		t.Fatal(err)
+	}
+	// Every conversation carries a short history; every third one ends with a customer message.
+	if _, err := pool.Exec(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,created_at)
+		SELECT c.workspace_id,c.id,CASE WHEN k=1 AND c.n%3=0 THEN 'incoming' ELSE 'note' END,'Fixture message',c.updated_at-((2-k)||' seconds')::interval
+		FROM (SELECT id,workspace_id,updated_at,row_number() OVER (ORDER BY created_at) AS n FROM conversations WHERE workspace_id=$1) c, generate_series(0,1) AS k`, workspace); err != nil {
 		t.Fatal(err)
 	}
 }

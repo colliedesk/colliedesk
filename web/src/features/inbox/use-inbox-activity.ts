@@ -27,12 +27,19 @@ class SeenIds {
 
 interface Alert { id: string; title: string; body: string }
 
-function alerts(activity: Activity): Alert[] {
-  const assigned = activity.assigned_to_me.map((item) => ({ id: item.id, title: messages.notificationAssigned, body: `${item.subject} · ${item.contact_name}` }));
+// A customer message is announced for my conversations, unassigned ones and the one I have open; a
+// teammate's conversation is otherwise theirs to answer. Items already announced as new or assigned
+// in the same poll are not announced a second time for the message that created them.
+function alerts(activity: Omit<Activity, 'updated'>, replies: Activity['updated'], agentId: string | undefined, viewing: (id: string) => boolean): Alert[] {
+  const body = (item: { subject: string; contact_name: string }) => `${item.subject} · ${item.contact_name}`;
+  const assigned = activity.assigned_to_me.map((item) => ({ id: item.id, title: messages.notificationAssigned, body: body(item) }));
   const taken = new Set(assigned.map((item) => item.id));
   const created = activity.new_conversations.filter((item) => !taken.has(item.id))
-    .map((item) => ({ id: item.id, title: messages.notificationNew, body: `${item.subject} · ${item.contact_name}` }));
-  return [...created, ...assigned];
+    .map((item) => ({ id: item.id, title: messages.notificationNew, body: body(item) }));
+  for (const item of created) taken.add(item.id);
+  const replied = replies.filter((item) => !taken.has(item.id) && (item.assignee_id === null || item.assignee_id === agentId || viewing(item.id)))
+    .map((item) => ({ id: item.id, title: messages.notificationReply, body: body(item) }));
+  return [...created, ...assigned, ...replied];
 }
 
 function notify(items: Alert[]) {
@@ -45,16 +52,17 @@ function notify(items: Alert[]) {
   } catch { /* some mobile browsers only allow notifications from a service worker */ }
 }
 
-// useInboxActivity keeps the signed-in app current: it polls for new and newly assigned conversations,
-// reloads the list when there is any, and, while the tab is in the background, raises a browser
-// notification (only when the agent turned them on) and shows the count in the tab title.
-export function useInboxActivity(enabled = true) {
+// useInboxActivity keeps the signed-in app current: it polls for new, newly assigned and changed
+// conversations, reloads the list and the timelines of the changed ones, and, while the tab is in
+// the background, raises a browser notification (only when the agent turned them on) and shows the
+// count in the tab title. agentId is the signed-in agent.
+export function useInboxActivity(enabled = true, agentId?: string) {
   const client = useQueryClient();
   const cursor = useRef<string | undefined>(undefined);
   // The first answer only sets the cursor. Anything stamped before it was already in the list the
   // agent loaded, so the lookback must not announce it.
   const opened = useRef<number | undefined>(undefined);
-  const seen = useRef({ created: new SeenIds(), assigned: new SeenIds() });
+  const seen = useRef({ created: new SeenIds(), assigned: new SeenIds(), updated: new SeenIds(), incoming: new SeenIds() });
   const pending = useRef(0);
   const baseTitle = useRef(document.title);
   const activity = useQuery({
@@ -79,15 +87,24 @@ export function useInboxActivity(enabled = true) {
       new_conversations: activity.data.new_conversations.filter((item) => seen.current.created.fresh(item.id) && Date.parse(item.created_at) > after),
       assigned_to_me: activity.data.assigned_to_me.filter((item) => seen.current.assigned.fresh(item.id) && Date.parse(item.assigned_at) > after),
     };
-    const items = alerts(unseen);
+    // An update repeats while it sits inside the server's lookback; it is new again only when the
+    // conversation changed again (updated_at) or another customer message arrived (incoming_at).
+    const changes = activity.data.updated.filter((item) => seen.current.updated.fresh(`${item.id}@${item.updated_at}`) && Date.parse(item.updated_at) > after);
+    const replies = changes.filter((item) => item.incoming_at !== null && seen.current.incoming.fresh(`${item.id}@${item.incoming_at}`) && Date.parse(item.incoming_at) > after);
+    // A timeline with an observer is on screen: the agent is reading that conversation.
+    const viewing = (id: string) => (client.getQueryCache().find({ queryKey: ['messages', id], exact: true })?.getObserversCount() ?? 0) > 0;
+    const items = alerts(unseen, replies, agentId, viewing);
+    // An update does not say who made it, so the caller's own change also refreshes the list once
+    // more. That costs at most one list fetch per poll and keeps the server row free of an actor field.
+    if (items.length > 0 || changes.length > 0) void client.invalidateQueries({ queryKey: ['conversations'] });
+    for (const item of changes) void client.invalidateQueries({ queryKey: ['messages', item.id] });
     if (items.length === 0) return;
-    void client.invalidateQueries({ queryKey: ['conversations'] });
     if (document.hasFocus()) return;
     if (pending.current === 0) baseTitle.current = document.title;
     pending.current += items.length;
     document.title = `(${pending.current}) ${baseTitle.current}`;
     if (currentNotificationState() === 'on') notify(items);
-  }, [activity.data, client]);
+  }, [activity.data, agentId, client]);
 
   useEffect(() => {
     const clear = () => {

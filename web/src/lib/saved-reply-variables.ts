@@ -5,6 +5,14 @@ export interface SavedReplyContext {
   agentName?: string;
 }
 
+// agentSignatureName is the name {{agent.name}} stands for. An invited agent may have no display
+// name yet; the part of the email before the @ keeps a signature from going out blank. A +tag is an
+// address detail, not part of a name, so it never reaches the customer.
+export function agentSignatureName(agent: { display_name: string; email: string } | undefined): string {
+  if (!agent) return '';
+  return agent.display_name.trim() || agent.email.split('@')[0]?.split('+')[0]?.trim() || '';
+}
+
 // A space or tab before an empty variable goes with it, so "Hi {{customer.name}}, thanks" reads
 // "Hi, thanks" when the customer has no name.
 const variable = /([ \t]?)\{\{\s*(customer\.name|agent\.name)\s*\}\}/g;
