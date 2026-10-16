@@ -40,6 +40,8 @@ jobs:
           cache: false
       - name: Product name spelled Colliedesk
         run: sh tests/brand-name-test.sh
+      - name: No webhook secret literals (GitHub secret scanning)
+        run: sh tests/webhook-secret-literal-test.sh
       - name: Release tags stay alpha (v0.0.N)
         run: sh tests/release-tag-test.sh
       - name: Release button picks the Cloud commit and the next tag

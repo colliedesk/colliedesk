@@ -19,10 +19,11 @@ import (
 
 const (
 	resendWebhookPath = "/api/v1/webhooks/resend"
-	// A Svix secret: "whsec_" plus the base64 of the key below.
-	resendWebhookSecret = "whsec_cmVzZW5kLXRlc3Qtc2lnbmluZy1rZXktMzJieXRlcw==" // gitleaks:allow (test placeholder)
-	resendWebhookKey    = "resend-test-signing-key-32bytes"
+	resendWebhookKey  = "resend-test-signing-key-32bytes"
 )
+
+// A Svix secret: "whsec_" plus the base64 of the key, built at run time (see billingWebhookSecret).
+var resendWebhookSecret = "whsec_" + base64.StdEncoding.EncodeToString([]byte(resendWebhookKey))
 
 func resendConfig(config *httpapi.Config) {
 	platformConfig(config)

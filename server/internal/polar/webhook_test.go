@@ -1,6 +1,7 @@
 package polar_test
 
 import (
+	"encoding/base64"
 	"net/http"
 	"testing"
 	"time"
@@ -14,15 +15,18 @@ const (
 	vectorBody      = `{"type":"subscription.updated","data":{"id":"sub_1"}}`
 	vectorID        = "msg_2xQ8vLrT"
 	vectorTimestamp = "1760500000"
-	// Secret whose key is the base64 payload after "whsec_" (Standard Webhooks).
-	standardSecret = "whsec_Y29sbGllZGVzay10ZXN0LXNpZ25pbmcta2V5LTMyYnk="
-	standardSig    = "By+yE5olfIYz5GYtOF4oTEB++L91exEG3v2Wz4bcKys="
+	// Key that, base64 encoded after "whsec_", forms the Standard Webhooks secret.
+	standardKey = "colliedesk-test-signing-key-32by"
+	standardSig = "By+yE5olfIYz5GYtOF4oTEB++L91exEG3v2Wz4bcKys="
 	// Secret whose key is the whole string as UTF-8 (Polar secrets issued before Standard Webhooks).
 	legacySecret = "whsec_legacyPolarSecretValue"
 	legacySig    = "S59W9EVHM/0/cvrZfD6+htN20n+KaGkji/OaYeBKdvc="
 )
 
 var vectorNow = time.Unix(1760500000, 0)
+
+// Built at run time so no secret-shaped literal reaches the repository (GitHub secret scanning flags it).
+var standardSecret = "whsec_" + base64.StdEncoding.EncodeToString([]byte(standardKey))
 
 func headers(id, timestamp, signature string) http.Header {
 	header := http.Header{}
