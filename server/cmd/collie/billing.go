@@ -64,11 +64,13 @@ func billingCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outp
 	return mailReconcileReport(ctx, report, emailConfig, strings.TrimSpace(os.Getenv("BILLING_ALERT_EMAIL")), now)
 }
 
-// mailReconcileReport sends the one summary mail. The findings are already applied and printed, so
-// a mail that cannot go out fails the command: a timer must not look healthy while nobody hears.
+// mailReconcileReport sends the one summary mail. The findings are already applied and printed.
+// Without an alert configuration it only warns, like the webhook alert; a send that fails fails the
+// command, so a timer does not look healthy while nobody hears.
 func mailReconcileReport(ctx context.Context, report billingreconcile.Report, config email.Config, to string, now time.Time) error {
 	if to == "" || !config.SMTP.Configured() || config.MailFromDomain == "" {
-		return errors.New("billing reconcile found items but no alert can be sent (set BILLING_ALERT_EMAIL, SMTP_HOST and MAIL_FROM_DOMAIN); read the output above")
+		_, err := fmt.Fprintln(stderr, "billing reconcile found items but no alert is configured (set BILLING_ALERT_EMAIL, SMTP_HOST and MAIL_FROM_DOMAIN); the list above is the only report")
+		return err
 	}
 	from := "noreply@" + config.MailFromDomain
 	message, err := report.Mail(from, to, now)

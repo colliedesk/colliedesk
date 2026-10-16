@@ -292,7 +292,25 @@ func TestReconcileDryRunPrintsTheDiffAndChangesNothing(t *testing.T) {
 	}
 }
 
-func TestReconcileFindingsWithoutAWorkingAlertMailFailTheCommandAfterApplying(t *testing.T) {
+func TestReconcileWithoutAlertConfigurationStillAppliesAndWarnsOnStderr(t *testing.T) {
+	env := newReconcileEnv(t, "No Alert")
+	env.seed("sub_n", "incomplete", "2026-10-16T09:00:00Z")
+	env.polar.pages = [][]map[string]any{{polarSub("sub_n", "active", "prod_team_m", env.workspaceID, "2026-10-16T10:00:00Z", nil)}}
+	t.Setenv("BILLING_ALERT_EMAIL", "")
+	var warned bytes.Buffer
+	previous := stderr
+	stderr = &warned
+	t.Cleanup(func() { stderr = previous })
+	env.mustRun("billing", "reconcile")
+	if got := env.billing(); got.Status != "active" {
+		t.Fatalf("status %q, want active", got.Status)
+	}
+	if !strings.Contains(warned.String(), "BILLING_ALERT_EMAIL") || len(env.mails()) != 0 {
+		t.Fatalf("want a stderr warning naming BILLING_ALERT_EMAIL and no mail: stderr=%q mails=%d", warned.String(), len(env.mails()))
+	}
+}
+
+func TestReconcileFailsWhenTheAlertMailCannotBeSentButKeepsTheAppliedChange(t *testing.T) {
 	env := newReconcileEnv(t, "Mail Down")
 	env.seed("sub_m", "incomplete", "2026-10-16T09:00:00Z")
 	env.polar.pages = [][]map[string]any{{polarSub("sub_m", "active", "prod_team_m", env.workspaceID, "2026-10-16T10:00:00Z", nil)}}
