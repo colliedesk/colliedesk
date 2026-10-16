@@ -23,9 +23,15 @@ const downloadRefusals: Record<string, string> = {
   failed: messages.exportFailed,
 };
 
+// The address is cleaned by the first mounted ExportAllData, but a second one can follow: the
+// settings page and the locked screen swap in the same load. The reason is kept for the page's
+// lifetime so whichever copy is on screen explains it; a reload starts without it.
+let landedRefusal: string | undefined;
+
 function returnedRefusal(): string | undefined {
   const reason = new URLSearchParams(window.location.search).get('export_error');
-  return reason !== null && Object.hasOwn(downloadRefusals, reason) ? downloadRefusals[reason] : undefined;
+  if (reason !== null) landedRefusal = Object.hasOwn(downloadRefusals, reason) ? downloadRefusals[reason] : undefined;
+  return landedRefusal;
 }
 
 // ExportAllData is the admin's way to take the whole workspace out as a ZIP. The server checks
@@ -33,7 +39,7 @@ function returnedRefusal(): string | undefined {
 // to disk with its own download progress. The same button serves Settings and the locked screen.
 export function ExportAllData() {
   const [returned] = useState(returnedRefusal);
-  // The reason is shown once: a reload must not repeat it.
+  // A reload must not repeat the reason, so the address is cleaned.
   useEffect(() => {
     if (new URLSearchParams(window.location.search).has('export_error')) window.history.replaceState(null, '', window.location.pathname);
   }, []);

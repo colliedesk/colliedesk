@@ -9,7 +9,7 @@ vi.mock('../../api/client', () => ({ api }));
 const assign = vi.fn();
 
 function show() {
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { mutations: { retry: false } } })}><ExportAllData /></QueryClientProvider>);
+  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { mutations: { retry: false } } })}><ExportAllData /></QueryClientProvider>);
 }
 beforeEach(() => {
   vi.clearAllMocks();
@@ -70,4 +70,15 @@ test('an unknown reason in the address is ignored', () => {
   Object.defineProperty(window, 'location', { configurable: true, value: { assign, search: '?export_error=<script>', pathname: '/settings' } });
   show();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+test('the reason survives a remount after the address was cleaned', () => {
+  Object.defineProperty(window, 'location', { configurable: true, value: { assign, search: '?export_error=link_invalid', pathname: '/settings' } });
+  const first = show();
+  expect(screen.getByRole('alert')).toHaveTextContent(/already used or has expired/i);
+  first.unmount();
+  // The first mount cleaned the address; the screen that replaces it must still explain the refusal.
+  Object.defineProperty(window, 'location', { configurable: true, value: { assign, search: '', pathname: '/settings' } });
+  show();
+  expect(screen.getByRole('alert')).toHaveTextContent(/already used or has expired/i);
 });
