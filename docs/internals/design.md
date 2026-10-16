@@ -51,7 +51,7 @@ the Clerk form.) Do not create a second palette.
 | Group | Tokens | Rule |
 |---|---|---|
 | Surfaces | `--surface-0` page and rail, `--surface-1` list, panels, cards, `--surface-2` hover, `--surface-3` active rail item and tag, `--surface-inverse` tooltip | Separate layers by surface step first. Add shadow only to floating layers. |
-| Lines | `--line` hairline dividers and panel edges, `--line-control` secondary button outline, `--line-strong` input borders | Inputs keep `--line-strong` (3:1). Buttons are identified by their label; their outline is decoration. |
+| Lines | `--line` hairline dividers and panel edges, `--line-control` secondary button outline, `--line-strong` input borders | Inputs keep `--line-strong` (3:1). Buttons are identified by their label, but their outline is about 2.3:1 so they do not look faded (owner feedback 16/10/2026: buttons looked washed out at 1.5:1). |
 | Text | `--text-1` primary, `--text-2` secondary, `--text-3` meta and labels, `--text-inverse` on the tooltip | `--text-3` is the lowest text tone. |
 | Brand | `--accent` primary fill, `--accent-hover`, `--on-accent` text on accent, `--accent-text` links, `--accent-soft` selected row and reply bubble, `--accent-strong` graphics only, `--logo-tile`, `--brand-panel`, `--on-brand-panel(-2)` | One primary action per screen. Light: white on `#2d62b3`. Dark: near-black on `#7aa5e6`. |
 | Focus and note | `--focus`, `--focus-ring`, `--note-bg`, `--note-line`, `--note-text` | Amber means focus or private note. Never use amber for status. |

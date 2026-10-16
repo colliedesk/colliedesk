@@ -24,6 +24,7 @@ test('an admin whose trial ended can choose each plan, export and sign out', () 
   expect(screen.getByText(/ended oct 15/i)).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Choose a plan' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: /team, \$49 per month/i }));
+  fireEvent.click(screen.getByRole('radio', { name: /yearly/i }));
   fireEvent.click(screen.getByRole('button', { name: /team, \$490 per year/i }));
   fireEvent.click(screen.getByRole('button', { name: /founding/i }));
   expect(onCheckout.mock.calls).toEqual([['team_monthly'], ['team_yearly'], ['founding']]);

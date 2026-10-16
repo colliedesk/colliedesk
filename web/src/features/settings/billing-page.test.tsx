@@ -20,17 +20,18 @@ test('a trial workspace sees when the trial ends, its usage and five ways to sub
   expect(screen.getByText(/trial ends oct 15/i)).toBeInTheDocument();
   expect(screen.getByText(/2 of 10 agents/i)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /manage billing/i })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Team, $49 per month' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Team, $490 per year' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Team 25, $99 per month' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Team 25, $990 per year' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Team, $49 per month' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Team 25, $99 per month' }));
+  fireEvent.click(screen.getByRole('radio', { name: /yearly/i }));
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Team, $490 per year' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Team 25, $990 per year' }));
   fireEvent.click(screen.getByRole('button', { name: /founding.*\$100.*year/i }));
-  expect(onCheckout.mock.calls).toEqual([['team_monthly'], ['team_yearly'], ['team25_monthly'], ['team25_yearly'], ['founding']]);
+  expect(onCheckout.mock.calls).toEqual([['team_monthly'], ['team25_monthly'], ['team_yearly'], ['team25_yearly'], ['founding']]);
 });
 
 test('a server without the Team 25 products offers only the plans it can sell', () => {
   render(<BillingPage billing={{ ...free, checkout_plans: ['team_monthly', 'team_yearly', 'founding'] }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
-  expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Team, $49 per month', 'Team, $490 per year', 'Founding, $100 per year for life']);
+  expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Choose Team, $49 per month', 'Choose Founding, $100 per year for life']);
   expect(screen.queryByRole('article', { name: 'Team 25' })).not.toBeInTheDocument();
 });
 
@@ -129,19 +130,32 @@ test('a paid plan shows its storage cap and no reply cap', () => {
   expect(screen.queryByText(/people emailed in the last 24 hours/i)).not.toBeInTheDocument();
 });
 
-test('each plan is a card that says what it includes, with one compact button per price', () => {
+test('each plan is a card with its price, what it includes and one clear Choose button; Yearly switches the prices', () => {
   render(<BillingPage billing={free} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
   const card = (name: string) => screen.getByRole('article', { name });
+  expect(card('Team')).toHaveTextContent('$49per month');
   expect(card('Team')).toHaveTextContent('Up to 10 agents');
   expect(card('Team')).toHaveTextContent('100 GiB attachment storage');
-  expect(within(card('Team')).getAllByRole('button').map((button) => button.textContent)).toEqual(['$49 per month', '$490 per year']);
   expect(card('Team 25')).toHaveTextContent('Up to 25 agents');
   expect(card('Team 25')).toHaveTextContent('250 GiB attachment storage');
-  expect(card('Founding')).toHaveTextContent('20 GiB attachment storage');
+  expect(card('Founding')).toHaveTextContent('$100per year for life');
   expect(card('Founding')).toHaveTextContent('10 workspaces only');
-  expect(within(card('Founding')).getAllByRole('button').map((button) => button.textContent)).toEqual(['$100 per year for life']);
-  // Price buttons are secondary: the page does not shout five primary buttons.
-  expect(screen.getAllByRole('button').filter((button) => button.classList.contains('primary-action'))).toHaveLength(0);
+  // One solid button per plan, so buying is the obvious action on the page.
+  for (const name of ['Team', 'Team 25', 'Founding']) {
+    const buttons = within(card(name)).getAllByRole('button');
+    expect(buttons.map((button) => button.textContent)).toEqual([`Choose ${name}`]);
+    expect(buttons[0]).toHaveClass('primary-action');
+  }
+  expect(screen.getByRole('radio', { name: 'Monthly' })).toBeChecked();
+  fireEvent.click(screen.getByRole('radio', { name: /yearly/i }));
+  expect(card('Team')).toHaveTextContent('$490per year');
+  expect(card('Team 25')).toHaveTextContent('$990per year');
+  expect(card('Founding')).toHaveTextContent('$100per year for life');
+});
+
+test('without any monthly and yearly pair there is no Monthly/Yearly switch', () => {
+  render(<BillingPage billing={{ ...free, checkout_plans: ['founding'] }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.queryByRole('radio')).not.toBeInTheDocument();
 });
 
 test('usage reads as meters with their numbers', () => {
