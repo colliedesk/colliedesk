@@ -666,6 +666,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/webhooks/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Receives Resend email events. Resend owns the envelope sender and rewrites the Message-ID, so its bounces never reach `MAIL_FROM_DOMAIN`; this webhook is how a reply sent through it shows **Delivery failed**. Authenticated by the Svix signature (`svix-id`, `svix-timestamp`, `svix-signature`), not by a session; a missing, wrong or stale signature is 401 and nothing is read. `email.bounced` (permanent) and `email.complained` fail the reply sent from `reply+<token>@MAIL_FROM_DOMAIN` to the bounced recipient: the one with that Message-ID if the relay kept it, otherwise the latest one sent before the event's email was created. Every understood event is 200 so Resend stops retrying; `status` is `applied` or `ignored` (other event types, a reply sent as a verified support address, a recipient the reply was not sent to, a redelivery). Only present when `RESEND_WEBHOOK_SECRET` is set. */
+        post: operations["receiveResendWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/founding": {
         parameters: {
             query?: never;
@@ -2831,6 +2848,34 @@ export interface operations {
         };
     };
     receivePolarWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Event understood */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    receiveResendWebhook: {
         parameters: {
             query?: never;
             header?: never;

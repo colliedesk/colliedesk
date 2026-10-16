@@ -218,6 +218,24 @@ slug. The server refuses to start when that name is below the hosted domain and 
 label such as `mail`, because a workspace could then own it. Give `MAIL_FROM_DOMAIN` its own MX
 record: a wildcard MX does not cover a name that has other records below it.
 
+### Bounces through Resend
+
+Resend keeps bounces and complaints and reports them by webhook instead. To show them as
+**Delivery failed**:
+
+1. In Resend, add a webhook to `https://<your server>/api/v1/webhooks/resend` for the events
+   `email.bounced` and `email.complained`.
+2. Set `RESEND_WEBHOOK_SECRET` on the server to the webhook's signing secret (`whsec_...`).
+   It needs `MAIL_FROM_DOMAIN`. Without the secret the endpoint does not exist.
+
+A bounce or a spam complaint marks the reply sent to that recipient **Delivery failed**, with the
+reason. Limits:
+
+- Only replies sent from `reply+<token>@MAIL_FROM_DOMAIN` are matched. A reply sent as a verified
+  support address is not, because that address does not name a conversation.
+- A reply goes to the conversation's contact only, so an event for any other address is ignored.
+- A temporary bounce or an `email.delivery_delayed` event changes nothing; the relay keeps trying.
+
 ## What you see in the inbox
 
 - Incoming messages show the sender address and are shown as plain text: no remote images load,

@@ -53,7 +53,14 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
 - **Bounces.** A delivery report (`multipart/report`, `MAILER-DAEMON`) is still dropped, but the
   Message-IDs in its returned headers mark our matching replies `failed`. This works only when the
   relay keeps our Message-ID and the DSN reaches `reply+...`. Resend and SES rewrite the Message-ID
-  and take the envelope sender, so their DSNs never arrive here.
+  and take the envelope sender, so their DSNs never arrive here. For Resend, `POST
+  /api/v1/webhooks/resend` (Svix signature, `RESEND_WEBHOOK_SECRET`) fails the reply instead. The
+  `from` of the event carries `reply+<token>`, which names the conversation; the reply is the one with
+  the event's `message_id` if the relay kept ours, else the latest one sent to the bounced recipient
+  before the event's `created_at` plus 2 minutes (our `sent_at` is written after the relay answers).
+  The SMTP `250` reply does not document the Resend email id and tags exist only on the HTTP API, so
+  no relay id is stored; SMTP stays the only transport. Replies sent as a verified support address are
+  not matched: support addresses are not unique across workspaces, so the address cannot pick one.
 - **Inbound limits are a loop guard plus a ceiling.** 10 messages per sender address per 10
   minutes (the header From, which a sender controls) and 200 new conversations per workspace per
   10 minutes (holds when From rotates). A per-(workspace, sender) advisory lock serializes the

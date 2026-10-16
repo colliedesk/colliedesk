@@ -1008,6 +1008,37 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/webhooks/resend:
+    post:
+      operationId: receiveResendWebhook
+      security: [{resendWebhook: []}]
+      x-permission: public
+      description: >
+        Receives Resend email events. Resend owns the envelope sender and rewrites the Message-ID, so its
+        bounces never reach `MAIL_FROM_DOMAIN`; this webhook is how a reply sent through it shows
+        **Delivery failed**. Authenticated by the Svix signature (`svix-id`, `svix-timestamp`,
+        `svix-signature`), not by a session; a missing, wrong or stale signature is 401 and nothing is
+        read. `email.bounced` (permanent) and `email.complained` fail the reply sent from
+        `reply+<token>@MAIL_FROM_DOMAIN` to the bounced recipient: the one with that Message-ID if the
+        relay kept it, otherwise the latest one sent before the event's email was created. Every
+        understood event is 200 so Resend stops retrying; `status` is `applied` or `ignored` (other
+        event types, a reply sent as a verified support address, a recipient the reply was not sent
+        to, a redelivery). Only present when `RESEND_WEBHOOK_SECRET` is set.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        '200':
+          description: Event understood
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebhookResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
   /api/v1/founding:
     get:
       operationId: getFoundingSlots
@@ -1241,6 +1272,7 @@ components:
     sessionCookie: {type: apiKey, in: cookie, name: colliedesk_session}
     inboundSecret: {type: apiKey, in: header, name: X-Colliedesk-Inbound-Secret}
     polarWebhook: {type: apiKey, in: header, name: webhook-signature}
+    resendWebhook: {type: apiKey, in: header, name: svix-signature}
   parameters:
     ID:
       name: id
