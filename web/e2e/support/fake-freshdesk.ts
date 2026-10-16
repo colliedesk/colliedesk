@@ -21,10 +21,11 @@ import { join } from 'node:path';
 //   attachments: one on the description of every 10th ticket (30),
 //     one on the customer reply of every 30th ticket (10)                   -> 40 attachments
 //   time entries: one on every 20th ticket (15); ticket 150 is not a multiple of 20
+//   canned responses: folder 801 "General" holds 2 (ids 9101, 9102), personal folder 802 "My drafts" holds 1 (id 9103)
 //   tags: every 3rd ticket "billing"; ticket ids 1, 4, 7, ... "shipping" and "vip"
 export const fixture = {
   tickets: 300, archivedTicket: 150, contacts: 120, inactiveContacts: 12, messages: 960, attachments: 40, timeEntries: 15,
-  searchableTicket: 42, searchableWord: 'Rotterdam',
+  searchableTicket: 42, searchableWord: 'Rotterdam', savedReplies: 2, personalCanned: 1,
 } as const;
 
 const epoch = Date.UTC(2024, 0, 1, 0, 0, 0);
@@ -32,7 +33,7 @@ const iso = (ms: number) => new Date(ms).toISOString().replace('.000Z', 'Z');
 export const ticketCreatedAt = (id: number) => iso(epoch + id * 3_600_000);
 const topics = ['refund request', 'shipping delay', 'login problem', 'invoice copy'];
 
-interface Options { apiKey: string; agentEmail: string; archiveForbidden?: boolean }
+interface Options { apiKey: string; agentEmail: string; archiveForbidden?: boolean; cannedUnavailable?: boolean }
 
 export class FakeFreshdesk {
   readonly requests = new Map<string, number>();
@@ -101,6 +102,18 @@ export class FakeFreshdesk {
     } else if (parts[0] === 'contacts' && parts.length === 2) {
       const contact = this.contacts().find((item) => item.id === id);
       json(response, contact ? 200 : 404, contact ?? { message: 'not found' });
+    } else if (path === '/api/v2/canned_response_folders') {
+      if (this.options.cannedUnavailable) { json(response, 404, { message: 'not found' }); return; }
+      this.page(response, url, [
+        { id: 801, name: 'General', personal: false, responses_count: 2, created_at: iso(epoch), updated_at: iso(epoch) },
+        { id: 802, name: 'My drafts', personal: true, responses_count: 1, created_at: iso(epoch), updated_at: iso(epoch) },
+      ]);
+    } else if (parts[0] === 'canned_response_folders' && parts[2] === 'responses') {
+      const responses = parts[1] === '801'
+        ? [cannedResponse(9101, 801, 'Greeting', 'Hi {{ticket.requester.name}}, thanks for writing.\n{{ticket.agent.name}}'),
+          cannedResponse(9102, 801, 'Track your parcel', 'Track it at {{ticket.url}}')]
+        : [cannedResponse(9103, 802, 'Private tip', 'Check the carrier log first.')];
+      this.page(response, url, responses);
     } else if (path === '/api/v2/search/tickets') {
       json(response, 200, { total: fixture.tickets - 1, results: [] });
     } else if (path === '/api/v2/search/contacts') {
@@ -225,6 +238,10 @@ export class FakeFreshdesk {
 
 export function fileBody(id: number): Buffer {
   return Buffer.from(`attachment ${id} bytes from the fake Freshdesk file host`);
+}
+
+function cannedResponse(id: number, folder: number, title: string, content: string) {
+  return { id, title, folder_id: folder, content, content_html: `<div>${content.replace(/\n/g, '<br>')}</div>`, attachments: [], created_at: iso(epoch), updated_at: iso(epoch) };
 }
 
 function json(response: ServerResponse, status: number, value: unknown) {

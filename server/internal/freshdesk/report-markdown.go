@@ -55,6 +55,9 @@ func (r *Report) Markdown() string {
 	if n := len(r.Tickets.UnresolvedIDs); n > 0 {
 		fmt.Fprintf(&b, "Ticket ids unresolved: %d (listed below). Each may be deleted or archived in Freshdesk.\n", n)
 	}
+	if r.SavedReplies.NotAvailable {
+		b.WriteString("Saved replies: Canned responses are not available on this Freshdesk account, so none were imported. This does not affect the ticket import.\n")
+	}
 	fmt.Fprintf(&b, "Saved replies: %d canned response folders; %d canned responses had no text and were skipped; %d files on canned responses were not imported.\n",
 		r.SavedReplies.Folders, len(r.SavedReplies.EmptySkipped), r.SavedReplies.AttachmentsNotImported)
 	fmt.Fprintf(&b, "Rate limiting: %d pause(s) after X-Ratelimit-Remaining 0, %d HTTP 429 response(s), %s waited in total.\n",

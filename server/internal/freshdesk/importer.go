@@ -63,6 +63,7 @@ type run struct {
 	cannedEmpty        []string
 	cannedPersonal     []string
 	cannedListError    string
+	cannedUnavailable  bool
 	cannedWithFiles    []string
 	cannedAttachments  int
 	cannedUnreadable   []string

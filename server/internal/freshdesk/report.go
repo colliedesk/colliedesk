@@ -67,7 +67,10 @@ type Verifications struct {
 // listed in EmptySkipped, so the counts stay comparable.
 type SavedReplyCount struct {
 	EntityCount
-	Folders      int      `json:"folders"`
+	Folders int `json:"folders"`
+	// NotAvailable is true when the Freshdesk account has no canned responses to read (the folder
+	// list answered 403 or 404). That is a fact about the account, not a failure of the import.
+	NotAvailable bool     `json:"not_available"`
 	EmptySkipped []string `json:"empty_skipped"`
 	// PersonalNotImported are canned responses in personal folders, left out unless asked for.
 	PersonalNotImported []string `json:"personal_not_imported"`

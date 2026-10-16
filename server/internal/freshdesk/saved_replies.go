@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
@@ -64,17 +65,43 @@ var (
 	imagePattern  = regexp.MustCompile(`(?i)<img\b`)
 )
 
+// schemePattern finds the URL scheme once whitespace and control characters are gone.
+var schemePattern = regexp.MustCompile(`^([a-zA-Z][a-zA-Z0-9+.-]*):`)
+
+// linkAddress returns the address of a link when it may be kept as text: only http, https and mailto.
+// Browsers ignore spaces and control characters inside a scheme, so they are removed before the check.
+// Any other scheme (javascript, data, vbscript, ...), a relative address or one that does not parse
+// leaves only the link text.
+func linkAddress(raw string) (string, bool) {
+	address := strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) || unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, raw)
+	match := schemePattern.FindStringSubmatch(address)
+	if match == nil {
+		return "", false
+	}
+	switch strings.ToLower(match[1]) {
+	case "http", "https", "mailto":
+		return address, true
+	}
+	return "", false
+}
+
 // keepLinks writes <a href="url">text</a> as "text (url)", so the address survives the reduction to
 // text. A link whose text already is the address stays as that address.
 func keepLinks(markup string) string {
 	return anchorPattern.ReplaceAllStringFunc(markup, func(match string) string {
 		parts := anchorPattern.FindStringSubmatch(match)
-		url, label := strings.TrimSpace(parts[1]), strings.TrimSpace(tagPattern.ReplaceAllString(parts[2], ""))
+		label := strings.TrimSpace(tagPattern.ReplaceAllString(parts[2], ""))
+		url, ok := linkAddress(parts[1])
 		switch {
+		case !ok:
+			return label
 		case label == "" || label == url || "mailto:"+label == url:
 			return url
-		case strings.HasPrefix(url, "#") || strings.HasPrefix(strings.ToLower(url), "javascript:"):
-			return label
 		}
 		return label + " (" + url + ")"
 	})
@@ -112,8 +139,10 @@ func (r *run) importSavedReplies(ctx context.Context) error {
 	case ctx.Err() != nil:
 		return ctx.Err()
 	case errors.Is(err, errNotFound) || errors.Is(err, errForbidden):
-		r.warn("saved_replies_unavailable", "Freshdesk refused the canned response folders, so canned responses were not imported. Use an admin API key on a plan that has canned responses, then run the import again.", "")
-		verification.Verified, verification.Detail = false, "The canned response folders could not be read: "+err.Error()
+		// A plan without canned responses answers 403 or 404. That says nothing about the tickets,
+		// so it is a note in the report and never a reason to fail or leave the import unverified.
+		r.cannedUnavailable = true
+		verification.Detail = "Canned responses are not available on this Freshdesk account (" + err.Error() + "), so there was nothing to compare."
 		r.verification.SavedReplies = verification
 		return nil
 	case err != nil:

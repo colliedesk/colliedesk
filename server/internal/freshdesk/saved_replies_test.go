@@ -216,14 +216,35 @@ func TestSavedReplyTotalFromFreshdeskMustMatchWhatWasListed(t *testing.T) {
 	}
 }
 
-func TestRefusedCannedResponseEndpointIsReportedAndTheRestStillImports(t *testing.T) {
-	env := newImportEnv(t).withCanned()
-	env.fake.failPathStatus = map[string]int{"/api/v2/canned_response_folders": 403}
-	report := env.mustRun(t)
-	if report.Status != "UNVERIFIED" || !hasWarning(report, "saved_replies_unavailable") || report.Verification.SavedReplies.Verified {
-		t.Fatalf("status=%s warnings=%+v verification=%+v", report.Status, report.Warnings, report.Verification.SavedReplies)
+func TestAccountWithoutCannedResponsesImportsNormallyAndSaysSo(t *testing.T) {
+	for _, status := range []int{403, 404} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) { accountWithoutCanned(t, status) })
 	}
-	assertCount(t, "tickets", report.Tickets.EntityCount, 5, 5)
+}
+
+func accountWithoutCanned(t *testing.T, status int) {
+	{
+		env := newImportEnv(t).withCanned()
+		env.fake.failPathStatus = map[string]int{"/api/v2/canned_response_folders": status}
+		report := env.mustRun(t)
+		if report.Status != "OK" || !report.Verification.SavedReplies.Verified {
+			t.Fatalf("HTTP %d: status=%s verification=%+v failures=%+v", status, report.Status, report.Verification.SavedReplies, report.Failures)
+		}
+		if !report.SavedReplies.NotAvailable || !strings.Contains(report.Markdown(), "Canned responses are not available on this Freshdesk account") {
+			t.Fatalf("HTTP %d: the report does not say canned responses are unavailable: %+v", status, report.SavedReplies)
+		}
+		assertCount(t, "tickets", report.Tickets.EntityCount, 5, 5)
+		assertCount(t, "saved replies", report.SavedReplies.EntityCount, 0, 0)
+	}
+}
+
+func TestServerErrorsListingCannedFoldersAreNotTreatedAsUnavailable(t *testing.T) {
+	env := newImportEnv(t).withCanned()
+	env.fake.failPathStatus = map[string]int{"/api/v2/canned_response_folders": 500}
+	report := env.mustRun(t)
+	if report.SavedReplies.NotAvailable || report.Verification.SavedReplies.Verified || report.Status == "OK" {
+		t.Fatalf("status=%s saved replies=%+v verification=%+v", report.Status, report.SavedReplies, report.Verification.SavedReplies)
+	}
 }
 
 func TestUnreadableCannedFolderIsAFailureNotASkip(t *testing.T) {
@@ -313,6 +334,31 @@ func TestCannedHTMLKeepsLinksAndReportsDroppedImages(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("warnings = %+v", report.Warnings)
+	}
+}
+
+func TestOnlyWebAndMailLinksKeepTheirAddress(t *testing.T) {
+	env := newImportEnv(t).withCanned()
+	links := []string{
+		`<a href="javascript:alert(1)">one</a>`, `<a href="JavaScript:alert(1)">two</a>`, `<a href="data:text/html;base64,AAAA">three</a>`,
+		`<a href="vbscript:msgbox">four</a>`, `<a href=" javascript:alert(1)">five</a>`, `<a href="/relative/path">six</a>`,
+		`<a href="HTTPS://Example.com/x">seven</a>`, `<a href="mailto:help@example.com">mail us</a>`, `<a href="java&#10;script:alert(1)">nine</a>`,
+		"<a href=\"java\tscript:alert(1)\">ten</a>", `<a href="//evil.example/x">eleven</a>`, `<a href="http://example.com">http://example.com</a>`,
+		`<a href="javascript:alert(2)">javascript:alert(2)</a>`,
+	}
+	env.fake.cannedExtra = []map[string]any{{"id": 9160, "title": "Schemes", "folder_id": 801, "content": "",
+		"content_html": "<div>" + strings.Join(links, "<br>") + "</div>", "attachments": []any{}}}
+	env.mustRun(t)
+	var body string
+	for _, reply := range env.savedReplies(t) {
+		if reply.Title == "General / Schemes" {
+			body = reply.Body
+		}
+	}
+	want := strings.Join([]string{"one", "two", "three", "four", "five", "six", "seven (HTTPS://Example.com/x)", "mail us (mailto:help@example.com)",
+		"nine", "ten", "eleven", "http://example.com", "javascript:alert(2)"}, "\n")
+	if body != want {
+		t.Fatalf("body = %q, want %q", body, want)
 	}
 }
 

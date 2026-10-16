@@ -208,7 +208,7 @@ func missing(report *Report) []string {
 // failed ones (and unreadable folders) to the failures.
 func (r *run) countSavedReplies(ctx context.Context, report *Report, _, _ []string) error {
 	ids := uniqueSorted(r.cannedIDs)
-	report.SavedReplies = SavedReplyCount{Folders: r.cannedFolders, EmptySkipped: uniqueSorted(r.cannedEmpty), PersonalNotImported: uniqueSorted(r.cannedPersonal),
+	report.SavedReplies = SavedReplyCount{Folders: r.cannedFolders, NotAvailable: r.cannedUnavailable, EmptySkipped: uniqueSorted(r.cannedEmpty), PersonalNotImported: uniqueSorted(r.cannedPersonal),
 		AttachmentsNotImported: r.cannedAttachments, ResponsesWithAttachments: uniqueSorted(r.cannedWithFiles), UnmappedPlaceholders: map[string][]string{}}
 	report.SavedReplies.Source = len(ids)
 	for name, used := range r.cannedPlaceholders {
