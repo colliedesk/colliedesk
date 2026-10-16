@@ -21,6 +21,11 @@ import (
 
 const sessionCookie = "colliedesk_session"
 
+// Mailer hands one composed message to the mail relay (the shape of email.SMTPSender).
+type Mailer interface {
+	Send(ctx context.Context, from string, to []string, message []byte) error
+}
+
 type Config struct {
 	Origin string
 	// Version is the build stamped into the binary, reported by GET /api/v1/config; empty reports "dev".
@@ -35,6 +40,10 @@ type Config struct {
 	RequestPool *pgxpool.Pool
 	// Billing turns on Polar billing for the hosted cloud; the zero value leaves it off.
 	Billing polar.Config
+	// AlertEmail is the operator address told about a paid subscription that matches no workspace
+	// (BILLING_ALERT_EMAIL). Empty, or without AlertMailer or Email.MailFromDomain, turns the alert off.
+	AlertEmail  string
+	AlertMailer Mailer
 	// Now is the clock for the trial, the lock and plan limits; nil uses the system clock.
 	Now func() time.Time
 	// LookupTXT resolves DNS TXT records for domain verification; nil uses the system resolver.
@@ -70,9 +79,11 @@ type API struct {
 	// limits is true on the hosted cloud, where the trial, lock and agent cap apply.
 	limits bool
 	config Config
-	auth   *auth.Service
-	cloud  *cloudauth.Verifier
-	store  *store.Store
+	// alerted dedupes the operator alert for paid subscriptions without a workspace.
+	alerted alertedSubscriptions
+	auth    *auth.Service
+	cloud   *cloudauth.Verifier
+	store   *store.Store
 	// exports admits workspace exports; see exportLimiter.
 	exports     *exportLimiter
 	exportLinks *exportLinks

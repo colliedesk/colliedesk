@@ -20,6 +20,7 @@ off and logs why, so an image older than its configuration never stops the inbox
 | `POLAR_API_URL` | Optional. Default `https://api.polar.sh`; sandbox `https://sandbox-api.polar.sh`. |
 | `POLAR_PRODUCT_TEAM_MONTHLY`, `POLAR_PRODUCT_TEAM_YEARLY`, `POLAR_PRODUCT_FOUNDING` | Polar product ids. |
 | `POLAR_PRODUCT_TEAM25_MONTHLY`, `POLAR_PRODUCT_TEAM25_YEARLY` | Optional. Polar product ids of Team 25. Unset: checkout for `team25_*` answers 400 like an unknown plan (the message lists only the plans the server sells), no event maps to the plan, `GET /billing` leaves `team25_*` out of `checkout_plans` so the web app shows no Team 25 button, and the Team seat error does not mention Team 25. Existing deployments keep starting. |
+| `BILLING_ALERT_EMAIL` | Optional. Operator address told about a paid subscription that matches no workspace. Needs `SMTP_HOST` and `MAIL_FROM_DOMAIN`. |
 
 Webhook URL to register in Polar: `https://<host>/api/v1/webhooks/polar`, event types
 `subscription.*`. The path is under `/api/` because the web handler forwards only that prefix to
@@ -59,6 +60,14 @@ the API.
   Polar stops retrying, and the endpoint reveals nothing about which workspaces exist. A
   subscription event that is ignored is logged at WARN with event type, subscription id and
   webhook id (no customer data), because it may be a payment nobody sees.
+- **A payment without a workspace emails the operator.** When the ignored event is for a missing
+  workspace id or an unknown workspace and the subscription is `active`, the server mails
+  `BILLING_ALERT_EMAIL` from `noreply@MAIL_FROM_DOMAIN` through `SMTP_*`: buyer email (from Polar's
+  customer), plan, product, subscription and customer ids, never a secret. Unset, or without
+  `SMTP_HOST` and `MAIL_FROM_DOMAIN`, it only logs a WARN. One mail per subscription id per process
+  (created, active and redelivered events share it); a restart can repeat one. A failed send is logged
+  and the answer stays 200. The static checkout link is the usual source; the in-app
+  `/settings/billing?buy=<plan>` link avoids the case.
 - **A new Polar status never fails the webhook.** A status outside the known list is stored as
   `unknown` (not paid) with a WARN log. Failing would make Polar retry until it disables the endpoint.
 - **Row-level security without a privileged lookup.** The workspace id in the event is used as the
