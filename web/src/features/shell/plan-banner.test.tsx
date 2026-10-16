@@ -9,7 +9,7 @@ const at = (iso: string) => new Date(iso);
 const GiB = 1024 ** 3;
 const billing = (storageBytes: number): Billing => ({
   plan: 'trial', trial_ends_at: trialEnd, locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false,
-  active_subscriptions: 0, complimentary: false, complimentary_until: null,
+  active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
   limits: { agents: 10, replies_per_24h: 200, storage_bytes: 2 * GiB, storage_warn_bytes: Math.floor(1.6 * GiB) },
   usage: { agents: 1, pending_invites: 0, replies_last_24h: 0, storage_bytes: storageBytes },
 });

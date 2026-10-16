@@ -6,7 +6,7 @@ import { BillingPage } from './billing-page';
 const GiB = 1024 ** 3;
 const founding = (used: number): Billing => ({
   plan: 'founding', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'active', current_period_end: '2027-10-01T00:00:00Z',
-  cancel_at_period_end: false, active_subscriptions: 1, complimentary: false, complimentary_until: null,
+  cancel_at_period_end: false, active_subscriptions: 1, complimentary: false, complimentary_until: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
   limits: { agents: 10, replies_per_24h: null, storage_bytes: 20 * GiB, storage_warn_bytes: 16 * GiB },
   usage: { agents: 2, pending_invites: 0, replies_last_24h: 0, storage_bytes: used },
 });
@@ -49,10 +49,35 @@ test('a trial workspace is warned at 80% of its 2 GiB too', () => {
   expect(screen.getByRole('status')).toBeInTheDocument();
 });
 
-test('a team workspace has no storage line and no warning', () => {
-  show({ ...founding(50 * GiB), plan: 'team', limits: { agents: 10, replies_per_24h: null, storage_bytes: null, storage_warn_bytes: null } });
-  expect(screen.queryByText(/attachment storage/i)).not.toBeInTheDocument();
+const teamPlan = (plan: 'team' | 'team25', used: number): Billing => ({
+  ...founding(used), plan,
+  limits: plan === 'team'
+    ? { agents: 10, replies_per_24h: null, storage_bytes: 100 * GiB, storage_warn_bytes: 80 * GiB }
+    : { agents: 25, replies_per_24h: null, storage_bytes: 250 * GiB, storage_warn_bytes: 200 * GiB },
+});
+
+test('a team workspace sees its usage against the 100 GiB cap and no warning below 80%', () => {
+  show(teamPlan('team', 50 * GiB));
+  expect(screen.getByText('Attachment storage: 50.0 GiB of 100.0 GiB')).toBeInTheDocument();
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+test('a team workspace at 80% is warned that only its own uploads and imports will stop', () => {
+  show(teamPlan('team', 80 * GiB));
+  const warning = screen.getByRole('status');
+  expect(warning).toHaveTextContent(/80% full/i);
+  expect(warning).toHaveTextContent(/customer email is always kept/i);
+  expect(warning).not.toHaveTextContent(/upgrade to team/i);
+});
+
+test('a team 25 workspace over its 250 GiB cap hears that mail is stored and who to ask for more', () => {
+  show(teamPlan('team25', 250 * GiB + 5));
+  const notice = screen.getByRole('alert', { name: /storage/i });
+  expect(notice).toHaveTextContent(/new uploads and imports are refused/i);
+  expect(notice).toHaveTextContent(/customer email is still stored/i);
+  expect(notice).toHaveTextContent(/contact us/i);
+  expect(notice).not.toHaveTextContent(/all incoming email is refused/i);
 });
 
 test('a full trial says incoming email with attachments is refused, not stored', () => {

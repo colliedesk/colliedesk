@@ -624,7 +624,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Start a hosted checkout for the signed-in workspace. The workspace is taken from the session, never from the body. A workspace that already has a paid plan gets 409; it changes or cancels its plan in the portal. */
+        /** @description Start a hosted checkout for the signed-in workspace. The workspace is taken from the session, never from the body. A workspace that already has a paid plan gets 409; it changes or cancels its plan in the portal. The `founding` plan gets 409 `founding_closed` once its slots are used up. */
         post: operations["createBillingCheckout"];
         delete?: never;
         options?: never;
@@ -660,6 +660,23 @@ export interface paths {
         put?: never;
         /** @description Receives Polar events. Authenticated by the Standard Webhooks signature (`webhook-id`, `webhook-timestamp`, `webhook-signature`), not by a session; a missing, wrong or stale signature is 401 and nothing is stored. A `subscription.*` event updates the workspace named by `customer.external_id`. Every understood event is 200 so Polar stops retrying; `status` says whether it was applied, was a redelivery, was older than the stored state, or was ignored (unknown workspace or product, other event types). Only present when billing is configured. */
         post: operations["receivePolarWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/founding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description How many of the Founding slots are taken, for the marketing site. Answered from server memory, never from the billing provider on the request: `taken` is null until the server has counted once after it started. `open` is false once Founding is closed, which is one-way: the slots are used up or the product was archived. Only present when billing is configured. */
+        get: operations["getFoundingSlots"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -766,6 +783,8 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         PublicConfig: {
+            /** @description The running build: a release tag such as `v0.0.1`, `edge-<commit>` for a main build, or `dev`. */
+            version?: string;
             limits: {
                 /** @description Most raw bytes of files one reply or note can carry in total. */
                 outgoing_attachments_bytes: number;
@@ -790,8 +809,19 @@ export interface components {
             url: string;
             expires_in_seconds: number;
         };
-        /** @enum {string} */
-        CheckoutPlan: "team_monthly" | "team_yearly" | "founding";
+        /**
+         * @description `team25_*` is refused with 400 on a server that has no Polar product for it.
+         * @enum {string}
+         */
+        CheckoutPlan: "team_monthly" | "team_yearly" | "team25_monthly" | "team25_yearly" | "founding";
+        FoundingSlots: {
+            /** @description Founding slots in total */
+            slots: number;
+            /** @description Slots held by active, trialing or past due subscriptions; null until counted */
+            taken: number | null;
+            /** @description Whether Founding can still be bought */
+            open: boolean;
+        };
         WebhookResult: {
             /** @enum {string} */
             status: "applied" | "duplicate" | "stale" | "ignored";
@@ -801,7 +831,7 @@ export interface components {
              * @description The plan in effect now. `trial` is the free trial; `none` means the trial is over and nothing is paid.
              * @enum {string}
              */
-            plan: "trial" | "team" | "founding" | "none";
+            plan: "trial" | "team" | "team25" | "founding" | "none";
             /**
              * Format: date-time
              * @description When the free trial ends or ended, whatever the plan.
@@ -826,6 +856,8 @@ export interface components {
              * @description When a complimentary plan ends; null when it has no end or the plan is not complimentary.
              */
             complimentary_until: string | null;
+            /** @description The plans this server can sell, in the order to offer them. `team25_*` appear only when both Team 25 products are configured; the web app shows a purchase button for each plan listed and for no other. `founding` is dropped once Founding is closed. */
+            checkout_plans: components["schemas"]["CheckoutPlan"][];
             limits: {
                 /** @description Seats of the plan; 0 when locked. */
                 agents: number;
@@ -833,7 +865,7 @@ export interface components {
                 replies_per_24h: number | null;
                 /**
                  * Format: int64
-                 * @description Attachment storage cap in bytes, 2 GiB on the trial and when locked (imported files do not count), 20 GiB on the Founding plan (imported files count); null on Team and on self-hosted, which have none.
+                 * @description Attachment storage cap in bytes: 2 GiB on the trial and when locked (imported files do not count); 20 GiB on Founding, 100 GiB on Team and 250 GiB on Team 25 (imported files count); null on self-hosted, which has none.
                  */
                 storage_bytes: number | null;
                 /**
@@ -918,7 +950,7 @@ export interface components {
             /** @description The trial and lock state, so every agent sees it. Null on self-hosted instances. */
             plan: null | {
                 /** @enum {string} */
-                plan: "trial" | "team" | "founding" | "none";
+                plan: "trial" | "team" | "team25" | "founding" | "none";
                 /** Format: date-time */
                 trial_ends_at: string;
                 locked: boolean;
@@ -2824,6 +2856,31 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    getFoundingSlots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Founding slot state */
+            200: {
+                headers: {
+                    /** @description `public, max-age=60` */
+                    "Cache-Control"?: string;
+                    /** @description The marketing site origin */
+                    "Access-Control-Allow-Origin"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoundingSlots"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     exportWorkspace: {
