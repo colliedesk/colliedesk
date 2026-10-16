@@ -50,7 +50,9 @@ func (a *alertedSubscriptions) forget(id string) {
 
 // alertUnmatchedPayment tells the operator that money was taken for a subscription that no
 // workspace received, which is a customer who paid and got nothing. Only an active subscription is
-// reported; a failure to send is logged and never changes the webhook answer.
+// reported. The alert is best effort: a failed send is logged at ERROR and the webhook still
+// answers 200, so Polar does not redeliver. A later event for the same subscription tries again;
+// the reconciliation of Polar subscriptions against workspaces is the safety net for the rest.
 func (a *API) alertUnmatchedPayment(ctx context.Context, event polar.Event, webhookID, reason string) {
 	sub := event.Subscription
 	if sub == nil || sub.Status != polarStatusActive {

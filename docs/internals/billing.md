@@ -65,8 +65,9 @@ the API.
   `BILLING_ALERT_EMAIL` from `noreply@MAIL_FROM_DOMAIN` through `SMTP_*`: buyer email (from Polar's
   customer), plan, product, subscription and customer ids, never a secret. Unset, or without
   `SMTP_HOST` and `MAIL_FROM_DOMAIN`, it only logs a WARN. One mail per subscription id per process
-  (created, active and redelivered events share it); a restart can repeat one. A failed send is logged
-  and the answer stays 200. The static checkout link is the usual source; the in-app
+  (created, active and redelivered events share it); a restart can repeat one. The alert is best effort: a failed send is logged at ERROR and the answer
+  stays 200, so Polar does not redeliver; a later event for the same subscription sends again, and the
+  planned reconciliation of Polar subscriptions against workspaces is the safety net. The static checkout link is the usual source; the in-app
   `/settings/billing?buy=<plan>` link avoids the case.
 - **A new Polar status never fails the webhook.** A status outside the known list is stored as
   `unknown` (not paid) with a WARN log. Failing would make Polar retry until it disables the endpoint.

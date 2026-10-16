@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -20,11 +21,21 @@ type sentMail struct {
 type recordingMailer struct {
 	mu   sync.Mutex
 	sent []sentMail
+	fail bool
+}
+
+func (m *recordingMailer) setFail(fail bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.fail = fail
 }
 
 func (m *recordingMailer) Send(_ context.Context, from string, to []string, message []byte) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.fail {
+		return errors.New("relay down")
+	}
 	m.sent = append(m.sent, sentMail{From: from, To: to, Message: string(message)})
 	return nil
 }
@@ -117,5 +128,22 @@ func TestUnmatchedPaymentWithoutAlertAddressStillAnswers200(t *testing.T) {
 	response := f.deliver(t, "msg_noaddr", foundingBuyer("sub_quiet", "active").event("subscription.active"))
 	if response.Code != 200 || len(mailer.all()) != 0 {
 		t.Fatalf("status=%d sent=%d, want 200 and no mail", response.Code, len(mailer.all()))
+	}
+}
+
+func TestFailedAlertStillAnswers200AndALaterEventSendsAgain(t *testing.T) {
+	f, mailer := newAlertFixture(t, "ops@alerts.example.net")
+	mailer.setFail(true)
+	sub := foundingBuyer("sub_retry", "active")
+	if response := f.deliver(t, "msg_fail", sub.event("subscription.active")); response.Code != 200 {
+		t.Fatalf("status=%d, want 200 even though the alert failed", response.Code)
+	}
+	if sent := mailer.all(); len(sent) != 0 {
+		t.Fatalf("sent %d, want none while the relay is down", len(sent))
+	}
+	mailer.setFail(false)
+	f.mustDeliver(t, "msg_later", sub.event("subscription.updated"))
+	if sent := mailer.all(); len(sent) != 1 || !strings.Contains(sent[0].Message, "sub_retry") {
+		t.Fatalf("sent=%v, want one alert for sub_retry after the relay recovered", sent)
 	}
 }
