@@ -5,9 +5,10 @@ import { suggestedCc } from './suggested-cc';
 const base = { conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, body_html: null, origin: null,
   attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null };
 let counter = 0;
-const incoming = (from: string, cc?: string[], authentication: 'pass' | 'fail' | 'none' = 'pass'): Message => ({
+type Via = 'platform' | 'workspace' | 'web_form';
+const incoming = (from: string, cc?: string[], authentication: 'pass' | 'fail' | 'none' = 'pass', via: Via = 'platform'): Message => ({
   ...base, id: `00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`, kind: 'incoming', body: 'Hi',
-  email: { from, authentication, attachments: [], original_attachment_id: null, ...(cc ? { cc } : {}) },
+  email: { from, authentication, via, attachments: [], original_attachment_id: null, ...(cc ? { cc } : {}) },
 });
 const outgoing = (cc: string[]): Message => ({ ...base, id: `00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`, kind: 'outgoing', body: 'Re', email: null, cc });
 
@@ -46,4 +47,13 @@ test('mail whose sender was not verified offers nothing: anyone can write its Cc
   expect(suggestedCc([incoming('ada@customer.example', ['boss@customer.example'], 'fail')])).toEqual([]);
   const latestUnverified = [incoming('ada@customer.example', ['boss@customer.example']), incoming('mallory@elsewhere.example', ['victim@elsewhere.example'], 'none')];
   expect(suggestedCc(latestUnverified)).toEqual([]);
+});
+
+test('on the hosted cloud, mail that did not come through the platform forwarder offers nothing: the server would refuse it', () => {
+  const posted = [incoming('ada@customer.example', ['boss@customer.example'], 'pass', 'workspace')];
+  expect(suggestedCc(posted, { hosted: true })).toEqual([]);
+  expect(suggestedCc([incoming('ada@customer.example', ['boss@customer.example'], 'pass', 'web_form')], { hosted: true })).toEqual([]);
+  expect(suggestedCc([incoming('ada@customer.example', ['boss@customer.example'])], { hosted: true })).toEqual(['boss@customer.example']);
+  // A self-hosted desk receives all its mail on its own inbound address.
+  expect(suggestedCc(posted)).toEqual(['boss@customer.example']);
 });

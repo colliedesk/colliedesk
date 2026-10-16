@@ -323,3 +323,13 @@ test('the reply box starts with the people the customer copied and sends them wi
   fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
   expect(onMessage).toHaveBeenCalledWith('outgoing', 'Thanks both.', [], ['manager@customer.example']);
 });
+
+test('on the hosted cloud the reply box offers no Cc from mail the workspace posted itself', () => {
+  const posted = [{
+    id: '33333333-3333-4333-8333-333333333333', conversation_id: conversation.id, author_agent_id: null, author_name: null, kind: 'incoming' as const,
+    body: 'Adding my manager.', body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null,
+    email: { from: 'mai@customer.example', authentication: 'pass' as const, via: 'workspace' as const, attachments: [], original_attachment_id: null, cc: ['manager@customer.example'] },
+  }];
+  render(<InboxPage hosted selected={conversation} conversations={[conversation]} timeline={posted} />);
+  expect(screen.queryByRole('list', { name: 'Cc' })).not.toBeInTheDocument();
+});

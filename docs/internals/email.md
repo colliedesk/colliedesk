@@ -167,8 +167,9 @@ unchanged; the workspace's Support address stays the identity customers see.
   `last_error` names the missed copies; the web timeline shows that line under a sent reply.
   A refused contact still fails the delivery.
 - Inbound Cc is stored in `email_meta.cc` (sender and own addresses removed, at most 50) and feeds the
-  composer default only when that message's `authentication` is `pass` (`suggestedCc` in the web
-  app). It is a suggestion; the server never trusts it on send.
+  composer default only when that message's `authentication` is `pass` and, on the hosted cloud
+  (`billing.enabled`), its `via` is `platform` (`suggestedCc` in the web app), so it never prefills an
+  address the trial rule would refuse. It is a suggestion; the server never trusts it on send.
 - A copied person's reply-all threads by `In-Reply-To`/`References` like any reply. It never changes
   the conversation contact, which is set when the conversation is created.
 

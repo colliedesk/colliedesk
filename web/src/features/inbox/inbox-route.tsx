@@ -33,7 +33,8 @@ export function InboxRoute() {
   const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
   const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
   // Shared with the app shell, so the limits cost no extra request.
-  const limits = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data?.limits;
+  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
+  const limits = config?.limits;
   const outbound = emailChannel.data;
   const outboundNotice = outbound?.channel && outbound.sending_from === null
     ? (outbound.smtp.configured ? messages.outboundNeedsVerification : messages.outboundNotConfigured) : undefined;
@@ -73,7 +74,7 @@ export function InboxRoute() {
     onSuccess: (retried) => client.invalidateQueries({ queryKey: ['messages', retried.conversation_id] }) });
   // A refusal belongs to the conversation it happened in; opening another one hides it.
   const retryError = retryDelivery.isError && retryDelivery.variables?.conversationId === selected?.id ? retryDelivery.error : undefined;
-  return <InboxPage conversations={conversations.data?.items} selected={selected} timeline={timeline.data?.items} timeEntries={timeEntries.data?.items}
+  return <InboxPage hosted={config?.billing.enabled ?? false} conversations={conversations.data?.items} selected={selected} timeline={timeline.data?.items} timeEntries={timeEntries.data?.items}
     agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone}
     page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} onPage={setPage}
     onSelect={(id) => { setSelectedId(id); navigate({ to: '/conversations/$conversationId', params: { conversationId: id } }); }}
