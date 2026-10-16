@@ -226,3 +226,10 @@ test('a browser that cannot list timezones still offers the common ones', () => 
     Intl.supportedValuesOf = original;
   }
 });
+
+test('an admin of a billed workspace finds Plan and billing last in the workspace group', () => {
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canManageWorkspace canCreateInvites showBilling />);
+  const links = within(screen.getByRole('navigation', { name: 'Settings sections' })).getAllByRole('link');
+  expect(links.at(-1)).toHaveTextContent('Plan and billing');
+  expect(links.at(-1)).toHaveAttribute('href', '/settings/billing');
+});

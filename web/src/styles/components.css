@@ -330,20 +330,28 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .data-list .session-name .badge { flex: none; color: var(--accent-text); background: var(--accent-soft); font-size: var(--fs-label); }
 .stacked-form { display: grid; gap: var(--space-3); }
 
-/* Billing: usage bars and one card per plan. */
-.current-plan { display: grid; gap: var(--space-1); }
+/* Billing: the current plan beside its usage, then one card per plan. */
+.current-plan-card { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-5); margin-bottom: var(--space-2); }
+.current-plan { display: grid; align-content: start; gap: var(--space-2); }
 .current-plan p { margin: 0; }
-.usage-list { display: grid; gap: var(--space-3); max-width: 28rem; }
+.current-plan h2 { margin: 0; }
+.current-plan-name { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; color: var(--text-1); }
+.usage-list { display: grid; align-content: start; gap: var(--space-3); }
 .usage { display: grid; gap: var(--space-1); font-size: var(--fs-small); color: var(--text-2); }
 .usage-bar { height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
 .usage-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 .usage-bar[data-level="high"] > span { background: var(--warn); }
+@media (max-width: 56rem) { .current-plan-card { grid-template-columns: 1fr; } }
 .plan-picker { display: grid; gap: var(--space-4); }
 .plan-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: var(--space-3); }
-.plan-card { display: grid; grid-template-rows: auto auto 1fr auto; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-5); }
+.plan-card { display: grid; grid-template-rows: auto auto auto 1fr; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-1); padding: var(--space-5); }
 .plan-card h3 { margin: 0; font-size: 15px; font-weight: 600; }
-.plan-price { display: flex; align-items: baseline; gap: var(--space-1); margin: 0; }
+.plan-price { display: grid; gap: 2px; }
+.plan-price p { display: flex; align-items: baseline; gap: var(--space-1); margin: 0; }
+.plan-price small { min-height: 2.6em; color: var(--text-3); font-size: var(--fs-label); } /* two lines, so every Choose button lines up */
 .plan-price strong { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; color: var(--text-1); }
 .plan-price span { color: var(--text-2); font-size: var(--fs-small); }
-.plan-card ul { display: grid; align-content: start; gap: var(--space-1); margin: 0; padding: 0; list-style: none; color: var(--text-2); font-size: var(--fs-small); }
+.plan-card ul { display: grid; align-content: start; gap: var(--space-2); margin: 0; padding: var(--space-3) 0 0; border-top: 1px solid var(--line); list-style: none; color: var(--text-2); font-size: var(--fs-small); }
+.plan-card li { display: flex; gap: var(--space-2); }
+.plan-card li::before { content: "✓"; flex: none; color: var(--accent-text); font-weight: 700; }
 .plan-card .primary-action { width: 100%; }

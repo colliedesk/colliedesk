@@ -8,11 +8,13 @@ import { RedeemRoute } from './features/auth/redeem-route';
 import { BillingRoute } from './features/settings/billing-route';
 import { clearCheckoutIntent, rememberCheckoutIntent } from './features/settings/checkout-intent';
 import { SettingsRoute } from './features/settings/settings-route';
+import { SettingsNavLinkContext } from './features/settings/settings-nav';
+import type { NavItem } from './features/settings/settings-nav';
 import { AppShell } from './features/shell/app-shell';
 import { LockedRoute } from './features/shell/locked-route';
 import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
-import { CreditCardIcon, InboxIcon, SettingsIcon } from './ui/icons';
+import { InboxIcon, SettingsIcon } from './ui/icons';
 import { LogoMark } from './ui/logo';
 
 function AppLayout() {
@@ -34,21 +36,26 @@ function AppLayout() {
   // Sign-in pages have nowhere to navigate to yet.
   if (onSignIn) return <div className="app-main"><Outlet /></div>;
   // Billing exists only on the hosted cloud and only admins manage it.
-  const showBilling = config.data?.billing.enabled === true && me.data?.agent.role === 'admin';
   const inBilling = path.startsWith('/settings/billing');
-  const inSettings = path.startsWith('/settings') && !inBilling;
-  return <AppShell me={me.data} signedOut={signedOut} signIn={signIn}
+  // Plan and billing is a page inside Settings, so Settings stays the current rail destination there.
+  const inSettings = path.startsWith('/settings');
+  return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} signedOut={signedOut} signIn={signIn}
     notice={me.data && <PlanNotices me={me.data} onBillingPage={inBilling} />} lockedScreen={locked && me.data ? <LockedRoute me={me.data} /> : undefined}
     onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending}
     brand={<span className="rail-brand" role="img" aria-label={messages.brand}><LogoMark /></span>}
     links={locked ? undefined : <>
-      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inBilling ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
-      {/* exact: the router would otherwise also mark Settings current on /settings/billing. */}
-      <Link to="/settings" activeOptions={{ exact: true }} className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}><SettingsIcon /><span className="rail-label" aria-hidden="true">{messages.settings}</span></Link>
-      {showBilling && <Link to="/settings/billing" search={{ checkout: '' }} className="rail-link" data-tip={messages.billing} aria-label={messages.billing} aria-current={inBilling ? 'page' : undefined}><CreditCardIcon /><span className="rail-label" aria-hidden="true">{messages.billing}</span></Link>}
+      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
+      <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}><SettingsIcon /><span className="rail-label" aria-hidden="true">{messages.settings}</span></Link>
     </>}>
     <Outlet />
-  </AppShell>;
+  </AppShell></SettingsNavLinkContext.Provider>;
+}
+
+// Settings sections link through the router, so moving between Settings and Plan and billing needs no reload.
+// exact + includeHash: otherwise every section link would count as current on any settings page.
+function settingsRouterLink(item: NavItem) {
+  return <Link to={item.to} hash={item.hash} activeOptions={{ exact: true, includeHash: true }}
+    aria-current={item.current ? 'page' : undefined}>{item.label}</Link>;
 }
 
 const rootRoute = createRootRoute({ component: AppLayout });

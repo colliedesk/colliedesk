@@ -3,6 +3,7 @@ import { formatBytes } from '../../lib/format-bytes';
 import { formatDay } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { PlanPicker } from './plan-picker';
+import { SettingsNav } from './settings-nav';
 
 interface BillingPageProps {
   billing: Billing;
@@ -59,49 +60,52 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
   const storageLimit = billing.limits.storage_bytes;
   const warnAt = billing.limits.storage_warn_bytes;
   const storageNearlyFull = warnAt !== null && billing.usage.storage_bytes >= warnAt && !(storageLimit !== null && billing.usage.storage_bytes >= storageLimit);
+  const manage = billing.status !== 'none' && !billing.complimentary;
   return (
     <main className="settings-page panel billing-page">
       <header><h1>{messages.billingHeading}</h1><p>{messages.billingDescription}</p></header>
-      {failed && <p role="alert" className="error-copy">{messages.billingActionFailed}</p>}
-      {checkoutReturned && <p role="status">{messages.checkoutReturned}</p>}
-      {billing.active_subscriptions > 1 && <p role="alert" className="error-copy">{messages.duplicateSubscriptions}</p>}
-      {billing.status === 'past_due' && <p role="alert" className="error-copy">{messages.pastDueNotice}</p>}
-      <section className="settings-card" aria-labelledby="current-plan-heading">
-        <div className="section-heading"><h2 id="current-plan-heading">{messages.currentPlan}</h2></div>
-        <div className="settings-body">
-          <div className="current-plan">
-            <p><strong>{billing.complimentary
-              ? messages.complimentaryPlan(messages.plans[billing.plan], billing.complimentary_until ? formatDay(billing.complimentary_until, timezone) : null)
-              : messages.plans[billing.plan]}</strong></p>
-            {note && <p className="muted-copy">{note}</p>}
-          </div>
-          {storageNearlyFull && storageLimit !== null && <p role="status" className="warning-note">
-            {(() => {
-              const percent = Math.floor((billing.usage.storage_bytes / storageLimit) * 100);
-              const used = formatBytes(billing.usage.storage_bytes);
-              return isPaid(billing)
-                ? messages.storageWarningPaid(percent, used, formatBytes(storageLimit), billing.plan === 'founding' ? messages.storageWarningUpgradeToTeam : messages.storageContactUs)
-                : messages.storageWarning(percent, used, formatBytes(storageLimit));
-            })()}</p>}
-          <StorageFull billing={billing} />
-          <div className="usage-list">
-            <Usage label={messages.usageAgents} text={messages.agentsUsage(billing.usage.agents, billing.limits.agents, billing.usage.pending_invites)}
-              used={billing.usage.agents + billing.usage.pending_invites} limit={billing.limits.agents} />
-            {storageLimit !== null && <Usage label={messages.usageStorage} text={messages.storageUsage(formatBytes(billing.usage.storage_bytes, 'down'), formatBytes(storageLimit))}
-              used={billing.usage.storage_bytes} limit={storageLimit} />}
-            {billing.limits.replies_per_24h !== null && <Usage label={messages.usageReplies} text={messages.repliesUsage(billing.usage.replies_last_24h, billing.limits.replies_per_24h)}
-              used={billing.usage.replies_last_24h} limit={billing.limits.replies_per_24h} />}
-          </div>
+      <div className="settings-layout">
+        {/* Only admins reach this page, and an admin sees every settings section. */}
+        <SettingsNav page="/settings/billing" shown={{ general: true, team: true, email: true, webForm: true, savedReplies: true, exportData: true, billing: true }} />
+        <div className="settings-sections">
+          {failed && <p role="alert" className="error-copy">{messages.billingActionFailed}</p>}
+          {checkoutReturned && <p role="status">{messages.checkoutReturned}</p>}
+          {billing.active_subscriptions > 1 && <p role="alert" className="error-copy">{messages.duplicateSubscriptions}</p>}
+          {billing.status === 'past_due' && <p role="alert" className="error-copy">{messages.pastDueNotice}</p>}
+          <section className="current-plan-card" aria-labelledby="current-plan-heading">
+            <div className="current-plan">
+              <h2 className="settings-group-label" id="current-plan-heading">{messages.currentPlan}</h2>
+              <p className="current-plan-name">{billing.complimentary
+                ? messages.complimentaryPlan(messages.plans[billing.plan], billing.complimentary_until ? formatDay(billing.complimentary_until, timezone) : null)
+                : messages.plans[billing.plan]}</p>
+              {note && <p className="muted-copy">{note}</p>}
+              {manage && <div className="button-row"><button type="button" onClick={onManage}>{messages.manageBilling}</button></div>}
+              {manage && <small className="muted-copy">{messages.manageBillingHelp}</small>}
+            </div>
+            <div className="usage-list">
+              {storageNearlyFull && storageLimit !== null && <p role="status" className="warning-note">
+                {(() => {
+                  const percent = Math.floor((billing.usage.storage_bytes / storageLimit) * 100);
+                  const used = formatBytes(billing.usage.storage_bytes);
+                  return isPaid(billing)
+                    ? messages.storageWarningPaid(percent, used, formatBytes(storageLimit), billing.plan === 'founding' ? messages.storageWarningUpgradeToTeam : messages.storageContactUs)
+                    : messages.storageWarning(percent, used, formatBytes(storageLimit));
+                })()}</p>}
+              <StorageFull billing={billing} />
+              <Usage label={messages.usageAgents} text={messages.agentsUsage(billing.usage.agents, billing.limits.agents, billing.usage.pending_invites)}
+                used={billing.usage.agents + billing.usage.pending_invites} limit={billing.limits.agents} />
+              {storageLimit !== null && <Usage label={messages.usageStorage} text={messages.storageUsage(formatBytes(billing.usage.storage_bytes, 'down'), formatBytes(storageLimit))}
+                used={billing.usage.storage_bytes} limit={storageLimit} />}
+              {billing.limits.replies_per_24h !== null && <Usage label={messages.usageReplies} text={messages.repliesUsage(billing.usage.replies_last_24h, billing.limits.replies_per_24h)}
+                used={billing.usage.replies_last_24h} limit={billing.limits.replies_per_24h} />}
+            </div>
+          </section>
+          {(billing.plan === 'trial' || billing.plan === 'none') && <section className="settings-card" aria-labelledby="upgrade-heading">
+            <div className="section-heading"><h2 id="upgrade-heading">{messages.upgradeHeading}</h2><p>{messages.upgradeHelp}</p></div>
+            <div className="settings-body"><PlanPicker sellable={billing.checkout_plans} busy={busy} onChoose={onCheckout} /></div>
+          </section>}
         </div>
-      </section>
-      {(billing.plan === 'trial' || billing.plan === 'none') && <section className="settings-card" aria-labelledby="upgrade-heading">
-        <div className="section-heading"><h2 id="upgrade-heading">{messages.upgradeHeading}</h2><p>{messages.upgradeHelp}</p></div>
-        <div className="settings-body"><PlanPicker sellable={billing.checkout_plans} busy={busy} onChoose={onCheckout} /></div>
-      </section>}
-      {billing.status !== 'none' && !billing.complimentary && <section className="settings-card" aria-labelledby="manage-billing-heading">
-        <div className="section-heading"><h2 id="manage-billing-heading">{messages.manageBilling}</h2><p>{messages.manageBillingHelp}</p></div>
-        <div className="settings-body"><div className="button-row"><button type="button" onClick={onManage}>{messages.manageBilling}</button></div></div>
-      </section>}
+      </div>
     </main>
   );
 }

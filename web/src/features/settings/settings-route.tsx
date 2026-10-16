@@ -16,6 +16,7 @@ function saveState(m: { isPending: boolean; isSuccess: boolean; isError: boolean
 export function SettingsRoute() {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
+  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
   const sessions = useQuery({ queryKey: ['sessions'], queryFn: api.sessions });
   const invites = useQuery({ queryKey: ['invites'], queryFn: api.invites });
   const team = useQuery({ queryKey: ['agents'], queryFn: api.agents });
@@ -45,9 +46,11 @@ export function SettingsRoute() {
   const updateSavedReply = useMutation({ mutationFn: ({ id, ...change }: { id: string; title: string; body: string; updated_at: string }) => api.updateSavedReply(id, change), onSuccess: refreshSavedReplies });
   const deleteSavedReply = useMutation({ mutationFn: (id: string) => api.deleteSavedReply(id), onSuccess: refreshSavedReplies });
   const isAdmin = me.data?.agent.role === 'admin';
+  // Plan and billing exists only on the hosted cloud and only admins manage it.
+  const showBilling = isAdmin && config.data?.billing.enabled === true;
   const emailFailed = rotateSecret.isError || disconnectEmail.isError || verifyDomain.isError;
   return <SettingsPage loading={me.isPending || sessions.isPending || invites.isPending} sessions={sessions.data?.items ?? []} invites={invites.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'}
-    canCreateInvites={isAdmin} canManageWorkspace={isAdmin} exportSection={isAdmin ? <ExportAllData /> : undefined}
+    canCreateInvites={isAdmin} canManageWorkspace={isAdmin} showBilling={showBilling} exportSection={isAdmin ? <ExportAllData /> : undefined}
     workspaceTimezoneSave={saveState(workspaceTimezone)} personalTimezoneSave={saveState(agentTimezone)}
     workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
     error={revokeInvite.isError || revokeSession.isError || emailFailed ? messages.settingsActionFailed : undefined}

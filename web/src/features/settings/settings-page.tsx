@@ -5,6 +5,7 @@ import { InvitesSection } from './invites-section';
 import { PreferencesSection } from './preferences-section';
 import type { SaveState } from './save-feedback';
 import { SessionsSection } from './sessions-section';
+import { SettingsNav } from './settings-nav';
 import { TimezoneSelect } from './timezone-select';
 
 interface SettingsPageProps {
@@ -35,40 +36,22 @@ interface SettingsPageProps {
   // exportSection is the admin's whole-workspace export.
   exportSection?: ReactNode;
   webFormSection?: ReactNode;
+  // showBilling adds Plan and billing to the nav; only admins of a billed (cloud) workspace see it.
+  showBilling?: boolean;
 }
 
-interface NavEntry { label: string; target: string; shown: boolean }
-
 // SettingsPage is one page in two groups: what belongs to the person signed in, then what the whole
-// workspace shares. A section nav jumps to each; it lists only the sections this person can see.
+// workspace shares. A section nav jumps to each; it lists only the sections this person can see,
+// plus Plan and billing (its own page) for admins of a billed workspace.
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
   workspaceTimezone = 'UTC', timezoneOverride = null, createdInviteUrl, onCreateInvite, onRevokeInvite,
-  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, emailSection, savedRepliesSection, webFormSection, exportSection }: SettingsPageProps) {
-  const groups: { label: string; entries: NavEntry[] }[] = [
-    { label: messages.settingsYourAccount, entries: [
-      { label: messages.profile, target: 'profile-heading', shown: true },
-      { label: messages.preferences, target: 'preferences-heading', shown: true },
-    ] },
-    { label: messages.settingsWorkspace, entries: [
-      { label: messages.general, target: 'general-heading', shown: canManageWorkspace },
-      { label: messages.team, target: 'team-heading', shown: Boolean(teamSection) },
-      { label: messages.invites, target: 'invites-heading', shown: true },
-      { label: messages.sessions, target: 'sessions-heading', shown: true },
-      { label: messages.emailChannel, target: 'email-channel-heading', shown: Boolean(emailSection) },
-      { label: messages.webForm, target: 'web-form-heading', shown: Boolean(webFormSection) },
-      { label: messages.savedReplies, target: 'saved-replies-heading', shown: Boolean(savedRepliesSection) },
-      { label: messages.exportHeading, target: 'export-heading', shown: Boolean(exportSection) },
-    ] },
-  ];
+  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, emailSection, savedRepliesSection, webFormSection, exportSection, showBilling = false }: SettingsPageProps) {
   return (
     <main className="settings-page panel">
       <header><h1>{messages.settings}</h1><p>{messages.settingsDescription}</p></header>
       {loading ? <p role="status" className="empty-copy">{messages.loading}</p> : <div className="settings-layout">
-        <nav className="settings-nav" aria-label={messages.settingsSections}>
-          {groups.map((group) => <div key={group.label}><p className="settings-group-label">{group.label}</p>
-            <ul>{group.entries.filter((entry) => entry.shown).map((entry) => <li key={entry.target}><a href={`#${entry.target}`}>{entry.label}</a></li>)}</ul>
-          </div>)}
-        </nav>
+        <SettingsNav page="/settings" shown={{ general: canManageWorkspace, team: Boolean(teamSection), email: Boolean(emailSection), webForm: Boolean(webFormSection),
+          savedReplies: Boolean(savedRepliesSection), exportData: Boolean(exportSection), billing: showBilling }} />
         <div className="settings-sections">
           {error && <p role="alert" className="error-copy">{error}</p>}
           <p className="settings-group-label">{messages.settingsYourAccount}</p>

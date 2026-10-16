@@ -3,7 +3,7 @@
 Billing exists only on the hosted Colliedesk Cloud. A self-hosted instance has no billing page, no
 trial, no plan and no limits; nothing here applies to it.
 
-Only workspace admins see **Billing** (left rail). Agents see how many days of the trial are left in
+Only workspace admins see **Settings → Plan and billing**. Agents see how many days of the trial are left in
 the banner at the top, and nothing else about billing.
 
 ## The free trial
@@ -32,7 +32,7 @@ Every new cloud workspace starts a 14-day free trial of the full Team plan. No c
   (mail that came in through your Colliedesk address, or imported history). To write to anyone,
   verify your sending domain in **Settings**, or choose a plan.
 - **Attachments.** 2 GiB in total. Files that came in with a Freshdesk import do not count. At 80%
-  the banner and **Billing** warn you. At the limit, mail with a larger attachment is refused by
+  the banner and **Plan and billing** warn you. At the limit, mail with a larger attachment is refused by
   the mail system and bounces to the sender; nothing is dropped silently.
 
 Nothing else is limited. Conversations, contacts, tags, notes and search work as on a paid plan.
@@ -59,12 +59,12 @@ The plan belongs to the workspace, not to a person. Paid plans have no reply cap
 | Team 25 | 250 GiB. Files brought in by an import count. |
 | Founding | 20 GiB. Files brought in by an import count. |
 
-**Billing** shows the attachments you have used, and warns at 80% of the limit.
+**Plan and billing** shows the attachments you have used, and warns at 80% of the limit.
 
 On a paid plan, at the limit nothing is deleted. You can still read everything, reply without adding
 files, and export all your data. **Email from your customers is never refused.** It is stored in
 full, attachments included, even when that takes the workspace past the limit; those bytes still count,
-so **Billing** shows the usage over the limit. What the limit stops is files you add yourself: an
+so **Plan and billing** shows the usage over the limit. What the limit stops is files you add yourself: an
 upload, an attachment on a reply, and a Freshdesk import that would pass it (the import does not
 start; see [Import from Freshdesk](import-freshdesk.md)). Colliedesk has no screen yet for uploading a
 file or attaching one to a reply; the limit applies to those the day they exist. Each refusal names
@@ -89,13 +89,14 @@ trial (or the subscription) has ended, instead of the inbox.
 
 ## Upgrade
 
-1. Open **Billing** (or select **Choose a plan** in the banner or on the locked page).
-2. Under **Choose a plan**, each plan is a card with its agents and attachment storage. Select a
-   price on the card: monthly or yearly (yearly costs two months less), or Founding.
+1. Open **Settings → Plan and billing** (or select **Choose a plan** in the banner or on the locked page).
+2. Under **Choose a plan**, pick **Monthly** or **Yearly, 2 months free**. Each plan is a card with its
+   price per month (a yearly plan also shows what is billed once a year), its agents and attachment
+   storage. Select **Choose Team**, **Choose Team 25** or **Choose Founding**.
 3. Pay in the window that opens on top of Colliedesk. It is run by our payment provider, Polar;
    Colliedesk never sees your card. Pay by card. Apple Pay and Google Pay come later. If you
    close the window, you stay on the page and can start again.
-4. You return to **Billing**. The plan updates within a few moments, once the provider confirms
+4. You return to **Plan and billing**. The plan updates within a few moments, once the provider confirms
    the payment.
 
 If the window does not load within 15 seconds (for example a browser extension blocks it),

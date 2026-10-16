@@ -30,10 +30,11 @@ export function PlanPicker({ sellable, busy = false, onChoose }: PlanPickerProps
         return (
           <article key={card.name} className="plan-card" aria-label={card.name}>
             <h3>{card.name}</h3>
-            <p className="plan-price"><strong>{price.amount}</strong><span>{price.per}</span></p>
-            <ul>{card.includes.map((line) => <li key={line}>{line}</li>)}</ul>
+            <div className="plan-price"><p><strong>{price.amount}</strong><span>{messages.perMonth}</span></p>
+              <small>{price.billed ?? messages.billedMonthly}</small></div>
             <button type="button" className="primary-action" aria-label={price.label} disabled={busy} aria-busy={busy}
               onClick={() => onChoose(price.plan)}>{messages.choosePlanName(card.name)}</button>
+            <ul>{card.includes.map((line) => <li key={line}>{line}</li>)}</ul>
           </article>
         );
       })}</div>

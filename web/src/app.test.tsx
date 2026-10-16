@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/react-router';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { routeTree } from './app';
 import { readCheckoutIntent, rememberCheckoutIntent } from './features/settings/checkout-intent';
@@ -163,7 +163,7 @@ test('going back to the billing page after the checkout was started does not sta
   expect(checkouts()).toBe(1);
 });
 
-test('on the billing page only Billing is the current rail destination, and the trial banner does not offer the page it is on', async () => {
+test('billing lives in Settings: the rail keeps Settings current, the settings nav marks Plan and billing, the banner does not offer the page it is on', async () => {
   serve({
     '/api/v1/auth/me': () => json(200, meBody('admin', trialPlan)),
     '/api/v1/config': () => json(200, config),
@@ -172,8 +172,12 @@ test('on the billing page only Billing is the current rail destination, and the 
   });
   open('/settings/billing');
   await screen.findByRole('heading', { name: 'Plan and billing' });
-  expect(screen.getByRole('link', { name: 'Billing' })).toHaveAttribute('aria-current', 'page');
-  expect(screen.getByRole('link', { name: 'Settings' })).not.toHaveAttribute('aria-current');
+  const rail = screen.getByRole('navigation', { name: 'Main' });
+  expect(within(rail).queryByRole('link', { name: 'Billing' })).not.toBeInTheDocument();
+  expect(within(rail).getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
+  const sections = screen.getByRole('navigation', { name: 'Settings sections' });
+  expect(within(sections).getByRole('link', { name: 'Plan and billing' })).toHaveAttribute('aria-current', 'page');
+  expect(within(sections).getByRole('link', { name: 'Team' })).toHaveAttribute('href', '/settings#team-heading');
   expect(screen.getByRole('region', { name: /plan notices/i })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Choose a plan' })).not.toBeInTheDocument();
 });
