@@ -11,6 +11,7 @@ import (
 const (
 	PlanTrial    = "trial"
 	PlanTeam     = "team"
+	PlanTeam25   = "team25"
 	PlanFounding = "founding"
 	PlanNone     = "none"
 )
@@ -19,11 +20,13 @@ const (
 const BillingStatusNone = "none"
 
 // Storage caps. The trial (and a locked workspace) gets 2 GiB of attachment bytes, imported files
-// excluded. The Founding plan gets 20 GiB with imported files included. Team has none.
+// excluded. Paid plans count imported files too: Founding gets 20 GiB, Team 100 GiB, Team 25 250 GiB.
 // StorageWarnPercent is where the web app starts to warn.
 const (
 	TrialStorageBytes    int64 = 2 << 30
 	FoundingStorageBytes int64 = 20 << 30
+	TeamStorageBytes     int64 = 100 << 30
+	Team25StorageBytes   int64 = 250 << 30
 	StorageWarnPercent         = 80
 )
 
@@ -38,6 +41,21 @@ type PlanLimits struct {
 	RepliesPer24h *int `json:"replies_per_24h"`
 }
 
+// PlanName is the plan as a person reads it: "Team 25", not the stored id "team25".
+func PlanName(plan string) string {
+	switch plan {
+	case PlanTeam:
+		return "Team"
+	case PlanTeam25:
+		return "Team 25"
+	case PlanFounding:
+		return "Founding"
+	case PlanTrial:
+		return "trial"
+	}
+	return plan
+}
+
 // StorageCap returns the attachment storage cap of plan in bytes, or 0 when the plan has none.
 func StorageCap(plan string) int64 {
 	switch plan {
@@ -45,6 +63,10 @@ func StorageCap(plan string) int64 {
 		return TrialStorageBytes
 	case PlanFounding:
 		return FoundingStorageBytes
+	case PlanTeam:
+		return TeamStorageBytes
+	case PlanTeam25:
+		return Team25StorageBytes
 	}
 	return 0
 }
@@ -53,7 +75,10 @@ func StorageCap(plan string) int64 {
 func StorageCapped(plan string) bool { return StorageCap(plan) > 0 }
 
 // StorageCountsImports reports whether imported files count toward the cap of plan.
-func StorageCountsImports(plan string) bool { return plan == PlanFounding }
+// Every plan with a cap other than the trial's counts them.
+func StorageCountsImports(plan string) bool {
+	return StorageCapped(plan) && plan != PlanTrial && plan != PlanNone
+}
 
 // LimitsFor returns the caps of plan; a locked workspace (PlanNone) holds no seats.
 func LimitsFor(plan string) PlanLimits {
@@ -67,6 +92,8 @@ func LimitsForStorage(plan string, storageCap int64) PlanLimits {
 	switch plan {
 	case PlanTrial, PlanTeam, PlanFounding:
 		limits.Agents = 10
+	case PlanTeam25:
+		limits.Agents = 25
 	}
 	if plan == PlanTrial {
 		replies := TrialRepliesPerDay
@@ -81,7 +108,7 @@ func LimitsForStorage(plan string, storageCap int64) PlanLimits {
 
 // Subscription mirrors the latest Polar subscription event of a workspace.
 type Subscription struct {
-	Plan              string // team or founding: what the product bought
+	Plan              string // team, team25 or founding: what the product bought
 	SubscriptionID    string
 	CustomerID        string
 	Status            string // the Polar status
@@ -127,7 +154,7 @@ type BillingUsage struct {
 	// trial's daily cap; it is 0 on every other plan.
 	RepliesLast24h int `json:"replies_last_24h"`
 	// StorageBytes is the attachment bytes the storage cap counts: every file except imported ones,
-	// or every file including imported ones on the Founding plan.
+	// or every file including imported ones on a paid plan.
 	StorageBytes int64 `json:"storage_bytes"`
 }
 
@@ -139,8 +166,11 @@ type StorageLimitError struct {
 
 func (e *StorageLimitError) Error() string {
 	limit := FormatBytes(e.Limit)
-	if e.Plan == PlanFounding {
-		return fmt.Sprintf("This workspace has reached the %s attachment storage limit of the Founding plan. Nothing is deleted, customer email is still stored, and you can still read, reply and export. Uploads and imports are refused. Upgrade to the Team plan under Billing > Manage billing to remove the limit, or export your data.", limit)
+	switch e.Plan {
+	case PlanFounding:
+		return fmt.Sprintf("This workspace has reached the %s attachment storage limit of the Founding plan. Nothing is deleted, customer email is still stored, and you can still read, reply and export. Uploads and imports are refused. Upgrade to the Team plan under Billing > Manage billing for a higher limit, or export your data.", limit)
+	case PlanTeam, PlanTeam25:
+		return fmt.Sprintf("This workspace has reached the %s attachment storage limit of its plan. Nothing is deleted, customer email is still stored, and you can still read, reply and export. Uploads and imports are refused. Contact us for more storage, or export your data.", limit)
 	}
 	return fmt.Sprintf("This workspace has reached its %s attachment storage limit. Subscribe to remove the limit, or export your data.", limit)
 }
@@ -165,6 +195,8 @@ func FormatBytes(n int64) string {
 type PlanLimitError struct {
 	Plan   string
 	Agents int // the agent cap of the plan
+	// Team25Offered is true when this server can sell Team 25, so a Team workspace can be told to upgrade.
+	Team25Offered bool
 }
 
 func (e *PlanLimitError) Error() string {
@@ -172,8 +204,13 @@ func (e *PlanLimitError) Error() string {
 	switch e.Plan {
 	case PlanFounding:
 		name = "Founding"
+	case PlanTeam25:
+		name = "Team 25"
 	case PlanTrial:
 		name = "trial"
+	}
+	if e.Plan == PlanTeam && e.Team25Offered {
+		return fmt.Sprintf("The Team plan allows %d agents, pending invites included. Revoke a pending invite to free a seat, or upgrade to Team 25 (up to %d agents) under Manage billing.", e.Agents, LimitsFor(PlanTeam25).Agents)
 	}
 	if e.Plan == PlanTrial {
 		return fmt.Sprintf("The trial allows %d agents, pending invites included. Revoke a pending invite to free a seat, or subscribe and contact us for more than %d agents.", e.Agents, e.Agents)
@@ -225,10 +262,13 @@ type Billing struct {
 	ComplimentaryUntil *time.Time   `json:"complimentary_until"`
 	Limits             PlanLimits   `json:"limits"`
 	Usage              BillingUsage `json:"usage"`
+	// CheckoutPlans are the plans this server can sell, in the order they are offered. The web app
+	// shows a purchase button for each and no other.
+	CheckoutPlans []string `json:"checkout_plans"`
 }
 
 // NewBilling derives the plan in effect from every subscription of the workspace. The best
-// subscription that is still paid decides the plan (founding before team, then the later period
+// subscription that is still paid decides the plan (by planRank, then the later period
 // end); with none paid, the most recently changed one explains the state. ActiveSubscriptions
 // counts the paid ones so a duplicate is visible.
 func NewBilling(subscriptions []Subscription, trialEndsAt time.Time, usage BillingUsage, now time.Time) Billing {
@@ -266,9 +306,24 @@ func NewBilling(subscriptions []Subscription, trialEndsAt time.Time, usage Billi
 	return billing
 }
 
+// planRank orders the paid plans by what they give, so a workspace that holds two gets the better
+// one: Team 25 has the most agents; Team and Founding have the same agents but Team has the larger
+// storage cap.
+func planRank(plan string) int {
+	switch plan {
+	case PlanTeam25:
+		return 3
+	case PlanTeam:
+		return 2
+	case PlanFounding:
+		return 1
+	}
+	return 0
+}
+
 func betterThan(a, b Subscription) bool {
 	if a.Plan != b.Plan {
-		return a.Plan == PlanFounding
+		return planRank(a.Plan) > planRank(b.Plan)
 	}
 	if a.CurrentPeriodEnd == nil || b.CurrentPeriodEnd == nil {
 		return a.CurrentPeriodEnd != nil

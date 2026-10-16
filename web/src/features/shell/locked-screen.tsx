@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { Billing, CheckoutPlan } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
-import { planOptions } from '../settings/plan-options';
+import { planOptionsFor } from '../settings/plan-options';
 
 interface LockedScreenProps {
   isAdmin: boolean;
@@ -44,7 +44,7 @@ export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = fals
         <div className="section-heading"><h2 id="locked-plan-heading">{messages.choosePlan}</h2></div>
         <div className="settings-body">
           {isAdmin
-            ? <div className="button-row">{planOptions.map((option) =>
+            ? <div className="button-row">{planOptionsFor(billing?.checkout_plans ?? []).map((option) =>
                 <button key={option.plan} type="button" className="primary-action" onClick={() => onCheckout(option.plan)}>{option.label}</button>)}
               {hasSubscription && onManage && <button type="button" onClick={onManage}>{messages.manageBilling}</button>}</div>
             : <p>{messages.askWorkspaceAdmin}</p>}

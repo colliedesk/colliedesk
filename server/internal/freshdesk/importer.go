@@ -89,7 +89,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 			return nil, err
 		}
 		defer release()
-		if err := r.guardFoundingStorage(ctx); err != nil {
+		if err := r.guardStorage(ctx); err != nil {
 			return nil, err
 		}
 	}

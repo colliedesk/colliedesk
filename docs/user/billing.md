@@ -40,9 +40,10 @@ Nothing else is limited. Conversations, contacts, tags, notes and search work as
 | Plan | Price | Agents |
 |---|---|---|
 | Team | $49 per month or $490 per year, per workspace | up to 10 (contact us for more) |
+| Team 25 | $99 per month or $990 per year, per workspace | up to 25 |
 | Founding | $100 per year, for life | up to 10 |
 
-The plan belongs to the workspace, not to a person. Paid plans have no reply cap and no recipient rule. Team has no storage cap; Founding has 20 GiB
+The plan belongs to the workspace, not to a person. Paid plans have no reply cap and no recipient rule. Every paid plan has an attachment storage cap
 (see "Attachment storage" below). Prices are in US dollars.
 
 ## Attachment storage
@@ -50,20 +51,21 @@ The plan belongs to the workspace, not to a person. Paid plans have no reply cap
 | Plan | Attachment storage |
 |---|---|
 | Free trial | 2 GiB. Files brought in by an import do not count. |
-| Team | no limit |
+| Team | 100 GiB. Files brought in by an import count. |
+| Team 25 | 250 GiB. Files brought in by an import count. |
 | Founding | 20 GiB. Files brought in by an import count. |
 
 **Billing** shows the attachments you have used, and warns at 80% of the limit.
 
-On Founding, at the limit nothing is deleted. You can still read everything, reply without adding
+On a paid plan, at the limit nothing is deleted. You can still read everything, reply without adding
 files, and export all your data. **Email from your customers is never refused.** It is stored in
-full, attachments included, even when that takes the workspace past 20 GiB; those bytes still count,
+full, attachments included, even when that takes the workspace past the limit; those bytes still count,
 so **Billing** shows the usage over the limit. What the limit stops is files you add yourself: an
 upload, an attachment on a reply, and a Freshdesk import that would pass it (the import does not
 start; see [Import from Freshdesk](import-freshdesk.md)). Colliedesk has no screen yet for uploading a
 file or attaching one to a reply; the limit applies to those the day they exist. Each refusal names
-the limit. To lift the
-limit, switch to the Team plan under **Manage billing**, or export your data. The trial is
+the limit. To raise the
+limit, contact us (on Founding, switch to the Team plan under **Manage billing**), or export your data. The trial is
 different: at its 2 GiB limit **all** incoming email is refused, because the size of the whole
 message counts, not only its attachments. There is no way to delete an attachment, so the way to
 keep receiving email is to upgrade. Files brought in by an import do not count on the trial. A file counts each time it is attached, so the same file on two messages counts twice.

@@ -109,8 +109,8 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 	}
 	limits := config.Billing.Enabled()
 	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), exportLinks: newExportLinks(), webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
-		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits),
-		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits)}
+		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25()),
+		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25())}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
 	if config.Random != nil {
 		api.auth = api.auth.WithRandom(config.Random)

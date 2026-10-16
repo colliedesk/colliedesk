@@ -69,7 +69,7 @@ func TestCheckStorageFoundingBoundaryIsExact(t *testing.T) {
 	}
 }
 
-func TestCheckStorageRefusesFoundingAtTheCapAndNotTeam(t *testing.T) {
+func TestCheckStorageRefusesFoundingAtItsCapWhileTeamHasRoom(t *testing.T) {
 	f := newLimitsFixture(t, true)
 	f.receive(t, false, 1, "First A")
 	f.receive(t, true, 2, "First B")
@@ -82,7 +82,7 @@ func TestCheckStorageRefusesFoundingAtTheCapAndNotTeam(t *testing.T) {
 		t.Fatalf("founding upload at the cap: %v, want a refusal", err)
 	}
 	if err := f.checkUpload(t, f.workspaceB, 1<<30); err != nil {
-		t.Fatalf("team upload: %v, want no cap", err)
+		t.Fatalf("team upload far below its 100 GiB cap: %v, want it allowed", err)
 	}
 }
 
@@ -142,22 +142,74 @@ func TestFoundingBillingShowsTheCapAndWarningThreshold(t *testing.T) {
 	}
 }
 
-func TestTeamStaysUncappedWhileFoundingIsCapped(t *testing.T) {
+// teamCap and team25Cap are written out by hand: 100 GiB and 250 GiB.
+const (
+	teamCap   = 107374182400
+	team25Cap = 268435456000
+)
+
+// makePlan puts the workspace on plan through a paid subscription that outlives every fixture date.
+func (f limitsFixture) makePlan(t *testing.T, workspace, plan string) {
+	t.Helper()
+	if _, err := f.pool.Exec(context.Background(), `INSERT INTO workspace_billing(workspace_id,polar_subscription_id,plan,polar_customer_id,status,current_period_end,source_modified_at)
+		VALUES($1::uuid,'sub_'||$2||'_'||$1::text,$2,'cus_plan','active','2027-10-01T00:00:00Z','2026-10-01T09:00:00Z')`, workspace, plan); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCheckStorageTeamAndTeam25BoundariesAreExact(t *testing.T) {
+	for plan, planCap := range map[string]int64{"team": teamCap, "team25": team25Cap} {
+		t.Run(plan, func(t *testing.T) {
+			f := newLimitsFixture(t, true)
+			f.receive(t, false, 1, "First")
+			f.makePlan(t, f.workspaceA, plan)
+			f.setStorage(t, f.workspaceA, planCap-600)
+			if err := f.checkUpload(t, f.workspaceA, 600); err != nil {
+				t.Fatalf("upload filling the cap exactly: %v, want it allowed", err)
+			}
+			f.setStorage(t, f.workspaceA, planCap-599)
+			var limit *domain.StorageLimitError
+			if err := f.checkUpload(t, f.workspaceA, 600); !errors.As(err, &limit) || limit.Limit != planCap {
+				t.Fatalf("upload one byte over the cap: %v, want a *domain.StorageLimitError with limit %d", err, planCap)
+			}
+		})
+	}
+}
+
+func TestTeamStorageCountsImportedFilesAndWarnsAtEightyPercent(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	conversation := f.conversationA(t)
+	f.makePlan(t, f.workspaceA, "team")
+	const warn = 85899345920 // 80% of 100 GiB
+	f.seedImported(t, f.workspaceA, conversation, teamCap-300)
+	var limit *domain.StorageLimitError
+	if err := f.checkUpload(t, f.workspaceA, 600); !errors.As(err, &limit) {
+		t.Fatalf("upload after a large import on Team: %v, want a refusal", err)
+	}
+	view := f.usage(t, f.adminA)
+	if view.Plan != "team" || view.Limits.StorageBytes == nil || *view.Limits.StorageBytes != teamCap ||
+		view.Limits.StorageWarnBytes == nil || *view.Limits.StorageWarnBytes != warn || view.Usage.StorageBytes != f.storedStorage(t, f.workspaceA) {
+		t.Fatalf("billing=%+v, want team capped at %d, warning at %d, usage counting imports", view, teamCap, warn)
+	}
+}
+
+func TestTeamOverTheCapStillTakesCustomerMail(t *testing.T) {
 	f := newLimitsFixture(t, true)
 	f.receive(t, false, 1, "First A")
-	f.receive(t, true, 2, "First B")
-	f.upgrade(t, f.workspaceA, "sub_team_uncapped")
-	f.makeFounding(t, f.workspaceB)
-	f.setStorage(t, f.workspaceA, foundingCap+5<<30)
-	f.setStorage(t, f.workspaceB, foundingCap)
+	f.makePlan(t, f.workspaceA, "team")
+	f.setStorage(t, f.workspaceA, teamCap+1000)
 	if got := inbound(t, f.api, platformSecret, sizedMail(t, 600, 4)); got.Code != http.StatusOK {
-		t.Fatalf("team workspace at 25 GiB: status=%d body=%s, want 200", got.Code, got.Body.String())
+		t.Fatalf("team workspace past 100 GiB: status=%d body=%s, want inbound mail accepted", got.Code, got.Body.String())
 	}
-	if view := f.usage(t, f.adminA); view.Plan != "team" || view.Limits.StorageBytes != nil {
-		t.Fatalf("team billing=%+v, want no storage cap", view)
-	}
-	if view := f.usage(t, f.adminB); view.Plan != "founding" || view.Limits.StorageBytes == nil {
-		t.Fatalf("founding billing=%+v, want a storage cap", view)
+}
+
+func TestTeam25IsCappedAt250GiBWithTwentyFiveAgents(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	f.receive(t, false, 1, "First A")
+	f.makePlan(t, f.workspaceA, "team25")
+	view := f.usage(t, f.adminA)
+	if view.Plan != "team25" || view.Limits.Agents != 25 || view.Limits.StorageBytes == nil || *view.Limits.StorageBytes != team25Cap {
+		t.Fatalf("billing=%+v, want team25 with 25 agents and a %d byte cap", view, team25Cap)
 	}
 }
 

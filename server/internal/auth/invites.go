@@ -23,7 +23,7 @@ func (s *Service) CreateInvite(ctx context.Context, principal Principal, email, 
 		return domain.Invite{}, "", err
 	}
 	if s.planLimits {
-		if err := store.CheckAgentSeat(ctx, tx, principal.Workspace.ID, s.now(), strings.ToLower(email), ""); err != nil {
+		if err := store.CheckAgentSeat(ctx, tx, principal.Workspace.ID, s.now(), strings.ToLower(email), "", s.team25Offered); err != nil {
 			return domain.Invite{}, "", err
 		}
 	}
