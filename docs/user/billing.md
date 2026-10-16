@@ -43,6 +43,8 @@ Nothing else is limited. Conversations, contacts, tags, notes and search work as
 | Team 25 | $99 per month or $990 per year, per workspace | up to 25 |
 | Founding | $100 per year, for life | up to 10 |
 
+Founding is limited to 10 subscriptions. When all 10 are taken it is closed for good and the billing page offers Team and Team 25 only.
+
 The plan belongs to the workspace, not to a person. Paid plans have no reply cap and no recipient rule. Every paid plan has an attachment storage cap
 (see "Attachment storage" below). Prices are in US dollars.
 
