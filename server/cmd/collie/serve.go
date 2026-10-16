@@ -82,7 +82,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	}
 	if emailConfig.SMTP.Configured() {
 		worker := emailoutbox.New(store.NewWithDB(db), email.SMTPSender{Config: emailConfig.SMTP},
-			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain})
+			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage})
 		go worker.Run(ctx, 5*time.Second)
 	}
 	warnWithoutTrustedProxies(slog.Default(), trustedProxies)

@@ -127,6 +127,17 @@
 .composer textarea { display: block; width: 100%; min-height: 3.5rem; max-height: 40vh; resize: vertical; border: 0; background: transparent; padding: var(--space-2) var(--space-4); line-height: 1.55; transition: min-height var(--dur) var(--ease); }
 .composer-card:focus-within textarea, .composer textarea:not(:placeholder-shown) { min-height: 7rem; }
 .composer textarea:focus-visible { outline: none; }
+.composer-attachments { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); }
+.attach-button { --control: 30px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-2); }
+.attach-button:hover:not(:disabled) { color: var(--text-1); }
+.attach-button svg { width: 16px; height: 16px; }
+.composer-files { display: contents; margin: 0; padding: 0; list-style: none; }
+.composer-files li { display: inline-flex; align-items: center; gap: var(--space-2); max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1); padding: 0 var(--space-1) 0 var(--space-3); font-size: var(--fs-label); min-height: 28px; }
+.composer-files li > svg { width: 14px; height: 14px; color: var(--text-3); flex: none; }
+.composer-files li > span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.composer-files li button { --control: 24px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-1); }
+.composer-files li button svg { width: 12px; height: 12px; }
+.composer-attachments-problem { flex-basis: 100%; margin: 0; border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); font-size: var(--fs-label); }
 .composer-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); padding: 0 var(--space-2) var(--space-2); }
 .composer-notice { margin: 0 var(--space-6) var(--space-2); justify-self: center; width: min(100% - 3rem, 46rem); border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); }
 

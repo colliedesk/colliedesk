@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"mime"
 	"net/http"
 	"strings"
 )
@@ -21,6 +22,10 @@ func (a *API) listMessages(response http.ResponseWriter, request *http.Request) 
 }
 
 func (a *API) createMessage(response http.ResponseWriter, request *http.Request) {
+	if mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type")); err == nil && mediaType == "multipart/form-data" {
+		a.createMessageWithFiles(response, request)
+		return
+	}
 	var input struct {
 		Kind string `json:"kind"`
 		Body string `json:"body"`

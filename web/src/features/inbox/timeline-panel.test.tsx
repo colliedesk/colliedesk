@@ -80,3 +80,12 @@ test('shows no loading status once the timeline has loaded', () => {
   render(<TimelinePanel items={[note]} timezone="UTC" />);
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
 });
+
+test('an outgoing reply lists the files that went with it as downloads', () => {
+  const sent: Message = { ...base, id: '66666666-6666-4666-8666-666666666666', kind: 'outgoing', body: 'Invoice attached.',
+    attachments: [{ id: '77777777-7777-4777-8777-777777777777', message_id: '66666666-6666-4666-8666-666666666666', filename: 'invoice.pdf', content_type: 'application/pdf', size: 2048, sha256: 'a'.repeat(64), created_at: '2026-10-14T00:00:00Z' }] };
+  render(<TimelinePanel items={[sent]} timezone="UTC" />);
+  const link = within(screen.getByRole('list', { name: 'Attachments' })).getByRole('link', { name: 'invoice.pdf' });
+  expect(link).toHaveAttribute('href', '/api/v1/attachments/77777777-7777-4777-8777-777777777777');
+  expect(screen.getByText('2.0 KiB')).toBeInTheDocument();
+});

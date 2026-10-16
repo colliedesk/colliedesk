@@ -26,6 +26,8 @@ type Config struct {
 	CloudAuth   cloudauth.Config
 	Email       email.Config
 	Attachments attachments.Storage
+	// UploadTimeout is the longest one multipart message upload may take to arrive (default 3 minutes).
+	UploadTimeout time.Duration
 	// RequestPool, when set, runs workspace-scoped queries as a separate request login
 	// (DATABASE_REQUEST_URL); nil runs them on the owner pool.
 	RequestPool *pgxpool.Pool
@@ -108,7 +110,7 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 	limits := config.Billing.Enabled()
 	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), exportLinks: newExportLinks(), webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
 		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits),
-		store: store.NewWithDB(db).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits)}
+		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits)}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
 	if config.Random != nil {
 		api.auth = api.auth.WithRandom(config.Random)

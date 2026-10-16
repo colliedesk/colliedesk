@@ -30,6 +30,8 @@ export function InboxRoute() {
   const agents = useQuery({ queryKey: ['agents'], queryFn: api.agents });
   const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags });
   const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
+  // Shared with the app shell, so the limits cost no extra request.
+  const limits = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data?.limits;
   const outbound = emailChannel.data;
   const outboundNotice = outbound?.channel && outbound.sending_from === null
     ? (outbound.smtp.configured ? messages.outboundNeedsVerification : messages.outboundNotConfigured) : undefined;
@@ -63,7 +65,7 @@ export function InboxRoute() {
     void client.invalidateQueries({ queryKey: ['tags'] });
     addTag.mutate({ conversationId: variables.conversationId, tagId: tag.id });
   } });
-  const message = useMutation({ mutationFn: ({ kind, body }: { kind: 'outgoing' | 'note'; body: string }) => api.createMessage(selected!.id, kind, body),
+  const message = useMutation({ mutationFn: ({ kind, body, files }: { kind: 'outgoing' | 'note'; body: string; files?: File[] }) => api.createMessage(selected!.id, kind, body, files),
     onSuccess: () => client.invalidateQueries({ queryKey: ['messages', selected?.id] }) });
   const retryDelivery = useMutation({ mutationFn: ({ conversationId, messageId }: { conversationId: string; messageId: string }) => api.retryDelivery(conversationId, messageId),
     onSuccess: (retried) => client.invalidateQueries({ queryKey: ['messages', retried.conversation_id] }) });
@@ -76,7 +78,8 @@ export function InboxRoute() {
     onFilters={(values) => { setFilters(values); setPage(1); }} onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
-    onMessage={(kind, body) => message.mutateAsync({ kind, body })}
+    onMessage={(kind, body, files) => message.mutateAsync({ kind, body, files })}
+    attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
     outboundNotice={outboundNotice} deliveryNotice={retryError ? retryRefusalText(retryError) : undefined} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}
     failed={conversations.isError} onRetry={() => void conversations.refetch()}

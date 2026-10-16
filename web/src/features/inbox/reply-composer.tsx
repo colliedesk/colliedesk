@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { AttachmentPicker, attachmentProblem } from './attachment-picker';
+import type { AttachmentLimits } from './attachment-picker';
 import { replyRefusalText } from './refusal-text';
 import { messages } from '../../messages';
 import { LockIcon, ReplyIcon } from '../../ui/icons';
@@ -7,7 +9,10 @@ import { LockIcon, ReplyIcon } from '../../ui/icons';
 interface ReplyComposerProps {
   disabled?: boolean;
   // May return a promise: the text is kept, with the reason shown, when it rejects.
-  onSubmit?: (kind: 'outgoing' | 'note', body: string) => void | Promise<unknown>;
+  // Called with files only when some are chosen.
+  onSubmit?: (kind: 'outgoing' | 'note', body: string, files?: File[]) => void | Promise<unknown>;
+  // The server's per-message file limits; the composer warns and holds the send while they are exceeded.
+  attachmentLimits?: AttachmentLimits;
 }
 
 type Kind = 'outgoing' | 'note';
@@ -27,22 +32,29 @@ function isTyping(target: EventTarget | null) {
 // acting on that key would send or switch before the text is committed.
 const composing = (event: KeyboardEvent) => event.isComposing || event.keyCode === 229;
 
-export function ReplyComposer({ disabled, onSubmit }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, onSubmit, attachmentLimits }: ReplyComposerProps) {
   const [kind, setKind] = useState<Kind>('outgoing');
   const [body, setBody] = useState('');
   const [problem, setProblem] = useState<string>();
   const [sending, setSending] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const fileProblem = attachmentProblem(files, attachmentLimits);
   const field = useRef<HTMLTextAreaElement>(null);
   // The text leaves the box only after the server accepted it; a refusal keeps it with the reason.
   const submit = () => {
-    if (!body.trim() || sending) return;
+    if (!body.trim() || sending || fileProblem) return;
     const sent = body.trim();
-    const result = onSubmit?.(kind, sent);
-    if (typeof (result as Promise<unknown> | undefined)?.then !== 'function') { setBody(''); return; }
+    const sentFiles = files;
+    const result = sentFiles.length > 0 ? onSubmit?.(kind, sent, sentFiles) : onSubmit?.(kind, sent);
+    if (typeof (result as Promise<unknown> | undefined)?.then !== 'function') { setBody(''); setFiles([]); return; }
     setSending(true);
     setProblem(undefined);
     // Clear only what was sent: text typed while the request was in flight (a note right after a reply) stays.
-    const clearSent = () => setBody((current) => (current.trim() === sent ? '' : current));
+    // The files go with it; files picked meanwhile stay.
+    const clearSent = () => {
+      setBody((current) => (current.trim() === sent ? '' : current));
+      setFiles((current) => current.filter((file) => !sentFiles.includes(file)));
+    };
     (result as Promise<unknown>).then(clearSent, (error: unknown) => setProblem(replyRefusalText(error))).finally(() => setSending(false));
   };
   // R starts a reply and N a private note from anywhere on the page, as the keycaps on the tabs say.
@@ -77,9 +89,10 @@ export function ReplyComposer({ disabled, onSubmit }: ReplyComposerProps) {
         <textarea ref={field} aria-label={messages.messageBody} value={body} disabled={disabled} onKeyDown={onFieldKey}
           placeholder={kind === 'note' ? messages.notePlaceholder : messages.replyPlaceholder} onChange={(event) => setBody(event.target.value)} />
         {problem && <p role="alert" className="composer-notice">{problem}</p>}
+        <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={disabled || sending} />
         <div className="composer-actions">
           <span className="composer-hint" aria-hidden="true"><kbd>Ctrl</kbd><kbd>Enter</kbd> {messages.sendShortcut}</span>
-          <button className="primary-action" type="button" disabled={disabled || sending || !body.trim()} onClick={submit}>
+          <button className="primary-action" type="button" disabled={disabled || sending || !body.trim() || Boolean(fileProblem)} onClick={submit}>
             {kind === 'note' ? messages.privateNote : messages.reply}
           </button>
         </div>

@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { api, ConflictError, PlanLimitError, WorkspaceLockedError } from './client';
+import { AttachmentsTooLargeError, AttachmentStorageError } from './attachments-error';
 import { NotAnAgentError, SignupError } from './cloud-signup';
 import { ExportRefusedError } from './workspace-export';
 
@@ -100,4 +101,49 @@ test('a 409 from the team keeps the server explanation as a ConflictError', asyn
   const error = await api.updateAgent('22222222-2222-4222-8222-222222222222', { active: false }).catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(ConflictError);
   expect((error as Error).message).toBe('A workspace needs at least one active admin.');
+});
+
+test('a reply with files is posted as multipart without a JSON content type', async () => {
+  fetchMock.mockResolvedValue(reply(201, { id: '55555555-5555-4555-8555-555555555555', conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, kind: 'outgoing', body: 'Hi', body_html: null, origin: null, attachments: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null }));
+  const pdf = new File(['%PDF'], 'invoice é.pdf', { type: 'application/pdf' });
+  await api.createMessage('11111111-1111-4111-8111-111111111111', 'outgoing', 'Hi', [pdf]);
+  const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(init.method).toBe('POST');
+  expect(init.body).toBeInstanceOf(FormData);
+  const form = init.body as FormData;
+  expect(form.get('kind')).toBe('outgoing');
+  expect(form.get('body')).toBe('Hi');
+  expect((form.getAll('files')[0] as File).name).toBe('invoice é.pdf');
+  expect(new Headers(init.headers).has('Content-Type')).toBe(false);
+});
+
+test('a reply without files stays a JSON request', async () => {
+  fetchMock.mockResolvedValue(reply(201, { id: '55555555-5555-4555-8555-555555555555', conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, kind: 'note', body: 'Hi', body_html: null, origin: null, attachments: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null }));
+  await api.createMessage('11111111-1111-4111-8111-111111111111', 'note', 'Hi');
+  const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(init.body).toBe(JSON.stringify({ kind: 'note', body: 'Hi' }));
+  expect(new Headers(init.headers).get('Content-Type')).toBe('application/json');
+});
+
+test('413 on a message becomes an error carrying the server reason', async () => {
+  fetchMock.mockResolvedValue(reply(413, apiError('attachments_too_large', 'The files of one message can be at most 10 MiB in total. Nothing was sent or stored.')));
+  const error = await api.createMessage('11111111-1111-4111-8111-111111111111', 'outgoing', 'Hi', [new File(['x'], 'x')]).catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(AttachmentsTooLargeError);
+  expect((error as Error).message).toMatch(/at most 10 MiB/);
+});
+
+test.each([
+  [403, 'storage_limit_reached', 'This workspace has reached its 2 GiB attachment storage limit.'],
+  [507, 'storage_full', 'The server is low on disk space for attachments. Nothing was sent or stored.'],
+])('%i %s on a message becomes an error carrying the server reason', async (status, code, message) => {
+  fetchMock.mockResolvedValue(reply(status, apiError(code, message)));
+  const error = await api.createMessage('11111111-1111-4111-8111-111111111111', 'outgoing', 'Hi', [new File(['x'], 'x')]).catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(AttachmentStorageError);
+  expect((error as Error).message).toBe(message);
+});
+
+test('a trial refusal on a message is still an outbound refusal, not a storage error', async () => {
+  fetchMock.mockResolvedValue(reply(403, apiError('trial_outbound_restricted', 'Verify your domain.')));
+  const error = await api.createMessage('11111111-1111-4111-8111-111111111111', 'outgoing', 'Hi').catch((caught: unknown) => caught);
+  expect(error).not.toBeInstanceOf(AttachmentStorageError);
 });

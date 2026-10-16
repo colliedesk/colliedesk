@@ -64,6 +64,11 @@ cannot be loaded, it says so with **Try again** instead.
   **Delivery failed** (with **Retry delivery**).
 - **Private note** is visible only to your team.
 - Messages support Markdown.
+- **Add attachment** (the paperclip under the message box) attaches files to a reply or a private
+  note. A message carries at most 10 files and 10 MiB in total. Each chosen file is listed with its
+  size; select the **x** next to it to remove it before you send. Over the limit, Colliedesk says so,
+  holds the **Send** button and sends nothing until you remove a file. A file you sent stays on the
+  message. A reply emails its files to the contact; a private note and its files never leave your team.
 - Attachments appear under their message with name and size. Select a file name to download it.
   Files always download; they are never opened inside Colliedesk.
 

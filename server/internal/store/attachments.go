@@ -33,8 +33,9 @@ func InsertAttachment(ctx context.Context, q Querier, workspaceID string, input 
 		contentType = "application/octet-stream"
 	}
 	var item domain.Attachment
-	err := q.QueryRow(ctx, `INSERT INTO attachments(workspace_id,message_id,filename,content_type,size,sha256,storage_key)
-		SELECT $1,m.id,$3,$4,$5,$6,$7 FROM messages m WHERE m.workspace_id=$1 AND m.id=$2
+	// clock_timestamp, not the transaction's now(): files added in one transaction keep their order.
+	err := q.QueryRow(ctx, `INSERT INTO attachments(workspace_id,message_id,filename,content_type,size,sha256,storage_key,created_at)
+		SELECT $1,m.id,$3,$4,$5,$6,$7,clock_timestamp() FROM messages m WHERE m.workspace_id=$1 AND m.id=$2
 		RETURNING `+attachmentColumns, workspaceID, input.MessageID, input.Filename, contentType,
 		input.Object.Size, input.Object.SHA256, input.Object.Key).
 		Scan(&item.ID, &item.MessageID, &item.Filename, &item.ContentType, &item.Size, &item.SHA256, &item.CreatedAt)

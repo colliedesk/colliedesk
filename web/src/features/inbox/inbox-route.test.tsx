@@ -6,7 +6,7 @@ import { InboxRoute } from './inbox-route';
 
 const api = vi.hoisted(() => ({
   me: vi.fn(), conversations: vi.fn(), conversation: vi.fn(), agents: vi.fn(), tags: vi.fn(), messages: vi.fn(), timeEntries: vi.fn(),
-  updateConversation: vi.fn(), bulkUpdateConversations: vi.fn(), createMessage: vi.fn(), createTag: vi.fn(),
+  updateConversation: vi.fn(), bulkUpdateConversations: vi.fn(), createMessage: vi.fn(), createTag: vi.fn(), config: vi.fn(),
   addConversationTag: vi.fn(), removeConversationTag: vi.fn(), retryDelivery: vi.fn(),
   emailChannel: vi.fn(async () => ({ channel: null, inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null })),
 }));
@@ -288,4 +288,26 @@ test('when the caught-up check fails, the inbox does not pretend the workspace i
   renderRoute();
   expect(await screen.findByText('No open conversations. Every customer has an answer.')).toBeInTheDocument();
   expect(screen.queryByRole('region', { name: /get started/i })).not.toBeInTheDocument();
+});
+
+test('the server limit from the config warns about oversized files before anything is uploaded', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.config.mockResolvedValue({ cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false }, signup: { enabled: false },
+    limits: { outgoing_attachments_bytes: 1024, outgoing_attachments_files: 2 } });
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  api.createMessage.mockReset();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await screen.findByRole('button', { name: /alpha conversation/i });
+  await waitFor(() => expect(api.config).toHaveBeenCalled());
+  fireEvent.change(screen.getByLabelText('Attach files'), { target: { files: [new File([new Uint8Array(2048)], 'big.bin')] } });
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Here' } });
+  expect(await screen.findByRole('alert')).toHaveTextContent('1.0 KiB');
+  fireEvent.keyDown(screen.getByLabelText('Message body'), { key: 'Enter', ctrlKey: true });
+  expect(api.createMessage).not.toHaveBeenCalled();
 });

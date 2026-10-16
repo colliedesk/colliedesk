@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"strings"
 	"time"
 
@@ -94,7 +95,14 @@ func createEmailConversation(ctx context.Context, tx pgx.Tx, workspaceID string,
 
 // linkFiles records stored files as attachments of the message and points the email metadata at the
 // stored original.
-func linkFiles(ctx context.Context, tx pgx.Tx, workspaceID, messageID string, files []EmailFile) error {
+func linkFiles(ctx context.Context, tx pgx.Tx, storage attachments.Storage, workspaceID, messageID string, files []EmailFile) error {
+	keys := make([]string, 0, len(files))
+	for _, file := range files {
+		keys = append(keys, file.Object.Key)
+	}
+	if err := VerifyObjects(ctx, tx, storage, keys...); err != nil {
+		return err
+	}
 	for _, file := range files {
 		item, err := InsertAttachment(ctx, tx, workspaceID, NewAttachment{MessageID: messageID, Filename: file.Filename,
 			ContentType: file.ContentType, Object: file.Object})

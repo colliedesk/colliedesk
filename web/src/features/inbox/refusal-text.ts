@@ -1,3 +1,4 @@
+import { AttachmentsTooLargeError, AttachmentStorageError } from '../../api/attachments-error';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { formatWait } from '../../lib/format-wait';
 import { messages } from '../../messages';
@@ -9,6 +10,7 @@ export function replyRefusalText(error: unknown): string {
   if (error instanceof OutboundRefusedError) {
     return error.code === 'trial_outbound_limit' ? messages.trialReplyLimit(formatWait(error.retryAfterSeconds ?? defaultWaitSeconds)) : messages.trialReplyRestricted;
   }
+  if (error instanceof AttachmentsTooLargeError || error instanceof AttachmentStorageError) return error.message;
   return messages.replyNotSent;
 }
 

@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import { AttachmentsTooLargeError, AttachmentStorageError } from './attachments-error';
 import { NotAnAgentError, signUpCloud } from './cloud-signup';
 import { OutboundRefusedError } from './outbound-error';
 import { requestExportLink } from './workspace-export';
@@ -87,6 +88,7 @@ async function outboundRefusal(response: Response): Promise<Error> {
   try {
     const body = await response.json() as { error?: { code?: unknown; message?: unknown; retry_after_seconds?: unknown } };
     const { code, message, retry_after_seconds: retry } = body.error ?? {};
+    if (code === 'storage_limit_reached' && typeof message === 'string' && message) return new AttachmentStorageError(message);
     if (code === 'trial_outbound_restricted' || code === 'trial_outbound_limit') {
       return new OutboundRefusedError(code, typeof message === 'string' ? message : '', typeof retry === 'number' ? retry : undefined);
     }
@@ -96,13 +98,23 @@ async function outboundRefusal(response: Response): Promise<Error> {
   return failure(response.status);
 }
 
+async function tooLarge(response: Response): Promise<Error> {
+  const error = await invalidRequest(response);
+  return error instanceof InvalidRequestError ? new AttachmentsTooLargeError(error.message) : error;
+}
+
+async function diskFull(response: Response): Promise<Error> {
+  const error = await invalidRequest(response);
+  return error instanceof InvalidRequestError ? new AttachmentStorageError(error.message) : error;
+}
+
 async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    ...init,
-  });
+  // A FormData body sets its own multipart Content-Type, with the boundary.
+  const headers = init?.body instanceof FormData ? init.headers : { 'Content-Type': 'application/json', ...init?.headers };
+  const response = await fetch(path, { credentials: 'same-origin', ...init, headers });
   if (response.status === 402) throw await planLimitFailure(response);
+  if (response.status === 413) throw await tooLarge(response);
+  if (response.status === 507) throw await diskFull(response);
   if (response.status === 400 || response.status === 409) throw await invalidRequest(response);
   if (response.status === 403 || response.status === 429) throw await outboundRefusal(response);
   if (!response.ok) throw failure(response.status);
@@ -120,6 +132,14 @@ export type UpdateConversationRequest = RequestBody<'updateConversation'>;
 export type BulkConversationChanges = RequestBody<'bulkUpdateConversations'>['changes'];
 
 const json = <Operation extends keyof operations>(value: RequestBody<Operation>): string => JSON.stringify(value);
+
+function messageForm(kind: string, body: string, files: File[]): FormData {
+  const form = new FormData();
+  form.append('kind', kind);
+  form.append('body', body);
+  for (const file of files) form.append('files', file, file.name);
+  return form;
+}
 
 export class CloudWorkspaceChoiceError extends Error {
   readonly workspaces: WorkspaceChoice[];
@@ -194,7 +214,8 @@ export const api = {
   removeConversationTag: (id: string, tagId: string) => request(`/api/v1/conversations/${id}/tags/${tagId}`, conversationSchema, { method: 'DELETE' }),
   messages: (id: string) => request(`/api/v1/conversations/${id}/messages`, messageListSchema),
   timeEntries: (id: string) => request(`/api/v1/conversations/${id}/time-entries`, timeEntryListSchema),
-  createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string) => request(`/api/v1/conversations/${id}/messages`, messageSchema, { method: 'POST', body: json<'createMessage'>({ kind, body }) }),
+  createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = []) =>
+    request(`/api/v1/conversations/${id}/messages`, messageSchema, { method: 'POST', body: files.length > 0 ? messageForm(kind, body, files) : json<'createMessage'>({ kind, body }) }),
   contacts: (search = '') => request(`/api/v1/contacts?search=${encodeURIComponent(search)}`, contactListSchema),
   contact: (id: string) => request(`/api/v1/contacts/${id}`, contactDetailSchema),
   createContact: (name: string, email: string) => request('/api/v1/contacts', contactSchema, { method: 'POST', body: json<'createContact'>({ name, email }) }),

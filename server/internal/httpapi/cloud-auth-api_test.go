@@ -13,7 +13,7 @@ import (
 func TestCloudAuthDisabled(t *testing.T) {
 	api, _ := testAPI(t)
 	config := request(t, api, http.MethodGet, "/api/v1/config", nil, "", nil)
-	if config.Code != http.StatusOK || config.Body.String() != "{\"billing\":{\"enabled\":false},\"cloud_sign_in\":{\"enabled\":false,\"publishable_key\":null},\"signup\":{\"enabled\":false}}\n" {
+	if config.Code != http.StatusOK || config.Body.String() != "{\"billing\":{\"enabled\":false},\"cloud_sign_in\":{\"enabled\":false,\"publishable_key\":null},\"limits\":{\"outgoing_attachments_bytes\":10485760,\"outgoing_attachments_files\":10},\"signup\":{\"enabled\":false}}\n" {
 		t.Fatalf("config status=%d body=%s", config.Code, config.Body.String())
 	}
 	exchanged := exchange(t, api, "not-a-token", "", testOrigin)
@@ -29,7 +29,7 @@ func TestCloudAuthValidTokenCreatesOrdinarySession(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := request(t, fixture.api, http.MethodGet, "/api/v1/config", nil, "", nil)
-	if config.Code != http.StatusOK || config.Body.String() != "{\"billing\":{\"enabled\":false},\"cloud_sign_in\":{\"enabled\":true,\"publishable_key\":\"pk_test_example\"},\"signup\":{\"enabled\":false}}\n" {
+	if config.Code != http.StatusOK || config.Body.String() != "{\"billing\":{\"enabled\":false},\"cloud_sign_in\":{\"enabled\":true,\"publishable_key\":\"pk_test_example\"},\"limits\":{\"outgoing_attachments_bytes\":10485760,\"outgoing_attachments_files\":10},\"signup\":{\"enabled\":false}}\n" {
 		t.Fatalf("config status=%d body=%s", config.Code, config.Body.String())
 	}
 	response := exchange(t, fixture.api, fixture.token(t, nil), "", testOrigin)

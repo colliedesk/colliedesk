@@ -240,6 +240,7 @@ export interface paths {
         };
         get: operations["listMessages"];
         put?: never;
+        /** @description Send JSON for a text-only message, or `multipart/form-data` to attach files: fields `kind` and `body` plus repeated `files` parts, each with a filename. A message carries at most `limits.outgoing_attachments_files` files and `limits.outgoing_attachments_bytes` bytes in total (both from `GET /api/v1/config`); more answers 413 and nothing is stored. A reply emails its files as attachments; a note never leaves the workspace. */
         post: operations["createMessage"];
         delete?: never;
         options?: never;
@@ -728,6 +729,12 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         PublicConfig: {
+            limits: {
+                /** @description Most raw bytes of files one reply or note can carry in total. */
+                outgoing_attachments_bytes: number;
+                /** @description Most files one reply or note can carry. */
+                outgoing_attachments_files: number;
+            };
             cloud_sign_in: {
                 enabled: boolean;
                 publishable_key: string | null;
@@ -1243,6 +1250,15 @@ export interface components {
         };
         /** @description The billing provider failed or could not be reached; nothing changed, try again */
         BadGateway: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description More files than allowed or more bytes than allowed in total for one message; nothing was stored */
+        AttachmentsTooLarge: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1898,6 +1914,13 @@ export interface operations {
                     /** @description Markdown source */
                     body: string;
                 };
+                "multipart/form-data": {
+                    /** @enum {string} */
+                    kind: "outgoing" | "note";
+                    /** @description Markdown source */
+                    body: string;
+                    files?: string[];
+                };
             };
         };
         responses: {
@@ -1915,7 +1938,17 @@ export interface operations {
             402: components["responses"]["WorkspaceLocked"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            413: components["responses"]["AttachmentsTooLarge"];
             429: components["responses"]["TrialOutboundLimit"];
+            /** @description The attachments volume is low on disk space; nothing was sent or stored */
+            507: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     retryMessageDelivery: {

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
+import { AttachmentsTooLargeError, AttachmentStorageError } from '../../api/attachments-error';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { ReplyComposer } from './reply-composer';
 
@@ -119,4 +120,77 @@ test('text typed while the previous message is still sending is kept when it lan
   await waitFor(() => expect(onSubmit).toHaveBeenCalledWith('outgoing', 'Public reply'));
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(body).toHaveValue('Private note typed meanwhile');
+});
+
+const MiB = 1024 * 1024;
+const limits = { bytes: 10 * MiB, files: 10 };
+const chosen = (name: string, size: number) => new File([new Uint8Array(size)], name);
+const attach = (...files: File[]) => fireEvent.change(screen.getByLabelText('Attach files'), { target: { files } });
+
+test('a reply is sent with the chosen files and they leave the composer once it is accepted', async () => {
+  const onSubmit = vi.fn().mockResolvedValue(undefined);
+  render(<ReplyComposer onSubmit={onSubmit} attachmentLimits={limits} />);
+  const pdf = chosen('invoice.pdf', 100);
+  attach(pdf);
+  expect(screen.getByRole('list', { name: 'Files to send' })).toHaveTextContent('invoice.pdf');
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Invoice attached' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledWith('outgoing', 'Invoice attached', [pdf]));
+  await waitFor(() => expect(screen.queryByRole('list', { name: 'Files to send' })).not.toBeInTheDocument());
+});
+
+test('a private note can carry files too', async () => {
+  const onSubmit = vi.fn().mockResolvedValue(undefined);
+  render(<ReplyComposer onSubmit={onSubmit} attachmentLimits={limits} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Private note' }));
+  const log = chosen('trace.log', 5);
+  attach(log);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Stack trace' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add private note' }));
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledWith('note', 'Stack trace', [log]));
+});
+
+test('files stay chosen when the send is refused so nothing has to be picked again', async () => {
+  const onSubmit = vi.fn().mockRejectedValue(new Error('API 500'));
+  render(<ReplyComposer onSubmit={onSubmit} attachmentLimits={limits} />);
+  attach(chosen('keep.pdf', 100));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Try' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(/could not be sent/i);
+  expect(screen.getByRole('list', { name: 'Files to send' })).toHaveTextContent('keep.pdf');
+});
+
+test('the send button is off and the limit is stated while the files are too big, and removing one fixes it', () => {
+  const onSubmit = vi.fn();
+  render(<ReplyComposer onSubmit={onSubmit} attachmentLimits={limits} />);
+  attach(chosen('big.bin', 8 * MiB), chosen('bigger.bin', 3 * MiB));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Too much' } });
+  expect(screen.getByRole('alert')).toHaveTextContent('10.0 MiB');
+  expect(screen.getByRole('button', { name: 'Send reply' })).toBeDisabled();
+  fireEvent.keyDown(screen.getByLabelText('Message body'), { key: 'Enter', ctrlKey: true });
+  expect(onSubmit).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Remove bigger.bin' }));
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Send reply' })).toBeEnabled();
+});
+
+test('the server refusing the files says why in the server words and keeps the text', async () => {
+  const onSubmit = vi.fn().mockRejectedValue(new AttachmentsTooLargeError('The files of one message can be at most 10 MiB in total. Nothing was sent or stored.'));
+  render(<ReplyComposer onSubmit={onSubmit} attachmentLimits={limits} />);
+  attach(chosen('a.bin', 1));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Hi' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('at most 10 MiB in total');
+  expect(screen.getByLabelText('Message body')).toHaveValue('Hi');
+});
+
+test('a storage refusal shows the server reason and keeps the text and files', async () => {
+  const onSubmit = vi.fn().mockRejectedValue(new AttachmentStorageError('This workspace has reached its 2 GiB attachment storage limit.'));
+  render(<ReplyComposer onSubmit={onSubmit} attachmentLimits={limits} />);
+  attach(chosen('a.bin', 1));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Hi' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('reached its 2 GiB attachment storage limit');
+  expect(screen.getByLabelText('Message body')).toHaveValue('Hi');
+  expect(screen.getByRole('list', { name: 'Files to send' })).toHaveTextContent('a.bin');
 });
