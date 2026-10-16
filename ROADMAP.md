@@ -28,10 +28,10 @@ database schema.
 Beta starts when HC Labs announces it. Before that:
 
 - Copy other people on a reply (Cc) and start a new conversation from the inbox.
-- Contact history: every conversation of a customer in one place.
+- Contact history: every conversation of a customer in one place ([#92](https://github.com/colliedesk/colliedesk/issues/92)).
 - Connect a Gmail / Google Workspace or Microsoft 365 mailbox with one click (OAuth); replies
   leave from your own address. Forwarding keeps working.
-- An upgrade guide, and upgrades tested from the previous release on real data.
+- An upgrade guide, and upgrades tested from the previous release on real data ([#91](https://github.com/colliedesk/colliedesk/issues/91)).
 - Import from Freshdesk inside the app, recent tickets first, with the reconcile report on screen
   ([#97](https://github.com/colliedesk/colliedesk/issues/97)).
 - See who is viewing or replying to a conversation ([#101](https://github.com/colliedesk/colliedesk/issues/101)).
@@ -62,4 +62,9 @@ Beta starts when HC Labs announces it. Before that:
 - Importers for Zendesk and Help Scout.
 - Live chat widget.
 
-Have a need that is not here? Open an issue.
+How items get here: ideas start in [Discussions → Ideas](https://github.com/colliedesk/colliedesk/discussions/categories/ideas),
+where upvotes show how many teams need them. An idea we agree with becomes an issue labelled
+`accepted`; when we commit to it, it is labelled `planned` and listed under Next or Then. A CI check
+keeps this page in step with those labels.
+
+Have a need that is not here? Share it in [Ideas](https://github.com/colliedesk/colliedesk/discussions/categories/ideas).
