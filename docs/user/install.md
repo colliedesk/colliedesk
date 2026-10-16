@@ -47,7 +47,7 @@ The installer writes `COLLIE_DESK_IMAGE` to `.env`. Pick one tag:
 
 Colliedesk is alpha: releases are `0.0.x` and any release may change the database schema. Back up
 before you upgrade (see below). Changes per release are in the
-[changelog](https://github.com/colliedesk/colliedesk/blob/main/CHANGELOG.md).
+[releases page](https://github.com/colliedesk/colliedesk/releases).
 
 To check which build you run:
 

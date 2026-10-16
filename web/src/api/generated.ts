@@ -783,6 +783,8 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         PublicConfig: {
+            /** @description The running build: a release tag such as `v0.0.1`, `edge-<commit>` for a main build, or `dev`. */
+            version?: string;
             limits: {
                 /** @description Most raw bytes of files one reply or note can carry in total. */
                 outgoing_attachments_bytes: number;

@@ -1,16 +1,24 @@
 name: Release
 
-# Push a v* tag on a main commit whose CI run passed. The image is rebuilt with the tag
-# stamped as its version, booted, then published as X.Y.Z, X.Y and (for non-prereleases) latest.
+# A release is cut by hand, never on a schedule:
+# - Run this workflow (Actions > Release > Run workflow). It releases the commit Colliedesk Cloud
+#   runs (GET /api/v1/config version), so a release is always a build HC Labs already uses every
+#   day, as the next v0.0.N. The tag is created here once the image boots.
+# - Or push a v0.0.N tag on a main commit whose CI run passed.
+# The image is rebuilt with the tag stamped as its version, booted, then published as X.Y.Z, X.Y
+# and (for the highest release) latest. Release notes come from the merged pull request titles.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# One release at a time, so two runs cannot pick the same next number.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -25,22 +33,69 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - id: target
+        name: Pick the release commit and tag
+        env:
+          CLOUD_CONFIG_URL: https://app.colliedesk.com/api/v1/config
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != workflow_dispatch ]; then
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::Run Release from main, not $GITHUB_REF."; exit 1
+          fi
+          version=$(curl -fsS --max-time 20 "$CLOUD_CONFIG_URL" | jq -r '.version // empty')
+          ref=$(sh .github/scripts/release-next.sh cloud-commit "$version")
+          sha=$(git rev-parse --verify --quiet "$ref^{commit}") || {
+            echo "::error::Cloud runs $version, which is not a commit of this repository."; exit 1; }
+          git merge-base --is-ancestor "$sha" origin/main || {
+            echo "::error::Cloud runs $sha, which is not on main."; exit 1; }
+          last=$(git tag -l 'v0.0.*' --sort=-v:refname | head -n 1)
+          # A run that tagged this commit but failed before the GitHub release finishes it.
+          if [ -n "$last" ] && [ "$(git rev-parse "$last^{commit}")" = "$sha" ] &&
+            ! gh release view "$last" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Finishing $last: tagged at $sha, no GitHub release yet"
+            echo "tag=$last" >> "$GITHUB_OUTPUT"
+            echo "sha=$sha" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -n "$last" ] && git merge-base --is-ancestor "$sha" "$last"; then
+            echo "::error::Cloud runs $sha, already part of $last. Deploy a newer main build to Cloud first."
+            exit 1
+          fi
+          # shellcheck disable=SC2046 # one word per tag
+          tag=$(sh .github/scripts/release-next.sh next-tag $(git tag -l 'v*'))
+          echo "Releasing $sha (Cloud runs $version) as $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       # Alpha: only v0.0.N. Beta starts when the owner announces it (see the script).
       - name: Require an allowed release tag
-        run: sh .github/scripts/release-tag-check.sh "$GITHUB_REF_NAME"
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+        run: sh .github/scripts/release-tag-check.sh "$TAG"
+      - name: Check out the release commit
+        env:
+          SHA: ${{ steps.target.outputs.sha }}
+        run: git checkout --quiet --detach "$SHA"
       # latest moves only for a stable tag that is the highest stable version, so tagging a
       # patch for an older line never moves self-hosters on latest backwards.
       - id: channel
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
         run: |
-          highest=$(git tag -l 'v*' --sort=-v:refname | grep -Fv -e '-' | head -n 1)
-          if [ "$highest" = "$GITHUB_REF_NAME" ]; then echo "latest=true"; else echo "latest=false"; fi >> "$GITHUB_OUTPUT"
+          highest=$({ git tag -l 'v*'; echo "$TAG"; } | grep -Fv -e '-' | sort -uV | tail -n 1)
+          if [ "$highest" = "$TAG" ]; then echo "latest=true"; else echo "latest=false"; fi >> "$GITHUB_OUTPUT"
       - name: Require a green CI run on main for this commit
         env:
           GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.target.outputs.sha }}
         run: |
-          passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&branch=main&event=push&status=success" --jq .total_count)
+          passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$SHA&branch=main&event=push&status=success" --jq .total_count)
           if [ "$passed" -eq 0 ]; then
-            echo "::error::No successful CI run on main for $GITHUB_SHA. Tag a main commit whose CI passed."
+            echo "::error::No successful CI run on main for $SHA. Release a main commit whose CI passed."
             exit 1
           fi
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -50,12 +105,26 @@ jobs:
           context: .
           file: server/Dockerfile
           platforms: linux/amd64
-          build-args: VERSION=${{ github.ref_name }}
+          build-args: VERSION=${{ steps.target.outputs.tag }}
           load: true
           tags: colliedesk:release
           cache-from: type=gha,scope=server-image
       - name: Boot image against Postgres
-        run: sh tests/image-boot-test.sh colliedesk:release "$GITHUB_REF_NAME"
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+        run: sh tests/image-boot-test.sh colliedesk:release "$TAG"
+      # Another release may have taken this number while the image built.
+      - name: Require the tag to be free or already this commit
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          peeled=$(git ls-remote origin "refs/tags/$TAG^{}" | awk '{print $1}')
+          direct=$(git ls-remote origin "refs/tags/$TAG" | awk '{print $1}')
+          commit=${peeled:-$direct}
+          if [ -n "$commit" ] && [ "$commit" != "$SHA" ]; then
+            echo "::error::$TAG already points at $commit, not $SHA. Run Release again."; exit 1
+          fi
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
@@ -64,11 +133,13 @@ jobs:
       - id: metadata
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
+          # git context reads the checked-out release commit, not the commit the run started on.
+          context: git
           images: ghcr.io/colliedesk/colliedesk
           flavor: latest=false
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}},value=${{ steps.target.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.target.outputs.tag }}
             type=raw,value=latest,enable=${{ steps.channel.outputs.latest == 'true' }}
       - id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -76,7 +147,7 @@ jobs:
           context: .
           file: server/Dockerfile
           platforms: linux/amd64
-          build-args: VERSION=${{ github.ref_name }}
+          build-args: VERSION=${{ steps.target.outputs.tag }}
           push: true
           sbom: true
           tags: ${{ steps.metadata.outputs.tags }}
@@ -87,10 +158,26 @@ jobs:
           subject-name: ghcr.io/colliedesk/colliedesk
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+      # Tagged only once the image is published, so a failed run leaves no tag behind. A tag pushed
+      # with the workflow token does not start this workflow again.
+      - name: Create the release tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          if git ls-remote --exit-code origin "refs/tags/$TAG" >/dev/null; then
+            echo "$TAG already exists at $SHA"; exit 0
+          fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            tag -a "$TAG" -m "Colliedesk $TAG (alpha)" "$SHA"
+          git push origin "refs/tags/$TAG"
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.target.outputs.tag }}
         run: |
           prerelease=
-          case "$GITHUB_REF_NAME" in *-*) prerelease=--prerelease ;; esac
-          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes $prerelease
+          case "$TAG" in *-*) prerelease=--prerelease ;; esac
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "$TAG is already released"; exit 0; fi
+          gh release create "$TAG" --verify-tag --generate-notes $prerelease
