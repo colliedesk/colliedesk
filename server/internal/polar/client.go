@@ -145,6 +145,40 @@ func (c *Client) HasPaidSubscription(ctx context.Context, externalID string, now
 	return false, nil
 }
 
+// maxSubscriptionPages bounds a listing, so a server that keeps answering pages cannot loop forever.
+const maxSubscriptionPages = 1000
+
+// ListSubscriptions returns every subscription of the organization, in all states, page by page.
+// It returns nothing when any page fails: a partial list would make live subscriptions look gone.
+func (c *Client) ListSubscriptions(ctx context.Context) ([]Subscription, error) {
+	var all []Subscription
+	for page := 1; ; page++ {
+		var reply struct {
+			Items      []json.RawMessage `json:"items"`
+			Pagination struct {
+				MaxPage int `json:"max_page"`
+			} `json:"pagination"`
+		}
+		path := fmt.Sprintf("/v1/subscriptions/?limit=100&page=%d", page)
+		if err := c.do(ctx, http.MethodGet, path, nil, &reply); err != nil {
+			return nil, fmt.Errorf("list polar subscriptions (page %d): %w", page, err)
+		}
+		for _, raw := range reply.Items {
+			subscription, err := decodeSubscription(raw, time.Time{})
+			if err != nil {
+				return nil, fmt.Errorf("list polar subscriptions (page %d): %w", page, err)
+			}
+			all = append(all, *subscription)
+		}
+		if page >= reply.Pagination.MaxPage {
+			return all, nil
+		}
+		if page >= maxSubscriptionPages {
+			return nil, fmt.Errorf("list polar subscriptions: more than %d pages", maxSubscriptionPages)
+		}
+	}
+}
+
 func (c *Client) do(ctx context.Context, method, path string, body, target any) error {
 	var payload io.Reader
 	if body != nil {

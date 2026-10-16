@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 // DefaultAPIURL is Polar production. Sandbox is https://sandbox-api.polar.sh.
@@ -17,6 +19,23 @@ type Products struct {
 	// Team25Monthly and Team25Yearly are optional; empty means the plan is not sold here.
 	Team25Monthly string
 	Team25Yearly  string
+}
+
+// PlanOf is the plan a Polar product buys, or "" when the product is not sold here. An unset
+// product id never matches, so an unconfigured plan cannot claim a subscription.
+func (p Products) PlanOf(productID string) string {
+	if productID == "" {
+		return ""
+	}
+	switch productID {
+	case p.TeamMonthly, p.TeamYearly:
+		return domain.PlanTeam
+	case p.Team25Monthly, p.Team25Yearly:
+		return domain.PlanTeam25
+	case p.Founding:
+		return domain.PlanFounding
+	}
+	return ""
 }
 
 // Config enables billing. The zero value means billing is off (self-hosted).

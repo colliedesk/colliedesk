@@ -28,6 +28,7 @@ var privilegedCallSites = []string{
 	"internal/database/scope.go: PrivilegeRequestLogin",
 	"internal/database/scope.go: PrivilegeWorkspaceBySlug",
 	"internal/retention/service.go: PrivilegeRetention",
+	"internal/store/billing-reconcile.go: PrivilegeBillingReconcile",
 	"internal/store/email-channels.go: PrivilegeInboundSecret",
 	"internal/store/email-inbound.go: PrivilegeReplyToken",
 	"internal/store/email-outbox.go: PrivilegeOutboxClaim",
@@ -37,6 +38,7 @@ var privilegedCallSites = []string{
 // poolFiles may import pgxpool. Outside the database package they only open a pool or hand it to a
 // constructor that wraps it in a DB; queries never run on the raw pool.
 var poolFiles = []string{
+	"cmd/collie/billing.go",
 	"cmd/collie/commands.go",
 	"cmd/collie/import.go",
 	"cmd/collie/plan.go",
