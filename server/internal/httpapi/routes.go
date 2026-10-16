@@ -17,7 +17,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.listSavedReplies, a.createSavedReply, a.updateSavedReply, a.deleteSavedReply,
 		a.retryMessageDelivery,
 		a.getEmailChannel, a.putEmailChannel, a.deleteEmailChannel, a.verifyEmailDomain, a.receiveInboundEmail, a.checkInboundRecipient, a.rotateEmailSecret,
-		a.getBilling, a.createCheckout, a.createPortal, a.receivePolarWebhook,
+		a.getBilling, a.createCheckout, a.createPortal, a.receivePolarWebhook, a.getFounding,
 		a.exportWorkspace,
 		a.getWebForm, a.putWebForm, a.submitWebForm,
 		a.createExportLink, a.downloadExport,

@@ -70,7 +70,7 @@ if [ ! -f "$TARGET_DIR/.env" ]; then
       printf 'DATABASE_URL=postgres://colliedesk:%s@postgres:5432/colliedesk?sslmode=disable\n' "$OWNER_PASSWORD"
       printf 'DATABASE_REQUEST_URL=postgres://colliedesk_request:%s@postgres:5432/colliedesk?sslmode=disable\n' "$REQUEST_PASSWORD"
       printf 'APP_SECRET=%s\n' "$APP_SECRET"
-      printf 'COLLIE_DESK_IMAGE=%s\n' "${COLLIE_DESK_IMAGE:-ghcr.io/colliedesk/colliedesk:edge}"
+      printf 'COLLIE_DESK_IMAGE=%s\n' "${COLLIE_DESK_IMAGE:-ghcr.io/colliedesk/colliedesk:latest}"
       printf 'COLLIE_DESK_PORT=%s\n' "${COLLIE_DESK_PORT:-8080}"
       printf 'APP_ORIGIN=%s\n' "${APP_ORIGIN:-http://localhost:${COLLIE_DESK_PORT:-8080}}"
     } >"$TARGET_DIR/.env"

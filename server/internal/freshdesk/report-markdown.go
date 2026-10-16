@@ -24,9 +24,9 @@ func (r *Report) Markdown() string {
 	}
 	if c := r.StorageCap; c != nil {
 		if c.WouldRefuse {
-			fmt.Fprintf(&b, "- storage: this import would be refused: it needs %s of attachments and %s is free under the %s cap of the Founding plan\n", domain.FormatBytes(c.NeededBytes), domain.FormatBytes(c.FreeBytes), domain.FormatBytes(c.LimitBytes))
+			fmt.Fprintf(&b, "- storage: this import would be refused: it needs %s of attachments and %s is free under the %s cap of the %s plan\n", domain.FormatBytes(c.NeededBytes), domain.FormatBytes(c.FreeBytes), domain.FormatBytes(c.LimitBytes), domain.PlanName(c.Plan))
 		} else {
-			fmt.Fprintf(&b, "- storage: fits the Founding plan cap (needs %s, %s free of %s)\n", domain.FormatBytes(c.NeededBytes), domain.FormatBytes(c.FreeBytes), domain.FormatBytes(c.LimitBytes))
+			fmt.Fprintf(&b, "- storage: fits the %s plan cap (needs %s, %s free of %s)\n", domain.PlanName(c.Plan), domain.FormatBytes(c.NeededBytes), domain.FormatBytes(c.FreeBytes), domain.FormatBytes(c.LimitBytes))
 		}
 	}
 	if r.TrialExtendedTo != nil {

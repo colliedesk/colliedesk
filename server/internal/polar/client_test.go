@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ type fakePolar struct {
 	server *httptest.Server
 	method string
 	path   string
+	query  url.Values
 	auth   string
 	body   map[string]any
 	status int
@@ -35,7 +37,7 @@ func newFakePolar(t *testing.T, status int, reply string) *fakePolar {
 	t.Helper()
 	fake := &fakePolar{status: status, reply: reply}
 	fake.server = httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		fake.method, fake.path, fake.auth = request.Method, request.URL.Path, request.Header.Get("Authorization")
+		fake.method, fake.path, fake.query, fake.auth = request.Method, request.URL.Path, request.URL.Query(), request.Header.Get("Authorization")
 		fake.body = nil
 		_ = json.NewDecoder(request.Body).Decode(&fake.body)
 		response.Header().Set("Content-Type", "application/json")

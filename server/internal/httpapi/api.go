@@ -21,8 +21,15 @@ import (
 
 const sessionCookie = "colliedesk_session"
 
+// Mailer hands one composed message to the mail relay (the shape of email.SMTPSender).
+type Mailer interface {
+	Send(ctx context.Context, from string, to []string, message []byte) error
+}
+
 type Config struct {
-	Origin      string
+	Origin string
+	// Version is the build stamped into the binary, reported by GET /api/v1/config; empty reports "dev".
+	Version     string
 	CloudAuth   cloudauth.Config
 	Email       email.Config
 	Attachments attachments.Storage
@@ -33,6 +40,10 @@ type Config struct {
 	RequestPool *pgxpool.Pool
 	// Billing turns on Polar billing for the hosted cloud; the zero value leaves it off.
 	Billing polar.Config
+	// AlertEmail is the operator address told about a paid subscription that matches no workspace
+	// (BILLING_ALERT_EMAIL). Empty, or without AlertMailer or Email.MailFromDomain, turns the alert off.
+	AlertEmail  string
+	AlertMailer Mailer
 	// Now is the clock for the trial, the lock and plan limits; nil uses the system clock.
 	Now func() time.Time
 	// LookupTXT resolves DNS TXT records for domain verification; nil uses the system resolver.
@@ -68,9 +79,11 @@ type API struct {
 	// limits is true on the hosted cloud, where the trial, lock and agent cap apply.
 	limits bool
 	config Config
-	auth   *auth.Service
-	cloud  *cloudauth.Verifier
-	store  *store.Store
+	// alerted dedupes the operator alert for paid subscriptions without a workspace.
+	alerted alertedSubscriptions
+	auth    *auth.Service
+	cloud   *cloudauth.Verifier
+	store   *store.Store
 	// exports admits workspace exports; see exportLimiter.
 	exports     *exportLimiter
 	exportLinks *exportLinks
@@ -78,6 +91,7 @@ type API struct {
 	webForms       *webFormLimiter
 	webFormClients *webFormLimiter
 	polar          *polar.Client
+	founding       foundingState
 	now            func() time.Time
 }
 
@@ -88,7 +102,18 @@ type routeSpec struct {
 
 type principalKey struct{}
 
-func New(pool *pgxpool.Pool, config Config) http.Handler {
+// Server is the HTTP handler of the API. RefreshFounding is the one thing the process starts besides
+// serving.
+type Server struct {
+	http.Handler
+	api *API
+}
+
+// RefreshFounding counts the Founding slots at Polar and closes Founding when they are used up. It
+// does nothing when billing is off.
+func (s *Server) RefreshFounding(ctx context.Context) error { return s.api.refreshFounding(ctx) }
+
+func New(pool *pgxpool.Pool, config Config) *Server {
 	config.Origin = strings.TrimRight(config.Origin, "/")
 	if config.LookupTXT == nil {
 		config.LookupTXT = net.DefaultResolver.LookupTXT
@@ -109,8 +134,8 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 	}
 	limits := config.Billing.Enabled()
 	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), exportLinks: newExportLinks(), webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
-		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits),
-		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits)}
+		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25()),
+		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25())}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
 	if config.Random != nil {
 		api.auth = api.auth.WithRandom(config.Random)
@@ -130,7 +155,7 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 	}
 	// The CORS preflight of the public web form is sent by the browser, never by an agent.
 	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)
-	return mux
+	return &Server{Handler: mux, api: api}
 }
 
 func Routes() []Route {
@@ -186,6 +211,7 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/billing/checkout", auth.PermissionBillingManage},
 		{http.MethodPost, "/api/v1/billing/portal", auth.PermissionBillingManage},
 		{http.MethodPost, polarWebhookPath, auth.PermissionPublic},
+		{http.MethodGet, foundingPath, auth.PermissionPublic},
 		{http.MethodGet, "/api/v1/export", auth.PermissionWorkspaceExport},
 		{http.MethodGet, "/api/v1/channels/web-form", auth.PermissionAccessRead},
 		{http.MethodPut, "/api/v1/channels/web-form", auth.PermissionAccessWrite},

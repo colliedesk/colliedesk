@@ -15,9 +15,11 @@ type Subscription struct {
 	ProductID          string
 	CustomerID         string
 	ExternalCustomerID string
-	CurrentPeriodEnd   *time.Time
-	CancelAtPeriodEnd  bool
-	EndedAt            *time.Time
+	// CustomerEmail is the buyer's address as Polar holds it; empty when the payload omits it.
+	CustomerEmail     string
+	CurrentPeriodEnd  *time.Time
+	CancelAtPeriodEnd bool
+	EndedAt           *time.Time
 	// ModifiedAt orders events of one subscription; it falls back to the event timestamp.
 	ModifiedAt time.Time
 }
@@ -56,6 +58,7 @@ func ParseEvent(body []byte) (Event, error) {
 		ModifiedAt        *time.Time `json:"modified_at"`
 		Customer          struct {
 			ExternalID *string `json:"external_id"`
+			Email      string  `json:"email"`
 		} `json:"customer"`
 	}
 	if err := json.Unmarshal(envelope.Data, &data); err != nil {
@@ -72,6 +75,7 @@ func ParseEvent(body []byte) (Event, error) {
 	if data.ModifiedAt != nil {
 		subscription.ModifiedAt = *data.ModifiedAt
 	}
+	subscription.CustomerEmail = data.Customer.Email
 	if data.Customer.ExternalID != nil {
 		subscription.ExternalCustomerID = *data.Customer.ExternalID
 	}

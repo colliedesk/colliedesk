@@ -35,9 +35,10 @@ const pendingSeatEmails = `SELECT count(DISTINCT p.email) FROM pairing_links p
 // through another pending invite, needs no new seat; a deactivated agent holds none, so reactivating
 // one takes a seat like a new invite does. A workspace-wide advisory lock makes two concurrent
 // invites see each other. The caller runs it only where plan limits apply (the hosted cloud).
+// team25Offered lets the refusal of a Team workspace point to Team 25.
 // ignoreInvite names an invite that is being redeemed, which is about to become the agent it
 // already reserved.
-func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time, email, ignoreInvite string) error {
+func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time, email, ignoreInvite string, team25Offered bool) error {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "agent-seats:"+workspaceID); err != nil {
 		return fmt.Errorf("lock agent seats: %w", err)
 	}
@@ -68,7 +69,7 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 		return fmt.Errorf("count agent seats: %w", err)
 	}
 	if seats+1 > limit {
-		return &domain.PlanLimitError{Plan: plan, Agents: limit}
+		return &domain.PlanLimitError{Plan: plan, Agents: limit, Team25Offered: team25Offered}
 	}
 	return nil
 }
@@ -159,15 +160,15 @@ func repliesLast24h(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 // costs one row however many files the workspace holds.
 const ownStorageBytes = `SELECT counted_storage_bytes FROM workspaces WHERE id=$1`
 
-// storedStorageBytes is what the Founding plan's cap counts: every attachment, imported ones included
+// storedStorageBytes is what a paid plan's cap counts: every attachment, imported ones included
 // (see the founding-storage-counter migration).
 const storedStorageBytes = `SELECT stored_storage_bytes FROM workspaces WHERE id=$1`
 
-// storageCap is the cap of plan in bytes, 0 for none. A store built with WithFoundingStorageBytes
-// changes the Founding cap.
+// storageCap is the cap of plan in bytes, 0 for none. A store built with WithPaidStorageBytes
+// changes the cap of every plan that counts imported files.
 func (s *Store) storageCap(plan string) int64 {
-	if plan == domain.PlanFounding && s.foundingStorage > 0 {
-		return s.foundingStorage
+	if domain.StorageCountsImports(plan) && s.paidStorage > 0 {
+		return s.paidStorage
 	}
 	return domain.StorageCap(plan)
 }
@@ -218,7 +219,7 @@ func (s *Store) GetStorageRoom(ctx context.Context, workspaceID string) (Storage
 	return room, nil
 }
 
-// CheckInboundStorage is CheckStorage for a customer's email. A paying Founding workspace never
+// CheckInboundStorage is CheckStorage for a customer's email. A paying workspace never
 // bounces its customers' mail for storage: the mail is stored in full and its bytes still count, so
 // billing shows the usage past the cap. The cap holds for uploads, reply attachments and imports. The
 // trial and a locked workspace keep refusing inbound mail at their 2 GiB, as before.
@@ -230,7 +231,7 @@ func (s *Store) CheckInboundStorage(ctx context.Context, tx pgx.Tx, workspaceID 
 	if err != nil {
 		return err
 	}
-	if access.Plan == domain.PlanFounding {
+	if domain.StorageCountsImports(access.Plan) {
 		return nil
 	}
 	return s.CheckStorage(ctx, tx, workspaceID, addBytes, now)
@@ -240,8 +241,7 @@ func (s *Store) CheckInboundStorage(ctx context.Context, tx pgx.Tx, workspaceID 
 // cap of the workspace's plan. Reaching the cap exactly is allowed. It reads the plan and the usage
 // inside tx and takes no lock, so two requests that arrive together can together pass the cap by at
 // most one request. Every path that stores an attachment an agent or an import supplies calls it
-// before writing the bytes; inbound mail calls CheckInboundStorage. Team and self-hosted workspaces
-// have no cap.
+// before writing the bytes; inbound mail calls CheckInboundStorage. Self-hosted workspaces have no cap.
 func (s *Store) CheckStorage(ctx context.Context, tx pgx.Tx, workspaceID string, addBytes int64, now time.Time) error {
 	if !s.limits {
 		return nil

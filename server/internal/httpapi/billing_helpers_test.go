@@ -28,16 +28,19 @@ const (
 	billingWebhookSecret = "whsec_Y29sbGllZGVzay10ZXN0LXNpZ25pbmcta2V5LTMyYnk="
 	billingWebhookKey    = "colliedesk-test-signing-key-32by"
 
-	productMonthly  = "prod-team-monthly"
-	productYearly   = "prod-team-yearly"
-	productFounding = "prod-founding"
+	productMonthly       = "prod-team-monthly"
+	productYearly        = "prod-team-yearly"
+	productFounding      = "prod-founding"
+	productTeam25Monthly = "prod-team25-monthly"
+	productTeam25Yearly  = "prod-team25-yearly"
 )
 
 // polarCall is one request the server made to the fake Polar API.
 type polarCall struct {
-	Path string
-	Auth string
-	Body map[string]any
+	Path  string
+	Query string
+	Auth  string
+	Body  map[string]any
 }
 
 // fakePolarAPI stands in for the Polar API, an external boundary. Like Polar it keeps customers
@@ -52,6 +55,9 @@ type fakePolarAPI struct {
 	// customers maps external id to customer id.
 	customers map[string]string
 	emails    map[string]bool
+	// holders and archived are the Founding-style product state: slot holders and the archive flag.
+	holders  map[string]int
+	archived map[string]bool
 }
 
 const customerByExternalPrefix = "/v1/customers/external/"
@@ -64,7 +70,7 @@ func newFakePolarAPI(t *testing.T) *fakePolarAPI {
 		_ = json.NewDecoder(request.Body).Decode(&body)
 		fake.mu.Lock()
 		defer fake.mu.Unlock()
-		fake.calls = append(fake.calls, polarCall{Path: request.URL.Path, Auth: request.Header.Get("Authorization"), Body: body})
+		fake.calls = append(fake.calls, polarCall{Path: request.URL.Path, Query: request.URL.RawQuery, Auth: request.Header.Get("Authorization"), Body: body})
 		number := 0
 		for _, call := range fake.calls {
 			if call.Path == request.URL.Path {
@@ -76,7 +82,7 @@ func newFakePolarAPI(t *testing.T) *fakePolarAPI {
 			response.WriteHeader(status)
 			fmt.Fprintf(response, format, args...)
 		}
-		if status := fake.status[request.URL.Path]; status != 0 {
+		if status := fake.status[request.URL.Path] + fake.status[request.Method+" "+request.URL.Path]; status != 0 {
 			reply(status, `{"detail":"fake failure"}`)
 			return
 		}
@@ -111,6 +117,7 @@ func newFakePolarAPI(t *testing.T) *fakePolarAPI {
 			reply(http.StatusCreated, `{"id":"co_%d","url":"https://polar.test/checkout/%d"}`, number, number)
 		case request.URL.Path == "/v1/customer-sessions/":
 			reply(http.StatusCreated, `{"id":"cs_%d","customer_portal_url":"https://polar.test/portal/%d"}`, number, number)
+		case fake.serveProducts(request, reply):
 		default:
 			reply(http.StatusNotFound, `{}`)
 		}
@@ -146,7 +153,7 @@ func (f *fakePolarAPI) recorded() []polarCall {
 func (f *fakePolarAPI) config() polar.Config {
 	return polar.Config{
 		AccessToken: "polar-token-for-test", WebhookSecret: billingWebhookSecret, APIURL: f.server.URL,
-		Products: polar.Products{TeamMonthly: productMonthly, TeamYearly: productYearly, Founding: productFounding},
+		Products: polar.Products{TeamMonthly: productMonthly, TeamYearly: productYearly, Founding: productFounding, Team25Monthly: productTeam25Monthly, Team25Yearly: productTeam25Yearly},
 	}
 }
 
@@ -187,6 +194,7 @@ type subscription struct {
 	CancelAtPeriodEnd bool
 	EndedAt           *time.Time
 	ModifiedAt        time.Time
+	CustomerEmail     string // customer.email; empty omits it
 }
 
 func (s subscription) event(eventType string) []byte {
@@ -198,13 +206,17 @@ func (s subscription) event(eventType string) []byte {
 	if s.EndedAt != nil {
 		ended = s.EndedAt.Format(time.RFC3339)
 	}
+	customer := map[string]any{"id": "cus_" + s.ID, "external_id": external}
+	if s.CustomerEmail != "" {
+		customer["email"] = s.CustomerEmail
+	}
 	payload := map[string]any{
 		"type": eventType, "timestamp": time.Now().UTC().Format(time.RFC3339),
 		"data": map[string]any{
 			"id": s.ID, "status": s.Status, "product_id": s.Product, "customer_id": "cus_" + s.ID,
 			"current_period_end": s.PeriodEnd.Format(time.RFC3339), "cancel_at_period_end": s.CancelAtPeriodEnd,
 			"ended_at": ended, "modified_at": s.ModifiedAt.Format(time.RFC3339),
-			"customer": map[string]any{"id": "cus_" + s.ID, "external_id": external},
+			"customer": customer,
 		},
 	}
 	encoded, err := json.Marshal(payload)
@@ -255,6 +267,7 @@ func (f billingFixture) mustDeliver(t *testing.T, id string, body []byte) {
 }
 
 type billingView struct {
+	CheckoutPlans     []string   `json:"checkout_plans"`
 	Plan              string     `json:"plan"`
 	Status            string     `json:"status"`
 	CurrentPeriodEnd  *time.Time `json:"current_period_end"`

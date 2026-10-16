@@ -40,9 +40,14 @@ in as.
 
 The installer writes `COLLIE_DESK_IMAGE` to `.env`. Pick one tag:
 
-- `ghcr.io/colliedesk/colliedesk:edge` (current default): the latest `main` commit that passed CI
-  and booted against PostgreSQL.
-- `ghcr.io/colliedesk/colliedesk:X.Y.Z`, `:X.Y` or `:latest`: tagged releases.
+- `ghcr.io/colliedesk/colliedesk:latest` (default): the newest release.
+- `ghcr.io/colliedesk/colliedesk:0.0.N`: one exact release, if you want to pin.
+- `ghcr.io/colliedesk/colliedesk:edge`: the newest `main` commit that passed CI and booted against
+  PostgreSQL. Newer, less tested.
+
+Colliedesk is alpha: releases are `0.0.x` and any release may change the database schema. Back up
+before you upgrade (see below). Changes per release are in the
+[releases page](https://github.com/colliedesk/colliedesk/releases).
 
 To check which build you run:
 

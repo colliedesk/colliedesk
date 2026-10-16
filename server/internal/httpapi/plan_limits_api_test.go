@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
 func invite(t *testing.T, f limitsFixture, admin string, number int) *responseView {
@@ -175,13 +177,27 @@ func TestReinvitingAnExistingAgentOrResendingAPendingInviteTakesNoSeat(t *testin
 	}
 }
 
-func TestPaidPlanLimitMessageSaysToContactUsInsteadOfUpgrade(t *testing.T) {
-	f := newLimitsFixture(t, true)
+func fillTeamSeats(t *testing.T, f limitsFixture) responseView {
+	t.Helper()
 	f.upgrade(t, f.workspaceA, "sub_message")
 	for number := 1; number <= 9; number++ {
 		invite(t, f, f.adminA, number)
 	}
-	refused := invite(t, f, f.adminA, 10)
+	return *invite(t, f, f.adminA, 10)
+}
+
+func TestTeamSeatLimitPointsToTeam25WhenItIsOnSale(t *testing.T) {
+	refused := fillTeamSeats(t, newLimitsFixture(t, true))
+	if refused.Code != http.StatusPaymentRequired || !strings.Contains(refused.Body, "upgrade to Team 25") {
+		t.Fatalf("status=%d body=%s, want a pointer to Team 25", refused.Code, refused.Body)
+	}
+}
+
+func TestTeamSeatLimitSaysToContactUsWhenTeam25IsNotOnSale(t *testing.T) {
+	f := newLimitsFixtureConfigured(t, true, nil, func(config *httpapi.Config) {
+		config.Billing.Products.Team25Monthly, config.Billing.Products.Team25Yearly = "", ""
+	})
+	refused := fillTeamSeats(t, f)
 	if refused.Code != http.StatusPaymentRequired || !strings.Contains(refused.Body, "contact us for more than 10 agents") ||
 		strings.Contains(strings.ToLower(refused.Body), "upgrade") {
 		t.Fatalf("status=%d body=%s, want a contact-us message without an upgrade offer", refused.Code, refused.Body)

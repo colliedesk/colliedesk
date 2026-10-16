@@ -14,6 +14,9 @@ type Products struct {
 	TeamMonthly string
 	TeamYearly  string
 	Founding    string
+	// Team25Monthly and Team25Yearly are optional; empty means the plan is not sold here.
+	Team25Monthly string
+	Team25Yearly  string
 }
 
 // Config enables billing. The zero value means billing is off (self-hosted).
@@ -28,7 +31,8 @@ type Config struct {
 func (c Config) Enabled() bool { return c.AccessToken != "" }
 
 // ConfigFromEnv reads POLAR_ACCESS_TOKEN, POLAR_WEBHOOK_SECRET, POLAR_PRODUCT_TEAM_MONTHLY,
-// POLAR_PRODUCT_TEAM_YEARLY, POLAR_PRODUCT_FOUNDING and the optional POLAR_API_URL. None set means
+// POLAR_PRODUCT_TEAM_YEARLY, POLAR_PRODUCT_FOUNDING and the optional POLAR_API_URL,
+// POLAR_PRODUCT_TEAM25_MONTHLY and POLAR_PRODUCT_TEAM25_YEARLY. Without the Team 25 products that plan cannot be bought. None set means
 // billing is off. Setting some but not all is an error that names the missing keys (never values),
 // so a half-configured instance never starts.
 func ConfigFromEnv(getenv func(string) string) (Config, error) {
@@ -45,6 +49,7 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 		{"POLAR_PRODUCT_TEAM_YEARLY", &config.Products.TeamYearly},
 		{"POLAR_PRODUCT_FOUNDING", &config.Products.Founding},
 	}
+	config.Products.Team25Monthly, config.Products.Team25Yearly = value("POLAR_PRODUCT_TEAM25_MONTHLY"), value("POLAR_PRODUCT_TEAM25_YEARLY")
 	apiURL := value("POLAR_API_URL")
 	var missing []string
 	for _, item := range required {
@@ -67,4 +72,22 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 		config.APIURL = strings.TrimRight(apiURL, "/")
 	}
 	return config, nil
+}
+
+// CheckoutPlans lists the checkout plan names this configuration can sell, in the order they are
+// offered. Team 25 is listed only when both of its products are set.
+func (c Config) CheckoutPlans() []string {
+	plans := []string{"team_monthly", "team_yearly"}
+	if c.Products.Team25Monthly != "" {
+		plans = append(plans, "team25_monthly")
+	}
+	if c.Products.Team25Yearly != "" {
+		plans = append(plans, "team25_yearly")
+	}
+	return append(plans, "founding")
+}
+
+// SellsTeam25 reports whether both Team 25 products are configured.
+func (c Config) SellsTeam25() bool {
+	return c.Products.Team25Monthly != "" && c.Products.Team25Yearly != ""
 }

@@ -2,7 +2,7 @@ import type { Billing, CheckoutPlan } from '../../api/schemas';
 import { formatBytes } from '../../lib/format-bytes';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
-import { planOptions } from './plan-options';
+import { planOptionsFor } from './plan-options';
 
 interface BillingPageProps {
   billing: Billing;
@@ -24,16 +24,20 @@ function periodNote(billing: Billing, timezone: string): string | null {
   return billing.cancel_at_period_end || billing.status === 'canceled' ? messages.cancelsOn(when) : messages.renewsOn(when);
 }
 
-// StorageFull says what the cap does once it is reached, which differs by plan: on Founding customer
+const isPaid = (billing: Billing) => billing.plan !== 'trial' && billing.plan !== 'none';
+// Founding can move up to Team; Team and Team 25 raise the cap by asking us.
+const paidStorageNext = (billing: Billing) => billing.plan === 'founding' ? messages.storageUpgradeFounding : messages.storageContactUs;
+
+// StorageFull says what the cap does once it is reached, which differs by plan: on a paid plan customer
 // email is always stored, on the trial and when locked it is refused. Below the cap the 80% warning
 // of the page applies.
 function StorageFull({ billing }: { billing: Billing }) {
   const limit = billing.limits.storage_bytes;
   if (limit === null || billing.usage.storage_bytes < limit) return null;
-  const founding = billing.plan === 'founding';
-  const upgrade = founding ? messages.storageUpgradeFounding : messages.storageUpgradeTrial;
+  const paid = isPaid(billing);
+  const upgrade = paid ? paidStorageNext(billing) : messages.storageUpgradeTrial;
   return <p role="alert" aria-label="Attachment storage" className="error-copy">
-    {founding ? messages.storageFullFounding(upgrade) : messages.storageFullTrial(upgrade)}</p>;
+    {paid ? messages.storageFullPaid(upgrade) : messages.storageFullTrial(upgrade)}</p>;
 }
 
 export function BillingPage({ billing, timezone, checkoutReturned = false, failed = false, onCheckout, onManage }: BillingPageProps) {
@@ -55,7 +59,13 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
           : messages.plans[billing.plan]}</strong></p>
         {note && <p className="muted-copy">{note}</p>}
         {storageNearlyFull && storageLimit !== null && <p role="status" className="error-copy">
-          {(billing.plan === 'founding' ? messages.storageWarningFounding : messages.storageWarning)(Math.floor((billing.usage.storage_bytes / storageLimit) * 100), formatBytes(billing.usage.storage_bytes), formatBytes(storageLimit))}</p>}
+          {(() => {
+            const percent = Math.floor((billing.usage.storage_bytes / storageLimit) * 100);
+            const used = formatBytes(billing.usage.storage_bytes);
+            return isPaid(billing)
+              ? messages.storageWarningPaid(percent, used, formatBytes(storageLimit), billing.plan === 'founding' ? messages.storageWarningUpgradeToTeam : messages.storageContactUs)
+              : messages.storageWarning(percent, used, formatBytes(storageLimit));
+          })()}</p>}
         <ul className="muted-copy">
           <li>{messages.agentsUsage(billing.usage.agents, billing.limits.agents, billing.usage.pending_invites)}</li>
           {storageLimit !== null && <li>{messages.storageUsage(formatBytes(billing.usage.storage_bytes, 'down'), formatBytes(storageLimit))}</li>}
@@ -65,7 +75,7 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
       </section>
       {(billing.plan === 'trial' || billing.plan === 'none') && <section aria-labelledby="upgrade-heading">
         <div className="section-heading"><div><h2 id="upgrade-heading">{messages.upgradeHeading}</h2></div></div>
-        <div className="button-row">{planOptions.map((item) =>
+        <div className="button-row">{planOptionsFor(billing.checkout_plans).map((item) =>
           <button key={item.plan} type="button" className="primary-action" onClick={() => onCheckout(item.plan)}>{item.label}</button>)}</div>
       </section>}
       {billing.status !== 'none' && !billing.complimentary && <section aria-labelledby="manage-billing-heading">

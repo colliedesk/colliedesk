@@ -4,15 +4,15 @@ import type { Billing } from '../../api/schemas';
 import { BillingPage } from './billing-page';
 
 const free: Billing = {
-  plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, complimentary: false, complimentary_until: null,
+  plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
   limits: { agents: 10, replies_per_24h: 200, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 2, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 const team: Billing = {
-  plan: 'team', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'active', current_period_end: '2026-11-15T09:30:00Z', cancel_at_period_end: false, active_subscriptions: 1, complimentary: false, complimentary_until: null,
-  limits: { agents: 10, replies_per_24h: null, storage_bytes: null, storage_warn_bytes: null }, usage: { agents: 6, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
+  plan: 'team', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'active', current_period_end: '2026-11-15T09:30:00Z', cancel_at_period_end: false, active_subscriptions: 1, complimentary: false, complimentary_until: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
+  limits: { agents: 10, replies_per_24h: null, storage_bytes: 107374182400, storage_warn_bytes: 85899345920 }, usage: { agents: 6, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 
-test('a trial workspace sees when the trial ends, its usage and three ways to subscribe', () => {
+test('a trial workspace sees when the trial ends, its usage and five ways to subscribe', () => {
   const onCheckout = vi.fn();
   render(<BillingPage billing={free} timezone="UTC" onCheckout={onCheckout} onManage={vi.fn()} />);
   expect(screen.getByRole('heading', { name: /plan and billing/i })).toBeInTheDocument();
@@ -20,10 +20,17 @@ test('a trial workspace sees when the trial ends, its usage and three ways to su
   expect(screen.getByText(/trial ends oct 15/i)).toBeInTheDocument();
   expect(screen.getByText(/2 of 10 agents/i)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /manage billing/i })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /team.*\$49.*month/i }));
-  fireEvent.click(screen.getByRole('button', { name: /team.*\$490.*year/i }));
+  fireEvent.click(screen.getByRole('button', { name: 'Team, $49 per month' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Team, $490 per year' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Team 25, $99 per month' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Team 25, $990 per year' }));
   fireEvent.click(screen.getByRole('button', { name: /founding.*\$100.*year/i }));
-  expect(onCheckout.mock.calls).toEqual([['team_monthly'], ['team_yearly'], ['founding']]);
+  expect(onCheckout.mock.calls).toEqual([['team_monthly'], ['team_yearly'], ['team25_monthly'], ['team25_yearly'], ['founding']]);
+});
+
+test('a server without the Team 25 products offers only the plans it can sell', () => {
+  render(<BillingPage billing={{ ...free, checkout_plans: ['team_monthly', 'team_yearly', 'founding'] }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['Team, $49 per month', 'Team, $490 per year', 'Founding, $100 per year for life']);
 });
 
 test('a paying workspace sees renewal, no upgrade buttons and a way to manage billing', () => {
@@ -35,6 +42,14 @@ test('a paying workspace sees renewal, no upgrade buttons and a way to manage bi
   expect(screen.queryByRole('button', { name: /\$49/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: /manage billing/i }));
   expect(onManage).toHaveBeenCalled();
+});
+
+test('a Team 25 workspace is named, shows 25 agents and its 250 GiB cap, and has no upgrade buttons', () => {
+  render(<BillingPage billing={{ ...team, plan: 'team25', limits: { agents: 25, replies_per_24h: null, storage_bytes: 268435456000, storage_warn_bytes: 214748364800 } }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.getByText('Team 25')).toBeInTheDocument();
+  expect(screen.getByText(/6 of 25 agents/i)).toBeInTheDocument();
+  expect(screen.getByText('Attachment storage: 0 B of 250.0 GiB')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /\$99/ })).not.toBeInTheDocument();
 });
 
 test('a cancelled plan says when access ends', () => {
@@ -107,8 +122,8 @@ test('a trial shows its attachment storage and replies, and warns from 80 percen
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
 });
 
-test('a paid plan shows no storage cap and no reply cap', () => {
+test('a paid plan shows its storage cap and no reply cap', () => {
   render(<BillingPage billing={team} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
-  expect(screen.queryByText(/storage:/i)).not.toBeInTheDocument();
+  expect(screen.getByText('Attachment storage: 0 B of 100.0 GiB')).toBeInTheDocument();
   expect(screen.queryByText(/replies in the last 24 hours/i)).not.toBeInTheDocument();
 });
