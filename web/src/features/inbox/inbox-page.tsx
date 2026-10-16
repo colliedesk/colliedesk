@@ -4,7 +4,7 @@ import type { BulkConversationChanges, UpdateConversationRequest } from '../../a
 import { BulkActionBar } from './bulk-action-bar';
 import { ConversationList } from './conversation-list';
 import { DetailsPanel } from './details-panel';
-import { InboxFilters } from './inbox-filters';
+import { InboxFilters, defaultInboxFilters } from './inbox-filters';
 import type { AttachmentLimits } from './attachment-picker';
 import { ReplyComposer } from './reply-composer';
 import { TimelinePanel } from './timeline-panel';
@@ -34,6 +34,7 @@ interface InboxPageProps {
   // deliveryNotice explains a refused retry of a failed delivery.
   deliveryNotice?: string;
   filtered?: boolean;
+  nothingOpen?: boolean;
   loading?: boolean;
   refreshing?: boolean;
   timelineLoading?: boolean;
@@ -46,12 +47,12 @@ interface InboxPageProps {
   onBulkUpdate?: (ids: string[], changes: BulkConversationChanges) => Promise<unknown>;
 }
 
-export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, loading, refreshing, timelineLoading, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate }: InboxPageProps) {
+export function InboxPage({ conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Filters are an uncontrolled form; clearing remounts it so every field returns to its default.
   const [filterGeneration, setFilterGeneration] = useState(0);
-  const clearFilters = () => { setFilterGeneration((current) => current + 1); onFilters?.({}); };
+  const clearFilters = () => { setFilterGeneration((current) => current + 1); onFilters?.({ ...defaultInboxFilters }); };
   const detailsToggle = useRef<HTMLButtonElement>(null);
   const listPane = useRef<HTMLElement>(null);
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
@@ -123,7 +124,7 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
           <p aria-live="polite" className="bulk-message">{bulkNotice}</p>
         </header>
         <ConversationList items={conversations} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
-          page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} loading={loading} refreshing={refreshing}
+          page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} nothingOpen={nothingOpen} loading={loading} refreshing={refreshing}
           failed={failed} onRetry={onRetry} onClearFilters={clearFilters} canManage={canManage} onOpenSettings={onOpenSettings}
           checkedIds={checked} onToggle={toggle} onToggleAll={toggleAll} selectAllRef={selectAll} />
       </section>

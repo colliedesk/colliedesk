@@ -13,6 +13,8 @@ type ConversationUpdate struct {
 	Priority   *string
 	AssigneeID **string
 	TagIDs     *[]string
+	// ActorID is the agent making the change; it is recorded when the assignee changes.
+	ActorID string
 }
 
 func (s *Store) UpdateConversation(ctx context.Context, workspaceID, id string, update ConversationUpdate) (domain.Conversation, error) {
@@ -45,8 +47,10 @@ func updateConversation(ctx context.Context, tx pgx.Tx, workspaceID, id string, 
 	}
 	result, err := tx.Exec(ctx, `UPDATE conversations SET
 		status=COALESCE($3,status),priority=COALESCE($4,priority),
+		assigned_at=CASE WHEN $5 AND assignee_id IS DISTINCT FROM $6::uuid THEN (CASE WHEN $6::uuid IS NULL THEN NULL ELSE now() END) ELSE assigned_at END,
+		assigned_by_agent_id=CASE WHEN $5 AND assignee_id IS DISTINCT FROM $6::uuid THEN (CASE WHEN $6::uuid IS NULL THEN NULL ELSE NULLIF($7,'')::uuid END) ELSE assigned_by_agent_id END,
 		assignee_id=CASE WHEN $5 THEN $6::uuid ELSE assignee_id END,updated_at=now()
-		WHERE workspace_id=$1 AND id=$2`, workspaceID, id, update.Status, update.Priority, update.AssigneeID != nil, nullableString(update.AssigneeID))
+		WHERE workspace_id=$1 AND id=$2`, workspaceID, id, update.Status, update.Priority, update.AssigneeID != nil, nullableString(update.AssigneeID), update.ActorID)
 	if err != nil {
 		return domain.Conversation{}, fmt.Errorf("update conversation: %w", err)
 	}

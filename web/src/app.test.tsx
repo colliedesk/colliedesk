@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/react-router';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { routeTree } from './app';
 import { createQueryClient } from './query-client';
@@ -30,8 +30,8 @@ function serve(handlers: Record<string, () => Response>) {
   });
 }
 
-function open() {
-  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: ['/'] }) });
+function open(path = '/') {
+  const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [path] }) });
   render(<QueryClientProvider client={createQueryClient()}><RouterProvider router={router} /></QueryClientProvider>);
 }
 
@@ -63,4 +63,25 @@ test('a 402 workspace_locked from the inbox replaces the inbox with the locked s
   expect(screen.getByText(/ask a workspace admin to choose a plan/i)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Export all data' })).not.toBeInTheDocument();
   expect(screen.getByRole('region', { name: 'Signed in as' })).toBeInTheDocument();
+});
+
+test('the inbox activity poll runs on every signed-in page, not only in the inbox', async () => {
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false })),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [] }),
+  });
+  open('/settings');
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/inbox/activity'))).toBe(true));
+});
+
+test('a locked workspace does not poll for inbox activity', async () => {
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false })),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/billing': () => json(200, billing),
+  });
+  open();
+  await screen.findByRole('heading', { level: 1, name: 'Your free trial has ended' });
+  expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/inbox/activity'))).toBe(false);
 });

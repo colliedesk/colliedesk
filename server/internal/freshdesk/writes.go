@@ -43,7 +43,10 @@ func (r *run) writeConversation(ctx context.Context, ticket fdTicket, contactID 
 	defer tx.Rollback(ctx) //nolint:errcheck
 	var id string
 	if existing != nil {
-		err = tx.QueryRow(ctx, `UPDATE conversations SET subject=$3,status=$4,priority=$5,assignee_id=CASE WHEN $9 THEN assignee_id ELSE $6 END,updated_at=$7,origin=$8
+		err = tx.QueryRow(ctx, `UPDATE conversations SET subject=$3,status=$4,priority=$5,
+			assigned_at=CASE WHEN NOT $9 AND assignee_id IS DISTINCT FROM $6::uuid THEN NULL ELSE assigned_at END,
+			assigned_by_agent_id=CASE WHEN NOT $9 AND assignee_id IS DISTINCT FROM $6::uuid THEN NULL ELSE assigned_by_agent_id END,
+			assignee_id=CASE WHEN $9 THEN assignee_id ELSE $6::uuid END,updated_at=$7,origin=$8
 			WHERE workspace_id=$1 AND id=$2 RETURNING id::text`, r.workspaceID, *existing,
 			subjectOrDefault(ticket.Subject), status, priority, assignee, ticket.UpdatedAt.UTC(), ticketOrigin(ticket), keepAssignee).Scan(&id)
 	}
