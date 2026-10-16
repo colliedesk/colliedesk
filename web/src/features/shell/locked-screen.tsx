@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { Billing, CheckoutPlan } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
-import { planOptionsFor } from '../settings/plan-options';
+import { PlanPicker } from '../settings/plan-picker';
 
 interface LockedScreenProps {
   isAdmin: boolean;
@@ -46,9 +46,8 @@ export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = fals
         <div className="section-heading"><h2 id="locked-plan-heading">{messages.choosePlan}</h2></div>
         <div className="settings-body">
           {isAdmin
-            ? <div className="button-row">{planOptionsFor(billing?.checkout_plans ?? []).map((option) =>
-                <button key={option.plan} type="button" className="primary-action" disabled={checkoutBusy} aria-busy={checkoutBusy} onClick={() => onCheckout(option.plan)}>{option.label}</button>)}
-              {hasSubscription && onManage && <button type="button" onClick={onManage}>{messages.manageBilling}</button>}</div>
+            ? <><PlanPicker sellable={billing?.checkout_plans ?? []} busy={checkoutBusy} onChoose={onCheckout} />
+              {hasSubscription && onManage && <div className="button-row"><button type="button" onClick={onManage}>{messages.manageBilling}</button></div>}</>
             : <p>{messages.askWorkspaceAdmin}</p>}
         </div>
       </section>

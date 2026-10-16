@@ -1,6 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/react-router';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { routeTree } from './app';
 import { readCheckoutIntent, rememberCheckoutIntent } from './features/settings/checkout-intent';
@@ -17,7 +17,7 @@ const meBody = (role: 'admin' | 'agent', plan: unknown) => ({
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
   timezone: 'UTC', plan,
 });
-const config = { cloud_sign_in: { enabled: true, publishable_key: 'pk' }, billing: { enabled: true }, signup: { enabled: true } };
+const config = { cloud_sign_in: { enabled: true, publishable_key: 'pk' }, billing: { enabled: true }, signup: { enabled: true }, limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 } };
 const billing = {
   plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, status: 'none', current_period_end: null, cancel_at_period_end: false,
   active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
@@ -161,4 +161,23 @@ test('going back to the billing page after the checkout was started does not sta
   render(<QueryClientProvider client={createQueryClient()}><RouterProvider router={createRouter({ routeTree, history })} /></QueryClientProvider>);
   await screen.findByRole('button', { name: /team, \$49 per month/i });
   expect(checkouts()).toBe(1);
+});
+
+test('billing lives in Settings: the rail keeps Settings current, the settings nav marks Plan and billing, the banner does not offer the page it is on', async () => {
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('admin', trialPlan)),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/billing': () => json(200, trialBilling),
+    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
+  });
+  open('/settings/billing');
+  await screen.findByRole('heading', { name: 'Plan and billing' });
+  const rail = screen.getByRole('navigation', { name: 'Main' });
+  expect(within(rail).queryByRole('link', { name: 'Billing' })).not.toBeInTheDocument();
+  expect(within(rail).getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
+  const sections = screen.getByRole('navigation', { name: 'Settings sections' });
+  expect(within(sections).getByRole('link', { name: 'Plan and billing' })).toHaveAttribute('aria-current', 'page');
+  expect(within(sections).getByRole('link', { name: 'Team' })).toHaveAttribute('href', '/settings#team-heading');
+  expect(screen.getByRole('region', { name: /plan notices/i })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Choose a plan' })).not.toBeInTheDocument();
 });

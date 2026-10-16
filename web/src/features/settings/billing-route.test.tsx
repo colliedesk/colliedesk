@@ -39,7 +39,8 @@ test('an admin upgrades: the server-made checkout URL is opened in the overlay a
   api.billing.mockResolvedValue(free);
   api.startCheckout.mockResolvedValue({ url: 'https://polar.example/checkout/1' });
   renderRoute();
-  fireEvent.click(await screen.findByRole('button', { name: /team, \$490 per year/i }));
+  fireEvent.click(await screen.findByRole('radio', { name: /yearly/i }));
+  fireEvent.click(screen.getByRole('button', { name: /team, \$490 per year/i }));
   await waitFor(() => expect(embed.create).toHaveBeenCalledWith('https://polar.example/checkout/1', expect.anything()));
   expect(assign).not.toHaveBeenCalled();
   expect(api.startCheckout).toHaveBeenCalledWith('team_yearly');
@@ -51,7 +52,7 @@ test('when the overlay cannot open, the hosted checkout is used so the purchase 
   api.billing.mockResolvedValue(free);
   api.startCheckout.mockResolvedValue({ url: 'https://polar.example/checkout/1' });
   renderRoute();
-  fireEvent.click(await screen.findByRole('button', { name: /team, \$490 per year/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /team, \$49 per month/i }));
   await waitFor(() => expect(assign).toHaveBeenCalledWith('https://polar.example/checkout/1'));
 });
 
@@ -61,7 +62,7 @@ test('a second click while the checkout is starting does not start another', asy
   api.billing.mockResolvedValue(free);
   api.startCheckout.mockResolvedValue({ url: 'https://polar.example/checkout/1' });
   renderRoute();
-  const button = await screen.findByRole('button', { name: /team, \$490 per year/i });
+  const button = await screen.findByRole('button', { name: /team, \$49 per month/i });
   fireEvent.click(button);
   await waitFor(() => expect(embed.create).toHaveBeenCalledTimes(1));
   expect(button).toBeDisabled();
@@ -128,7 +129,7 @@ test('an intent for a plan the server does not offer is dropped and the billing 
   api.me.mockResolvedValue(me('admin'));
   api.billing.mockResolvedValue({ ...free, checkout_plans: ['team_monthly', 'team_yearly'] });
   renderRoute();
-  expect(await screen.findByRole('button', { name: /team, \$490 per year/i })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: /team, \$49 per month/i })).toBeInTheDocument();
   expect(api.startCheckout).not.toHaveBeenCalled();
   expect(readCheckoutIntent()).toBeUndefined();
 });

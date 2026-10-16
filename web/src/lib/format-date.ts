@@ -15,6 +15,12 @@ export function formatDate(value: string, timeZone: string, now: Date = new Date
   return format(date, timeZone, year(date) === year(now) ? dateTime : { ...dateTime, year: 'numeric' });
 }
 
+// formatDay is a calendar day with its year, for dates where the time of day means nothing (a trial
+// end, a renewal).
+export function formatDay(value: string, timeZone: string): string {
+  return format(new Date(value), timeZone, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 // Compact form for dense lists: the time for today, the day otherwise, the year only when it differs.
 // ICU may separate "1:05" and "PM" with a narrow no-break space; plain spaces keep it predictable.
 export function formatShortDate(value: string, timeZone: string, now = new Date()): string {

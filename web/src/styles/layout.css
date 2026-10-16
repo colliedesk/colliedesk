@@ -62,6 +62,7 @@
 .settings-nav ul { display: grid; gap: 2px; margin: var(--space-2) 0 0; padding: 0; list-style: none; }
 .settings-nav a { display: block; border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); color: var(--text-2); font-size: var(--fs-small); text-decoration: none; }
 .settings-nav a:hover { background: var(--surface-2); color: var(--text-1); }
+.settings-nav a[aria-current="page"] { background: var(--surface-2); color: var(--text-1); font-weight: 600; }
 .settings-group-label { margin: 0; color: var(--text-3); font-size: var(--fs-label); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
 .settings-nav .settings-group-label { padding: 0 var(--space-2); }
 .settings-sections > .settings-group-label { padding: var(--space-6) 0 var(--space-2); }

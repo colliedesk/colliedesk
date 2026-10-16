@@ -7,7 +7,7 @@ const api = vi.hoisted(() => ({
   me: vi.fn(), sessions: vi.fn(), invites: vi.fn(), emailChannel: vi.fn(), agents: vi.fn(), updateAgent: vi.fn(),
   createInvite: vi.fn(), revokeInvite: vi.fn(), revokeSession: vi.fn(), updateWorkspaceTimezone: vi.fn(), updateAgentTimezone: vi.fn(),
   saveEmailChannel: vi.fn(), updateWorkspaceSlug: vi.fn(), rotateEmailSecret: vi.fn(), verifyEmailDomain: vi.fn(), disconnectEmailChannel: vi.fn(),
-  exportWorkspace: vi.fn(), webForm: vi.fn(), saveWebForm: vi.fn(),
+  exportWorkspace: vi.fn(), config: vi.fn(), webForm: vi.fn(), saveWebForm: vi.fn(),
   savedReplies: vi.fn(), createSavedReply: vi.fn(), updateSavedReply: vi.fn(), deleteSavedReply: vi.fn(),
 }));
 vi.mock('../../api/client', () => ({ api, PlanLimitError: class extends Error {}, InvalidRequestError: class extends Error {} }));
@@ -26,6 +26,7 @@ const ANN = '33333333-3333-4333-8333-333333333333';
 
 function show(role: 'admin' | 'agent', sessions: unknown[] = []) {
   api.me.mockResolvedValue(me(role));
+  api.config.mockResolvedValue({ billing: { enabled: false } });
   api.agents.mockResolvedValue({ items: [teammate(SAM, 'sam@example.com', { role }), teammate(ANN, 'ann@example.com', { open_conversations: 1 })] });
   api.updateAgent.mockResolvedValue(teammate(ANN, 'ann@example.com', { deactivated_at: '2026-10-15T10:00:00Z' }));
   api.sessions.mockResolvedValue({ items: sessions });

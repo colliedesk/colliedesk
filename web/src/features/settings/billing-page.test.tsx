@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import type { Billing } from '../../api/schemas';
 import { BillingPage } from './billing-page';
@@ -20,23 +20,25 @@ test('a trial workspace sees when the trial ends, its usage and five ways to sub
   expect(screen.getByText(/trial ends oct 15/i)).toBeInTheDocument();
   expect(screen.getByText(/2 of 10 agents/i)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /manage billing/i })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Team, $49 per month' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Team, $490 per year' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Team 25, $99 per month' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Team 25, $990 per year' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Team, $49 per month' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Team 25, $99 per month' }));
+  fireEvent.click(screen.getByRole('radio', { name: /yearly/i }));
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Team, $490 per year' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Team 25, $990 per year' }));
   fireEvent.click(screen.getByRole('button', { name: /founding.*\$100.*year/i }));
-  expect(onCheckout.mock.calls).toEqual([['team_monthly'], ['team_yearly'], ['team25_monthly'], ['team25_yearly'], ['founding']]);
+  expect(onCheckout.mock.calls).toEqual([['team_monthly'], ['team25_monthly'], ['team_yearly'], ['team25_yearly'], ['founding']]);
 });
 
 test('a server without the Team 25 products offers only the plans it can sell', () => {
   render(<BillingPage billing={{ ...free, checkout_plans: ['team_monthly', 'team_yearly', 'founding'] }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
-  expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['Team, $49 per month', 'Team, $490 per year', 'Founding, $100 per year for life']);
+  expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Choose Team, $49 per month', 'Choose Founding, $100 per year for life']);
+  expect(screen.queryByRole('article', { name: 'Team 25' })).not.toBeInTheDocument();
 });
 
 test('a paying workspace sees renewal, no upgrade buttons and a way to manage billing', () => {
   const onManage = vi.fn();
   render(<BillingPage billing={team} timezone="UTC" onCheckout={vi.fn()} onManage={onManage} />);
-  expect(screen.getByText('Team')).toBeInTheDocument();
+  expect(within(screen.getByRole('region', { name: 'Current plan' })).getByText('Team')).toBeInTheDocument();
   expect(screen.getByText(/renews nov 15/i)).toBeInTheDocument();
   expect(screen.getByText(/6 of 10 agents/i)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /\$49/ })).not.toBeInTheDocument();
@@ -46,7 +48,7 @@ test('a paying workspace sees renewal, no upgrade buttons and a way to manage bi
 
 test('a Team 25 workspace is named, shows 25 agents and its 250 GiB cap, and has no upgrade buttons', () => {
   render(<BillingPage billing={{ ...team, plan: 'team25', limits: { agents: 25, replies_per_24h: null, storage_bytes: 268435456000, storage_warn_bytes: 214748364800 } }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
-  expect(screen.getByText('Team 25')).toBeInTheDocument();
+  expect(within(screen.getByRole('region', { name: 'Current plan' })).getByText('Team 25')).toBeInTheDocument();
   expect(screen.getByText(/6 of 25 agents/i)).toBeInTheDocument();
   expect(screen.getByText('Attachment storage: 0 B of 250.0 GiB')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /\$99/ })).not.toBeInTheDocument();
@@ -60,7 +62,7 @@ test('a cancelled plan says when access ends', () => {
 
 test('a failed payment is flagged while the plan stays active', () => {
   render(<BillingPage billing={{ ...team, status: 'past_due' }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
-  expect(screen.getByText('Team')).toBeInTheDocument();
+  expect(within(screen.getByRole('region', { name: 'Current plan' })).getByText('Team')).toBeInTheDocument();
   expect(screen.getByRole('alert')).toHaveTextContent(/last payment failed/i);
 });
 
@@ -126,4 +128,67 @@ test('a paid plan shows its storage cap and no reply cap', () => {
   render(<BillingPage billing={team} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
   expect(screen.getByText('Attachment storage: 0 B of 100.0 GiB')).toBeInTheDocument();
   expect(screen.queryByText(/people emailed in the last 24 hours/i)).not.toBeInTheDocument();
+});
+
+test('each plan is a card with its price, what it includes and one clear Choose button; Yearly switches the prices', () => {
+  render(<BillingPage billing={free} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  const card = (name: string) => screen.getByRole('article', { name });
+  expect(card('Team')).toHaveTextContent('$49per monthBilled monthly');
+  expect(card('Team')).toHaveTextContent('Up to 10 agents');
+  expect(card('Team')).toHaveTextContent('100 GiB attachment storage');
+  expect(card('Team 25')).toHaveTextContent('Up to 25 agents');
+  expect(card('Team 25')).toHaveTextContent('250 GiB attachment storage');
+  expect(card('Founding')).toHaveTextContent('10 workspaces only');
+  // One solid button per plan, so buying is the obvious action on the page.
+  for (const name of ['Team', 'Team 25', 'Founding']) {
+    const buttons = within(card(name)).getAllByRole('button');
+    expect(buttons.map((button) => button.textContent)).toEqual([`Choose ${name}`]);
+    expect(buttons[0]).toHaveClass('primary-action');
+  }
+  expect(screen.getByRole('radio', { name: 'Monthly' })).toBeChecked();
+  fireEvent.click(screen.getByRole('radio', { name: /yearly/i }));
+  expect(card('Team')).toHaveTextContent('Billed $490 yearly');
+  expect(card('Team 25')).toHaveTextContent('Billed $990 yearly');
+  expect(card('Founding')).toHaveTextContent('Billed $100 yearly');
+});
+
+test('without any monthly and yearly pair there is no Monthly/Yearly switch', () => {
+  render(<BillingPage billing={{ ...free, checkout_plans: ['founding'] }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+});
+
+test('usage reads as meters with their numbers', () => {
+  render(<BillingPage billing={free} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  const agents = screen.getByRole('meter', { name: 'Agents' });
+  expect(agents).toHaveAttribute('aria-valuenow', '2');
+  expect(agents).toHaveAttribute('aria-valuemax', '10');
+  expect(screen.getByRole('meter', { name: 'Attachment storage' })).toHaveAttribute('aria-valuenow', '0');
+  expect(screen.getByRole('meter', { name: 'People emailed in 24 hours' })).toHaveAttribute('aria-valuemax', '200');
+});
+
+test('trial and renewal dates are days, not times', () => {
+  const { rerender } = render(<BillingPage billing={free} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.getByText(/trial ends Oct 15, 2026\./)).toBeInTheDocument();
+  expect(screen.queryByText(/\d:\d\d/)).not.toBeInTheDocument();
+  rerender(<BillingPage billing={team} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.getByText('Renews Nov 15, 2026.')).toBeInTheDocument();
+});
+
+test('yearly prices read per month with what is billed, so plans compare at a glance', () => {
+  render(<BillingPage billing={free} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  const card = (name: string) => screen.getByRole('article', { name });
+  expect(card('Founding')).toHaveTextContent('$8.33per month');
+  expect(card('Founding')).toHaveTextContent('Billed $100 yearly, the price never changes');
+  fireEvent.click(screen.getByRole('radio', { name: /yearly/i }));
+  expect(card('Team')).toHaveTextContent('$40.83per month');
+  expect(card('Team')).toHaveTextContent('Billed $490 yearly');
+  expect(card('Team 25')).toHaveTextContent('$82.50per month');
+  expect(card('Team 25')).toHaveTextContent('Billed $990 yearly');
+});
+
+test('the current plan, its usage and Manage billing sit together at the top', () => {
+  render(<BillingPage billing={team} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  const current = screen.getByRole('region', { name: 'Current plan' });
+  expect(within(current).getByRole('button', { name: /manage billing/i })).toBeInTheDocument();
+  expect(within(current).getByRole('meter', { name: 'Agents' })).toBeInTheDocument();
 });

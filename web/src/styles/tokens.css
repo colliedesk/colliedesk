@@ -70,7 +70,7 @@
   --accent-soft: #e8effa;
   --accent-strong: #2c5a9e;          /* graphics only */
   --logo-tile: #1b2330;              /* the mark always sits on a dark tile */
-  --line-control: #cdd3dc;           /* secondary button outline; the label is the cue */
+  --line-control: #a3acbb;           /* secondary button outline, 2.3:1 on white so a button reads as a button */
   --brand-panel: #141b26;            /* sign-in brand side */
   --on-brand-panel: #ffffff;
   --on-brand-panel-2: #b4bfcf;
@@ -130,7 +130,7 @@
   --accent-soft: #1a2940;            /* selected row, AI hint background */
   --accent-strong: #2c5a9e;          /* graphics only (mark, bars); never text on dark */
   --logo-tile: #18202c;
-  --line-control: #2e3a4d;
+  --line-control: #46546b;           /* 2.3:1 on the dark panel */
   --brand-panel: #111721;
   --on-brand-panel: #e8edf4;
   --on-brand-panel-2: #b4bfcf;
