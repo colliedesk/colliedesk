@@ -140,10 +140,12 @@ test('confirming leaves focus on the row, not on the page body', () => {
   expect(row('ann@example.com')).toHaveFocus();
 });
 
-test('the only active admin is not offered Deactivate on themself; with a second admin they are', () => {
+test('the only active admin cannot deactivate or demote themself; with a second admin they can', () => {
   const { rerender } = render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" />);
   expect(screen.queryByRole('button', { name: 'Deactivate Ada Admin' })).not.toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: 'Role of Ada Admin' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Deactivate ann@example.com' })).toBeInTheDocument();
   rerender(<TeamSection members={[admin, { ...ann, role: 'admin' }]} currentAgentId={admin.id} canManage timezone="UTC" />);
   expect(screen.getByRole('button', { name: 'Deactivate Ada Admin' })).toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: 'Role of Ada Admin' })).toBeEnabled();
 });

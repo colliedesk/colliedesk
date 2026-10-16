@@ -48,7 +48,7 @@ export function TeamSection({ members, currentAgentId, canManage, timezone, erro
                 {member.display_name && <small>{member.email}</small>}</span>
               {canManage && !deactivated
                 ? <span className="team-role">
-                    <select aria-label={messages.teamRoleOf(name)} value={draft} onChange={(event) => setRoleDraft({ ...roleDraft, [member.id]: event.target.value as 'admin' | 'agent' })}>
+                    <select aria-label={messages.teamRoleOf(name)} value={draft} disabled={lastAdmin} title={lastAdmin ? messages.teamLastAdmin : undefined} onChange={(event) => setRoleDraft({ ...roleDraft, [member.id]: event.target.value as 'admin' | 'agent' })}>
                       <option value="agent">{messages.roles.agent}</option><option value="admin">{messages.roles.admin}</option>
                     </select>
                     {draft !== member.role && <button type="button" aria-label={messages.teamApplyRoleFor(name)}

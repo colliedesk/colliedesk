@@ -1,7 +1,6 @@
 export const messages = {
   brand: 'Colliedesk',
   inbox: 'Inbox',
-  notificationsHeading: 'Notifications',
   notificationsLabel: 'Desktop notifications for new, assigned and customer-replied conversations',
   notificationsBlocked: 'Blocked by this browser. Allow notifications for this site in its site settings, then reload.',
   notificationNew: 'New conversation',
@@ -178,6 +177,7 @@ export const messages = {
   teamLastActive: (when: string) => `Last active ${when}`,
   teamYou: 'you',
   teamRoleOf: (name: string) => `Role of ${name}`,
+  teamLastAdmin: 'The only active admin keeps the admin role. Make someone else an admin first.',
   teamApplyRole: 'Apply',
   teamApplyRoleFor: (name: string) => `Apply role for ${name}`,
   teamDeactivate: 'Deactivate',

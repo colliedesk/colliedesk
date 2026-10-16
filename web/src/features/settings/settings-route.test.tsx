@@ -62,14 +62,15 @@ test('an agent sees the team but no controls', async () => {
   expect(within(team).queryByRole('button')).not.toBeInTheDocument();
 });
 
-test('choosing a timezone saves once, shows Saving… with the control locked, then Saved', async () => {
+test('a chosen timezone saves once, shows Saving…, then Saved', async () => {
   show('admin');
   let finish: () => void = () => {};
   api.updateWorkspaceTimezone.mockReturnValue(new Promise<void>((resolve) => { finish = resolve; }));
   const select = await screen.findByRole('combobox', { name: 'Workspace timezone' });
   fireEvent.change(select, { target: { value: 'Asia/Tokyo' } });
+  fireEvent.blur(select);
   expect(await screen.findByText('Saving…')).toBeInTheDocument();
-  await waitFor(() => expect(select).toBeDisabled());
+  fireEvent.blur(select);
   expect(api.updateWorkspaceTimezone).toHaveBeenCalledTimes(1);
   expect(api.updateWorkspaceTimezone.mock.calls[0][0]).toBe('Asia/Tokyo');
   finish();
@@ -80,7 +81,9 @@ test('choosing a timezone saves once, shows Saving… with the control locked, t
 test('a failed timezone save shows the failure next to its control', async () => {
   show('admin');
   api.updateWorkspaceTimezone.mockRejectedValue(new Error('boom'));
-  fireEvent.change(await screen.findByRole('combobox', { name: 'Workspace timezone' }), { target: { value: 'Asia/Tokyo' } });
+  const zone = await screen.findByRole('combobox', { name: 'Workspace timezone' });
+  fireEvent.change(zone, { target: { value: 'Asia/Tokyo' } });
+  fireEvent.blur(zone);
   const alert = await screen.findByRole('alert');
   expect(alert).toHaveTextContent('The settings action failed. Try again.');
   expect(alert.closest('.settings-card')).toHaveTextContent('Workspace timezone');

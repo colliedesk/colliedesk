@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { SettingsPage } from './settings-page';
 
@@ -114,11 +114,13 @@ test('theme and desktop notifications live together under Preferences', () => {
   vi.unstubAllGlobals();
 });
 
-test('choosing a workspace timezone saves it at once, no Save button', () => {
+test('a chosen workspace timezone is saved when the list is left, no Save button', () => {
   const onSetWorkspaceTimezone = vi.fn();
   render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canManageWorkspace workspaceTimezone="UTC" onSetWorkspaceTimezone={onSetWorkspaceTimezone} />);
   const general = screen.getByRole('region', { name: 'General' });
-  fireEvent.change(within(general).getByRole('combobox', { name: 'Workspace timezone' }), { target: { value: 'America/New_York' } });
+  const select = within(general).getByRole('combobox', { name: 'Workspace timezone' });
+  fireEvent.change(select, { target: { value: 'America/New_York' } });
+  fireEvent.blur(select);
   expect(onSetWorkspaceTimezone).toHaveBeenCalledWith('America/New_York');
   expect(within(general).queryByRole('button')).not.toBeInTheDocument();
 });
@@ -130,7 +132,9 @@ test('your timezone follows the workspace until you choose one, and choosing the
   expect(select).toHaveValue('Europe/London');
   expect(within(select).getByRole('option', { name: 'Same as workspace (Europe/Berlin)' })).toBeInTheDocument();
   fireEvent.change(select, { target: { value: 'Asia/Tokyo' } });
+  fireEvent.keyDown(select, { key: 'Enter' });
   fireEvent.change(select, { target: { value: '' } });
+  fireEvent.blur(select);
   expect(onSetAgentTimezone.mock.calls).toEqual([['Asia/Tokyo'], [null]]);
 });
 
@@ -141,8 +145,9 @@ test('a stored timezone this browser does not list is still shown as chosen', ()
 
 test('a timezone save shows Saving…, Saved or the failure next to its own control', () => {
   const { rerender } = render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ pending: true }} />);
-  expect(screen.getByRole('combobox', { name: 'Your timezone' })).toBeDisabled();
   expect(screen.getByText('Saving…')).toBeInTheDocument();
+  // Never disabled: a disabled control would throw keyboard focus out to the page.
+  expect(screen.getByRole('combobox', { name: 'Your timezone' })).toBeEnabled();
   rerender(<SettingsPage sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ saved: true }} />);
   expect(screen.getByRole('status')).toHaveTextContent('Saved');
   rerender(<SettingsPage sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ error: 'Unknown timezone.' }} />);
@@ -172,4 +177,39 @@ test('a session is named by its browser and system, and this device is marked wi
 test('an invite asks for a role, not a ceiling', () => {
   render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canCreateInvites />);
   expect(screen.getByRole('combobox', { name: 'Role' })).toHaveValue('agent');
+});
+
+test('browsing the timezone list with arrow keys saves only where it stops, once, and keeps focus', () => {
+  vi.useFakeTimers();
+  const onSetWorkspaceTimezone = vi.fn();
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canManageWorkspace workspaceTimezone="UTC" onSetWorkspaceTimezone={onSetWorkspaceTimezone} />);
+  const select = screen.getByRole('combobox', { name: 'Workspace timezone' });
+  select.focus();
+  for (const zone of ['Africa/Abidjan', 'Africa/Accra', 'Africa/Addis_Ababa']) fireEvent.change(select, { target: { value: zone } });
+  expect(onSetWorkspaceTimezone).not.toHaveBeenCalled();
+  act(() => { vi.advanceTimersByTime(2000); });
+  expect(onSetWorkspaceTimezone.mock.calls).toEqual([['Africa/Addis_Ababa']]);
+  expect(select).toHaveFocus();
+  fireEvent.blur(select);
+  expect(onSetWorkspaceTimezone).toHaveBeenCalledTimes(1);
+  vi.useRealTimers();
+});
+
+test('a stored zone that this browser lists under its old name appears once', () => {
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" workspaceTimezone="UTC" timezoneOverride="Asia/Ho_Chi_Minh" />);
+  const select = screen.getByRole('combobox', { name: 'Your timezone' });
+  expect(select).toHaveValue('Asia/Ho_Chi_Minh');
+  const vietnam = within(select).getAllByRole('option').filter((option) => ['Asia/Ho_Chi_Minh', 'Asia/Saigon'].includes(option.getAttribute('value') ?? ''));
+  expect(vietnam).toHaveLength(1);
+});
+
+test('after a failed timezone save, leaving the list again retries it', () => {
+  const onSetAgentTimezone = vi.fn();
+  const { rerender } = render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" onSetAgentTimezone={onSetAgentTimezone} />);
+  const select = screen.getByRole('combobox', { name: 'Your timezone' });
+  fireEvent.change(select, { target: { value: 'Asia/Tokyo' } });
+  fireEvent.blur(select);
+  rerender(<SettingsPage sessions={[]} invites={[]} timezone="UTC" onSetAgentTimezone={onSetAgentTimezone} personalTimezoneSave={{ error: 'Unknown timezone.' }} />);
+  fireEvent.blur(select);
+  expect(onSetAgentTimezone.mock.calls).toEqual([['Asia/Tokyo'], ['Asia/Tokyo']]);
 });

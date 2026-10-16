@@ -33,7 +33,7 @@ test('the add form stays closed until New saved reply, and Cancel closes it agai
   expect(screen.queryByRole('button', { name: 'New saved reply' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
   expect(screen.queryByLabelText('Title')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'New saved reply' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'New saved reply' })).toHaveFocus();
 });
 
 test('any agent adds one; the form closes once it is saved', async () => {
@@ -48,6 +48,7 @@ test('any agent adds one; the form closes once it is saved', async () => {
   fireEvent.click(add);
   expect(actions.onCreate).toHaveBeenCalledWith('Closing', 'Thanks for writing.');
   await waitFor(() => expect(screen.queryByLabelText('Title')).not.toBeInTheDocument());
+  expect(screen.getByRole('button', { name: 'New saved reply' })).toHaveFocus();
   fireEvent.click(screen.getByRole('button', { name: 'New saved reply' }));
   expect(screen.getByLabelText('Title')).toHaveValue('');
   expect(screen.getByLabelText('Text')).toHaveValue('');
