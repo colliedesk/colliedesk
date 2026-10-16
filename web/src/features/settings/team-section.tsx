@@ -30,6 +30,8 @@ export function TeamSection({ members, currentAgentId, canManage, timezone, erro
     (refocus.target === 'row' ? rows : buttons).current.get(refocus.id)?.focus();
     setRefocus(null);
   }, [refocus]);
+  // The server refuses to leave a workspace without an active admin; the button is not offered either.
+  const activeAdmins = members.filter((member) => member.role === 'admin' && member.deactivated_at === null).length;
   return (
     <section className="settings-card" aria-labelledby="team-heading">
       <div className="section-heading"><h2 id="team-heading">{messages.team}</h2><p>{messages.teamDescription}</p></div>
@@ -39,6 +41,7 @@ export function TeamSection({ members, currentAgentId, canManage, timezone, erro
           const name = nameOf(member);
           const deactivated = member.deactivated_at !== null;
           const draft = roleDraft[member.id] ?? member.role;
+          const lastAdmin = member.role === 'admin' && !deactivated && activeAdmins === 1;
           return <article key={member.id} tabIndex={-1} ref={(node) => { if (node) rows.current.set(member.id, node); else rows.current.delete(member.id); }}>
             <div>
               <span className="team-person"><strong title={member.email}>{name}{member.id === currentAgentId && <small> ({messages.teamYou})</small>}</strong>
@@ -55,7 +58,7 @@ export function TeamSection({ members, currentAgentId, canManage, timezone, erro
               <span>{deactivated ? messages.teamDeactivated : messages.teamActive}</span>
               <time>{member.last_active_at ? messages.teamLastActive(formatDate(member.last_active_at, timezone)) : messages.teamNeverSignedIn}</time>
             </div>
-            {canManage && !deactivated && confirming !== member.id &&
+            {canManage && !deactivated && !lastAdmin && confirming !== member.id &&
               <button type="button" className="danger-action" aria-label={messages.teamDeactivateName(name)} ref={(node) => { if (node) buttons.current.set(member.id, node); else buttons.current.delete(member.id); }} onClick={() => setConfirming(member.id)}>{messages.teamDeactivate}</button>}
             {canManage && deactivated &&
               <button type="button" aria-label={messages.teamReactivateName(name)} title={messages.teamReactivateHelp} onClick={() => onReactivate?.(member.id)}>{messages.teamReactivate}</button>}

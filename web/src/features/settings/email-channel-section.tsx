@@ -29,6 +29,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   const addressFeedback = useSaveFeedback(addressSave);
   const slugFeedback = useSaveFeedback(slugSave);
   const [copied, setCopied] = useState(false);
+  const [urlCopied, setUrlCopied] = useState(false);
   // Disconnecting stops inbound mail for everyone, so it asks first; Cancel is the focused default.
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   const disconnectButton = useRef<HTMLButtonElement>(null);
@@ -67,7 +68,11 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
             <small>{messages.addressNameWarning}</small>
           </form>}
         </div>}
-        {settings && !hostedAddress && <label className="invite-link"><span className="field-label">{messages.inboundURL}</span><input readOnly value={settings.inbound_url} /></label>}
+        {settings && !hostedAddress && <div className="copy-field">
+          <label className="invite-link"><span className="field-label">{messages.inboundURL}</span><input readOnly value={settings.inbound_url} /></label>
+          <span className="button-row"><button type="button" onClick={() => void navigator.clipboard.writeText(settings.inbound_url).then(() => setUrlCopied(true))}>{messages.copyInboundURL}</button>
+            {urlCopied && <span role="status">{messages.urlCopied}</span>}</span>
+        </div>}
         {channel && !hostedAddress && <p className="muted-copy">{channel.secret_set && channel.secret_rotated_at
           ? messages.inboundSecretSet(formatDate(channel.secret_rotated_at, timezone)) : messages.inboundSecretMissing}</p>}
         {canManage && !hostedAddress && createdSecret && <label className="invite-link"><span className="field-label">{messages.inboundSecret}</span>
@@ -93,8 +98,9 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
         {channel && (settings?.sending_from
           ? <p className="muted-copy">{messages.sendingFrom(settings.sending_from)}</p>
           : <p role="status" className="error-copy">{messages.cannotSend}</p>)}
-        {smtp && <p className="muted-copy"><strong>{messages.outgoingEmail}: </strong>
-          {smtp.configured ? messages.smtpConfigured(smtp.host, smtp.port, smtp.starttls, smtp.authenticated) : messages.smtpNotConfigured}</p>}
+        {smtp && (smtp.configured
+          ? <p className="muted-copy"><strong>{messages.outgoingEmail}: </strong>{messages.smtpConfigured(smtp.host, smtp.port, smtp.starttls, smtp.authenticated)}</p>
+          : <p role="note" className="warning-note"><strong>{messages.outgoingEmail}: </strong>{messages.smtpNotConfigured}</p>)}
       </div>
     </section>
   );

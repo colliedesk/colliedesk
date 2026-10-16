@@ -16,7 +16,7 @@ test('invite teammate: admin invites, teammate joins under the agent ceiling, ad
 
   await admin.getByRole('link', { name: 'Settings' }).click();
   await admin.getByLabel('Invite email').fill(teammateEmail);
-  await admin.getByLabel('Role ceiling').selectOption('agent');
+  await admin.getByLabel('Role', { exact: true }).selectOption('agent');
   await admin.getByRole('button', { name: 'Create invite' }).click();
   const inviteURL = await admin.getByRole('textbox', { name: 'One-time invite link' }).inputValue();
   expect(inviteURL).toMatch(new RegExp(`^${baseURL}/sign-in\\?token=`));

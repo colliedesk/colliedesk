@@ -21,34 +21,9 @@ test('does not offer invite creation without admin permission', () => {
   expect(screen.queryByRole('button', { name: /create invite/i })).not.toBeInTheDocument();
 });
 
-test('updates workspace and personal timezone settings', () => {
-  const onSetWorkspaceTimezone = vi.fn();
-  const onSetAgentTimezone = vi.fn();
-  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canCreateInvites canManageWorkspace
-    workspaceTimezone="UTC" timezoneOverride="Europe/London"
-    onSetWorkspaceTimezone={onSetWorkspaceTimezone} onSetAgentTimezone={onSetAgentTimezone} />);
-
-  fireEvent.change(screen.getByRole('textbox', { name: /workspace timezone/i }), { target: { value: 'America/New_York' } });
-  fireEvent.click(screen.getByRole('button', { name: /save workspace timezone/i }));
-  fireEvent.change(screen.getByRole('textbox', { name: /personal timezone override/i }), { target: { value: 'Asia/Tokyo' } });
-  fireEvent.click(screen.getByRole('button', { name: /save personal timezone/i }));
-  fireEvent.click(screen.getByRole('button', { name: /clear personal timezone/i }));
-
-  expect(onSetWorkspaceTimezone).toHaveBeenCalledWith('America/New_York');
-  expect(onSetAgentTimezone.mock.calls).toEqual([['Asia/Tokyo'], [null]]);
-});
-
 test('surfaces a failed revoke operation', () => {
   render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" error="The revoke failed." />);
   expect(screen.getByRole('alert')).toHaveTextContent('The revoke failed.');
-});
-
-test('reflects timezone values loaded after the settings page mounts', () => {
-  const { rerender } = render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canManageWorkspace />);
-  rerender(<SettingsPage sessions={[]} invites={[]} timezone="America/New_York" canManageWorkspace
-    workspaceTimezone="America/New_York" timezoneOverride="Europe/London" />);
-  expect(screen.getByRole('textbox', { name: /workspace timezone/i })).toHaveValue('America/New_York');
-  expect(screen.getByRole('textbox', { name: /personal timezone override/i })).toHaveValue('Europe/London');
 });
 
 test('shows the state of every invite and offers revoke only while it is pending', () => {
@@ -72,7 +47,7 @@ test('shows the state of every invite and offers revoke only while it is pending
 });
 
 test('a revoked or expired session is shown as such and cannot be revoked again', () => {
-  const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', label: 'Chrome', created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z' };
+  const base = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', label: 'Chrome', current: false, created_at: '2026-10-14T00:00:00Z', last_seen_at: '2026-10-14T00:00:00Z' };
   const future = new Date(Date.now() + 600_000).toISOString();
   render(<SettingsPage invites={[]} timezone="UTC" sessions={[
     { ...base, id: '11111111-1111-4111-8111-111111111111', label: 'Active device', expires_at: future, revoked_at: null },
@@ -93,38 +68,108 @@ test('shows why an invite was refused next to the invite form', () => {
   expect(screen.getByRole('alert')).toHaveTextContent(/trial allows 10 agents/i);
 });
 
-test('a pending timezone save disables its button and reads Saving…', () => {
+test('shows the loading status while settings data is pending, without the forms', () => {
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" loading canCreateInvites />);
+  expect(screen.getByRole('status')).toHaveTextContent('Loading workspace…');
+  expect(screen.queryByRole('button', { name: /create invite/i })).not.toBeInTheDocument();
+});
+
+const sessionBase = { agent_id: '55555555-5555-4555-8555-555555555555', agent_email: 'sam@example.com', created_at: '2026-10-14T00:00:00Z',
+  last_seen_at: '2026-10-14T00:00:00Z', expires_at: new Date(Date.now() + 600_000).toISOString(), revoked_at: null, current: false };
+
+test('settings is split into your account and the workspace, with a link to every section', () => {
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canManageWorkspace canCreateInvites
+    teamSection={<section aria-labelledby="team-heading"><h2 id="team-heading">Team</h2></section>} exportSection={<p>export</p>} />);
+  const nav = screen.getByRole('navigation', { name: 'Settings sections' });
+  const links = within(nav).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')]);
+  expect(links).toEqual([
+    ['Profile', '#profile-heading'], ['Preferences', '#preferences-heading'],
+    ['General', '#general-heading'], ['Team', '#team-heading'], ['Invites', '#invites-heading'], ['Sessions', '#sessions-heading'],
+    ['Export all data', '#export-heading'],
+  ]);
+  for (const [, href] of links) expect(document.getElementById(href!.slice(1))).not.toBeNull();
+});
+
+test('an agent gets no workspace-only sections or links', () => {
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" workspaceTimezone="Europe/Berlin" />);
+  const nav = screen.getByRole('navigation', { name: 'Settings sections' });
+  expect(within(nav).queryByRole('link', { name: 'General' })).not.toBeInTheDocument();
+  expect(within(nav).queryByRole('link', { name: 'Export all data' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('combobox', { name: 'Workspace timezone' })).not.toBeInTheDocument();
+});
+
+test('invites sit right after the team they add to', () => {
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canCreateInvites
+    teamSection={<section aria-labelledby="team-heading"><h2 id="team-heading">Team</h2></section>} />);
+  const team = screen.getByRole('region', { name: 'Team' });
+  expect(team.nextElementSibling).toBe(screen.getByRole('region', { name: 'Invites' }));
+});
+
+test('theme and desktop notifications live together under Preferences', () => {
+  vi.stubGlobal('Notification', class { static permission = 'default'; static requestPermission = vi.fn(); });
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" />);
+  const preferences = screen.getByRole('region', { name: 'Preferences' });
+  expect(within(preferences).getByRole('radio', { name: 'Dark' })).toBeInTheDocument();
+  expect(within(preferences).getByRole('checkbox', { name: /desktop notifications/i })).toBeInTheDocument();
+  vi.unstubAllGlobals();
+});
+
+test('choosing a workspace timezone saves it at once, no Save button', () => {
   const onSetWorkspaceTimezone = vi.fn();
-  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canManageWorkspace onSetWorkspaceTimezone={onSetWorkspaceTimezone}
-    workspaceTimezoneSave={{ pending: true }} />);
-  const button = screen.getByRole('button', { name: 'Saving…' });
-  expect(button).toBeDisabled();
-  fireEvent.click(button);
-  expect(onSetWorkspaceTimezone).not.toHaveBeenCalled();
-  expect(screen.getByRole('button', { name: /save personal timezone/i })).toBeEnabled();
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canManageWorkspace workspaceTimezone="UTC" onSetWorkspaceTimezone={onSetWorkspaceTimezone} />);
+  const general = screen.getByRole('region', { name: 'General' });
+  fireEvent.change(within(general).getByRole('combobox', { name: 'Workspace timezone' }), { target: { value: 'America/New_York' } });
+  expect(onSetWorkspaceTimezone).toHaveBeenCalledWith('America/New_York');
+  expect(within(general).queryByRole('button')).not.toBeInTheDocument();
 });
 
-test('a saved timezone shows Saved next to its form and clears when the field is edited', () => {
-  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canManageWorkspace workspaceTimezone="UTC"
-    workspaceTimezoneSave={{ saved: true }} />);
-  expect(screen.getByRole('status')).toHaveTextContent('Saved');
-  expect(screen.getByRole('status').closest('label')).toContainElement(screen.getByRole('textbox', { name: /workspace timezone/i }));
-  fireEvent.change(screen.getByRole('textbox', { name: /workspace timezone/i }), { target: { value: 'Asia/Tokyo' } });
-  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+test('your timezone follows the workspace until you choose one, and choosing the workspace again clears it', () => {
+  const onSetAgentTimezone = vi.fn();
+  render(<SettingsPage sessions={[]} invites={[]} timezone="Europe/London" workspaceTimezone="Europe/Berlin" timezoneOverride="Europe/London" onSetAgentTimezone={onSetAgentTimezone} />);
+  const select = within(screen.getByRole('region', { name: 'Profile' })).getByRole('combobox', { name: 'Your timezone' });
+  expect(select).toHaveValue('Europe/London');
+  expect(within(select).getByRole('option', { name: 'Same as workspace (Europe/Berlin)' })).toBeInTheDocument();
+  fireEvent.change(select, { target: { value: 'Asia/Tokyo' } });
+  fireEvent.change(select, { target: { value: '' } });
+  expect(onSetAgentTimezone.mock.calls).toEqual([['Asia/Tokyo'], [null]]);
 });
 
-test('a personal timezone save shows Saving…, Saved and a failure next to its own form', () => {
+test('a stored timezone this browser does not list is still shown as chosen', () => {
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" timezoneOverride="Mars/Olympus_Mons" />);
+  expect(screen.getByRole('combobox', { name: 'Your timezone' })).toHaveValue('Mars/Olympus_Mons');
+});
+
+test('a timezone save shows Saving…, Saved or the failure next to its own control', () => {
   const { rerender } = render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ pending: true }} />);
-  expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: /clear personal timezone/i })).toBeDisabled();
+  expect(screen.getByRole('combobox', { name: 'Your timezone' })).toBeDisabled();
+  expect(screen.getByText('Saving…')).toBeInTheDocument();
   rerender(<SettingsPage sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ saved: true }} />);
   expect(screen.getByRole('status')).toHaveTextContent('Saved');
   rerender(<SettingsPage sessions={[]} invites={[]} timezone="UTC" personalTimezoneSave={{ error: 'Unknown timezone.' }} />);
   expect(screen.getByRole('alert')).toHaveTextContent('Unknown timezone.');
 });
 
-test('shows the loading status while settings data is pending, without the forms', () => {
-  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" loading canCreateInvites />);
-  expect(screen.getByRole('status')).toHaveTextContent('Loading workspace…');
-  expect(screen.queryByRole('button', { name: /create invite/i })).not.toBeInTheDocument();
+test('a session is named by its browser and system, and this device is marked with Sign out instead of Revoke', () => {
+  const onRevokeSession = vi.fn();
+  render(<SettingsPage invites={[]} timezone="UTC" onRevokeSession={onRevokeSession} sessions={[
+    { ...sessionBase, id: '11111111-1111-4111-8111-111111111111', current: true,
+      label: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36' },
+    { ...sessionBase, id: '22222222-2222-4222-8222-222222222222',
+      label: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1' },
+    { ...sessionBase, id: '33333333-3333-4333-8333-333333333333', label: 'Cloud sign-in' },
+  ]} />);
+  const sessions = screen.getByRole('region', { name: 'Sessions' });
+  const here = within(sessions).getByText('Chrome on Linux').closest('article') as HTMLElement;
+  expect(here).toHaveTextContent('This device');
+  fireEvent.click(within(here).getByRole('button', { name: 'Sign out' }));
+  expect(onRevokeSession).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
+  const phone = within(sessions).getByText('Safari on iPhone').closest('article') as HTMLElement;
+  expect(phone).not.toHaveTextContent('This device');
+  expect(within(phone).getByRole('button', { name: 'Revoke' })).toBeInTheDocument();
+  expect(within(sessions).getByText('Cloud sign-in')).toBeInTheDocument();
+});
+
+test('an invite asks for a role, not a ceiling', () => {
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" canCreateInvites />);
+  expect(screen.getByRole('combobox', { name: 'Role' })).toHaveValue('agent');
 });

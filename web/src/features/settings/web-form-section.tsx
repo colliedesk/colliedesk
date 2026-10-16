@@ -26,15 +26,15 @@ export function WebFormSection({ settings, canManage, save, onSave }: WebFormSec
     <section className="settings-card" aria-labelledby="web-form-heading">
       <div className="section-heading"><h2 id="web-form-heading">{messages.webForm}</h2><p>{messages.webFormDescription}</p></div>
       <div className="settings-body">
-        <p role="status"><strong>{state}</strong></p>
+        <p role="status" className="saved-state" data-on={settings?.enabled ? 'true' : 'false'}>{state}</p>
         {canManage
-          ? <form onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) onSave?.(enabled, parseOrigins(origins)); }}>
+          ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) onSave?.(enabled, parseOrigins(origins)); }}>
               <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => { feedback.touch(); setEnabled(event.target.checked); }} /><span>{messages.webFormAccept}</span></label>
               <label className="field"><span>{messages.webFormOrigins}</span>
                 <textarea rows={3} value={origins} placeholder="https://example.com" onChange={(event) => { feedback.touch(); setOrigins(event.target.value); }} /></label>
-              <small>{messages.webFormOriginsHelp}</small>
-              <button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(messages.saveWebForm)}</button>
-              {feedback.status}
+              <small className="muted-copy">{messages.webFormOriginsHelp}</small>
+              <span className="button-row"><button className="primary-action" type="submit" disabled={feedback.pending}>{feedback.saveLabel(messages.saveWebForm)}</button>
+                {feedback.status}</span>
             </form>
           : <ul className="muted-copy">{(settings?.allowed_origins ?? []).map((origin) => <li key={origin}>{origin}</li>)}</ul>}
         {settings && <label className="invite-link"><span className="field-label">{messages.webFormSubmitUrl}</span>

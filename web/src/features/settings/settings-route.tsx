@@ -27,7 +27,8 @@ export function SettingsRoute() {
     onSuccess: () => { for (const key of ['agents', 'sessions', 'invites', 'billing', 'conversations']) void refresh(key); },
   });
   const revokeInvite = useMutation({ mutationFn: api.revokeInvite, onSuccess: () => refresh('invites') });
-  const revokeSession = useMutation({ mutationFn: api.revokeSession, onSuccess: () => refresh('sessions') });
+  // Revoking this device's own session signs it out; reloading me shows the signed-out screen.
+  const revokeSession = useMutation({ mutationFn: api.revokeSession, onSuccess: () => { void refresh('sessions'); void refresh('me'); } });
   const workspaceTimezone = useMutation({ mutationFn: api.updateWorkspaceTimezone, onSuccess: () => refresh('me') });
   const agentTimezone = useMutation({ mutationFn: api.updateAgentTimezone, onSuccess: () => refresh('me') });
   const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });

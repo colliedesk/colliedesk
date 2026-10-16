@@ -40,7 +40,8 @@ and can fix it before sending. If a reply (not a private note) still contains `{
 
 Open **Settings → Saved replies**.
 
-- **Add**: type a **Title** and the **Text**, then select **Add saved reply**.
+- **Add**: select **New saved reply**, type a **Title** and the **Text**, then select **Add saved reply**
+  (or **Cancel**).
 - **Edit**: select **Edit** next to a reply, change it, then **Save saved reply**. Select **Cancel** to
   leave it as it was. The change applies for the whole team at once. If a teammate saved the same
   reply after you opened it, your edit is refused (nothing is overwritten) with "changed by someone

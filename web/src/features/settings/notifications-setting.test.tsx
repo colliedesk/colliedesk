@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { NotificationsSection } from './notifications-section';
+import { NotificationsSetting } from './notifications-setting';
 
 const request = vi.fn();
 class FakeNotification {
@@ -20,7 +20,7 @@ const box = () => screen.getByRole('checkbox', { name: /desktop notifications/i 
 
 test('off by default; ticking it asks the browser only on the click and stays ticked once granted', async () => {
   request.mockImplementation(async () => { FakeNotification.permission = 'granted'; return 'granted'; });
-  render(<NotificationsSection />);
+  render(<NotificationsSetting />);
   expect(box()).not.toBeChecked();
   expect(request).not.toHaveBeenCalled();
   fireEvent.click(box());
@@ -31,7 +31,7 @@ test('off by default; ticking it asks the browser only on the click and stays ti
 test('unticking keeps the browser permission and does not ask again', () => {
   FakeNotification.permission = 'granted';
   localStorage.setItem('colliedesk.desktop-notifications', 'on');
-  render(<NotificationsSection />);
+  render(<NotificationsSetting />);
   expect(box()).toBeChecked();
   fireEvent.click(box());
   expect(box()).not.toBeChecked();
@@ -40,7 +40,7 @@ test('unticking keeps the browser permission and does not ask again', () => {
 
 test('a declined prompt leaves it unticked', async () => {
   request.mockResolvedValue('denied');
-  render(<NotificationsSection />);
+  render(<NotificationsSetting />);
   fireEvent.click(box());
   await waitFor(() => expect(request).toHaveBeenCalled());
   expect(box()).not.toBeChecked();
@@ -48,13 +48,13 @@ test('a declined prompt leaves it unticked', async () => {
 
 test('a blocked browser disables the box and says how to unblock', () => {
   FakeNotification.permission = 'denied';
-  render(<NotificationsSection />);
+  render(<NotificationsSetting />);
   expect(box()).toBeDisabled();
   expect(screen.getByText(/site settings/)).toBeInTheDocument();
 });
 
 test('a browser without notifications shows nothing', () => {
   vi.stubGlobal('Notification', undefined);
-  const { container } = render(<NotificationsSection />);
+  const { container } = render(<NotificationsSetting />);
   expect(container).toBeEmptyDOMElement();
 });

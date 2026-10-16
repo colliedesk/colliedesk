@@ -23,6 +23,8 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
   const [problem, setProblem] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [stale, setStale] = useState(false);
+  // The add form is closed until asked for, so the list is what the section shows first.
+  const [adding, setAdding] = useState(false);
   // run keeps the form open with the server's reason when an action is refused.
   const run = async (action: () => Promise<unknown>, done: () => void) => {
     setBusy(true);
@@ -44,11 +46,15 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
       <div className="settings-body">
         {problem && <p role="alert" className="error-copy">{problem}</p>}
         {stale && <button type="button" onClick={() => { setEditing(null); setProblem(undefined); setStale(false); onReload?.(); }}>{messages.reload}</button>}
-        {!editing && <form className="saved-reply-form" aria-label={messages.addSavedReply}
-          onSubmit={(event) => { event.preventDefault(); if (!busy) void run(() => onCreate(title, body), () => { setTitle(''); setBody(''); }); }}>
-          <label className="field"><span>{messages.savedReplyTitle}</span><input value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} /></label>
+        {!editing && !adding && <button type="button" className="new-saved-reply" onClick={() => { setProblem(undefined); setAdding(true); }}>{messages.newSavedReply}</button>}
+        {!editing && adding && <form className="saved-reply-form" aria-label={messages.addSavedReply}
+          onSubmit={(event) => { event.preventDefault(); if (!busy) void run(() => onCreate(title, body), () => { setTitle(''); setBody(''); setAdding(false); }); }}>
+          <label className="field"><span>{messages.savedReplyTitle}</span><input autoFocus value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} /></label>
           <label className="field"><span>{messages.savedReplyText}</span><textarea rows={4} value={body} maxLength={20000} onChange={(event) => setBody(event.target.value)} /></label>
-          <button className="primary-action" type="submit" disabled={busy || !title.trim() || !body.trim()}>{messages.addSavedReply}</button>
+          <div className="saved-reply-actions">
+            <button className="primary-action" type="submit" disabled={busy || !title.trim() || !body.trim()}>{messages.addSavedReply}</button>
+            <button type="button" disabled={busy} onClick={() => { setAdding(false); setProblem(undefined); }}>{messages.cancel}</button>
+          </div>
         </form>}
         {replies.length === 0 ? <p className="empty-copy">{messages.noSavedReplies}</p> : <ul className="saved-reply-list">{replies.map((reply) => (
           <li key={reply.id}>
