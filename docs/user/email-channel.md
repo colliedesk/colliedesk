@@ -255,7 +255,8 @@ on their side.
 - The reply goes to the conversation contact in **To** and to every Cc address. There is no Bcc.
   The timeline shows **Cc: …** under the reply, and under customer mail that copied someone.
 - At most 10 addresses per reply. Plain addresses only (`name@example.com`, no display names). You
-  cannot copy your own support address, the forwarding address or the platform sending domain.
+  cannot copy your own support address (also in its `support+…@` form), the forwarding address or
+  the platform sending domain.
 - Private notes cannot be copied: they never leave your team.
 - **Retry delivery** sends to the same Cc list again.
 - A copied address that does not exist never stops the reply to the customer. The reply shows

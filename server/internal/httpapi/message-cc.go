@@ -53,9 +53,9 @@ func (a *API) cleanCC(ctx context.Context, workspaceID, kind string, raw []strin
 }
 
 // isOwnAddress reports whether mail to the address would arrive back in a workspace: the support
-// address, or anything on the hosted forwarding or platform sending domains.
+// address or a plus form of it, or anything on the hosted forwarding or platform sending domains.
 func (a *API) isOwnAddress(address string, channel *domain.EmailChannel) bool {
-	if channel != nil && strings.EqualFold(channel.SupportAddress, address) {
+	if channel != nil && email.SameMailbox(address, channel.SupportAddress) {
 		return true
 	}
 	config := a.config.Email

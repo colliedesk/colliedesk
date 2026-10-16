@@ -248,11 +248,11 @@ func inboundVia(in email.Inbound) string {
 }
 
 // copiedAddresses are the other people on the customer's Cc line: not the sender, not the support
-// address (the mail reached us through it).
+// address or a plus form of it (the mail reached us through it).
 func copiedAddresses(in email.Inbound, supportAddress string) []string {
 	var kept []string
 	for _, address := range in.Cc {
-		if address != in.FromAddress && !strings.EqualFold(address, supportAddress) {
+		if address != in.FromAddress && !email.SameMailbox(address, supportAddress) {
 			kept = append(kept, address)
 		}
 	}

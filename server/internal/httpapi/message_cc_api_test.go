@@ -50,7 +50,8 @@ func newCCDesk(t *testing.T) ccDesk {
 	connectEmail(t, api, other, "support@other-cc.example.com")
 	result := inboundOK(t, api, secret, mail([]string{
 		"From: Ada <ada@customer.example>", "To: support@cc.example.com",
-		"Cc: Boss <Boss@Customer.example>, support@cc.example.com, support@cc." + hostedDomain + ", reply+0123456789abcdef0123456789abcdef@" + mailFromDomain,
+		"Cc: Boss <Boss@Customer.example>, support@cc.example.com, Support+r-0123abcd@CC.example.com, support@cc." + hostedDomain +
+			", reply+0123456789abcdef0123456789abcdef@" + mailFromDomain,
 		"Subject: Invoice", "Message-ID: <cc-start@customer.example>",
 	}, "Please help."))
 	if result.ConversationID == nil {
@@ -156,7 +157,8 @@ func TestCCListIsBoundedAndEveryAddressIsPlain(t *testing.T) {
 func TestCCRefusesOurOwnAddresses(t *testing.T) {
 	d := newCCDesk(t)
 	for _, own := range []string{
-		"support@cc.example.com", "Support@CC.example.com", "support@cc." + hostedDomain, "anything@other." + hostedDomain,
+		"support@cc.example.com", "Support@CC.example.com", "support+r-0123abcd@cc.example.com", "Support+anything@CC.example.com",
+		"support@cc." + hostedDomain, "anything@other." + hostedDomain,
 		"reply+0123456789abcdef0123456789abcdef@" + mailFromDomain, "x@" + mailFromDomain,
 	} {
 		if got := d.reply(t, []string{own}); got.Code != http.StatusBadRequest {
@@ -202,7 +204,7 @@ func TestInboundMailKeepsItsCcWithoutOurOwnAddresses(t *testing.T) {
 	d := newCCDesk(t)
 	first := d.messages(t)[0]
 	if first.Email == nil || fmt.Sprint(first.Email.CC) != "[boss@customer.example]" {
-		t.Fatalf("email.cc = %+v, want only boss (support address, hosted address and reply alias are ours)", first.Email)
+		t.Fatalf("email.cc = %+v, want only boss (support address and its plus form, hosted address and reply alias are ours)", first.Email)
 	}
 }
 

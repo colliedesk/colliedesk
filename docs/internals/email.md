@@ -157,7 +157,8 @@ unchanged; the workspace's Support address stays the identity customers see.
   reads it from the message, so a retry or a re-sent lease goes to the same people. Envelope
   recipients are the contact plus `cc`; the header is `Cc:`. There is no Bcc anywhere.
 - Validation is in `httpapi/message-cc.go`: plain addr-spec, at most 10, lowercase, de-duplicated,
-  refuses the workspace support address and anything under `HOSTED_MAIL_DOMAIN` or `MAIL_FROM_DOMAIN`
+  refuses the workspace support address and its plus forms (`support+r-…@`, `email.SameMailbox`)
+  and anything under `HOSTED_MAIL_DOMAIN` or `MAIL_FROM_DOMAIN`
   (a Cc to those would loop the reply back in). The store drops the conversation contact.
   `email.Compose` re-checks every address, so a stored value can never write a header line.
 - A Cc address never fails the reply to the contact. The worker leaves out a stored address that is
