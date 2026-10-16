@@ -19,6 +19,9 @@ expect '<refused>' cloud-commit ''
 expect '<refused>' cloud-commit edge-
 expect '<refused>' cloud-commit 'edge-f7f0;rm'
 expect '<refused>' cloud-commit sha-f7f0e0a72c9c
+# A second line could smuggle a workflow command (::stop-commands::) into the log.
+expect '<refused>' cloud-commit "$(printf 'edge-f7f0e0a72c9c\n::stop-commands::x')"
+expect '<refused>' cloud-commit "$(printf 'v0.0.1\nv0.0.2')"
 
 expect v0.0.1 next-tag
 expect v0.0.2 next-tag v0.0.1

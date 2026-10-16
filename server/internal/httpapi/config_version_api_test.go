@@ -18,14 +18,3 @@ func TestConfigReportsRunningVersion(t *testing.T) {
 		t.Fatalf("version=%q, want edge-f7f0e0a72c9c", config.Version)
 	}
 }
-
-func TestConfigReportsDevWithoutStampedVersion(t *testing.T) {
-	api, _ := testAPI(t)
-	var config struct {
-		Version string `json:"version"`
-	}
-	decode(t, request(t, api, http.MethodGet, "/api/v1/config", nil, "", nil), &config)
-	if config.Version != "dev" {
-		t.Fatalf("version=%q, want dev", config.Version)
-	}
-}

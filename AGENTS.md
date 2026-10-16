@@ -94,6 +94,7 @@ nothing makes one on a schedule. A release is cut only when the owner asks: run
 releases the commit Colliedesk Cloud runs (`version` in `GET /api/v1/config`), never the head of
 `main`, as the next `v0.0.N`, and fails when Cloud runs nothing newer than the last release.
 Release notes are generated from merged pull request titles, so write titles a user can read.
+A run that failed after creating its tag is finished by running Release again.
 `latest` follows the newest release.
 Never call a release, page or doc "beta", and never tag `v0.1.0` or higher, until the HC Labs
 owner announces beta. Two gates refuse other tags: the repository tag ruleset

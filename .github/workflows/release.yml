@@ -37,11 +37,15 @@ jobs:
         name: Pick the release commit and tag
         env:
           CLOUD_CONFIG_URL: https://app.colliedesk.com/api/v1/config
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$GITHUB_EVENT_NAME" != workflow_dispatch ]; then
             echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
             echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::Run Release from main, not $GITHUB_REF."; exit 1
           fi
           version=$(curl -fsS --max-time 20 "$CLOUD_CONFIG_URL" | jq -r '.version // empty')
           ref=$(sh .github/scripts/release-next.sh cloud-commit "$version")
@@ -50,6 +54,14 @@ jobs:
           git merge-base --is-ancestor "$sha" origin/main || {
             echo "::error::Cloud runs $sha, which is not on main."; exit 1; }
           last=$(git tag -l 'v0.0.*' --sort=-v:refname | head -n 1)
+          # A run that tagged this commit but failed before the GitHub release finishes it.
+          if [ -n "$last" ] && [ "$(git rev-parse "$last^{commit}")" = "$sha" ] &&
+            ! gh release view "$last" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Finishing $last: tagged at $sha, no GitHub release yet"
+            echo "tag=$last" >> "$GITHUB_OUTPUT"
+            echo "sha=$sha" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ -n "$last" ] && git merge-base --is-ancestor "$sha" "$last"; then
             echo "::error::Cloud runs $sha, already part of $last. Deploy a newer main build to Cloud first."
             exit 1
@@ -101,6 +113,18 @@ jobs:
         env:
           TAG: ${{ steps.target.outputs.tag }}
         run: sh tests/image-boot-test.sh colliedesk:release "$TAG"
+      # Another release may have taken this number while the image built.
+      - name: Require the tag to be free or already this commit
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          peeled=$(git ls-remote origin "refs/tags/$TAG^{}" | awk '{print $1}')
+          direct=$(git ls-remote origin "refs/tags/$TAG" | awk '{print $1}')
+          commit=${peeled:-$direct}
+          if [ -n "$commit" ] && [ "$commit" != "$SHA" ]; then
+            echo "::error::$TAG already points at $commit, not $SHA. Run Release again."; exit 1
+          fi
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
@@ -109,6 +133,8 @@ jobs:
       - id: metadata
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
+          # git context reads the checked-out release commit, not the commit the run started on.
+          context: git
           images: ghcr.io/colliedesk/colliedesk
           flavor: latest=false
           tags: |
@@ -140,6 +166,9 @@ jobs:
           TAG: ${{ steps.target.outputs.tag }}
           SHA: ${{ steps.target.outputs.sha }}
         run: |
+          if git ls-remote --exit-code origin "refs/tags/$TAG" >/dev/null; then
+            echo "$TAG already exists at $SHA"; exit 0
+          fi
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             tag -a "$TAG" -m "Colliedesk $TAG (alpha)" "$SHA"
           git push origin "refs/tags/$TAG"
@@ -150,4 +179,5 @@ jobs:
         run: |
           prerelease=
           case "$TAG" in *-*) prerelease=--prerelease ;; esac
+          if gh release view "$TAG" >/dev/null 2>&1; then echo "$TAG is already released"; exit 0; fi
           gh release create "$TAG" --verify-tag --generate-notes $prerelease
