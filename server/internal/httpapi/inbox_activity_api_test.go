@@ -21,6 +21,25 @@ type activityBody struct {
 		Subject    string    `json:"subject"`
 		AssignedAt time.Time `json:"assigned_at"`
 	} `json:"assigned_to_me"`
+	Updated []updatedActivity `json:"updated"`
+}
+
+type updatedActivity struct {
+	ID          string     `json:"id"`
+	Subject     string     `json:"subject"`
+	ContactName string     `json:"contact_name"`
+	AssigneeID  *string    `json:"assignee_id"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	IncomingAt  *time.Time `json:"incoming_at"`
+}
+
+func updatedByID(items []updatedActivity, id string) (updatedActivity, bool) {
+	for _, item := range items {
+		if item.ID == id {
+			return item, true
+		}
+	}
+	return updatedActivity{}, false
 }
 
 func inboxActivity(t *testing.T, api http.Handler, token string, since time.Time) activityBody {
@@ -212,5 +231,82 @@ func TestInboxActivityRejectsBadCursorAndAnonymous(t *testing.T) {
 	}
 	if response := request(t, api, http.MethodGet, "/api/v1/inbox/activity", nil, "", nil); response.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous status=%d, want 401", response.Code)
+	}
+}
+
+func TestInboxActivityReportsACustomerReplyOnAnExistingConversation(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "Activity Reply", "admin@activity-reply.example.com")
+	secret := connectEmail(t, api, admin, "support@activity-reply.example.com")
+	first := inboundOK(t, api, secret, mail([]string{"From: Ada <ada@customer.example>", "To: support@activity-reply.example.com", "Subject: Printer", "Message-ID: <first@customer.example>"}, "It is on fire."))
+	cursor := inboxActivity(t, api, admin, time.Time{}).Now
+
+	reply := inboundOK(t, api, secret, mail([]string{"From: Ada <ada@customer.example>", "To: support@activity-reply.example.com", "Subject: Re: Printer",
+		"Message-ID: <second@customer.example>", "In-Reply-To: <first@customer.example>", "References: <first@customer.example>"}, "Still on fire."))
+	if reply.ConversationID == nil || *reply.ConversationID != *first.ConversationID {
+		t.Fatalf("reply was not threaded: %+v", reply)
+	}
+
+	got := inboxActivity(t, api, admin, cursor)
+	item, found := updatedByID(got.Updated, *first.ConversationID)
+	if len(got.Updated) != 1 || !found || item.IncomingAt == nil || item.Subject != "Printer" || item.ContactName != "Ada" || item.UpdatedAt.IsZero() {
+		t.Fatalf("updated = %+v, want the replied conversation with an incoming timestamp", got.Updated)
+	}
+}
+
+func TestInboxActivityReportsAnotherAgentsChangeWithoutAnIncomingMark(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "Activity Change", "admin@activity-change.example.com")
+	_, inviteURL := createContractInvite(t, api, admin, "b@activity-change.example.com", "agent")
+	agentB := redeemLabelled(t, api, inviteURL, "Agent B")
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Grace", "email": "grace@activity-change.example.com"})
+	conversation := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Refund"})
+	cursor := inboxActivity(t, api, admin, time.Time{}).Now
+
+	if response := request(t, api, http.MethodPatch, "/api/v1/conversations/"+conversation, map[string]any{"status": "resolved"}, agentB, nil); response.Code != http.StatusOK {
+		t.Fatalf("resolve status=%d body=%s", response.Code, response.Body.String())
+	}
+	if response := request(t, api, http.MethodPost, "/api/v1/conversations/"+conversation+"/messages", map[string]any{"kind": "note", "body": "Refunded."}, agentB, nil); response.Code != http.StatusCreated {
+		t.Fatalf("note status=%d body=%s", response.Code, response.Body.String())
+	}
+
+	got := inboxActivity(t, api, admin, cursor)
+	item, found := updatedByID(got.Updated, conversation)
+	if !found || item.IncomingAt != nil {
+		t.Fatalf("updated = %+v, want the changed conversation with no incoming timestamp (nothing to notify)", got.Updated)
+	}
+}
+
+func TestInboxActivityUpdatedStaysInsideTheWorkspaceAndTheLookback(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	tokenA := createSession(t, api, service, "Activity Upd Alpha", "admin@activity-upd-alpha.example.com")
+	tokenB := createSession(t, api, service, "Activity Upd Beta", "admin@activity-upd-beta.example.com")
+	contactA := create(t, api, tokenA, "/api/v1/contacts", map[string]any{"name": "Alpha", "email": "alpha@activity-upd-alpha.example.com"})
+	contactB := create(t, api, tokenB, "/api/v1/contacts", map[string]any{"name": "Beta", "email": "beta@activity-upd-beta.example.com"})
+	conversationA := create(t, api, tokenA, "/api/v1/conversations", map[string]any{"contact_id": contactA, "subject": "Alpha only"})
+	conversationB := create(t, api, tokenB, "/api/v1/conversations", map[string]any{"contact_id": contactB, "subject": "Beta only"})
+	cursor := inboxActivity(t, api, tokenA, time.Time{}).Now
+	if _, err := pool.Exec(context.Background(), `INSERT INTO messages(workspace_id,conversation_id,kind,body)
+		SELECT workspace_id,id,'incoming','Hello' FROM conversations WHERE id=$1::uuid`, conversationB); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(context.Background(), `UPDATE conversations SET updated_at=now() WHERE id=$1::uuid`, conversationB); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := inboxActivity(t, api, tokenA, cursor); func() bool { _, found := updatedByID(got.Updated, conversationB); return found }() {
+		t.Fatalf("workspace A saw workspace B update: %+v", got.Updated)
+	}
+	if got := inboxActivity(t, api, tokenB, cursor); func() bool {
+		item, found := updatedByID(got.Updated, conversationB)
+		return !found || item.IncomingAt == nil
+	}() {
+		t.Fatalf("workspace B own update missing: %+v", got.Updated)
+	}
+	if _, err := pool.Exec(context.Background(), `UPDATE conversations SET updated_at=now()-interval '10 minutes' WHERE id=$1::uuid`, conversationA); err != nil {
+		t.Fatal(err)
+	}
+	if got := inboxActivity(t, api, tokenA, time.Now().UTC()); func() bool { _, found := updatedByID(got.Updated, conversationA); return found }() {
+		t.Fatalf("an update older than the lookback was listed: %+v", got.Updated)
 	}
 }

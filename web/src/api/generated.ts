@@ -379,7 +379,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description What changed in the inbox after `since`: conversations created, and conversations another agent assigned to the caller. Each list holds at most 50 items, newest first. Send the returned `now` as the next `since`. A list can repeat an item from the previous call (a short lookback covers conversations that committed late), so the client removes duplicates by id. Without `since` both lists are empty and `now` is the first cursor. */
+        /** @description What changed in the inbox after `since`: conversations created, conversations another agent assigned to the caller, and conversations that changed in any way (a new customer message, a status, assignee, priority or tag change, a reply or note). Each list holds at most 50 items, newest first. Send the returned `now` as the next `since`. A list can repeat an item from the previous call (a short lookback covers conversations that committed late), so the client removes duplicates by id (`updated` items by `id` and `updated_at`). Without `since` the lists are empty and `now` is the first cursor. */
         get: operations["getInboxActivity"];
         put?: never;
         post?: never;
@@ -1069,6 +1069,21 @@ export interface components {
                 contact_name: string;
                 /** Format: date-time */
                 assigned_at: string;
+            }[];
+            updated: {
+                /** Format: uuid */
+                id: string;
+                subject: string;
+                contact_name: string;
+                /** Format: uuid */
+                assignee_id: string | null;
+                /** Format: date-time */
+                updated_at: string;
+                /**
+                 * Format: date-time
+                 * @description Time of the newest customer message inside the polled window, or null when the change was not a customer message.
+                 */
+                incoming_at: string | null;
             }[];
         };
         Message: {
