@@ -76,7 +76,7 @@ func TestSendingIdentityFollowsDomainVerification(t *testing.T) {
 	}{
 		{"any policy", "", `"Outbound Desk" <support@outbound.example.com>`, "support@outbound.example.com", email.FromPolicyAny},
 		{"verified domain", "now()", `"Outbound Desk" <support@outbound.example.com>`, "support@outbound.example.com", email.FromPolicyVerified},
-		{"unverified domain", "", `"Outbound Desk via Colliedesk" <reply+TOKEN@mail.colliedesk.test>`, "reply+TOKEN@mail.colliedesk.test", email.FromPolicyVerified},
+		{"unverified domain", "", `"Outbound Desk via Colliedesk" <reply+TOKEN-REPLY@mail.colliedesk.test>`, "reply+TOKEN-REPLY@mail.colliedesk.test", email.FromPolicyVerified},
 	}
 	for _, item := range cases {
 		t.Run(item.name, func(t *testing.T) {
@@ -99,14 +99,20 @@ func TestSendingIdentityFollowsDomainVerification(t *testing.T) {
 			if err := f.pool.QueryRow(context.Background(), `SELECT email_reply_token FROM conversations WHERE id=$1`, f.conversationID).Scan(&token); err != nil {
 				t.Fatal(err)
 			}
+			var messageID string
+			if err := f.pool.QueryRow(context.Background(), `SELECT email_message_id FROM messages WHERE id=$1`, reply.ID).Scan(&messageID); err != nil {
+				t.Fatal(err)
+			}
+			// The address names the reply by the first 12 hex digits of its random Message-ID.
+			replace := strings.NewReplacer("TOKEN", token, "REPLY", strings.TrimPrefix(messageID, "cd.")[:12])
 			parsed, err := mail.ReadMessage(strings.NewReader(received[0].Data))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got, want := parsed.Header.Get("From"), strings.ReplaceAll(item.wantFrom, "TOKEN", token); got != want {
+			if got, want := parsed.Header.Get("From"), replace.Replace(item.wantFrom); got != want {
 				t.Errorf("From=%q, want %q", got, want)
 			}
-			if got, want := received[0].From, strings.ReplaceAll(item.wantEnvelope, "TOKEN", token); got != want {
+			if got, want := received[0].From, replace.Replace(item.wantEnvelope); got != want {
 				t.Errorf("envelope sender=%q, want %q", got, want)
 			}
 			if got, want := parsed.Header.Get("Reply-To"), `"Outbound Desk" <support+r-`+token+`@outbound.example.com>`; got != want {

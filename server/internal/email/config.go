@@ -29,10 +29,13 @@ type Config struct {
 	// HostedMailDomain turns on the hosted cloud address support@<workspace slug>.<HostedMailDomain>.
 	// Empty (the self-host default) leaves it off. The same PlatformInboundSecret authenticates its forwarder.
 	HostedMailDomain string
+	// ResendWebhookSecret turns on POST /api/v1/webhooks/resend, which marks replies the relay could not
+	// deliver. Relays such as Resend own the envelope sender, so their bounces never reach MAIL_FROM_DOMAIN.
+	ResendWebhookSecret string
 }
 
 // ConfigFromEnv reads SMTP_*, EMAIL_FROM_POLICY (verified), MAIL_FROM_DOMAIN, MAIL_FROM_INBOUND_SECRET and
-// EMAIL_TRUSTED_AUTHSERV_ID and HOSTED_MAIL_DOMAIN.
+// EMAIL_TRUSTED_AUTHSERV_ID, HOSTED_MAIL_DOMAIN and RESEND_WEBHOOK_SECRET.
 func ConfigFromEnv(getenv func(string) string) (Config, error) {
 	smtp, err := SMTPConfigFromEnv(getenv)
 	if err != nil {
@@ -40,7 +43,7 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 	}
 	config := Config{SMTP: smtp, FromPolicy: FromPolicyVerified, MailFromDomain: strings.ToLower(strings.TrimSpace(getenv("MAIL_FROM_DOMAIN"))),
 		TrustedAuthServID: strings.TrimSpace(getenv("EMAIL_TRUSTED_AUTHSERV_ID")), PlatformInboundSecret: strings.TrimSpace(getenv("MAIL_FROM_INBOUND_SECRET")),
-		HostedMailDomain: strings.ToLower(strings.TrimSpace(getenv("HOSTED_MAIL_DOMAIN")))}
+		HostedMailDomain: strings.ToLower(strings.TrimSpace(getenv("HOSTED_MAIL_DOMAIN"))), ResendWebhookSecret: strings.TrimSpace(getenv("RESEND_WEBHOOK_SECRET"))}
 	if value := strings.TrimSpace(getenv("EMAIL_FROM_POLICY")); value != "" {
 		config.FromPolicy = value
 	}
@@ -61,6 +64,10 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 	}
 	if config.MailFromDomain != "" && HostedSlug("reply@"+config.MailFromDomain, config.HostedMailDomain) != "" {
 		return Config{}, fmt.Errorf("MAIL_FROM_DOMAIN %q is below HOSTED_MAIL_DOMAIN and not a reserved name, so a workspace could own it as its slug; use a reserved label such as mail", config.MailFromDomain)
+	}
+	if config.ResendWebhookSecret != "" && config.MailFromDomain == "" {
+		// The webhook finds the reply by the reply+<token>@MAIL_FROM_DOMAIN address it was sent from.
+		return Config{}, fmt.Errorf("RESEND_WEBHOOK_SECRET needs MAIL_FROM_DOMAIN")
 	}
 	return config, nil
 }

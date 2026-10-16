@@ -18,7 +18,10 @@ const (
 
 var (
 	resultPattern     = regexp.MustCompile(`\b(spf|dkim|dmarc)\s*=\s*([a-z]+)`)
-	replyTokenPattern = regexp.MustCompile(`(?:\+r-|^reply\+)([a-f0-9]{32})@`)
+	replyTokenPattern = regexp.MustCompile(`(?:\+r-([a-f0-9]{32})|^reply\+([a-f0-9]{32})(?:-[a-f0-9]{12})?)@`)
+	// platformReplyPattern also accepts the per-reply form reply+<token>-<reply id>@.
+	platformReplyPattern = regexp.MustCompile(`^reply\+([a-f0-9]{32})(?:-([a-f0-9]{12}))?@`)
+	replyIDPattern       = regexp.MustCompile(`^cd\.([a-f0-9]{12})`)
 )
 
 // authentication reads the topmost Authentication-Results header stamped by the trusted receiving
@@ -101,28 +104,47 @@ func dropReason(header mail.Header, from string) string {
 func ReplyToken(recipients []string) string {
 	for _, recipient := range recipients {
 		if match := replyTokenPattern.FindStringSubmatch(strings.ToLower(recipient)); match != nil {
-			return match[1]
+			return match[1] + match[2]
 		}
 	}
 	return ""
 }
 
-// PlatformReplyToken returns the token of a reply+<token>@<domain> recipient on the platform sending
-// domain, used when a workspace sends without a verified domain.
+// PlatformReplyToken returns the token of a reply+<token>@<domain> (or reply+<token>-<reply id>@<domain>)
+// recipient on the platform sending domain, used when a workspace sends without a verified domain.
 func PlatformReplyToken(recipients []string, domain string) string {
-	if domain == "" {
-		return ""
-	}
-	suffix := "@" + strings.ToLower(domain)
 	for _, recipient := range recipients {
-		recipient = strings.ToLower(recipient)
-		if strings.HasSuffix(recipient, suffix) && strings.HasPrefix(recipient, "reply+") {
-			if match := replyTokenPattern.FindStringSubmatch(recipient); match != nil {
-				return match[1]
-			}
+		if token, _ := PlatformReplyAddress(recipient, domain); token != "" {
+			return token
 		}
 	}
 	return ""
+}
+
+// PlatformReplyAddress splits a platform reply address into the conversation token and the reply id,
+// which is "" for the older reply+<token>@<domain> form. Both are "" for any other address.
+func PlatformReplyAddress(address, domain string) (token, replyID string) {
+	address = strings.ToLower(address)
+	if domain == "" || !strings.HasSuffix(address, "@"+strings.ToLower(domain)) {
+		return "", ""
+	}
+	match := platformReplyPattern.FindStringSubmatch(address)
+	if match == nil {
+		return "", ""
+	}
+	return match[1], match[2]
+}
+
+// PlatformReplyFrom is the address a reply is sent from on the platform domain. It names the
+// conversation by its token and the reply by the first 12 hex digits of its random Message-ID
+// (cd.<hex>@...): 48 bits, unique among the replies of one conversation, and short enough to keep the
+// local part under the 64 characters SMTP allows. A relay event about the address then names one
+// reply. A Message-ID of another shape gives the conversation-only form.
+func PlatformReplyFrom(token, messageID, domain string) string {
+	if match := replyIDPattern.FindStringSubmatch(messageID); match != nil {
+		return "reply+" + token + "-" + match[1] + "@" + domain
+	}
+	return "reply+" + token + "@" + domain
 }
 
 // PlusAddress inserts a reply token into an address: support@example.com -> support+r-TOKEN@example.com.
