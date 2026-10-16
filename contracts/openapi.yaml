@@ -569,6 +569,24 @@ paths:
                   items: {type: array, items: {$ref: '#/components/schemas/TimeEntry'}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/inbox/activity:
+    get:
+      operationId: getInboxActivity
+      x-permission: conversations:read
+      description: >-
+        What changed in the inbox after `since`: conversations created, and conversations another agent
+        assigned to the caller. Each list holds at most 50 items, newest first. Send the returned `now`
+        as the next `since`. A list can repeat an item from the previous call (a short lookback covers conversations that committed late), so the client removes duplicates by id. Without `since` both lists are empty and `now` is the first cursor.
+      parameters:
+        - {name: since, in: query, schema: {type: string, format: date-time}}
+      responses:
+        '200':
+          description: Inbox activity after the cursor
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/InboxActivity'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
   /api/v1/attachments/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -1616,6 +1634,33 @@ components:
         items: {type: array, items: {$ref: '#/components/schemas/Conversation'}}
         page: {type: integer, minimum: 1}
         page_size: {type: integer, minimum: 1}
+    InboxActivity:
+      type: object
+      required: [now, new_conversations, assigned_to_me]
+      properties:
+        now: {type: string, format: date-time}
+        new_conversations:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [id, subject, contact_name, created_at]
+            properties:
+              id: {type: string, format: uuid}
+              subject: {type: string}
+              contact_name: {type: string}
+              created_at: {type: string, format: date-time}
+        assigned_to_me:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [id, subject, contact_name, assigned_at]
+            properties:
+              id: {type: string, format: uuid}
+              subject: {type: string}
+              contact_name: {type: string}
+              assigned_at: {type: string, format: date-time}
     Message:
       type: object
       required: [id, conversation_id, author_agent_id, author_name, kind, body, body_html, origin, attachments, created_at, delivery, email]

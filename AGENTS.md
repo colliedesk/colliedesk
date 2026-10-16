@@ -70,6 +70,7 @@ untag one; fix the product instead. `corepack pnpm test` fails when this list an
 - `invite teammate: admin invites, teammate joins under the agent ceiling, admin revokes, revoked session refused` (`web/e2e/onboarding-invite.spec.ts`)
 - `email channel: forwarded mail opens a conversation, the reply is delivered by SMTP with threading headers, the customer reply threads back` (`web/e2e/onboarding-email.spec.ts`)
 - `freshdesk import: reconcile OK with exact counts, tickets searchable with original timestamps, undo removes exactly the import` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
+- `freshdesk import: an account without canned responses still migrates its tickets and says so` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
 - `freshdesk import: a wrong API key stops before writing anything and says why` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
 - `freshdesk import: an archive refused with 403 is reported UNVERIFIED, never OK` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
 - `cloud sign-in: a verified identity of an existing agent gets a Colliedesk session; every other token is refused` (`web/e2e/onboarding-cloud-sign-in.spec.ts`)

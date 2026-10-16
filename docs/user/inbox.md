@@ -9,15 +9,38 @@ support email**, **Import from Freshdesk** and **Invite your team** (admins see 
 cannot be loaded, it says so with **Try again** instead.
 
 **Find conversations**
-- Filter by **Status** (Open, Pending, Resolved, Closed), **Assignee** (Any assignee, Assigned to me,
+- The inbox opens on **Open** conversations, the ones that still need an answer. **All** shows every
+  status. When nothing is open but the workspace has conversations, the list says so instead of
+  showing the new-workspace steps.
+- Filter by **Status** (All, Open, Pending, Resolved, Closed), **Assignee** (Any assignee, Assigned to me,
   Unassigned) and **Tag**.
-- **Search conversations** matches subject and message text. Characters such as `%` and `_`
-  are matched literally.
-- When nothing matches, **Clear filters** below the message resets search, status, assignee and
-  tag in one step.
+- **Search conversations** matches subject and message text, in every status unless you picked a
+  status tab first, so imported closed tickets are found; the view stays on **All** after you clear
+  the search. Characters such as `%` and `_` are matched
+  literally.
+- A conversation you opened stays on screen after you resolve or close it, although it leaves the
+  Open list.
+- When nothing matches, **Clear filters** below the message resets search, assignee and tag, and
+  returns to **Open**, in one step.
 - The list is ordered by latest activity and grouped under **Today** and **Earlier**. Use **Previous page** and **Next page** below the list to move; they appear only when there is more than one page.
 - Dates from an earlier year show the year, for example imported history.
 - The list loads again each time you open the inbox, so mail that arrived meanwhile is there.
+  You do not need to reload to see new mail.
+
+**Know when something new arrives**
+- Any page of Colliedesk you have open (including Settings) checks every 20 seconds; the inbox reloads the list by itself when a conversation is created or a teammate assigns one
+  to you. Conversations you assign to yourself do not count.
+- When the tab is in the background, its title shows the number of new items, for example
+  `(2) Colliedesk`. The count clears when you return to the tab.
+- To also get a desktop notification, select the bell in the left rail: **Enable desktop
+  notifications**. Your browser then asks for permission; it never asks before you select the bell.
+  Select the bell again (**Desktop notifications are on. Turn off**) to stop them. The choice is
+  stored in this browser only.
+- A notification shows the subject and contact name, never message text. More than three new items at
+  once become one summary notification.
+- If your browser blocked notifications for this site, the bell says so; change it in the browser's
+  site settings. The list refresh and the title count keep working.
+- Colliedesk does not email agents about new or assigned conversations.
 
 **Change many conversations at once**
 - Tick the box at the left of a row to select it, or tick **Select all on this page**. Ticking a box

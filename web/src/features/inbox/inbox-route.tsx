@@ -3,7 +3,9 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { api } from '../../api/client';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
+import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
+import { defaultInboxFilters } from './inbox-filters';
 import { messages } from '../../messages';
 import { retryRefusalText } from './refusal-text';
 
@@ -11,7 +13,7 @@ export function InboxRoute() {
   const client = useQueryClient();
   const navigate = useNavigate();
   const params = useParams({ strict: false }) as { conversationId?: string };
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [filters, setFilters] = useState<Record<string, string>>({ ...defaultInboxFilters });
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string>();
   const query = useMemo(() => {
@@ -35,19 +37,32 @@ export function InboxRoute() {
   const outbound = emailChannel.data;
   const outboundNotice = outbound?.channel && outbound.sending_from === null
     ? (outbound.smtp.configured ? messages.outboundNeedsVerification : messages.outboundNotConfigured) : undefined;
+  const narrowed = Boolean(filters.search || filters.assignee || filters.tag);
+  const filtered = narrowed || !['', defaultInboxFilters.status].includes(filters.status ?? '');
+  // An empty Open view is either a new workspace or one that is caught up; one row of All tells which.
+  const checkAny = !narrowed && filters.status === defaultInboxFilters.status && page === 1 && conversations.data?.items.length === 0;
+  const anyConversation = useQuery({ queryKey: ['conversations', 'any'], queryFn: () => api.conversations('page=1&page_size=1'), enabled: checkAny });
+  // A failed check is not proof of an empty workspace, so it never shows the new-workspace steps.
+  const nothingOpen = checkAny && (anyConversation.isError || (anyConversation.data?.items.length ?? 0) > 0);
   const activeID = selectedId ?? params.conversationId;
-  const selected = conversations.data?.items.find((item) => item.id === activeID) ?? conversations.data?.items[0];
+  const listed = conversations.data?.items.find((item) => item.id === activeID);
+  // A conversation the agent opened stays on screen after it leaves the list, e.g. once resolved. It is
+  // fetched alongside the list for a deep link, and seeded from every change so the panes never swap.
+  const opened = useQuery({ queryKey: ['conversations', 'one', activeID], queryFn: () => api.conversation(activeID!),
+    enabled: Boolean(activeID && !listed) });
+  const selected = listed ?? (opened.data?.id === activeID ? opened.data : undefined) ?? conversations.data?.items[0];
   const timeline = useQuery({ queryKey: ['messages', selected?.id], queryFn: () => api.messages(selected!.id), enabled: Boolean(selected),
     // Poll while a reply waits in the email outbox so its delivery status updates without a reload.
     refetchInterval: (query) => (query.state.data?.items.some((item) => item.delivery?.status === 'queued') ? 5000 : false) });
   const timeEntries = useQuery({ queryKey: ['time-entries', selected?.id], queryFn: () => api.timeEntries(selected!.id), enabled: Boolean(selected) });
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
-  const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes), onSuccess: refresh });
+  const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
+  const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes), onSuccess: keepOpened });
   const bulkUpdate = useMutation({ mutationFn: ({ ids, changes }: { ids: string[]; changes: BulkConversationChanges }) => api.bulkUpdateConversations(ids, changes),
     // A refusal usually means a row is gone or changed under the agent; reload so the list shows it.
     onSettled: refresh });
-  const addTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.addConversationTag(conversationId, tagId), onSuccess: refresh });
-  const removeTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.removeConversationTag(conversationId, tagId), onSuccess: refresh });
+  const addTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.addConversationTag(conversationId, tagId), onSuccess: keepOpened });
+  const removeTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.removeConversationTag(conversationId, tagId), onSuccess: keepOpened });
   const createTag = useMutation({ mutationFn: ({ name }: { conversationId: string; name: string }) => api.createTag(name), onSuccess: (tag, variables) => {
     void client.invalidateQueries({ queryKey: ['tags'] });
     addTag.mutate({ conversationId: variables.conversationId, tagId: tag.id });
@@ -71,7 +86,7 @@ export function InboxRoute() {
     // A new tab, so the draft and the files in this reply box stay where they are.
     onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
-    outboundNotice={outboundNotice} deliveryNotice={retryError ? retryRefusalText(retryError) : undefined} filtered={Object.values(filters).some(Boolean)} loading={conversations.isPending} refreshing={conversations.isFetching && !conversations.isPending}
+    outboundNotice={outboundNotice} deliveryNotice={retryError ? retryRefusalText(retryError) : undefined} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}
     failed={conversations.isError} onRetry={() => void conversations.refetch()}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}

@@ -74,8 +74,9 @@ func (a *API) updateConversation(response http.ResponseWriter, request *http.Req
 		}
 		assignee = &value
 	}
-	item, err := a.store.UpdateConversation(request.Context(), principal(request).Workspace.ID, request.PathValue("id"), store.ConversationUpdate{
-		Status: input.Status, Priority: input.Priority, AssigneeID: assignee, TagIDs: input.TagIDs,
+	identity := principal(request)
+	item, err := a.store.UpdateConversation(request.Context(), identity.Workspace.ID, request.PathValue("id"), store.ConversationUpdate{
+		Status: input.Status, Priority: input.Priority, AssigneeID: assignee, TagIDs: input.TagIDs, ActorID: identity.Agent.ID,
 	})
 	if err != nil {
 		writeStoreError(response, err)

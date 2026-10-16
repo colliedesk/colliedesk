@@ -5,7 +5,7 @@ import { OutboundRefusedError } from '../../api/outbound-error';
 import { InboxRoute } from './inbox-route';
 
 const api = vi.hoisted(() => ({
-  me: vi.fn(), conversations: vi.fn(), agents: vi.fn(), tags: vi.fn(), messages: vi.fn(), timeEntries: vi.fn(),
+  me: vi.fn(), conversations: vi.fn(), conversation: vi.fn(), agents: vi.fn(), tags: vi.fn(), messages: vi.fn(), timeEntries: vi.fn(),
   updateConversation: vi.fn(), bulkUpdateConversations: vi.fn(), createMessage: vi.fn(), createTag: vi.fn(), config: vi.fn(),
   addConversationTag: vi.fn(), removeConversationTag: vi.fn(), retryDelivery: vi.fn(),
   savedReplies: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })), contact: vi.fn(),
@@ -201,6 +201,94 @@ test('a refused bulk change reloads the list, so a conversation that is gone sto
   fireEvent.click(screen.getByRole('button', { name: 'Closed' }));
   expect(await screen.findByRole('alert')).toBeInTheDocument();
   await waitFor(() => expect(api.conversations.mock.calls.length).toBeGreaterThan(loadsBefore));
+});
+
+const quietApis = () => {
+  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+};
+const renderRoute = () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+};
+
+test('the inbox opens on open conversations', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation')], page: 1, page_size: 50 });
+  renderRoute();
+  await screen.findByRole('button', { name: /alpha conversation/i });
+  expect(new URLSearchParams(api.conversations.mock.calls[0][0]).get('status')).toBe('open');
+});
+
+test('a workspace whose conversations are all closed says nothing is open, not "Get started"', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  const closed = { ...conversation('11111111-1111-4111-8111-111111111111', 'Imported from Freshdesk'), status: 'closed' as const };
+  api.conversations.mockImplementation(async (query: string) =>
+    ({ items: new URLSearchParams(query).get('status') === 'open' ? [] : [closed], page: 1, page_size: 50 }));
+  renderRoute();
+  expect(await screen.findByText('No open conversations. Every customer has an answer.')).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: /get started/i })).not.toBeInTheDocument();
+});
+
+test('a brand-new workspace still shows "Get started"', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
+  renderRoute();
+  expect(await screen.findByRole('region', { name: /get started/i })).toBeInTheDocument();
+});
+
+test('resolving the open conversation keeps it on screen although it left the Open list', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const resolved = { ...alpha, status: 'resolved' as const };
+  let isResolved = false;
+  api.conversations.mockImplementation(async () => ({ items: isResolved ? [] : [alpha], page: 1, page_size: 50 }));
+  api.conversation.mockResolvedValue(resolved);
+  api.updateConversation.mockImplementation(async () => { isResolved = true; return resolved; });
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), { target: { value: 'resolved' } });
+  await waitFor(() => expect(api.conversation).toHaveBeenCalledWith(alpha.id));
+  expect(await screen.findByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
+});
+
+test('resolving the open conversation never swaps the screen to another one, so its draft survives', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversation.mockReset();
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
+  let isResolved = false;
+  api.conversations.mockImplementation(async () => ({ items: isResolved ? [beta] : [alpha, beta], page: 1, page_size: 50 }));
+  api.conversation.mockReturnValue(new Promise(() => {})); // the by-id fetch never answers: only the update response can keep alpha
+  api.updateConversation.mockImplementation(async () => { isResolved = true; return { ...alpha, status: 'resolved' as const }; });
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Half-written answer' } });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Status' }), { target: { value: 'resolved' } });
+  await waitFor(() => expect(screen.queryByRole('button', { name: /alpha conversation/i })).not.toBeInTheDocument());
+  expect(screen.getByRole('heading', { name: 'Alpha conversation' })).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Beta conversation' })).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Message body')).toHaveValue('Half-written answer');
+});
+
+test('when the caught-up check fails, the inbox does not pretend the workspace is new', async () => {
+  quietApis();
+  api.conversations.mockReset();
+  api.conversations.mockImplementation(async (query: string) => {
+    if (new URLSearchParams(query).get('status') === 'open') return { items: [], page: 1, page_size: 50 };
+    throw new Error('network');
+  });
+  renderRoute();
+  expect(await screen.findByText('No open conversations. Every customer has an answer.')).toBeInTheDocument();
+  expect(screen.queryByRole('region', { name: /get started/i })).not.toBeInTheDocument();
 });
 
 test('the server limit from the config warns about oversized files before anything is uploaded', async () => {

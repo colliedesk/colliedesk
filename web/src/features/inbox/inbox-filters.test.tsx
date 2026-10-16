@@ -4,11 +4,11 @@ import { InboxFilters } from './inbox-filters';
 
 const tags = [{ id: '33333333-3333-4333-8333-333333333333', name: 'Billing', color: '#64748b' }];
 
-test('status is a row of tabs, All first and selected', () => {
+test('status is a row of tabs, All first, Open selected so the inbox starts on what needs an answer', () => {
   render(<InboxFilters tags={tags} />);
   const status = screen.getByRole('radiogroup', { name: 'Status' });
   expect(within(status).getAllByRole('radio').map((item) => item.getAttribute('value'))).toEqual(['', 'open', 'pending', 'resolved', 'closed']);
-  expect(within(status).getByRole('radio', { name: 'All' })).toBeChecked();
+  expect(within(status).getByRole('radio', { name: 'Open' })).toBeChecked();
 });
 
 test('choosing a status tab filters the list', () => {
@@ -24,7 +24,7 @@ test('assignee and tag live in one Filter menu that counts what is active', () =
   expect(screen.getByText('Filter', { selector: 'summary *, summary' })).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText('Assignee'), { target: { value: 'unassigned' } });
   fireEvent.change(screen.getByLabelText('Tag'), { target: { value: tags[0].id } });
-  expect(onChange).toHaveBeenLastCalledWith({ search: '', status: '', assignee: 'unassigned', tag: tags[0].id });
+  expect(onChange).toHaveBeenLastCalledWith({ search: '', status: 'open', assignee: 'unassigned', tag: tags[0].id });
   expect(screen.getByLabelText('2 filters active')).toBeInTheDocument();
 });
 
@@ -49,4 +49,20 @@ test('moving focus between controls inside the Filter menu keeps it open', () =>
   menu.open = true;
   fireEvent.blur(screen.getByLabelText('Assignee'), { relatedTarget: screen.getByLabelText('Tag') });
   expect(menu.open).toBe(true);
+});
+
+test('searching from the default Open view searches every status, like Freshdesk does', () => {
+  const onChange = vi.fn();
+  render(<InboxFilters tags={tags} onChange={onChange} />);
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search conversations' }), { target: { value: 'invoice' } });
+  expect(onChange).toHaveBeenLastCalledWith({ search: 'invoice', status: '', assignee: '', tag: '' });
+  expect(screen.getByRole('radio', { name: 'All' })).toBeChecked();
+});
+
+test('a status the agent picked stays when they search', () => {
+  const onChange = vi.fn();
+  render(<InboxFilters tags={tags} onChange={onChange} />);
+  fireEvent.click(screen.getByRole('radio', { name: 'Pending' }));
+  fireEvent.change(screen.getByRole('searchbox', { name: 'Search conversations' }), { target: { value: 'invoice' } });
+  expect(onChange).toHaveBeenLastCalledWith({ search: 'invoice', status: 'pending', assignee: '', tag: '' });
 });
