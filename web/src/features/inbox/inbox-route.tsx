@@ -67,7 +67,7 @@ export function InboxRoute() {
     void client.invalidateQueries({ queryKey: ['tags'] });
     addTag.mutate({ conversationId: variables.conversationId, tagId: tag.id });
   } });
-  const message = useMutation({ mutationFn: ({ kind, body, files }: { kind: 'outgoing' | 'note'; body: string; files?: File[] }) => api.createMessage(selected!.id, kind, body, files),
+  const message = useMutation({ mutationFn: ({ kind, body, files, cc }: { kind: 'outgoing' | 'note'; body: string; files?: File[]; cc?: string[] }) => api.createMessage(selected!.id, kind, body, files, cc),
     onSuccess: () => client.invalidateQueries({ queryKey: ['messages', selected?.id] }) });
   const retryDelivery = useMutation({ mutationFn: ({ conversationId, messageId }: { conversationId: string; messageId: string }) => api.retryDelivery(conversationId, messageId),
     onSuccess: (retried) => client.invalidateQueries({ queryKey: ['messages', retried.conversation_id] }) });
@@ -80,7 +80,7 @@ export function InboxRoute() {
     onFilters={(values) => { setFilters(values); setPage(1); }} onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
-    onMessage={(kind, body, files) => message.mutateAsync({ kind, body, files })}
+    onMessage={(kind, body, files, cc) => message.mutateAsync({ kind, body, files, cc })}
     savedReplies={savedReplies.data?.items} customerName={selected?.contact_name} agentName={me.data?.agent?.display_name}
     savedRepliesState={savedReplies.isPending ? 'loading' : savedReplies.isError ? 'failed' : 'ready'}
     // A new tab, so the draft and the files in this reply box stay where they are.

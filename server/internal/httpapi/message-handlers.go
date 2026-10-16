@@ -27,15 +27,26 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	var input struct {
-		Kind string `json:"kind"`
-		Body string `json:"body"`
+		Kind string   `json:"kind"`
+		Body string   `json:"body"`
+		CC   []string `json:"cc"`
 	}
 	if err := decodeJSON(request, &input); err != nil || (input.Kind != "outgoing" && input.Kind != "note") || strings.TrimSpace(input.Body) == "" {
 		writeError(response, http.StatusBadRequest, "invalid_request", "A reply or note body is required.")
 		return
 	}
 	identity := principal(request)
-	item, err := a.store.CreateMessage(request.Context(), identity.Workspace.ID, request.PathValue("id"), identity.Agent.ID, input.Kind, input.Body)
+	// A conversation of another workspace is refused before anything about the Cc list is said.
+	if _, err := a.store.GetConversation(request.Context(), identity.Workspace.ID, request.PathValue("id")); err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	cc, refusal := a.cleanCC(request.Context(), identity.Workspace.ID, input.Kind, input.CC)
+	if refusal != nil {
+		a.writeUploadError(response, refusal)
+		return
+	}
+	item, err := a.store.CreateMessageWithCC(request.Context(), identity.Workspace.ID, request.PathValue("id"), identity.Agent.ID, input.Kind, input.Body, cc)
 	if err != nil {
 		writeStoreError(response, err)
 		return

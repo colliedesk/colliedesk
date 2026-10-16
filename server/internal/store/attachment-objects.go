@@ -91,7 +91,7 @@ func VerifyObjects(ctx context.Context, tx pgx.Tx, storage attachments.Storage, 
 // CheckAttachmentAdmission refuses early what CreateMessage would refuse after the bytes were
 // written: no room left under the plan's storage cap, and a reply the trial does not allow. The checks
 // inside CreateMessage stay authoritative.
-func (s *Store) CheckAttachmentAdmission(ctx context.Context, workspaceID, conversationID, kind string) error {
+func (s *Store) CheckAttachmentAdmission(ctx context.Context, workspaceID, conversationID, kind string, cc []string) error {
 	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
 		if err := s.CheckStorage(ctx, tx, workspaceID, 1, s.now()); err != nil {
 			return struct{}{}, err
@@ -107,7 +107,10 @@ func (s *Store) CheckAttachmentAdmission(ctx context.Context, workspaceID, conve
 		if err != nil {
 			return struct{}{}, fmt.Errorf("load email channel: %w", err)
 		}
-		return struct{}{}, s.checkTrialOutbound(ctx, tx, workspaceID, conversationID, verified)
+		if err := s.checkTrialOutbound(ctx, tx, workspaceID, conversationID, verified); err != nil {
+			return struct{}{}, err
+		}
+		return struct{}{}, s.checkTrialCC(ctx, tx, workspaceID, conversationID, verified, cc)
 	})
 	return err
 }

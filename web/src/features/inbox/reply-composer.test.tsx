@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { AttachmentsTooLargeError, AttachmentStorageError } from '../../api/attachments-error';
 import { OutboundRefusedError } from '../../api/outbound-error';
@@ -381,4 +381,101 @@ test('a list that could not be loaded says so', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Insert saved reply' }));
   expect(screen.getByText('Saved replies could not be loaded. Close this and try again.')).toBeInTheDocument();
   expect(screen.queryByText('No saved replies yet.')).not.toBeInTheDocument();
+});
+
+const ccField = () => screen.queryByLabelText('Add Cc address');
+const typeCc = (address: string) => {
+  fireEvent.change(screen.getByLabelText('Add Cc address'), { target: { value: address } });
+  fireEvent.keyDown(screen.getByLabelText('Add Cc address'), { key: 'Enter' });
+};
+
+test('the Cc field is collapsed until asked for, and opening it moves focus into it', () => {
+  render(<ReplyComposer />);
+  expect(ccField()).not.toBeInTheDocument();
+  const toggle = screen.getByRole('button', { name: 'Cc', expanded: false });
+  fireEvent.click(toggle);
+  expect(ccField()).toHaveFocus();
+  expect(screen.queryByRole('button', { name: 'Cc', expanded: false })).not.toBeInTheDocument();
+});
+
+test('addresses typed into Cc go out with the reply, after the files', () => {
+  const onSubmit = vi.fn();
+  render(<ReplyComposer onSubmit={onSubmit} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Cc' }));
+  typeCc('boss@customer.example');
+  typeCc('ops@customer.example');
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Looping in the team.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+  expect(onSubmit).toHaveBeenCalledWith('outgoing', 'Looping in the team.', [], ['boss@customer.example', 'ops@customer.example']);
+});
+
+test('the addresses the customer copied are offered, shown without a click, and sent unless removed', () => {
+  const onSubmit = vi.fn();
+  render(<ReplyComposer onSubmit={onSubmit} suggestedCc={['boss@customer.example', 'ops@customer.example']} />);
+  const list = screen.getByRole('list', { name: 'Cc' });
+  expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+  fireEvent.click(screen.getByRole('button', { name: 'Remove ops@customer.example' }));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Thanks.' } });
+  fireEvent.keyDown(screen.getByLabelText('Message body'), { key: 'Enter', ctrlKey: true });
+  expect(onSubmit).toHaveBeenCalledWith('outgoing', 'Thanks.', [], ['boss@customer.example']);
+});
+
+test('removing every suggested address sends the reply to the customer alone', () => {
+  const onSubmit = vi.fn();
+  render(<ReplyComposer onSubmit={onSubmit} suggestedCc={['boss@customer.example']} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Remove boss@customer.example' }));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Only you.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+  expect(onSubmit).toHaveBeenCalledWith('outgoing', 'Only you.');
+});
+
+test('suggestions that arrive after the box opened fill an untouched field but never undo the agent’s edit', () => {
+  const { rerender } = render(<ReplyComposer />);
+  expect(ccField()).not.toBeInTheDocument();
+  rerender(<ReplyComposer suggestedCc={['boss@customer.example']} />);
+  expect(screen.getByRole('button', { name: 'Remove boss@customer.example' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Remove boss@customer.example' }));
+  rerender(<ReplyComposer suggestedCc={['boss@customer.example', 'new@customer.example']} />);
+  expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
+});
+
+test('a private note has no Cc field and never carries addresses', () => {
+  const onSubmit = vi.fn();
+  render(<ReplyComposer onSubmit={onSubmit} suggestedCc={['boss@customer.example']} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Private note' }));
+  expect(ccField()).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Cc' })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Internal.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add private note' }));
+  expect(onSubmit).toHaveBeenCalledWith('note', 'Internal.');
+  fireEvent.click(screen.getByRole('button', { name: 'Reply' }));
+  expect(screen.getByRole('button', { name: 'Remove boss@customer.example' })).toBeInTheDocument();
+});
+
+test('an address typed but not yet confirmed is not lost when the reply is sent with the button', () => {
+  const onSubmit = vi.fn();
+  render(<ReplyComposer onSubmit={onSubmit} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Cc' }));
+  fireEvent.change(screen.getByLabelText('Add Cc address'), { target: { value: 'late@customer.example' } });
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Hello.' } });
+  fireEvent.blur(screen.getByLabelText('Add Cc address'));
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+  expect(onSubmit).toHaveBeenCalledWith('outgoing', 'Hello.', [], ['late@customer.example']);
+});
+
+test('Ctrl+Enter from the Cc box sends the reply', () => {
+  const onSubmit = vi.fn();
+  render(<ReplyComposer onSubmit={onSubmit} suggestedCc={['boss@customer.example']} />);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Sent from Cc.' } });
+  fireEvent.keyDown(screen.getByLabelText('Add Cc address'), { key: 'Enter', ctrlKey: true });
+  expect(onSubmit).toHaveBeenCalledWith('outgoing', 'Sent from Cc.', [], ['boss@customer.example']);
+});
+
+test('a refused reply keeps the Cc list with the text', async () => {
+  const onSubmit = vi.fn().mockRejectedValue(new OutboundRefusedError('trial_outbound_restricted', 'server text'));
+  render(<ReplyComposer onSubmit={onSubmit} suggestedCc={['boss@customer.example']} />);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Try.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+  expect(await screen.findByRole('alert')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Remove boss@customer.example' })).toBeInTheDocument();
 });

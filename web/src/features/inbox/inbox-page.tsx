@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Conversation, Message, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import { BulkActionBar } from './bulk-action-bar';
@@ -7,6 +7,7 @@ import { DetailsPanel } from './details-panel';
 import { InboxFilters, defaultInboxFilters } from './inbox-filters';
 import type { AttachmentLimits } from './attachment-picker';
 import { ReplyComposer } from './reply-composer';
+import { suggestedCc } from './suggested-cc';
 import { TimelinePanel } from './timeline-panel';
 import { messages } from '../../messages';
 
@@ -20,7 +21,7 @@ interface InboxPageProps {
   timezone?: string;
   onSelect?: (id: string) => void;
   onFilters?: (filters: Record<string, string>) => void;
-  onMessage?: (kind: 'outgoing' | 'note', body: string, files?: File[]) => void | Promise<unknown>;
+  onMessage?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[]) => void | Promise<unknown>;
   attachmentLimits?: AttachmentLimits;
   savedReplies?: SavedReply[];
   // The names the composer fills into a saved reply: the selected customer and the signed-in agent.
@@ -97,6 +98,7 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
       setBulkBusy(false);
     }
   };
+  const copied = useMemo(() => suggestedCc(timeline), [timeline]);
   const closeDetails = () => { setDetailsOpen(false); (detailsToggle.current ?? listPane.current)?.focus(); };
   // The drawer belongs to one conversation: a new selection or none closes it. Without a toggle left
   // to return to, focus goes to the list pane instead of falling back to the page.
@@ -140,7 +142,7 @@ export function InboxPage({ conversations = [], selected, timeline = [], timeEnt
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}</p>}
         {deliveryNotice && <p role="alert" className="composer-notice">{deliveryNotice}</p>}
         {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
-        <ReplyComposer key={selected?.id} disabled={!selected} onSubmit={onMessage} attachmentLimits={attachmentLimits}
+        <ReplyComposer key={selected?.id} disabled={!selected} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
           savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState} />
       </div>
       <DetailsPanel conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate}

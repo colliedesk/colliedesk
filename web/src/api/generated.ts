@@ -240,7 +240,11 @@ export interface paths {
         };
         get: operations["listMessages"];
         put?: never;
-        /** @description Send JSON for a text-only message, or `multipart/form-data` to attach files: fields `kind` and `body` plus repeated `files` parts, each with a filename. A message carries at most `limits.outgoing_attachments_files` files and `limits.outgoing_attachments_bytes` bytes in total (both from `GET /api/v1/config`); more answers 413 and nothing is stored. A reply emails its files as attachments; a note never leaves the workspace. */
+        /**
+         * @description Send JSON for a text-only message, or `multipart/form-data` to attach files: fields `kind` and `body` plus repeated `files` parts, each with a filename. A message carries at most `limits.outgoing_attachments_files` files and `limits.outgoing_attachments_bytes` bytes in total (both from `GET /api/v1/config`); more answers 413 and nothing is stored. A reply emails its files as attachments; a note never leaves the workspace.
+         *
+         *     A reply may copy other people with `cc`: at most 10 plain addresses (`name@example.com`, no display name), stored lowercase without duplicates. The conversation contact stays the only `To` recipient and is dropped from `cc`; our own support, forwarding and sending addresses are refused with 400, and so is `cc` on a note. In `multipart/form-data` send one `cc` field per address, before the files. On the trial, `cc` may name only addresses the customer wrote from or copied (verified customer mail or imported history) unless the sending domain is verified; another address answers 403 `trial_outbound_restricted` and nothing is stored. A retry of a failed delivery sends to the same stored list. There is no Bcc.
+         */
         post: operations["createMessage"];
         delete?: never;
         options?: never;
@@ -1088,6 +1092,8 @@ export interface components {
             /** @description Where an imported message came from; null for messages written in Colliedesk. */
             origin: null | components["schemas"]["MessageOrigin"];
             attachments: components["schemas"]["Attachment"][];
+            /** @description Addresses an outgoing reply was copied to; empty for every other message. */
+            cc: components["schemas"]["CopiedAddresses"];
             /** Format: date-time */
             created_at: string;
             /** @description Email delivery of an outgoing reply; null when the reply was not emailed. */
@@ -1095,6 +1101,8 @@ export interface components {
             /** @description Envelope details of an incoming email; null for messages that did not arrive by email. */
             email: null | components["schemas"]["IncomingEmail"];
         };
+        /** @description Plain email addresses copied on a reply, lowercase, without duplicates. */
+        CopiedAddresses: string[];
         MessageOrigin: {
             system: string;
             external_id: string;
@@ -1156,6 +1164,8 @@ export interface components {
              * @enum {string}
              */
             via?: "platform" | "workspace" | "web_form";
+            /** @description Other addresses on the Cc line of the email (not the sender, not our own addresses), as the reply box offers them to copy. Absent on mail stored before Cc was kept. */
+            cc?: string[];
             /**
              * Format: uuid
              * @description Attachment holding the complete raw message, gzip-compressed (original-message.eml.gz). Null for mail received before raw messages were kept.
@@ -1967,12 +1977,14 @@ export interface operations {
                     kind: "outgoing" | "note";
                     /** @description Markdown source */
                     body: string;
+                    cc?: components["schemas"]["CopiedAddresses"];
                 };
                 "multipart/form-data": {
                     /** @enum {string} */
                     kind: "outgoing" | "note";
                     /** @description Markdown source */
                     body: string;
+                    cc?: components["schemas"]["CopiedAddresses"];
                     files?: string[];
                 };
             };

@@ -199,7 +199,8 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 		}
 	}
 
-	meta, err := json.Marshal(domain.IncomingEmail{From: in.FromAddress, Authentication: in.Authentication, Via: inboundVia(in), Attachments: in.Attachments})
+	meta, err := json.Marshal(domain.IncomingEmail{From: in.FromAddress, Authentication: in.Authentication, Via: inboundVia(in), Attachments: in.Attachments,
+		CC: copiedAddresses(in, supportAddress)})
 	if err != nil {
 		return result, fmt.Errorf("encode email metadata: %w", err)
 	}
@@ -244,4 +245,16 @@ func inboundVia(in email.Inbound) string {
 		return domain.ViaPlatform
 	}
 	return domain.ViaWorkspace
+}
+
+// copiedAddresses are the other people on the customer's Cc line: not the sender, not the support
+// address (the mail reached us through it).
+func copiedAddresses(in email.Inbound, supportAddress string) []string {
+	var kept []string
+	for _, address := range in.Cc {
+		if address != in.FromAddress && !strings.EqualFold(address, supportAddress) {
+			kept = append(kept, address)
+		}
+	}
+	return kept
 }

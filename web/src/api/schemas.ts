@@ -78,6 +78,7 @@ export const messageDeliverySchema = z.object({
 export const emailAuthenticationSchema = z.enum(['pass', 'fail', 'none']);
 export const incomingEmailSchema = z.object({
   from: z.string(), authentication: emailAuthenticationSchema, via: z.enum(['platform', 'workspace', 'web_form']).optional(),
+  cc: z.array(z.string()).optional(),
   attachments: z.array(z.object({ filename: z.string(), content_type: z.string() })),
   original_attachment_id: z.string().uuid().nullable(),
 }) satisfies z.ZodType<Generated<'IncomingEmail'>>;
@@ -89,7 +90,7 @@ export const messageSchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), author_agent_id: z.string().uuid().nullable(),
   author_name: z.string().nullable(), kind: z.enum(['incoming', 'outgoing', 'note']), body: z.string(),
   body_html: z.string().nullable(), origin: messageOriginSchema.nullable(),
-  attachments: z.array(attachmentSchema), created_at: z.string().datetime(),
+  attachments: z.array(attachmentSchema), cc: z.array(z.string()), created_at: z.string().datetime(),
   delivery: messageDeliverySchema.nullable(), email: incomingEmailSchema.nullable(),
 }) satisfies z.ZodType<Generated<'Message'>>;
 export const emailChannelSchema = z.object({

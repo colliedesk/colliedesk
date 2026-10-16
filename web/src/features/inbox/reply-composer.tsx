@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { SavedReply } from '../../api/schemas';
 import { renderSavedReply } from '../../lib/saved-reply-variables';
 import { AttachmentPicker, attachmentProblem } from './attachment-picker';
+import { CcField } from './cc-field';
 import type { AttachmentLimits } from './attachment-picker';
 import { replyRefusalText } from './refusal-text';
 import { SavedReplyPicker } from './saved-reply-picker';
@@ -12,8 +13,11 @@ import { BookmarkIcon, LockIcon, ReplyIcon } from '../../ui/icons';
 interface ReplyComposerProps {
   disabled?: boolean;
   // May return a promise: the text is kept, with the reason shown, when it rejects.
-  // Called with files only when some are chosen.
-  onSubmit?: (kind: 'outgoing' | 'note', body: string, files?: File[]) => void | Promise<unknown>;
+  // Called with files only when some are chosen, and with cc (after the files, which may then be empty)
+  // only for a reply that copies someone.
+  onSubmit?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[]) => void | Promise<unknown>;
+  // The addresses the customer copied on their latest message; the field starts with them until the agent edits it.
+  suggestedCc?: string[];
   // The server's per-message file limits; the composer warns and holds the send while they are exceeded.
   attachmentLimits?: AttachmentLimits;
   // The workspace's saved replies; inserting one fills {{customer.name}} and {{agent.name}} from the two names.
@@ -41,13 +45,27 @@ function isTyping(target: EventTarget | null) {
 // acting on that key would send or switch before the text is committed.
 const composing = (event: KeyboardEvent) => event.isComposing || event.keyCode === 229;
 
-export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState }: ReplyComposerProps) {
+const noAddresses: string[] = [];
+
+export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, suggestedCc = noAddresses }: ReplyComposerProps) {
   const [kind, setKind] = useState<Kind>('outgoing');
   const [body, setBody] = useState('');
   const [problem, setProblem] = useState<string>();
   const [sending, setSending] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const fileProblem = attachmentProblem(files, attachmentLimits);
+  // undefined until the agent edits the list, so suggestions that load later still show up.
+  const [ccEdited, setCcEdited] = useState<string[]>();
+  const [ccOpen, setCcOpen] = useState(false);
+  const cc = ccEdited ?? suggestedCc;
+  const showCc = kind === 'outgoing' && (ccOpen || ccEdited !== undefined || cc.length > 0);
+  const card = useRef<HTMLDivElement>(null);
+  const focusCc = useRef(false);
+  useEffect(() => {
+    if (!focusCc.current || !showCc) return;
+    focusCc.current = false;
+    card.current?.querySelector<HTMLInputElement>('.composer-cc input')?.focus();
+  }, [showCc]);
   const field = useRef<HTMLTextAreaElement>(null);
   const [picking, setPicking] = useState(false);
   // Where the cursor goes once an inserted reply is in the box.
@@ -87,7 +105,9 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
     if (unfilled.length > 0 && !window.confirm(messages.unfilledVariables(unfilled))) return;
     const sent = body.trim();
     const sentFiles = files;
-    const result = sentFiles.length > 0 ? onSubmit?.(kind, sent, sentFiles) : onSubmit?.(kind, sent);
+    const sentCc = kind === 'outgoing' ? cc : [];
+    const result = sentCc.length > 0 ? onSubmit?.(kind, sent, sentFiles, sentCc)
+      : sentFiles.length > 0 ? onSubmit?.(kind, sent, sentFiles) : onSubmit?.(kind, sent);
     if (typeof (result as Promise<unknown> | undefined)?.then !== 'function') { setBody(''); setFiles([]); return; }
     setSending(true);
     setProblem(undefined);
@@ -121,7 +141,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
   };
   return (
     <div className="composer">
-      <div className="composer-card" data-kind={kind}>
+      <div className="composer-card" data-kind={kind} ref={card}>
         <div className="composer-head">
           <div className="composer-tabs" role="group" aria-label={messages.messageKind}>
             <button type="button" aria-pressed={kind === 'outgoing'} onClick={() => setKind('outgoing')}>
@@ -135,12 +155,17 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
           placeholder={kind === 'note' ? messages.notePlaceholder : messages.replyPlaceholder} onChange={(event) => setBody(event.target.value)} />
         {picking && !disabled && <SavedReplyPicker replies={savedReplies} onPick={insertSavedReply} onClose={closePicker} onManage={onManageSavedReplies} state={savedRepliesState} />}
         {problem && <p role="alert" className="composer-notice">{problem}</p>}
+        {showCc && <CcField value={cc} onChange={setCcEdited} disabled={disabled || sending} onSend={submit} />}
         <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={disabled || sending} />
         <div className="composer-actions">
           {/* Mouse down must not blur the open list, or the click would close it and open it again. */}
           <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking} title={`${messages.insertSavedReply} (/)`}
             onMouseDown={(event) => event.preventDefault()} onClick={() => setPicking((open) => !open)}>
             <BookmarkIcon />{messages.insertSavedReply}<kbd aria-hidden="true">/</kbd></button>
+          {kind === 'outgoing' && !showCc && (
+            <button type="button" className="cc-button" disabled={disabled} aria-expanded={false} title={messages.ccToggleTitle}
+              onClick={() => { focusCc.current = true; setCcOpen(true); }}>{messages.ccToggle}</button>
+          )}
           <span className="composer-hint" aria-hidden="true"><kbd>Ctrl</kbd><kbd>Enter</kbd> {messages.sendShortcut}</span>
           <button className="primary-action" type="button" disabled={disabled || sending || !body.trim() || Boolean(fileProblem)} onClick={submit}>
             {kind === 'note' ? messages.privateNote : messages.reply}

@@ -197,6 +197,14 @@ and workspaces without an email channel never reach it.
   that is imported history (`origin IS NOT NULL`) or inbound mail that came through the platform
   forwarder (`email_meta.via = 'platform'`) and whose authentication verdict is not `fail`.
   Refusal: HTTP 403 `trial_outbound_restricted`.
+- **Cc addresses are recipients too.** A trial reply with an unverified domain may copy only
+  addresses found on mail that qualifies above: its sender or its Cc line (`email_meta.from`,
+  `email_meta.cc`), or the `from` and `cc` of imported history. Anything else is the same 403
+  `trial_outbound_restricted`. Code: `checkTrialCC` in `store/message-cc.go`, run beside
+  `checkTrialOutbound`. Workspace-posted mail and `fail` mail add no addresses, so a trial user
+  cannot plant a victim in a Cc line and then copy it. A verified domain lifts the rule, as it does
+  for the contact. The 200/day cap counts replies, not recipients: with the rule above the extra
+  recipients are people the customer named, so one cap unit cannot fan out to strangers.
 - **Mail posted to a workspace's own inbound secret never qualifies.** The admin writes that whole
   message, `Authentication-Results` included, so it proves nothing about the sender. `IngestEmail`
   records the door in `email_meta.via` (`platform` or `workspace`). Mail stored before `via`

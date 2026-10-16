@@ -104,7 +104,7 @@ test('a 409 from the team keeps the server explanation as a ConflictError', asyn
 });
 
 test('a reply with files is posted as multipart without a JSON content type', async () => {
-  fetchMock.mockResolvedValue(reply(201, { id: '55555555-5555-4555-8555-555555555555', conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, kind: 'outgoing', body: 'Hi', body_html: null, origin: null, attachments: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null }));
+  fetchMock.mockResolvedValue(reply(201, { id: '55555555-5555-4555-8555-555555555555', conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, kind: 'outgoing', body: 'Hi', body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null }));
   const pdf = new File(['%PDF'], 'invoice é.pdf', { type: 'application/pdf' });
   await api.createMessage('11111111-1111-4111-8111-111111111111', 'outgoing', 'Hi', [pdf]);
   const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
@@ -118,7 +118,7 @@ test('a reply with files is posted as multipart without a JSON content type', as
 });
 
 test('a reply without files stays a JSON request', async () => {
-  fetchMock.mockResolvedValue(reply(201, { id: '55555555-5555-4555-8555-555555555555', conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, kind: 'note', body: 'Hi', body_html: null, origin: null, attachments: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null }));
+  fetchMock.mockResolvedValue(reply(201, { id: '55555555-5555-4555-8555-555555555555', conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, kind: 'note', body: 'Hi', body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null }));
   await api.createMessage('11111111-1111-4111-8111-111111111111', 'note', 'Hi');
   const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
   expect(init.body).toBe(JSON.stringify({ kind: 'note', body: 'Hi' }));
@@ -146,4 +146,20 @@ test('a trial refusal on a message is still an outbound refusal, not a storage e
   fetchMock.mockResolvedValue(reply(403, apiError('trial_outbound_restricted', 'Verify your domain.')));
   const error = await api.createMessage('11111111-1111-4111-8111-111111111111', 'outgoing', 'Hi').catch((caught: unknown) => caught);
   expect(error).not.toBeInstanceOf(AttachmentStorageError);
+});
+
+test('a reply that copies people sends one JSON list, and a note sends none', async () => {
+  fetchMock.mockResolvedValue(reply(201, { id: '55555555-5555-4555-8555-555555555555', conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, kind: 'outgoing', body: 'Hi', body_html: null, origin: null, attachments: [], cc: ['boss@customer.example'], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null }));
+  const message = await api.createMessage('11111111-1111-4111-8111-111111111111', 'outgoing', 'Hi', [], ['boss@customer.example']);
+  const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(init.body).toBe(JSON.stringify({ kind: 'outgoing', body: 'Hi', cc: ['boss@customer.example'] }));
+  expect(message.cc).toEqual(['boss@customer.example']);
+});
+
+test('a reply with files and copies sends one cc field per address, before the files', async () => {
+  fetchMock.mockResolvedValue(reply(201, { id: '55555555-5555-4555-8555-555555555555', conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, kind: 'outgoing', body: 'Hi', body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null }));
+  await api.createMessage('11111111-1111-4111-8111-111111111111', 'outgoing', 'Hi', [new File(['x'], 'x.txt')], ['a@customer.example', 'b@customer.example']);
+  const form = ((fetchMock.mock.calls[0] as [string, RequestInit])[1]).body as FormData;
+  expect(form.getAll('cc')).toEqual(['a@customer.example', 'b@customer.example']);
+  expect([...form.keys()]).toEqual(['kind', 'body', 'cc', 'cc', 'files']);
 });

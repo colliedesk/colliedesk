@@ -237,9 +237,35 @@ A customer reply joins the conversation when any of these match, in this order:
 Otherwise the message starts a new conversation. A reply to a **Resolved** or **Closed**
 conversation reopens it.
 
-A message from someone other than the conversation contact (for example a colleague in Cc) also
-joins the thread, with their address shown on the message. Your replies still go only to the
-conversation contact.
+A message from someone other than the conversation contact (for example a colleague in Cc, who
+answers with reply-all) also joins the thread, with their address shown on the message. That person
+does not become the contact of the conversation.
+
+## Copy other people on a reply (Cc)
+
+When a customer writes with colleagues in Cc, copy them on your reply so the thread does not split
+on their side.
+
+- Under the message box, select **Cc** to add addresses. Type or paste an address and press Enter,
+  comma, semicolon or space. Select the **x** on an address to remove it, or press Backspace in the
+  empty box to remove the last one.
+- The box opens with the people the customer copied on their latest message (and a copied colleague
+  who answered with reply-all). Remove any of them before you send. Mail received before Colliedesk
+  kept Cc lines offers nothing.
+- The reply goes to the conversation contact in **To** and to every Cc address. There is no Bcc.
+  The timeline shows **Cc: …** under the reply, and under customer mail that copied someone.
+- At most 10 addresses per reply. Plain addresses only (`name@example.com`, no display names). You
+  cannot copy your own support address, the forwarding address or the platform sending domain.
+- Private notes cannot be copied: they never leave your team.
+- **Retry delivery** sends to the same Cc list again.
+- During the **trial**, as long as the sending domain is not verified, you can copy only addresses
+  the customer already wrote from or copied. Any other address is refused with the same message as a
+  first message to a new customer, and nothing is stored. Verify the domain or choose a plan to lift
+  it. The daily trial limit counts replies, not recipients.
+- A copied person who answers with reply-all joins the same conversation.
+
+Through the API, send `cc` (a list of addresses) with `kind: "outgoing"`; in a multipart request
+send one `cc` field per address before the files. See `createMessage` in `contracts/openapi.yaml`.
 
 ## Limits
 

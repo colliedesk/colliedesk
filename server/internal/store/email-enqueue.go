@@ -45,7 +45,7 @@ func (p OutboundPolicy) notReadyReason(domainVerified bool) string {
 // enqueueReply gives a reply its Message-ID and adds it to the outbox when the workspace has an email
 // channel. The Message-ID is fixed here so every retry, including after a crash, carries the same one.
 // When outbound email cannot work, the reply is recorded as failed with the reason instead of waiting.
-func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID string) error {
+func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID string, cc []string) error {
 	var supportAddress string
 	var verified bool
 	err := tx.QueryRow(ctx, `SELECT support_address,domain_verified_at IS NOT NULL FROM email_channels WHERE workspace_id=$1`, workspaceID).
@@ -57,6 +57,9 @@ func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conver
 		return fmt.Errorf("load email channel: %w", err)
 	}
 	if err := s.checkTrialOutbound(ctx, tx, workspaceID, conversationID, verified); err != nil {
+		return err
+	}
+	if err := s.checkTrialCC(ctx, tx, workspaceID, conversationID, verified, cc); err != nil {
 		return err
 	}
 	emailMessageID, err := email.NewMessageID(email.Domain(supportAddress))

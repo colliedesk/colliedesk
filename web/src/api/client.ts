@@ -142,10 +142,12 @@ export type BulkConversationChanges = RequestBody<'bulkUpdateConversations'>['ch
 
 const json = <Operation extends keyof operations>(value: RequestBody<Operation>): string => JSON.stringify(value);
 
-function messageForm(kind: string, body: string, files: File[]): FormData {
+function messageForm(kind: string, body: string, files: File[], cc: string[]): FormData {
   const form = new FormData();
   form.append('kind', kind);
   form.append('body', body);
+  // The server reads the copied addresses before the files, so a refusal costs no upload.
+  for (const address of cc) form.append('cc', address);
   for (const file of files) form.append('files', file, file.name);
   return form;
 }
@@ -223,8 +225,9 @@ export const api = {
   removeConversationTag: (id: string, tagId: string) => request(`/api/v1/conversations/${id}/tags/${tagId}`, conversationSchema, { method: 'DELETE' }),
   messages: (id: string) => request(`/api/v1/conversations/${id}/messages`, messageListSchema),
   timeEntries: (id: string) => request(`/api/v1/conversations/${id}/time-entries`, timeEntryListSchema),
-  createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = []) =>
-    request(`/api/v1/conversations/${id}/messages`, messageSchema, { method: 'POST', body: files.length > 0 ? messageForm(kind, body, files) : json<'createMessage'>({ kind, body }) }),
+  createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = [], cc: string[] = []) =>
+    request(`/api/v1/conversations/${id}/messages`, messageSchema, { method: 'POST',
+      body: files.length > 0 ? messageForm(kind, body, files, cc) : json<'createMessage'>(cc.length > 0 ? { kind, body, cc } : { kind, body }) }),
   contacts: (search = '') => request(`/api/v1/contacts?search=${encodeURIComponent(search)}`, contactListSchema),
   contact: (id: string) => request(`/api/v1/contacts/${id}`, contactDetailSchema),
   createContact: (name: string, email: string) => request('/api/v1/contacts', contactSchema, { method: 'POST', body: json<'createContact'>({ name, email }) }),

@@ -166,13 +166,13 @@ func (w *Worker) deliver(ctx context.Context, item store.Delivery) error {
 	message, err := email.Compose(email.Outgoing{Files: files,
 		FromName: from.Name, FromAddress: from.Address, ReplyTo: email.PlusAddress(item.SupportAddress, item.ReplyToken),
 		ReplyToName: item.WorkspaceName,
-		ToName:      item.ContactName, ToAddress: item.ContactEmail, Subject: item.Subject, Body: item.Body,
+		ToName:      item.ContactName, ToAddress: item.ContactEmail, Cc: item.CC, Subject: item.Subject, Body: item.Body,
 		MessageID: item.EmailMessageID, InReplyTo: item.InReplyTo, References: item.References, Date: w.options.Now(),
 	})
 	if err != nil {
 		return w.store.MarkDeliveryFailed(ctx, item, truncate(err.Error()))
 	}
-	sendErr := w.sender.Send(ctx, envelope, []string{item.ContactEmail}, message)
+	sendErr := w.sender.Send(ctx, envelope, append([]string{item.ContactEmail}, item.CC...), message)
 	switch {
 	case sendErr == nil:
 		return w.store.MarkDeliverySent(ctx, item, w.options.Now())

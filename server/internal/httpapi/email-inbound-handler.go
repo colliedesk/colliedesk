@@ -62,6 +62,7 @@ func (a *API) receiveInboundEmail(response http.ResponseWriter, request *http.Re
 		return
 	}
 	parsed.Platform = platform
+	parsed.Cc = a.withoutPlatformAddresses(parsed.Cc)
 	if platform {
 		var hosted bool
 		if workspaceID, hosted, err = a.platformWorkspace(request.Context(), parsed); err != nil {
@@ -208,4 +209,17 @@ func (a *API) checkInboundRecipient(response http.ResponseWriter, request *http.
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
+}
+
+// withoutPlatformAddresses drops the addresses on the hosted forwarding and platform sending domains from
+// a Cc list: they are ours, so they are never offered as people to copy.
+func (a *API) withoutPlatformAddresses(addresses []string) []string {
+	config := a.config.Email
+	var kept []string
+	for _, address := range addresses {
+		if !email.UnderDomain(address, config.HostedMailDomain) && !email.UnderDomain(address, config.MailFromDomain) {
+			kept = append(kept, address)
+		}
+	}
+	return kept
 }

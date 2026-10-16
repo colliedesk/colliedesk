@@ -148,6 +148,20 @@ unchanged; the workspace's Support address stays the identity customers see.
   - A wildcard MX does not apply to names that already have records (`app`, `www`, `send`, `rsend`, `mx`),
     which is why those slugs are reserved.
 
+## Cc on replies
+
+- `messages.cc text[]` (NULL = none, 1 to 10 entries) holds the list of an outgoing reply; the outbox
+  reads it from the message, so a retry or a re-sent lease goes to the same people. Envelope
+  recipients are the contact plus `cc`; the header is `Cc:`. There is no Bcc anywhere.
+- Validation is in `httpapi/message-cc.go`: plain addr-spec, at most 10, lowercase, de-duplicated,
+  refuses the workspace support address and anything under `HOSTED_MAIL_DOMAIN` or `MAIL_FROM_DOMAIN`
+  (a Cc to those would loop the reply back in). The store drops the conversation contact.
+  `email.Compose` re-checks every address, so a stored value can never write a header line.
+- Inbound Cc is stored in `email_meta.cc` (sender and own addresses removed, at most 50) and feeds the
+  composer default. It is a suggestion; the server never trusts it on send.
+- A copied person's reply-all threads by `In-Reply-To`/`References` like any reply. It never changes
+  the conversation contact, which is set when the conversation is created.
+
 ## Open
 
 - **Filtered mail is not stored.** Dropped automatic mail is reported only in the 200 response.
