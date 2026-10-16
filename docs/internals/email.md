@@ -56,7 +56,26 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   `Action: failed`) and every one is in the reply's `cc`, the delivery keeps its status and the
   addresses are appended to `last_error`: the customer got the reply. This works only when the
   relay keeps our Message-ID and the DSN reaches `reply+...`. Resend and SES rewrite the Message-ID
-  and take the envelope sender, so their DSNs never arrive here.
+  and take the envelope sender, so their DSNs never arrive here. For Resend, `POST
+  /api/v1/webhooks/resend` (Svix signature, `RESEND_WEBHOOK_SECRET`) fails the reply instead. Each
+  reply on the platform domain is sent from `reply+<token>-<reply id>@MAIL_FROM_DOMAIN`, where the reply
+  id is the first 12 hex digits of its random Message-ID (48 bits; the local part stays under 64
+  characters). The event's `from` therefore names one reply, and nothing is guessed from timing: two
+  replies seconds apart cannot be confused. Inbound routing, the RCPT check and threading accept both
+  this form and the older `reply+<token>@`; for the older form the webhook acts only when the relay
+  kept our Message-ID. The `svix-id` is stored in `relay_webhook_events` in the same transaction, so a
+  redelivery is `duplicate` even after an agent retried the reply. A reply still `queued` (the relay can
+  report a suppressed address before the worker records the send) is failed too; the worker then loses
+  its lease and leaves it. An event that names only the contact fails the reply and keeps any missed-copy note after
+  the reason; one that names only Cc addresses of the reply leaves it sent and appends "Bounced from
+  copied address" to the note, like a DSN. Resend does not document what `to` holds when a Cc copy
+  bounces, so the contact next to others, or an address the reply was not sent to, changes nothing.
+  `sent_at` is kept on failure: the trial recipient cap still counts the reply, the hourly send limit
+  (`status='sent'`) does not. A `from` that `net/mail` rejects (unquoted "Acme, Inc.") is read from its
+  last angle brackets. Ignored failures are logged at Warn with ids only. The SMTP `250`
+  reply does not document the Resend email id and tags exist only on the HTTP API, so SMTP stays the
+  only transport. Replies sent as a verified support address are not matched: support addresses are
+  not unique across workspaces.
 - **Inbound limits are a loop guard plus a ceiling.** 10 messages per sender address per 10
   minutes (the header From, which a sender controls) and 200 new conversations per workspace per
   10 minutes (holds when From rotates). A per-(workspace, sender) advisory lock serializes the

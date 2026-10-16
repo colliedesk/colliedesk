@@ -95,3 +95,25 @@ func TestSlugAddressesStillRouteWhenTheReplyDomainIsBelowTheHostedDomain(t *test
 		t.Fatalf("slug address result = %+v", result)
 	}
 }
+
+// Each reply is sent from reply+<token>-<reply id>@MAIL_FROM_DOMAIN; a customer answering that address
+// reaches the conversation like one answering the older reply+<token>@ form.
+func TestPerReplyAddressThreadsAndPassesTheRecipientCheck(t *testing.T) {
+	api, service, pool, _ := testAPIWithConfig(t, cloudReplyConfig)
+	admin := createSession(t, api, service, "Cloud Eta", "admin@cloud-eta.example.com")
+	conversation, _, token := replyToken(t, api, pool, admin, connectEmail(t, api, admin, "support@eta.example.com"), "ce2@customer.example")
+	address := "reply+" + token + "-0123456789ab@" + cloudMailFromDomain
+
+	if code := recipientCheck(t, api, platformSecret, address); code != http.StatusNoContent {
+		t.Fatalf("per-reply address check: status=%d, want 204", code)
+	}
+	result := inboundOK(t, api, platformSecret, hostedMail(address, "per-reply@customer.example", "To: "+address))
+	if result.Status != "threaded" || result.ConversationID == nil || *result.ConversationID != conversation {
+		t.Fatalf("per-reply address: %+v, want threaded into %s", result, conversation)
+	}
+	for _, bad := range []string{"reply+" + token + "-0123@" + cloudMailFromDomain, "reply+" + token + "-0123456789abz@" + cloudMailFromDomain} {
+		if code := recipientCheck(t, api, platformSecret, bad); code != http.StatusNotFound {
+			t.Errorf("%s: status=%d, want 404", bad, code)
+		}
+	}
+}
