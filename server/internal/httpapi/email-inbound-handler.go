@@ -112,23 +112,35 @@ func (a *API) isPlatformSecret(secret string) bool {
 	return subtle.ConstantTimeCompare(want[:], got[:]) == 1
 }
 
-// platformWorkspace routes mail that arrived with the server-wide secret. A recipient under
-// HOSTED_MAIL_DOMAIN picks the workspace by its slug (hosted is true even when nothing matches, so the
-// caller rejects instead of dropping); otherwise reply+<token>@MAIL_FROM_DOMAIN picks the workspace of
-// that conversation.
+// platformWorkspace routes mail that arrived with the server-wide secret. An envelope recipient at
+// MAIL_FROM_DOMAIN is a reply address and picks the workspace of its conversation, even when that domain
+// sits below HOSTED_MAIL_DOMAIN. Otherwise a recipient under HOSTED_MAIL_DOMAIN picks the workspace by
+// its slug (hosted is true even when nothing matches, so the caller rejects instead of dropping), and
+// a reply token among the recipients is the last resort.
 func (a *API) platformWorkspace(ctx context.Context, parsed email.Inbound) (workspaceID string, hosted bool, err error) {
 	config := a.config.Email
+	if email.ForDomain(parsed.EnvelopeTo, config.MailFromDomain) {
+		workspaceID, err = a.replyWorkspace(ctx, []string{parsed.EnvelopeTo})
+		return workspaceID, false, err
+	}
 	if email.UnderDomain(parsed.EnvelopeTo, config.HostedMailDomain) {
 		// Only the envelope recipient counts: To and Cc are written by the sender.
 		workspaceID, err = a.hostedWorkspace(ctx, parsed.EnvelopeTo)
 		return workspaceID, true, err
 	}
-	token := email.PlatformReplyToken(parsed.Recipients, config.MailFromDomain)
-	if token == "" {
-		return "", false, nil
-	}
-	workspaceID, _, err = a.store.WorkspaceForReplyToken(ctx, token)
+	workspaceID, err = a.replyWorkspace(ctx, parsed.Recipients)
 	return workspaceID, false, err
+}
+
+// replyWorkspace returns the workspace of the conversation named by a reply+<token>@MAIL_FROM_DOMAIN
+// recipient, or "" when there is none or no conversation has that token.
+func (a *API) replyWorkspace(ctx context.Context, recipients []string) (string, error) {
+	token := email.PlatformReplyToken(recipients, a.config.Email.MailFromDomain)
+	if token == "" {
+		return "", nil
+	}
+	workspaceID, _, err := a.store.WorkspaceForReplyToken(ctx, token)
+	return workspaceID, err
 }
 
 // stashEmail writes the gzip-compressed raw message and every file of the message to attachment storage.
@@ -198,7 +210,13 @@ func (a *API) checkInboundRecipient(response http.ResponseWriter, request *http.
 		writeError(response, http.StatusBadRequest, "invalid_request", "The body must be {\"recipient\": \"<address>\"}.")
 		return
 	}
-	workspaceID, err := a.hostedWorkspace(request.Context(), body.Recipient)
+	var workspaceID string
+	var err error
+	if email.ForDomain(body.Recipient, a.config.Email.MailFromDomain) {
+		workspaceID, err = a.replyWorkspace(request.Context(), []string{body.Recipient})
+	} else {
+		workspaceID, err = a.hostedWorkspace(request.Context(), body.Recipient)
+	}
 	if err != nil {
 		writeInternalError(response, err)
 		return

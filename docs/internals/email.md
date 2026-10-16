@@ -51,7 +51,9 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   without spending the attempt. Trial workspaces also have a 200 replies per 24 h cap and may
   reply only to customers who wrote first; see "Trial outbound controls" in `billing.md`.
 - **Bounces.** A delivery report (`multipart/report`, `MAILER-DAEMON`) is still dropped, but the
-  Message-IDs in its returned headers mark our matching replies `failed`.
+  Message-IDs in its returned headers mark our matching replies `failed`. This works only when the
+  relay keeps our Message-ID and the DSN reaches `reply+...`. Resend and SES rewrite the Message-ID
+  and take the envelope sender, so their DSNs never arrive here.
 - **Inbound limits are a loop guard plus a ceiling.** 10 messages per sender address per 10
   minutes (the header From, which a sender controls) and 200 new conversations per workspace per
   10 minutes (holds when From rotates). A per-(workspace, sender) advisory lock serializes the
@@ -79,7 +81,12 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
 - **Platform domain inbound.** `MAIL_FROM_INBOUND_SECRET` authenticates the forwarder of
   `MAIL_FROM_DOMAIN` on the same endpoint. The workspace comes from the conversation of the
   `reply+<token>@MAIL_FROM_DOMAIN` recipient (tokens are unique and 128-bit). Only that domain
-  counts; a token on another domain does not route.
+  counts; a token on another domain does not route. An envelope recipient at `MAIL_FROM_DOMAIN` is
+  checked first, before the hosted slug lookup, in both inbound routing and the RCPT check, because
+  `UnderDomain` is true for every name below `HOSTED_MAIL_DOMAIN`. `ConfigFromEnv` refuses a
+  `MAIL_FROM_DOMAIN` that is one valid, non-reserved label below `HOSTED_MAIL_DOMAIN`, so no workspace
+  can own it as a slug (tests: `TestReplyTokenBelowTheHostedDomainThreadsIntoItsConversation`,
+  `TestConfigFromEnvKeepsTheReplyDomainOutOfTheWorkspaceSlugs`).
 
 ## Hosted cloud addresses (`HOSTED_MAIL_DOMAIN`)
 
