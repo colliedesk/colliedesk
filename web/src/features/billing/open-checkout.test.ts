@@ -43,14 +43,41 @@ test('closing the overlay leaves the page alone', async () => {
   expect(assign).not.toHaveBeenCalled();
 });
 
-test('an embed that cannot start falls back to the hosted checkout', async () => {
-  sdk.create.mockRejectedValue(new Error('blocked'));
-  await openCheckout('https://polar.example/checkout/1');
-  expect(assign).toHaveBeenCalledTimes(1);
-  expect(assign).toHaveBeenCalledWith('https://polar.example/checkout/1');
+test('an overlay that never loads falls back to the hosted checkout after 15 seconds', async () => {
+  vi.useFakeTimers();
+  try {
+    sdk.create.mockReturnValue(new Promise(() => {}));
+    const opened = openCheckout('https://polar.example/checkout/1');
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(assign).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await opened;
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(assign).toHaveBeenCalledWith('https://polar.example/checkout/1');
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
-test('an embed that throws synchronously falls back to the hosted checkout', async () => {
+test('the timeout removes the frame the embed left on the page', async () => {
+  vi.useFakeTimers();
+  try {
+    const frame = document.createElement('iframe');
+    frame.src = 'https://polar.example/checkout/1?embed=true';
+    document.body.append(frame);
+    document.body.classList.add('polar-no-scroll');
+    sdk.create.mockReturnValue(new Promise(() => {}));
+    const opened = openCheckout('https://polar.example/checkout/1');
+    await vi.advanceTimersByTimeAsync(15_000);
+    await opened;
+    expect(document.body.contains(frame)).toBe(false);
+    expect(document.body.classList.contains('polar-no-scroll')).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('an embed script that cannot be loaded falls back to the hosted checkout', async () => {
   sdk.create.mockImplementation(() => { throw new Error('boom'); });
   await openCheckout('https://polar.example/checkout/2');
   expect(assign).toHaveBeenCalledWith('https://polar.example/checkout/2');

@@ -45,6 +45,6 @@ export function BillingRoute({ checkoutReturned = false }: BillingRouteProps) {
   if (me.data && !isAdmin) return <main className="settings-page"><p className="muted-copy">{messages.billingAdminsOnly}</p></main>;
   if (!billing.data) return <main className="settings-page">{billing.isError && <p role="alert" className="error-copy">{messages.billingActionFailed}</p>}</main>;
   return <BillingPage billing={billing.data} timezone={me.data?.timezone ?? 'UTC'} checkoutReturned={checkoutReturned}
-    failed={checkout.isError || portal.isError}
+    failed={checkout.isError || portal.isError} busy={checkout.isPending}
     onCheckout={(plan) => checkout.mutate(plan)} onManage={() => portal.mutate()} />;
 }

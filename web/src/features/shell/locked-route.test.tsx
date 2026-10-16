@@ -44,3 +44,14 @@ test('a locked workspace still reaches the hosted checkout when the overlay cann
   fireEvent.click(await screen.findByRole('button', { name: /team, \$490 per year/i }));
   await waitFor(() => expect(assign).toHaveBeenCalledWith('https://polar.example/checkout/9'));
 });
+
+test('a second click while the checkout is starting does not start another', async () => {
+  embed.create.mockReturnValue(new Promise(() => {}));
+  renderLocked();
+  const button = await screen.findByRole('button', { name: /team, \$490 per year/i });
+  fireEvent.click(button);
+  await waitFor(() => expect(embed.create).toHaveBeenCalledTimes(1));
+  expect(button).toBeDisabled();
+  fireEvent.click(button);
+  expect(api.startCheckout).toHaveBeenCalledTimes(1);
+});

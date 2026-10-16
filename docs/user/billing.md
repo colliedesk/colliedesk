@@ -97,8 +97,8 @@ trial (or the subscription) has ended, instead of the inbox.
 4. You return to **Billing**. The plan updates within a few moments, once the provider confirms
    the payment.
 
-If the window cannot open (for example a browser extension blocks it), Colliedesk opens the same
-checkout as a full page instead.
+If the window does not load within 15 seconds (for example a browser extension blocks it),
+Colliedesk opens the same checkout as a full page instead.
 
 A workspace that already pays cannot start a second checkout. Change or cancel in the portal.
 If two checkouts ever run at once, the page warns that the workspace pays twice; cancel the extra

@@ -55,6 +55,21 @@ test('when the overlay cannot open, the hosted checkout is used so the purchase 
   await waitFor(() => expect(assign).toHaveBeenCalledWith('https://polar.example/checkout/1'));
 });
 
+test('a second click while the checkout is starting does not start another', async () => {
+  embed.create.mockReturnValue(new Promise(() => {}));
+  api.me.mockResolvedValue(me('admin'));
+  api.billing.mockResolvedValue(free);
+  api.startCheckout.mockResolvedValue({ url: 'https://polar.example/checkout/1' });
+  renderRoute();
+  const button = await screen.findByRole('button', { name: /team, \$490 per year/i });
+  fireEvent.click(button);
+  await waitFor(() => expect(embed.create).toHaveBeenCalledTimes(1));
+  expect(button).toBeDisabled();
+  expect(button).toHaveAttribute('aria-busy', 'true');
+  fireEvent.click(button);
+  expect(api.startCheckout).toHaveBeenCalledTimes(1);
+});
+
 test('manage billing opens the portal URL', async () => {
   api.me.mockResolvedValue(me('admin'));
   api.billing.mockResolvedValue({ ...free, plan: 'team', status: 'active', current_period_end: '2026-11-15T00:00:00Z' });
