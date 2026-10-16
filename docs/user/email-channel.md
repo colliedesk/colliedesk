@@ -258,6 +258,9 @@ on their side.
   cannot copy your own support address, the forwarding address or the platform sending domain.
 - Private notes cannot be copied: they never leave your team.
 - **Retry delivery** sends to the same Cc list again.
+- A copied address that does not exist never stops the reply to the customer. The reply shows
+  **Sent**, with a line naming each copied address it did not reach, whether the mail system
+  refused it at once or bounced it later.
 - During the **trial**, as long as the sending domain is not verified, you can copy only addresses
   the customer already wrote from or copied. Any other address is refused with the same message as a
   first message to a new customer, and nothing is stored. Verify the domain or choose a plan to lift

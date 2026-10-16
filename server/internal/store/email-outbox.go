@@ -155,9 +155,10 @@ func (s *Store) CountSentSince(ctx context.Context, workspaceID string, since ti
 	return count, nil
 }
 
-// MarkDeliverySent records a successful hand-off to the SMTP relay.
-func (s *Store) MarkDeliverySent(ctx context.Context, item Delivery, sentAt time.Time) error {
-	return s.finishDelivery(ctx, item, `status='sent',sent_at=$4,last_error=NULL`, sentAt)
+// MarkDeliverySent records a successful hand-off to the SMTP relay. note, kept as the delivery's
+// last error, names copied addresses the reply did not reach; empty when it reached everyone.
+func (s *Store) MarkDeliverySent(ctx context.Context, item Delivery, sentAt time.Time, note string) error {
+	return s.finishDelivery(ctx, item, `status='sent',sent_at=$4,last_error=NULLIF($5,'')`, sentAt, note)
 }
 
 // MarkDeliveryRetry keeps the row queued and schedules the next attempt.

@@ -132,7 +132,7 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 		return dropped(result, email.DropOwnAddress), nil
 	}
 	if in.DropReason == email.DropMailerDaemon && len(in.BouncedMessageIDs) > 0 {
-		if err := markBounced(ctx, tx, workspaceID, in.BouncedMessageIDs); err != nil {
+		if err := markBounced(ctx, tx, workspaceID, in.BouncedMessageIDs, in.BouncedRecipients); err != nil {
 			return result, err
 		}
 		if err := tx.Commit(ctx); err != nil {

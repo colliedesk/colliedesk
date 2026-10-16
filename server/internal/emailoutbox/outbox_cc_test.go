@@ -83,3 +83,38 @@ func TestAReplyWithoutCopiesStillGoesToTheContactAlone(t *testing.T) {
 		t.Fatalf("received = %+v", received)
 	}
 }
+
+func TestARefusedCopyStillDeliversTheReplyToTheContact(t *testing.T) {
+	f := newFixture(t)
+	server := startSMTPServer(t)
+	server.refuseRecipient("gone@customer.example", "550 5.1.1 No such user")
+	clock := time.Now().UTC().Add(time.Second)
+	reply := f.replyCopying(t, "gone@customer.example", "ops@customer.example")
+	process(t, newWorker(f, server, &clock))
+	delivery := f.delivery(t, reply)
+	if delivery.Status != "sent" {
+		t.Fatalf("one refused Cc failed the whole reply: %+v", delivery)
+	}
+	if delivery.LastError == nil || !strings.Contains(*delivery.LastError, "gone@customer.example") {
+		t.Fatalf("the refused copy must be reported on the delivery: %+v", delivery)
+	}
+	received := server.mail()
+	if len(received) != 1 || !reflect.DeepEqual(received[0].To, []string{"olive@customer.example", "ops@customer.example"}) {
+		t.Fatalf("received = %+v", received)
+	}
+}
+
+func TestARefusedContactStillFailsTheReply(t *testing.T) {
+	f := newFixture(t)
+	server := startSMTPServer(t)
+	server.refuseRecipient("olive@customer.example", "550 5.1.1 No such user")
+	clock := time.Now().UTC().Add(time.Second)
+	reply := f.replyCopying(t, "ops@customer.example")
+	process(t, newWorker(f, server, &clock))
+	if delivery := f.delivery(t, reply); delivery.Status != "failed" {
+		t.Fatalf("a reply the customer cannot receive must fail: %+v", delivery)
+	}
+	if len(server.mail()) != 0 {
+		t.Fatal("nothing may be sent when the contact is refused")
+	}
+}

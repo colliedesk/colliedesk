@@ -188,6 +188,9 @@ func NewToken() (string, error) {
 	return hex.EncodeToString(raw), nil
 }
 
+// ValidAddress reports whether address is a plain addr-spec that a header can carry as written.
+func ValidAddress(address string) bool { return validAddress(address) }
+
 func validAddress(address string) bool {
 	parsed, err := mail.ParseAddress(address)
 	return err == nil && parsed.Address == address

@@ -51,7 +51,10 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   without spending the attempt. Trial workspaces also have a cap of 200 recipients (To + Cc) per 24 h and may
   reply only to customers who wrote first; see "Trial outbound controls" in `billing.md`.
 - **Bounces.** A delivery report (`multipart/report`, `MAILER-DAEMON`) is still dropped, but the
-  Message-IDs in its returned headers mark our matching replies `failed`.
+  Message-IDs in its returned headers mark our matching replies `failed`. When its
+  `message/delivery-status` part names the failed recipients (`Final-Recipient` with
+  `Action: failed`) and every one is in the reply's `cc`, the delivery keeps its status and the
+  addresses are appended to `last_error`: the customer got the reply.
 - **Inbound limits are a loop guard plus a ceiling.** 10 messages per sender address per 10
   minutes (the header From, which a sender controls) and 200 new conversations per workspace per
   10 minutes (holds when From rotates). A per-(workspace, sender) advisory lock serializes the
@@ -157,6 +160,11 @@ unchanged; the workspace's Support address stays the identity customers see.
   refuses the workspace support address and anything under `HOSTED_MAIL_DOMAIN` or `MAIL_FROM_DOMAIN`
   (a Cc to those would loop the reply back in). The store drops the conversation contact.
   `email.Compose` re-checks every address, so a stored value can never write a header line.
+- A Cc address never fails the reply to the contact. The worker leaves out a stored address that is
+  not a plain addr-spec, and `SMTPSender.SendCopying` skips a copy refused at `RCPT TO` (temporary
+  refusals too: a retry would send the customer a second copy). The reply is `sent` and
+  `last_error` names the missed copies; the web timeline shows that line under a sent reply.
+  A refused contact still fails the delivery.
 - Inbound Cc is stored in `email_meta.cc` (sender and own addresses removed, at most 50) and feeds the
   composer default. It is a suggestion; the server never trusts it on send.
 - A copied person's reply-all threads by `In-Reply-To`/`References` like any reply. It never changes

@@ -1796,7 +1796,12 @@ components:
       properties:
         status: {$ref: '#/components/schemas/DeliveryStatus'}
         attempts: {type: integer, minimum: 0}
-        last_error: {type: [string, 'null']}
+        last_error:
+          type: [string, 'null']
+          description: >
+            Why a failed or retried delivery did not go out. On a sent reply, names the copied (Cc)
+            addresses it did not reach: refused by the relay or bounced later. A copy that misses
+            never fails the reply to the contact.
         sent_at: {type: [string, 'null'], format: date-time}
     EmailAuthentication:
       type: string

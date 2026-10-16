@@ -99,3 +99,14 @@ test('shows who a reply was copied to and who the customer copied', () => {
   expect(within(customerItem).getByText('Cc: legal@customer.example')).toBeInTheDocument();
   expect(within(plainItem).queryByText(/^Cc:/)).not.toBeInTheDocument();
 });
+
+test('a sent reply that missed a copied address says which one, without offering a retry', () => {
+  const partly: Message = {
+    ...base, id: '66666666-6666-4666-8666-666666666666', kind: 'outgoing', body: 'Copying your team.', cc: ['gone@customer.example'],
+    delivery: { status: 'sent', attempts: 1, last_error: 'Sent to the customer, but not to: gone@customer.example (550 5.1.1 No such user)', sent_at: '2026-10-14T00:01:00Z' },
+  };
+  render(<TimelinePanel items={[partly]} timezone="UTC" onRetryDelivery={vi.fn()} />);
+  const item = screen.getByRole('article');
+  expect(within(item).getByText(/not to: gone@customer\.example/i)).toBeInTheDocument();
+  expect(within(item).queryByRole('button', { name: /retry delivery/i })).not.toBeInTheDocument();
+});

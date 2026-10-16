@@ -1179,6 +1179,7 @@ export interface components {
         MessageDelivery: {
             status: components["schemas"]["DeliveryStatus"];
             attempts: number;
+            /** @description Why a failed or retried delivery did not go out. On a sent reply, names the copied (Cc) addresses it did not reach: refused by the relay or bounced later. A copy that misses never fails the reply to the contact. */
             last_error: string | null;
             /** Format: date-time */
             sent_at: string | null;

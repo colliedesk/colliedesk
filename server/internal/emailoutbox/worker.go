@@ -30,9 +30,10 @@ const (
 	limitDeferral      = 10 * time.Minute
 )
 
-// Sender hands one composed message to a mail relay.
+// Sender hands one composed reply to a mail relay: to must accept it, a refused copy is skipped and
+// returned.
 type Sender interface {
-	Send(ctx context.Context, from string, to []string, message []byte) error
+	SendCopying(ctx context.Context, from, to string, copies []string, message []byte) ([]email.RefusedCopy, error)
 }
 
 // Options tune the worker; zero values use the defaults.
@@ -163,25 +164,53 @@ func (w *Worker) deliver(ctx context.Context, item store.Delivery) error {
 	if err != nil {
 		return w.store.MarkDeliveryRetry(ctx, item, w.options.Now().Add(Backoff(item.Attempts)), truncate(err.Error()))
 	}
+	copies, unusable := usableCopies(item.CC)
 	message, err := email.Compose(email.Outgoing{Files: files,
 		FromName: from.Name, FromAddress: from.Address, ReplyTo: email.PlusAddress(item.SupportAddress, item.ReplyToken),
 		ReplyToName: item.WorkspaceName,
-		ToName:      item.ContactName, ToAddress: item.ContactEmail, Cc: item.CC, Subject: item.Subject, Body: item.Body,
+		ToName:      item.ContactName, ToAddress: item.ContactEmail, Cc: copies, Subject: item.Subject, Body: item.Body,
 		MessageID: item.EmailMessageID, InReplyTo: item.InReplyTo, References: item.References, Date: w.options.Now(),
 	})
 	if err != nil {
 		return w.store.MarkDeliveryFailed(ctx, item, truncate(err.Error()))
 	}
-	sendErr := w.sender.Send(ctx, envelope, append([]string{item.ContactEmail}, item.CC...), message)
+	refused, sendErr := w.sender.SendCopying(ctx, envelope, item.ContactEmail, copies, message)
 	switch {
 	case sendErr == nil:
-		return w.store.MarkDeliverySent(ctx, item, w.options.Now())
+		return w.store.MarkDeliverySent(ctx, item, w.options.Now(), truncate(missedCopies(append(unusable, refused...))))
 	case email.IsPermanent(sendErr) || item.Attempts >= w.options.MaxAttempts:
 		w.options.Logger.Warn("email delivery failed", "workspace", item.WorkspaceID, "message", item.MessageID, "attempts", item.Attempts, "error", sendErr)
 		return w.store.MarkDeliveryFailed(ctx, item, truncate(sendErr.Error()))
 	default:
 		return w.store.MarkDeliveryRetry(ctx, item, w.options.Now().Add(Backoff(item.Attempts)), truncate(sendErr.Error()))
 	}
+}
+
+// usableCopies splits a stored Cc list into the addresses a message can carry and the rest, which are
+// reported instead of failing the reply to the customer.
+func usableCopies(cc []string) ([]string, []email.RefusedCopy) {
+	var usable []string
+	var unusable []email.RefusedCopy
+	for _, address := range cc {
+		if email.ValidAddress(address) {
+			usable = append(usable, address)
+		} else {
+			unusable = append(unusable, email.RefusedCopy{Address: address, Reason: "not a plain email address"})
+		}
+	}
+	return usable, unusable
+}
+
+// missedCopies describes the copied addresses a sent reply did not reach; empty when it reached all.
+func missedCopies(missed []email.RefusedCopy) string {
+	if len(missed) == 0 {
+		return ""
+	}
+	parts := make([]string, len(missed))
+	for i, copy := range missed {
+		parts[i] = copy.Address + " (" + copy.Reason + ")"
+	}
+	return "Sent to the customer, but not to: " + strings.Join(parts, "; ")
 }
 
 // errFileMissing marks a file that is gone or no longer matches its checksum: permanent for the delivery.
