@@ -13,7 +13,7 @@ CHECK = os.path.join(ROOT, ".github", "scripts", "roadmap-check.py")
 REPO = "https://github.com/colliedesk/colliedesk/issues/"
 
 
-def run(roadmap, issues):
+def run(roadmap, issues, closing=""):
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "ROADMAP.md")
         with open(path, "w", encoding="utf-8") as f:
@@ -21,7 +21,7 @@ def run(roadmap, issues):
         issues_path = os.path.join(tmp, "issues.json")
         with open(issues_path, "w", encoding="utf-8") as f:
             json.dump(issues, f)
-        env = dict(os.environ, ROADMAP_ISSUES_FILE=issues_path)
+        env = dict(os.environ, ROADMAP_ISSUES_FILE=issues_path, ROADMAP_CLOSING=closing)
         return subprocess.run([sys.executable, "-I", CHECK, path], env=env,
                               capture_output=True, text=True)
 
@@ -38,7 +38,7 @@ def issue(state="open", labels=()):
 
 
 CASES = [
-    # (name, roadmap, issues, should_pass, expected text in output)
+    # (name, roadmap, issues, should_pass, expected text in output[, issues the PR closes])
     ("planned issue in Next passes",
      doc(next_items=f"- Import ([#97]({REPO}97)).\n"), {"97": issue(labels=["planned"])}, True, ""),
     ("planned issue in Then passes",
@@ -57,11 +57,20 @@ CASES = [
      doc(now_items=f"- Shipped ([#5]({REPO}5)).\n"), {}, True, ""),
     ("links to other repositories are ignored",
      doc(next_items="- Site ([#31](https://github.com/colliedesk/colliedesk.com/issues/31)).\n"), {}, True, ""),
+    # A pull request that closes a planned issue must take it off the roadmap in the same PR.
+    ("PR closing an issue still on the roadmap fails",
+     doc(next_items=f"- Import ([#97]({REPO}97)).\n"), {"97": issue(labels=["planned"])}, False,
+     "closes #97", "97"),
+    ("PR closing an issue already taken off the roadmap passes",
+     doc(next_items=f"- Collision ([#101]({REPO}101)).\n"), {"101": issue(labels=["planned"])}, True,
+     "", "97 12"),
+    ("PR closing an issue listed under Now passes",
+     doc(now_items=f"- Import ([#97]({REPO}97)).\n"), {}, True, "", "97"),
 ]
 
 failed = 0
-for name, roadmap, issues, should_pass, expect in CASES:
-    r = run(roadmap, issues)
+for name, roadmap, issues, should_pass, expect, *closing in CASES:
+    r = run(roadmap, issues, *closing)
     out = r.stdout + r.stderr
     ok = (r.returncode == 0) == should_pass and (expect in out)
     if not ok:

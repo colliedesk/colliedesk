@@ -103,6 +103,23 @@ owner announces beta. Two gates refuse other tags: the repository tag ruleset
 `.github/scripts/release-tag-check.sh` in `release.yml`. Never edit either one without the
 owner's announcement quoted in the PR or ruleset change.
 
+## Issues and the roadmap
+
+ROADMAP.md is read by teams deciding whether to move to Colliedesk, so it must only promise what
+the issue tracker backs. CI (`roadmap` job, part of `ci-ok`) enforces this; follow it as you work:
+
+- **Labels mean state:** `needs-triage` (new, added automatically), `accepted` (belongs in
+  Colliedesk, not scheduled), `planned` (listed under Next or Then). Only a maintainer's request
+  moves an issue to `accepted` or `planned`; say who asked in the issue.
+- **Shipping a planned issue:** put `Closes #N` in the PR description **and** remove that line
+  from ROADMAP.md in the same PR (or move it under Now without the link). CI fails otherwise.
+- **Adding to the roadmap:** link the issue and label it to match the section:
+  `gh issue edit N --add-label planned` for Next/Then, `accepted` for Later.
+- **New ideas from users** belong in Discussions → Ideas, not Issues. When a maintainer accepts
+  one, open an issue that links the discussion.
+- Check before pushing: `python3 -I .github/scripts/roadmap-check.py ROADMAP.md` (needs `gh`
+  logged in). Add `ROADMAP_CLOSING="N"` to check a PR that closes issue N.
+
 ## Clean room
 
 Do not open, copy, translate or paraphrase the source code of other helpdesks, especially

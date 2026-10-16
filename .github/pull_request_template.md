@@ -1,6 +1,6 @@
 ## What and why
 
-<!-- One or two sentences. Link the issue if there is one. -->
+<!-- One or two sentences. Write "Closes #N" for the issue this ships. -->
 
 ## Checklist
 
@@ -9,6 +9,7 @@
 - [ ] New queries filter by `workspace_id`, with a cross-workspace test
 - [ ] Every new action has a way back and a way to see its state
 - [ ] User-visible change updates its page in `docs/user/`
+- [ ] Ships a `planned` issue: its line is removed from `ROADMAP.md` in this PR (CI checks)
 
 External contributions need the HC Labs Contributor License Agreement before they can be merged.
 See `CONTRIBUTING.md`.
