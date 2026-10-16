@@ -52,3 +52,7 @@ test('an agent without a display name signs with the part of the email before th
   expect(agentSignatureName({ display_name: ' Chinh ', email: 'chinh@example.com' })).toBe('Chinh');
   expect(agentSignatureName(undefined)).toBe('');
 });
+
+test('the email name of an agent without a display name drops a +tag', () => {
+  expect(agentSignatureName({ display_name: '', email: 'chinh.hoang+admin@example.com' })).toBe('chinh.hoang');
+});
