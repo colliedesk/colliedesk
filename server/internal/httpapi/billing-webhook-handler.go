@@ -44,6 +44,11 @@ func (a *API) receivePolarWebhook(response http.ResponseWriter, request *http.Re
 		writeJSON(response, http.StatusOK, map[string]string{"status": webhookIgnored})
 		return
 	}
+	if a.isFoundingProduct(event.Subscription.ProductID) {
+		// Whatever happens to the event, the slot count may have changed, including for a buyer
+		// of the checkout link who has no workspace here.
+		defer a.refreshFoundingAfterWebhook(request.Context())
+	}
 	incoming, workspaceID, reason := a.subscriptionFromEvent(event)
 	webhookID := request.Header.Get("webhook-id")
 	if reason != "" {
