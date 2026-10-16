@@ -25,12 +25,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - name: Require a vX.Y.Z tag
-        run: |
-          if ! printf '%s' "$GITHUB_REF_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
-            echo "::error::$GITHUB_REF_NAME is not vX.Y.Z or vX.Y.Z-prerelease."
-            exit 1
-          fi
+      # Alpha: only v0.0.N. Beta starts when the owner announces it (see the script).
+      - name: Require an allowed release tag
+        run: sh .github/scripts/release-tag-check.sh "$GITHUB_REF_NAME"
       # latest moves only for a stable tag that is the highest stable version, so tagging a
       # patch for an older line never moves self-hosters on latest backwards.
       - id: channel
