@@ -16,6 +16,8 @@ interface ConversationListProps {
   hasNextPage: boolean;
   onPage?: (page: number) => void;
   filtered?: boolean;
+  // The Open view is empty but the workspace has conversations: caught up, not new.
+  nothingOpen?: boolean;
   loading?: boolean;
   // refreshing: a refetch is running while the previous rows stay on screen.
   refreshing?: boolean;
@@ -33,12 +35,12 @@ interface ConversationListProps {
 
 const visibleTags = 2;
 
-export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, loading = false, refreshing = false,
+export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
   failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef }: ConversationListProps) {
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
   const now = useNow(timezone);
   const settled = !loading && !failed;
-  const brandNew = items.length === 0 && !filtered && settled && page === 1;
+  const brandNew = items.length === 0 && !filtered && !nothingOpen && settled && page === 1;
   const checkedCount = items.filter((item) => checkedIds?.has(item.id)).length;
   const allChecked = items.length > 0 && checkedCount === items.length;
   const selectAll = useRef<HTMLInputElement | null>(null);
@@ -69,7 +71,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
       </section>}
       {failed && <div className="empty-copy"><p role="alert" className="error-copy">{messages.conversationsFailed}</p>
         <button type="button" onClick={() => onRetry?.()}>{messages.tryAgain}</button></div>}
-      {items.length === 0 && !brandNew && settled && <div className="empty-copy"><p>{messages.noConversations}</p>
+      {items.length === 0 && !brandNew && settled && <div className="empty-copy"><p>{nothingOpen ? messages.noOpenConversations : messages.noConversations}</p>
         {filtered && onClearFilters && <button type="button" onClick={onClearFilters}>{messages.clearFilters}</button>}</div>}
       {items.length > 0 && <label className="select-all">
         <input type="checkbox" ref={setSelectAll} checked={allChecked} onChange={(event) => onToggleAll?.(event.target.checked)} />
