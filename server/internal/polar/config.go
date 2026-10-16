@@ -73,3 +73,21 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 	}
 	return config, nil
 }
+
+// CheckoutPlans lists the checkout plan names this configuration can sell, in the order they are
+// offered. Team 25 is listed only when both of its products are set.
+func (c Config) CheckoutPlans() []string {
+	plans := []string{"team_monthly", "team_yearly"}
+	if c.Products.Team25Monthly != "" {
+		plans = append(plans, "team25_monthly")
+	}
+	if c.Products.Team25Yearly != "" {
+		plans = append(plans, "team25_yearly")
+	}
+	return append(plans, "founding")
+}
+
+// SellsTeam25 reports whether both Team 25 products are configured.
+func (c Config) SellsTeam25() bool {
+	return c.Products.Team25Monthly != "" && c.Products.Team25Yearly != ""
+}

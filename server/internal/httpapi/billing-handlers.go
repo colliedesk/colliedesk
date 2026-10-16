@@ -21,6 +21,7 @@ func (a *API) getBilling(response http.ResponseWriter, request *http.Request) {
 		writeInternalError(response, err)
 		return
 	}
+	billing.CheckoutPlans = a.config.Billing.CheckoutPlans()
 	writeJSON(response, http.StatusOK, billing)
 }
 
@@ -62,12 +63,12 @@ func (a *API) createCheckout(response http.ResponseWriter, request *http.Request
 		Plan string `json:"plan"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "plan must be team_monthly, team_yearly, team25_monthly, team25_yearly or founding.")
+		writeError(response, http.StatusBadRequest, "invalid_request", a.checkoutPlanMessage())
 		return
 	}
 	product, ok := a.checkoutProduct(input.Plan)
 	if !ok {
-		writeError(response, http.StatusBadRequest, "invalid_request", "plan must be team_monthly, team_yearly, team25_monthly, team25_yearly or founding.")
+		writeError(response, http.StatusBadRequest, "invalid_request", a.checkoutPlanMessage())
 		return
 	}
 	who := principal(request)
@@ -134,4 +135,10 @@ func (a *API) createPortal(response http.ResponseWriter, request *http.Request) 
 func writeBillingProviderError(response http.ResponseWriter, err error) {
 	slog.Error("billing provider request failed", "error", err)
 	writeError(response, http.StatusBadGateway, "billing_provider_error", "The billing provider could not be reached. Try again.")
+}
+
+// checkoutPlanMessage names the plans a client may ask for: only those this server can sell.
+func (a *API) checkoutPlanMessage() string {
+	plans := a.config.Billing.CheckoutPlans()
+	return "plan must be " + strings.Join(plans[:len(plans)-1], ", ") + " or " + plans[len(plans)-1] + "."
 }

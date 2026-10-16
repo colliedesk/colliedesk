@@ -24,13 +24,10 @@ type StorageCapError struct {
 
 func (e *StorageCapError) Error() string {
 	remedy := "Contact us for more storage"
-	name := "Team"
-	switch e.Plan {
-	case domain.PlanFounding:
-		remedy, name = "Upgrade to the Team plan (Billing > Manage billing) for a higher cap", "Founding"
-	case domain.PlanTeam25:
-		name = "Team 25"
+	if e.Plan == domain.PlanFounding {
+		remedy = "Upgrade to the Team plan (Billing > Manage billing) for a higher cap"
 	}
+	name := domain.PlanName(e.Plan)
 	return fmt.Sprintf("this import needs %s of attachments, but only %s is free under the %s attachment cap of the %s plan. "+
 		"Nothing was imported. %s, or import a smaller slice with --since.",
 		domain.FormatBytes(e.Needed), domain.FormatBytes(max(e.Limit-e.Used, 0)), domain.FormatBytes(e.Limit), name, remedy)
@@ -63,7 +60,7 @@ func (r *run) cappedRoom(ctx context.Context) (room store.StorageRoom, ok bool, 
 // The size is not in the ticket list, so a read-only pass adds up the reported attachment bytes first:
 // the dry-run listing and id probing, then one read of each ticket and of its conversations. It
 // repeats the listing and probing of the real run and costs a second round of API calls, once, and
-// only for a Founding workspace. Trial, Team and self-hosted runs skip it.
+// only for a workspace on a paid plan, whose cap counts imports. Trial and self-hosted runs skip it.
 func (r *run) guardStorage(ctx context.Context) error {
 	if _, ok, err := r.cappedRoom(ctx); err != nil || !ok {
 		return err

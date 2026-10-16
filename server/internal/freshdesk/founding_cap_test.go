@@ -317,3 +317,15 @@ func TestSizingSkipsATicketWhoseConversationsAreGoneOrForbidden(t *testing.T) {
 		})
 	}
 }
+
+func TestReportNamesThePlanAsAPersonReadsIt(t *testing.T) {
+	for plan, want := range map[string]string{"team25": "Team 25 plan", "team": "Team plan", "founding": "Founding plan"} {
+		for _, refuse := range []bool{false, true} {
+			report := &freshdesk.Report{StorageCap: &freshdesk.StorageCapCheck{Plan: plan, LimitBytes: 1 << 30, WouldRefuse: refuse}}
+			markdown := report.Markdown()
+			if !strings.Contains(markdown, want) || strings.Contains(markdown, "team25") {
+				t.Errorf("plan %s refuse=%v: report lacks %q or shows the raw id:\n%s", plan, refuse, want, markdown)
+			}
+		}
+	}
+}

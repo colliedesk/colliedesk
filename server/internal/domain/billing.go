@@ -41,6 +41,21 @@ type PlanLimits struct {
 	RepliesPer24h *int `json:"replies_per_24h"`
 }
 
+// PlanName is the plan as a person reads it: "Team 25", not the stored id "team25".
+func PlanName(plan string) string {
+	switch plan {
+	case PlanTeam:
+		return "Team"
+	case PlanTeam25:
+		return "Team 25"
+	case PlanFounding:
+		return "Founding"
+	case PlanTrial:
+		return "trial"
+	}
+	return plan
+}
+
 // StorageCap returns the attachment storage cap of plan in bytes, or 0 when the plan has none.
 func StorageCap(plan string) int64 {
 	switch plan {
@@ -180,6 +195,8 @@ func FormatBytes(n int64) string {
 type PlanLimitError struct {
 	Plan   string
 	Agents int // the agent cap of the plan
+	// Team25Offered is true when this server can sell Team 25, so a Team workspace can be told to upgrade.
+	Team25Offered bool
 }
 
 func (e *PlanLimitError) Error() string {
@@ -191,6 +208,9 @@ func (e *PlanLimitError) Error() string {
 		name = "Team 25"
 	case PlanTrial:
 		name = "trial"
+	}
+	if e.Plan == PlanTeam && e.Team25Offered {
+		return fmt.Sprintf("The Team plan allows %d agents, pending invites included. Revoke a pending invite to free a seat, or upgrade to Team 25 (up to %d agents) under Manage billing.", e.Agents, LimitsFor(PlanTeam25).Agents)
 	}
 	if e.Plan == PlanTrial {
 		return fmt.Sprintf("The trial allows %d agents, pending invites included. Revoke a pending invite to free a seat, or subscribe and contact us for more than %d agents.", e.Agents, e.Agents)
@@ -242,10 +262,13 @@ type Billing struct {
 	ComplimentaryUntil *time.Time   `json:"complimentary_until"`
 	Limits             PlanLimits   `json:"limits"`
 	Usage              BillingUsage `json:"usage"`
+	// CheckoutPlans are the plans this server can sell, in the order they are offered. The web app
+	// shows a purchase button for each and no other.
+	CheckoutPlans []string `json:"checkout_plans"`
 }
 
 // NewBilling derives the plan in effect from every subscription of the workspace. The best
-// subscription that is still paid decides the plan (founding before team, then the later period
+// subscription that is still paid decides the plan (by planRank, then the later period
 // end); with none paid, the most recently changed one explains the state. ActiveSubscriptions
 // counts the paid ones so a duplicate is visible.
 func NewBilling(subscriptions []Subscription, trialEndsAt time.Time, usage BillingUsage, now time.Time) Billing {
@@ -283,10 +306,14 @@ func NewBilling(subscriptions []Subscription, trialEndsAt time.Time, usage Billi
 	return billing
 }
 
-// planRank orders the paid plans: the one with more agents wins when a workspace holds two.
+// planRank orders the paid plans by what they give, so a workspace that holds two gets the better
+// one: Team 25 has the most agents; Team and Founding have the same agents but Team has the larger
+// storage cap.
 func planRank(plan string) int {
 	switch plan {
 	case PlanTeam25:
+		return 3
+	case PlanTeam:
 		return 2
 	case PlanFounding:
 		return 1

@@ -1,6 +1,7 @@
 package domain_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -55,5 +56,41 @@ func TestTeam25OutranksOtherPaidPlans(t *testing.T) {
 	got := domain.NewAccess(subs, time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)).Plan
 	if got != domain.PlanTeam25 {
 		t.Fatalf("plan in effect=%s, want team25", got)
+	}
+}
+
+func TestPaidPlanRankFollowsTheLimitsTheyGive(t *testing.T) {
+	future := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+	held := func(plans ...string) string {
+		var subs []domain.Subscription
+		for i, plan := range plans {
+			subs = append(subs, domain.Subscription{Plan: plan, SubscriptionID: "sub_" + string(rune('a'+i)), Status: "active", CurrentPeriodEnd: &future})
+		}
+		return domain.NewAccess(subs, time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)).Plan
+	}
+	if got := held(domain.PlanFounding, domain.PlanTeam); got != domain.PlanTeam {
+		t.Errorf("Founding and Team held together: %s, want team (100 GiB beats 20 GiB at the same agents)", got)
+	}
+	if got := held(domain.PlanTeam, domain.PlanFounding); got != domain.PlanTeam {
+		t.Errorf("Team and Founding held together, other order: %s, want team", got)
+	}
+	if got := held(domain.PlanTeam, domain.PlanTeam25, domain.PlanFounding); got != domain.PlanTeam25 {
+		t.Errorf("all three held: %s, want team25", got)
+	}
+}
+
+func TestPlanLimitErrorPointsTeamToTeam25OnlyWhenItIsOffered(t *testing.T) {
+	offered := (&domain.PlanLimitError{Plan: domain.PlanTeam, Agents: 10, Team25Offered: true}).Error()
+	if !strings.Contains(offered, "upgrade to Team 25") || !strings.Contains(offered, "25 agents") {
+		t.Errorf("Team with Team 25 on sale: %q, want a pointer to Team 25 and its 25 agents", offered)
+	}
+	for _, e := range []*domain.PlanLimitError{
+		{Plan: domain.PlanTeam, Agents: 10},
+		{Plan: domain.PlanFounding, Agents: 10, Team25Offered: true},
+		{Plan: domain.PlanTeam25, Agents: 25, Team25Offered: true},
+	} {
+		if message := e.Error(); strings.Contains(message, "Team 25 under") || !strings.Contains(message, "contact us") {
+			t.Errorf("%+v: %q, want only the contact-us wording", e, message)
+		}
 	}
 }

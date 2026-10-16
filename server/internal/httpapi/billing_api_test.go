@@ -1,11 +1,12 @@
 package httpapi_test
 
 import (
-	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
 func TestBillingIsAdminOnly(t *testing.T) {
@@ -175,8 +176,25 @@ func TestCheckoutTeam25NeedsItsProductsConfigured(t *testing.T) {
 			t.Errorf("%s without a Polar product: status=%d body=%s, want 400 as for an unknown plan", plan, response.Code, response.Body.String())
 		}
 	}
+	response := request(t, api, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": "team25_monthly"}, admin, nil)
+	if strings.Contains(response.Body.String(), "team25") {
+		t.Errorf("error %s lists a plan this server cannot sell", response.Body.String())
+	}
+	var offered billingView
+	decode(t, request(t, api, http.MethodGet, "/api/v1/billing", nil, admin, nil), &offered)
+	if strings.Join(offered.CheckoutPlans, ",") != "team_monthly,team_yearly,founding" {
+		t.Errorf("checkout_plans=%v, want the three plans this server can sell", offered.CheckoutPlans)
+	}
 	if calls := fake.recorded(); len(calls) != 0 {
 		t.Fatalf("an unconfigured plan reached Polar: %v", calls)
+	}
+}
+
+func TestBillingListsEveryPlanTheServerCanSell(t *testing.T) {
+	f := newBillingFixture(t)
+	got := getBilling(t, f.api, f.adminA).CheckoutPlans
+	if strings.Join(got, ",") != "team_monthly,team_yearly,team25_monthly,team25_yearly,founding" {
+		t.Fatalf("checkout_plans=%v", got)
 	}
 }
 

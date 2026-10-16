@@ -4,11 +4,11 @@ import type { Billing } from '../../api/schemas';
 import { BillingPage } from './billing-page';
 
 const free: Billing = {
-  plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, complimentary: false, complimentary_until: null,
+  plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
   limits: { agents: 10, replies_per_24h: 200, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 2, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 const team: Billing = {
-  plan: 'team', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'active', current_period_end: '2026-11-15T09:30:00Z', cancel_at_period_end: false, active_subscriptions: 1, complimentary: false, complimentary_until: null,
+  plan: 'team', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'active', current_period_end: '2026-11-15T09:30:00Z', cancel_at_period_end: false, active_subscriptions: 1, complimentary: false, complimentary_until: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
   limits: { agents: 10, replies_per_24h: null, storage_bytes: 107374182400, storage_warn_bytes: 85899345920 }, usage: { agents: 6, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 
@@ -26,6 +26,11 @@ test('a trial workspace sees when the trial ends, its usage and five ways to sub
   fireEvent.click(screen.getByRole('button', { name: 'Team 25, $990 per year' }));
   fireEvent.click(screen.getByRole('button', { name: /founding.*\$100.*year/i }));
   expect(onCheckout.mock.calls).toEqual([['team_monthly'], ['team_yearly'], ['team25_monthly'], ['team25_yearly'], ['founding']]);
+});
+
+test('a server without the Team 25 products offers only the plans it can sell', () => {
+  render(<BillingPage billing={{ ...free, checkout_plans: ['team_monthly', 'team_yearly', 'founding'] }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['Team, $49 per month', 'Team, $490 per year', 'Founding, $100 per year for life']);
 });
 
 test('a paying workspace sees renewal, no upgrade buttons and a way to manage billing', () => {

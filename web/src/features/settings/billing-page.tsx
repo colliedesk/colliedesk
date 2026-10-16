@@ -2,7 +2,7 @@ import type { Billing, CheckoutPlan } from '../../api/schemas';
 import { formatBytes } from '../../lib/format-bytes';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
-import { planOptions } from './plan-options';
+import { planOptionsFor } from './plan-options';
 
 interface BillingPageProps {
   billing: Billing;
@@ -75,7 +75,7 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
       </section>
       {(billing.plan === 'trial' || billing.plan === 'none') && <section aria-labelledby="upgrade-heading">
         <div className="section-heading"><div><h2 id="upgrade-heading">{messages.upgradeHeading}</h2></div></div>
-        <div className="button-row">{planOptions.map((item) =>
+        <div className="button-row">{planOptionsFor(billing.checkout_plans).map((item) =>
           <button key={item.plan} type="button" className="primary-action" onClick={() => onCheckout(item.plan)}>{item.label}</button>)}</div>
       </section>}
       {billing.status !== 'none' && !billing.complimentary && <section aria-labelledby="manage-billing-heading">

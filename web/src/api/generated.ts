@@ -829,6 +829,8 @@ export interface components {
              * @description When a complimentary plan ends; null when it has no end or the plan is not complimentary.
              */
             complimentary_until: string | null;
+            /** @description The plans this server can sell, in the order to offer them. `team25_*` appear only when both Team 25 products are configured; the web app shows a purchase button for each plan listed and for no other. */
+            checkout_plans: components["schemas"]["CheckoutPlan"][];
             limits: {
                 /** @description Seats of the plan; 0 when locked. */
                 agents: number;
@@ -836,7 +838,7 @@ export interface components {
                 replies_per_24h: number | null;
                 /**
                  * Format: int64
-                 * @description Attachment storage cap in bytes, 2 GiB on the trial and when locked (imported files do not count), 20 GiB on the Founding plan (imported files count); null on Team and on self-hosted, which have none.
+                 * @description Attachment storage cap in bytes: 2 GiB on the trial and when locked (imported files do not count); 20 GiB on Founding, 100 GiB on Team and 250 GiB on Team 25 (imported files count); null on self-hosted, which has none.
                  */
                 storage_bytes: number | null;
                 /**

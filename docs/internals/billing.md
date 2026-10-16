@@ -19,7 +19,7 @@ off and logs why, so an image older than its configuration never stops the inbox
 | `POLAR_WEBHOOK_SECRET` | The `whsec_...` secret of the webhook endpoint. |
 | `POLAR_API_URL` | Optional. Default `https://api.polar.sh`; sandbox `https://sandbox-api.polar.sh`. |
 | `POLAR_PRODUCT_TEAM_MONTHLY`, `POLAR_PRODUCT_TEAM_YEARLY`, `POLAR_PRODUCT_FOUNDING` | Polar product ids. |
-| `POLAR_PRODUCT_TEAM25_MONTHLY`, `POLAR_PRODUCT_TEAM25_YEARLY` | Optional. Polar product ids of Team 25. Unset: checkout for `team25_*` answers 400 like an unknown plan and no event maps to the plan, so existing deployments keep starting. |
+| `POLAR_PRODUCT_TEAM25_MONTHLY`, `POLAR_PRODUCT_TEAM25_YEARLY` | Optional. Polar product ids of Team 25. Unset: checkout for `team25_*` answers 400 like an unknown plan (the message lists only the plans the server sells), no event maps to the plan, `GET /billing` leaves `team25_*` out of `checkout_plans` so the web app shows no Team 25 button, and the Team seat error does not mention Team 25. Existing deployments keep starting. |
 
 Webhook URL to register in Polar: `https://<host>/api/v1/webhooks/polar`, event types
 `subscription.*`. The path is under `/api/` because the web handler forwards only that prefix to
@@ -234,7 +234,7 @@ and workspaces without an email channel never reach it.
 ### Storage cap
 
 Trial and locked (`none`) workspaces may hold 2 GiB (`domain.TrialStorageBytes`, 2147483648) of
-attachments; paid plans and self-hosted have no cap. Used bytes are `sum(attachments.size)` over
+attachments; self-hosted has no cap, and paid plans have their own caps that count imported files (below). Used bytes are `sum(attachments.size)` over
 messages with `origin IS NULL`: files of imported (Freshdesk) messages never count, because an import
 is history the customer already owned. The number is `workspaces.counted_storage_bytes`, kept by triggers on
 `attachments` (migration `storage-counter`; `attachments.counted` is false for files of imported messages
@@ -260,7 +260,7 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
   (100 GiB, `domain.TeamStorageBytes`) and Team 25 (250 GiB, `domain.Team25StorageBytes`, 25 agents,
   $99 or $990) have the same shape: imports count, warn at 80%, same inbound exemption. The rule is
   `domain.StorageCountsImports`: every capped plan except the trial and a locked workspace. When one
-  workspace holds several paid subscriptions, Team 25 outranks Founding, which outranks Team (`planRank`). Over the cap nothing is deleted. Inbound customer mail is exempt (`Store.CheckInboundStorage` lets a paid plan
+  workspace holds several paid subscriptions, Team 25 outranks Founding, which outranks Team (`planRank`: Team 25 > Team > Founding, by agents then storage). The migration `allow-team25-plan` cannot be rolled back while a subscription row is on `team25` (it raises, naming the count; deleting or downgrading the row would lock or shrink a paying workspace, and Polar does not redeliver an event it already delivered). Move those subscriptions to another plan in Polar first. A Team workspace at its 10th seat is told to upgrade to Team 25 under Manage billing when Team 25 is on sale; the switch itself happens in the Polar portal, there is no in-app flow. Over the cap nothing is deleted. Inbound customer mail is exempt (`Store.CheckInboundStorage` lets a paid plan
   through, so it is stored in full and its bytes still count: a bounced customer email hurts the paying
   team's own customers and looks like an outage; the cost is bounded by real mail). The cap still refuses
   what an agent or an import supplies (`Store.CheckStorage`, the importer's guard). There is no agent
@@ -268,8 +268,8 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
   and its tests (`TestCheckStorage...`) prove the store function, not an upload route. **Any future
   upload route must call `CheckStorage` before writing and get a test of its own.** Reading, replies
   without new files and export are untouched. The trial and a locked workspace still refuse inbound mail.
-- **Import on Founding: one check, before any write; then admitted.** The ticket list does not carry
-  attachment sizes, so `freshdesk.guardFoundingStorage` runs a read-only pass first: the dry-run
+- **Import on a paid plan: one check, before any write; then admitted.** The ticket list does not carry
+  attachment sizes, so `freshdesk.guardStorage` runs a read-only pass first: the dry-run
   listing and id probing (`listTickets`, `classifyTickets`, which the real run then repeats), then a
   read of each ticket and of its conversations (paged, so at least two calls per ticket), adding up
   the reported sizes of attachments the ledger does not hold yet. It then re-reads the room (the pass
@@ -280,7 +280,7 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
   that ticket and goes on (`Report.StorageCap.SkippedTickets` in a dry run). **No cap check
   after that:** an admitted import is never stopped by the cap, so bytes that arrive meanwhile (inbound
   mail is exempt; uploads and a file added at the source after the pass) may take usage past
-  20 GiB, by whatever arrives while the import runs (the real run lists the tickets again, so tickets
+  the plan's cap, by whatever arrives while the import runs (the real run lists the tickets again, so tickets
   created at the source during the sizing window are imported without being sized; on a busy account that
   is not small), which is accepted, and there is no partial-import path from the cap (only a full disk still
   stops a run, as before). `--dry-run` reports the same comparison in `Report.StorageCap` without
