@@ -259,7 +259,7 @@ func (w *Worker) identity(item store.Delivery) (mail.Address, string, bool) {
 	if w.options.MailFromDomain == "" || item.ReplyToken == "" {
 		return mail.Address{}, "", false
 	}
-	address := "reply+" + item.ReplyToken + "@" + w.options.MailFromDomain
+	address := email.PlatformReplyFrom(item.ReplyToken, item.EmailMessageID, w.options.MailFromDomain)
 	return mail.Address{Name: item.WorkspaceName + " via Colliedesk", Address: address}, address, true
 }
 

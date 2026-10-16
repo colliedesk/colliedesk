@@ -82,3 +82,18 @@ func TestConfigFromEnvKeepsTheReplyDomainOutOfTheWorkspaceSlugs(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigFromEnvReadsTheResendWebhookSecret(t *testing.T) {
+	env := map[string]string{"MAIL_FROM_DOMAIN": "mail.example.com", "RESEND_WEBHOOK_SECRET": " whsec_c2VjcmV0 "} // gitleaks:allow (test placeholder)
+	config, err := email.ConfigFromEnv(func(key string) string { return env[key] })
+	if err != nil || config.ResendWebhookSecret != "whsec_c2VjcmV0" {
+		t.Fatalf("resend webhook secret not read: %+v %v", config, err)
+	}
+	if config, err = email.ConfigFromEnv(func(string) string { return "" }); err != nil || config.ResendWebhookSecret != "" {
+		t.Fatalf("webhook must default to off: %+v %v", config, err)
+	}
+	noDomain := map[string]string{"RESEND_WEBHOOK_SECRET": "whsec_c2VjcmV0"} // gitleaks:allow (test placeholder)
+	if _, err := email.ConfigFromEnv(func(key string) string { return noDomain[key] }); err == nil || !strings.Contains(err.Error(), "MAIL_FROM_DOMAIN") {
+		t.Fatalf("secret without MAIL_FROM_DOMAIN accepted: %v", err)
+	}
+}

@@ -151,6 +151,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		if billingRoute(route.Route) && api.polar == nil {
 			continue
 		}
+		if route.Pattern == resendWebhookPath && config.Email.ResendWebhookSecret == "" {
+			continue
+		}
 		mux.Handle(route.Method+" "+route.Pattern, api.authorize(route.Route, route.handler))
 	}
 	// The CORS preflight of the public web form is sent by the browser, never by an agent.
@@ -211,6 +214,7 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/billing/checkout", auth.PermissionBillingManage},
 		{http.MethodPost, "/api/v1/billing/portal", auth.PermissionBillingManage},
 		{http.MethodPost, polarWebhookPath, auth.PermissionPublic},
+		{http.MethodPost, resendWebhookPath, auth.PermissionPublic},
 		{http.MethodGet, foundingPath, auth.PermissionPublic},
 		{http.MethodGet, "/api/v1/export", auth.PermissionWorkspaceExport},
 		{http.MethodGet, "/api/v1/channels/web-form", auth.PermissionAccessRead},
