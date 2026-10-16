@@ -62,15 +62,26 @@ func (a *API) receivePolarWebhook(response http.ResponseWriter, request *http.Re
 		writeJSON(response, http.StatusOK, map[string]string{"status": webhookIgnored})
 		return
 	}
+	// A workspace becomes a paying customer once: Polar also sends subscription.active when a
+	// past_due subscription is paid, and a workspace may later switch plans. Read before applying,
+	// because applying records this webhook.
+	firstActivation := false
+	if event.Type == "subscription.active" && a.config.Funnel != nil {
+		activated, err := a.store.HasBeenActivated(request.Context(), workspaceID)
+		if err != nil {
+			writeInternalError(response, err)
+			return
+		}
+		firstActivation = !activated
+	}
 	result, err := a.store.ApplySubscription(request.Context(), workspaceID, webhookID, event.Type, incoming)
 	if err != nil {
 		// 500 makes Polar redeliver; nothing was recorded, so the retry is applied.
 		writeInternalError(response, err)
 		return
 	}
-	// Polar sends subscription.active once, when the first payment succeeds; a redelivery is a
-	// duplicate, so each paid subscription is counted once.
-	if result == store.SubscriptionApplied && event.Type == "subscription.active" {
+	// A redelivery is a duplicate and a stale event changes nothing; neither is counted.
+	if result == store.SubscriptionApplied && firstActivation {
 		a.recordFunnel("subscription_activated", workspaceID, map[string]any{"plan": incoming.Plan})
 	}
 	status := string(result)

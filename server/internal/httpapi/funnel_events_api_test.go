@@ -67,6 +67,11 @@ func TestSubscriptionActiveWebhookRecordsActivationOnce(t *testing.T) {
 	updated := activeTeam(f.workspaceA, "sub_funnel_founding", time.Now())
 	updated.Product = productFounding
 	f.mustDeliver(t, "msg_funnel_founding_update", updated.event("subscription.updated"))
+	// Polar sends subscription.active again, under a new webhook id, when a past_due subscription
+	// is paid; the workspace was already paying, so it is not a new conversion.
+	recovered := activeTeam(f.workspaceA, "sub_funnel_founding", time.Now().Add(time.Minute))
+	recovered.Product = productFounding
+	f.mustDeliver(t, "msg_funnel_founding_recovered", recovered.event("subscription.active"))
 
 	events := funnel.recorded()
 	if len(events) != 1 {

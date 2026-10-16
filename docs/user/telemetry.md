@@ -57,8 +57,8 @@ them; `DISABLE_TELEMETRY` and `DO_NOT_TRACK` turn them off too.
 
 | Event | When | Fields |
 |---|---|---|
-| `trial_started` | A cloud sign-up creates a workspace | `distinct_id` = the workspace id, `realm`, `version` |
-| `subscription_activated` | Polar reports the first successful payment of a subscription (`subscription.active`); a redelivered webhook is not counted again | `distinct_id` = the workspace id, `plan` (`team`, `team25` or `founding`), `realm`, `version` |
+| `trial_started` | A cloud sign-up creates a workspace and signs its admin in | `distinct_id` = the workspace id, `realm`, `version` |
+| `subscription_activated` | A workspace becomes a paying customer for the first time (its first `subscription.active` from Polar). A redelivered webhook, a past_due subscription paid again and a later plan change are not counted again | `distinct_id` = the workspace id, `plan` (`team`, `team25` or `founding`), `realm`, `version` |
 
 The workspace id is a random UUID. The events never carry the email address of the person who
 signed up, the workspace name or its address. They are sent in the background; a failure is logged
