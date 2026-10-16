@@ -78,6 +78,7 @@ type API struct {
 	webForms       *webFormLimiter
 	webFormClients *webFormLimiter
 	polar          *polar.Client
+	founding       foundingState
 	now            func() time.Time
 }
 
@@ -88,7 +89,18 @@ type routeSpec struct {
 
 type principalKey struct{}
 
-func New(pool *pgxpool.Pool, config Config) http.Handler {
+// Server is the HTTP handler of the API. RefreshFounding is the one thing the process starts besides
+// serving.
+type Server struct {
+	http.Handler
+	api *API
+}
+
+// RefreshFounding counts the Founding slots at Polar and closes Founding when they are used up. It
+// does nothing when billing is off.
+func (s *Server) RefreshFounding(ctx context.Context) error { return s.api.refreshFounding(ctx) }
+
+func New(pool *pgxpool.Pool, config Config) *Server {
 	config.Origin = strings.TrimRight(config.Origin, "/")
 	if config.LookupTXT == nil {
 		config.LookupTXT = net.DefaultResolver.LookupTXT
@@ -130,7 +142,7 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 	}
 	// The CORS preflight of the public web form is sent by the browser, never by an agent.
 	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)
-	return mux
+	return &Server{Handler: mux, api: api}
 }
 
 func Routes() []Route {
@@ -186,6 +198,7 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/billing/checkout", auth.PermissionBillingManage},
 		{http.MethodPost, "/api/v1/billing/portal", auth.PermissionBillingManage},
 		{http.MethodPost, polarWebhookPath, auth.PermissionPublic},
+		{http.MethodGet, foundingPath, auth.PermissionPublic},
 		{http.MethodGet, "/api/v1/export", auth.PermissionWorkspaceExport},
 		{http.MethodGet, "/api/v1/channels/web-form", auth.PermissionAccessRead},
 		{http.MethodPut, "/api/v1/channels/web-form", auth.PermissionAccessWrite},

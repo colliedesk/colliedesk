@@ -174,6 +174,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/billing/checkout":                 {path: "/api/v1/billing/checkout", body: map[string]any{"plan": "team_monthly"}, token: admin, status: 200},
 		"POST /api/v1/billing/portal":                   {path: "/api/v1/billing/portal", token: f.portalToken, status: 200},
 		"POST " + webhookPath:                           {path: webhookPath, raw: f.webhookBody, status: 200},
+		"GET /api/v1/founding":                          {path: "/api/v1/founding", status: 200},
 		"GET /api/v1/conversations/{id}/time-entries":   {path: "/api/v1/conversations/" + f.conversationID + "/time-entries", token: admin, status: 200},
 		"GET /api/v1/inbox/activity":                    {path: "/api/v1/inbox/activity?since=2026-01-01T00:00:00Z", token: admin, status: 200},
 		"GET /api/v1/attachments/{id}":                  {path: "/api/v1/attachments/" + f.attachmentID, token: admin, status: 200},

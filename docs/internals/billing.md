@@ -385,3 +385,22 @@ Run on the server shell (`docker compose exec server /app/collie ...`).
   billing page shows "Complimentary Team plan (until ...)" and hides Manage billing; checkout answers
   409 `already_subscribed` without a portal hint.
 
+## Founding slot cap
+
+`domain.FoundingSlots` (10) limits the Founding plan. A slot is a Polar subscription of the Founding
+product in status active, trialing or past_due. The count comes from Polar (`GET /v1/subscriptions/`
+with repeated `status` parameters, `pagination.total_count`), not from the local database, because a
+buyer of the static checkout link has no workspace and the webhook ignores that event.
+
+- State lives in API memory: unknown until the first refresh succeeds, then taken plus the archive flag.
+  Refreshes run once at start (background, `serve.go`) and after every signature-verified subscription
+  webhook for the Founding product, including events ignored for lack of a workspace. A failed refresh
+  is logged and never changes the webhook answer.
+- Closed means taken >= 10 or the product is archived at Polar. At the cap the server archives the
+  product (`PATCH /v1/products/{id}`), the hard stop for every checkout path. Closing is one-way: nothing
+  unarchives, even when a subscription later ends. Reopening is a manual unarchive in Polar plus a restart.
+- Unknown counts as open in the app; the Polar archive is the hard stop. `GET /api/v1/founding` (public,
+  memory only) reports `taken: null` while unknown.
+- Trap: two buyers who pay at the same moment at slot 9 both get in (11 of 10). Accepted.
+- Trap: if the archive call fails, the app is already closed but the checkout link stays live until the next
+  Founding event or restart retries it. The token needs the product write scope.

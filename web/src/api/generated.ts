@@ -624,7 +624,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Start a hosted checkout for the signed-in workspace. The workspace is taken from the session, never from the body. A workspace that already has a paid plan gets 409; it changes or cancels its plan in the portal. */
+        /** @description Start a hosted checkout for the signed-in workspace. The workspace is taken from the session, never from the body. A workspace that already has a paid plan gets 409; it changes or cancels its plan in the portal. The `founding` plan gets 409 `founding_closed` once its slots are used up. */
         post: operations["createBillingCheckout"];
         delete?: never;
         options?: never;
@@ -660,6 +660,23 @@ export interface paths {
         put?: never;
         /** @description Receives Polar events. Authenticated by the Standard Webhooks signature (`webhook-id`, `webhook-timestamp`, `webhook-signature`), not by a session; a missing, wrong or stale signature is 401 and nothing is stored. A `subscription.*` event updates the workspace named by `customer.external_id`. Every understood event is 200 so Polar stops retrying; `status` says whether it was applied, was a redelivery, was older than the stored state, or was ignored (unknown workspace or product, other event types). Only present when billing is configured. */
         post: operations["receivePolarWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/founding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description How many of the Founding slots are taken, for the marketing site. Answered from server memory, never from the billing provider on the request: `taken` is null until the server has counted once after it started. `open` is false once Founding is closed, which is one-way: the slots are used up or the product was archived. Only present when billing is configured. */
+        get: operations["getFoundingSlots"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -795,6 +812,14 @@ export interface components {
          * @enum {string}
          */
         CheckoutPlan: "team_monthly" | "team_yearly" | "team25_monthly" | "team25_yearly" | "founding";
+        FoundingSlots: {
+            /** @description Founding slots in total */
+            slots: number;
+            /** @description Slots held by active, trialing or past due subscriptions; null until counted */
+            taken: number | null;
+            /** @description Whether Founding can still be bought */
+            open: boolean;
+        };
         WebhookResult: {
             /** @enum {string} */
             status: "applied" | "duplicate" | "stale" | "ignored";
@@ -829,7 +854,7 @@ export interface components {
              * @description When a complimentary plan ends; null when it has no end or the plan is not complimentary.
              */
             complimentary_until: string | null;
-            /** @description The plans this server can sell, in the order to offer them. `team25_*` appear only when both Team 25 products are configured; the web app shows a purchase button for each plan listed and for no other. */
+            /** @description The plans this server can sell, in the order to offer them. `team25_*` appear only when both Team 25 products are configured; the web app shows a purchase button for each plan listed and for no other. `founding` is dropped once Founding is closed. */
             checkout_plans: components["schemas"]["CheckoutPlan"][];
             limits: {
                 /** @description Seats of the plan; 0 when locked. */
@@ -2829,6 +2854,31 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    getFoundingSlots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Founding slot state */
+            200: {
+                headers: {
+                    /** @description `public, max-age=60` */
+                    "Cache-Control"?: string;
+                    /** @description The marketing site origin */
+                    "Access-Control-Allow-Origin"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoundingSlots"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     exportWorkspace: {

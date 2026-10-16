@@ -12,7 +12,7 @@ import (
 
 // billingRoute reports whether a route exists only when Polar billing is configured.
 func billingRoute(route Route) bool {
-	return strings.HasPrefix(route.Pattern, "/api/v1/billing") || route.Pattern == polarWebhookPath
+	return strings.HasPrefix(route.Pattern, "/api/v1/billing") || route.Pattern == polarWebhookPath || route.Pattern == foundingPath
 }
 
 func (a *API) getBilling(response http.ResponseWriter, request *http.Request) {
@@ -21,7 +21,7 @@ func (a *API) getBilling(response http.ResponseWriter, request *http.Request) {
 		writeInternalError(response, err)
 		return
 	}
-	billing.CheckoutPlans = a.config.Billing.CheckoutPlans()
+	billing.CheckoutPlans = a.checkoutPlans()
 	writeJSON(response, http.StatusOK, billing)
 }
 
@@ -69,6 +69,10 @@ func (a *API) createCheckout(response http.ResponseWriter, request *http.Request
 	product, ok := a.checkoutProduct(input.Plan)
 	if !ok {
 		writeError(response, http.StatusBadRequest, "invalid_request", a.checkoutPlanMessage())
+		return
+	}
+	if input.Plan == "founding" && a.foundingClosed() {
+		writeError(response, http.StatusConflict, "founding_closed", "The Founding plan is sold out. Choose the Team plan instead.")
 		return
 	}
 	who := principal(request)
@@ -139,6 +143,6 @@ func writeBillingProviderError(response http.ResponseWriter, err error) {
 
 // checkoutPlanMessage names the plans a client may ask for: only those this server can sell.
 func (a *API) checkoutPlanMessage() string {
-	plans := a.config.Billing.CheckoutPlans()
+	plans := a.checkoutPlans()
 	return "plan must be " + strings.Join(plans[:len(plans)-1], ", ") + " or " + plans[len(plans)-1] + "."
 }

@@ -19,6 +19,9 @@ const (
 // BillingStatusNone is the status of a workspace that never had a subscription.
 const BillingStatusNone = "none"
 
+// FoundingSlots is how many Founding subscriptions can exist at once; the plan closes when they are taken.
+const FoundingSlots = 10
+
 // Storage caps. The trial (and a locked workspace) gets 2 GiB of attachment bytes, imported files
 // excluded. Paid plans count imported files too: Founding gets 20 GiB, Team 100 GiB, Team 25 250 GiB.
 // StorageWarnPercent is where the web app starts to warn.

@@ -97,9 +97,13 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			go sweepRetention(ctx, retentionService)
 		}
 	}
+	api := httpapi.New(pool, httpapi.Config{Origin: origin, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != ""})
+	if billing.Enabled() {
+		go refreshFoundingAtStart(ctx, api)
+	}
 	server := &http.Server{
 		Addr:              *address,
-		Handler:           webui.Handler(httpapi.New(pool, httpapi.Config{Origin: origin, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != ""})),
+		Handler:           webui.Handler(api),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	done := make(chan error, 1)
@@ -117,6 +121,16 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			return fmt.Errorf("shutdown HTTP server: %w", err)
 		}
 		return nil
+	}
+}
+
+// refreshFoundingAtStart counts the Founding slots once so the state survives a restart. A failure
+// leaves the state unknown, which keeps Founding on offer; the next Founding webhook counts again.
+func refreshFoundingAtStart(ctx context.Context, api *httpapi.Server) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := api.RefreshFounding(ctx); err != nil {
+		slog.Error("founding slot count at start failed", "error", err)
 	}
 }
 

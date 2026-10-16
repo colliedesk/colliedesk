@@ -37,9 +37,10 @@ const (
 
 // polarCall is one request the server made to the fake Polar API.
 type polarCall struct {
-	Path string
-	Auth string
-	Body map[string]any
+	Path  string
+	Query string
+	Auth  string
+	Body  map[string]any
 }
 
 // fakePolarAPI stands in for the Polar API, an external boundary. Like Polar it keeps customers
@@ -54,6 +55,9 @@ type fakePolarAPI struct {
 	// customers maps external id to customer id.
 	customers map[string]string
 	emails    map[string]bool
+	// holders and archived are the Founding-style product state: slot holders and the archive flag.
+	holders  map[string]int
+	archived map[string]bool
 }
 
 const customerByExternalPrefix = "/v1/customers/external/"
@@ -66,7 +70,7 @@ func newFakePolarAPI(t *testing.T) *fakePolarAPI {
 		_ = json.NewDecoder(request.Body).Decode(&body)
 		fake.mu.Lock()
 		defer fake.mu.Unlock()
-		fake.calls = append(fake.calls, polarCall{Path: request.URL.Path, Auth: request.Header.Get("Authorization"), Body: body})
+		fake.calls = append(fake.calls, polarCall{Path: request.URL.Path, Query: request.URL.RawQuery, Auth: request.Header.Get("Authorization"), Body: body})
 		number := 0
 		for _, call := range fake.calls {
 			if call.Path == request.URL.Path {
@@ -78,7 +82,7 @@ func newFakePolarAPI(t *testing.T) *fakePolarAPI {
 			response.WriteHeader(status)
 			fmt.Fprintf(response, format, args...)
 		}
-		if status := fake.status[request.URL.Path]; status != 0 {
+		if status := fake.status[request.URL.Path] + fake.status[request.Method+" "+request.URL.Path]; status != 0 {
 			reply(status, `{"detail":"fake failure"}`)
 			return
 		}
@@ -113,6 +117,7 @@ func newFakePolarAPI(t *testing.T) *fakePolarAPI {
 			reply(http.StatusCreated, `{"id":"co_%d","url":"https://polar.test/checkout/%d"}`, number, number)
 		case request.URL.Path == "/v1/customer-sessions/":
 			reply(http.StatusCreated, `{"id":"cs_%d","customer_portal_url":"https://polar.test/portal/%d"}`, number, number)
+		case fake.serveProducts(request, reply):
 		default:
 			reply(http.StatusNotFound, `{}`)
 		}
