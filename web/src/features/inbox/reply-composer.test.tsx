@@ -82,7 +82,7 @@ test('a reply over the daily cap says when to retry and keeps the text', async (
   const body = screen.getByLabelText('Message body');
   fireEvent.change(body, { target: { value: 'Hello again' } });
   fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
-  expect(await screen.findByRole('alert')).toHaveTextContent(/200 replies in 24 hours.*try again in about 2 hours/i);
+  expect(await screen.findByRole('alert')).toHaveTextContent(/200 people in 24 hours, counting everyone copied.*try again in about 2 hours/i);
   expect(body).toHaveValue('Hello again');
 });
 

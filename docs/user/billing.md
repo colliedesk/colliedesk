@@ -24,8 +24,10 @@ Every new cloud workspace starts a 14-day free trial of the full Team plan. No c
   seats are taken fails with a message that names the limit. Revoke an invite you no longer need and
   try again. Sending a second invite to the same address, or inviting someone who already is an
   agent, does not take another seat.
-- **Replies by email.** Up to 200 replies in any 24 hours. The next reply is refused with the time to
-  wait, and your text stays in the composer. Retrying a failed delivery counts again.
+- **Replies by email.** Up to 200 people in any 24 hours. Each reply counts the customer and
+  everyone you copy, so a reply with two people in Cc counts 3. A reply that would pass the limit
+  is refused with the time to wait, and your text stays in the composer. Retrying a failed delivery
+  counts again.
 - **Who you can write to.** During the trial a reply goes only to customers who wrote to you first
   (mail that came in through your Colliedesk address, or imported history). To write to anyone,
   verify your sending domain in **Settings**, or choose a plan.

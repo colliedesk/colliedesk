@@ -261,7 +261,8 @@ on their side.
 - During the **trial**, as long as the sending domain is not verified, you can copy only addresses
   the customer already wrote from or copied. Any other address is refused with the same message as a
   first message to a new customer, and nothing is stored. Verify the domain or choose a plan to lift
-  it. The daily trial limit counts replies, not recipients.
+  it. The daily trial limit counts people, not replies: a reply to the customer with two people in Cc
+  counts 3 of the 200.
 - A copied person who answers with reply-all joins the same conversation.
 
 Through the API, send `cc` (a list of addresses) with `kind: "outgoing"`; in a multipart request

@@ -314,7 +314,7 @@ export const messages = {
   storageContactUs: 'Contact us for more storage.',
   storageUpgradeTrial: 'Upgrade to keep receiving email: choose a plan above.',
   storageUsage: (used: string, limit: string) => `Attachment storage: ${used} of ${limit}`,
-  repliesUsage: (count: number, limit: number) => `${count} of ${limit} replies in the last 24 hours`,
+  repliesUsage: (count: number, limit: number) => `${count} of ${limit} people emailed in the last 24 hours`,
   agentsUsage: (used: number, limit: number, pending = 0) =>
     `${used} of ${limit} agents${pending > 0 ? `, plus ${pending} pending ${pending === 1 ? 'invite' : 'invites'}` : ''}`,
   linkPlanLimited: 'This workspace has reached the agent limit of its plan, so the link cannot add you yet. Ask a workspace admin to upgrade, then use this link again before it expires, or ask for a new link.',
@@ -344,10 +344,10 @@ export const messages = {
   themes: { light: 'Light', dark: 'Dark' },
   replyNotSent: 'The reply could not be sent. Your text is still here; try again.',
   trialReplyRestricted: 'During the trial, email goes only to customers who wrote to you first. Verify your sending domain in Settings or choose a plan to start new conversations. Your text is still here.',
-  trialReplyLimit: (wait: string) => `The trial sends up to 200 replies in 24 hours. Try again in about ${wait}, or choose a plan to remove the limit. Your text is still here.`,
+  trialReplyLimit: (wait: string) => `The trial emails up to 200 people in 24 hours, counting everyone copied. Try again in about ${wait}, or choose a plan to remove the limit. Your text is still here.`,
   retryNotSent: 'The delivery could not be retried. Try again.',
   trialRetryRestricted: 'During the trial, email goes only to customers who wrote to you first. Verify your sending domain in Settings or choose a plan.',
-  trialRetryLimit: (wait: string) => `The trial sends up to 200 replies in 24 hours. Try again in about ${wait}, or choose a plan to remove the limit.`,
+  trialRetryLimit: (wait: string) => `The trial emails up to 200 people in 24 hours, counting everyone copied. Try again in about ${wait}, or choose a plan to remove the limit.`,
   hours: (count: number) => `${count} hour${count === 1 ? '' : 's'}`,
   minutes: (count: number) => `${count} minute${count === 1 ? '' : 's'}`,
 } as const;

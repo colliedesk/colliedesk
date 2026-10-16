@@ -1325,9 +1325,10 @@ components:
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     TrialOutboundLimit:
       description: >
-        A trial workspace already sent 200 replies in the last 24 hours (error code
-        `trial_outbound_limit`, with `retry_after_seconds` and a `Retry-After` header: the time until
-        the oldest counted reply leaves the window). Nothing was stored. Paid plans have no such limit.
+        Sending this reply would take a trial workspace past 200 people emailed in the last 24 hours,
+        where each reply counts its contact and every Cc address (error code `trial_outbound_limit`,
+        with `retry_after_seconds` and a `Retry-After` header: the time until enough counted replies
+        leave the window). Nothing was stored. Paid plans have no such limit.
       headers:
         Retry-After: {schema: {type: integer}}
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
@@ -1454,7 +1455,7 @@ components:
           required: [agents, storage_bytes, storage_warn_bytes, replies_per_24h]
           properties:
             agents: {type: integer, description: 'Seats of the plan; 0 when locked.'}
-            replies_per_24h: {type: [integer, 'null'], description: 'Emailed replies allowed in any 24 hours on the trial; null on every other plan and self-hosted.'}
+            replies_per_24h: {type: [integer, 'null'], description: 'People that emailed replies may reach in any 24 hours on the trial, each reply counting its contact and every Cc address; null on every other plan and self-hosted.'}
             storage_bytes:
               type: [integer, 'null']
               format: int64
@@ -1474,7 +1475,7 @@ components:
               description: Attachment bytes counted against `limits.storage_bytes`. On the trial files of imported messages are not counted; on the Founding plan every file is, imported ones included.
             replies_last_24h:
               type: integer
-              description: Emailed replies of the last 24 hours that count against the trial cap of 200; 0 on other plans.
+              description: People reached by the emailed replies of the last 24 hours (the contact plus every Cc address of each reply), which count against the trial cap of 200; 0 on other plans.
             pending_invites:
               type: integer
               description: Unused, unrevoked, unexpired invites. Each holds an agent seat, so agents plus pending invites is compared with `limits.agents`.

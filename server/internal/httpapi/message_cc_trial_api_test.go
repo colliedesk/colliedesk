@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -104,4 +105,27 @@ func TestCopyingStillCountsOnTheTrialDailyCap(t *testing.T) {
 	conversation := f.receiveCopied(t, "boss@customer.example")
 	f.seedOutbox(t, f.workspaceA, 200, "sent", f.clock.Now().Add(-time.Hour))
 	wantStatus(t, f.replyCopying(t, conversation, "boss@customer.example"), http.StatusTooManyRequests, limitCode, "reply at the cap")
+}
+
+// A sender writes the Cc line of their own mail, so a trial user can mail themselves with strangers
+// copied and then copy all of them on every reply. The daily cap must count each person reached.
+func TestTrialCapCountsEveryRecipientNotEveryReply(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	victims := make([]string, 10)
+	for i := range victims {
+		victims[i] = fmt.Sprintf("victim%d@elsewhere.example", i+1)
+	}
+	conversation := f.receiveCopied(t, strings.Join(victims, ", "))
+	// Each reply reaches the contact and ten copies: 11 recipients. 18 replies reach 198.
+	for i := range 18 {
+		if got := f.replyCopying(t, conversation, victims...); got.Code != http.StatusCreated {
+			t.Fatalf("reply %d: status=%d body=%s", i+1, got.Code, got.Body)
+		}
+	}
+	wantStatus(t, f.replyCopying(t, conversation, victims...), http.StatusTooManyRequests, limitCode, "a reply that would reach 209 people")
+	f.wantReplyQueued(t, conversation, "a reply to the contact alone reaches the 199th person")
+	wantStatus(t, f.replyCopying(t, conversation, victims[0]), http.StatusTooManyRequests, limitCode, "a reply to 2 people with 1 left")
+	if usage := f.usage(t, f.adminA); usage.Usage.RepliesLast24h != 199 {
+		t.Fatalf("usage.replies_last_24h=%d, want the 199 people reached", usage.Usage.RepliesLast24h)
+	}
 }

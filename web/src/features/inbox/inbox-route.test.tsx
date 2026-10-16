@@ -116,7 +116,7 @@ test('a retry the trial refuses says why instead of doing nothing', async () => 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
   fireEvent.click(await screen.findByRole('button', { name: /retry delivery/i }));
-  expect(await screen.findByRole('alert')).toHaveTextContent(/200 replies in 24 hours.*about 2 hours/i);
+  expect(await screen.findByRole('alert')).toHaveTextContent(/200 people in 24 hours, counting everyone copied.*about 2 hours/i);
 });
 
 test('typing in search keeps the previous rows until the new response arrives', async () => {

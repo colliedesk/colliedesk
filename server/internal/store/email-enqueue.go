@@ -56,7 +56,8 @@ func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conver
 	if err != nil {
 		return fmt.Errorf("load email channel: %w", err)
 	}
-	if err := s.checkTrialOutbound(ctx, tx, workspaceID, conversationID, verified); err != nil {
+	recipients := 1 + len(cc)
+	if err := s.checkTrialOutbound(ctx, tx, workspaceID, conversationID, verified, recipients); err != nil {
 		return err
 	}
 	if err := s.checkTrialCC(ctx, tx, workspaceID, conversationID, verified, cc); err != nil {
@@ -81,8 +82,8 @@ func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conver
 	if reason != "" {
 		status = "failed"
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO email_outbox(workspace_id,message_id,status,last_error,created_at) VALUES($1,$2,$3,NULLIF($4,''),$5)`,
-		workspaceID, messageID, status, reason, s.now()); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO email_outbox(workspace_id,message_id,status,last_error,created_at,recipients) VALUES($1,$2,$3,NULLIF($4,''),$5,$6)`,
+		workspaceID, messageID, status, reason, s.now(), recipients); err != nil {
 		return fmt.Errorf("queue reply: %w", err)
 	}
 	return nil
@@ -119,7 +120,7 @@ func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	if trial, err := s.onTrial(ctx, tx, workspaceID, now); err != nil {
 		return domain.Message{}, err
 	} else if trial {
-		if err := s.checkTrialCap(ctx, tx, workspaceID, now); err != nil {
+		if err := s.checkTrialCap(ctx, tx, workspaceID, now, 1+len(message.CC)); err != nil {
 			return domain.Message{}, err
 		}
 	}

@@ -107,7 +107,7 @@ func (s *Store) CheckAttachmentAdmission(ctx context.Context, workspaceID, conve
 		if err != nil {
 			return struct{}{}, fmt.Errorf("load email channel: %w", err)
 		}
-		if err := s.checkTrialOutbound(ctx, tx, workspaceID, conversationID, verified); err != nil {
+		if err := s.checkTrialOutbound(ctx, tx, workspaceID, conversationID, verified, 1+len(cc)); err != nil {
 			return struct{}{}, err
 		}
 		return struct{}{}, s.checkTrialCC(ctx, tx, workspaceID, conversationID, verified, cc)
