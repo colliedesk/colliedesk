@@ -28,8 +28,14 @@ cannot be loaded, it says so with **Try again** instead.
   You do not need to reload to see new mail.
 
 **Know when something new arrives**
-- Any page of Colliedesk you have open (including Settings) checks every 20 seconds; the inbox reloads the list by itself when a conversation is created or a teammate assigns one
-  to you. Conversations you assign to yourself do not count.
+- Any page of Colliedesk you have open (including Settings) checks every 20 seconds. The inbox reloads the list by itself when a conversation is created, when a teammate assigns one
+  to you, or when any conversation changes (a customer message, a status, assignee or tag change by a teammate).
+  A conversation you have open shows a new customer message within about 25 seconds, without a reload.
+  Conversations you assign to yourself do not count.
+- A customer message on a conversation that is assigned to you, assigned to nobody, or open on your
+  screen counts as a new item and can raise a notification. A message on any other teammate's
+  conversation updates the screen quietly.
+  Your own replies, notes and changes never count.
 - When the tab is in the background, its title shows the number of new items, for example
   `(2) Colliedesk`. The count clears when you return to the tab.
 - To also get a desktop notification, select the bell in the left rail: **Enable desktop
@@ -37,7 +43,7 @@ cannot be loaded, it says so with **Try again** instead.
   Select the bell again (**Desktop notifications are on. Turn off**) to stop them. The choice is
   stored in this browser only.
 - A notification shows the subject and contact name, never message text. More than three new items at
-  once become one summary notification.
+  once become one summary notification. The title of a customer message notification is **New customer message**.
 - If your browser blocked notifications for this site, the bell says so; change it in the browser's
   site settings. The list refresh and the title count keep working.
 - Colliedesk does not email agents about new or assigned conversations.

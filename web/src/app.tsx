@@ -21,8 +21,8 @@ function AppLayout() {
   const signedOut = !onSignIn && me.error instanceof UnauthorizedError;
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config, enabled: !onSignIn });
   const locked = me.data?.plan?.locked === true;
-  // New and newly assigned conversations are announced on every signed-in page, not only in the inbox.
-  useInboxActivity(!onSignIn && Boolean(me.data) && !signedOut && !locked);
+  // New, newly assigned and changed conversations are picked up on every signed-in page, not only in the inbox.
+  useInboxActivity(!onSignIn && Boolean(me.data) && !signedOut && !locked, me.data?.agent?.id);
   // On an instance with cloud sign-in the way back in is the sign-in page, not a new pairing link.
   const signIn = config.data?.cloud_sign_in.enabled ? <Link to="/sign-in">{messages.signIn}</Link> : undefined;
   // Sign-in pages have nowhere to navigate to yet.
