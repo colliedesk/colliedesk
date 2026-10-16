@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { renderSavedReply, savedReplyMatches } from './saved-reply-variables';
+import { agentSignatureName, renderSavedReply, savedReplyMatches } from './saved-reply-variables';
 
 const who = { customerName: 'Mai Linh', agentName: 'Chinh' };
 
@@ -44,4 +44,15 @@ test('a title matches a search ignoring case and accents', () => {
   expect(savedReplyMatches('Refund steps', '  ')).toBe(true);
   expect(savedReplyMatches('Refund steps', 'shipping')).toBe(false);
   expect(savedReplyMatches('Đơn hàng', 'don hang')).toBe(true);
+});
+
+test('an agent without a display name signs with the part of the email before the @', () => {
+  expect(agentSignatureName({ display_name: '', email: 'qa-b@hclabs.colliedesk.com' })).toBe('qa-b');
+  expect(agentSignatureName({ display_name: '   ', email: 'Sam.Lee@example.com' })).toBe('Sam.Lee');
+  expect(agentSignatureName({ display_name: ' Chinh ', email: 'chinh@example.com' })).toBe('Chinh');
+  expect(agentSignatureName(undefined)).toBe('');
+});
+
+test('the email name of an agent without a display name drops a +tag', () => {
+  expect(agentSignatureName({ display_name: '', email: 'chinh.hoang+admin@example.com' })).toBe('chinh.hoang');
 });

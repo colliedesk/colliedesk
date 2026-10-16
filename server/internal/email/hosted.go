@@ -67,3 +67,9 @@ func UnderDomain(address, domain string) bool {
 	host, domain := strings.ToLower(address[at+1:]), strings.ToLower(domain)
 	return host == domain || strings.HasSuffix(host, "."+domain)
 }
+
+// ForDomain reports whether the address is exactly at domain (not a subdomain), ignoring case.
+func ForDomain(address, domain string) bool {
+	at := strings.LastIndex(address, "@")
+	return at > 0 && domain != "" && strings.EqualFold(address[at+1:], domain)
+}

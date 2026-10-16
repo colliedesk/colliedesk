@@ -59,5 +59,8 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 	if config.HostedMailDomain != "" && config.PlatformInboundSecret == "" {
 		return Config{}, fmt.Errorf("HOSTED_MAIL_DOMAIN needs MAIL_FROM_INBOUND_SECRET for its forwarder")
 	}
+	if config.MailFromDomain != "" && HostedSlug("reply@"+config.MailFromDomain, config.HostedMailDomain) != "" {
+		return Config{}, fmt.Errorf("MAIL_FROM_DOMAIN %q is below HOSTED_MAIL_DOMAIN and not a reserved name, so a workspace could own it as its slug; use a reserved label such as mail", config.MailFromDomain)
+	}
 	return config, nil
 }

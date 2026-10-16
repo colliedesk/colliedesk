@@ -6,6 +6,7 @@ export const messages = {
   notificationsBlocked: 'Desktop notifications are blocked in this browser',
   notificationNew: 'New conversation',
   notificationAssigned: 'Assigned to you',
+  notificationReply: 'New customer message',
   notificationSummary: (count: number) => `${count} new updates in your inbox`,
   settings: 'Settings',
   timezoneSettings: 'Timezone',

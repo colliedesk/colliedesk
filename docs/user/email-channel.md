@@ -197,8 +197,9 @@ The secret is passed in a private header file, never on the command line.
 
 Workspaces without a verified domain send from `reply+<token>@<MAIL_FROM_DOMAIN>`. Most customers
 reply to the support address (it is in `Reply-To`), but some mail clients reply to the From
-address, and bounces always go to it. The server operator routes that domain once for all
-workspaces:
+address. A bounce goes to it only when your relay keeps that address as the envelope sender; relays
+that own the envelope sender (Resend, Amazon SES) send bounces to themselves instead. The server
+operator routes the domain once for all workspaces:
 
 1. Point the MX records of `MAIL_FROM_DOMAIN` at a forwarder, for example Cloudflare Email Routing
    with a catch-all rule to a Worker.
@@ -207,8 +208,15 @@ workspaces:
    Keep the `X-Original-To` line: it carries the `reply+<token>` address.
 
 Colliedesk finds the conversation from the token and files the message in its workspace, like any
-reply. A bounce marks the reply **Delivery failed**. Mail for an unknown token is answered `200`
-with status `dropped` and reason `unknown_recipient`; the Worker forwards nothing for it.
+reply. A bounce that reaches this address marks the reply **Delivery failed**. Mail for an unknown
+token is answered `200` with status `dropped` and reason `unknown_recipient`; the Worker forwards
+nothing for it.
+
+On the hosted cloud, `MAIL_FROM_DOMAIN` may sit below `HOSTED_MAIL_DOMAIN`, for example
+`mail.colliedesk.com`. A recipient at `MAIL_FROM_DOMAIN` is always a reply address, never a workspace
+slug. The server refuses to start when that name is below the hosted domain and is not a reserved
+label such as `mail`, because a workspace could then own it. Give `MAIL_FROM_DOMAIN` its own MX
+record: a wildcard MX does not cover a name that has other records below it.
 
 ## What you see in the inbox
 
