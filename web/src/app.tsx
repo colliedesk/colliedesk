@@ -2,11 +2,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, Outlet, createRootRoute, createRoute, createRouter, useRouterState } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
 import { InboxRoute } from './features/inbox/inbox-route';
+import { useInboxActivity } from './features/inbox/use-inbox-activity';
 import { RedeemRoute } from './features/auth/redeem-route';
 import { BillingRoute } from './features/settings/billing-route';
 import { SettingsRoute } from './features/settings/settings-route';
 import { AppShell } from './features/shell/app-shell';
 import { LockedRoute } from './features/shell/locked-route';
+import { NotificationToggle } from './features/shell/notification-toggle';
 import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
 import { CreditCardIcon, InboxIcon, SettingsIcon } from './ui/icons';
@@ -18,6 +20,9 @@ function AppLayout() {
   const me = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: !onSignIn });
   const signedOut = !onSignIn && me.error instanceof UnauthorizedError;
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config, enabled: !onSignIn });
+  const locked = me.data?.plan?.locked === true;
+  // New and newly assigned conversations are announced on every signed-in page, not only in the inbox.
+  useInboxActivity(!onSignIn && Boolean(me.data) && !signedOut && !locked);
   // On an instance with cloud sign-in the way back in is the sign-in page, not a new pairing link.
   const signIn = config.data?.cloud_sign_in.enabled ? <Link to="/sign-in">{messages.signIn}</Link> : undefined;
   // Sign-in pages have nowhere to navigate to yet.
@@ -26,7 +31,6 @@ function AppLayout() {
   const showBilling = config.data?.billing.enabled === true && me.data?.agent.role === 'admin';
   const inBilling = path.startsWith('/settings/billing');
   const inSettings = path.startsWith('/settings') && !inBilling;
-  const locked = me.data?.plan?.locked === true;
   return <AppShell me={me.data} signedOut={signedOut} signIn={signIn}
     notice={me.data && <PlanNotices me={me.data} />} lockedScreen={locked && me.data ? <LockedRoute me={me.data} /> : undefined}
     brand={<Link to="/" className="rail-brand" aria-label={messages.brand} data-tip={messages.brand}><LogoMark /></Link>}
@@ -34,6 +38,7 @@ function AppLayout() {
       <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inBilling ? undefined : 'page'}><InboxIcon /></Link>
       <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}><SettingsIcon /></Link>
       {showBilling && <Link to="/settings/billing" search={{ checkout: '' }} className="rail-link" data-tip={messages.billing} aria-label={messages.billing} aria-current={inBilling ? 'page' : undefined}><CreditCardIcon /></Link>}
+      <NotificationToggle />
     </>}>
     <Outlet />
   </AppShell>;
