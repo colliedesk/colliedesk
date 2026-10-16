@@ -74,6 +74,7 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 	// Never the email, and the address only at debug level: the trial record keeps no raw address.
 	slog.Info("cloud sign-up", "workspace", workspace.Slug)
 	slog.Debug("cloud sign-up client", "client_ip", ip)
+	a.recordFunnel("trial_started", workspace.ID, nil)
 	result, _, err := a.auth.ExchangeCloud(request.Context(), verified, workspace.Slug, "Cloud sign-up")
 	if err != nil {
 		writeInternalError(response, err)

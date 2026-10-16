@@ -173,8 +173,19 @@ type billingFixture struct {
 
 func newBillingFixture(t *testing.T) billingFixture {
 	t.Helper()
+	return newBillingFixtureWith(t, nil)
+}
+
+// newBillingFixtureWith is newBillingFixture with a further change to the API config.
+func newBillingFixtureWith(t *testing.T, mutate func(*httpapi.Config)) billingFixture {
+	t.Helper()
 	fake := newFakePolarAPI(t)
-	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.Billing = fake.config() })
+	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
+		config.Billing = fake.config()
+		if mutate != nil {
+			mutate(config)
+		}
+	})
 	adminA := createSession(t, api, service, "Billing Alpha", "admin@billing-alpha.example.com")
 	adminB := createSession(t, api, service, "Billing Bravo", "admin@billing-bravo.example.com")
 	_, agentURL := createContractInvite(t, api, adminA, "agent@billing-alpha.example.com", "agent")

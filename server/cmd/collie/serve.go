@@ -88,7 +88,8 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	warnWithoutTrustedProxies(slog.Default(), trustedProxies)
 	// The hosted cloud is cloud sign-in with billing; a self-hosted server may use sign-in alone.
 	hostedCloud := cloudAuth.Enabled() && billing.Enabled()
-	go telemetry.New(db, telemetry.ConfigFromEnv(os.Getenv, origin, hostedCloud, version), nil).Run(ctx, slog.Default())
+	telemetryConfig := telemetry.ConfigFromEnv(os.Getenv, origin, hostedCloud, version)
+	go telemetry.New(db, telemetryConfig, nil).Run(ctx, slog.Default())
 	if billing.Enabled() {
 		retentionService, err := newRetentionService(db, origin, billing, retentionSettingsForServe(os.Getenv, slog.Default()))
 		if err != nil {
@@ -97,7 +98,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			go sweepRetention(ctx, retentionService)
 		}
 	}
-	apiConfig := httpapi.Config{Origin: origin, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != ""}
+	apiConfig := httpapi.Config{Origin: origin, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", Funnel: telemetry.NewFunnel(telemetryConfig, nil)}
 	if emailConfig.SMTP.Configured() {
 		apiConfig.AlertEmail = strings.TrimSpace(os.Getenv("BILLING_ALERT_EMAIL"))
 		apiConfig.AlertMailer = email.SMTPSender{Config: emailConfig.SMTP}
