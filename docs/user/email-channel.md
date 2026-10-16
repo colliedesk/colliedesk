@@ -248,7 +248,8 @@ on their side.
 
 - Under the message box, select **Cc** to add addresses. Type or paste an address and press Enter,
   comma, semicolon or space. Select the **x** on an address to remove it, or press Backspace in the
-  empty box to remove the last one.
+  empty box to remove the last one. While the box holds text that is not a valid address, **Send**
+  stays off: fix the address or clear it.
 - The box opens with the people the customer copied on their latest message (and a copied colleague
   who answered with reply-all). Remove any of them before you send. Mail received before Colliedesk
   kept Cc lines offers nothing, and so does mail whose sender did not pass verification: anyone can

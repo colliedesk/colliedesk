@@ -57,6 +57,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
   // undefined until the agent edits the list, so suggestions that load later still show up.
   const [ccEdited, setCcEdited] = useState<string[]>();
   const [ccOpen, setCcOpen] = useState(false);
+  const [ccBlocking, setCcBlocking] = useState(false);
   const cc = ccEdited ?? suggestedCc;
   const showCc = kind === 'outgoing' && (ccOpen || ccEdited !== undefined || cc.length > 0);
   const card = useRef<HTMLDivElement>(null);
@@ -98,8 +99,10 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
   }, [body, picking]);
   useEffect(() => { if (disabled) setPicking(false); }, [disabled]);
   // The text leaves the box only after the server accepted it; a refusal keeps it with the reason.
+  // An address typed into Cc that cannot be added would otherwise be dropped from the reply unseen.
+  const ccHolds = kind === 'outgoing' && showCc && ccBlocking;
   const submit = () => {
-    if (!body.trim() || sending || fileProblem) return;
+    if (!body.trim() || sending || fileProblem || ccHolds) return;
     // A variable no saved reply filled in would reach the customer as written.
     const unfilled = kind === 'outgoing' ? [...new Set(body.match(/\{\{[^{}]*\}\}/g) ?? [])] : [];
     if (unfilled.length > 0 && !window.confirm(messages.unfilledVariables(unfilled))) return;
@@ -155,7 +158,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
           placeholder={kind === 'note' ? messages.notePlaceholder : messages.replyPlaceholder} onChange={(event) => setBody(event.target.value)} />
         {picking && !disabled && <SavedReplyPicker replies={savedReplies} onPick={insertSavedReply} onClose={closePicker} onManage={onManageSavedReplies} state={savedRepliesState} />}
         {problem && <p role="alert" className="composer-notice">{problem}</p>}
-        {showCc && <CcField value={cc} onChange={setCcEdited} disabled={disabled || sending} onSend={submit} />}
+        {showCc && <CcField value={cc} onChange={setCcEdited} disabled={disabled || sending} onSend={submit} onBlockingChange={setCcBlocking} />}
         <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={disabled || sending} />
         <div className="composer-actions">
           {/* Mouse down must not blur the open list, or the click would close it and open it again. */}
@@ -167,7 +170,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
               onClick={() => { focusCc.current = true; setCcOpen(true); }}>{messages.ccToggle}</button>
           )}
           <span className="composer-hint" aria-hidden="true"><kbd>Ctrl</kbd><kbd>Enter</kbd> {messages.sendShortcut}</span>
-          <button className="primary-action" type="button" disabled={disabled || sending || !body.trim() || Boolean(fileProblem)} onClick={submit}>
+          <button className="primary-action" type="button" disabled={disabled || sending || !body.trim() || Boolean(fileProblem) || ccHolds} onClick={submit}>
             {kind === 'note' ? messages.privateNote : messages.reply}
           </button>
         </div>

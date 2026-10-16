@@ -491,3 +491,20 @@ test('a refused reply keeps the Cc list with the text', async () => {
   expect(await screen.findByRole('alert')).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Remove boss@customer.example' })).toBeInTheDocument();
 });
+
+test('an invalid address typed into Cc blocks Send until it is fixed or cleared', () => {
+  const onSubmit = vi.fn();
+  render(<ReplyComposer onSubmit={onSubmit} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Cc' }));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Hello.' } });
+  fireEvent.change(screen.getByLabelText('Add Cc address'), { target: { value: 'boss@' } });
+  fireEvent.blur(screen.getByLabelText('Add Cc address'));
+  expect(screen.getByRole('button', { name: 'Send reply' })).toBeDisabled();
+  fireEvent.keyDown(screen.getByLabelText('Message body'), { key: 'Enter', ctrlKey: true });
+  expect(onSubmit).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText('Add Cc address'), { target: { value: 'boss@customer.example' } });
+  fireEvent.blur(screen.getByLabelText('Add Cc address'));
+  expect(screen.getByRole('button', { name: 'Send reply' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+  expect(onSubmit).toHaveBeenCalledWith('outgoing', 'Hello.', [], ['boss@customer.example']);
+});

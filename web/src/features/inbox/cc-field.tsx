@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ClipboardEvent, KeyboardEvent } from 'react';
 import { messages } from '../../messages';
 import { XIcon } from '../../ui/icons';
@@ -17,26 +17,36 @@ interface CcFieldProps {
   disabled?: boolean;
   // Ctrl/Cmd+Enter in an empty box sends the reply, as it does in the message box.
   onSend?: () => void;
+  // Told whether the box holds typed text that cannot be added, which the reply must not leave without.
+  onBlockingChange?: (blocking: boolean) => void;
 }
 
-export function CcField({ value, onChange, disabled, onSend }: CcFieldProps) {
+// added lists value plus every address in text, or says why one of them cannot be added.
+function added(text: string, value: string[]): { next: string[] } | { problem: string } {
+  const next = [...value];
+  for (const address of text.split(separators).filter(Boolean).map((item) => item.toLowerCase())) {
+    if (!plainAddress.test(address) || address.length > 254) return { problem: messages.ccInvalid };
+    if (next.includes(address)) continue;
+    if (next.length >= maxCc) return { problem: messages.ccTooMany(maxCc) };
+    next.push(address);
+  }
+  return { next };
+}
+
+export function CcField({ value, onChange, disabled, onSend, onBlockingChange }: CcFieldProps) {
   const [draft, setDraft] = useState('');
   const [problem, setProblem] = useState<string>();
   const field = useRef<HTMLInputElement>(null);
+  const blocking = draft.trim() !== '' && 'problem' in added(draft, value);
+  useEffect(() => { onBlockingChange?.(blocking); }, [blocking, onBlockingChange]);
+  useEffect(() => () => onBlockingChange?.(false), [onBlockingChange]);
   // Adds every address in the text. Returns false and keeps the text when one cannot be added.
   const commit = (text: string): boolean => {
-    const wanted = text.split(separators).filter(Boolean).map((item) => item.toLowerCase());
-    if (wanted.length === 0) return true;
-    const next = [...value];
-    for (const address of wanted) {
-      if (!plainAddress.test(address) || address.length > 254) { setProblem(messages.ccInvalid); return false; }
-      if (next.includes(address)) continue;
-      if (next.length >= maxCc) { setProblem(messages.ccTooMany(maxCc)); return false; }
-      next.push(address);
-    }
+    const result = added(text, value);
+    if ('problem' in result) { setProblem(result.problem); return false; }
     setProblem(undefined);
     setDraft('');
-    if (next.length !== value.length) onChange(next);
+    if (result.next.length !== value.length) onChange(result.next);
     return true;
   };
   const remove = (address: string) => {
