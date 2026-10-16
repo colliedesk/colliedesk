@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { BillingRoute } from './billing-route';
+import { readCheckoutIntent, rememberCheckoutIntent } from './checkout-intent';
 
 const api = vi.hoisted(() => ({ me: vi.fn(), config: vi.fn(), billing: vi.fn(), startCheckout: vi.fn(), openBillingPortal: vi.fn() }));
 vi.mock('../../api/client', () => ({ api }));
@@ -24,6 +25,7 @@ function renderRoute(props: { checkoutReturned?: boolean } = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.sessionStorage.clear();
   Object.defineProperty(window, 'location', { configurable: true, value: { assign } });
   api.config.mockResolvedValue({ cloud_sign_in: { enabled: true, publishable_key: 'pk' }, billing: { enabled: true } });
 });
@@ -77,4 +79,66 @@ test('after checkout the page tells the plan is being confirmed', async () => {
   api.billing.mockResolvedValue(free);
   renderRoute({ checkoutReturned: true });
   expect(await screen.findByRole('status')).toHaveTextContent(/payment received/i);
+});
+
+test('a stored founding intent starts the founding checkout once and clears the intent', async () => {
+  rememberCheckoutIntent('founding');
+  api.me.mockResolvedValue(me('admin'));
+  api.billing.mockResolvedValue(free);
+  api.startCheckout.mockResolvedValue({ url: 'https://polar.example/checkout/founding' });
+  renderRoute();
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('https://polar.example/checkout/founding'));
+  expect(api.startCheckout).toHaveBeenCalledTimes(1);
+  expect(api.startCheckout).toHaveBeenCalledWith('founding');
+  expect(readCheckoutIntent()).toBeUndefined();
+});
+
+test('an intent for a plan the server does not offer is dropped and the billing page is shown', async () => {
+  rememberCheckoutIntent('founding');
+  api.me.mockResolvedValue(me('admin'));
+  api.billing.mockResolvedValue({ ...free, checkout_plans: ['team_monthly', 'team_yearly'] });
+  renderRoute();
+  expect(await screen.findByRole('button', { name: /team, \$490 per year/i })).toBeInTheDocument();
+  expect(api.startCheckout).not.toHaveBeenCalled();
+  expect(readCheckoutIntent()).toBeUndefined();
+});
+
+test('an intent is dropped when the workspace already pays', async () => {
+  rememberCheckoutIntent('founding');
+  api.me.mockResolvedValue(me('admin'));
+  api.billing.mockResolvedValue({ ...free, plan: 'team', status: 'active', current_period_end: '2026-11-15T00:00:00Z' });
+  renderRoute();
+  await screen.findByRole('button', { name: /manage billing/i });
+  expect(api.startCheckout).not.toHaveBeenCalled();
+  expect(readCheckoutIntent()).toBeUndefined();
+});
+
+test('an intent is dropped for an agent who is not an admin', async () => {
+  rememberCheckoutIntent('founding');
+  api.me.mockResolvedValue(me('agent'));
+  renderRoute();
+  await screen.findByText(/only workspace admins/i);
+  expect(api.startCheckout).not.toHaveBeenCalled();
+  expect(readCheckoutIntent()).toBeUndefined();
+});
+
+test('a failed intent checkout is not retried', async () => {
+  rememberCheckoutIntent('founding');
+  api.me.mockResolvedValue(me('admin'));
+  api.billing.mockResolvedValue(free);
+  api.startCheckout.mockRejectedValue(new Error('API 502'));
+  renderRoute();
+  expect(await screen.findByRole('alert')).toHaveTextContent(/billing action failed/i);
+  expect(api.startCheckout).toHaveBeenCalledTimes(1);
+  expect(readCheckoutIntent()).toBeUndefined();
+});
+
+test('an intent is dropped when the billing data cannot be loaded', async () => {
+  rememberCheckoutIntent('founding');
+  api.me.mockResolvedValue(me('admin'));
+  api.billing.mockRejectedValue(new Error('API 500'));
+  renderRoute();
+  expect(await screen.findByRole('alert')).toHaveTextContent(/billing action failed/i);
+  expect(api.startCheckout).not.toHaveBeenCalled();
+  expect(readCheckoutIntent()).toBeUndefined();
 });

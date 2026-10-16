@@ -194,6 +194,7 @@ type subscription struct {
 	CancelAtPeriodEnd bool
 	EndedAt           *time.Time
 	ModifiedAt        time.Time
+	CustomerEmail     string // customer.email; empty omits it
 }
 
 func (s subscription) event(eventType string) []byte {
@@ -205,13 +206,17 @@ func (s subscription) event(eventType string) []byte {
 	if s.EndedAt != nil {
 		ended = s.EndedAt.Format(time.RFC3339)
 	}
+	customer := map[string]any{"id": "cus_" + s.ID, "external_id": external}
+	if s.CustomerEmail != "" {
+		customer["email"] = s.CustomerEmail
+	}
 	payload := map[string]any{
 		"type": eventType, "timestamp": time.Now().UTC().Format(time.RFC3339),
 		"data": map[string]any{
 			"id": s.ID, "status": s.Status, "product_id": s.Product, "customer_id": "cus_" + s.ID,
 			"current_period_end": s.PeriodEnd.Format(time.RFC3339), "cancel_at_period_end": s.CancelAtPeriodEnd,
 			"ended_at": ended, "modified_at": s.ModifiedAt.Format(time.RFC3339),
-			"customer": map[string]any{"id": "cus_" + s.ID, "external_id": external},
+			"customer": customer,
 		},
 	}
 	encoded, err := json.Marshal(payload)

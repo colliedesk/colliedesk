@@ -97,7 +97,12 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			go sweepRetention(ctx, retentionService)
 		}
 	}
-	api := httpapi.New(pool, httpapi.Config{Origin: origin, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != ""})
+	apiConfig := httpapi.Config{Origin: origin, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != ""}
+	if emailConfig.SMTP.Configured() {
+		apiConfig.AlertEmail = strings.TrimSpace(os.Getenv("BILLING_ALERT_EMAIL"))
+		apiConfig.AlertMailer = email.SMTPSender{Config: emailConfig.SMTP}
+	}
+	api := httpapi.New(pool, apiConfig)
 	if billing.Enabled() {
 		go refreshFoundingAtStart(ctx, api)
 	}

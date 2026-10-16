@@ -17,6 +17,9 @@ const (
 	maxWebhookBytes  = 1 << 20
 	// webhookIgnored is the answer for a verified event this instance has nothing to do with.
 	webhookIgnored = "ignored"
+
+	reasonNoWorkspaceID     = "customer has no workspace id as external id"
+	reasonWorkspaceNotFound = "workspace not found"
 )
 
 var workspaceIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -53,6 +56,9 @@ func (a *API) receivePolarWebhook(response http.ResponseWriter, request *http.Re
 	webhookID := request.Header.Get("webhook-id")
 	if reason != "" {
 		warnIgnoredSubscription(event, webhookID, reason)
+		if reason == reasonNoWorkspaceID {
+			a.alertUnmatchedPayment(request.Context(), event, webhookID, reason)
+		}
 		writeJSON(response, http.StatusOK, map[string]string{"status": webhookIgnored})
 		return
 	}
@@ -65,7 +71,8 @@ func (a *API) receivePolarWebhook(response http.ResponseWriter, request *http.Re
 	status := string(result)
 	if result == store.SubscriptionUnknownWorkspace {
 		status = webhookIgnored
-		warnIgnoredSubscription(event, webhookID, "workspace not found")
+		warnIgnoredSubscription(event, webhookID, reasonWorkspaceNotFound)
+		a.alertUnmatchedPayment(request.Context(), event, webhookID, reasonWorkspaceNotFound)
 	}
 	writeJSON(response, http.StatusOK, map[string]string{"status": status})
 }
@@ -86,7 +93,7 @@ func warnIgnoredSubscription(event polar.Event, webhookID, reason string) {
 func (a *API) subscriptionFromEvent(event polar.Event) (domain.Subscription, string, string) {
 	sub := event.Subscription
 	if !workspaceIDPattern.MatchString(sub.ExternalCustomerID) {
-		return domain.Subscription{}, "", "customer has no workspace id as external id"
+		return domain.Subscription{}, "", reasonNoWorkspaceID
 	}
 	plan := a.planOfProduct(sub.ProductID)
 	if plan == "" {
