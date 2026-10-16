@@ -117,7 +117,7 @@ func TestResendBounceMarksTheReplyDeliveryFailed(t *testing.T) {
 	if _, lastError := deliveryOf(t, pool, reply); !strings.Contains(lastError, "bounced") {
 		t.Fatalf("bounce reason not recorded: %q", lastError)
 	}
-	// The relay took the reply, so it still counts against send caps.
+	// sent_at stays the record that the relay took the reply; the trial recipient cap counts it.
 	if sentAt := queryString(t, pool, `SELECT COALESCE(sent_at::text,'') FROM email_outbox WHERE message_id=$1`, reply); sentAt == "" {
 		t.Fatal("marking the reply failed cleared sent_at")
 	}
@@ -278,5 +278,57 @@ func TestResendWebhookNeedsAValidSignature(t *testing.T) {
 	off, _, _, _ := testAPIWithConfig(t, platformConfig)
 	if response := serve(off, signedResendRequest("msg_off", body)); response.Code != http.StatusNotFound {
 		t.Fatalf("webhook without RESEND_WEBHOOK_SECRET: status=%d, want 404", response.Code)
+	}
+}
+
+func TestResendBounceOfACopiedAddressLeavesTheReplySent(t *testing.T) {
+	api, service, pool, _ := testAPIWithConfig(t, resendConfig)
+	admin := createSession(t, api, service, "Resend Cc", "admin@resend-cc.example.com")
+	conversation, _, _ := replyToken(t, api, pool, admin, connectEmail(t, api, admin, "support@resend-cc.example.com"), "rcc@customer.example")
+	reply := create(t, api, admin, "/api/v1/conversations/"+conversation+"/messages",
+		map[string]any{"kind": "outgoing", "body": "Copying your team.", "cc": []string{"boss@customer.example", "gone@customer.example"}})
+	sentReply(t, pool, reply, time.Now())
+	// The worker already noted a copy the relay refused at RCPT TO.
+	missed := "Sent to the customer, but not to: boss@customer.example (550 no such user)"
+	if _, err := pool.Exec(t.Context(), `UPDATE email_outbox SET last_error=$2 WHERE message_id=$1`, reply, missed); err != nil {
+		t.Fatal(err)
+	}
+	from := replyFrom(t, pool, reply)
+
+	copyOnly := resendEvent("email.bounced", from, []string{"Gone <GONE@customer.example>"}, "", time.Now())
+	if status := deliverResend(t, api, "msg_cc_copy", copyOnly); status != "applied" {
+		t.Fatalf("copy bounce status=%q, want applied", status)
+	}
+	status, note := deliveryOf(t, pool, reply)
+	if status != "sent" || !strings.Contains(note, missed) || !strings.Contains(note, "gone@customer.example") {
+		t.Fatalf("copy bounce: status=%q note=%q, want sent with both missed copies named", status, note)
+	}
+
+	contact := resendEvent("email.bounced", from, []string{"z@customer.example"}, "", time.Now())
+	if status := deliverResend(t, api, "msg_cc_contact", contact); status != "applied" {
+		t.Fatalf("contact bounce status=%q, want applied", status)
+	}
+	status, note = deliveryOf(t, pool, reply)
+	if status != "failed" || !strings.Contains(note, "bounced") || !strings.Contains(note, missed) {
+		t.Fatalf("contact bounce: status=%q note=%q, want failed keeping the missed-copy note", status, note)
+	}
+}
+
+// Resend echoes From as it was sent; a display name with a comma is not a valid RFC 5322 phrase
+// unless quoted, so the address is read from the angle brackets.
+func TestResendBounceReadsAFromWithAnUnquotedDisplayName(t *testing.T) {
+	api, service, pool, _ := testAPIWithConfig(t, resendConfig)
+	admin := createSession(t, api, service, "Acme, Inc.", "admin@resend-acme.example.com")
+	_, reply, _ := replyToken(t, api, pool, admin, connectEmail(t, api, admin, "support@resend-acme.example.com"), "racme@customer.example")
+	sentReply(t, pool, reply, time.Now())
+	from := replyFrom(t, pool, reply)
+	address := from[strings.Index(from, "<"):]
+
+	body := resendEvent("email.bounced", "Acme, Inc. via Colliedesk "+address, []string{"z@customer.example"}, "", time.Now())
+	if status := deliverResend(t, api, "msg_acme", body); status != "applied" {
+		t.Fatalf("status=%q, want applied", status)
+	}
+	if status, _ := deliveryOf(t, pool, reply); status != "failed" {
+		t.Fatalf("reply status=%q, want failed", status)
 	}
 }

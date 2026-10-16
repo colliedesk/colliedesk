@@ -235,8 +235,9 @@ names exactly one reply; a customer who answers that address still reaches the c
 - Only replies sent from the platform domain are matched. A reply sent as a verified support address
   is not, because that address does not name a conversation. Replies sent before each reply had its
   own address are matched only when Resend kept the Message-ID.
-- The event must name the conversation's contact and nobody else. A bounce for a Cc address never
-  fails the reply; it is logged for the operator.
+- A bounce for the contact fails the reply. A bounce for Cc addresses only never fails it: the reply
+  stays sent and the missed copies are named under it. An event that names the contact next to
+  others, or an address the reply was not sent to, changes nothing and is logged for the operator.
 - A temporary bounce or an `email.delivery_delayed` event changes nothing; the relay keeps trying.
 - Resend sends an event again until it gets an answer; a repeated event changes nothing.
 

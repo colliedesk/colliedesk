@@ -66,9 +66,13 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   kept our Message-ID. The `svix-id` is stored in `relay_webhook_events` in the same transaction, so a
   redelivery is `duplicate` even after an agent retried the reply. A reply still `queued` (the relay can
   report a suppressed address before the worker records the send) is failed too; the worker then loses
-  its lease and leaves it. The event must name the conversation's contact and nobody else: Resend does
-  not document what `to` holds when a Cc recipient bounces, so an event that also names another
-  address never fails the reply. Ignored failures are logged at Warn with ids only. The SMTP `250`
+  its lease and leaves it. An event that names only the contact fails the reply and keeps any missed-copy note after
+  the reason; one that names only Cc addresses of the reply leaves it sent and appends "Bounced from
+  copied address" to the note, like a DSN. Resend does not document what `to` holds when a Cc copy
+  bounces, so the contact next to others, or an address the reply was not sent to, changes nothing.
+  `sent_at` is kept on failure: the trial recipient cap still counts the reply, the hourly send limit
+  (`status='sent'`) does not. A `from` that `net/mail` rejects (unquoted "Acme, Inc.") is read from its
+  last angle brackets. Ignored failures are logged at Warn with ids only. The SMTP `250`
   reply does not document the Resend email id and tags exist only on the HTTP API, so SMTP stays the
   only transport. Replies sent as a verified support address are not matched: support addresses are
   not unique across workspaces.

@@ -82,10 +82,7 @@ func (a *API) applyResendEvent(request *http.Request, webhookID string, event re
 	if data.Bounce != nil && data.Bounce.Type != "" && !strings.EqualFold(data.Bounce.Type, "Permanent") {
 		return webhookIgnored, reasonNotDeliveryFailure, nil
 	}
-	token, replyID := "", ""
-	if from, err := mail.ParseAddress(data.From); err == nil {
-		token, replyID = email.PlatformReplyAddress(from.Address, a.config.Email.MailFromDomain)
-	}
+	token, replyID := email.PlatformReplyAddress(senderAddress(data.From), a.config.Email.MailFromDomain)
 	if token == "" {
 		return webhookIgnored, "not sent from a reply address", nil
 	}
@@ -100,12 +97,26 @@ func (a *API) applyResendEvent(request *http.Request, webhookID string, event re
 	switch {
 	case err != nil:
 		return "", "", err
-	case result == store.RelayBounceApplied:
+	case result == store.RelayBounceApplied, result == store.RelayBounceCopy:
 		return "applied", "", nil
 	case result == store.RelayBounceDuplicate:
 		return "duplicate", "", nil
 	}
 	return webhookIgnored, string(result), nil
+}
+
+// senderAddress is the address of a From value. The value comes back as it was sent, and a display
+// name with a comma or an @ that is not quoted (a workspace named "Acme, Inc.") is not valid RFC 5322,
+// so the text inside the last angle brackets is used when the value does not parse.
+func senderAddress(from string) string {
+	if parsed, err := mail.ParseAddress(from); err == nil {
+		return parsed.Address
+	}
+	open, end := strings.LastIndex(from, "<"), strings.LastIndex(from, ">")
+	if open < 0 || end < open {
+		return ""
+	}
+	return strings.TrimSpace(from[open+1 : end])
 }
 
 // bareAddresses drops display names; an entry that does not parse is kept as it is.
