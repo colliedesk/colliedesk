@@ -1,13 +1,14 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, createMemoryHistory, createRouter } from '@tanstack/react-router';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { routeTree } from './app';
+import { readCheckoutIntent, rememberCheckoutIntent } from './features/settings/checkout-intent';
 import { createQueryClient } from './query-client';
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
-afterEach(() => fetchMock.mockReset());
+afterEach(() => { fetchMock.mockReset(); window.sessionStorage.clear(); });
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
 const locked = { error: { code: 'workspace_locked', message: 'This workspace is locked because its trial or subscription ended.' } };
@@ -84,4 +85,60 @@ test('a locked workspace does not poll for inbox activity', async () => {
   open();
   await screen.findByRole('heading', { level: 1, name: 'Your free trial has ended' });
   expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/inbox/activity'))).toBe(false);
+});
+
+const trialPlan = { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false };
+const trialBilling = { ...billing, plan: 'trial', locked: false };
+
+test('the billing link with buy=founding remembers the intent for a visitor who is signed out', async () => {
+  serve({
+    '/api/v1/auth/me': () => json(401, { error: { code: 'unauthorized', message: 'Sign in.' } }),
+    '/api/v1/config': () => json(200, config),
+  });
+  open('/settings/billing?buy=founding');
+  await screen.findByRole('alert');
+  expect(readCheckoutIntent()).toBe('founding');
+});
+
+test('the billing link with buy=founding starts the founding checkout for a signed-in trial admin', async () => {
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('admin', trialPlan)),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/billing': () => json(200, trialBilling),
+    '/api/v1/billing/checkout': () => json(200, { url: 'https://polar.example/checkout/founding' }),
+    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [] }),
+  });
+  open('/settings/billing?buy=founding');
+  await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => String(url) === '/api/v1/billing/checkout')).toHaveLength(1));
+  const [, init] = fetchMock.mock.calls.find(([url]) => String(url) === '/api/v1/billing/checkout')!;
+  expect(JSON.parse(String(init.body))).toEqual({ plan: 'founding' });
+  expect(readCheckoutIntent()).toBeUndefined();
+});
+
+test('after signing in with a pairing link the remembered intent leads to the billing page and its checkout', async () => {
+  rememberCheckoutIntent('founding');
+  serve({
+    '/api/v1/auth/redeem': () => json(200, { agent: meBody('admin', trialPlan).agent, workspace: meBody('admin', trialPlan).workspace }),
+    '/api/v1/auth/me': () => json(200, meBody('admin', trialPlan)),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/billing': () => json(200, trialBilling),
+    '/api/v1/billing/checkout': () => json(200, { url: 'https://polar.example/checkout/founding' }),
+    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [] }),
+  });
+  open('/sign-in?token=pairing-token');
+  fireEvent.click(await screen.findByRole('button', { name: /sign in|continue|open/i }));
+  await waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => String(url) === '/api/v1/billing/checkout')).toHaveLength(1));
+});
+
+test('a locked workspace drops the remembered plan and shows its own plan choices', async () => {
+  rememberCheckoutIntent('founding');
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false })),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/billing': () => json(200, billing),
+  });
+  open('/settings/billing?buy=founding');
+  await screen.findByRole('heading', { level: 1, name: 'Your free trial has ended' });
+  await waitFor(() => expect(readCheckoutIntent()).toBeUndefined());
+  expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/v1/billing/checkout')).toBe(false);
 });

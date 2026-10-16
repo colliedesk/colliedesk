@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { Link, Outlet, createRootRoute, createRoute, createRouter, useRouterState } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
 import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
 import { RedeemRoute } from './features/auth/redeem-route';
 import { BillingRoute } from './features/settings/billing-route';
+import { clearCheckoutIntent, rememberCheckoutIntent } from './features/settings/checkout-intent';
 import { SettingsRoute } from './features/settings/settings-route';
 import { AppShell } from './features/shell/app-shell';
 import { LockedRoute } from './features/shell/locked-route';
@@ -22,6 +24,8 @@ function AppLayout() {
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config, enabled: !onSignIn });
   const locked = me.data?.plan?.locked === true;
   // New and newly assigned conversations are announced on every signed-in page, not only in the inbox.
+  // A locked workspace chooses its plan on the locked screen, so a remembered plan must not fire later.
+  useEffect(() => { if (locked) clearCheckoutIntent(); }, [locked]);
   useInboxActivity(!onSignIn && Boolean(me.data) && !signedOut && !locked);
   // On an instance with cloud sign-in the way back in is the sign-in page, not a new pairing link.
   const signIn = config.data?.cloud_sign_in.enabled ? <Link to="/sign-in">{messages.signIn}</Link> : undefined;
@@ -51,7 +55,13 @@ const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/set
 const billingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/billing',
-  validateSearch: (search: Record<string, unknown>) => ({ checkout: search.checkout === 'success' ? 'success' : '' }),
+  // `buy=<plan>` is the link the website uses to send a visitor straight into that plan's checkout.
+  validateSearch: (search: Record<string, unknown>): { checkout: 'success' | ''; buy?: string } => ({
+    checkout: search.checkout === 'success' ? 'success' : '',
+    ...(typeof search.buy === 'string' && search.buy !== '' ? { buy: search.buy } : {}),
+  }),
+  // Runs before sign-in is known, so the plan is kept through the sign-in and sign-up round trip.
+  beforeLoad: ({ search }) => { if (search.buy) rememberCheckoutIntent(search.buy); },
   component: () => <BillingRoute checkoutReturned={billingRoute.useSearch().checkout === 'success'} />,
 });
 const signInRoute = createRoute({
