@@ -1,6 +1,7 @@
 package email_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/email"
@@ -58,6 +59,26 @@ func TestConfigFromEnvReadsTheHostedMailDomain(t *testing.T) {
 	} {
 		if _, err := email.ConfigFromEnv(func(key string) string { return bad[key] }); err == nil {
 			t.Errorf("%s accepted", name)
+		}
+	}
+}
+
+// MAIL_FROM_DOMAIN below HOSTED_MAIL_DOMAIN must not be a name a workspace can own as its slug.
+func TestConfigFromEnvKeepsTheReplyDomainOutOfTheWorkspaceSlugs(t *testing.T) {
+	secret := "0123456789abcdef0123456789abcdef" // gitleaks:allow (test placeholder)
+	load := func(from string) error {
+		env := map[string]string{"HOSTED_MAIL_DOMAIN": "colliedesk.com", "MAIL_FROM_DOMAIN": from, "MAIL_FROM_INBOUND_SECRET": secret}
+		_, err := email.ConfigFromEnv(func(key string) string { return env[key] })
+		return err
+	}
+	for _, ok := range []string{"mail.colliedesk.com", "bounce.colliedesk.com", "reply.mail.colliedesk.com", "colliedesk.com", "mail.example.org"} {
+		if err := load(ok); err != nil {
+			t.Errorf("MAIL_FROM_DOMAIN=%s refused: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"acme.colliedesk.com", "Desk.Colliedesk.com"} {
+		if err := load(bad); err == nil || !strings.Contains(err.Error(), "MAIL_FROM_DOMAIN") {
+			t.Errorf("MAIL_FROM_DOMAIN=%s accepted: %v", bad, err)
 		}
 	}
 }
