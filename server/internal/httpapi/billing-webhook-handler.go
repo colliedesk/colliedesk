@@ -99,30 +99,10 @@ func (a *API) subscriptionFromEvent(event polar.Event) (domain.Subscription, str
 	if plan == "" {
 		return domain.Subscription{}, "", "product is not sold here"
 	}
-	status := sub.Status
-	if !domain.KnownStatuses[status] {
-		slog.Warn("polar subscription has an unknown status; stored as not paid", "status", status, "subscription_id", sub.ID)
-		status = domain.StatusUnknown
-	}
-	return domain.Subscription{
-		Plan: plan, SubscriptionID: sub.ID, CustomerID: sub.CustomerID, Status: status,
-		CurrentPeriodEnd: sub.CurrentPeriodEnd, CancelAtPeriodEnd: sub.CancelAtPeriodEnd, EndedAt: sub.EndedAt, ModifiedAt: sub.ModifiedAt,
-	}, sub.ExternalCustomerID, ""
+	return sub.Stored(plan), sub.ExternalCustomerID, ""
 }
 
-// planOfProduct is the plan a Polar product buys, or "" when the product is not sold here. An
-// unset product id never matches, so an unconfigured plan cannot claim an event.
+// planOfProduct is the plan a Polar product buys, or "" when the product is not sold here.
 func (a *API) planOfProduct(productID string) string {
-	if productID == "" {
-		return ""
-	}
-	switch products := a.config.Billing.Products; productID {
-	case products.TeamMonthly, products.TeamYearly:
-		return domain.PlanTeam
-	case products.Team25Monthly, products.Team25Yearly:
-		return domain.PlanTeam25
-	case products.Founding:
-		return domain.PlanFounding
-	}
-	return ""
+	return a.config.Billing.Products.PlanOf(productID)
 }

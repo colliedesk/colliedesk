@@ -20,7 +20,7 @@ off and logs why, so an image older than its configuration never stops the inbox
 | `POLAR_API_URL` | Optional. Default `https://api.polar.sh`; sandbox `https://sandbox-api.polar.sh`. |
 | `POLAR_PRODUCT_TEAM_MONTHLY`, `POLAR_PRODUCT_TEAM_YEARLY`, `POLAR_PRODUCT_FOUNDING` | Polar product ids. |
 | `POLAR_PRODUCT_TEAM25_MONTHLY`, `POLAR_PRODUCT_TEAM25_YEARLY` | Optional. Polar product ids of Team 25. Unset: checkout for `team25_*` answers 400 like an unknown plan (the message lists only the plans the server sells), no event maps to the plan, `GET /billing` leaves `team25_*` out of `checkout_plans` so the web app shows no Team 25 button, and the Team seat error does not mention Team 25. Existing deployments keep starting. |
-| `BILLING_ALERT_EMAIL` | Optional. Operator address told about a paid subscription that matches no workspace. Needs `SMTP_HOST` and `MAIL_FROM_DOMAIN`. |
+| `BILLING_ALERT_EMAIL` | Optional. Operator address told about a paid subscription that matches no workspace, and the summary of `collie billing reconcile`. Needs `SMTP_HOST` and `MAIL_FROM_DOMAIN`. |
 
 Webhook URL to register in Polar: `https://<host>/api/v1/webhooks/polar`, event types
 `subscription.*`. The path is under `/api/` because the web handler forwards only that prefix to
@@ -455,3 +455,57 @@ buyer of the static checkout link has no workspace and the webhook ignores that 
 - Trap: two buyers who pay at the same moment at slot 9 both get in (11 of 10). Accepted.
 - Trap: if the archive call fails, the app is already closed but the checkout link stays live until the next
   Founding event or restart retries it. The token needs the product write scope.
+
+## Reconcile with Polar
+
+`collie billing reconcile [--dry-run]` compares every subscription of the Polar organization with
+`workspace_billing`. It is the safety net for a lost webhook and for the operator alert that fires
+only once per process. Run it from the server shell like the other operator commands; it needs the
+same `POLAR_*` variables as `serve` (and `BILLING_ALERT_EMAIL`, `SMTP_*`, `MAIL_FROM_DOMAIN` for the mail).
+
+- It lists all subscriptions first (`GET /v1/subscriptions/`, 25 a page, `sorting=started_at`, the stable sort Polar offers (it has no `created_at` sort); every page;
+  a listing reply may be up to 8 MiB because items embed product and customer). A failed page, or a reply
+  without `pagination`, fails the command (non-zero) before anything is written, so a partial list never
+  makes a live subscription look gone.
+- Write path: `store.ApplySubscription`, the webhook's own path. The same rule orders both: a row is
+  replaced only by a subscription whose `modified_at` is not older, so a late reconcile cannot undo a
+  newer webhook and a late webhook cannot undo a newer reconcile. The webhook id recorded is
+  `reconcile:<subscription>:<modified_at>`, so running twice applies once.
+- Applied: Polar's `modified_at` is newer than the stored `source_modified_at`, or the subscription
+  is paid at Polar and was never stored. A subscription that was never stored and grants nothing
+  (ended, unpaid) is skipped.
+- Reported, never written: an `active` or `past_due` subscription with no workspace (no external id,
+  or, for a product sold here, an id that matches no workspace), and a subscription stored as paid that Polar no longer
+  lists. Subscriptions of products not sold here are ignored.
+- Any applied or reported item sends one summary mail to `BILLING_ALERT_EMAIL` (the unmatched buyer's
+  email is in the mail, not in stdout). A run that finds nothing prints `in sync` and sends nothing.
+  An unmatched payment is reported on every run until someone resolves it. Without the alert
+  configuration the command only warns on stderr; a mail that fails to send exits non-zero, after
+  the changes were applied.
+- Every change line and the mail show what the store did: `applied`, `stale` (a newer webhook won in the
+  meantime), `duplicate`, `failed` or `not attempted` (after a failure). The summary counts match. When an
+  apply fails midway the partial report is still printed and mailed, then the command exits non-zero.
+- `--require-alert` makes the command exit non-zero when `BILLING_ALERT_EMAIL`, `SMTP_HOST` or
+  `MAIL_FROM_DOMAIN` is missing, even with nothing to report. The production timer passes it; self-hosters
+  keep the default.
+- `--dry-run` prints what it would apply and report, writes nothing and sends nothing.
+- `PrivilegeBillingReconcile` reads all workspace ids and stored Polar rows in one repeatable-read
+  read-only transaction; the writes are scoped.
+- Infra: run it daily, for example a timer on the cloud host that runs the command in the server
+  container. It is not wired by this repository.
+
+Verified against the Polar sandbox (listing shape, pagination fields, apply, second run applies
+nothing) with a free sandbox product and a free subscription created through the API.
+
+## Sandbox end-to-end: why there is none
+
+A Playwright journey that buys Founding at the Polar sandbox checkout cannot run unattended. The
+checkout fills and validates (address, Stripe card `4242 4242 4242 4242`), but "Subscribe now" then
+stops: Stripe's invisible hCaptcha frame answers "Please try again" and no confirm request is sent
+(only a `PATCH /v1/checkouts/client/<id>` and a beacon to `r.stripe.com`). Observed from the cook
+host with headless Chromium and with headed Chrome under Xvfb. The card fields are reachable: they
+are inputs named `number`, `expiry` and `cvc` inside one Stripe frame titled "Secure payment input
+frame". Passing the captcha would mean evading a bot check, so the journey was not built. What the
+sandbox does support without a browser: a free product and `POST /v1/subscriptions/` with a customer
+whose `external_id` is a workspace id, which is enough to exercise `collie billing reconcile` against
+the real API.
