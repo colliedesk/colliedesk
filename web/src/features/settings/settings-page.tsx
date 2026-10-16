@@ -4,6 +4,7 @@ import type { Invite, Session } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { AppearanceSection } from './appearance-section';
+import { NotificationsSection } from './notifications-section';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
 
@@ -79,6 +80,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
       {emailSection}
       {webFormSection}
       <AppearanceSection />
+      <NotificationsSection />
       {exportSection && <section className="settings-card" aria-labelledby="export-heading">
         <div className="section-heading"><h2 id="export-heading">{messages.exportHeading}</h2><p>{messages.exportDescription}</p></div>
         <div className="settings-body">{exportSection}</div>

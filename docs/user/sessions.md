@@ -5,6 +5,8 @@ was created and last used.
 
 - Select **Revoke** to sign a device out immediately. The device stays in the list as **Revoked**;
   a session that ran out shows **Expired**.
+- To sign out of the browser you are using, select your avatar at the foot of the left rail (top
+  right on a phone) and choose **Sign out**.
 - Agents see their own sessions. Admins see and can revoke every session in the workspace.
 
 A session lasts 30 days and extends while you use Colliedesk. A browser without a valid session

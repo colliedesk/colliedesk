@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { AppShell } from './app-shell';
 
 const me = {
@@ -45,4 +45,52 @@ test('Escape dismisses open tooltips and the next pointer move brings them back'
   expect(document.documentElement).toHaveAttribute('data-tips-off');
   fireEvent.pointerMove(document.body);
   expect(document.documentElement).not.toHaveAttribute('data-tips-off');
+});
+
+test('a signed-out visitor gets no navigation and no account menu that lead nowhere', () => {
+  render(<AppShell signedOut links={<a href="/">Inbox</a>}><p>inbox</p></AppShell>);
+  expect(screen.queryByRole('link', { name: 'Inbox' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Account' })).not.toBeInTheDocument();
+});
+
+test('the avatar opens an account menu with who is signed in and Sign out', () => {
+  const signOut = vi.fn();
+  render(<AppShell me={me} onSignOut={signOut}><p>inbox</p></AppShell>);
+  const button = screen.getByRole('button', { name: 'Account' });
+  expect(button).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(button);
+  expect(button).toHaveAttribute('aria-expanded', 'true');
+  const menu = screen.getByRole('group', { name: 'Account' });
+  expect(menu).toHaveTextContent('sam@example.com');
+  expect(menu).toHaveTextContent('Beta Desk');
+  fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+  expect(signOut).toHaveBeenCalledTimes(1);
+});
+
+test('Escape closes the account menu and returns focus to the avatar', () => {
+  render(<AppShell me={me} onSignOut={() => {}}><p>inbox</p></AppShell>);
+  const button = screen.getByRole('button', { name: 'Account' });
+  fireEvent.click(button);
+  fireEvent.keyDown(screen.getByRole('button', { name: 'Sign out' }), { key: 'Escape' });
+  expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
+  expect(button).toHaveFocus();
+});
+
+test('a failed sign out says so in the menu', () => {
+  render(<AppShell me={me} onSignOut={() => {}} signOutFailed><p>inbox</p></AppShell>);
+  fireEvent.click(screen.getByRole('button', { name: 'Account' }));
+  expect(screen.getByRole('alert')).toHaveTextContent('Sign out failed. Try again.');
+});
+
+test('the account menu closes when focus moves out of it', () => {
+  render(<AppShell me={me} onSignOut={() => {}}><button type="button">elsewhere</button></AppShell>);
+  fireEvent.click(screen.getByRole('button', { name: 'Account' }));
+  fireEvent.blur(screen.getByRole('button', { name: 'Sign out' }), { relatedTarget: screen.getByRole('button', { name: 'elsewhere' }) });
+  expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
+});
+
+test('Sign out cannot be sent twice while the first request runs', () => {
+  render(<AppShell me={me} onSignOut={() => {}} signingOut><p>inbox</p></AppShell>);
+  fireEvent.click(screen.getByRole('button', { name: 'Account' }));
+  expect(screen.getByRole('button', { name: 'Sign out' })).toBeDisabled();
 });

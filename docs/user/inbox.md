@@ -38,14 +38,13 @@ cannot be loaded, it says so with **Try again** instead.
   Your own replies, notes and changes never raise a notification or a count; they only refresh the screen.
 - When the tab is in the background, its title shows the number of new items, for example
   `(2) Colliedesk`. The count clears when you return to the tab.
-- To also get a desktop notification, select the bell in the left rail: **Enable desktop
-  notifications**. Your browser then asks for permission; it never asks before you select the bell.
-  Select the bell again (**Desktop notifications are on. Turn off**) to stop them. The choice is
-  stored in this browser only.
+- To also get a desktop notification, tick **Desktop notifications** in **Settings > Notifications**.
+  Your browser asks for permission only when you tick it; untick it to stop. The choice is stored in
+  this browser only.
 - A notification shows the subject and contact name, never message text. More than three new items at
   once become one summary notification. The title of a customer message notification is **New customer message**.
-- If your browser blocked notifications for this site, the bell says so; change it in the browser's
-  site settings. The list refresh and the title count keep working.
+- If your browser blocked notifications for this site, the checkbox is disabled and the section says so;
+  allow them in the browser's site settings, then reload the page. The list refresh and the title count keep working.
 - Colliedesk does not email agents about new or assigned conversations.
 
 **Change many conversations at once**

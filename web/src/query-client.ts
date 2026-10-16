@@ -16,7 +16,11 @@ export function createQueryClient(): QueryClient {
     } },
   });
   function signedOut(error: Error, key?: unknown) {
-    if (error instanceof UnauthorizedError && key !== 'me') void client.invalidateQueries({ queryKey: ['me'] });
+    if (!(error instanceof UnauthorizedError)) return;
+    if (key !== 'me') { void client.invalidateQueries({ queryKey: ['me'] }); return; }
+    // Signed out (sign out, revoked, expired): nothing of that workspace may show to whoever signs
+    // in next in this tab. Only the instance's public configuration survives.
+    client.removeQueries({ predicate: (query) => query.queryKey[0] !== 'me' && query.queryKey[0] !== 'public-config' });
   }
   function locked(error: Error) {
     if (!(error instanceof WorkspaceLockedError)) return;
