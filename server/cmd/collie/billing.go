@@ -17,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const billingUsage = "usage: collie billing reconcile [--dry-run]"
+const billingUsage = "usage: collie billing reconcile [--dry-run] [--require-alert]"
 
 // alertMailer is the mail boundary of the operator summary.
 type alertMailer interface {
@@ -26,6 +26,9 @@ type alertMailer interface {
 
 // reconcileMailer builds the mailer of the summary; tests replace it.
 var reconcileMailer = func(config email.SMTPConfig) alertMailer { return email.SMTPSender{Config: config} }
+
+// reconcileData is the database side of the command; tests wrap it.
+var reconcileData = func(pool *pgxpool.Pool) billingreconcile.Data { return store.New(pool) }
 
 const reconcileMailTimeout = 15 * time.Second
 
@@ -36,6 +39,7 @@ func billingCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outp
 	flags := flag.NewFlagSet("billing reconcile", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	dryRun := flags.Bool("dry-run", false, "print what would change; apply and send nothing")
+	requireAlert := flags.Bool("require-alert", false, "fail when no operator alert can be sent, even with nothing to report")
 	if err := flags.Parse(args[1:]); err != nil || flags.NArg() != 0 {
 		return errors.New(billingUsage)
 	}
@@ -51,24 +55,36 @@ func billingCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outp
 		return err
 	}
 	now := clock().UTC()
-	report, err := billingreconcile.Run(ctx, polar.NewClient(billing), store.New(pool), billing.Products, now, *dryRun)
-	if err != nil {
-		return fmt.Errorf("billing reconcile: %w", err)
+	alertTo := strings.TrimSpace(os.Getenv("BILLING_ALERT_EMAIL"))
+	alertReady := alertTo != "" && emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != ""
+	report, runErr := billingreconcile.Run(ctx, polar.NewClient(billing), reconcileData(pool), billing.Products, now, *dryRun)
+	if runErr != nil && len(report.Changes) == 0 {
+		return fmt.Errorf("billing reconcile: %w", runErr)
 	}
-	if err := report.Print(output, *dryRun); err != nil {
-		return err
+	// A failure after some changes were written still prints and mails what was written.
+	var failures []error
+	if runErr != nil {
+		failures = append(failures, fmt.Errorf("billing reconcile: %w", runErr))
 	}
-	if *dryRun || !report.NeedsAttention() {
-		return nil
+	if err := report.Print(output); err != nil {
+		return errors.Join(append(failures, err)...)
 	}
-	return mailReconcileReport(ctx, report, emailConfig, strings.TrimSpace(os.Getenv("BILLING_ALERT_EMAIL")), now)
+	if !*dryRun && report.NeedsAttention() {
+		if err := mailReconcileReport(ctx, report, emailConfig, alertTo, alertReady, now); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	if *requireAlert && !alertReady {
+		failures = append(failures, errors.New("--require-alert: no alert can be sent (set BILLING_ALERT_EMAIL, SMTP_HOST and MAIL_FROM_DOMAIN)"))
+	}
+	return errors.Join(failures...)
 }
 
 // mailReconcileReport sends the one summary mail. The findings are already applied and printed.
 // Without an alert configuration it only warns, like the webhook alert; a send that fails fails the
 // command, so a timer does not look healthy while nobody hears.
-func mailReconcileReport(ctx context.Context, report billingreconcile.Report, config email.Config, to string, now time.Time) error {
-	if to == "" || !config.SMTP.Configured() || config.MailFromDomain == "" {
+func mailReconcileReport(ctx context.Context, report billingreconcile.Report, config email.Config, to string, ready bool, now time.Time) error {
+	if !ready {
 		_, err := fmt.Fprintln(stderr, "billing reconcile found items but no alert is configured (set BILLING_ALERT_EMAIL, SMTP_HOST and MAIL_FROM_DOMAIN); the list above is the only report")
 		return err
 	}

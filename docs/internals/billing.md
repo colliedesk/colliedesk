@@ -445,9 +445,10 @@ buyer of the static checkout link has no workspace and the webhook ignores that 
 only once per process. Run it from the server shell like the other operator commands; it needs the
 same `POLAR_*` variables as `serve` (and `BILLING_ALERT_EMAIL`, `SMTP_*`, `MAIL_FROM_DOMAIN` for the mail).
 
-- It lists all subscriptions first (`GET /v1/subscriptions/`, 100 a page, every page). A failed page
-  fails the command (non-zero) before anything is written, so a partial list never makes a live
-  subscription look gone.
+- It lists all subscriptions first (`GET /v1/subscriptions/`, 25 a page, `sorting=started_at`, the stable sort Polar offers (it has no `created_at` sort); every page;
+  a listing reply may be up to 8 MiB because items embed product and customer). A failed page, or a reply
+  without `pagination`, fails the command (non-zero) before anything is written, so a partial list never
+  makes a live subscription look gone.
 - Write path: `store.ApplySubscription`, the webhook's own path. The same rule orders both: a row is
   replaced only by a subscription whose `modified_at` is not older, so a late reconcile cannot undo a
   newer webhook and a late webhook cannot undo a newer reconcile. The webhook id recorded is
@@ -456,15 +457,22 @@ same `POLAR_*` variables as `serve` (and `BILLING_ALERT_EMAIL`, `SMTP_*`, `MAIL_
   is paid at Polar and was never stored. A subscription that was never stored and grants nothing
   (ended, unpaid) is skipped.
 - Reported, never written: an `active` or `past_due` subscription with no workspace (no external id,
-  or an id that matches no workspace here), and a subscription stored as paid that Polar no longer
+  or, for a product sold here, an id that matches no workspace), and a subscription stored as paid that Polar no longer
   lists. Subscriptions of products not sold here are ignored.
 - Any applied or reported item sends one summary mail to `BILLING_ALERT_EMAIL` (the unmatched buyer's
   email is in the mail, not in stdout). A run that finds nothing prints `in sync` and sends nothing.
   An unmatched payment is reported on every run until someone resolves it. Without the alert
   configuration the command only warns on stderr; a mail that fails to send exits non-zero, after
   the changes were applied.
+- Every change line and the mail show what the store did: `applied`, `stale` (a newer webhook won in the
+  meantime), `duplicate`, `failed` or `not attempted` (after a failure). The summary counts match. When an
+  apply fails midway the partial report is still printed and mailed, then the command exits non-zero.
+- `--require-alert` makes the command exit non-zero when `BILLING_ALERT_EMAIL`, `SMTP_HOST` or
+  `MAIL_FROM_DOMAIN` is missing, even with nothing to report. The production timer passes it; self-hosters
+  keep the default.
 - `--dry-run` prints what it would apply and report, writes nothing and sends nothing.
-- `PrivilegeBillingReconcile` reads all workspace ids and stored Polar rows once; the writes are scoped.
+- `PrivilegeBillingReconcile` reads all workspace ids and stored Polar rows in one repeatable-read
+  read-only transaction; the writes are scoped.
 - Infra: run it daily, for example a timer on the cloud host that runs the command in the server
   container. It is not wired by this repository.
 

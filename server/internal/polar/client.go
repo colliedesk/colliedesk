@@ -155,13 +155,17 @@ func (c *Client) ListSubscriptions(ctx context.Context) ([]Subscription, error) 
 	for page := 1; ; page++ {
 		var reply struct {
 			Items      []json.RawMessage `json:"items"`
-			Pagination struct {
+			Pagination *struct {
 				MaxPage int `json:"max_page"`
 			} `json:"pagination"`
 		}
-		path := fmt.Sprintf("/v1/subscriptions/?limit=100&page=%d", page)
-		if err := c.do(ctx, http.MethodGet, path, nil, &reply); err != nil {
+		// A fixed sort keeps an item from moving between pages while the listing is read.
+		path := fmt.Sprintf("/v1/subscriptions/?limit=%d&sorting=started_at&page=%d", subscriptionsPage, page)
+		if err := c.doLimited(ctx, http.MethodGet, path, nil, &reply, maxListReplyBytes); err != nil {
 			return nil, fmt.Errorf("list polar subscriptions (page %d): %w", page, err)
+		}
+		if reply.Pagination == nil {
+			return nil, fmt.Errorf("list polar subscriptions (page %d): reply has no pagination, so completeness cannot be told", page)
 		}
 		for _, raw := range reply.Items {
 			subscription, err := decodeSubscription(raw, time.Time{})
@@ -179,7 +183,18 @@ func (c *Client) ListSubscriptions(ctx context.Context) ([]Subscription, error) 
 	}
 }
 
+// maxReplyBytes bounds ordinary replies; a listing page embeds product and customer objects and gets more.
+const (
+	maxReplyBytes     = 1 << 20
+	maxListReplyBytes = 8 << 20
+	subscriptionsPage = 25
+)
+
 func (c *Client) do(ctx context.Context, method, path string, body, target any) error {
+	return c.doLimited(ctx, method, path, body, target, maxReplyBytes)
+}
+
+func (c *Client) doLimited(ctx context.Context, method, path string, body, target any, maxReply int64) error {
 	var payload io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)
@@ -204,7 +219,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, target any) 
 	if response.StatusCode < 200 || response.StatusCode > 299 {
 		return &StatusError{Code: response.StatusCode}
 	}
-	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(target); err != nil {
+	if err := json.NewDecoder(io.LimitReader(response.Body, maxReply)).Decode(target); err != nil {
 		return fmt.Errorf("decode reply: %w", err)
 	}
 	return nil

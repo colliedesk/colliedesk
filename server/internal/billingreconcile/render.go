@@ -16,15 +16,22 @@ func orDash(value string) string {
 	return value
 }
 
-// Lines are the findings, one per line, with no customer data beyond ids.
-func (r Report) Lines(dryRun bool) []string {
-	verb := "apply"
-	if dryRun {
-		verb = "would apply"
+// outcome says what happened to a change: the store's answer, or that nothing was tried.
+func (c Change) outcome(dryRun bool) string {
+	switch {
+	case dryRun:
+		return "would apply"
+	case c.Result == "":
+		return "not attempted"
 	}
+	return string(c.Result)
+}
+
+// Lines are the findings, one per line, with no customer data beyond ids.
+func (r Report) Lines() []string {
 	var lines []string
 	for _, change := range r.Changes {
-		lines = append(lines, fmt.Sprintf("%s workspace=%s subscription=%s plan=%s status=%s -> %s", verb, change.WorkspaceID,
+		lines = append(lines, fmt.Sprintf("%s workspace=%s subscription=%s plan=%s status=%s -> %s", change.outcome(r.DryRun), change.WorkspaceID,
 			change.Polar.SubscriptionID, change.Polar.Plan, orDash(change.StoredStatus), change.Polar.Status))
 	}
 	for _, item := range r.Unmatched {
@@ -37,25 +44,25 @@ func (r Report) Lines(dryRun bool) []string {
 	return lines
 }
 
-// Summary is the closing line of the command.
-func (r Report) Summary(dryRun bool) string {
+// Summary is the closing line of the command; its counts are the ones of the lines above.
+func (r Report) Summary() string {
 	if !r.NeedsAttention() {
 		return fmt.Sprintf("reconcile: in sync (%d Polar subscriptions)", r.Listed)
 	}
-	if dryRun {
+	if r.DryRun {
 		return fmt.Sprintf("reconcile (dry run): %d to apply, %d unmatched, %d absent at Polar", len(r.Changes), len(r.Unmatched), len(r.Absent))
 	}
-	return fmt.Sprintf("reconcile: %d applied, %d unmatched, %d absent at Polar", r.Applied, len(r.Unmatched), len(r.Absent))
+	return fmt.Sprintf("reconcile: %d applied, %d not applied, %d unmatched, %d absent at Polar", r.Applied, len(r.Changes)-r.Applied, len(r.Unmatched), len(r.Absent))
 }
 
 // Print writes the findings and the summary.
-func (r Report) Print(output io.Writer, dryRun bool) error {
-	for _, line := range r.Lines(dryRun) {
+func (r Report) Print(output io.Writer) error {
+	for _, line := range r.Lines() {
 		if _, err := fmt.Fprintln(output, line); err != nil {
 			return err
 		}
 	}
-	_, err := fmt.Fprintln(output, r.Summary(dryRun))
+	_, err := fmt.Fprintln(output, r.Summary())
 	return err
 }
 
@@ -69,9 +76,9 @@ func (r Report) Mail(from, to string, now time.Time) ([]byte, error) {
 	var body strings.Builder
 	body.WriteString("The billing reconcile compared Polar with the workspaces and found the items below.\n\n")
 	if len(r.Changes) > 0 {
-		body.WriteString("Applied from Polar (a webhook was lost or arrived out of order):\n")
+		body.WriteString("Differences from Polar (a webhook was lost or arrived out of order), with what the store did:\n")
 		for _, change := range r.Changes {
-			fmt.Fprintf(&body, "- workspace %s, subscription %s: plan %s, status %s -> %s\n", change.WorkspaceID, change.Polar.SubscriptionID,
+			fmt.Fprintf(&body, "- %s: workspace %s, subscription %s: plan %s, status %s -> %s\n", change.outcome(r.DryRun), change.WorkspaceID, change.Polar.SubscriptionID,
 				change.Polar.Plan, orDash(change.StoredStatus), change.Polar.Status)
 		}
 		body.WriteString("\n")
@@ -90,6 +97,7 @@ func (r Report) Mail(from, to string, now time.Time) ([]byte, error) {
 			fmt.Fprintf(&body, "- workspace %s, subscription %s, status %s\n", item.WorkspaceID, item.Stored.SubscriptionID, item.Stored.Status)
 		}
 	}
+	body.WriteString("\n" + r.Summary() + "\n")
 	return email.Compose(email.Outgoing{FromName: "Colliedesk", FromAddress: from, ToAddress: to,
 		Subject: fmt.Sprintf("Colliedesk: billing reconcile found %d item(s)", len(r.Changes)+len(r.Unmatched)+len(r.Absent)),
 		Body:    body.String(), MessageID: messageID, Date: now, Standalone: true})

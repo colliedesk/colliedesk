@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"mime/quotedprintable"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -11,9 +14,11 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/colliedesk/colliedesk/server/internal/billingreconcile"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const reconcileNow = "2026-10-16T12:00:00Z"
@@ -21,10 +26,11 @@ const reconcileNow = "2026-10-16T12:00:00Z"
 // fakePolar answers the subscription listing the way Polar does: pages of items with a pagination
 // block. It is the only fake in these tests; the database is real.
 type fakePolar struct {
-	mu       sync.Mutex
-	pages    [][]map[string]any
-	failPage int
-	server   *httptest.Server
+	mu           sync.Mutex
+	pages        [][]map[string]any
+	failPage     int
+	noPagination bool
+	server       *httptest.Server
 }
 
 func newFakePolar(t *testing.T, pages ...[]map[string]any) *fakePolar {
@@ -35,6 +41,10 @@ func newFakePolar(t *testing.T, pages ...[]map[string]any) *fakePolar {
 		defer fake.mu.Unlock()
 		if request.URL.Path != "/v1/subscriptions/" || request.Header.Get("Authorization") != "Bearer polar-test-token" {
 			http.Error(response, "unexpected request", http.StatusTeapot)
+			return
+		}
+		if request.URL.Query().Get("sorting") != "started_at" {
+			http.Error(response, "an unsorted listing can skip or repeat items between pages", http.StatusBadRequest)
 			return
 		}
 		page := 1
@@ -50,8 +60,11 @@ func newFakePolar(t *testing.T, pages ...[]map[string]any) *fakePolar {
 			items = fake.pages[page-1]
 		}
 		response.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(response).Encode(map[string]any{"items": items,
-			"pagination": map[string]any{"total_count": 100, "max_page": len(fake.pages)}})
+		reply := map[string]any{"items": items}
+		if !fake.noPagination {
+			reply["pagination"] = map[string]any{"total_count": 100, "max_page": len(fake.pages)}
+		}
+		_ = json.NewEncoder(response).Encode(reply)
 	}))
 	t.Cleanup(fake.server.Close)
 	return fake
@@ -131,7 +144,16 @@ func (e *reconcileEnv) billing() domain.Billing {
 func (e *reconcileEnv) mails() []string {
 	e.mailer.mu.Lock()
 	defer e.mailer.mu.Unlock()
-	return append([]string(nil), e.mailer.messages...)
+	// The body is quoted-printable, which folds long lines; read it as the recipient does.
+	decoded := make([]string, 0, len(e.mailer.messages))
+	for _, message := range e.mailer.messages {
+		text, err := io.ReadAll(quotedprintable.NewReader(strings.NewReader(message)))
+		if err != nil {
+			e.t.Fatal(err)
+		}
+		decoded = append(decoded, string(text))
+	}
+	return decoded
 }
 
 func TestReconcileAppliesWhatALostWebhookLeftBehind(t *testing.T) {
@@ -342,5 +364,135 @@ func TestReconcileNeedsBillingAndRejectsBadArguments(t *testing.T) {
 	}
 	if _, err := env.run("billing", "reconcile"); err == nil || !strings.Contains(err.Error(), "billing is not configured") {
 		t.Fatalf("want billing is not configured, got %v", err)
+	}
+}
+
+func TestReconcileDecodesAListingPageLargerThanOneMebibyte(t *testing.T) {
+	env := newReconcileEnv(t, "Big Page")
+	env.seed("sub_big", "incomplete", "2026-10-16T09:00:00Z")
+	big := polarSub("sub_big", "active", "prod_team_m", env.workspaceID, "2026-10-16T10:00:00Z",
+		map[string]any{"product": map[string]any{"description": strings.Repeat("x", 1_300_000)}})
+	env.polar.pages = [][]map[string]any{{big}}
+	env.mustRun("billing", "reconcile")
+	if got := env.billing(); got.Status != "active" {
+		t.Fatalf("status %q, want active: a large page must not be cut off", got.Status)
+	}
+}
+
+func TestReconcileFailsWhenThePageCarriesNoPagination(t *testing.T) {
+	env := newReconcileEnv(t, "No Pagination")
+	env.seed("sub_np", "incomplete", "2026-10-16T09:00:00Z")
+	env.polar.pages = [][]map[string]any{{polarSub("sub_np", "active", "prod_team_m", env.workspaceID, "2026-10-16T10:00:00Z", nil)}}
+	env.polar.noPagination = true
+	if _, err := env.run("billing", "reconcile"); err == nil || !strings.Contains(err.Error(), "pagination") {
+		t.Fatalf("want an error naming pagination, got %v", err)
+	}
+	if got := env.billing(); got.Status != "incomplete" {
+		t.Fatalf("status %q: nothing may be written from a listing that cannot be trusted to be complete", got.Status)
+	}
+}
+
+func TestReconcileRequireAlertFailsWithoutAlertConfigurationEvenWhenInSync(t *testing.T) {
+	env := newReconcileEnv(t, "Require Alert")
+	env.seed("sub_ra", "active", "2026-10-16T10:00:00Z")
+	env.polar.pages = [][]map[string]any{{polarSub("sub_ra", "active", "prod_team_m", env.workspaceID, "2026-10-16T10:00:00Z", nil)}}
+	if _, err := env.run("billing", "reconcile", "--require-alert"); err != nil {
+		t.Fatalf("configured alert, in sync: %v", err)
+	}
+	t.Setenv("BILLING_ALERT_EMAIL", "")
+	if _, err := env.run("billing", "reconcile"); err != nil {
+		t.Fatalf("default keeps self-hosters working: %v", err)
+	}
+	if _, err := env.run("billing", "reconcile", "--require-alert"); err == nil || !strings.Contains(err.Error(), "BILLING_ALERT_EMAIL") {
+		t.Fatalf("want an error naming BILLING_ALERT_EMAIL, got %v", err)
+	}
+}
+
+// racingData applies a newer webhook between the snapshot and the write, as production can.
+type racingData struct {
+	billingreconcile.Data
+	race func()
+}
+
+func (d racingData) BillingSnapshot(ctx context.Context) (store.BillingSnapshot, error) {
+	snapshot, err := d.Data.BillingSnapshot(ctx)
+	d.race()
+	return snapshot, err
+}
+
+func TestReconcileShowsTheStoreResultOfEveryChange(t *testing.T) {
+	env := newReconcileEnv(t, "Stale Desk")
+	env.seed("sub_race", "incomplete", "2026-10-16T09:00:00Z")
+	env.polar.pages = [][]map[string]any{{polarSub("sub_race", "active", "prod_team_m", env.workspaceID, "2026-10-16T10:00:00Z", nil)}}
+	previous := reconcileData
+	reconcileData = func(pool *pgxpool.Pool) billingreconcile.Data {
+		return racingData{Data: store.New(pool), race: func() {
+			end := mustTime(t, "2026-11-16T00:00:00Z")
+			_, err := store.New(pool).ApplySubscription(context.Background(), env.workspaceID, "webhook-newer", "subscription.updated",
+				domain.Subscription{Plan: domain.PlanTeam, SubscriptionID: "sub_race", CustomerID: "cus_sub_race", Status: "past_due", CurrentPeriodEnd: &end, ModifiedAt: mustTime(t, "2026-10-16T11:00:00Z")})
+			if err != nil {
+				t.Error(err)
+			}
+		}}
+	}
+	t.Cleanup(func() { reconcileData = previous })
+	output := env.mustRun("billing", "reconcile")
+	if !strings.Contains(output, "stale") || !strings.Contains(output, "0 applied, 1 not applied") {
+		t.Fatalf("output must show the stale result and matching counts:\n%s", output)
+	}
+	if mails := env.mails(); len(mails) != 1 || !strings.Contains(mails[0], "stale") {
+		t.Fatalf("the mail must show the stale result too: %q", mails)
+	}
+	if got := env.billing(); got.Status != "past_due" {
+		t.Fatalf("the newer webhook state must win, got %q", got.Status)
+	}
+}
+
+func TestReconcileIgnoresProductsThisInstanceDoesNotSell(t *testing.T) {
+	env := newReconcileEnv(t, "Foreign Product")
+	env.polar.pages = [][]map[string]any{{
+		polarSub("sub_foreign", "active", "prod_someone_elses", "11111111-2222-3333-4444-555555555555", "2026-10-16T10:00:00Z", nil),
+	}}
+	output := env.mustRun("billing", "reconcile")
+	if !strings.Contains(output, "in sync") || len(env.mails()) != 0 {
+		t.Fatalf("a product not sold here is not a payment nobody received: mails=%d\n%s", len(env.mails()), output)
+	}
+}
+
+type failingSecondApply struct {
+	billingreconcile.Data
+	calls int
+}
+
+func (d *failingSecondApply) ApplySubscription(ctx context.Context, workspaceID, webhookID, eventType string, incoming domain.Subscription) (store.SubscriptionResult, error) {
+	d.calls++
+	if d.calls == 2 {
+		return "", errors.New("connection reset")
+	}
+	return d.Data.ApplySubscription(ctx, workspaceID, webhookID, eventType, incoming)
+}
+
+func TestReconcileReportsWhatWasWrittenWhenALaterApplyFails(t *testing.T) {
+	env := newReconcileEnv(t, "Partial One")
+	other := &reconcileEnv{trialEnv: env.withWorkspace("Partial Two"), polar: env.polar, mailer: env.mailer}
+	env.seed("sub_first", "incomplete", "2026-10-16T09:00:00Z")
+	other.seed("sub_second", "incomplete", "2026-10-16T09:00:00Z")
+	env.polar.pages = [][]map[string]any{{
+		polarSub("sub_first", "active", "prod_team_m", env.workspaceID, "2026-10-16T10:00:00Z", nil),
+		polarSub("sub_second", "active", "prod_team_m", other.workspaceID, "2026-10-16T10:00:00Z", nil),
+	}}
+	previous := reconcileData
+	reconcileData = func(pool *pgxpool.Pool) billingreconcile.Data { return &failingSecondApply{Data: store.New(pool)} }
+	t.Cleanup(func() { reconcileData = previous })
+	output, err := env.run("billing", "reconcile")
+	if err == nil || !strings.Contains(err.Error(), "connection reset") {
+		t.Fatalf("want the apply error, got %v", err)
+	}
+	if got := env.billing(); got.Status != "active" {
+		t.Fatalf("the first change was written and stays: %q", got.Status)
+	}
+	mails := env.mails()
+	if !strings.Contains(output, "1 applied") || len(mails) != 1 || !strings.Contains(mails[0], "sub_first") || !strings.Contains(mails[0], "failed") {
+		t.Fatalf("the partial report must be printed and mailed: mails=%q\n%s", mails, output)
 	}
 }

@@ -105,12 +105,16 @@ func (d *DB) InWorkspace(ctx context.Context, workspaceID string, fn func(pgx.Tx
 
 // Privileged runs fn as the connecting owner role with app.privileged set for this transaction, so
 // it sees every workspace. Use it only for a reason listed in privileges.go; a guard test fails
-// when a new call site appears.
-func (d *DB) Privileged(ctx context.Context, reason Privilege, fn func(pgx.Tx) error) error {
+// when a new call site appears. An optional pgx.TxOptions sets isolation and access mode.
+func (d *DB) Privileged(ctx context.Context, reason Privilege, fn func(pgx.Tx) error, options ...pgx.TxOptions) error {
 	if reason == "" {
 		return errors.New("privileged transaction needs a reason")
 	}
-	tx, err := d.pool.Begin(ctx)
+	txOptions := pgx.TxOptions{}
+	if len(options) > 0 {
+		txOptions = options[0]
+	}
+	tx, err := d.pool.BeginTx(ctx, txOptions)
 	if err != nil {
 		return fmt.Errorf("begin privileged transaction (%s): %w", reason, err)
 	}

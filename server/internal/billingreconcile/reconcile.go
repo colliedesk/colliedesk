@@ -32,7 +32,13 @@ type Change struct {
 	WorkspaceID  string
 	Polar        domain.Subscription
 	StoredStatus string // empty when nothing was stored
+	// Result is what the store did with it; empty until an apply was tried (never set in a dry run).
+	// ResultFailed marks the apply that returned an error.
+	Result store.SubscriptionResult
 }
+
+// ResultFailed marks a change whose apply returned an error.
+const ResultFailed store.SubscriptionResult = "failed"
 
 // Unmatched is a paid Polar subscription that no workspace of this instance owns.
 type Unmatched struct {
@@ -46,11 +52,12 @@ type Absent struct {
 	Stored      domain.Subscription
 }
 
-// Report is everything one run found. Applied is the part of Changes that was written.
+// Report is everything one run found. Applied counts the changes the store wrote.
 type Report struct {
 	Listed    int
 	Changes   []Change
 	Applied   int
+	DryRun    bool
 	Unmatched []Unmatched
 	Absent    []Absent
 }
@@ -73,7 +80,7 @@ func Run(ctx context.Context, source Source, data Data, products polar.Products,
 	if err != nil {
 		return Report{}, err
 	}
-	report := Report{Listed: len(listed)}
+	report := Report{Listed: len(listed), DryRun: dryRun}
 	seen := map[string]bool{}
 	for _, sub := range listed {
 		seen[sub.ID] = true
@@ -82,12 +89,13 @@ func Run(ctx context.Context, source Source, data Data, products polar.Products,
 			report.noteUnmatched(sub, "customer has no workspace id as external id")
 			continue
 		}
-		if !snapshot.Workspaces[workspaceID] {
-			report.noteUnmatched(sub, "workspace not found")
-			continue
-		}
+		// Same order as the webhook: a product sold elsewhere is nobody's lost payment here.
 		plan := products.PlanOf(sub.ProductID)
 		if plan == "" {
+			continue
+		}
+		if !snapshot.Workspaces[workspaceID] {
+			report.noteUnmatched(sub, "workspace not found")
 			continue
 		}
 		incoming := sub.Stored(plan)
@@ -112,13 +120,16 @@ func Run(ctx context.Context, source Source, data Data, products polar.Products,
 	if dryRun {
 		return report, nil
 	}
-	for _, change := range report.Changes {
+	for i := range report.Changes {
+		change := &report.Changes[i]
 		// The webhook id is derived from the subscription state, so a repeated run is a duplicate.
 		webhookID := fmt.Sprintf("reconcile:%s:%s", change.Polar.SubscriptionID, change.Polar.ModifiedAt.UTC().Format(time.RFC3339Nano))
 		result, err := data.ApplySubscription(ctx, change.WorkspaceID, webhookID, "reconcile", change.Polar)
 		if err != nil {
-			return report, err
+			change.Result = ResultFailed
+			return report, fmt.Errorf("apply subscription %s: %w", change.Polar.SubscriptionID, err)
 		}
+		change.Result = result
 		if result == store.SubscriptionApplied {
 			report.Applied++
 		}

@@ -49,7 +49,7 @@ func (s *Store) BillingSnapshot(ctx context.Context) (BillingSnapshot, error) {
 			snapshot.Subscriptions[workspaceID][sub.SubscriptionID] = sub
 		}
 		return rows.Err()
-	})
+	}, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return BillingSnapshot{}, fmt.Errorf("read billing snapshot: %w", err)
 	}
