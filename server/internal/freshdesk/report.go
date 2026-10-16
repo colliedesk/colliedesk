@@ -144,17 +144,19 @@ type Report struct {
 	// TrialExtensionError is set when the import finished but the trial could not be extended;
 	// running the same import again retries it.
 	TrialExtensionError string `json:"trial_extension_error,omitempty"`
-	// StorageCap is set by a dry run on a Founding workspace: whether the import would be refused.
+	// StorageCap is set by a dry run on a workspace whose cap counts imports: whether the import would be refused.
 	StorageCap *StorageCapCheck `json:"storage_cap,omitempty"`
 }
 
-// StorageCapCheck compares the attachment bytes an import needs with the room a Founding workspace has.
+// StorageCapCheck compares the attachment bytes an import needs with the room the workspace has under its plan.
 type StorageCapCheck struct {
-	LimitBytes  int64 `json:"limit_bytes"`
-	UsedBytes   int64 `json:"used_bytes"`
-	NeededBytes int64 `json:"needed_bytes"`
-	FreeBytes   int64 `json:"free_bytes"`
-	WouldRefuse bool  `json:"would_refuse"`
+	// Plan is the plan whose cap is checked: founding, team or team25.
+	Plan        string `json:"plan"`
+	LimitBytes  int64  `json:"limit_bytes"`
+	UsedBytes   int64  `json:"used_bytes"`
+	NeededBytes int64  `json:"needed_bytes"`
+	FreeBytes   int64  `json:"free_bytes"`
+	WouldRefuse bool   `json:"would_refuse"`
 	// SkippedTickets are tickets the sizing could not read (deleted or forbidden) and so did not count.
 	SkippedTickets []string `json:"skipped_tickets,omitempty"`
 }

@@ -19,6 +19,8 @@ off and logs why, so an image older than its configuration never stops the inbox
 | `POLAR_WEBHOOK_SECRET` | The `whsec_...` secret of the webhook endpoint. |
 | `POLAR_API_URL` | Optional. Default `https://api.polar.sh`; sandbox `https://sandbox-api.polar.sh`. |
 | `POLAR_PRODUCT_TEAM_MONTHLY`, `POLAR_PRODUCT_TEAM_YEARLY`, `POLAR_PRODUCT_FOUNDING` | Polar product ids. |
+| `POLAR_PRODUCT_TEAM25_MONTHLY`, `POLAR_PRODUCT_TEAM25_YEARLY` | Optional. Polar product ids of Team 25. Unset: checkout for `team25_*` answers 400 like an unknown plan (the message lists only the plans the server sells), no event maps to the plan, `GET /billing` leaves `team25_*` out of `checkout_plans` so the web app shows no Team 25 button, and the Team seat error does not mention Team 25. Existing deployments keep starting. |
+| `BILLING_ALERT_EMAIL` | Optional. Operator address told about a paid subscription that matches no workspace. Needs `SMTP_HOST` and `MAIL_FROM_DOMAIN`. |
 
 Webhook URL to register in Polar: `https://<host>/api/v1/webhooks/polar`, event types
 `subscription.*`. The path is under `/api/` because the web handler forwards only that prefix to
@@ -58,6 +60,15 @@ the API.
   Polar stops retrying, and the endpoint reveals nothing about which workspaces exist. A
   subscription event that is ignored is logged at WARN with event type, subscription id and
   webhook id (no customer data), because it may be a payment nobody sees.
+- **A payment without a workspace emails the operator.** When the ignored event is for a missing
+  workspace id or an unknown workspace and the subscription is `active`, the server mails
+  `BILLING_ALERT_EMAIL` from `noreply@MAIL_FROM_DOMAIN` through `SMTP_*`: buyer email (from Polar's
+  customer), plan, product, subscription and customer ids, never a secret. Unset, or without
+  `SMTP_HOST` and `MAIL_FROM_DOMAIN`, it only logs a WARN. One mail per subscription id per process
+  (created, active and redelivered events share it); a restart can repeat one. The alert is best effort: a failed send is logged at ERROR and the answer
+  stays 200, so Polar does not redeliver; a later event for the same subscription sends again, and the
+  planned reconciliation of Polar subscriptions against workspaces is the safety net. The static checkout link is the usual source; the in-app
+  `/settings/billing?buy=<plan>` link avoids the case.
 - **A new Polar status never fails the webhook.** A status outside the known list is stored as
   `unknown` (not paid) with a WARN log. Failing would make Polar retry until it disables the endpoint.
 - **Row-level security without a privileged lookup.** The workspace id in the event is used as the
@@ -233,7 +244,7 @@ and workspaces without an email channel never reach it.
 ### Storage cap
 
 Trial and locked (`none`) workspaces may hold 2 GiB (`domain.TrialStorageBytes`, 2147483648) of
-attachments; paid plans and self-hosted have no cap. Used bytes are `sum(attachments.size)` over
+attachments; self-hosted has no cap, and paid plans have their own caps that count imported files (below). Used bytes are `sum(attachments.size)` over
 messages with `origin IS NULL`: files of imported (Freshdesk) messages never count, because an import
 is history the customer already owned. The number is `workspaces.counted_storage_bytes`, kept by triggers on
 `attachments` (migration `storage-counter`; `attachments.counted` is false for files of imported messages
@@ -255,8 +266,11 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
   $100 once a year for life and attachments are the one cost that grows without bound (break-even is
   roughly 41-56 GB), so it has a cap. Unlike the trial, imported files count: the number is
   `workspaces.stored_storage_bytes`, the sum of every attachment, kept by the same triggers (migration
-  `founding-storage-counter`, additive; the three trigger functions now update both counters). Team has
-  no cap. Over the cap nothing is deleted. Inbound customer mail is exempt (`Store.CheckInboundStorage` lets Founding
+  `founding-storage-counter`, additive; the three trigger functions now update both counters). Team
+  (100 GiB, `domain.TeamStorageBytes`) and Team 25 (250 GiB, `domain.Team25StorageBytes`, 25 agents,
+  $99 or $990) have the same shape: imports count, warn at 80%, same inbound exemption. The rule is
+  `domain.StorageCountsImports`: every capped plan except the trial and a locked workspace. When one
+  workspace holds several paid subscriptions, Team 25 outranks Founding, which outranks Team (`planRank`: Team 25 > Team > Founding, by agents then storage). The migration `allow-team25-plan` cannot be rolled back while a subscription row is on `team25` (it raises, naming the count; deleting or downgrading the row would lock or shrink a paying workspace, and Polar does not redeliver an event it already delivered). Move those subscriptions to another plan in Polar first. A Team workspace at its 10th seat is told to upgrade to Team 25 under Manage billing when Team 25 is on sale; the switch itself happens in the Polar portal, there is no in-app flow. Over the cap nothing is deleted. Inbound customer mail is exempt (`Store.CheckInboundStorage` lets a paid plan
   through, so it is stored in full and its bytes still count: a bounced customer email hurts the paying
   team's own customers and looks like an outage; the cost is bounded by real mail). The cap still refuses
   what an agent or an import supplies (`Store.CheckStorage`, the importer's guard). There is no agent
@@ -264,8 +278,8 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
   and its tests (`TestCheckStorage...`) prove the store function, not an upload route. **Any future
   upload route must call `CheckStorage` before writing and get a test of its own.** Reading, replies
   without new files and export are untouched. The trial and a locked workspace still refuse inbound mail.
-- **Import on Founding: one check, before any write; then admitted.** The ticket list does not carry
-  attachment sizes, so `freshdesk.guardFoundingStorage` runs a read-only pass first: the dry-run
+- **Import on a paid plan: one check, before any write; then admitted.** The ticket list does not carry
+  attachment sizes, so `freshdesk.guardStorage` runs a read-only pass first: the dry-run
   listing and id probing (`listTickets`, `classifyTickets`, which the real run then repeats), then a
   read of each ticket and of its conversations (paged, so at least two calls per ticket), adding up
   the reported sizes of attachments the ledger does not hold yet. It then re-reads the room (the pass
@@ -276,18 +290,18 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
   that ticket and goes on (`Report.StorageCap.SkippedTickets` in a dry run). **No cap check
   after that:** an admitted import is never stopped by the cap, so bytes that arrive meanwhile (inbound
   mail is exempt; uploads and a file added at the source after the pass) may take usage past
-  20 GiB, by whatever arrives while the import runs (the real run lists the tickets again, so tickets
+  the plan's cap, by whatever arrives while the import runs (the real run lists the tickets again, so tickets
   created at the source during the sizing window are imported without being sized; on a busy account that
   is not small), which is accepted, and there is no partial-import path from the cap (only a full disk still
   stops a run, as before). `--dry-run` reports the same comparison in `Report.StorageCap` without
   refusing. The counter counts logical rows: a file attached twice counts twice although the local
   disk stores it once, which is safe for cost. `import undo` deletes the files, and the triggers
-  release the bytes. `Options.FoundingStorageBytes` and `Store.WithFoundingStorageBytes` are test-only
-  seams that shrink the cap (kept as options because an unexported hook would mean threading a
+  release the bytes. `Options.PaidStorageBytes` and `Store.WithPaidStorageBytes` are test-only
+  seams that shrink the cap of every plan that counts imports (kept as options because an unexported hook would mean threading a
   package-private value through the `store` and `freshdesk` packages).
 - `GET /billing` reports (for every plan) `usage.storage_bytes`, `limits.storage_bytes` (null when uncapped) and
-  `limits.storage_warn_bytes` (80%: 1717986918 on the trial, 17179869184 on Founding), the usage at which the web app
-  warns. On Founding `usage.storage_bytes` is the stored counter, imports included.
+  `limits.storage_warn_bytes` (80%: 1717986918 on the trial, 17179869184 on Founding, 85899345920 on Team, 214748364800 on Team 25), the usage at which the web app
+  warns. On a paid plan `usage.storage_bytes` is the stored counter, imports included.
 
 ### Clock
 
@@ -381,3 +395,22 @@ Run on the server shell (`docker compose exec server /app/collie ...`).
   billing page shows "Complimentary Team plan (until ...)" and hides Manage billing; checkout answers
   409 `already_subscribed` without a portal hint.
 
+## Founding slot cap
+
+`domain.FoundingSlots` (10) limits the Founding plan. A slot is a Polar subscription of the Founding
+product in status active, trialing or past_due. The count comes from Polar (`GET /v1/subscriptions/`
+with repeated `status` parameters, `pagination.total_count`), not from the local database, because a
+buyer of the static checkout link has no workspace and the webhook ignores that event.
+
+- State lives in API memory: unknown until the first refresh succeeds, then taken plus the archive flag.
+  Refreshes run once at start (background, `serve.go`) and after every signature-verified subscription
+  webhook for the Founding product, including events ignored for lack of a workspace. A failed refresh
+  is logged and never changes the webhook answer.
+- Closed means taken >= 10 or the product is archived at Polar. At the cap the server archives the
+  product (`PATCH /v1/products/{id}`), the hard stop for every checkout path. Closing is one-way: nothing
+  unarchives, even when a subscription later ends. Reopening is a manual unarchive in Polar plus a restart.
+- Unknown counts as open in the app; the Polar archive is the hard stop. `GET /api/v1/founding` (public,
+  memory only) reports `taken: null` while unknown.
+- Trap: two buyers who pay at the same moment at slot 9 both get in (11 of 10). Accepted.
+- Trap: if the archive call fails, the app is already closed but the checkout link stays live until the next
+  Founding event or restart retries it. The token needs the product write scope.

@@ -949,7 +949,7 @@ paths:
       description: >
         Start a hosted checkout for the signed-in workspace. The workspace is taken from the session,
         never from the body. A workspace that already has a paid plan gets 409; it changes or cancels
-        its plan in the portal.
+        its plan in the portal. The `founding` plan gets 409 `founding_closed` once its slots are used up.
       requestBody:
         required: true
         content:
@@ -1010,6 +1010,30 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/founding:
+    get:
+      operationId: getFoundingSlots
+      security: []
+      x-permission: public
+      description: >
+        How many of the Founding slots are taken, for the marketing site. Answered from server memory,
+        never from the billing provider on the request: `taken` is null until the server has counted
+        once after it started. `open` is false once Founding is closed, which is one-way: the slots
+        are used up or the product was archived. Only present when billing is configured.
+      responses:
+        '200':
+          description: Founding slot state
+          headers:
+            Cache-Control:
+              schema: {type: string}
+              description: '`public, max-age=60`'
+            Access-Control-Allow-Origin:
+              schema: {type: string}
+              description: The marketing site origin
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FoundingSlots'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/export:
     get:
       operationId: exportWorkspace
@@ -1335,6 +1359,7 @@ components:
       type: object
       required: [cloud_sign_in, billing, signup, limits]
       properties:
+        version: {type: string, description: 'The running build: a release tag such as `v0.0.1`, `edge-<commit>` for a main build, or `dev`.'}
         limits:
           type: object
           required: [outgoing_attachments_bytes, outgoing_attachments_files]
@@ -1363,7 +1388,14 @@ components:
       properties:
         url: {type: string, description: 'Path on this server, for example /api/v1/export/download/<token>.'}
         expires_in_seconds: {type: integer}
-    CheckoutPlan: {type: string, enum: [team_monthly, team_yearly, founding]}
+    CheckoutPlan: {type: string, enum: [team_monthly, team_yearly, team25_monthly, team25_yearly, founding], description: '`team25_*` is refused with 400 on a server that has no Polar product for it.'}
+    FoundingSlots:
+      type: object
+      required: [slots, taken, open]
+      properties:
+        slots: {type: integer, description: Founding slots in total}
+        taken: {type: [integer, 'null'], description: 'Slots held by active, trialing or past due subscriptions; null until counted'}
+        open: {type: boolean, description: Whether Founding can still be bought}
     WebhookResult:
       type: object
       required: [status]
@@ -1371,11 +1403,11 @@ components:
         status: {type: string, enum: [applied, duplicate, stale, ignored]}
     Billing:
       type: object
-      required: [plan, trial_ends_at, locked, status, current_period_end, cancel_at_period_end, active_subscriptions, complimentary, complimentary_until, limits, usage]
+      required: [plan, trial_ends_at, locked, status, current_period_end, cancel_at_period_end, active_subscriptions, complimentary, complimentary_until, limits, usage, checkout_plans]
       properties:
         plan:
           type: string
-          enum: [trial, team, founding, none]
+          enum: [trial, team, team25, founding, none]
           description: The plan in effect now. `trial` is the free trial; `none` means the trial is over and nothing is paid.
         trial_ends_at: {type: string, format: date-time, description: 'When the free trial ends or ended, whatever the plan.'}
         locked: {type: boolean, description: 'True when `plan` is `none`; the workspace refuses every route outside the locked allowlist.'}
@@ -1403,6 +1435,10 @@ components:
           type: [string, 'null']
           format: date-time
           description: 'When a complimentary plan ends; null when it has no end or the plan is not complimentary.'
+        checkout_plans:
+          type: array
+          items: {$ref: '#/components/schemas/CheckoutPlan'}
+          description: 'The plans this server can sell, in the order to offer them. `team25_*` appear only when both Team 25 products are configured; the web app shows a purchase button for each plan listed and for no other. `founding` is dropped once Founding is closed.'
         limits:
           type: object
           required: [agents, storage_bytes, storage_warn_bytes, replies_per_24h]
@@ -1412,7 +1448,7 @@ components:
             storage_bytes:
               type: [integer, 'null']
               format: int64
-              description: 'Attachment storage cap in bytes, 2 GiB on the trial and when locked (imported files do not count), 20 GiB on the Founding plan (imported files count); null on Team and on self-hosted, which have none.'
+              description: 'Attachment storage cap in bytes: 2 GiB on the trial and when locked (imported files do not count); 20 GiB on Founding, 100 GiB on Team and 250 GiB on Team 25 (imported files count); null on self-hosted, which has none.'
             storage_warn_bytes:
               type: [integer, 'null']
               format: int64
@@ -1507,7 +1543,7 @@ components:
             - type: object
               required: [plan, trial_ends_at, locked, trial_extended]
               properties:
-                plan: {type: string, enum: [trial, team, founding, none]}
+                plan: {type: string, enum: [trial, team, team25, founding, none]}
                 trial_ends_at: {type: string, format: date-time}
                 locked: {type: boolean}
                 trial_extended: {type: boolean, description: True when a Freshdesk import already extended the trial.}

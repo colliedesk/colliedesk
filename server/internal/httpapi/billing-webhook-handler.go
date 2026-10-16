@@ -17,6 +17,9 @@ const (
 	maxWebhookBytes  = 1 << 20
 	// webhookIgnored is the answer for a verified event this instance has nothing to do with.
 	webhookIgnored = "ignored"
+
+	reasonNoWorkspaceID     = "customer has no workspace id as external id"
+	reasonWorkspaceNotFound = "workspace not found"
 )
 
 var workspaceIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -44,10 +47,18 @@ func (a *API) receivePolarWebhook(response http.ResponseWriter, request *http.Re
 		writeJSON(response, http.StatusOK, map[string]string{"status": webhookIgnored})
 		return
 	}
+	if a.isFoundingProduct(event.Subscription.ProductID) {
+		// Whatever happens to the event, the slot count may have changed, including for a buyer
+		// of the checkout link who has no workspace here.
+		defer a.refreshFoundingAfterWebhook(request.Context())
+	}
 	incoming, workspaceID, reason := a.subscriptionFromEvent(event)
 	webhookID := request.Header.Get("webhook-id")
 	if reason != "" {
 		warnIgnoredSubscription(event, webhookID, reason)
+		if reason == reasonNoWorkspaceID {
+			a.alertUnmatchedPayment(request.Context(), event, webhookID, reason)
+		}
 		writeJSON(response, http.StatusOK, map[string]string{"status": webhookIgnored})
 		return
 	}
@@ -60,7 +71,8 @@ func (a *API) receivePolarWebhook(response http.ResponseWriter, request *http.Re
 	status := string(result)
 	if result == store.SubscriptionUnknownWorkspace {
 		status = webhookIgnored
-		warnIgnoredSubscription(event, webhookID, "workspace not found")
+		warnIgnoredSubscription(event, webhookID, reasonWorkspaceNotFound)
+		a.alertUnmatchedPayment(request.Context(), event, webhookID, reasonWorkspaceNotFound)
 	}
 	writeJSON(response, http.StatusOK, map[string]string{"status": status})
 }
@@ -81,15 +93,10 @@ func warnIgnoredSubscription(event polar.Event, webhookID, reason string) {
 func (a *API) subscriptionFromEvent(event polar.Event) (domain.Subscription, string, string) {
 	sub := event.Subscription
 	if !workspaceIDPattern.MatchString(sub.ExternalCustomerID) {
-		return domain.Subscription{}, "", "customer has no workspace id as external id"
+		return domain.Subscription{}, "", reasonNoWorkspaceID
 	}
-	var plan string
-	switch products := a.config.Billing.Products; sub.ProductID {
-	case products.TeamMonthly, products.TeamYearly:
-		plan = domain.PlanTeam
-	case products.Founding:
-		plan = domain.PlanFounding
-	default:
+	plan := a.planOfProduct(sub.ProductID)
+	if plan == "" {
 		return domain.Subscription{}, "", "product is not sold here"
 	}
 	status := sub.Status
@@ -101,4 +108,21 @@ func (a *API) subscriptionFromEvent(event polar.Event) (domain.Subscription, str
 		Plan: plan, SubscriptionID: sub.ID, CustomerID: sub.CustomerID, Status: status,
 		CurrentPeriodEnd: sub.CurrentPeriodEnd, CancelAtPeriodEnd: sub.CancelAtPeriodEnd, EndedAt: sub.EndedAt, ModifiedAt: sub.ModifiedAt,
 	}, sub.ExternalCustomerID, ""
+}
+
+// planOfProduct is the plan a Polar product buys, or "" when the product is not sold here. An
+// unset product id never matches, so an unconfigured plan cannot claim an event.
+func (a *API) planOfProduct(productID string) string {
+	if productID == "" {
+		return ""
+	}
+	switch products := a.config.Billing.Products; productID {
+	case products.TeamMonthly, products.TeamYearly:
+		return domain.PlanTeam
+	case products.Team25Monthly, products.Team25Yearly:
+		return domain.PlanTeam25
+	case products.Founding:
+		return domain.PlanFounding
+	}
+	return ""
 }

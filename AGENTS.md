@@ -86,6 +86,23 @@ Run locally: `docker compose --profile test up -d postgres mailpit`, then
 `make e2e E2E_ARGS='--grep @onboarding'`; for the installer,
 `docker build -t colliedesk:smoke -f server/Dockerfile . && COLLIE_DESK_IMAGE=colliedesk:smoke sh tests/install-smoke.sh`.
 
+## Releases
+
+Colliedesk is **alpha**: releases are `v0.0.N`. Merging to `main` never makes a release, and
+nothing makes one on a schedule. A release is cut only when Chính (`hiimchinh`) or Long
+(`buiduclong0511`) asks: run `gh workflow run release.yml -R colliedesk/colliedesk`, or they press
+Run workflow themselves (it needs write access to this repository). It
+releases the commit Colliedesk Cloud runs (`version` in `GET /api/v1/config`), never the head of
+`main`, as the next `v0.0.N`, and fails when Cloud runs nothing newer than the last release.
+Release notes are generated from merged pull request titles, so write titles a user can read.
+A run that failed after creating its tag is finished by running Release again.
+`latest` follows the newest release.
+Never call a release, page or doc "beta", and never tag `v0.1.0` or higher, until the HC Labs
+owner announces beta. Two gates refuse other tags: the repository tag ruleset
+`alpha-release-tags-only` (no bypass, so GitHub rejects the push even from an admin) and
+`.github/scripts/release-tag-check.sh` in `release.yml`. Never edit either one without the
+owner's announcement quoted in the PR or ruleset change.
+
 ## Clean room
 
 Do not open, copy, translate or paraphrase the source code of other helpdesks, especially
