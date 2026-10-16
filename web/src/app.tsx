@@ -39,7 +39,7 @@ function AppLayout() {
   const inSettings = path.startsWith('/settings') && !inBilling;
   return <AppShell me={me.data} signedOut={signedOut} signIn={signIn}
     notice={me.data && <PlanNotices me={me.data} />} lockedScreen={locked && me.data ? <LockedRoute me={me.data} /> : undefined}
-    onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError}
+    onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending}
     brand={<span className="rail-brand" role="img" aria-label={messages.brand}><LogoMark /></span>}
     links={locked ? undefined : <>
       <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inBilling ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
