@@ -10,6 +10,8 @@ interface BillingPageProps {
   // checkoutReturned is set when the browser comes back from a successful checkout.
   checkoutReturned?: boolean;
   failed?: boolean;
+  // busy is true while a checkout is starting or open; the plan buttons wait so a second click cannot open a second one.
+  busy?: boolean;
   onCheckout: (plan: CheckoutPlan) => void;
   onManage: () => void;
 }
@@ -40,7 +42,7 @@ function StorageFull({ billing }: { billing: Billing }) {
     {paid ? messages.storageFullPaid(upgrade) : messages.storageFullTrial(upgrade)}</p>;
 }
 
-export function BillingPage({ billing, timezone, checkoutReturned = false, failed = false, onCheckout, onManage }: BillingPageProps) {
+export function BillingPage({ billing, timezone, checkoutReturned = false, failed = false, busy = false, onCheckout, onManage }: BillingPageProps) {
   const note = periodNote(billing, timezone);
   const storageLimit = billing.limits.storage_bytes;
   const warnAt = billing.limits.storage_warn_bytes;
@@ -76,7 +78,7 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
       {(billing.plan === 'trial' || billing.plan === 'none') && <section aria-labelledby="upgrade-heading">
         <div className="section-heading"><div><h2 id="upgrade-heading">{messages.upgradeHeading}</h2></div></div>
         <div className="button-row">{planOptionsFor(billing.checkout_plans).map((item) =>
-          <button key={item.plan} type="button" className="primary-action" onClick={() => onCheckout(item.plan)}>{item.label}</button>)}</div>
+          <button key={item.plan} type="button" className="primary-action" disabled={busy} aria-busy={busy} onClick={() => onCheckout(item.plan)}>{item.label}</button>)}</div>
       </section>}
       {billing.status !== 'none' && !billing.complimentary && <section aria-labelledby="manage-billing-heading">
         <div className="section-heading"><div><h2 id="manage-billing-heading">{messages.manageBilling}</h2><p>{messages.manageBillingHelp}</p></div></div>

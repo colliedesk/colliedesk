@@ -11,6 +11,8 @@ interface LockedScreenProps {
   billing?: Billing;
   timezone: string;
   checkoutFailed?: boolean;
+  // checkoutBusy is true while a checkout is starting or open; the plan buttons wait for it.
+  checkoutBusy?: boolean;
   signOutFailed?: boolean;
   exportAction?: ReactNode;
   onCheckout: (plan: CheckoutPlan) => void;
@@ -26,7 +28,7 @@ function heading(billing?: Billing) {
 
 // LockedScreen replaces the whole workspace once the trial or subscription ended. It names what
 // happened, what an admin can do (pay, take the data out) and what anyone can do (sign out).
-export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = false, signOutFailed = false, exportAction, onCheckout, onManage, onSignOut }: LockedScreenProps) {
+export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = false, checkoutBusy = false, signOutFailed = false, exportAction, onCheckout, onManage, onSignOut }: LockedScreenProps) {
   // A 402 can swap the inbox for this page; focus would stay on a removed node, so the heading takes it.
   const title = useRef<HTMLHeadingElement>(null);
   useEffect(() => title.current?.focus(), []);
@@ -45,7 +47,7 @@ export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = fals
         <div className="settings-body">
           {isAdmin
             ? <div className="button-row">{planOptionsFor(billing?.checkout_plans ?? []).map((option) =>
-                <button key={option.plan} type="button" className="primary-action" onClick={() => onCheckout(option.plan)}>{option.label}</button>)}
+                <button key={option.plan} type="button" className="primary-action" disabled={checkoutBusy} aria-busy={checkoutBusy} onClick={() => onCheckout(option.plan)}>{option.label}</button>)}
               {hasSubscription && onManage && <button type="button" onClick={onManage}>{messages.manageBilling}</button>}</div>
             : <p>{messages.askWorkspaceAdmin}</p>}
         </div>

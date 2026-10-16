@@ -6,6 +6,9 @@ import { readCheckoutIntent, rememberCheckoutIntent } from './checkout-intent';
 
 const api = vi.hoisted(() => ({ me: vi.fn(), config: vi.fn(), billing: vi.fn(), startCheckout: vi.fn(), openBillingPortal: vi.fn() }));
 vi.mock('../../api/client', () => ({ api }));
+// The Polar embed SDK is the only other boundary; the open-checkout module runs for real.
+const embed = vi.hoisted(() => ({ create: vi.fn() }));
+vi.mock('@polar-sh/checkout/embed', () => ({ PolarEmbedCheckout: { create: embed.create } }));
 
 const me = (role: 'admin' | 'agent') => ({
   agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role, timezone_override: null },
@@ -27,17 +30,44 @@ beforeEach(() => {
   vi.clearAllMocks();
   window.sessionStorage.clear();
   Object.defineProperty(window, 'location', { configurable: true, value: { assign } });
+  embed.create.mockResolvedValue({ addEventListener: vi.fn() });
   api.config.mockResolvedValue({ cloud_sign_in: { enabled: true, publishable_key: 'pk' }, billing: { enabled: true } });
 });
 
-test('an admin upgrades: the server-made checkout URL is opened and nothing but the plan is sent', async () => {
+test('an admin upgrades: the server-made checkout URL is opened in the overlay and nothing but the plan is sent', async () => {
+  api.me.mockResolvedValue(me('admin'));
+  api.billing.mockResolvedValue(free);
+  api.startCheckout.mockResolvedValue({ url: 'https://polar.example/checkout/1' });
+  renderRoute();
+  fireEvent.click(await screen.findByRole('button', { name: /team, \$490 per year/i }));
+  await waitFor(() => expect(embed.create).toHaveBeenCalledWith('https://polar.example/checkout/1', expect.anything()));
+  expect(assign).not.toHaveBeenCalled();
+  expect(api.startCheckout).toHaveBeenCalledWith('team_yearly');
+});
+
+test('when the overlay cannot open, the hosted checkout is used so the purchase is not lost', async () => {
+  embed.create.mockRejectedValue(new Error('script blocked'));
   api.me.mockResolvedValue(me('admin'));
   api.billing.mockResolvedValue(free);
   api.startCheckout.mockResolvedValue({ url: 'https://polar.example/checkout/1' });
   renderRoute();
   fireEvent.click(await screen.findByRole('button', { name: /team, \$490 per year/i }));
   await waitFor(() => expect(assign).toHaveBeenCalledWith('https://polar.example/checkout/1'));
-  expect(api.startCheckout).toHaveBeenCalledWith('team_yearly');
+});
+
+test('a second click while the checkout is starting does not start another', async () => {
+  embed.create.mockReturnValue(new Promise(() => {}));
+  api.me.mockResolvedValue(me('admin'));
+  api.billing.mockResolvedValue(free);
+  api.startCheckout.mockResolvedValue({ url: 'https://polar.example/checkout/1' });
+  renderRoute();
+  const button = await screen.findByRole('button', { name: /team, \$490 per year/i });
+  fireEvent.click(button);
+  await waitFor(() => expect(embed.create).toHaveBeenCalledTimes(1));
+  expect(button).toBeDisabled();
+  expect(button).toHaveAttribute('aria-busy', 'true');
+  fireEvent.click(button);
+  expect(api.startCheckout).toHaveBeenCalledTimes(1);
 });
 
 test('manage billing opens the portal URL', async () => {
@@ -87,7 +117,7 @@ test('a stored founding intent starts the founding checkout once and clears the 
   api.billing.mockResolvedValue(free);
   api.startCheckout.mockResolvedValue({ url: 'https://polar.example/checkout/founding' });
   renderRoute();
-  await waitFor(() => expect(assign).toHaveBeenCalledWith('https://polar.example/checkout/founding'));
+  await waitFor(() => expect(embed.create).toHaveBeenCalledWith('https://polar.example/checkout/founding', expect.anything()));
   expect(api.startCheckout).toHaveBeenCalledTimes(1);
   expect(api.startCheckout).toHaveBeenCalledWith('founding');
   expect(readCheckoutIntent()).toBeUndefined();

@@ -33,6 +33,24 @@ the API.
   checkout with that `customer_id`. Events come back with `customer.external_id`, which names the
   workspace. The client sends only the plan name; any other field is rejected, so a browser can
   neither pay for nor link to another workspace.
+- **The checkout opens as an overlay in the app.** The server sends `embed_origin` (`APP_ORIGIN`)
+  on every checkout session it creates; Polar refuses to embed a session without it. `success_url`
+  stays, because the fallback and the provider's own redirect still use it. The web app
+  (`web/src/features/billing/open-checkout.ts`, used by the billing page and the locked screen)
+  loads `@polar-sh/checkout/embed` lazily, so the inbox does not pay for it. On `success` it
+  prevents Polar's redirect and goes to `/settings/billing?checkout=success`. That event only
+  changes what the page shows: the plan changes only when the webhook arrives, as before. A
+  script that fails to load (a stale chunk after a deploy) falls back at once to
+  `window.location.assign(<checkout url>)`. `PolarEmbedCheckout.create` never rejects: its promise
+  settles only when the iframe reports `loaded`, and the close button is inside the iframe. So
+  `openCheckout` races it against a 15 s timeout, removes the frame the SDK left, and opens
+  Polar's own page, so the user is never trapped behind the overlay and no purchase is lost. While
+  the checkout starts or an overlay is open the plan buttons are disabled, so a second click
+  cannot open a second one. Setup in Polar: Settings, Embedding, Embed hosts must list the app
+  host without a scheme (`app.colliedesk.com`), and it must equal `APP_ORIGIN` (the SDK sends
+  `window.location.origin`). A host not listed makes Polar refuse the frame; the user then waits
+  up to 15 s before the full page opens. Apple Pay and Google Pay stay off in embeds until Polar
+  validates the domain (a request to Polar support).
 - **Polar customers are unique by email too.** The customer is created with the admin's real email,
   so receipts reach them. If Polar refuses the create (422, the email belongs to another customer:
   the same person pays for a second workspace), the server retries once with the address tagged

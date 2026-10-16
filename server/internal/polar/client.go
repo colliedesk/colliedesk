@@ -43,6 +43,9 @@ type CheckoutRequest struct {
 	ProductID  string
 	CustomerID string
 	SuccessURL string
+	// EmbedOrigin is the origin of the page that opens the checkout as an overlay. Polar refuses
+	// to embed a checkout session created without it.
+	EmbedOrigin string
 }
 
 // EnsureCustomer returns the Polar customer whose external id is externalID, creating it when
@@ -84,6 +87,9 @@ func (c *Client) CreateCheckout(ctx context.Context, input CheckoutRequest) (str
 	body := map[string]any{"products": []string{input.ProductID}, "customer_id": input.CustomerID}
 	if input.SuccessURL != "" {
 		body["success_url"] = input.SuccessURL
+	}
+	if input.EmbedOrigin != "" {
+		body["embed_origin"] = input.EmbedOrigin
 	}
 	var reply struct {
 		URL string `json:"url"`

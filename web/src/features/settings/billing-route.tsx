@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import type { CheckoutPlan } from '../../api/schemas';
 import { api } from '../../api/client';
 import { messages } from '../../messages';
+import { openCheckout } from '../billing/open-checkout';
 import { BillingPage } from './billing-page';
 import { clearCheckoutIntent, readCheckoutIntent } from './checkout-intent';
 
@@ -23,9 +24,8 @@ export function BillingRoute({ checkoutReturned = false }: BillingRouteProps) {
     queryKey: ['billing'], queryFn: api.billing, enabled: isAdmin && enabled,
     refetchInterval: (query) => (checkoutReturned && (query.state.data?.plan === 'trial' || query.state.data?.plan === 'none') ? confirmPollMs : false),
   });
-  const leave = { onSuccess: (link: { url: string }) => window.location.assign(link.url) };
-  const checkout = useMutation({ mutationFn: (plan: CheckoutPlan) => api.startCheckout(plan), ...leave });
-  const portal = useMutation({ mutationFn: () => api.openBillingPortal(), ...leave });
+  const checkout = useMutation({ mutationFn: (plan: CheckoutPlan) => api.startCheckout(plan), onSuccess: (link) => openCheckout(link.url) });
+  const portal = useMutation({ mutationFn: () => api.openBillingPortal(), onSuccess: (link) => window.location.assign(link.url) });
   // A remembered plan is acted on once, as soon as it is known whether this admin can buy it; every
   // other outcome drops it, so it can never fire later or loop.
   const intentHandled = useRef(false);
@@ -45,6 +45,6 @@ export function BillingRoute({ checkoutReturned = false }: BillingRouteProps) {
   if (me.data && !isAdmin) return <main className="settings-page"><p className="muted-copy">{messages.billingAdminsOnly}</p></main>;
   if (!billing.data) return <main className="settings-page">{billing.isError && <p role="alert" className="error-copy">{messages.billingActionFailed}</p>}</main>;
   return <BillingPage billing={billing.data} timezone={me.data?.timezone ?? 'UTC'} checkoutReturned={checkoutReturned}
-    failed={checkout.isError || portal.isError}
+    failed={checkout.isError || portal.isError} busy={checkout.isPending}
     onCheckout={(plan) => checkout.mutate(plan)} onManage={() => portal.mutate()} />;
 }
