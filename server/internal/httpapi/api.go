@@ -67,6 +67,15 @@ type Config struct {
 	SignupDisabled bool
 	// Random is the entropy for generated workspace slug suffixes; nil uses crypto/rand.
 	Random io.Reader
+	// Funnel receives the cloud's trial_started and subscription_activated events; nil records
+	// nothing.
+	Funnel FunnelRecorder
+}
+
+// FunnelRecorder takes one sign-up or payment event of a workspace. Record must not block the
+// request; telemetry.Funnel sends in the background.
+type FunnelRecorder interface {
+	Record(event, workspaceID string, properties map[string]any)
 }
 
 type Route struct {

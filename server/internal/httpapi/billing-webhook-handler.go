@@ -62,11 +62,27 @@ func (a *API) receivePolarWebhook(response http.ResponseWriter, request *http.Re
 		writeJSON(response, http.StatusOK, map[string]string{"status": webhookIgnored})
 		return
 	}
+	// A workspace becomes a paying customer once: Polar also sends subscription.active when a
+	// past_due subscription is paid, and a workspace may later switch plans. Read before applying,
+	// because applying records this webhook.
+	firstActivation := false
+	if event.Type == "subscription.active" && a.config.Funnel != nil {
+		activated, err := a.store.HasBeenActivated(request.Context(), workspaceID)
+		if err != nil {
+			writeInternalError(response, err)
+			return
+		}
+		firstActivation = !activated
+	}
 	result, err := a.store.ApplySubscription(request.Context(), workspaceID, webhookID, event.Type, incoming)
 	if err != nil {
 		// 500 makes Polar redeliver; nothing was recorded, so the retry is applied.
 		writeInternalError(response, err)
 		return
+	}
+	// A redelivery is a duplicate and a stale event changes nothing; neither is counted.
+	if result == store.SubscriptionApplied && firstActivation {
+		a.recordFunnel("subscription_activated", workspaceID, map[string]any{"plan": incoming.Plan})
 	}
 	status := string(result)
 	if result == store.SubscriptionUnknownWorkspace {
@@ -105,4 +121,11 @@ func (a *API) subscriptionFromEvent(event polar.Event) (domain.Subscription, str
 // planOfProduct is the plan a Polar product buys, or "" when the product is not sold here.
 func (a *API) planOfProduct(productID string) string {
 	return a.config.Billing.Products.PlanOf(productID)
+}
+
+// recordFunnel passes a sign-up or payment event to the configured funnel, if any.
+func (a *API) recordFunnel(event, workspaceID string, properties map[string]any) {
+	if a.config.Funnel != nil {
+		a.config.Funnel.Record(event, workspaceID, properties)
+	}
 }
