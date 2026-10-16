@@ -160,7 +160,7 @@ test('a bulk status change sends the selected ids, then reloads the list and rep
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
   const gamma = conversation('55555555-5555-4555-8555-555555555555', 'Gamma conversation');
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', role: 'agent' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'alice@example.com', display_name: 'Alice', role: 'agent' } });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha, beta, gamma], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
@@ -185,7 +185,7 @@ test('a bulk status change sends the selected ids, then reloads the list and rep
 
 test('a refused bulk change reloads the list, so a conversation that is gone stops being selectable', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', role: 'agent' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'alice@example.com', display_name: 'Alice', role: 'agent' } });
   api.conversations.mockReset();
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
@@ -316,7 +316,7 @@ test('the server limit from the config warns about oversized files before anythi
 test('a saved reply inserted the moment a conversation is selected already has the customer name, with no extra request', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   api.contact.mockReset();
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', display_name: 'Chinh', role: 'agent' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'chinh@example.com', display_name: 'Chinh', role: 'agent' } });
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });
@@ -333,10 +333,28 @@ test('a saved reply inserted the moment a conversation is selected already has t
   expect(api.contact).not.toHaveBeenCalled();
 });
 
+test('a saved reply signs with the email name of an agent who has no display name', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'qa-b@hclabs.colliedesk.com', display_name: '', role: 'agent' } });
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  api.savedReplies.mockResolvedValue({ items: [{ id: '77777777-7777-4777-8777-777777777777', title: 'Closing', body: 'Best regards,\n{{agent.name}}',
+    created_by_agent_id: null, created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z' }] });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Insert saved reply' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Insert saved reply' }));
+  fireEvent.click(await screen.findByRole('option', { name: 'Closing' }));
+  expect(screen.getByLabelText('Message body')).toHaveValue('Best regards,\nqa-b');
+});
+
 test('Manage saved replies opens Settings in a new tab, so a draft is not lost', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const open = vi.spyOn(window, 'open').mockReturnValue(null);
-  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', display_name: 'Chinh', role: 'agent' } });
+  api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: '66666666-6666-4666-8666-666666666666', email: 'chinh@example.com', display_name: 'Chinh', role: 'agent' } });
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });

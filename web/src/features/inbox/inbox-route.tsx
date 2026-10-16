@@ -6,6 +6,7 @@ import type { BulkConversationChanges, UpdateConversationRequest } from '../../a
 import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
 import { defaultInboxFilters } from './inbox-filters';
+import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
 import { retryRefusalText } from './refusal-text';
 
@@ -81,7 +82,7 @@ export function InboxRoute() {
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body, files) => message.mutateAsync({ kind, body, files })}
-    savedReplies={savedReplies.data?.items} customerName={selected?.contact_name} agentName={me.data?.agent?.display_name}
+    savedReplies={savedReplies.data?.items} customerName={selected?.contact_name} agentName={agentSignatureName(me.data?.agent)}
     savedRepliesState={savedReplies.isPending ? 'loading' : savedReplies.isError ? 'failed' : 'ready'}
     // A new tab, so the draft and the files in this reply box stay where they are.
     onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
