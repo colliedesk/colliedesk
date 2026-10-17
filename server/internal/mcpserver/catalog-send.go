@@ -11,7 +11,7 @@ func replySendSpec() Spec {
 		Description: `Send a reply on a conversation. Colliedesk emails it to the customer (and to cc) through the workspace's email channel. ` +
 			`It cannot be undone: an email that left cannot be called back. ` + confirmFirst +
 			`Each call sends one more email, so never call it again to retry a call that succeeded; read the conversation first. ` +
-			`To suggest a reply for a person to review instead, use colliedesk_note_add. ` +
+			`To have a person check the words first, use colliedesk_reply_draft; with a token below send this tool files the same draft for a person to send. ` +
 			`The reply is recorded as written by you through your token (written_by_agent_token). delivery says whether the email is queued.` +
 			"\n\nTier: send.",
 		Tier: "send", Destructive: true,

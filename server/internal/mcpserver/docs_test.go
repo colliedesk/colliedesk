@@ -17,7 +17,7 @@ func TestDocsSearchRanksTheEmbeddedUserGuides(t *testing.T) {
 			pages []string
 		}{
 			{"revoke an unused invite", []string{"invites"}},
-			{"agent tokens draft tier", []string{"sessions", "mcp"}},
+			{"agent tokens draft tier", []string{"sessions", "mcp", "agent-requests"}}, // the agent requests guide explains what each tier may do alone
 			{"renaming and deleting tags", []string{"tags"}},
 		}
 		for _, c := range cases {

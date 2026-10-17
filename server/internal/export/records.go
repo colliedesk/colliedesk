@@ -49,6 +49,33 @@ type SavedReply struct {
 	UpdatedAt        time.Time `json:"updated_at"`
 }
 
+// AgentRequest is a call an agent token asked a person to approve, and what became of it. The answer
+// of an approved call is not exported: credentials and links are never stored, and other answers are
+// the records exported elsewhere. Body and EditedBody are null once 90 days passed after the decision.
+type AgentRequest struct {
+	ID                 string          `json:"id"`
+	Kind               string          `json:"kind"`
+	Status             string          `json:"status"`
+	Method             string          `json:"method"`
+	Route              string          `json:"route"`
+	Path               string          `json:"path"`
+	Body               json.RawMessage `json:"body"`
+	EditedBody         json.RawMessage `json:"edited_body"`
+	Summary            string          `json:"summary"`
+	ConversationID     *string         `json:"conversation_id"`
+	TokenID            *string         `json:"token_id"`
+	TokenLabel         string          `json:"token_label"`
+	TokenScope         string          `json:"token_scope"`
+	RequestedByAgentID *string         `json:"requested_by_agent_id"`
+	DecidedByAgentID   *string         `json:"decided_by_agent_id"`
+	DecidedAt          *time.Time      `json:"decided_at"`
+	Reason             *string         `json:"reason"`
+	ResultStatus       *int32          `json:"result_status"`
+	ResultNote         *string         `json:"result_note"`
+	CreatedAt          time.Time       `json:"created_at"`
+	ExpiresAt          time.Time       `json:"expires_at"`
+}
+
 // Attachment describes one file. Path is its location in the archive; StorageKey is where the
 // server reads the bytes from and never leaves the server.
 type Attachment struct {
@@ -73,6 +100,8 @@ type Message struct {
 	Origin         *domain.MessageOrigin `json:"origin"`
 	EmailMessageID *string               `json:"email_message_id"`
 	EmailMeta      json.RawMessage       `json:"email_meta"`
+	// AgentRequestID names the agent request a person approved to send this reply.
+	AgentRequestID *string `json:"agent_request_id"`
 	// CC is the list a reply was copied to; null when it copied no one.
 	CC          []string     `json:"cc"`
 	CreatedAt   time.Time    `json:"created_at"`
@@ -109,6 +138,7 @@ type Sink interface {
 	Contact(Contact) error
 	Tag(Tag) error
 	SavedReply(SavedReply) error
+	AgentRequest(AgentRequest) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error
 	EndConversation(timeEntries []domain.TimeEntry) error

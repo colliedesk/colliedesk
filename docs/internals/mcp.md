@@ -46,6 +46,19 @@
   `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails on a tool that lists a closed
   route. When a tool starts calling a route in `mcpToolPending`, remove it there. The tool's tier in
   the catalog is only used to word the error and to list `tools_you_can_use`; REST decides.
+- **An agent request is a result, not an error.** A REST call answered 202 with a `request_id`
+  comes back from `restClient.do` as `*agentRequested`; `execute` turns it into
+  `{agent_request, next}` with `isError` false. `next` says nothing changed yet, how to follow the
+  request, and that the rest of a multi-step call did not run (`conversation_update` files only its
+  first write). Every writing tool's advertised output schema is widened by `outputSchema` to accept
+  that shape (`anyOf` of the usual `required` list and `agent_request`), so a client that validates
+  structured output accepts it. The answer of an approved call is never shown to the model by
+  `colliedesk_request_get`: it can hold customer text; `result_status` says whether it worked.
+- **Approval tools.** Each route that needs approval for every tier has a tool that only files the
+  request (`colliedesk_token_create_request`, `..._workspace_export_request`, `..._billing_request`,
+  `..._email_channel_disconnect_request`, `..._email_secret_rotate_request`,
+  `..._workspace_slug_change_request`); `colliedesk_reply_draft` sends `draft: true` so even a `send`
+  token only drafts. No tool approves or rejects: those routes are `PersonOnly`.
 - **Tags are created by name.** `colliedesk_conversation_update` creates a name in `add_tags` that no
   tag has, because `POST /tags` is a `draft` route and triage must not stall on a missing tag. Every
   other check runs first (assignee, unknown `remove_tags`, a tag in both lists, the conversation

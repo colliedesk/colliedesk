@@ -34,14 +34,9 @@ func TestConversationUpdateNeedsTheDraftTier(t *testing.T) {
 	e.created("/api/v1/tags", map[string]any{"name": "urgent-bug"}, f.w.admin)
 	args := map[string]any{"conversation_id": f.c3, "status": "pending", "priority": "high", "assignee": "me", "add_tags": []string{"billing", "urgent-bug"}}
 
-	message := e.fails(e.connect(f.w.read, ""), "colliedesk_conversation_update", args)
-	for _, want := range []string{"`read`", "`draft`", "admin"} {
-		if !strings.Contains(message, want) {
-			t.Errorf("read token message %q lacks %q", message, want)
-		}
-	}
+	requestedForTier(t, e, f.w.read, "colliedesk_conversation_update", args)
 	if after := restConversation(t, e, f.w, f.c3); after["status"] != "open" || after["priority"] != "normal" || after["assignee_id"] != nil || len(tagNames(t, after)) != 0 {
-		t.Fatalf("a refused update changed the conversation: %v", after)
+		t.Fatalf("an update waiting for approval changed the conversation: %v", after)
 	}
 
 	draft := e.connect(f.w.draft, "")
@@ -100,9 +95,7 @@ func TestNoteAddNeedsTheDraftTierAndStaysPrivate(t *testing.T) {
 	e := newEnv(t)
 	f := seedInbox(t, e)
 	args := map[string]any{"conversation_id": f.c2, "body": "Checked the invoice: refund is due."}
-	if message := e.fails(e.connect(f.w.read, ""), "colliedesk_note_add", args); !strings.Contains(message, "`draft`") {
-		t.Errorf("read token message %q does not name the draft tier", message)
-	}
+	requestedForTier(t, e, f.w.read, "colliedesk_note_add", args)
 	out := e.ok(e.connect(f.w.draft, ""), "colliedesk_note_add", args)
 	if at(t, out, "message", "kind") != "note" || at(t, out, "conversation_id") != f.c2 {
 		t.Errorf("note result: %v", out)

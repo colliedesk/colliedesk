@@ -59,13 +59,14 @@ func TestConversationUpdateCreatesNoTagWhenTheCallIsRefusedOrInvalid(t *testing.
 		args  map[string]any
 		want  string
 	}{
-		{"read tier", f.w.read, map[string]any{"conversation_id": f.c3, "add_tags": []string{"brand-new"}}, "`draft`"},
 		{"unknown assignee", f.w.draft, map[string]any{"conversation_id": f.c3, "add_tags": []string{"brand-new"}, "assignee": "nobody@inbox.example.com"}, "No team member"},
 		{"unknown tag to remove", f.w.draft, map[string]any{"conversation_id": f.c3, "add_tags": []string{"brand-new"}, "remove_tags": []string{"nonesuch"}}, "No tag named"},
 		{"same tag added and removed", f.w.draft, map[string]any{"conversation_id": f.c3, "add_tags": []string{"brand-new", "billing"}, "remove_tags": []string{"Billing"}}, "both add_tags and remove_tags"},
 		{"blank name", f.w.draft, map[string]any{"conversation_id": f.c3, "add_tags": []string{"   "}}, "empty"},
 		{"unknown conversation", f.w.draft, map[string]any{"conversation_id": "00000000-0000-4000-8000-000000000000", "add_tags": []string{"brand-new"}}, "No conversation"},
 	}
+	// Below the tier the first change is filed as an agent request; no tag is created until a person approves.
+	requestedForTier(t, e, f.w.read, "colliedesk_conversation_update", map[string]any{"conversation_id": f.c3, "add_tags": []string{"brand-new"}})
 	for _, c := range cases {
 		if message := e.fails(e.connect(c.token, ""), "colliedesk_conversation_update", c.args); !strings.Contains(message, c.want) {
 			t.Errorf("%s: message %q lacks %q", c.name, message, c.want)

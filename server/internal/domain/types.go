@@ -123,11 +123,13 @@ type MessageToken struct {
 }
 
 type Message struct {
-	ID             string         `json:"id"`
-	ConversationID string         `json:"conversation_id"`
-	AuthorAgentID  *string        `json:"author_agent_id"`
-	AuthorName     *string        `json:"author_name"`
-	AgentToken     *MessageToken  `json:"agent_token"`
+	ID             string        `json:"id"`
+	ConversationID string        `json:"conversation_id"`
+	AuthorAgentID  *string       `json:"author_agent_id"`
+	AuthorName     *string       `json:"author_name"`
+	AgentToken     *MessageToken `json:"agent_token"`
+	// AgentRequestID names the agent request a person approved to send this message (a reply draft).
+	AgentRequestID *string        `json:"agent_request_id"`
 	Kind           string         `json:"kind"`
 	Body           string         `json:"body"`
 	BodyHTML       *string        `json:"body_html"`

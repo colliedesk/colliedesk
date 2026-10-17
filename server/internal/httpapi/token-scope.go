@@ -1,11 +1,11 @@
 package httpapi
 
 import (
-	"fmt"
 	"maps"
 	"net/http"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 // gatedByHandler marks a route whose tier depends on the request body. Any token passes the route
@@ -13,25 +13,29 @@ import (
 const gatedByHandler = "handler"
 
 // TokenAccess classifies one route of Routes() for agent tokens. Tier is the lowest tier that may
-// call it (read, draft, send, or gatedByHandler). An empty Tier closes the route to every token, and
-// Closed says why; Target is the tier a TierPending route will open to, and Tracking the issue that
-// opens it.
+// call it (read, draft, send, or gatedByHandler); a token below that tier gets an agent request a
+// person approves (202) instead of a refusal. Approval marks a route no tier may call directly: every
+// token gets an agent request. Otherwise the route is closed to every token, and Closed says why;
+// Target is the tier a TierPending route will open to, Tracking the issue that opens it, and Why the
+// reason a PersonOnly route stays with people.
 type TokenAccess struct {
 	Tier     string
+	Approval bool
 	Closed   string
 	Target   string
 	Tracking int
+	Why      string
 }
 
 // Why a route is closed to every token today.
 const (
-	// ApprovalRequired: risky for any tier (new credentials, money, data leaving); it opens as an agent
-	// request a person approves.
-	ApprovalRequired = "approval_required"
 	// AdminTier: workspace settings, team and channels; it opens to the admin tier.
 	AdminTier = "admin_tier"
 	// TierPending: will open to Target once the issue in Tracking ships (secrets redacted, history kept).
 	TierPending = "tier_pending"
+	// PersonOnly: a person's own decision about an agent's request; an agent approving its own request
+	// would make approval meaningless. It never opens to a token, and Why says so.
+	PersonOnly = "person_only"
 	// NotForPeople: no session reaches it (public pages, sign-in, provider webhooks), so no token does.
 	NotForPeople = "not_for_people"
 )
@@ -43,13 +47,17 @@ func pendingTier(target string, issue int) TokenAccess {
 	return TokenAccess{Closed: TierPending, Target: target, Tracking: issue}
 }
 
+func personOnly(why string) TokenAccess { return TokenAccess{Closed: PersonOnly, Why: why} }
+
 var (
-	approvalRequired = TokenAccess{Closed: ApprovalRequired, Tracking: 127}
+	// approvalRequired: risky for any tier (new credentials, money, data leaving); every token's call
+	// becomes an agent request a person approves.
+	approvalRequired = TokenAccess{Approval: true}
 	adminTier        = TokenAccess{Closed: AdminTier, Tracking: 128}
 	notForPeople     = TokenAccess{Closed: NotForPeople}
 )
 
-// tokenTiers classifies every route in Routes(), keyed "METHOD pattern". refuseToken lets a token
+// tokenTiers classifies every route in Routes(), keyed "METHOD pattern". gateToken lets a token
 // through only when Tier is set, so a route missing here is still closed to every token, but
 // TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool keeps a new route from reaching main
 // without a row.
@@ -60,11 +68,12 @@ var (
 // replying and creating contacts and conversations. Posting a message is gated by the handler: a note
 // needs draft, an outgoing reply needs send.
 //
-// Every other route is closed to every token today, with the reason and the issue that opens it:
-// settings that wait for the admin tier (#128), risky actions that will be agent requests a person
-// approves (#127), reads that open once secrets and links are redacted (#128), saved reply writes
-// that open with history and restore (#129), and routes no session reaches (NotForPeople).
-// The closed rows may only shrink.
+// A token below a route's tier, and every token on an Approval route (new credentials, money, data
+// leaving), gets an agent request a person approves instead of a refusal. Deciding a request is
+// PersonOnly. Every other route is closed to every token today, with the reason and the issue that
+// opens it: settings that wait for the admin tier (#128), reads that open once secrets and links are
+// redacted (#128), saved reply writes that open with history and restore (#129), and routes no
+// session reaches (NotForPeople). The closed rows may only shrink.
 var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/auth/logout":                                   tier(auth.ScopeRead),
 	"GET /api/v1/auth/me":                                        tier(auth.ScopeRead),
@@ -90,6 +99,12 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/tags":                                          tier(auth.ScopeDraft),
 	"PATCH /api/v1/tags/{id}":                                    tier(auth.ScopeSend),
 	"DELETE /api/v1/tags/{id}":                                   tier(auth.ScopeSend),
+	"GET /api/v1/agent-requests":                                 tier(auth.ScopeRead),
+	"GET /api/v1/agent-requests/{id}":                            tier(auth.ScopeRead),
+	"POST /api/v1/agent-requests/{id}/cancel":                    tier(auth.ScopeRead),
+
+	"POST /api/v1/agent-requests/{id}/approve": personOnly("an agent approving its own request would make approval meaningless"),
+	"POST /api/v1/agent-requests/{id}/reject":  personOnly("deciding an agent's request is a person's call"),
 
 	"GET /api/v1/auth/sessions":         pendingTier(auth.ScopeRead, 128),
 	"GET /api/v1/auth/invites":          pendingTier(auth.ScopeRead, 128),
@@ -137,26 +152,28 @@ var tokenTiers = map[string]TokenAccess{
 // the MCP catalog.
 func TokenAccessTable() map[string]TokenAccess { return maps.Clone(tokenTiers) }
 
-// refuseToken answers 403 scope_insufficient and reports true when who is an agent token and the
-// route is outside its tier. A full session is never refused here.
-func refuseToken(response http.ResponseWriter, route Route, who auth.Principal) bool {
+// gateToken answers for an agent token whose call may not run as it is and reports true when it did:
+// a call above the token's tier, or on an Approval route, becomes an agent request (202); a PersonOnly
+// or closed route is refused (403). A full session is never stopped here.
+func (a *API) gateToken(response http.ResponseWriter, request *http.Request, route Route, who auth.Principal) bool {
 	if who.Scope == "" {
 		return false
 	}
-	need := tokenTiers[route.Method+" "+route.Pattern].Tier
-	if need == "" {
+	access := tokenTiers[route.Method+" "+route.Pattern]
+	switch {
+	case access.Approval:
+	case access.Tier == gatedByHandler:
+		return false
+	case access.Tier != "" && auth.ScopeAllows(who.Scope, access.Tier):
+		return false
+	case access.Tier != "":
+	case access.Closed == PersonOnly:
+		writeError(response, http.StatusForbidden, "person_only", "Only a person signed in to Colliedesk can do this; agent tokens cannot.")
+		return true
+	default:
 		writeError(response, http.StatusForbidden, "scope_insufficient", "Agent tokens cannot use this route. Sign in as a person to do this.")
 		return true
 	}
-	if need == gatedByHandler || auth.ScopeAllows(who.Scope, need) {
-		return false
-	}
-	writeScopeInsufficient(response, who.Scope, need)
+	a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, nil, "")
 	return true
-}
-
-// writeScopeInsufficient names the tier the action needs so an agent can tell its owner what to grant.
-func writeScopeInsufficient(response http.ResponseWriter, have, need string) {
-	writeError(response, http.StatusForbidden, "scope_insufficient",
-		fmt.Sprintf("This token has the %s scope; this action needs the %s scope.", have, need))
 }

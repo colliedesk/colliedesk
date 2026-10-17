@@ -37,7 +37,8 @@ func (e *restError) Error() string {
 }
 
 // do calls the REST API with the caller's bearer token and decodes a 2xx JSON answer into into
-// (which may be nil). Any other status comes back as a *restError.
+// (which may be nil). A call Colliedesk filed as an agent request (202) comes back as an
+// *agentRequested; any other status as a *restError.
 func (r *restClient) do(ctx context.Context, token, method, path string, query url.Values, body, into any) error {
 	target := path
 	if len(query) > 0 {
@@ -64,6 +65,12 @@ func (r *restClient) do(ctx context.Context, token, method, path string, query u
 	r.api.ServeHTTP(recorder, request)
 	if recorder.overflow {
 		return errTooLarge
+	}
+	if recorder.status == http.StatusAccepted {
+		var filed agentRequested
+		if json.Unmarshal(recorder.body.Bytes(), &filed) == nil && filed.RequestID != "" {
+			return &filed
+		}
 	}
 	if recorder.status < 200 || recorder.status > 299 {
 		return parseRESTError(recorder)
@@ -92,6 +99,18 @@ func (r *restClient) download(ctx context.Context, token, path string, limit int
 	}
 	return recorder.header, recorder.body.Bytes(), nil
 }
+
+// agentRequested is a call Colliedesk did not run: above the token's tier, or one that needs a
+// person's approval for every tier, it was filed as an agent request. Nothing changed yet.
+type agentRequested struct {
+	RequestID string `json:"request_id"`
+	Kind      string `json:"kind"`
+	Status    string `json:"status"`
+	Summary   string `json:"summary"`
+	ExpiresAt string `json:"expires_at"`
+}
+
+func (e *agentRequested) Error() string { return "filed as agent request " + e.RequestID }
 
 func parseRESTError(r *recorder) *restError {
 	failure := &restError{Status: r.status, RetryAfter: r.header.Get("Retry-After")}

@@ -816,10 +816,180 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agent-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Calls of agent tokens that wait for a person, and what became of them: pending first, then newest first, at most 200. An agent token sees only the requests it made; a person sees the whole workspace's. A pending request past its `expires_at` (seven days) is answered as `expired`. */
+        get: operations["listAgentRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description One agent request. An agent token finds only the requests it made (404 otherwise). */
+        get: operations["getAgentRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-requests/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description People only (an agent token gets 403 `person_only`). Runs the stored call once, as the approving person: their role, the workspace lock and every check of the route apply. The answer is 200 with the request (`approved` when the call succeeded, `failed` with `result_status` otherwise, for example 403 when the approver may not do it) and `result`, the call's own answer. When the answer holds a credential, a link or a payment page (new token, inbound secret, export, billing), `result` is shown here once and the request keeps only `result_status` and `result_note`. Approving an export (`GET /api/v1/export` or `POST /api/v1/export/link`) answers the export's one-time download link. `body` replaces the text of a reply draft; it is refused for any other request. A request that is decided or expired, or whose token was revoked, answers 409 and runs nothing; two approvals at once run the call once. A person whose role may not run the call gets 403 and the request keeps waiting (`approvable_by`). `cc` keeps only some of a reply draft's copies; it cannot add one. The approval finishes even if the approver's connection closes. */
+        post: operations["approveAgentRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-requests/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description People only. Refuses the request (a discarded reply draft); nothing runs, and it can never run later. */
+        post: operations["rejectAgentRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent-requests/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Withdraws a pending request. The token that made it, or the person who owns that token, may cancel it (another token gets 404, another person 403: they reject instead). */
+        post: operations["cancelAgentRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        AgentRequestStatus: "pending" | "approved" | "failed" | "rejected" | "cancelled" | "expired";
+        AgentRequestAccepted: {
+            /** Format: uuid */
+            request_id: string;
+            /** @enum {string} */
+            kind: "reply_draft" | "action";
+            status: components["schemas"]["AgentRequestStatus"];
+            /** @description What the call does, for the person deciding */
+            summary: string;
+            /** Format: date-time */
+            expires_at: string;
+            message: string;
+        };
+        AgentRequest: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description reply_draft: an outgoing reply a token may not send; action: any other call
+             * @enum {string}
+             */
+            kind: "reply_draft" | "action";
+            status: components["schemas"]["AgentRequestStatus"];
+            /** @enum {string} */
+            method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+            /** @description The route pattern, for example /api/v1/conversations/{id} */
+            route: string;
+            /** @description The concrete path that runs on approval */
+            path: string;
+            /** @description The JSON body of the call as the token sent it; null when it had none, in a list without detail=full, and 90 days after the decision. */
+            body: {
+                [key: string]: unknown;
+            } | unknown[] | string | number | boolean | null;
+            /** @description A reply draft as the approver edited it (text changed, copies removed); this is what ran. Null when not edited. */
+            edited_body: {
+                [key: string]: unknown;
+            } | unknown[] | string | number | boolean | null;
+            /**
+             * @description The lowest role whose person can approve it; a person below it gets 403 and the request keeps waiting.
+             * @enum {string}
+             */
+            approvable_by: "agent" | "admin";
+            summary: string;
+            /** Format: uuid */
+            conversation_id: string | null;
+            requested_by: {
+                /** Format: uuid */
+                token_id: string | null;
+                token_label: string;
+                token_scope: components["schemas"]["TokenScope"];
+                /** @description A request of a revoked token can only be rejected. */
+                token_revoked: boolean;
+                /** Format: uuid */
+                agent_id: string | null;
+                /** @description The person who owns the token */
+                agent_name: string | null;
+            };
+            decided_by: null | {
+                /** Format: uuid */
+                agent_id: string | null;
+                name: string;
+            };
+            /** Format: date-time */
+            decided_at: string | null;
+            reason: string | null;
+            /** @description HTTP status the approved call answered */
+            result_status: number | null;
+            /** @description The JSON answer of the approved call, at most 64 KiB; null when withheld (see result_note) or none. */
+            result: {
+                [key: string]: unknown;
+            } | unknown[] | string | number | boolean | null;
+            result_note: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
         PublicConfig: {
             /** @description The running build: a release tag such as `v0.0.1`, `edge-<commit>` for a main build, or `dev`. */
             version?: string;
@@ -1183,6 +1353,11 @@ export interface components {
             author_name: string | null;
             /** @description The agent token the message was written with; null for what a person wrote and for incoming mail. */
             agent_token: null | components["schemas"]["MessageAgentToken"];
+            /**
+             * Format: uuid
+             * @description The agent request whose approval sent this message (a reply draft): `agent_token` drafted it, `author_agent_id` approved and sent it. Null otherwise.
+             */
+            agent_request_id: string | null;
             /** @enum {string} */
             kind: "incoming" | "outgoing" | "note";
             body: string;
@@ -1359,6 +1534,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description An agent token called this above its tier, or the action needs a person's approval for every tier: nothing happened yet. The call is stored as an agent request a person approves or rejects (`GET /api/v1/agent-requests/{request_id}` shows the outcome); it expires after seven days. A token gets 429 `too_many_requests` while 50 of its requests wait or after 100 in an hour (with `Retry-After`), 402 `workspace_locked` in a locked workspace, and a call with files gets 403 `files_need_approval` (send the text alone, attach files after approval). */
+        AgentRequestAccepted: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AgentRequestAccepted"];
+            };
+        };
         /** @description Session created from a one-time link */
         Redeemed: {
             headers: {
@@ -1551,7 +1735,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Permission or CSRF check failed. An agent token outside its tier gets error code `scope_insufficient`; the message names the tier the action needs. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them); nothing was stored. */
+        /** @description Permission or CSRF check failed. An agent token on a route closed to every token gets error code `scope_insufficient`, and `person_only` on a decision only a person makes (approving or rejecting an agent request); a token below a route's tier gets 202 instead (an agent request). A call with files that would need approval gets `files_need_approval`. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them); nothing was stored. */
         Error403: {
             headers: {
                 [name: string]: unknown;
@@ -1824,6 +2008,7 @@ export interface operations {
                     "application/json": components["schemas"]["AgentToken"];
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -1966,6 +2151,7 @@ export interface operations {
         };
         responses: {
             201: components["responses"]["Conversation"];
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -1993,6 +2179,7 @@ export interface operations {
                     "application/json": components["schemas"]["BulkConversationUpdateResult"];
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -2038,6 +2225,7 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["Conversation"];
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -2057,6 +2245,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["Conversation"];
+            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -2075,6 +2264,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["Conversation"];
+            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -2123,6 +2313,8 @@ export interface operations {
                     /** @description Markdown source */
                     body: string;
                     cc?: components["schemas"]["CopiedAddresses"];
+                    /** @description Agent tokens only, with `kind: outgoing`: file the reply as a reply draft (202) that a person edits, sends or discards, whatever the token's tier. A token below `send` gets a draft without it, and may copy only the contact and addresses already on the conversation (400 otherwise). A person's session answers 400. */
+                    draft?: boolean;
                 };
                 "multipart/form-data": {
                     /** @enum {string} */
@@ -2144,6 +2336,7 @@ export interface operations {
                     "application/json": components["schemas"]["Message"];
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["WorkspaceLocked"];
@@ -2183,6 +2376,7 @@ export interface operations {
                     "application/json": components["schemas"]["Message"];
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -2236,6 +2430,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            202: components["responses"]["AgentRequestAccepted"];
             /** @description Email channel disconnected */
             204: {
                 headers: {
@@ -2287,6 +2482,7 @@ export interface operations {
                     };
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -2488,6 +2684,7 @@ export interface operations {
                     "application/json": components["schemas"]["Contact"];
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -2641,6 +2838,7 @@ export interface operations {
                     "application/json": components["schemas"]["Workspace"];
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -2726,6 +2924,7 @@ export interface operations {
                     "application/json": components["schemas"]["Tag"];
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -2742,6 +2941,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            202: components["responses"]["AgentRequestAccepted"];
             /** @description Tag deleted */
             204: {
                 headers: {
@@ -2780,6 +2980,7 @@ export interface operations {
                     "application/json": components["schemas"]["Tag"];
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -2936,6 +3137,7 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["BillingLink"];
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -2955,6 +3157,7 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["BillingLink"];
+            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -3063,6 +3266,7 @@ export interface operations {
                     "application/zip": string;
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
@@ -3228,6 +3432,7 @@ export interface operations {
                     "application/json": components["schemas"]["ExportLink"];
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
@@ -3284,6 +3489,165 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    listAgentRequests: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["AgentRequestStatus"];
+                /** @description full adds each request's body, edited_body and result; without it they are null so a poll stays small. */
+                detail?: "full";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Agent requests */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["AgentRequest"][];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+        };
+    };
+    getAgentRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The agent request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRequest"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    approveAgentRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description The edited text of a reply draft (Markdown) */
+                    body?: string;
+                    /** @description The copies to keep on a reply draft; only addresses the draft already copied (400 otherwise). */
+                    cc?: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description The decided request and the answer of its call */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        request: components["schemas"]["AgentRequest"];
+                        /** @description The JSON answer of the approved call; null when it had none or was too large. */
+                        result: {
+                            [key: string]: unknown;
+                        } | unknown[] | string | number | boolean | null;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    rejectAgentRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @description Shown to the agent that asked */
+                    reason?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The rejected request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRequest"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    cancelAgentRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The cancelled request */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentRequest"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
 }

@@ -10,14 +10,16 @@ import (
 
 var tierRank = map[string]int{"read": 1, "draft": 2, "send": 3}
 
-// routeTiers is the lowest tier that may call each route. "closed" routes are never open to a token.
+// routeTiers is the lowest tier that may call each route; a token below it gets an agent request (202).
+// "approval" routes give every token an agent request, "person" routes refuse every token
+// (person_only), and "closed" routes are never open to a token.
 // It is written out by hand so a route added later fails here until someone classifies it.
 var routeTiers = map[string]string{
 	"POST /api/v1/auth/logout":                                   "read",
 	"GET /api/v1/auth/me":                                        "read",
 	"GET /api/v1/auth/sessions":                                  "closed",
 	"DELETE /api/v1/auth/sessions/{id}":                          "closed",
-	"POST /api/v1/auth/tokens":                                   "closed",
+	"POST /api/v1/auth/tokens":                                   "approval",
 	"POST /api/v1/auth/invites":                                  "closed",
 	"GET /api/v1/auth/invites":                                   "closed",
 	"DELETE /api/v1/auth/invites/{id}":                           "closed",
@@ -44,7 +46,7 @@ var routeTiers = map[string]string{
 	"GET /api/v1/contacts/{id}":                                  "read",
 	"GET /api/v1/agents":                                         "read",
 	"PATCH /api/v1/workspace/timezone":                           "closed",
-	"PATCH /api/v1/workspace/slug":                               "closed",
+	"PATCH /api/v1/workspace/slug":                               "approval",
 	"PATCH /api/v1/agents/me/timezone":                           "closed",
 	"GET /api/v1/tags":                                           "read",
 	"POST /api/v1/tags":                                          "draft",
@@ -52,16 +54,21 @@ var routeTiers = map[string]string{
 	"DELETE /api/v1/tags/{id}":                                   "send",
 	"GET /api/v1/channels/email":                                 "closed",
 	"PUT /api/v1/channels/email":                                 "closed",
-	"DELETE /api/v1/channels/email":                              "closed",
+	"DELETE /api/v1/channels/email":                              "approval",
 	"POST /api/v1/channels/email/domain-verification":            "closed",
-	"POST /api/v1/channels/email/secret":                         "closed",
+	"POST /api/v1/channels/email/secret":                         "approval",
 	"GET /api/v1/billing":                                        "closed",
-	"POST /api/v1/billing/checkout":                              "closed",
-	"POST /api/v1/billing/portal":                                "closed",
-	"GET /api/v1/export":                                         "closed",
-	"POST /api/v1/export/link":                                   "closed",
+	"POST /api/v1/billing/checkout":                              "approval",
+	"POST /api/v1/billing/portal":                                "approval",
+	"GET /api/v1/export":                                         "approval",
+	"POST /api/v1/export/link":                                   "approval",
 	"GET /api/v1/channels/web-form":                              "closed",
 	"PUT /api/v1/channels/web-form":                              "closed",
+	"GET /api/v1/agent-requests":                                 "read",
+	"GET /api/v1/agent-requests/{id}":                            "read",
+	"POST /api/v1/agent-requests/{id}/cancel":                    "read",
+	"POST /api/v1/agent-requests/{id}/approve":                   "person",
+	"POST /api/v1/agent-requests/{id}/reject":                    "person",
 }
 
 func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
@@ -85,12 +92,25 @@ func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
 				body = map[string]any{"name": "matrix tag " + tier}
 			}
 			response := request(t, fixture.api, route.Method, item.path, body, token, nil)
-			refused, _ := scopeRefused(t, response)
-			wantRefused := want == "closed" || tierRank[tier] < tierRank[want]
-			if refused != wantRefused {
-				t.Errorf("%s with a %s token: refused=%v, want %v (status=%d body=%s)", key, tier, refused, wantRefused, response.Code, response.Body.String())
-			}
-			if !wantRefused && response.Code != item.status {
+			switch {
+			case want == "closed":
+				if refused, _ := scopeRefused(t, response); !refused {
+					t.Errorf("%s with a %s token: status=%d body=%s, want 403 scope_insufficient", key, tier, response.Code, response.Body.String())
+				}
+			case want == "person":
+				if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "person_only") {
+					t.Errorf("%s with a %s token: status=%d body=%s, want 403 person_only", key, tier, response.Code, response.Body.String())
+				}
+			case want == "approval" || tierRank[tier] < tierRank[want]:
+				if response.Code != http.StatusAccepted {
+					t.Errorf("%s with a %s token: status=%d body=%s, want 202 (an agent request)", key, tier, response.Code, response.Body.String())
+				}
+			case strings.HasPrefix(route.Pattern, "/api/v1/agent-requests/{id}"):
+				// The fixture's request belongs to another token, which this one cannot see.
+				if response.Code != http.StatusNotFound {
+					t.Errorf("%s with a %s token: status=%d body=%s, want 404 for another token's request", key, tier, response.Code, response.Body.String())
+				}
+			case response.Code != item.status:
 				t.Errorf("%s with a %s token: status=%d body=%s, want the success status %d", key, tier, response.Code, response.Body.String(), item.status)
 			}
 		}
@@ -126,13 +146,13 @@ func TestTokenTiersGateWhatAnAgentMayChange(t *testing.T) {
 	reply := map[string]any{"kind": "outgoing", "body": "Hello customer"}
 	tagPath := path + "/tags/" + tag
 
+	// tierNeeded names a tier above the token's: the call becomes an agent request and changes nothing.
 	step := func(label, token, method, target string, body any, want int, tierNeeded string) {
 		t.Helper()
 		response := request(t, api, method, target, body, token, nil)
 		if tierNeeded != "" {
-			refused, message := scopeRefused(t, response)
-			if !refused || !strings.Contains(message, "needs the "+tierNeeded+" scope") {
-				t.Errorf("%s: status=%d body=%s, want scope_insufficient naming the %s scope", label, response.Code, response.Body.String(), tierNeeded)
+			if response.Code != http.StatusAccepted || !strings.Contains(response.Body.String(), `"request_id"`) {
+				t.Errorf("%s: status=%d body=%s, want 202 with an agent request (the action needs %s)", label, response.Code, response.Body.String(), tierNeeded)
 			}
 			return
 		}
@@ -165,7 +185,7 @@ func TestTokenTiersGateWhatAnAgentMayChange(t *testing.T) {
 	}
 	decode(t, request(t, api, http.MethodGet, path+"/messages", nil, admin, nil), &messages)
 	if len(messages.Items) != 1 || messages.Items[0].Kind != "note" {
-		t.Errorf("refused reply must store nothing; messages = %+v", messages.Items)
+		t.Errorf("a reply waiting for approval must store nothing; messages = %+v", messages.Items)
 	}
 
 	step("send replies", send, http.MethodPost, path+"/messages", reply, 201, "")

@@ -28,6 +28,7 @@ var privilegedCallSites = []string{
 	"internal/database/scope.go: PrivilegeRequestLogin",
 	"internal/database/scope.go: PrivilegeWorkspaceBySlug",
 	"internal/retention/service.go: PrivilegeRetention",
+	"internal/store/agent-requests.go: PrivilegeAgentRequestPrune",
 	"internal/store/billing-reconcile.go: PrivilegeBillingReconcile",
 	"internal/store/email-channels.go: PrivilegeInboundSecret",
 	"internal/store/email-inbound.go: PrivilegeReplyToken",

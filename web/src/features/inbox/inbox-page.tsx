@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Conversation, Message, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
+import type { AgentRequest, Conversation, Message, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import { BulkActionBar } from './bulk-action-bar';
 import { ConversationList } from './conversation-list';
@@ -7,6 +7,8 @@ import { DetailsPanel } from './details-panel';
 import { InboxFilters, defaultInboxFilters } from './inbox-filters';
 import type { AttachmentLimits } from './attachment-picker';
 import { ReplyComposer } from './reply-composer';
+import { ReplyDraftCard } from './reply-draft-card';
+import type { DraftEdit } from './reply-draft-card';
 import { suggestedCc } from './suggested-cc';
 import { TimelinePanel } from './timeline-panel';
 import { messages } from '../../messages';
@@ -54,9 +56,14 @@ interface InboxPageProps {
   currentAgentId?: string;
   // onBulkUpdate resolves when every listed conversation changed, and rejects when none did.
   onBulkUpdate?: (ids: string[], changes: BulkConversationChanges) => Promise<unknown>;
+  // Reply drafts AI agents left on the selected conversation, and the conversations that have one.
+  replyDrafts?: AgentRequest[];
+  draftConversationIds?: ReadonlySet<string>;
+  onSendDraft?: (draft: AgentRequest, edit?: DraftEdit) => Promise<unknown>;
+  onDiscardDraft?: (draft: AgentRequest) => Promise<unknown>;
 }
 
-export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate }: InboxPageProps) {
+export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, onSendDraft, onDiscardDraft }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Filters are an uncontrolled form; clearing remounts it so every field returns to its default.
@@ -101,6 +108,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
     }
   };
   const copied = useMemo(() => suggestedCc(timeline, { hosted }), [timeline, hosted]);
+  const agentNames = useMemo(() => new Map(agents.map((agent) => [agent.id, agent.display_name || agent.email])), [agents]);
   const closeDetails = () => { setDetailsOpen(false); (detailsToggle.current ?? listPane.current)?.focus(); };
   // The drawer belongs to one conversation: a new selection or none closes it. Without a toggle left
   // to return to, focus goes to the list pane instead of falling back to the page.
@@ -136,13 +144,15 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
         <ConversationList items={conversations} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
           page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} nothingOpen={nothingOpen} loading={loading} refreshing={refreshing}
           failed={failed} onRetry={onRetry} onClearFilters={clearFilters} canManage={canManage} onOpenSettings={onOpenSettings}
-          checkedIds={checked} onToggle={toggle} onToggleAll={toggleAll} selectAllRef={selectAll} />
+          checkedIds={checked} onToggle={toggle} onToggleAll={toggleAll} selectAllRef={selectAll} draftIds={draftConversationIds} />
       </section>
       <div className="conversation-center panel">
-        <TimelinePanel conversation={selected} items={timeline} timeEntries={timeEntries} loading={timelineLoading} timezone={timezone} onRetryDelivery={onRetryDelivery}
+        <TimelinePanel conversation={selected} items={timeline} timeEntries={timeEntries} loading={timelineLoading} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
           detailsOpen={detailsOpen} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}</p>}
         {deliveryNotice && <p role="alert" className="composer-notice">{deliveryNotice}</p>}
+        {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft} customer={customerName}
+          onSend={(edit) => onSendDraft?.(draft, edit) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}
         {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
         <ReplyComposer key={selected?.id} disabled={!selected} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
           savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState} />

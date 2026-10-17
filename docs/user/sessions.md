@@ -43,11 +43,16 @@ it, create a new token and revoke the old one. The agent sends it as `Authorizat
 
 Start with `read` or `draft`.
 
-Whatever the scope, a token cannot manage sessions, tokens or invites, and cannot change
-workspace, email channel, web form, billing or export settings. It cannot read the lists of
-sessions and invites or the email and web form settings either. This holds when an admin creates
-the token: it has the agent role. A call outside the scope fails with HTTP 403 and the error code
-`scope_insufficient`. The message names the scope the action needs.
+A call above the scope is not refused: it becomes an [agent request](agent-requests.md) that a
+person approves or rejects, and nothing changes until then (HTTP 202). A reply from a token below
+`send` becomes a reply draft a person sends. Creating tokens, export, billing, disconnecting the
+email channel, rotating its secret and changing the workspace address always wait for a person,
+whatever the scope.
+
+A token cannot manage sessions or invites, and cannot change workspace, team, email channel or web
+form settings. It cannot read the lists of sessions and invites or the email and web form settings
+either. This holds when an admin creates the token: it has the agent role. Such a call fails with
+HTTP 403 and the error code `scope_insufficient`.
 
 A token starts with `cdk_agent_` so that secret scanners recognise it if it ends up in a file by
 mistake. It works only in the `Authorization` header. A browser cookie that holds a token is

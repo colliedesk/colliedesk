@@ -91,7 +91,8 @@ export const messageAgentTokenSchema = z.object({
 }) satisfies z.ZodType<Generated<'MessageAgentToken'>>;
 export const messageSchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), author_agent_id: z.string().uuid().nullable(),
-  author_name: z.string().nullable(), agent_token: messageAgentTokenSchema.nullable(), kind: z.enum(['incoming', 'outgoing', 'note']), body: z.string(),
+  author_name: z.string().nullable(), agent_token: messageAgentTokenSchema.nullable(), agent_request_id: z.string().uuid().nullable(),
+  kind: z.enum(['incoming', 'outgoing', 'note']), body: z.string(),
   body_html: z.string().nullable(), origin: messageOriginSchema.nullable(),
   attachments: z.array(attachmentSchema), cc: z.array(z.string()), created_at: z.string().datetime(),
   delivery: messageDeliverySchema.nullable(), email: incomingEmailSchema.nullable(),
@@ -161,3 +162,23 @@ export type WebFormSettings = Generated<'WebFormSettings'>;
 export type Session = Generated<'Session'>;
 export type Tag = Generated<'Tag'>;
 export type SavedReply = Generated<'SavedReply'>;
+
+export const agentRequestStatusSchema = z.enum(['pending', 'approved', 'failed', 'rejected', 'cancelled', 'expired']);
+// A stored call body and a call's answer are any JSON value.
+const anyJson = z.unknown() as z.ZodType<Generated<'AgentRequest'>['body']>;
+export const agentRequestSchema = z.object({
+  id: z.string().uuid(), kind: z.enum(['reply_draft', 'action']), status: agentRequestStatusSchema,
+  method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']), route: z.string(), path: z.string(), body: anyJson, edited_body: anyJson,
+  approvable_by: z.enum(['agent', 'admin']), summary: z.string(),
+  conversation_id: z.string().uuid().nullable(),
+  requested_by: z.object({
+    token_id: z.string().uuid().nullable(), token_label: z.string(), token_scope: z.enum(['read', 'draft', 'send']), token_revoked: z.boolean(),
+    agent_id: z.string().uuid().nullable(), agent_name: z.string().nullable(),
+  }),
+  decided_by: z.object({ agent_id: z.string().uuid().nullable(), name: z.string() }).nullable(),
+  decided_at: nullableDate, reason: z.string().nullable(), result_status: z.number().int().nullable(), result: anyJson,
+  result_note: z.string().nullable(), created_at: z.string().datetime(), expires_at: z.string().datetime(),
+}) satisfies z.ZodType<Generated<'AgentRequest'>>;
+export type AgentRequest = z.infer<typeof agentRequestSchema>;
+export const agentRequestListSchema = z.object({ items: z.array(agentRequestSchema) }) satisfies z.ZodType<JsonResponse<'listAgentRequests', 200>>;
+export const approvedAgentRequestSchema = z.object({ request: agentRequestSchema, result: anyJson }) satisfies z.ZodType<JsonResponse<'approveAgentRequest', 200>>;

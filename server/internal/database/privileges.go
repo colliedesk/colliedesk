@@ -13,6 +13,9 @@ const (
 	PrivilegeCreateWorkspace Privilege = "create-workspace"
 	// PrivilegeSignupSweep clears the old client address hashes of cloud_signups.
 	PrivilegeSignupSweep Privilege = "signup-sweep"
+	// PrivilegeAgentRequestPrune clears the call and answer of agent requests decided more than 90
+	// days ago, in every workspace; the audit rows stay.
+	PrivilegeAgentRequestPrune Privilege = "agent-request-prune"
 	// PrivilegeRetention finds locked workspaces, records and sends their deletion notice, and deletes
 	// the ones locked for a year with their attachment files.
 	PrivilegeRetention Privilege = "retention"

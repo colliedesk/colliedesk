@@ -91,6 +91,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	hostedCloud := cloudAuth.Enabled() && billing.Enabled()
 	telemetryConfig := telemetry.ConfigFromEnv(os.Getenv, origin, hostedCloud, version)
 	go telemetry.New(db, telemetryConfig, nil).Run(ctx, slog.Default())
+	go sweepAgentRequests(ctx, store.NewWithDB(db))
 	if billing.Enabled() {
 		retentionService, err := newRetentionService(db, origin, billing, retentionSettingsForServe(os.Getenv, slog.Default()))
 		if err != nil {
@@ -170,6 +171,25 @@ func sweepSignupAddresses(ctx context.Context, service *auth.Service) {
 	for {
 		if _, err := service.ClearSignupAddresses(ctx); err != nil && ctx.Err() == nil {
 			slog.Error("clear old sign-up addresses", "error", err)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// sweepAgentRequests clears the call and answer of agent requests decided more than 90 days ago, at
+// start and then daily until ctx ends. The rows stay as the record of who asked and who decided.
+func sweepAgentRequests(ctx context.Context, data *store.Store) {
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+	for {
+		if pruned, err := data.PruneAgentRequests(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("prune old agent requests", "error", err)
+		} else if pruned > 0 {
+			slog.Info("pruned old agent requests", "count", pruned)
 		}
 		select {
 		case <-ctx.Done():

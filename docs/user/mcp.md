@@ -20,8 +20,12 @@ private notes for your team. With a `send` token it can also reply to customers.
 | `draft` | Everything in `read`, plus change status, priority, assignee and tags of one or many conversations (a tag name that does not exist yet is created), and add private notes. Nothing reaches a customer. |
 | `send` | Everything in `draft`, plus reply to customers, retry a failed reply, open conversations, add customers, and rename or delete tags. |
 
-A tool that needs a higher tier answers with a message that names the tier and says an admin can
-create a token with it. Nothing else changes.
+A tool used above its tier does not fail: Colliedesk files the call as an
+[agent request](agent-requests.md) that a person approves in **Requests**, and the tool answers
+with `agent_request` (its id, summary and expiry) and `next`, which tells the model that nothing
+changed yet and how to follow it. A reply from a token below `send` becomes a reply draft. Some
+actions wait for a person with every tier: new tokens, export, billing, the email channel and the
+workspace address. No tool approves or rejects; only a person does.
 
 ## Connect Claude Code
 
@@ -66,6 +70,16 @@ with `billing` and leave a note with a summary."
 | `colliedesk_agents_list` | Lists team members for assigning | `read` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any |
 | `colliedesk_docs_search` | Searches these user guides | any |
+| `colliedesk_reply_draft` | Leaves a reply draft that a person edits, sends or discards; never emails by itself | `read` |
+| `colliedesk_requests_list` | Lists the agent requests this token filed, waiting first | `read` |
+| `colliedesk_request_get` | Shows what became of one request: approved (and how the call went), rejected with the reason, cancelled or expired | `read` |
+| `colliedesk_request_cancel` | Withdraws a waiting request | `read` |
+| `colliedesk_token_create_request` | Asks for a new agent token; the approver gets it, never the agent | `read` |
+| `colliedesk_workspace_export_request` | Asks for a workspace export; the approver gets the download | `read` |
+| `colliedesk_billing_request` | Asks for a plan checkout or the billing portal | `read` |
+| `colliedesk_email_channel_disconnect_request` | Asks to disconnect the email channel | `read` |
+| `colliedesk_email_secret_rotate_request` | Asks for a new inbound email secret; the approver sees it | `read` |
+| `colliedesk_workspace_slug_change_request` | Asks to change the workspace address | `read` |
 
 Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the
 model to show you what it will do and wait for your yes, unless you already asked for exactly that.

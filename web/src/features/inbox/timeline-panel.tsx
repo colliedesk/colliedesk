@@ -15,9 +15,11 @@ interface TimelinePanelProps {
   detailsOpen?: boolean;
   onToggleDetails?: () => void;
   detailsToggleRef?: RefObject<HTMLButtonElement | null>;
+  // Team member names by id, to name the person who approved a reply an AI agent drafted.
+  agentNames?: ReadonlyMap<string, string>;
 }
 
-export function TimelinePanel({ conversation, items, timeEntries = [], loading = false, timezone, onRetryDelivery, detailsOpen = false, onToggleDetails, detailsToggleRef }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, items, timeEntries = [], loading = false, timezone, onRetryDelivery, detailsOpen = false, onToggleDetails, detailsToggleRef, agentNames }: TimelinePanelProps) {
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
       <header className="timeline-header">
@@ -31,7 +33,8 @@ export function TimelinePanel({ conversation, items, timeEntries = [], loading =
       <div className="timeline-scroll">
         <div className="timeline-stack">
           {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
-          {items.map((item) => <MessageItem key={item.id} item={item} timezone={timezone} onRetryDelivery={onRetryDelivery} />)}
+          {items.map((item) => <MessageItem key={item.id} item={item} timezone={timezone} onRetryDelivery={onRetryDelivery}
+            approvedBy={item.author_agent_id ? agentNames?.get(item.author_agent_id) : undefined} />)}
           {timeEntries.length > 0 && <TimeEntriesSection items={timeEntries} timezone={timezone} />}
         </div>
       </div>

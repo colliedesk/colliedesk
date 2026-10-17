@@ -13,7 +13,7 @@ import (
 
 // messageSelect returns timeline rows with their email delivery (outgoing) and envelope (incoming).
 const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_id::text,m.author_name,m.kind,m.body,m.body_html,m.origin,m.created_at,m.email_meta,m.cc,
-	o.status,o.attempts,o.last_error,o.sent_at,t.id::text,t.label,t.scope,COALESCE(NULLIF(ta.display_name,''),ta.email)
+	o.status,o.attempts,o.last_error,o.sent_at,t.id::text,t.label,t.scope,COALESCE(NULLIF(ta.display_name,''),ta.email),m.agent_request_id::text
 	FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
 	LEFT JOIN email_outbox o ON o.workspace_id=m.workspace_id AND o.message_id=m.id
 	LEFT JOIN sessions t ON t.workspace_id=m.workspace_id AND t.id=m.agent_token_id
@@ -31,7 +31,7 @@ func scanMessage(row rowScanner) (domain.Message, error) {
 	var sentAt *time.Time
 	if err := row.Scan(&message.ID, &message.ConversationID, &message.AuthorAgentID, &message.AuthorName, &message.Kind, &message.Body,
 		&message.BodyHTML, &message.Origin, &message.CreatedAt, &meta, &message.CC, &status, &attempts, &lastError, &sentAt,
-		&tokenID, &tokenLabel, &tokenScope, &tokenAgent); err != nil {
+		&tokenID, &tokenLabel, &tokenScope, &tokenAgent, &message.AgentRequestID); err != nil {
 		return domain.Message{}, err
 	}
 	message.CreatedAt = domain.UTC(message.CreatedAt)
@@ -106,6 +106,8 @@ func getMessage(ctx context.Context, query messageQuerier, workspaceID, messageI
 type Actor struct {
 	AgentID string
 	TokenID string
+	// RequestID is the agent request whose approval writes the message; empty otherwise.
+	RequestID string
 }
 
 // CreateMessage stores a reply or note with files already written to attachment storage (only
@@ -138,9 +140,9 @@ func (s *Store) CreateMessageWithCC(ctx context.Context, workspaceID, conversati
 		return domain.Message{}, err
 	}
 	var messageID string
-	err = tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,author_agent_id,agent_token_id,kind,body,cc)
-		SELECT $1,c.id,$3,NULLIF($4,'')::uuid,$5,$6,$7 FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2
-		RETURNING id::text`, workspaceID, conversationID, actor.AgentID, actor.TokenID, kind, body, cc).Scan(&messageID)
+	err = tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,author_agent_id,agent_token_id,agent_request_id,kind,body,cc)
+		SELECT $1,c.id,$3,NULLIF($4,'')::uuid,NULLIF($8,'')::uuid,$5,$6,$7 FROM conversations c WHERE c.workspace_id=$1 AND c.id=$2
+		RETURNING id::text`, workspaceID, conversationID, actor.AgentID, actor.TokenID, kind, body, cc, actor.RequestID).Scan(&messageID)
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("create message: %w", err)
 	}

@@ -108,7 +108,7 @@ test('a retry the trial refuses says why instead of doing nothing', async () => 
   api.tags.mockResolvedValue({ items: [] });
   api.timeEntries.mockResolvedValue({ items: [] });
   api.messages.mockResolvedValue({ items: [{
-    id: '33333333-3333-4333-8333-333333333333', conversation_id: alpha.id, author_agent_id: null, author_name: null, agent_token: null, kind: 'outgoing', body: 'Answer.',
+    id: '33333333-3333-4333-8333-333333333333', conversation_id: alpha.id, author_agent_id: null, author_name: null, agent_token: null, agent_request_id: null, kind: 'outgoing', body: 'Answer.',
     body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', email: null,
     delivery: { status: 'failed', attempts: 1, last_error: 'x', sent_at: null },
   }] });
