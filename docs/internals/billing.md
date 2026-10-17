@@ -19,6 +19,8 @@ off and logs why, so an image older than its configuration never stops the inbox
 | `POLAR_WEBHOOK_SECRET` | The `whsec_...` secret of the webhook endpoint. |
 | `POLAR_API_URL` | Optional. Default `https://api.polar.sh`; sandbox `https://sandbox-api.polar.sh`. |
 | `POLAR_PRODUCT_TEAM_MONTHLY`, `POLAR_PRODUCT_TEAM_YEARLY`, `POLAR_PRODUCT_FOUNDING` | Polar product ids. |
+| `POLAR_PRODUCT_TEAM25_MONTHLY`, `POLAR_PRODUCT_TEAM25_YEARLY` | Optional. Polar product ids of Team 25. Unset: checkout for `team25_*` answers 400 like an unknown plan (the message lists only the plans the server sells), no event maps to the plan, `GET /billing` leaves `team25_*` out of `checkout_plans` so the web app shows no Team 25 button, and the Team seat error does not mention Team 25. Existing deployments keep starting. |
+| `BILLING_ALERT_EMAIL` | Optional. Operator address told about a paid subscription that matches no workspace, and the summary of `collie billing reconcile`. Needs `SMTP_HOST` and `MAIL_FROM_DOMAIN`. |
 
 Webhook URL to register in Polar: `https://<host>/api/v1/webhooks/polar`, event types
 `subscription.*`. The path is under `/api/` because the web handler forwards only that prefix to
@@ -31,6 +33,24 @@ the API.
   checkout with that `customer_id`. Events come back with `customer.external_id`, which names the
   workspace. The client sends only the plan name; any other field is rejected, so a browser can
   neither pay for nor link to another workspace.
+- **The checkout opens as an overlay in the app.** The server sends `embed_origin` (`APP_ORIGIN`)
+  on every checkout session it creates; Polar refuses to embed a session without it. `success_url`
+  stays, because the fallback and the provider's own redirect still use it. The web app
+  (`web/src/features/billing/open-checkout.ts`, used by the billing page and the locked screen)
+  loads `@polar-sh/checkout/embed` lazily, so the inbox does not pay for it. On `success` it
+  prevents Polar's redirect and goes to `/settings/billing?checkout=success`. That event only
+  changes what the page shows: the plan changes only when the webhook arrives, as before. A
+  script that fails to load (a stale chunk after a deploy) falls back at once to
+  `window.location.assign(<checkout url>)`. `PolarEmbedCheckout.create` never rejects: its promise
+  settles only when the iframe reports `loaded`, and the close button is inside the iframe. So
+  `openCheckout` races it against a 15 s timeout, removes the frame the SDK left, and opens
+  Polar's own page, so the user is never trapped behind the overlay and no purchase is lost. While
+  the checkout starts or an overlay is open the plan buttons are disabled, so a second click
+  cannot open a second one. Setup in Polar: Settings, Embedding, Embed hosts must list the app
+  host without a scheme (`app.colliedesk.com`), and it must equal `APP_ORIGIN` (the SDK sends
+  `window.location.origin`). A host not listed makes Polar refuse the frame; the user then waits
+  up to 15 s before the full page opens. Apple Pay and Google Pay stay off in embeds until Polar
+  validates the domain (a request to Polar support).
 - **Polar customers are unique by email too.** The customer is created with the admin's real email,
   so receipts reach them. If Polar refuses the create (422, the email belongs to another customer:
   the same person pays for a second workspace), the server retries once with the address tagged
@@ -58,6 +78,15 @@ the API.
   Polar stops retrying, and the endpoint reveals nothing about which workspaces exist. A
   subscription event that is ignored is logged at WARN with event type, subscription id and
   webhook id (no customer data), because it may be a payment nobody sees.
+- **A payment without a workspace emails the operator.** When the ignored event is for a missing
+  workspace id or an unknown workspace and the subscription is `active`, the server mails
+  `BILLING_ALERT_EMAIL` from `noreply@MAIL_FROM_DOMAIN` through `SMTP_*`: buyer email (from Polar's
+  customer), plan, product, subscription and customer ids, never a secret. Unset, or without
+  `SMTP_HOST` and `MAIL_FROM_DOMAIN`, it only logs a WARN. One mail per subscription id per process
+  (created, active and redelivered events share it); a restart can repeat one. The alert is best effort: a failed send is logged at ERROR and the answer
+  stays 200, so Polar does not redeliver; a later event for the same subscription sends again, and the
+  planned reconciliation of Polar subscriptions against workspaces is the safety net. The static checkout link is the usual source; the in-app
+  `/settings/billing?buy=<plan>` link avoids the case.
 - **A new Polar status never fails the webhook.** A status outside the known list is stored as
   `unknown` (not paid) with a WARN log. Failing would make Polar retry until it disables the endpoint.
 - **Row-level security without a privileged lookup.** The workspace id in the event is used as the
@@ -154,14 +183,20 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
 ### Agent seats
 
 - Cap: 10 on trial, Team and Founding (more than 10 is "contact us", so the message says that instead of
-  offering an upgrade). A seat is an agent, or a person with an unused, unrevoked, unexpired invite.
-  Pending invites count by distinct address: re-sending an invite to the same address, or inviting someone
-  who is already an agent (a role change), takes no new seat.
-- Checked when an invite is created and when one is redeemed. Redeem excludes the invite itself
-  and skips someone who is already an agent. Redeem matters after a downgrade: the invite stays
-  unused (the transaction rolls back), so it works after an upgrade.
-- Both checks take `pg_advisory_xact_lock("agent-seats:<workspace>")`, so concurrent invites see
-  each other. Existing agents are never removed.
+  offering an upgrade). A seat is an active agent, or a person with an unused, unrevoked, unexpired invite.
+  A deactivated agent holds no seat. Pending invites count by distinct address: re-sending an invite to the
+  same address, or inviting someone who is already an active agent (a role change), takes no new seat.
+- Checked when an invite is created, when one is redeemed and when a deactivated agent is reactivated.
+  Redeem excludes the invite itself and skips someone who is already an active agent. Redeem matters after a
+  downgrade: the invite stays unused (the transaction rolls back), so it works after an upgrade.
+- All three checks take `pg_advisory_xact_lock("agent-seats:<workspace>")`, so concurrent invites and
+  reactivations see each other. `PATCH /api/v1/agents/{id}` takes the same lock before its last-admin check.
+- Agents are never deleted. An admin deactivates them (`agents.deactivated_at`): the seat is freed at once,
+  sessions and unused links and invites of the agent are revoked, and the open and pending conversations move
+  to Unassigned or to another active agent in the same transaction. Reactivating takes a seat again
+  (402 `plan_limit_reached` when none is free) and does not restore assignments or sessions. An invite for the
+  address of a deactivated agent is refused with 409 `agent_deactivated`: reactivate instead. Downgrading a
+  plan still removes nobody; the admin frees seats by deactivating agents or revoking invites.
 - Error: HTTP 402, code `plan_limit_reached`, message names the plan, the cap and the way out.
 
 ### Rollback of the cleanup
@@ -191,6 +226,15 @@ and workspaces without an email channel never reach it.
   that is imported history (`origin IS NOT NULL`) or inbound mail that came through the platform
   forwarder (`email_meta.via = 'platform'`) and whose authentication verdict is not `fail`.
   Refusal: HTTP 403 `trial_outbound_restricted`.
+- **Cc addresses are recipients too.** A trial reply with an unverified domain may copy only
+  addresses found on mail that qualifies above: its sender or its Cc line (`email_meta.from`,
+  `email_meta.cc`), or the `from` and `cc` of imported history. Anything else is the same 403
+  `trial_outbound_restricted`, and the refusal names the refused addresses. Code: `checkTrialCC`
+  in `store/message-cc.go`, run beside `checkTrialOutbound`. Workspace-posted mail and `fail` mail
+  add no addresses. This rule does not stop a determined sender: the Cc line is written by whoever
+  sends the mail, so a trial user can mail their own hosted address (verdict `none` or `pass`) with
+  strangers in Cc and then copy all of them. What bounds that is the daily cap below, which counts
+  every recipient, not every reply.
 - **Mail posted to a workspace's own inbound secret never qualifies.** The admin writes that whole
   message, `Authentication-Results` included, so it proves nothing about the sender. `IngestEmail`
   records the door in `email_meta.via` (`platform` or `workspace`). Mail stored before `via`
@@ -198,16 +242,27 @@ and workspaces without an email channel never reach it.
 - **Spoof-From trade-off.** A trial user can send a forged `From: victim@...` through the hosted
   address and then reply to the victim through our relay. `fail` is refused. `none` is allowed for
   now because many small senders publish no DMARC and refusing it would block real customers; the
-  200/day cap, the hourly 300 worker limit and the signup controls bound the abuse. "Require
+  200-recipient daily cap, the hourly 300 worker limit and the signup controls bound the abuse. "Require
   `pass`" is not the hardening: without a DMARC record, any `spf=pass` or `dkim=pass`, even for an
   unrelated domain, makes the verdict `pass`. The real step is requiring an *aligned* `dmarc=pass`,
   which needs the parser to record the DMARC result on its own.
-- **200 replies per rolling 24 h per workspace**, counted from `email_outbox.created_at > now-24h`
-  with `status <> 'failed'` (a failed delivery never left). A row exactly 24 h old no longer counts.
-  Refusal: HTTP 429 `trial_outbound_limit`, with `Retry-After` and `retry_after_seconds` (time until
-  the 200th newest counted reply leaves the window). The existing 300/hour worker limit stays.
+- **200 recipients per rolling 24 h per workspace**: the sum of `email_outbox.recipients` (the
+  contact plus every Cc address of the reply, set at enqueue) over rows with
+  `created_at > now-24h` that are queued, sent, or failed after they were handed to the relay
+  (`status <> 'failed' OR sent_at IS NOT NULL`). A delivery that failed before leaving does not
+  count. A failure after `sent_at` never frees the slot: a delivery report fails the reply, and
+  anyone can post a forged report to the workspace's inbound address, so counting only
+  non-failed rows would let a trial user reset the cap at will. A row exactly
+  24 h old no longer counts. A reply is refused when it would take the sum past 200, so a reply
+  copying ten people costs 11 and at most 200 people are reached a day however the Cc lists are
+  built. Refusal: HTTP 429 `trial_outbound_limit`, with `Retry-After` and `retry_after_seconds`
+  (time until enough counted rows leave the window for this reply). The existing 300/hour worker
+  limit stays.
 - Both a new reply and the retry of a failed delivery pass `checkTrialCap`, because a retried row
-  counts again once it is queued (429 on retry too).
+  counts again once it is queued (429 on retry too). The retry moves the row's `created_at` to the
+  retry time. When the row had already left (`sent_at`) inside the window, its earlier people are
+  added to the retry's (`recipients` grows); the sum then lasts a full window from the retry. This
+  counts too much rather than too little, so forged-bounce-and-retry loops still fill the cap.
 - Both checks run under `pg_advisory_xact_lock("outbound-cap:<workspace>")` inside the message
   transaction, so two replies racing for the last slot admit exactly one, and a refusal rolls back
   the whole message (no orphan reply in the timeline).
@@ -217,17 +272,20 @@ and workspaces without an email channel never reach it.
 - Index `email_outbox_workspace_created_idx (workspace_id, created_at)` serves the count;
   `TestTrialCapCountStaysFastOnALargeOutbox` asserts the plan uses it and a reply takes under
   200 ms with 200k outbox rows (measured ~12 ms).
-- `GET /billing` reports `usage.replies_last_24h` (0 off-trial).
-- Imported history qualifies. Imports run only through the operator CLI today; if import becomes
-  self-service for trial workspaces, this gate must be revisited (a Freshdesk trial could invent
-  tickets for any address).
-- There is no Cc support yet, so nothing to restrict. When reply Cc lands, it must be refused in
-  trial unless the domain is verified, with the same `trial_outbound_restricted` code.
+- `GET /billing` reports `usage.replies_last_24h` (0 off-trial). Despite the name it is the people
+  reached, the number the cap compares; `limits.replies_per_24h` is the cap. The field names predate Cc.
+- Imported history qualifies, for the contact and for Cc. Imports run only through the operator CLI
+  today; if import becomes self-service for trial workspaces, this gate must be revisited: a trial
+  user could import from their own Freshdesk trial, where they create tickets with any requester and
+  any Cc, and every imported address would become copyable. Until then the recipient cap bounds it.
+- Cc addresses also count from platform mail whose verdict is `none`, the same trust as the contact
+  rule; only `fail` is refused. The web composer prefills Cc only from `pass` mail. Requiring an
+  aligned `dmarc=pass` is the planned hardening for both rules.
 
 ### Storage cap
 
 Trial and locked (`none`) workspaces may hold 2 GiB (`domain.TrialStorageBytes`, 2147483648) of
-attachments; paid plans and self-hosted have no cap. Used bytes are `sum(attachments.size)` over
+attachments; self-hosted has no cap, and paid plans have their own caps that count imported files (below). Used bytes are `sum(attachments.size)` over
 messages with `origin IS NULL`: files of imported (Freshdesk) messages never count, because an import
 is history the customer already owned. The number is `workspaces.counted_storage_bytes`, kept by triggers on
 `attachments` (migration `storage-counter`; `attachments.counted` is false for files of imported messages
@@ -249,8 +307,11 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
   $100 once a year for life and attachments are the one cost that grows without bound (break-even is
   roughly 41-56 GB), so it has a cap. Unlike the trial, imported files count: the number is
   `workspaces.stored_storage_bytes`, the sum of every attachment, kept by the same triggers (migration
-  `founding-storage-counter`, additive; the three trigger functions now update both counters). Team has
-  no cap. Over the cap nothing is deleted. Inbound customer mail is exempt (`Store.CheckInboundStorage` lets Founding
+  `founding-storage-counter`, additive; the three trigger functions now update both counters). Team
+  (100 GiB, `domain.TeamStorageBytes`) and Team 25 (250 GiB, `domain.Team25StorageBytes`, 25 agents,
+  $99 or $990) have the same shape: imports count, warn at 80%, same inbound exemption. The rule is
+  `domain.StorageCountsImports`: every capped plan except the trial and a locked workspace. When one
+  workspace holds several paid subscriptions, Team 25 outranks Founding, which outranks Team (`planRank`: Team 25 > Team > Founding, by agents then storage). The migration `allow-team25-plan` cannot be rolled back while a subscription row is on `team25` (it raises, naming the count; deleting or downgrading the row would lock or shrink a paying workspace, and Polar does not redeliver an event it already delivered). Move those subscriptions to another plan in Polar first. A Team workspace at its 10th seat is told to upgrade to Team 25 under Manage billing when Team 25 is on sale; the switch itself happens in the Polar portal, there is no in-app flow. Over the cap nothing is deleted. Inbound customer mail is exempt (`Store.CheckInboundStorage` lets a paid plan
   through, so it is stored in full and its bytes still count: a bounced customer email hurts the paying
   team's own customers and looks like an outage; the cost is bounded by real mail). The cap still refuses
   what an agent or an import supplies (`Store.CheckStorage`, the importer's guard). There is no agent
@@ -258,8 +319,8 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
   and its tests (`TestCheckStorage...`) prove the store function, not an upload route. **Any future
   upload route must call `CheckStorage` before writing and get a test of its own.** Reading, replies
   without new files and export are untouched. The trial and a locked workspace still refuse inbound mail.
-- **Import on Founding: one check, before any write; then admitted.** The ticket list does not carry
-  attachment sizes, so `freshdesk.guardFoundingStorage` runs a read-only pass first: the dry-run
+- **Import on a paid plan: one check, before any write; then admitted.** The ticket list does not carry
+  attachment sizes, so `freshdesk.guardStorage` runs a read-only pass first: the dry-run
   listing and id probing (`listTickets`, `classifyTickets`, which the real run then repeats), then a
   read of each ticket and of its conversations (paged, so at least two calls per ticket), adding up
   the reported sizes of attachments the ledger does not hold yet. It then re-reads the room (the pass
@@ -270,18 +331,18 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
   that ticket and goes on (`Report.StorageCap.SkippedTickets` in a dry run). **No cap check
   after that:** an admitted import is never stopped by the cap, so bytes that arrive meanwhile (inbound
   mail is exempt; uploads and a file added at the source after the pass) may take usage past
-  20 GiB, by whatever arrives while the import runs (the real run lists the tickets again, so tickets
+  the plan's cap, by whatever arrives while the import runs (the real run lists the tickets again, so tickets
   created at the source during the sizing window are imported without being sized; on a busy account that
   is not small), which is accepted, and there is no partial-import path from the cap (only a full disk still
   stops a run, as before). `--dry-run` reports the same comparison in `Report.StorageCap` without
   refusing. The counter counts logical rows: a file attached twice counts twice although the local
   disk stores it once, which is safe for cost. `import undo` deletes the files, and the triggers
-  release the bytes. `Options.FoundingStorageBytes` and `Store.WithFoundingStorageBytes` are test-only
-  seams that shrink the cap (kept as options because an unexported hook would mean threading a
+  release the bytes. `Options.PaidStorageBytes` and `Store.WithPaidStorageBytes` are test-only
+  seams that shrink the cap of every plan that counts imports (kept as options because an unexported hook would mean threading a
   package-private value through the `store` and `freshdesk` packages).
 - `GET /billing` reports (for every plan) `usage.storage_bytes`, `limits.storage_bytes` (null when uncapped) and
-  `limits.storage_warn_bytes` (80%: 1717986918 on the trial, 17179869184 on Founding), the usage at which the web app
-  warns. On Founding `usage.storage_bytes` is the stored counter, imports included.
+  `limits.storage_warn_bytes` (80%: 1717986918 on the trial, 17179869184 on Founding, 85899345920 on Team, 214748364800 on Team 25), the usage at which the web app
+  warns. On a paid plan `usage.storage_bytes` is the stored counter, imports included.
 
 ### Clock
 
@@ -375,3 +436,76 @@ Run on the server shell (`docker compose exec server /app/collie ...`).
   billing page shows "Complimentary Team plan (until ...)" and hides Manage billing; checkout answers
   409 `already_subscribed` without a portal hint.
 
+## Founding slot cap
+
+`domain.FoundingSlots` (10) limits the Founding plan. A slot is a Polar subscription of the Founding
+product in status active, trialing or past_due. The count comes from Polar (`GET /v1/subscriptions/`
+with repeated `status` parameters, `pagination.total_count`), not from the local database, because a
+buyer of the static checkout link has no workspace and the webhook ignores that event.
+
+- State lives in API memory: unknown until the first refresh succeeds, then taken plus the archive flag.
+  Refreshes run once at start (background, `serve.go`) and after every signature-verified subscription
+  webhook for the Founding product, including events ignored for lack of a workspace. A failed refresh
+  is logged and never changes the webhook answer.
+- Closed means taken >= 10 or the product is archived at Polar. At the cap the server archives the
+  product (`PATCH /v1/products/{id}`), the hard stop for every checkout path. Closing is one-way: nothing
+  unarchives, even when a subscription later ends. Reopening is a manual unarchive in Polar plus a restart.
+- Unknown counts as open in the app; the Polar archive is the hard stop. `GET /api/v1/founding` (public,
+  memory only) reports `taken: null` while unknown.
+- Trap: two buyers who pay at the same moment at slot 9 both get in (11 of 10). Accepted.
+- Trap: if the archive call fails, the app is already closed but the checkout link stays live until the next
+  Founding event or restart retries it. The token needs the product write scope.
+
+## Reconcile with Polar
+
+`collie billing reconcile [--dry-run]` compares every subscription of the Polar organization with
+`workspace_billing`. It is the safety net for a lost webhook and for the operator alert that fires
+only once per process. Run it from the server shell like the other operator commands; it needs the
+same `POLAR_*` variables as `serve` (and `BILLING_ALERT_EMAIL`, `SMTP_*`, `MAIL_FROM_DOMAIN` for the mail).
+
+- It lists all subscriptions first (`GET /v1/subscriptions/`, 25 a page, `sorting=started_at`, the stable sort Polar offers (it has no `created_at` sort); every page;
+  a listing reply may be up to 8 MiB because items embed product and customer). A failed page, or a reply
+  without `pagination`, fails the command (non-zero) before anything is written, so a partial list never
+  makes a live subscription look gone.
+- Write path: `store.ApplySubscription`, the webhook's own path. The same rule orders both: a row is
+  replaced only by a subscription whose `modified_at` is not older, so a late reconcile cannot undo a
+  newer webhook and a late webhook cannot undo a newer reconcile. The webhook id recorded is
+  `reconcile:<subscription>:<modified_at>`, so running twice applies once.
+- Applied: Polar's `modified_at` is newer than the stored `source_modified_at`, or the subscription
+  is paid at Polar and was never stored. A subscription that was never stored and grants nothing
+  (ended, unpaid) is skipped.
+- Reported, never written: an `active` or `past_due` subscription with no workspace (no external id,
+  or, for a product sold here, an id that matches no workspace), and a subscription stored as paid that Polar no longer
+  lists. Subscriptions of products not sold here are ignored.
+- Any applied or reported item sends one summary mail to `BILLING_ALERT_EMAIL` (the unmatched buyer's
+  email is in the mail, not in stdout). A run that finds nothing prints `in sync` and sends nothing.
+  An unmatched payment is reported on every run until someone resolves it. Without the alert
+  configuration the command only warns on stderr; a mail that fails to send exits non-zero, after
+  the changes were applied.
+- Every change line and the mail show what the store did: `applied`, `stale` (a newer webhook won in the
+  meantime), `duplicate`, `failed` or `not attempted` (after a failure). The summary counts match. When an
+  apply fails midway the partial report is still printed and mailed, then the command exits non-zero.
+- `--require-alert` makes the command exit non-zero when `BILLING_ALERT_EMAIL`, `SMTP_HOST` or
+  `MAIL_FROM_DOMAIN` is missing, even with nothing to report. The production timer passes it; self-hosters
+  keep the default.
+- `--dry-run` prints what it would apply and report, writes nothing and sends nothing.
+- `PrivilegeBillingReconcile` reads all workspace ids and stored Polar rows in one repeatable-read
+  read-only transaction; the writes are scoped.
+- Infra: run it daily, for example a timer on the cloud host that runs the command in the server
+  container. It is not wired by this repository.
+
+Verified against the Polar sandbox (listing shape, pagination fields, apply, second run applies
+nothing) with a free sandbox product and a free subscription created through the API.
+
+## Sandbox end-to-end: why there is none
+
+A Playwright journey that buys Founding at the Polar sandbox checkout cannot run unattended. The
+checkout fills and validates (address, Stripe card `4242 4242 4242 4242`), but "Subscribe now" then
+stops: Stripe's invisible hCaptcha frame answers "Please try again" and no confirm request is sent
+(only a `PATCH /v1/checkouts/client/<id>` and a beacon to `r.stripe.com`). Observed from the cook
+host with headless Chromium and with headed Chrome under Xvfb. The card fields are reachable: they
+are inputs named `number`, `expiry` and `cvc` inside one Stripe frame titled "Secure payment input
+frame". Passing the captcha would mean evading a bot check, so the journey was not built. What the
+sandbox does support without a browser: a free product and `POST /v1/subscriptions/` with a customer
+whose `external_id` is a workspace id, which is enough to exercise `collie billing reconcile` against
+the real API.

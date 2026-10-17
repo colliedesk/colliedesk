@@ -48,10 +48,34 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   every attempt (crash loop) fails without sending. Backoff 30 s doubling to 1 h, 8 attempts,
   any 5xx fails at once.
 - **Per-workspace hourly send limit (300).** Over the limit, the row is deferred 10 minutes
-  without spending the attempt. Trial workspaces also have a 200 replies per 24 h cap and may
+  without spending the attempt. Trial workspaces also have a cap of 200 recipients (To + Cc) per 24 h and may
   reply only to customers who wrote first; see "Trial outbound controls" in `billing.md`.
 - **Bounces.** A delivery report (`multipart/report`, `MAILER-DAEMON`) is still dropped, but the
-  Message-IDs in its returned headers mark our matching replies `failed`.
+  Message-IDs in its returned headers mark our matching replies `failed`. When its
+  `message/delivery-status` part names the failed recipients (`Final-Recipient` with
+  `Action: failed`) and every one is in the reply's `cc`, the delivery keeps its status and the
+  addresses are appended to `last_error`: the customer got the reply. This works only when the
+  relay keeps our Message-ID and the DSN reaches `reply+...`. Resend and SES rewrite the Message-ID
+  and take the envelope sender, so their DSNs never arrive here. For Resend, `POST
+  /api/v1/webhooks/resend` (Svix signature, `RESEND_WEBHOOK_SECRET`) fails the reply instead. Each
+  reply on the platform domain is sent from `reply+<token>-<reply id>@MAIL_FROM_DOMAIN`, where the reply
+  id is the first 12 hex digits of its random Message-ID (48 bits; the local part stays under 64
+  characters). The event's `from` therefore names one reply, and nothing is guessed from timing: two
+  replies seconds apart cannot be confused. Inbound routing, the RCPT check and threading accept both
+  this form and the older `reply+<token>@`; for the older form the webhook acts only when the relay
+  kept our Message-ID. The `svix-id` is stored in `relay_webhook_events` in the same transaction, so a
+  redelivery is `duplicate` even after an agent retried the reply. A reply still `queued` (the relay can
+  report a suppressed address before the worker records the send) is failed too; the worker then loses
+  its lease and leaves it. An event that names only the contact fails the reply and keeps any missed-copy note after
+  the reason; one that names only Cc addresses of the reply leaves it sent and appends "Bounced from
+  copied address" to the note, like a DSN. Resend does not document what `to` holds when a Cc copy
+  bounces, so the contact next to others, or an address the reply was not sent to, changes nothing.
+  `sent_at` is kept on failure: the trial recipient cap still counts the reply, the hourly send limit
+  (`status='sent'`) does not. A `from` that `net/mail` rejects (unquoted "Acme, Inc.") is read from its
+  last angle brackets. Ignored failures are logged at Warn with ids only. The SMTP `250`
+  reply does not document the Resend email id and tags exist only on the HTTP API, so SMTP stays the
+  only transport. Replies sent as a verified support address are not matched: support addresses are
+  not unique across workspaces.
 - **Inbound limits are a loop guard plus a ceiling.** 10 messages per sender address per 10
   minutes (the header From, which a sender controls) and 200 new conversations per workspace per
   10 minutes (holds when From rotates). A per-(workspace, sender) advisory lock serializes the
@@ -79,7 +103,12 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
 - **Platform domain inbound.** `MAIL_FROM_INBOUND_SECRET` authenticates the forwarder of
   `MAIL_FROM_DOMAIN` on the same endpoint. The workspace comes from the conversation of the
   `reply+<token>@MAIL_FROM_DOMAIN` recipient (tokens are unique and 128-bit). Only that domain
-  counts; a token on another domain does not route.
+  counts; a token on another domain does not route. An envelope recipient at `MAIL_FROM_DOMAIN` is
+  checked first, before the hosted slug lookup, in both inbound routing and the RCPT check, because
+  `UnderDomain` is true for every name below `HOSTED_MAIL_DOMAIN`. `ConfigFromEnv` refuses a
+  `MAIL_FROM_DOMAIN` that is one valid, non-reserved label below `HOSTED_MAIL_DOMAIN`, so no workspace
+  can own it as a slug (tests: `TestReplyTokenBelowTheHostedDomainThreadsIntoItsConversation`,
+  `TestConfigFromEnvKeepsTheReplyDomainOutOfTheWorkspaceSlugs`).
 
 ## Hosted cloud addresses (`HOSTED_MAIL_DOMAIN`)
 
@@ -147,6 +176,28 @@ unchanged; the workspace's Support address stays the identity customers see.
     instead of accepting it unwashed.
   - A wildcard MX does not apply to names that already have records (`app`, `www`, `send`, `rsend`, `mx`),
     which is why those slugs are reserved.
+
+## Cc on replies
+
+- `messages.cc text[]` (NULL = none, 1 to 10 entries) holds the list of an outgoing reply; the outbox
+  reads it from the message, so a retry or a re-sent lease goes to the same people. Envelope
+  recipients are the contact plus `cc`; the header is `Cc:`. There is no Bcc anywhere.
+- Validation is in `httpapi/message-cc.go`: plain addr-spec, at most 10, lowercase, de-duplicated,
+  refuses the workspace support address and its plus forms (`support+r-…@`, `email.SameMailbox`)
+  and anything under `HOSTED_MAIL_DOMAIN` or `MAIL_FROM_DOMAIN`
+  (a Cc to those would loop the reply back in). The store drops the conversation contact.
+  `email.Compose` re-checks every address, so a stored value can never write a header line.
+- A Cc address never fails the reply to the contact. The worker leaves out a stored address that is
+  not a plain addr-spec, and `SMTPSender.SendCopying` skips a copy refused at `RCPT TO` (temporary
+  refusals too: a retry would send the customer a second copy). The reply is `sent` and
+  `last_error` names the missed copies; the web timeline shows that line under a sent reply.
+  A refused contact still fails the delivery.
+- Inbound Cc is stored in `email_meta.cc` (sender and own addresses removed, at most 50) and feeds the
+  composer default only when that message's `authentication` is `pass` and, on the hosted cloud
+  (`billing.enabled`), its `via` is `platform` (`suggestedCc` in the web app), so it never prefills an
+  address the trial rule would refuse. It is a suggestion; the server never trusts it on send.
+- A copied person's reply-all threads by `In-Reply-To`/`References` like any reply. It never changes
+  the conversation contact, which is set when the conversation is created.
 
 ## Open
 

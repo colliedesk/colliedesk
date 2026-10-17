@@ -1,6 +1,7 @@
 package email_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/email"
@@ -59,5 +60,40 @@ func TestConfigFromEnvReadsTheHostedMailDomain(t *testing.T) {
 		if _, err := email.ConfigFromEnv(func(key string) string { return bad[key] }); err == nil {
 			t.Errorf("%s accepted", name)
 		}
+	}
+}
+
+// MAIL_FROM_DOMAIN below HOSTED_MAIL_DOMAIN must not be a name a workspace can own as its slug.
+func TestConfigFromEnvKeepsTheReplyDomainOutOfTheWorkspaceSlugs(t *testing.T) {
+	secret := "0123456789abcdef0123456789abcdef" // gitleaks:allow (test placeholder)
+	load := func(from string) error {
+		env := map[string]string{"HOSTED_MAIL_DOMAIN": "colliedesk.com", "MAIL_FROM_DOMAIN": from, "MAIL_FROM_INBOUND_SECRET": secret}
+		_, err := email.ConfigFromEnv(func(key string) string { return env[key] })
+		return err
+	}
+	for _, ok := range []string{"mail.colliedesk.com", "bounce.colliedesk.com", "reply.mail.colliedesk.com", "colliedesk.com", "mail.example.org"} {
+		if err := load(ok); err != nil {
+			t.Errorf("MAIL_FROM_DOMAIN=%s refused: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"acme.colliedesk.com", "Desk.Colliedesk.com"} {
+		if err := load(bad); err == nil || !strings.Contains(err.Error(), "MAIL_FROM_DOMAIN") {
+			t.Errorf("MAIL_FROM_DOMAIN=%s accepted: %v", bad, err)
+		}
+	}
+}
+
+func TestConfigFromEnvReadsTheResendWebhookSecret(t *testing.T) {
+	env := map[string]string{"MAIL_FROM_DOMAIN": "mail.example.com", "RESEND_WEBHOOK_SECRET": " whsec_c2VjcmV0 "} // gitleaks:allow (test placeholder)
+	config, err := email.ConfigFromEnv(func(key string) string { return env[key] })
+	if err != nil || config.ResendWebhookSecret != "whsec_c2VjcmV0" {
+		t.Fatalf("resend webhook secret not read: %+v %v", config, err)
+	}
+	if config, err = email.ConfigFromEnv(func(string) string { return "" }); err != nil || config.ResendWebhookSecret != "" {
+		t.Fatalf("webhook must default to off: %+v %v", config, err)
+	}
+	noDomain := map[string]string{"RESEND_WEBHOOK_SECRET": "whsec_c2VjcmV0"} // gitleaks:allow (test placeholder)
+	if _, err := email.ConfigFromEnv(func(key string) string { return noDomain[key] }); err == nil || !strings.Contains(err.Error(), "MAIL_FROM_DOMAIN") {
+		t.Fatalf("secret without MAIL_FROM_DOMAIN accepted: %v", err)
 	}
 }

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { Me } from '../../api/schemas';
 import { messages } from '../../messages';
-import { Avatar } from '../../ui/avatar';
+import { AccountMenu } from './account-menu';
 
 interface AppShellProps {
   me?: Me;
@@ -15,6 +15,9 @@ interface AppShellProps {
   notice?: ReactNode;
   // lockedScreen replaces the view when the workspace is locked; the identity bar stays.
   lockedScreen?: ReactNode;
+  onSignOut?: () => void;
+  signOutFailed?: boolean;
+  signingOut?: boolean;
   children: ReactNode;
 }
 
@@ -39,7 +42,7 @@ function useDismissibleTooltips() {
   }, []);
 }
 
-export function AppShell({ me, signedOut = false, brand, links, signIn, notice, lockedScreen, children }: AppShellProps) {
+export function AppShell({ me, signedOut = false, brand, links, signIn, notice, lockedScreen, onSignOut, signOutFailed, signingOut, children }: AppShellProps) {
   useDismissibleTooltips();
   const view = signedOut
     ? <main className="redeem-page"><section className="redeem-panel">
@@ -51,8 +54,9 @@ export function AppShell({ me, signedOut = false, brand, links, signIn, notice, 
     <div className="app-shell">
       <nav className="app-rail" aria-label={messages.mainNavigation}>
         {brand}
-        <div className="rail-links">{links}</div>
-        {me && <span className="rail-avatar"><Avatar name={me.agent.display_name || me.agent.email} /></span>}
+        {/* Signed out, every destination ends on the same screen, so the rail offers none. */}
+        {!signedOut && <div className="rail-links">{links}</div>}
+        {me && !signedOut && <AccountMenu me={me} onSignOut={onSignOut} signOutFailed={signOutFailed} signingOut={signingOut} />}
       </nav>
       <div className="app-main">
         {me && <section className="identity-bar" aria-label={messages.signedInAs}>

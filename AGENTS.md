@@ -70,6 +70,7 @@ untag one; fix the product instead. `corepack pnpm test` fails when this list an
 - `invite teammate: admin invites, teammate joins under the agent ceiling, admin revokes, revoked session refused` (`web/e2e/onboarding-invite.spec.ts`)
 - `email channel: forwarded mail opens a conversation, the reply is delivered by SMTP with threading headers, the customer reply threads back` (`web/e2e/onboarding-email.spec.ts`)
 - `freshdesk import: reconcile OK with exact counts, tickets searchable with original timestamps, undo removes exactly the import` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
+- `freshdesk import: an account without canned responses still migrates its tickets and says so` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
 - `freshdesk import: a wrong API key stops before writing anything and says why` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
 - `freshdesk import: an archive refused with 403 is reported UNVERIFIED, never OK` (`web/e2e/onboarding-freshdesk-import.spec.ts`)
 - `cloud sign-in: a verified identity of an existing agent gets a Colliedesk session; every other token is refused` (`web/e2e/onboarding-cloud-sign-in.spec.ts`)
@@ -84,6 +85,40 @@ checkouts can run them at once; `COLLIEDESK_E2E_PORT_BASE` overrides the ports.
 Run locally: `docker compose --profile test up -d postgres mailpit`, then
 `make e2e E2E_ARGS='--grep @onboarding'`; for the installer,
 `docker build -t colliedesk:smoke -f server/Dockerfile . && COLLIE_DESK_IMAGE=colliedesk:smoke sh tests/install-smoke.sh`.
+
+## Releases
+
+Colliedesk is **alpha**: releases are `v0.0.N`. Merging to `main` never makes a release, and
+nothing makes one on a schedule. A release is cut only when Chính (`hiimchinh`) or Long
+(`buiduclong0511`) asks: run `gh workflow run release.yml -R colliedesk/colliedesk`, or they press
+Run workflow themselves (it needs write access to this repository). It
+releases the commit Colliedesk Cloud runs (`version` in `GET /api/v1/config`), never the head of
+`main`, as the next `v0.0.N`, and fails when Cloud runs nothing newer than the last release.
+Release notes are generated from merged pull request titles, so write titles a user can read.
+A run that failed after creating its tag is finished by running Release again.
+`latest` follows the newest release.
+Never call a release, page or doc "beta", and never tag `v0.1.0` or higher, until the HC Labs
+owner announces beta. Two gates refuse other tags: the repository tag ruleset
+`alpha-release-tags-only` (no bypass, so GitHub rejects the push even from an admin) and
+`.github/scripts/release-tag-check.sh` in `release.yml`. Never edit either one without the
+owner's announcement quoted in the PR or ruleset change.
+
+## Issues and the roadmap
+
+ROADMAP.md is read by teams deciding whether to move to Colliedesk, so it must only promise what
+the issue tracker backs. CI (`roadmap` job, part of `ci-ok`) enforces this; follow it as you work:
+
+- **Labels mean state:** `needs-triage` (new, added automatically), `accepted` (belongs in
+  Colliedesk, not scheduled), `planned` (listed under Next or Then). Only a maintainer's request
+  moves an issue to `accepted` or `planned`; say who asked in the issue.
+- **Shipping a planned issue:** put `Closes #N` in the PR description **and** remove that line
+  from ROADMAP.md in the same PR (or move it under Now without the link). CI fails otherwise.
+- **Adding to the roadmap:** link the issue and label it to match the section:
+  `gh issue edit N --add-label planned` for Next/Then, `accepted` for Later.
+- **New ideas from users** belong in Discussions → Ideas, not Issues. When a maintainer accepts
+  one, open an issue that links the discussion.
+- Check before pushing: `python3 -I .github/scripts/roadmap-check.py ROADMAP.md` (needs `gh`
+  logged in). Add `ROADMAP_CLOSING="N"` to check a PR that closes issue N.
 
 ## Clean room
 

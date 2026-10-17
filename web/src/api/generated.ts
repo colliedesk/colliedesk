@@ -202,7 +202,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Change up to 50 conversations at once
+         * @description All or nothing: one transaction. A conversation id that is missing or belongs to another workspace answers 404 and changes nothing; the response does not say which id. Status, assignee and tags follow the same rules as `PATCH /conversations/{id}`. Tags in `remove_tag_ids` are removed, then tags in `add_tag_ids` are added.
+         */
+        patch: operations["bulkUpdateConversations"];
         trace?: never;
     };
     "/api/v1/conversations/{id}": {
@@ -253,6 +257,11 @@ export interface paths {
         };
         get: operations["listMessages"];
         put?: never;
+        /**
+         * @description Send JSON for a text-only message, or `multipart/form-data` to attach files: fields `kind` and `body` plus repeated `files` parts, each with a filename. A message carries at most `limits.outgoing_attachments_files` files and `limits.outgoing_attachments_bytes` bytes in total (both from `GET /api/v1/config`); more answers 413 and nothing is stored. A reply emails its files as attachments; a note never leaves the workspace.
+         *
+         *     A reply may copy other people with `cc`: at most 10 plain addresses (`name@example.com`, no display name), stored lowercase without duplicates. The conversation contact stays the only `To` recipient and is dropped from `cc`; our own support, forwarding and sending addresses are refused with 400, and so is `cc` on a note. In `multipart/form-data` send one `cc` field per address, before the files. On the trial, `cc` may name only addresses the customer wrote from or copied (customer mail through the platform forwarder that did not fail authentication, or imported history) unless the sending domain is verified; another address answers 403 `trial_outbound_restricted` with `refused_cc` listing every refused address, and nothing is stored. Each reply counts its contact and every `cc` address against the trial's 200 people a day. A retry of a failed delivery sends to the same stored list. There is no Bcc.
+         */
         post: operations["createMessage"];
         delete?: never;
         options?: never;
@@ -384,6 +393,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inbox/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description What changed in the inbox after `since`: conversations created, conversations another agent assigned to the caller, and conversations that changed in any way (a new customer message, a status, assignee, priority or tag change, a reply or note). `updated` includes the caller's own changes; only `incoming_at` marks something to announce. Each list holds at most 50 items, newest first; in `updated`, conversations with a customer message in the window come first, so a bulk change cannot push a customer reply out of the list. Send the returned `now` as the next `since`. A `since` older than 10 minutes is treated as 10 minutes old; an agent who was away longer reloads the inbox. A list can repeat an item from the previous call (a short lookback covers conversations that committed late), so the client removes duplicates by id (`updated` items by `id` and `updated_at`). Without `since` the lists are empty and `now` is the first cursor. */
+        get: operations["getInboxActivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/attachments/{id}": {
         parameters: {
             query?: never;
@@ -444,6 +470,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description Every agent of the workspace, deactivated ones included (old conversations and messages still name them). Clients hide deactivated agents from assignee pickers. */
         get: operations["listAgents"];
         put?: never;
         post?: never;
@@ -451,6 +478,25 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Change an agent's role or active state; send at least one of `role` and `active`. Deactivating an agent, in one transaction: sets `deactivated_at`, revokes the agent's sessions and unused sign-in links and invites, and moves the agent's open and pending conversations to `reassign_to` (to Unassigned when it is absent). Resolved and closed conversations keep their assignee. A deactivated agent cannot sign in and holds no seat. Reactivating clears `deactivated_at`, takes a seat again and does not restore assignments; the agent signs in through a new link. Sending the state an agent already has changes nothing. */
+        patch: operations["updateAgent"];
         trace?: never;
     };
     "/api/v1/workspace/timezone": {
@@ -536,6 +582,43 @@ export interface paths {
         patch: operations["updateTag"];
         trace?: never;
     };
+    "/api/v1/saved-replies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The saved replies every agent in the workspace shares, ordered by title ignoring case. The body may hold the variables `{{customer.name}}` and `{{agent.name}}`; the web app fills them in when an agent inserts the reply. The API returns the text as stored. */
+        get: operations["listSavedReplies"];
+        put?: never;
+        /** @description Any agent may create one. The title is unique in the workspace ignoring case (409 `duplicate_title`). A workspace holds at most 500 (409 `saved_reply_limit`). */
+        post: operations["createSavedReply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/saved-replies/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteSavedReply"];
+        options?: never;
+        head?: never;
+        /** @description Change the title, the body or both. Any agent may edit a shared reply. Send back the `updated_at` you read; when the reply was saved since, nothing changes and the answer is 409 `changed_elsewhere`. A taken title is 409 `duplicate_title`. */
+        patch: operations["updateSavedReply"];
+        trace?: never;
+    };
     "/api/v1/billing": {
         parameters: {
             query?: never;
@@ -562,7 +645,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Start a hosted checkout for the signed-in workspace. The workspace is taken from the session, never from the body. A workspace that already has a paid plan gets 409; it changes or cancels its plan in the portal. */
+        /** @description Start a hosted checkout for the signed-in workspace. The workspace is taken from the session, never from the body. A workspace that already has a paid plan gets 409; it changes or cancels its plan in the portal. The `founding` plan gets 409 `founding_closed` once its slots are used up. */
         post: operations["createBillingCheckout"];
         delete?: never;
         options?: never;
@@ -598,6 +681,40 @@ export interface paths {
         put?: never;
         /** @description Receives Polar events. Authenticated by the Standard Webhooks signature (`webhook-id`, `webhook-timestamp`, `webhook-signature`), not by a session; a missing, wrong or stale signature is 401 and nothing is stored. A `subscription.*` event updates the workspace named by `customer.external_id`. Every understood event is 200 so Polar stops retrying; `status` says whether it was applied, was a redelivery, was older than the stored state, or was ignored (unknown workspace or product, other event types). Only present when billing is configured. */
         post: operations["receivePolarWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Receives Resend email events. Resend owns the envelope sender and rewrites the Message-ID, so its bounces never reach `MAIL_FROM_DOMAIN`; this webhook is how a reply sent through it shows **Delivery failed**. Authenticated by the Svix signature (`svix-id`, `svix-timestamp`, `svix-signature`), not by a session; a missing, wrong or stale signature is 401 and nothing is read. `email.bounced` (permanent) and `email.complained` fail the one reply named by the sender `reply+<token>-<reply id>@MAIL_FROM_DOMAIN` (for the older `reply+<token>@` form, only the reply whose Message-ID the relay kept) when the event names only the conversation's contact; when it names only Cc addresses of the reply, the reply stays sent and the missed copies are added to its note. Every understood event is 200 so Resend stops retrying; `status` is `applied`, `duplicate` (this `svix-id` was already applied) or `ignored` (other event types, a reply sent as a verified support address, no matching reply, the contact next to others or an address the reply was not sent to). Only present when `RESEND_WEBHOOK_SECRET` is set. */
+        post: operations["receiveResendWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/founding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description How many of the Founding slots are taken, for the marketing site. Answered from server memory, never from the billing provider on the request: `taken` is null until the server has counted once after it started. `open` is false once Founding is closed, which is one-way: the slots are used up or the product was archived. Only present when billing is configured. */
+        get: operations["getFoundingSlots"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -704,6 +821,14 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         PublicConfig: {
+            /** @description The running build: a release tag such as `v0.0.1`, `edge-<commit>` for a main build, or `dev`. */
+            version?: string;
+            limits: {
+                /** @description Most raw bytes of files one reply or note can carry in total. */
+                outgoing_attachments_bytes: number;
+                /** @description Most files one reply or note can carry. */
+                outgoing_attachments_files: number;
+            };
             cloud_sign_in: {
                 enabled: boolean;
                 publishable_key: string | null;
@@ -722,8 +847,19 @@ export interface components {
             url: string;
             expires_in_seconds: number;
         };
-        /** @enum {string} */
-        CheckoutPlan: "team_monthly" | "team_yearly" | "founding";
+        /**
+         * @description `team25_*` is refused with 400 on a server that has no Polar product for it.
+         * @enum {string}
+         */
+        CheckoutPlan: "team_monthly" | "team_yearly" | "team25_monthly" | "team25_yearly" | "founding";
+        FoundingSlots: {
+            /** @description Founding slots in total */
+            slots: number;
+            /** @description Slots held by active, trialing or past due subscriptions; null until counted */
+            taken: number | null;
+            /** @description Whether Founding can still be bought */
+            open: boolean;
+        };
         WebhookResult: {
             /** @enum {string} */
             status: "applied" | "duplicate" | "stale" | "ignored";
@@ -733,7 +869,7 @@ export interface components {
              * @description The plan in effect now. `trial` is the free trial; `none` means the trial is over and nothing is paid.
              * @enum {string}
              */
-            plan: "trial" | "team" | "founding" | "none";
+            plan: "trial" | "team" | "team25" | "founding" | "none";
             /**
              * Format: date-time
              * @description When the free trial ends or ended, whatever the plan.
@@ -758,14 +894,16 @@ export interface components {
              * @description When a complimentary plan ends; null when it has no end or the plan is not complimentary.
              */
             complimentary_until: string | null;
+            /** @description The plans this server can sell, in the order to offer them. `team25_*` appear only when both Team 25 products are configured; the web app shows a purchase button for each plan listed and for no other. `founding` is dropped once Founding is closed. */
+            checkout_plans: components["schemas"]["CheckoutPlan"][];
             limits: {
                 /** @description Seats of the plan; 0 when locked. */
                 agents: number;
-                /** @description Emailed replies allowed in any 24 hours on the trial; null on every other plan and self-hosted. */
+                /** @description People that emailed replies may reach in any 24 hours on the trial, each reply counting its contact and every Cc address; null on every other plan and self-hosted. */
                 replies_per_24h: number | null;
                 /**
                  * Format: int64
-                 * @description Attachment storage cap in bytes, 2 GiB on the trial and when locked (imported files do not count), 20 GiB on the Founding plan (imported files count); null on Team and on self-hosted, which have none.
+                 * @description Attachment storage cap in bytes: 2 GiB on the trial and when locked (imported files do not count); 20 GiB on Founding, 100 GiB on Team and 250 GiB on Team 25 (imported files count); null on self-hosted, which has none.
                  */
                 storage_bytes: number | null;
                 /**
@@ -781,7 +919,7 @@ export interface components {
                  * @description Attachment bytes counted against `limits.storage_bytes`. On the trial files of imported messages are not counted; on the Founding plan every file is, imported ones included.
                  */
                 storage_bytes: number;
-                /** @description Emailed replies of the last 24 hours that count against the trial cap of 200; 0 on other plans. */
+                /** @description People reached by the emailed replies of the last 24 hours (the contact plus every Cc address of each reply), which count against the trial cap of 200; 0 on other plans. */
                 replies_last_24h: number;
                 /** @description Unused, unrevoked, unexpired invites. Each holds an agent seat, so agents plus pending invites is compared with `limits.agents`. */
                 pending_invites: number;
@@ -817,6 +955,27 @@ export interface components {
             role: components["schemas"]["Role"];
             timezone_override: string | null;
         };
+        TeamMember: {
+            /** Format: uuid */
+            id: string;
+            /** Format: email */
+            email: string;
+            display_name: string;
+            role: components["schemas"]["Role"];
+            timezone_override: string | null;
+            /**
+             * Format: date-time
+             * @description Null for an active agent.
+             */
+            deactivated_at: string | null;
+            /**
+             * Format: date-time
+             * @description The last time a session of the agent was used; null when none ever was.
+             */
+            last_active_at: string | null;
+            /** @description Open and pending conversations assigned to the agent; a deactivation moves them. */
+            open_conversations: number;
+        };
         Redeemed: {
             token?: string;
             agent: components["schemas"]["Agent"];
@@ -831,7 +990,7 @@ export interface components {
             /** @description The trial and lock state, so every agent sees it. Null on self-hosted instances. */
             plan: null | {
                 /** @enum {string} */
-                plan: "trial" | "team" | "founding" | "none";
+                plan: "trial" | "team" | "team25" | "founding" | "none";
                 /** Format: date-time */
                 trial_ends_at: string;
                 locked: boolean;
@@ -859,6 +1018,8 @@ export interface components {
             label: string;
             /** @description The tier of an agent token; null for a person's session, which has no tier. */
             scope: null | components["schemas"]["TokenScope"];
+            /** @description True for the session that made this request, so a client can mark "this device". */
+            current: boolean;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -907,11 +1068,28 @@ export interface components {
             name: string;
             color: string;
         };
+        SavedReplyInput: {
+            title: string;
+            body: string;
+        };
+        SavedReply: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            body: string;
+            /** Format: uuid */
+            created_by_agent_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
         Conversation: {
             /** Format: uuid */
             id: string;
             /** Format: uuid */
             contact_id: string;
+            contact_name: string;
             subject: string;
             status: components["schemas"]["ConversationStatus"];
             priority: components["schemas"]["Priority"];
@@ -941,10 +1119,58 @@ export interface components {
             cc: string[];
             forwarded_to: string[];
         };
+        BulkConversationUpdate: {
+            ids: string[];
+            changes: {
+                status?: components["schemas"]["ConversationStatus"];
+                /** Format: uuid */
+                assignee_id?: string | null;
+                add_tag_ids?: string[];
+                remove_tag_ids?: string[];
+            };
+        };
+        BulkConversationUpdateResult: {
+            updated: number;
+        };
         ConversationPage: {
             items: components["schemas"]["Conversation"][];
             page: number;
             page_size: number;
+        };
+        InboxActivity: {
+            /** Format: date-time */
+            now: string;
+            new_conversations: {
+                /** Format: uuid */
+                id: string;
+                subject: string;
+                contact_name: string;
+                /** Format: date-time */
+                created_at: string;
+            }[];
+            assigned_to_me: {
+                /** Format: uuid */
+                id: string;
+                subject: string;
+                contact_name: string;
+                /** Format: date-time */
+                assigned_at: string;
+            }[];
+            updated: {
+                /** Format: uuid */
+                id: string;
+                subject: string;
+                contact_name: string;
+                /** Format: uuid */
+                assignee_id: string | null;
+                /** Format: date-time */
+                updated_at: string;
+                /**
+                 * Format: date-time
+                 * @description Time of the newest customer message inside the polled window, or null when the change was not a customer message.
+                 */
+                incoming_at: string | null;
+            }[];
         };
         Message: {
             /** Format: uuid */
@@ -965,6 +1191,8 @@ export interface components {
             /** @description Where an imported message came from; null for messages written in Colliedesk. */
             origin: null | components["schemas"]["MessageOrigin"];
             attachments: components["schemas"]["Attachment"][];
+            /** @description Addresses an outgoing reply was copied to; empty for every other message. */
+            cc: components["schemas"]["CopiedAddresses"];
             /** Format: date-time */
             created_at: string;
             /** @description Email delivery of an outgoing reply; null when the reply was not emailed. */
@@ -981,6 +1209,8 @@ export interface components {
             /** @description Display name, or the email when there is none, of the agent the token acts as */
             agent_name: string;
         };
+        /** @description Plain email addresses copied on a reply, lowercase, without duplicates. */
+        CopiedAddresses: string[];
         MessageOrigin: {
             system: string;
             external_id: string;
@@ -1025,6 +1255,7 @@ export interface components {
         MessageDelivery: {
             status: components["schemas"]["DeliveryStatus"];
             attempts: number;
+            /** @description Why a failed or retried delivery did not go out. On a sent reply, names the copied (Cc) addresses it did not reach: refused by the relay or bounced later. A copy that misses never fails the reply to the contact. */
             last_error: string | null;
             /** Format: date-time */
             sent_at: string | null;
@@ -1042,6 +1273,8 @@ export interface components {
              * @enum {string}
              */
             via?: "platform" | "workspace" | "web_form";
+            /** @description Other addresses on the Cc line of the email (not the sender, not our own addresses), as the reply box offers them to copy. Absent on mail stored before Cc was kept. */
+            cc?: string[];
             /**
              * Format: uuid
              * @description Attachment holding the complete raw message, gzip-compressed (original-message.eml.gz). Null for mail received before raw messages were kept.
@@ -1120,6 +1353,8 @@ export interface components {
                 };
                 /** @description Only on trial_outbound_limit: seconds until a reply can be sent. */
                 retry_after_seconds?: number;
+                /** @description Only on trial_outbound_restricted caused by Cc: exactly the addresses the trial refused to copy. */
+                refused_cc?: string[];
             };
         };
     };
@@ -1197,6 +1432,15 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description More files than allowed or more bytes than allowed in total for one message; nothing was stored */
+        AttachmentsTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description Message larger than 25 MiB or with more than 100 attachments; nothing was stored */
         PayloadTooLarge: {
             headers: {
@@ -1261,7 +1505,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description A trial workspace already sent 200 replies in the last 24 hours (error code `trial_outbound_limit`, with `retry_after_seconds` and a `Retry-After` header: the time until the oldest counted reply leaves the window). Nothing was stored. Paid plans have no such limit. */
+        /** @description Sending this reply would take a trial workspace past 200 people emailed in the last 24 hours, where each reply counts its contact and every Cc address (error code `trial_outbound_limit`, with `retry_after_seconds` and a `Retry-After` header: the time until enough counted replies leave the window). Nothing was stored. Paid plans have no such limit. */
         TrialOutboundLimit: {
             headers: {
                 "Retry-After"?: number;
@@ -1307,7 +1551,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Permission or CSRF check failed. An agent token outside its tier gets error code `scope_insufficient`; the message names the tier the action needs. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain); nothing was stored. */
+        /** @description Permission or CSRF check failed. An agent token outside its tier gets error code `scope_insufficient`; the message names the tier the action needs. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them); nothing was stored. */
         Error403: {
             headers: {
                 [name: string]: unknown;
@@ -1366,6 +1610,8 @@ export interface operations {
             content: {
                 "application/json": {
                     workspace_slug?: string;
+                    /** @description Names the device in the session list, usually the browser user agent. Defaults to "Cloud sign-in". */
+                    label?: string;
                 };
             };
         };
@@ -1640,6 +1886,15 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["PlanLimitReached"];
             403: components["responses"]["Forbidden"];
+            /** @description The address belongs to a deactivated agent (error code `agent_deactivated`). Reactivate the agent in the team list instead of inviting them again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     revokeInvite: {
@@ -1714,6 +1969,35 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    bulkUpdateConversations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkConversationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Number of conversations changed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkConversationUpdateResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     getConversation: {
@@ -1838,6 +2122,15 @@ export interface operations {
                     kind: "outgoing" | "note";
                     /** @description Markdown source */
                     body: string;
+                    cc?: components["schemas"]["CopiedAddresses"];
+                };
+                "multipart/form-data": {
+                    /** @enum {string} */
+                    kind: "outgoing" | "note";
+                    /** @description Markdown source */
+                    body: string;
+                    cc?: components["schemas"]["CopiedAddresses"];
+                    files?: string[];
                 };
             };
         };
@@ -1856,7 +2149,17 @@ export interface operations {
             402: components["responses"]["WorkspaceLocked"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            413: components["responses"]["AttachmentsTooLarge"];
             429: components["responses"]["TrialOutboundLimit"];
+            /** @description The attachments volume is low on disk space; nothing was sent or stored */
+            507: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     retryMessageDelivery: {
@@ -2076,6 +2379,30 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    getInboxActivity: {
+        parameters: {
+            query?: {
+                since?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Inbox activity after the cursor */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboxActivity"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
     downloadAttachment: {
         parameters: {
             query?: never;
@@ -2199,18 +2526,66 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Workspace agents */
+            /** @description Workspace team */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        items: components["schemas"]["Agent"][];
+                        items: components["schemas"]["TeamMember"][];
                     };
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    updateAgent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    role?: components["schemas"]["Role"];
+                    active?: boolean;
+                    /**
+                     * Format: uuid
+                     * @description Only with `active: false`. An active agent of this workspace other than the one being deactivated; an invalid target is `invalid_reassign_target` and nothing changes.
+                     */
+                    reassign_to?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description The agent after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamMember"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PlanLimitReached"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The change would leave the workspace without an active admin (error code `last_admin`). Make another agent an admin first. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     updateWorkspaceTimezone: {
@@ -2411,6 +2786,116 @@ export interface operations {
             404: components["responses"]["NotFound"];
         };
     };
+    listSavedReplies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Workspace saved replies */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["SavedReply"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createSavedReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedReplyInput"];
+            };
+        };
+        responses: {
+            /** @description Created saved reply */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedReply"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    deleteSavedReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved reply deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateSavedReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    updated_at: string;
+                    title?: string;
+                    body?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Updated saved reply */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedReply"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     getBilling: {
         parameters: {
             query?: never;
@@ -2503,6 +2988,59 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    receiveResendWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Event understood */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getFoundingSlots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Founding slot state */
+            200: {
+                headers: {
+                    /** @description `public, max-age=60` */
+                    "Cache-Control"?: string;
+                    /** @description The marketing site origin */
+                    "Access-Control-Allow-Origin"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoundingSlots"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     exportWorkspace: {

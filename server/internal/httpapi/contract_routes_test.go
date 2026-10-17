@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
@@ -21,6 +22,9 @@ func contractRequest(t *testing.T, method string, item contractCase, token, secr
 	t.Helper()
 	if item.path == webhookPath {
 		return signedWebhookRequest("msg_contract_"+method, []byte(item.raw))
+	}
+	if item.path == resendWebhookPath {
+		return signedResendRequest("msg_contract_"+method, []byte(item.raw))
 	}
 	if item.raw != "" {
 		return inboundRequest(t, item.raw, secret)
@@ -137,6 +141,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"DELETE /api/v1/auth/invites/{id}":                           {"/api/v1/auth/invites/" + f.inviteID, nil, admin, 204, ""},
 		"GET /api/v1/conversations":                                  {"/api/v1/conversations", nil, admin, 200, ""},
 		"POST /api/v1/conversations":                                 {"/api/v1/conversations", map[string]any{"contact_id": f.contactID, "subject": "Created by contract test"}, admin, 201, ""},
+		"PATCH /api/v1/conversations":                                {"/api/v1/conversations", map[string]any{"ids": []string{f.conversationID}, "changes": map[string]any{"status": "open"}}, admin, 200, ""},
 		"GET /api/v1/conversations/{id}":                             {"/api/v1/conversations/" + f.conversationID, nil, admin, 200, ""},
 		"PATCH /api/v1/conversations/{id}":                           {"/api/v1/conversations/" + f.conversationID, map[string]any{"priority": "high"}, admin, 200, ""},
 		"PUT /api/v1/conversations/{id}/tags/{tagId}":                {"/api/v1/conversations/" + f.conversationID + "/tags/" + f.updateTagID, nil, admin, 200, ""},
@@ -150,10 +155,15 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"PATCH /api/v1/workspace/timezone":                           {"/api/v1/workspace/timezone", map[string]any{"timezone": "UTC"}, admin, 200, ""},
 		"PATCH /api/v1/workspace/slug":                               {"/api/v1/workspace/slug", map[string]any{"slug": "contract-desk"}, admin, 200, ""},
 		"PATCH /api/v1/agents/me/timezone":                           {"/api/v1/agents/me/timezone", map[string]any{"timezone": "UTC"}, admin, 200, ""},
+		"PATCH /api/v1/agents/{id}":                                  {"/api/v1/agents/" + f.agentID, map[string]any{"role": "agent"}, admin, 200, ""},
 		"GET /api/v1/tags":                                           {"/api/v1/tags", nil, admin, 200, ""},
 		"POST /api/v1/tags":                                          {"/api/v1/tags", map[string]any{"name": "Created contract tag"}, admin, 201, ""},
 		"PATCH /api/v1/tags/{id}":                                    {"/api/v1/tags/" + f.updateTagID, map[string]any{"name": "Updated contract tag"}, admin, 200, ""},
 		"DELETE /api/v1/tags/{id}":                                   {"/api/v1/tags/" + f.deleteTagID, nil, admin, 204, ""},
+		"GET /api/v1/saved-replies":                                  {"/api/v1/saved-replies", nil, admin, 200, ""},
+		"POST /api/v1/saved-replies":                                 {"/api/v1/saved-replies", map[string]any{"title": "Created contract reply", "body": "Thanks"}, admin, 201, ""},
+		"PATCH /api/v1/saved-replies/{id}":                           {"/api/v1/saved-replies/" + f.updateReplyID, map[string]any{"body": "Updated", "updated_at": f.updateReplySeen}, admin, 200, ""},
+		"DELETE /api/v1/saved-replies/{id}":                          {"/api/v1/saved-replies/" + f.deleteReplyID, nil, admin, 204, ""},
 		"POST /api/v1/conversations/{id}/messages/{messageId}/retry": {path: "/api/v1/conversations/" + f.conversationID + "/messages/" + f.failedReplyID + "/retry", token: admin, status: 200},
 		"GET /api/v1/channels/email":                                 {path: "/api/v1/channels/email", token: admin, status: 200},
 		"PUT /api/v1/channels/email":                                 {path: "/api/v1/channels/email", body: map[string]any{"support_address": "support@contract-all.example.com"}, token: admin, status: 200},
@@ -169,7 +179,10 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/billing/checkout":                 {path: "/api/v1/billing/checkout", body: map[string]any{"plan": "team_monthly"}, token: admin, status: 200},
 		"POST /api/v1/billing/portal":                   {path: "/api/v1/billing/portal", token: f.portalToken, status: 200},
 		"POST " + webhookPath:                           {path: webhookPath, raw: f.webhookBody, status: 200},
+		"POST " + resendWebhookPath:                     {path: resendWebhookPath, raw: string(resendEvent("email.delivered", "Desk <support@contract-all.example.com>", []string{"contact@contract-all.example.com"}, "", time.Now())), status: 200},
+		"GET /api/v1/founding":                          {path: "/api/v1/founding", status: 200},
 		"GET /api/v1/conversations/{id}/time-entries":   {path: "/api/v1/conversations/" + f.conversationID + "/time-entries", token: admin, status: 200},
+		"GET /api/v1/inbox/activity":                    {path: "/api/v1/inbox/activity?since=2026-01-01T00:00:00Z", token: admin, status: 200},
 		"GET /api/v1/attachments/{id}":                  {path: "/api/v1/attachments/" + f.attachmentID, token: admin, status: 200},
 		"GET /api/v1/export":                            {path: "/api/v1/export", token: admin, status: 200},
 		"POST /api/v1/export/link":                      {path: "/api/v1/export/link", token: admin, status: 201},

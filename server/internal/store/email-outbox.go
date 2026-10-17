@@ -27,6 +27,14 @@ type Delivery struct {
 	EmailMessageID, ReplyToken       string
 	InReplyTo                        string
 	References                       []string
+	// CC is the list stored with the reply; a retry sends to the same addresses.
+	CC    []string
+	Files []DeliveryFile
+}
+
+// DeliveryFile is a file attached to the reply, kept in attachment storage under StorageKey.
+type DeliveryFile struct {
+	Filename, ContentType, StorageKey, SHA256 string
 }
 
 // ClaimDueDeliveries leases due rows, counts the attempt and stamps a claim token that every finish
@@ -77,14 +85,14 @@ func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
 	var conversationID string
 	var createdAt time.Time
 	err := tx.QueryRow(ctx, `SELECT w.name,COALESCE(ch.support_address,''),COALESCE(ch.domain_verified_at IS NOT NULL,false),
-			ct.name,ct.email,c.subject,m.body,COALESCE(m.email_message_id,''),COALESCE(c.email_reply_token,''),c.id::text,m.created_at
+			ct.name,ct.email,c.subject,m.body,COALESCE(m.email_message_id,''),COALESCE(c.email_reply_token,''),c.id::text,m.created_at,m.cc
 		FROM messages m JOIN conversations c ON c.workspace_id=m.workspace_id AND c.id=m.conversation_id
 		JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
 		JOIN workspaces w ON w.id=m.workspace_id
 		LEFT JOIN email_channels ch ON ch.workspace_id=m.workspace_id
 		WHERE m.workspace_id=$1 AND m.id=$2`, item.WorkspaceID, item.MessageID).
 		Scan(&item.WorkspaceName, &item.SupportAddress, &item.DomainVerified, &item.ContactName, &item.ContactEmail, &item.Subject, &item.Body,
-			&item.EmailMessageID, &item.ReplyToken, &conversationID, &createdAt)
+			&item.EmailMessageID, &item.ReplyToken, &conversationID, &createdAt, &item.CC)
 	if err != nil {
 		return fmt.Errorf("load delivery %s: %w", item.OutboxID, err)
 	}
@@ -117,6 +125,19 @@ func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
 	if len(item.References) > maxReplyReferences {
 		item.References = item.References[len(item.References)-maxReplyReferences:]
 	}
+	fileRows, err := tx.Query(ctx, `SELECT filename,content_type,storage_key,sha256 FROM attachments
+		WHERE workspace_id=$1 AND message_id=$2 ORDER BY created_at,id`, item.WorkspaceID, item.MessageID)
+	if err != nil {
+		return fmt.Errorf("load reply files: %w", err)
+	}
+	item.Files, err = pgx.CollectRows(fileRows, func(row pgx.CollectableRow) (DeliveryFile, error) {
+		var file DeliveryFile
+		err := row.Scan(&file.Filename, &file.ContentType, &file.StorageKey, &file.SHA256)
+		return file, err
+	})
+	if err != nil {
+		return fmt.Errorf("scan reply files: %w", err)
+	}
 	return nil
 }
 
@@ -134,9 +155,10 @@ func (s *Store) CountSentSince(ctx context.Context, workspaceID string, since ti
 	return count, nil
 }
 
-// MarkDeliverySent records a successful hand-off to the SMTP relay.
-func (s *Store) MarkDeliverySent(ctx context.Context, item Delivery, sentAt time.Time) error {
-	return s.finishDelivery(ctx, item, `status='sent',sent_at=$4,last_error=NULL`, sentAt)
+// MarkDeliverySent records a successful hand-off to the SMTP relay. note, kept as the delivery's
+// last error, names copied addresses the reply did not reach; empty when it reached everyone.
+func (s *Store) MarkDeliverySent(ctx context.Context, item Delivery, sentAt time.Time, note string) error {
+	return s.finishDelivery(ctx, item, `status='sent',sent_at=$4,last_error=NULLIF($5,'')`, sentAt, note)
 }
 
 // MarkDeliveryRetry keeps the row queued and schedules the next attempt.

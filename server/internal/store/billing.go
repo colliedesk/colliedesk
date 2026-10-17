@@ -72,6 +72,20 @@ func (s *Store) ApplySubscription(ctx context.Context, workspaceID, webhookID, e
 	return result, nil
 }
 
+// HasBeenActivated reports whether the workspace ever received a subscription.active webhook, that
+// is, whether it already became a paying customer once. billing_webhook_events is never pruned.
+func (s *Store) HasBeenActivated(ctx context.Context, workspaceID string) (bool, error) {
+	activated, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
+		var activated bool
+		err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM billing_webhook_events WHERE workspace_id=$1 AND event_type='subscription.active')`, workspaceID).Scan(&activated)
+		return activated, err
+	})
+	if err != nil {
+		return false, fmt.Errorf("read activation: %w", err)
+	}
+	return activated, nil
+}
+
 // LoadSubscriptions reads every subscription of the workspace inside tx, in one statement: the Polar
 // rows, plus the complimentary plan in force, which counts as a paid subscription that no payment
 // backs (see compSubscriptionColumns).
@@ -95,7 +109,7 @@ func (s *Store) GetBilling(ctx context.Context, workspaceID string, now time.Tim
 		var trialEndsAt time.Time
 		var storedBytes int64
 		err = tx.QueryRow(ctx, `SELECT
-			(SELECT count(*) FROM agents WHERE workspace_id=$1),
+			(SELECT count(*) FROM agents WHERE workspace_id=$1 AND deactivated_at IS NULL),
 			(`+pendingSeatEmails+`),
 			(SELECT trial_ends_at FROM workspaces WHERE id=$1),
 			(`+ownStorageBytes+`),

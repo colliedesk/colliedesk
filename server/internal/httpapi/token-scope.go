@@ -16,15 +16,19 @@ const gatedByHandler = "handler"
 // stays out of their reach until someone classifies it on purpose.
 //
 // read: what triage needs to look at (conversations, messages, contacts, tags, the team list).
-// draft: changes that never reach a customer (status, priority, assignee, tags on a conversation,
-// creating a tag, private notes). send: everything else an agent may do, such as replying and creating
+// draft: changes that never reach a customer (status, priority, assignee, tags on one conversation or
+// many at once, creating a tag, private notes). send: everything else an agent may do, such as replying and creating
 // contacts and conversations. Closed on purpose: sessions, tokens and invites (including listing
-// them), and every workspace, channel, billing and export setting. Posting a message is gated by the
+// them), changing a teammate, writing saved replies (text a person later sends to customers), and
+// every workspace, channel, billing and export setting. Posting a message is gated by the
 // handler: a note needs draft, an outgoing reply needs send.
 var tokenTiers = map[string]string{
 	"POST /api/v1/auth/logout":                                   auth.ScopeRead,
 	"GET /api/v1/auth/me":                                        auth.ScopeRead,
 	"GET /api/v1/conversations":                                  auth.ScopeRead,
+	"PATCH /api/v1/conversations":                                auth.ScopeDraft,
+	"GET /api/v1/inbox/activity":                                 auth.ScopeRead,
+	"GET /api/v1/saved-replies":                                  auth.ScopeRead,
 	"POST /api/v1/conversations":                                 auth.ScopeSend,
 	"GET /api/v1/conversations/{id}":                             auth.ScopeRead,
 	"PATCH /api/v1/conversations/{id}":                           auth.ScopeDraft,

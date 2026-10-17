@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-const attributionMigration = "20261015112018-message-agent-token-attribution.up.sql"
+const attributionMigration = "20261017020422-message-agent-token-attribution.up.sql"
 
 func TestMessageAttributionMigrationKeepsMessagesAndBindsTokensToTheirWorkspace(t *testing.T) {
 	pool := testPool(t)

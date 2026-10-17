@@ -7,8 +7,9 @@ Flat price, no per-agent fees.
 Think of Colliedesk as the sheepdog for your support queue: the AI herds every ticket home,
 your team stays in charge.
 
-**Status:** pre-alpha (v0.1). The interface and database schema may change before the first
-stable release. See the [roadmap](ROADMAP.md).
+**Status:** alpha (0.0.x). The interface and database schema may change in any release; every
+release ships the migrations to upgrade, and export always works. See the [roadmap](ROADMAP.md)
+and [versioning](#versioning).
 
 ## "Wait, what are you selling me?"
 
@@ -55,6 +56,20 @@ User guides: [docs/user](docs/user/README.md). They are also published at [colli
 `make dev` runs the server and web app. `make test` needs PostgreSQL at the default test URL or
 `TEST_DATABASE_URL`. Read [AGENTS.md](AGENTS.md) before changing code, whether you are a person
 or a coding agent.
+
+## Versioning
+
+Colliedesk uses [Semantic Versioning](https://semver.org). While it is alpha, releases are
+`0.0.x`: any release may change the interface or the database schema. Beta starts at `0.1.0`,
+when HC Labs announces it. Merging to `main` does not make a release: HC Labs cuts one by hand,
+from the build that already runs on Colliedesk Cloud. Changes per release are on the
+[releases page](https://github.com/colliedesk/colliedesk/releases).
+
+Container image tags:
+
+- `latest`: the newest release. The installer uses it by default.
+- `0.0.x`: one exact release, if you want to pin.
+- `edge`: the newest `main` commit that passed CI. Newer, less tested.
 
 ## License
 

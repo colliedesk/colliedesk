@@ -48,9 +48,10 @@ not match its recorded checksum, it aborts the download. You then get a broken Z
 | Path | Content |
 |---|---|
 | `manifest.json` | Format, version, export time (UTC), workspace, record counts, and every attachment file with its size and SHA-256 |
-| `agents.ndjson` | One agent per line: `id`, `email`, `display_name`, `role`, `timezone_override`, `created_at` |
+| `agents.ndjson` | One agent per line: `id`, `email`, `display_name`, `role`, `timezone_override`, `created_at`, `deactivated_at` (`null` for an active agent) |
 | `contacts.ndjson` | One contact per line: `id`, `name`, `email`, `organization`, `created_at`, `updated_at` |
 | `tags.ndjson` | One tag per line: `id`, `name`, `color`, `created_at` |
+| `saved-replies.ndjson` | One saved reply per line: `id`, `title`, `body`, `created_by_agent_id` (an agent id or `null`), `created_at`, `updated_at`. The body keeps the variables `{{customer.name}}` and `{{agent.name}}` unfilled |
 | `conversations.ndjson` | One conversation per line, with its messages and time entries |
 | `attachments/<attachment id>/<file name>` | The original bytes of each attachment |
 
@@ -62,10 +63,10 @@ A conversation line has `id`, `contact_id`, `subject`, `status`, `priority`, `as
 
 Each message has `id`, `conversation_id`, `author_agent_id`, `author_name`, `kind`
 (`incoming`, `outgoing` or `note`), `body`, `body_html`, `origin`, `email_message_id`,
-`email_meta` (the sender, authentication result, `via` and attachment names of a received message;
-`via` is `platform` or `workspace` for email and `web_form` for text typed into the web form, whose
-sender address is unverified and whose `authentication` is `none`),
-`created_at` and `attachments`. Each attachment entry has `id`, `filename`, `content_type`,
+`email_meta` (the sender, authentication result, `via`, Cc addresses and attachment names of a
+received message; `via` is `platform` or `workspace` for email and `web_form` for text typed into
+the web form, whose sender address is unverified and whose `authentication` is `none`), `cc` (the
+addresses a reply was copied to, or `null`), `created_at` and `attachments`. Each attachment entry has `id`, `filename`, `content_type`,
 `size`, `sha256`, `created_at` and `path`, the file's location in the ZIP.
 
 Each time entry has `id`, `conversation_id`, `agent_id`, `agent_name`, `minutes`, `note`,

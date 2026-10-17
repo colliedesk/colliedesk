@@ -18,6 +18,9 @@ type Agent struct {
 	Role             string    `json:"role"`
 	TimezoneOverride *string   `json:"timezone_override"`
 	CreatedAt        time.Time `json:"created_at"`
+	// DeactivatedAt is null for an active agent. A deactivated agent stays in the archive because
+	// conversations and messages still name it.
+	DeactivatedAt *time.Time `json:"deactivated_at"`
 }
 
 type Contact struct {
@@ -34,6 +37,16 @@ type Tag struct {
 	Name      string    `json:"name"`
 	Color     string    `json:"color"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+// SavedReply is a reply the team shares; its body may hold the variables {{customer.name}} and {{agent.name}}.
+type SavedReply struct {
+	ID               string    `json:"id"`
+	Title            string    `json:"title"`
+	Body             string    `json:"body"`
+	CreatedByAgentID *string   `json:"created_by_agent_id"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // Attachment describes one file. Path is its location in the archive; StorageKey is where the
@@ -60,8 +73,10 @@ type Message struct {
 	Origin         *domain.MessageOrigin `json:"origin"`
 	EmailMessageID *string               `json:"email_message_id"`
 	EmailMeta      json.RawMessage       `json:"email_meta"`
-	CreatedAt      time.Time             `json:"created_at"`
-	Attachments    []Attachment          `json:"attachments"`
+	// CC is the list a reply was copied to; null when it copied no one.
+	CC          []string     `json:"cc"`
+	CreatedAt   time.Time    `json:"created_at"`
+	Attachments []Attachment `json:"attachments"`
 }
 
 // ConversationHead holds the fields of a conversation line that precede its messages.
@@ -86,13 +101,14 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// Tag*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// Tag*, SavedReply*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
 	Agent(Agent) error
 	Contact(Contact) error
 	Tag(Tag) error
+	SavedReply(SavedReply) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error
 	EndConversation(timeEntries []domain.TimeEntry) error

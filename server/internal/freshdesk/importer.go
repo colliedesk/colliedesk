@@ -24,26 +24,28 @@ type ticketRef struct {
 }
 
 type run struct {
-	opts          Options
-	db            *database.DB
-	client        *client
-	ledger        ledger
-	workspaceID   string
-	agents        map[int64]fdAgent
-	agentTargets  map[int64]string
-	companies     map[int64]string
-	usedCompanies map[int64]bool
-	contactNames  map[int64]string
-	contactIDs    []string
-	refs          []ticketRef
-	deleted       []string
-	trashed       []string
-	spam          []string
-	absent        int
-	unresolved    []string
-	archived      int
-	warnings      []*Warning
-	internalErr   error
+	opts         Options
+	db           *database.DB
+	client       *client
+	ledger       ledger
+	workspaceID  string
+	agents       map[int64]fdAgent
+	agentTargets map[int64]string
+	// deactivatedAgents are the Freshdesk agents matched to a deactivated Colliedesk agent.
+	deactivatedAgents map[int64]bool
+	companies         map[int64]string
+	usedCompanies     map[int64]bool
+	contactNames      map[int64]string
+	contactIDs        []string
+	refs              []ticketRef
+	deleted           []string
+	trashed           []string
+	spam              []string
+	absent            int
+	unresolved        []string
+	archived          int
+	warnings          []*Warning
+	internalErr       error
 
 	listedContacts     int
 	probeAhead         int
@@ -55,6 +57,17 @@ type run struct {
 	archiveUnavailable atomic.Bool
 	verification       Verifications
 	progress           *progress
+
+	cannedFolders      int
+	cannedIDs          []string
+	cannedEmpty        []string
+	cannedPersonal     []string
+	cannedListError    string
+	cannedUnavailable  bool
+	cannedWithFiles    []string
+	cannedAttachments  int
+	cannedUnreadable   []string
+	cannedPlaceholders map[string][]string
 }
 
 // Run imports (or, with DryRun, only counts) a Freshdesk account. Item-level
@@ -76,7 +89,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 			return nil, err
 		}
 		defer release()
-		if err := r.guardFoundingStorage(ctx); err != nil {
+		if err := r.guardStorage(ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -84,7 +97,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 		name string
 		run  func(context.Context) error
 	}
-	steps := []step{{"loading agents", r.loadAgents}, {"loading companies", r.loadCompanies}, {"importing contacts", r.importContacts},
+	steps := []step{{"loading agents", r.loadAgents}, {"loading companies", r.loadCompanies}, {"importing contacts", r.importContacts}, {"importing saved replies", r.importSavedReplies},
 		{"listing tickets", r.listTickets}, {"checking ticket ids", r.classifyTickets}, {"verifying totals", r.verifyTotals}}
 	if !options.DryRun {
 		steps = append(steps, step{"importing tickets", r.importTickets})
@@ -153,8 +166,8 @@ func newRun(ctx context.Context, db *database.DB, options Options) (*run, error)
 		opts: options, db: db, workspaceID: workspaceID, progress: progress,
 		client: httpClient,
 		ledger: ledger{db: db, workspaceID: workspaceID}, probeAhead: probeAhead(options.hooks),
-		agents: map[int64]fdAgent{}, agentTargets: map[int64]string{}, companies: map[int64]string{},
-		usedCompanies: map[int64]bool{}, contactNames: map[int64]string{},
+		agents: map[int64]fdAgent{}, agentTargets: map[int64]string{}, deactivatedAgents: map[int64]bool{}, companies: map[int64]string{},
+		usedCompanies: map[int64]bool{}, contactNames: map[int64]string{}, cannedPlaceholders: map[string][]string{},
 	}, nil
 }
 

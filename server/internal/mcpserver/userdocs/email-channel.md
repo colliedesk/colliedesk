@@ -17,7 +17,8 @@ change where your mailbox forwards:
 
 1. Open **Settings → Email channel** and enter your **Support address**, for example
    `support@example.com`. Select **Save support address**. A workspace created another way accepts
-   mail only after this step.
+   mail only after this step. The button reads "Saving…" until the save ends, then "Saved" appears
+   next to it.
 2. Copy the **Forwarding address** (select **Copy forwarding address**).
 3. In your mailbox, forward all mail for the support address to the forwarding address:
    - **Gmail:** Settings → See all settings → Forwarding and POP/IMAP → Add a forwarding address.
@@ -196,8 +197,9 @@ The secret is passed in a private header file, never on the command line.
 
 Workspaces without a verified domain send from `reply+<token>@<MAIL_FROM_DOMAIN>`. Most customers
 reply to the support address (it is in `Reply-To`), but some mail clients reply to the From
-address, and bounces always go to it. The server operator routes that domain once for all
-workspaces:
+address. A bounce goes to it only when your relay keeps that address as the envelope sender; relays
+that own the envelope sender (Resend, Amazon SES) send bounces to themselves instead. The server
+operator routes the domain once for all workspaces:
 
 1. Point the MX records of `MAIL_FROM_DOMAIN` at a forwarder, for example Cloudflare Email Routing
    with a catch-all rule to a Worker.
@@ -206,14 +208,45 @@ workspaces:
    Keep the `X-Original-To` line: it carries the `reply+<token>` address.
 
 Colliedesk finds the conversation from the token and files the message in its workspace, like any
-reply. A bounce marks the reply **Delivery failed**. Mail for an unknown token is answered `200`
-with status `dropped` and reason `unknown_recipient`; the Worker forwards nothing for it.
+reply. A bounce that reaches this address marks the reply **Delivery failed**. Mail for an unknown
+token is answered `200` with status `dropped` and reason `unknown_recipient`; the Worker forwards
+nothing for it.
+
+On the hosted cloud, `MAIL_FROM_DOMAIN` may sit below `HOSTED_MAIL_DOMAIN`, for example
+`mail.colliedesk.com`. A recipient at `MAIL_FROM_DOMAIN` is always a reply address, never a workspace
+slug. The server refuses to start when that name is below the hosted domain and is not a reserved
+label such as `mail`, because a workspace could then own it. Give `MAIL_FROM_DOMAIN` its own MX
+record: a wildcard MX does not cover a name that has other records below it.
+
+### Bounces through Resend
+
+Resend keeps bounces and complaints and reports them by webhook instead. To show them as
+**Delivery failed**:
+
+1. In Resend, add a webhook to `https://<your server>/api/v1/webhooks/resend` for the events
+   `email.bounced` and `email.complained`.
+2. Set `RESEND_WEBHOOK_SECRET` on the server to the webhook's signing secret (`whsec_...`).
+   It needs `MAIL_FROM_DOMAIN`. Without the secret the endpoint does not exist.
+
+A bounce or a spam complaint marks the reply it is about **Delivery failed**, with the reason.
+Each reply is sent from its own address, `reply+<token>-<reply id>@MAIL_FROM_DOMAIN`, so the event
+names exactly one reply; a customer who answers that address still reaches the conversation. Limits:
+
+- Only replies sent from the platform domain are matched. A reply sent as a verified support address
+  is not, because that address does not name a conversation. Replies sent before each reply had its
+  own address are matched only when Resend kept the Message-ID.
+- A bounce for the contact fails the reply. A bounce for Cc addresses only never fails it: the reply
+  stays sent and the missed copies are named under it. An event that names the contact next to
+  others, or an address the reply was not sent to, changes nothing and is logged for the operator.
+- A temporary bounce or an `email.delivery_delayed` event changes nothing; the relay keeps trying.
+- Resend sends an event again until it gets an answer; a repeated event changes nothing.
 
 ## What you see in the inbox
 
 - Incoming messages show the sender address and are shown as plain text: no remote images load,
   and only web addresses written in the text become links.
-- Attachments are listed under the message; select a file name to download it. **Show original**
+- Attachments are listed under the message, including the files you sent with a reply; select a
+  file name to download it. **Show original**
   opens the HTML version in a locked frame; inline images in it come from the stored message,
   never from the internet. **Download original email** gives the complete message as received
   (`.eml.gz`), so nothing is lost even if a part could not be shown.
@@ -235,12 +268,53 @@ A customer reply joins the conversation when any of these match, in this order:
 Otherwise the message starts a new conversation. A reply to a **Resolved** or **Closed**
 conversation reopens it.
 
-A message from someone other than the conversation contact (for example a colleague in Cc) also
-joins the thread, with their address shown on the message. Your replies still go only to the
-conversation contact.
+A message from someone other than the conversation contact (for example a colleague in Cc, who
+answers with reply-all) also joins the thread, with their address shown on the message. That person
+does not become the contact of the conversation.
+
+## Copy other people on a reply (Cc)
+
+When a customer writes with colleagues in Cc, copy them on your reply so the thread does not split
+on their side.
+
+- Under the message box, select **Cc** to add addresses. Type or paste an address and press Enter,
+  comma, semicolon or space. Select the **x** on an address to remove it, or press Backspace in the
+  empty box to remove the last one. While the box holds text that is not a valid address, **Send**
+  stays off: fix the address or clear it.
+- The box opens with the people the customer copied on their latest message (and a copied colleague
+  who answered with reply-all). Remove any of them before you send. Mail received before Colliedesk
+  kept Cc lines offers nothing, and so does mail whose sender did not pass verification: anyone can
+  write a Cc line, so you add those people yourself if you mean to.
+- The reply goes to the conversation contact in **To** and to every Cc address. There is no Bcc.
+  The timeline shows **Cc: …** under the reply, and under customer mail that copied someone.
+- At most 10 addresses per reply. Plain addresses only (`name@example.com`, no display names). You
+  cannot copy your own support address (also in its `support+…@` form), the forwarding address or
+  the platform sending domain.
+- Private notes cannot be copied: they never leave your team.
+- **Retry delivery** sends to the same Cc list again.
+- A copied address that does not exist never stops the reply to the customer. The reply shows
+  **Sent**, with a line naming each copied address it did not reach, whether the mail system
+  refused it at once or bounced it later.
+- During the **trial**, as long as the sending domain is not verified, you can copy only addresses
+  the customer already wrote from or copied. Any other address is refused, the message names each
+  refused address, your text stays in the composer, and nothing is stored. Verify the domain or choose a plan to lift
+  it. The daily trial limit counts people, not replies: a reply to the customer with two people in Cc
+  counts 3 of the 200.
+- A copied person who answers with reply-all joins the same conversation.
+
+Through the API, send `cc` (a list of addresses) with `kind: "outgoing"`; in a multipart request
+send one `cc` field per address before the files. See `createMessage` in `contracts/openapi.yaml`.
 
 ## Limits
 
+- A reply carries at most 10 attachments and 10 MiB of files in total (the raw size, before email
+  encoding). The limit is also in `GET /api/v1/config` as `limits.outgoing_attachments_bytes` and
+  `limits.outgoing_attachments_files`. More answers `413` with the reason, and nothing is stored
+  or sent. Make sure your mail relay accepts a message of about 14 MiB; email encoding adds a third.
+  Some recipient servers cap incoming mail at about 10 MB, so a large reply can bounce; it then shows
+  **Delivery failed** with **Retry delivery**.
+- If a stored file is gone when the reply is sent, the reply shows **Delivery failed** and names the
+  file. Colliedesk never sends the reply without it.
 - A message may be up to 25 MiB with at most 100 attachments. Larger mail gets `413` and nothing
   is stored; the forwarder should keep a copy for a person.
 - If attachment storage fails, the forwarder gets `500` and nothing is stored; it retries.

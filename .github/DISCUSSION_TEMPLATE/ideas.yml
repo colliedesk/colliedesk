@@ -1,7 +1,9 @@
-name: Feature request
-description: Something your support team needs that Colliedesk does not do yet.
-labels: [enhancement]
+title: "[Idea] "
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Upvote existing ideas instead of posting a duplicate: upvotes are how we see what many teams need.
   - type: textarea
     id: problem
     attributes:

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { Billing, CheckoutPlan } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
-import { planOptions } from '../settings/plan-options';
+import { PlanPicker } from '../settings/plan-picker';
 
 interface LockedScreenProps {
   isAdmin: boolean;
@@ -11,6 +11,8 @@ interface LockedScreenProps {
   billing?: Billing;
   timezone: string;
   checkoutFailed?: boolean;
+  // checkoutBusy is true while a checkout is starting or open; the plan buttons wait for it.
+  checkoutBusy?: boolean;
   signOutFailed?: boolean;
   exportAction?: ReactNode;
   onCheckout: (plan: CheckoutPlan) => void;
@@ -26,7 +28,7 @@ function heading(billing?: Billing) {
 
 // LockedScreen replaces the whole workspace once the trial or subscription ended. It names what
 // happened, what an admin can do (pay, take the data out) and what anyone can do (sign out).
-export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = false, signOutFailed = false, exportAction, onCheckout, onManage, onSignOut }: LockedScreenProps) {
+export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = false, checkoutBusy = false, signOutFailed = false, exportAction, onCheckout, onManage, onSignOut }: LockedScreenProps) {
   // A 402 can swap the inbox for this page; focus would stay on a removed node, so the heading takes it.
   const title = useRef<HTMLHeadingElement>(null);
   useEffect(() => title.current?.focus(), []);
@@ -44,9 +46,8 @@ export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = fals
         <div className="section-heading"><h2 id="locked-plan-heading">{messages.choosePlan}</h2></div>
         <div className="settings-body">
           {isAdmin
-            ? <div className="button-row">{planOptions.map((option) =>
-                <button key={option.plan} type="button" className="primary-action" onClick={() => onCheckout(option.plan)}>{option.label}</button>)}
-              {hasSubscription && onManage && <button type="button" onClick={onManage}>{messages.manageBilling}</button>}</div>
+            ? <><PlanPicker sellable={billing?.checkout_plans ?? []} busy={checkoutBusy} onChoose={onCheckout} />
+              {hasSubscription && onManage && <div className="button-row"><button type="button" onClick={onManage}>{messages.manageBilling}</button></div>}</>
             : <p>{messages.askWorkspaceAdmin}</p>}
         </div>
       </section>

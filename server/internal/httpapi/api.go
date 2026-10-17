@@ -21,16 +21,29 @@ import (
 
 const sessionCookie = "colliedesk_session"
 
+// Mailer hands one composed message to the mail relay (the shape of email.SMTPSender).
+type Mailer interface {
+	Send(ctx context.Context, from string, to []string, message []byte) error
+}
+
 type Config struct {
-	Origin      string
+	Origin string
+	// Version is the build stamped into the binary, reported by GET /api/v1/config; empty reports "dev".
+	Version     string
 	CloudAuth   cloudauth.Config
 	Email       email.Config
 	Attachments attachments.Storage
+	// UploadTimeout is the longest one multipart message upload may take to arrive (default 3 minutes).
+	UploadTimeout time.Duration
 	// RequestPool, when set, runs workspace-scoped queries as a separate request login
 	// (DATABASE_REQUEST_URL); nil runs them on the owner pool.
 	RequestPool *pgxpool.Pool
 	// Billing turns on Polar billing for the hosted cloud; the zero value leaves it off.
 	Billing polar.Config
+	// AlertEmail is the operator address told about a paid subscription that matches no workspace
+	// (BILLING_ALERT_EMAIL). Empty, or without AlertMailer or Email.MailFromDomain, turns the alert off.
+	AlertEmail  string
+	AlertMailer Mailer
 	// Now is the clock for the trial, the lock and plan limits; nil uses the system clock.
 	Now func() time.Time
 	// LookupTXT resolves DNS TXT records for domain verification; nil uses the system resolver.
@@ -54,6 +67,15 @@ type Config struct {
 	SignupDisabled bool
 	// Random is the entropy for generated workspace slug suffixes; nil uses crypto/rand.
 	Random io.Reader
+	// Funnel receives the cloud's trial_started and subscription_activated events; nil records
+	// nothing.
+	Funnel FunnelRecorder
+}
+
+// FunnelRecorder takes one sign-up or payment event of a workspace. Record must not block the
+// request; telemetry.Funnel sends in the background.
+type FunnelRecorder interface {
+	Record(event, workspaceID string, properties map[string]any)
 }
 
 type Route struct {
@@ -66,9 +88,11 @@ type API struct {
 	// limits is true on the hosted cloud, where the trial, lock and agent cap apply.
 	limits bool
 	config Config
-	auth   *auth.Service
-	cloud  *cloudauth.Verifier
-	store  *store.Store
+	// alerted dedupes the operator alert for paid subscriptions without a workspace.
+	alerted alertedSubscriptions
+	auth    *auth.Service
+	cloud   *cloudauth.Verifier
+	store   *store.Store
 	// exports admits workspace exports; see exportLimiter.
 	exports     *exportLimiter
 	exportLinks *exportLinks
@@ -76,6 +100,7 @@ type API struct {
 	webForms       *webFormLimiter
 	webFormClients *webFormLimiter
 	polar          *polar.Client
+	founding       foundingState
 	now            func() time.Time
 }
 
@@ -86,7 +111,18 @@ type routeSpec struct {
 
 type principalKey struct{}
 
-func New(pool *pgxpool.Pool, config Config) http.Handler {
+// Server is the HTTP handler of the API. RefreshFounding is the one thing the process starts besides
+// serving.
+type Server struct {
+	http.Handler
+	api *API
+}
+
+// RefreshFounding counts the Founding slots at Polar and closes Founding when they are used up. It
+// does nothing when billing is off.
+func (s *Server) RefreshFounding(ctx context.Context) error { return s.api.refreshFounding(ctx) }
+
+func New(pool *pgxpool.Pool, config Config) *Server {
 	config.Origin = strings.TrimRight(config.Origin, "/")
 	if config.LookupTXT == nil {
 		config.LookupTXT = net.DefaultResolver.LookupTXT
@@ -107,8 +143,8 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 	}
 	limits := config.Billing.Enabled()
 	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), exportLinks: newExportLinks(), webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
-		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits),
-		store: store.NewWithDB(db).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits)}
+		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25()),
+		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25())}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
 	if config.Random != nil {
 		api.auth = api.auth.WithRandom(config.Random)
@@ -124,11 +160,14 @@ func New(pool *pgxpool.Pool, config Config) http.Handler {
 		if billingRoute(route.Route) && api.polar == nil {
 			continue
 		}
+		if route.Pattern == resendWebhookPath && config.Email.ResendWebhookSecret == "" {
+			continue
+		}
 		mux.Handle(route.Method+" "+route.Pattern, api.authorize(route.Route, route.handler))
 	}
 	// The CORS preflight of the public web form is sent by the browser, never by an agent.
 	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)
-	return mux
+	return &Server{Handler: mux, api: api}
 }
 
 func Routes() []Route {
@@ -147,6 +186,7 @@ func Routes() []Route {
 		{http.MethodDelete, "/api/v1/auth/invites/{id}", auth.PermissionAccessWrite},
 		{http.MethodGet, "/api/v1/conversations", auth.PermissionConversationsRead},
 		{http.MethodPost, "/api/v1/conversations", auth.PermissionConversationsWrite},
+		{http.MethodPatch, "/api/v1/conversations", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/conversations/{id}", auth.PermissionConversationsRead},
 		{http.MethodPatch, "/api/v1/conversations/{id}", auth.PermissionConversationsWrite},
 		{http.MethodPut, "/api/v1/conversations/{id}/tags/{tagId}", auth.PermissionConversationsWrite},
@@ -154,6 +194,7 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/conversations/{id}/messages", auth.PermissionConversationsRead},
 		{http.MethodPost, "/api/v1/conversations/{id}/messages", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/conversations/{id}/time-entries", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/inbox/activity", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/attachments/{id}", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/contacts", auth.PermissionContactsRead},
 		{http.MethodPost, "/api/v1/contacts", auth.PermissionContactsWrite},
@@ -162,10 +203,15 @@ func Routes() []Route {
 		{http.MethodPatch, "/api/v1/workspace/timezone", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/workspace/slug", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/agents/me/timezone", auth.PermissionAuthenticated},
+		{http.MethodPatch, "/api/v1/agents/{id}", auth.PermissionAccessWrite},
 		{http.MethodGet, "/api/v1/tags", auth.PermissionConversationsRead},
 		{http.MethodPost, "/api/v1/tags", auth.PermissionConversationsWrite},
 		{http.MethodPatch, "/api/v1/tags/{id}", auth.PermissionConversationsWrite},
 		{http.MethodDelete, "/api/v1/tags/{id}", auth.PermissionConversationsWrite},
+		{http.MethodGet, "/api/v1/saved-replies", auth.PermissionConversationsRead},
+		{http.MethodPost, "/api/v1/saved-replies", auth.PermissionConversationsWrite},
+		{http.MethodPatch, "/api/v1/saved-replies/{id}", auth.PermissionConversationsWrite},
+		{http.MethodDelete, "/api/v1/saved-replies/{id}", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/conversations/{id}/messages/{messageId}/retry", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/channels/email", auth.PermissionAccessRead},
 		{http.MethodPut, "/api/v1/channels/email", auth.PermissionAccessWrite},
@@ -178,6 +224,8 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/billing/checkout", auth.PermissionBillingManage},
 		{http.MethodPost, "/api/v1/billing/portal", auth.PermissionBillingManage},
 		{http.MethodPost, polarWebhookPath, auth.PermissionPublic},
+		{http.MethodPost, resendWebhookPath, auth.PermissionPublic},
+		{http.MethodGet, foundingPath, auth.PermissionPublic},
 		{http.MethodGet, "/api/v1/export", auth.PermissionWorkspaceExport},
 		{http.MethodGet, "/api/v1/channels/web-form", auth.PermissionAccessRead},
 		{http.MethodPut, "/api/v1/channels/web-form", auth.PermissionAccessWrite},

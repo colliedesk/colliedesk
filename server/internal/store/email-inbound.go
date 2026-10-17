@@ -132,7 +132,7 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 		return dropped(result, email.DropOwnAddress), nil
 	}
 	if in.DropReason == email.DropMailerDaemon && len(in.BouncedMessageIDs) > 0 {
-		if err := markBounced(ctx, tx, workspaceID, in.BouncedMessageIDs); err != nil {
+		if err := markBounced(ctx, tx, workspaceID, in.BouncedMessageIDs, in.BouncedRecipients); err != nil {
 			return result, err
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -199,7 +199,8 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 		}
 	}
 
-	meta, err := json.Marshal(domain.IncomingEmail{From: in.FromAddress, Authentication: in.Authentication, Via: inboundVia(in), Attachments: in.Attachments})
+	meta, err := json.Marshal(domain.IncomingEmail{From: in.FromAddress, Authentication: in.Authentication, Via: inboundVia(in), Attachments: in.Attachments,
+		CC: copiedAddresses(in, supportAddress)})
 	if err != nil {
 		return result, fmt.Errorf("encode email metadata: %w", err)
 	}
@@ -212,7 +213,7 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 		VALUES($1,$2,'incoming',$3,NULLIF($4,''),$5,$6) RETURNING id::text`, workspaceID, conversationID, body, in.BodyHTML, in.MessageID, meta).Scan(&messageID); err != nil {
 		return result, fmt.Errorf("store inbound message: %w", err)
 	}
-	if err := linkFiles(ctx, tx, workspaceID, messageID, files); err != nil {
+	if err := linkFiles(ctx, tx, s.objects, workspaceID, messageID, files); err != nil {
 		return result, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -244,4 +245,16 @@ func inboundVia(in email.Inbound) string {
 		return domain.ViaPlatform
 	}
 	return domain.ViaWorkspace
+}
+
+// copiedAddresses are the other people on the customer's Cc line: not the sender, not the support
+// address or a plus form of it (the mail reached us through it).
+func copiedAddresses(in email.Inbound, supportAddress string) []string {
+	var kept []string
+	for _, address := range in.Cc {
+		if address != in.FromAddress && !email.SameMailbox(address, supportAddress) {
+			kept = append(kept, address)
+		}
+	}
+	return kept
 }

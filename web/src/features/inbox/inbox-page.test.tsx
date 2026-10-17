@@ -5,6 +5,7 @@ import { InboxPage } from './inbox-page';
 const conversation = {
   id: '11111111-1111-4111-8111-111111111111',
   contact_id: '22222222-2222-4222-8222-222222222222',
+  contact_name: 'Mai Linh',
   subject: 'Example request',
   status: 'open' as const,
   priority: 'normal' as const,
@@ -70,6 +71,7 @@ test('renders message Markdown in the timeline', () => {
     body_html: null,
     origin: null,
     attachments: [],
+    cc: [],
     created_at: '2026-10-14T00:00:00Z',
     delivery: null,
     email: null,
@@ -80,7 +82,7 @@ test('renders message Markdown in the timeline', () => {
 
 test('tells the agent when replies will not be emailed', () => {
   render(<InboxPage selected={conversation} conversations={[conversation]} outboundNotice="Outgoing email is not configured on this server." />);
-  expect(screen.getByRole('status')).toHaveTextContent('Outgoing email is not configured on this server.');
+  expect(screen.getByText('Outgoing email is not configured on this server.')).toHaveAttribute('role', 'status');
 });
 
 test('shows the author name and attachment download links on a timeline message', () => {
@@ -103,6 +105,7 @@ test('shows the author name and attachment download links on a timeline message'
       sha256: 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9',
       created_at: '2026-10-14T00:00:00Z',
     }],
+    cc: [],
     created_at: '2026-10-14T00:00:00Z',
     delivery: null,
     email: null,
@@ -125,6 +128,7 @@ const imported = {
   body_html: '<p onclick="steal()">Forwarding the <b>logs</b><img src="https://tracker.example/p.gif"></p>',
   origin: { system: 'freshdesk', external_id: '7004', kind: 'forward' as const, from: null, to: ['vendor@partner.example'], cc: ['boss@acme.example'], bcc: [] },
   attachments: [],
+  cc: [],
   created_at: '2026-10-14T00:00:00Z',
   delivery: null,
   email: null,
@@ -184,15 +188,15 @@ test('an empty filtered list says no conversation matches', () => {
   expect(screen.getByText('No conversations match these filters.')).toBeInTheDocument();
 });
 
-test('an empty filtered list offers a way out that clears every filter', () => {
+test('an empty filtered list offers a way out that clears every filter back to the Open view', () => {
   const onFilters = vi.fn();
   render(<InboxPage conversations={[]} filtered onFilters={onFilters} />);
   fireEvent.change(screen.getByRole('searchbox', { name: /search conversations/i }), { target: { value: 'refund' } });
   fireEvent.click(screen.getByRole('radio', { name: 'Pending' }));
   fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
-  expect(onFilters).toHaveBeenLastCalledWith({});
+  expect(onFilters).toHaveBeenLastCalledWith({ status: 'open' });
   expect(screen.getByRole('searchbox', { name: /search conversations/i })).toHaveValue('');
-  expect(screen.getByRole('radio', { name: 'All' })).toBeChecked();
+  expect(screen.getByRole('radio', { name: 'Open' })).toBeChecked();
   expect(screen.getByRole('searchbox', { name: /search conversations/i })).toHaveFocus();
 });
 
@@ -307,4 +311,28 @@ test('a refusal shown for one conversation does not follow the agent to the next
 test('a delivery notice from a retry is shown above the composer', () => {
   render(<InboxPage selected={conversation} conversations={[conversation]} deliveryNotice="Try again later." />);
   expect(screen.getByRole('alert')).toHaveTextContent('Try again later.');
+});
+
+test('the reply box starts with the people the customer copied and sends them with the reply', () => {
+  const onMessage = vi.fn();
+  const timeline = [{
+    id: '33333333-3333-4333-8333-333333333333', conversation_id: conversation.id, author_agent_id: null, author_name: null, agent_token: null, kind: 'incoming' as const,
+    body: 'Adding my manager.', body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null,
+    email: { from: 'mai@customer.example', authentication: 'pass' as const, attachments: [], original_attachment_id: null, cc: ['manager@customer.example'] },
+  }];
+  render(<InboxPage selected={conversation} conversations={[conversation]} timeline={timeline} onMessage={onMessage} />);
+  expect(screen.getByRole('list', { name: 'Cc' })).toHaveTextContent('manager@customer.example');
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Thanks both.' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+  expect(onMessage).toHaveBeenCalledWith('outgoing', 'Thanks both.', [], ['manager@customer.example']);
+});
+
+test('on the hosted cloud the reply box offers no Cc from mail the workspace posted itself', () => {
+  const posted = [{
+    id: '33333333-3333-4333-8333-333333333333', conversation_id: conversation.id, author_agent_id: null, author_name: null, agent_token: null, kind: 'incoming' as const,
+    body: 'Adding my manager.', body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null,
+    email: { from: 'mai@customer.example', authentication: 'pass' as const, via: 'workspace' as const, attachments: [], original_attachment_id: null, cc: ['manager@customer.example'] },
+  }];
+  render(<InboxPage hosted selected={conversation} conversations={[conversation]} timeline={posted} />);
+  expect(screen.queryByRole('list', { name: 'Cc' })).not.toBeInTheDocument();
 });

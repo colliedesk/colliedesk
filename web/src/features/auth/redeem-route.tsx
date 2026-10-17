@@ -5,24 +5,30 @@ import { api, CloudWorkspaceChoiceError, PlanLimitError } from '../../api/client
 import { NotAnAgentError } from '../../api/cloud-signup';
 import type { WorkspaceChoice } from '../../api/schemas';
 import { messages } from '../../messages';
+import { readCheckoutIntent } from '../settings/checkout-intent';
 import { RedeemPage } from './redeem-page';
 
 const CloudSignIn = lazy(() => import('./cloud-sign-in').then((module) => ({ default: module.CloudSignIn })));
 
 export function RedeemRoute({ token }: { token: string }) {
   const navigate = useNavigate();
+  // A visitor who came to buy a plan lands on the billing page, which carries the purchase out.
+  const goAfterSignIn = useCallback(
+    () => (readCheckoutIntent() ? navigate({ to: '/settings/billing', search: { checkout: '' } }) : navigate({ to: '/' })),
+    [navigate],
+  );
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
   const [workspaceSlug, setWorkspaceSlug] = useState<string>();
   const [workspaces, setWorkspaces] = useState<WorkspaceChoice[]>([]);
   const [cloudPending, setCloudPending] = useState(false);
   const [cloudFailed, setCloudFailed] = useState(false);
-  const redeem = useMutation({ mutationFn: () => api.redeem(token, navigator.userAgent), onSuccess: () => navigate({ to: '/' }) });
+  const redeem = useMutation({ mutationFn: () => api.redeem(token, navigator.userAgent), onSuccess: goAfterSignIn });
   const exchange = useCallback(async (sessionToken: string) => {
     setCloudPending(true);
     setCloudFailed(false);
     try {
       await api.exchangeCloudSession(sessionToken, workspaceSlug);
-      await navigate({ to: '/' });
+      await goAfterSignIn();
     } catch (error) {
       if (error instanceof CloudWorkspaceChoiceError) setWorkspaces(error.workspaces);
       else if (!(error instanceof NotAnAgentError)) setCloudFailed(true);
@@ -30,11 +36,11 @@ export function RedeemRoute({ token }: { token: string }) {
     } finally {
       setCloudPending(false);
     }
-  }, [navigate, workspaceSlug]);
+  }, [goAfterSignIn, workspaceSlug]);
   const signUp = useCallback(async (sessionToken: string, workspaceName: string) => {
     await api.signUpCloud(sessionToken, workspaceName);
-    await navigate({ to: '/' });
-  }, [navigate]);
+    await goAfterSignIn();
+  }, [goAfterSignIn]);
   const cloudConfig = config.data?.cloud_sign_in;
   const cloudEnabled = !token && cloudConfig?.enabled === true && cloudConfig.publishable_key !== null;
 

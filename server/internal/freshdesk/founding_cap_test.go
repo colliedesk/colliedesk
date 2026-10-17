@@ -35,7 +35,7 @@ func (e *importEnv) runCapped(t *testing.T, cap int64) (*freshdesk.Report, error
 	t.Helper()
 	return e.run(t, context.Background(), func(o *freshdesk.Options) {
 		o.Cloud = true
-		o.FoundingStorageBytes = cap
+		o.PaidStorageBytes = cap
 	})
 }
 
@@ -121,23 +121,46 @@ func TestFoundingImportUndoReleasesTheBytes(t *testing.T) {
 	}
 }
 
-func TestTrialAndTeamImportsIgnoreTheFoundingCap(t *testing.T) {
-	for _, plan := range []string{"", "team"} {
-		env := newImportEnv(t)
-		if plan != "" {
+func TestTrialImportIgnoresThePaidCap(t *testing.T) {
+	env := newImportEnv(t)
+	report, err := env.runCapped(t, 1)
+	if err != nil || report.Status != "OK" {
+		t.Fatalf("trial: report=%+v err=%v, want an import the paid cap does not touch", report, err)
+	}
+}
+
+func TestTeamPlansCountImportedFilesTowardTheirCap(t *testing.T) {
+	for _, plan := range []string{"team", "team25"} {
+		t.Run(plan+" over the cap", func(t *testing.T) {
+			env := newImportEnv(t)
 			env.setPlan(t, env.workspaceID, plan)
-		}
-		report, err := env.runCapped(t, 1)
-		if err != nil || report.Status != "OK" {
-			t.Fatalf("plan %q: report=%+v err=%v, want an uncapped import", plan, report, err)
-		}
+			before := env.rowCounts(t)
+			report, err := env.runCapped(t, 29)
+			var capErr *freshdesk.StorageCapError
+			if !errors.As(err, &capErr) || report != nil {
+				t.Fatalf("report=%v err=%v, want a *StorageCapError and no report", report, err)
+			}
+			if strings.Contains(err.Error(), "Founding") {
+				t.Fatalf("error %q names the Founding plan", err)
+			}
+			if after := env.rowCounts(t); after != before {
+				t.Fatalf("rows changed from %s to %s", before, after)
+			}
+		})
+		t.Run(plan+" at exactly the cap", func(t *testing.T) {
+			env := newImportEnv(t)
+			env.setPlan(t, env.workspaceID, plan)
+			if report, err := env.runCapped(t, 30); err != nil || report.Status != "OK" {
+				t.Fatalf("report=%+v err=%v, want it imported", report, err)
+			}
+		})
 	}
 }
 
 func TestSelfHostedImportIgnoresTheFoundingCap(t *testing.T) {
 	env := newImportEnv(t)
 	env.setPlan(t, env.workspaceID, "founding")
-	report, err := env.run(t, context.Background(), func(o *freshdesk.Options) { o.FoundingStorageBytes = 1 })
+	report, err := env.run(t, context.Background(), func(o *freshdesk.Options) { o.PaidStorageBytes = 1 })
 	if err != nil || report.Status != "OK" {
 		t.Fatalf("self-hosted run (Cloud false): report=%+v err=%v, want OK", report, err)
 	}
@@ -224,7 +247,7 @@ func TestFoundingDryRunSaysWhetherTheImportWouldBeRefused(t *testing.T) {
 	before := env.rowCounts(t)
 	dry := func(cap int64) *freshdesk.Report {
 		report, err := env.run(t, context.Background(), func(o *freshdesk.Options) {
-			o.DryRun, o.Cloud, o.FoundingStorageBytes = true, true, cap
+			o.DryRun, o.Cloud, o.PaidStorageBytes = true, true, cap
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -271,7 +294,7 @@ func TestSizingSkipsATicketWhoseConversationsAreGoneOrForbidden(t *testing.T) {
 			env.fake.failPathStatus = map[string]int{path: status}
 
 			dry, err := env.run(t, context.Background(), func(o *freshdesk.Options) {
-				o.DryRun, o.Cloud, o.FoundingStorageBytes = true, true, 1000
+				o.DryRun, o.Cloud, o.PaidStorageBytes = true, true, 1000
 			})
 			if err != nil || dry.StorageCap == nil {
 				t.Fatalf("status %d: dry run err=%v check=%+v, want a storage check", status, err, dry.StorageCap)
@@ -292,5 +315,17 @@ func TestSizingSkipsATicketWhoseConversationsAreGoneOrForbidden(t *testing.T) {
 				t.Fatalf("status %d: report=%s conversations=%d, want the other tickets imported and ticket 6 reported failed", status, report.Status, env.count(t, "conversations"))
 			}
 		})
+	}
+}
+
+func TestReportNamesThePlanAsAPersonReadsIt(t *testing.T) {
+	for plan, want := range map[string]string{"team25": "Team 25 plan", "team": "Team plan", "founding": "Founding plan"} {
+		for _, refuse := range []bool{false, true} {
+			report := &freshdesk.Report{StorageCap: &freshdesk.StorageCapCheck{Plan: plan, LimitBytes: 1 << 30, WouldRefuse: refuse}}
+			markdown := report.Markdown()
+			if !strings.Contains(markdown, want) || strings.Contains(markdown, "team25") {
+				t.Errorf("plan %s refuse=%v: report lacks %q or shows the raw id:\n%s", plan, refuse, want, markdown)
+			}
+		}
 	}
 }

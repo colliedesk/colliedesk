@@ -43,6 +43,9 @@ type CheckoutRequest struct {
 	ProductID  string
 	CustomerID string
 	SuccessURL string
+	// EmbedOrigin is the origin of the page that opens the checkout as an overlay. Polar refuses
+	// to embed a checkout session created without it.
+	EmbedOrigin string
 }
 
 // EnsureCustomer returns the Polar customer whose external id is externalID, creating it when
@@ -84,6 +87,9 @@ func (c *Client) CreateCheckout(ctx context.Context, input CheckoutRequest) (str
 	body := map[string]any{"products": []string{input.ProductID}, "customer_id": input.CustomerID}
 	if input.SuccessURL != "" {
 		body["success_url"] = input.SuccessURL
+	}
+	if input.EmbedOrigin != "" {
+		body["embed_origin"] = input.EmbedOrigin
 	}
 	var reply struct {
 		URL string `json:"url"`
@@ -145,7 +151,56 @@ func (c *Client) HasPaidSubscription(ctx context.Context, externalID string, now
 	return false, nil
 }
 
+// maxSubscriptionPages bounds a listing, so a server that keeps answering pages cannot loop forever.
+const maxSubscriptionPages = 1000
+
+// ListSubscriptions returns every subscription of the organization, in all states, page by page.
+// It returns nothing when any page fails: a partial list would make live subscriptions look gone.
+func (c *Client) ListSubscriptions(ctx context.Context) ([]Subscription, error) {
+	var all []Subscription
+	for page := 1; ; page++ {
+		var reply struct {
+			Items      []json.RawMessage `json:"items"`
+			Pagination *struct {
+				MaxPage int `json:"max_page"`
+			} `json:"pagination"`
+		}
+		// A fixed sort keeps an item from moving between pages while the listing is read.
+		path := fmt.Sprintf("/v1/subscriptions/?limit=%d&sorting=started_at&page=%d", subscriptionsPage, page)
+		if err := c.doLimited(ctx, http.MethodGet, path, nil, &reply, maxListReplyBytes); err != nil {
+			return nil, fmt.Errorf("list polar subscriptions (page %d): %w", page, err)
+		}
+		if reply.Pagination == nil {
+			return nil, fmt.Errorf("list polar subscriptions (page %d): reply has no pagination, so completeness cannot be told", page)
+		}
+		for _, raw := range reply.Items {
+			subscription, err := decodeSubscription(raw, time.Time{})
+			if err != nil {
+				return nil, fmt.Errorf("list polar subscriptions (page %d): %w", page, err)
+			}
+			all = append(all, *subscription)
+		}
+		if page >= reply.Pagination.MaxPage {
+			return all, nil
+		}
+		if page >= maxSubscriptionPages {
+			return nil, fmt.Errorf("list polar subscriptions: more than %d pages", maxSubscriptionPages)
+		}
+	}
+}
+
+// maxReplyBytes bounds ordinary replies; a listing page embeds product and customer objects and gets more.
+const (
+	maxReplyBytes     = 1 << 20
+	maxListReplyBytes = 8 << 20
+	subscriptionsPage = 25
+)
+
 func (c *Client) do(ctx context.Context, method, path string, body, target any) error {
+	return c.doLimited(ctx, method, path, body, target, maxReplyBytes)
+}
+
+func (c *Client) doLimited(ctx context.Context, method, path string, body, target any, maxReply int64) error {
 	var payload io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)
@@ -170,7 +225,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, target any) 
 	if response.StatusCode < 200 || response.StatusCode > 299 {
 		return &StatusError{Code: response.StatusCode}
 	}
-	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(target); err != nil {
+	if err := json.NewDecoder(io.LimitReader(response.Body, maxReply)).Decode(target); err != nil {
 		return fmt.Errorf("decode reply: %w", err)
 	}
 	return nil

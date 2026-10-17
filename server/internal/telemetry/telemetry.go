@@ -102,22 +102,33 @@ func (r *Reporter) SendOnce(ctx context.Context) error {
 		// website and the cloud app, so the report must not create a person profile.
 		"$process_person_profile": false,
 	}
+	if err := capture(ctx, r.client, r.config, "instance heartbeat", u.installID, properties); err != nil {
+		return err
+	}
+	r.logger.Info("usage report sent", "install_id", u.installID, "version", r.config.Version, "realm", r.config.Realm,
+		"domain", r.config.Domain, "workspaces", u.workspaces, "agents_active_30d", u.activeAgents, "replies_30d", u.replies,
+		"email_channel", u.emailChannel, "web_form", u.webForm, "freshdesk_import", u.freshdeskImport)
+	return nil
+}
+
+// capture posts one event to PostHog's capture endpoint and fails unless PostHog accepts it.
+func capture(ctx context.Context, client *http.Client, config Config, event, distinctID string, properties map[string]any) error {
 	body, err := json.Marshal(map[string]any{
-		"api_key":     r.config.ProjectKey,
-		"event":       "instance heartbeat",
-		"distinct_id": u.installID,
+		"api_key":     config.ProjectKey,
+		"event":       event,
+		"distinct_id": distinctID,
 		"timestamp":   time.Now().UTC().Format(time.RFC3339),
 		"properties":  properties,
 	})
 	if err != nil {
 		return err
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, r.config.Endpoint+"/i/v0/e/", bytes.NewReader(body))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, config.Endpoint+"/i/v0/e/", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
 	request.Header.Set("Content-Type", "application/json")
-	response, err := r.client.Do(request)
+	response, err := client.Do(request)
 	if err != nil {
 		return err
 	}
@@ -126,8 +137,5 @@ func (r *Reporter) SendOnce(ctx context.Context) error {
 	if response.StatusCode/100 != 2 {
 		return fmt.Errorf("PostHog answered %d", response.StatusCode)
 	}
-	r.logger.Info("usage report sent", "install_id", u.installID, "version", r.config.Version, "realm", r.config.Realm,
-		"domain", r.config.Domain, "workspaces", u.workspaces, "agents_active_30d", u.activeAgents, "replies_30d", u.replies,
-		"email_channel", u.emailChannel, "web_form", u.webForm, "freshdesk_import", u.freshdeskImport)
 	return nil
 }

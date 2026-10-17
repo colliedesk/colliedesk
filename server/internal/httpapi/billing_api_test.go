@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
 func TestBillingIsAdminOnly(t *testing.T) {
@@ -56,7 +58,7 @@ func TestBillingFromOneWorkspaceNeverShowsAnothers(t *testing.T) {
 }
 
 func TestCheckoutUsesTheSessionsWorkspaceCustomerAndThePlansProduct(t *testing.T) {
-	for plan, product := range map[string]string{"team_monthly": productMonthly, "team_yearly": productYearly, "founding": productFounding} {
+	for plan, product := range map[string]string{"team_monthly": productMonthly, "team_yearly": productYearly, "founding": productFounding, "team25_monthly": productTeam25Monthly, "team25_yearly": productTeam25Yearly} {
 		t.Run(plan, func(t *testing.T) {
 			f := newBillingFixture(t)
 			response := request(t, f.api, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": plan}, f.adminA, nil)
@@ -91,6 +93,9 @@ func TestCheckoutUsesTheSessionsWorkspaceCustomerAndThePlansProduct(t *testing.T
 			}
 			if success, _ := body["success_url"].(string); success != testOrigin+"/settings/billing?checkout=success" {
 				t.Fatalf("success_url=%q", success)
+			}
+			if embed, _ := body["embed_origin"].(string); embed != testOrigin {
+				t.Fatalf("embed_origin=%q, want %q", embed, testOrigin)
 			}
 		})
 	}
@@ -158,6 +163,41 @@ func TestCheckoutRejectsUnknownPlans(t *testing.T) {
 	}
 	if calls := f.fake.recorded(); len(calls) != 0 {
 		t.Fatalf("invalid requests reached Polar: %v", calls)
+	}
+}
+
+func TestCheckoutTeam25NeedsItsProductsConfigured(t *testing.T) {
+	fake := newFakePolarAPI(t)
+	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
+		config.Billing = fake.config()
+		config.Billing.Products.Team25Monthly, config.Billing.Products.Team25Yearly = "", ""
+	})
+	admin := createSession(t, api, service, "Billing Alpha", "admin@billing-alpha.example.com")
+	for _, plan := range []string{"team25_monthly", "team25_yearly"} {
+		response := request(t, api, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": plan}, admin, nil)
+		if response.Code != http.StatusBadRequest {
+			t.Errorf("%s without a Polar product: status=%d body=%s, want 400 as for an unknown plan", plan, response.Code, response.Body.String())
+		}
+	}
+	response := request(t, api, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": "team25_monthly"}, admin, nil)
+	if strings.Contains(response.Body.String(), "team25") {
+		t.Errorf("error %s lists a plan this server cannot sell", response.Body.String())
+	}
+	var offered billingView
+	decode(t, request(t, api, http.MethodGet, "/api/v1/billing", nil, admin, nil), &offered)
+	if strings.Join(offered.CheckoutPlans, ",") != "team_monthly,team_yearly,founding" {
+		t.Errorf("checkout_plans=%v, want the three plans this server can sell", offered.CheckoutPlans)
+	}
+	if calls := fake.recorded(); len(calls) != 0 {
+		t.Fatalf("an unconfigured plan reached Polar: %v", calls)
+	}
+}
+
+func TestBillingListsEveryPlanTheServerCanSell(t *testing.T) {
+	f := newBillingFixture(t)
+	got := getBilling(t, f.api, f.adminA).CheckoutPlans
+	if strings.Join(got, ",") != "team_monthly,team_yearly,team25_monthly,team25_yearly,founding" {
+		t.Fatalf("checkout_plans=%v", got)
 	}
 }
 

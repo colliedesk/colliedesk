@@ -36,4 +36,7 @@ const (
 	// table and reads instance-wide counts (workspaces, active agents, replies, channels in use).
 	// Only aggregates leave the transaction, never row content.
 	PrivilegeTelemetry Privilege = "telemetry"
+	// PrivilegeBillingReconcile reads every workspace id and every stored Polar subscription, so the
+	// operator command can compare them with Polar's list. Writes go through the scoped path.
+	PrivilegeBillingReconcile Privilege = "billing-reconcile"
 )

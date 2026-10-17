@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const scopedTokenMigration = "20261015092304-scoped-agent-tokens.up.sql"
+const scopedTokenMigration = "20261017020421-scoped-agent-tokens.up.sql"
 
 func TestScopedTokenMigrationKeepsSessionsAndRevokesTokensOnRollback(t *testing.T) {
 	pool := testPool(t)

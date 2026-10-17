@@ -49,6 +49,21 @@ still send one report a day together. Each report sent is also written to the se
 | `web_form` | `false` | Whether any workspace has the web form on |
 | `freshdesk_import` | `true` | Whether the install has records of a Freshdesk import |
 
+## Colliedesk Cloud only: trial and payment events
+
+Colliedesk Cloud (`realm` `cloud`) also sends two events, so the team can see how many trials
+start and how many become paid. A self-hosted server has no trials or billing and never sends
+them; `DISABLE_TELEMETRY` and `DO_NOT_TRACK` turn them off too.
+
+| Event | When | Fields |
+|---|---|---|
+| `trial_started` | A cloud sign-up creates a workspace and signs its admin in | `distinct_id` = the workspace id, `realm`, `version` |
+| `subscription_activated` | A workspace becomes a paying customer for the first time (its first `subscription.active` from Polar). A redelivered webhook, a past_due subscription paid again and a later plan change are not counted again | `distinct_id` = the workspace id, `plan` (`team`, `team25` or `founding`), `realm`, `version` |
+
+The workspace id is a random UUID. The events never carry the email address of the person who
+signed up, the workspace name or its address. They are sent in the background; a failure is logged
+as `funnel event not sent` and changes nothing in the workspace.
+
 ## Where it goes
 
 The report goes to PostHog (`us.i.posthog.com`), the product analytics service the Colliedesk team

@@ -45,7 +45,7 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 		err := tx.QueryRow(ctx, `SELECT w.id::text,w.slug,w.name,w.timezone,a.id::text,a.email,a.display_name,
 			CASE WHEN a.role='agent' OR s.role_ceiling='agent' THEN 'agent' ELSE 'admin' END,a.timezone_override,s.id::text,w.trial_ends_at,COALESCE(s.scope,''),w.trial_extended_at IS NOT NULL,s.created_at,s.last_seen_at
 			FROM sessions s JOIN agents a ON a.id=s.agent_id AND a.workspace_id=s.workspace_id JOIN workspaces w ON w.id=s.workspace_id
-			WHERE s.workspace_id=$3 AND s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>$2`, hash, now, workspaceID).
+			WHERE s.workspace_id=$3 AND s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>$2 AND a.deactivated_at IS NULL`, hash, now, workspaceID).
 			Scan(&principal.Workspace.ID, &principal.Workspace.Slug, &principal.Workspace.Name, &principal.Workspace.Timezone,
 				&principal.Agent.ID, &principal.Agent.Email, &principal.Agent.DisplayName, &principal.Agent.Role,
 				&principal.Agent.TimezoneOverride, &principal.SessionID, &trialEndsAt, &principal.Scope, &trialExtended, &createdAt, &lastSeenAt)
@@ -107,6 +107,9 @@ func (s *Service) ListSessions(ctx context.Context, principal Principal) ([]doma
 		sessions, err = listSessions(ctx, tx, query, args)
 		return err
 	})
+	for index := range sessions {
+		sessions[index].Current = sessions[index].ID == principal.SessionID
+	}
 	return sessions, err
 }
 

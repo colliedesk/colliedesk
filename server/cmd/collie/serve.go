@@ -83,13 +83,14 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	}
 	if emailConfig.SMTP.Configured() {
 		worker := emailoutbox.New(store.NewWithDB(db), email.SMTPSender{Config: emailConfig.SMTP},
-			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain})
+			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage})
 		go worker.Run(ctx, 5*time.Second)
 	}
 	warnWithoutTrustedProxies(slog.Default(), trustedProxies)
 	// The hosted cloud is cloud sign-in with billing; a self-hosted server may use sign-in alone.
 	hostedCloud := cloudAuth.Enabled() && billing.Enabled()
-	go telemetry.New(db, telemetry.ConfigFromEnv(os.Getenv, origin, hostedCloud, version), nil).Run(ctx, slog.Default())
+	telemetryConfig := telemetry.ConfigFromEnv(os.Getenv, origin, hostedCloud, version)
+	go telemetry.New(db, telemetryConfig, nil).Run(ctx, slog.Default())
 	if billing.Enabled() {
 		retentionService, err := newRetentionService(db, origin, billing, retentionSettingsForServe(os.Getenv, slog.Default()))
 		if err != nil {
@@ -98,7 +99,15 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			go sweepRetention(ctx, retentionService)
 		}
 	}
-	api := httpapi.New(pool, httpapi.Config{Origin: origin, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != ""})
+	apiConfig := httpapi.Config{Origin: origin, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", Funnel: telemetry.NewFunnel(telemetryConfig, nil)}
+	if emailConfig.SMTP.Configured() {
+		apiConfig.AlertEmail = strings.TrimSpace(os.Getenv("BILLING_ALERT_EMAIL"))
+		apiConfig.AlertMailer = email.SMTPSender{Config: emailConfig.SMTP}
+	}
+	api := httpapi.New(pool, apiConfig)
+	if billing.Enabled() {
+		go refreshFoundingAtStart(ctx, api)
+	}
 	server := &http.Server{
 		Addr:              *address,
 		Handler:           mcpserver.Mount(mcpserver.Config{API: api, Auth: auth.NewWithDB(db, origin), Version: version}, webui.Handler(api)),
@@ -119,6 +128,16 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			return fmt.Errorf("shutdown HTTP server: %w", err)
 		}
 		return nil
+	}
+}
+
+// refreshFoundingAtStart counts the Founding slots once so the state survives a restart. A failure
+// leaves the state unknown, which keeps Founding on offer; the next Founding webhook counts again.
+func refreshFoundingAtStart(ctx context.Context, api *httpapi.Server) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := api.RefreshFounding(ctx); err != nil {
+		slog.Error("founding slot count at start failed", "error", err)
 	}
 }
 

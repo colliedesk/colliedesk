@@ -79,6 +79,8 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 		writeInternalError(response, err)
 		return
 	}
+	// Counted only once the person has a session, so a failed sign-in is not a started trial.
+	a.recordFunnel("trial_started", workspace.ID, nil)
 	setSessionCookie(response, result.Token)
 	result.Token = ""
 	writeJSON(response, http.StatusCreated, result)

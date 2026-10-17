@@ -24,7 +24,8 @@ type Service struct {
 	origin string
 	now    func() time.Time
 	// planLimits turns on the agent cap of the hosted cloud's plans; self-hosted has none.
-	planLimits bool
+	team25Offered bool
+	planLimits    bool
 	// random is the entropy for generated slug suffixes; nil reads crypto/rand.
 	random io.Reader
 	// signupKey keys the hashes of the cloud sign-up records (SIGNUP_HASH_KEY).
@@ -106,7 +107,7 @@ func (s *Service) Pair(ctx context.Context, workspaceSlug, email string) (string
 	var link createdLink
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		var agentID, role string
-		if err := tx.QueryRow(ctx, `SELECT id::text,role FROM agents WHERE workspace_id=$1 AND email=lower($2)`, workspaceID, email).
+		if err := tx.QueryRow(ctx, `SELECT id::text,role FROM agents WHERE workspace_id=$1 AND email=lower($2) AND deactivated_at IS NULL`, workspaceID, email).
 			Scan(&agentID, &role); err != nil {
 			return fmt.Errorf("find agent: %w", err)
 		}
@@ -134,6 +135,13 @@ func (s *Service) redeemURL(token string) string {
 func (s *Service) WithPlanLimits(enabled bool) *Service {
 	copy := *s
 	copy.planLimits = enabled
+	return &copy
+}
+
+// WithTeam25Offered returns a service whose seat refusals on Team point to Team 25.
+func (s *Service) WithTeam25Offered(offered bool) *Service {
+	copy := *s
+	copy.team25Offered = offered
 	return &copy
 }
 

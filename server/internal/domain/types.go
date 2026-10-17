@@ -20,11 +20,13 @@ type Agent struct {
 // Session is a sign-in. Scope is the tier of an agent token (read, draft or send); nil for a
 // person's full session.
 type Session struct {
-	ID         string     `json:"id"`
-	AgentID    string     `json:"agent_id"`
-	AgentEmail string     `json:"agent_email"`
-	Label      string     `json:"label"`
-	Scope      *string    `json:"scope"`
+	ID         string  `json:"id"`
+	AgentID    string  `json:"agent_id"`
+	AgentEmail string  `json:"agent_email"`
+	Label      string  `json:"label"`
+	Scope      *string `json:"scope"`
+	// Current marks the session that made the request; it is not stored.
+	Current    bool       `json:"current"`
 	CreatedAt  time.Time  `json:"created_at"`
 	LastSeenAt time.Time  `json:"last_seen_at"`
 	ExpiresAt  time.Time  `json:"expires_at"`
@@ -63,16 +65,18 @@ type Tag struct {
 }
 
 type Conversation struct {
-	ID         string              `json:"id"`
-	ContactID  string              `json:"contact_id"`
-	Subject    string              `json:"subject"`
-	Status     string              `json:"status"`
-	Priority   string              `json:"priority"`
-	AssigneeID *string             `json:"assignee_id"`
-	Tags       []Tag               `json:"tags"`
-	Origin     *ConversationOrigin `json:"origin"`
-	CreatedAt  time.Time           `json:"created_at"`
-	UpdatedAt  time.Time           `json:"updated_at"`
+	ID        string `json:"id"`
+	ContactID string `json:"contact_id"`
+	// ContactName saves the reply box a second request for the customer's name.
+	ContactName string              `json:"contact_name"`
+	Subject     string              `json:"subject"`
+	Status      string              `json:"status"`
+	Priority    string              `json:"priority"`
+	AssigneeID  *string             `json:"assignee_id"`
+	Tags        []Tag               `json:"tags"`
+	Origin      *ConversationOrigin `json:"origin"`
+	CreatedAt   time.Time           `json:"created_at"`
+	UpdatedAt   time.Time           `json:"updated_at"`
 }
 
 // ConversationOrigin records where an imported conversation came from.
@@ -119,19 +123,21 @@ type MessageToken struct {
 }
 
 type Message struct {
-	ID             string           `json:"id"`
-	ConversationID string           `json:"conversation_id"`
-	AuthorAgentID  *string          `json:"author_agent_id"`
-	AuthorName     *string          `json:"author_name"`
-	AgentToken     *MessageToken    `json:"agent_token"`
-	Kind           string           `json:"kind"`
-	Body           string           `json:"body"`
-	BodyHTML       *string          `json:"body_html"`
-	Origin         *MessageOrigin   `json:"origin"`
-	Attachments    []Attachment     `json:"attachments"`
-	CreatedAt      time.Time        `json:"created_at"`
-	Delivery       *MessageDelivery `json:"delivery"`
-	Email          *IncomingEmail   `json:"email"`
+	ID             string         `json:"id"`
+	ConversationID string         `json:"conversation_id"`
+	AuthorAgentID  *string        `json:"author_agent_id"`
+	AuthorName     *string        `json:"author_name"`
+	AgentToken     *MessageToken  `json:"agent_token"`
+	Kind           string         `json:"kind"`
+	Body           string         `json:"body"`
+	BodyHTML       *string        `json:"body_html"`
+	Origin         *MessageOrigin `json:"origin"`
+	Attachments    []Attachment   `json:"attachments"`
+	// CC lists the addresses an outgoing reply was copied to; empty for every other message.
+	CC        []string         `json:"cc"`
+	CreatedAt time.Time        `json:"created_at"`
+	Delivery  *MessageDelivery `json:"delivery"`
+	Email     *IncomingEmail   `json:"email"`
 }
 
 type Attachment struct {
@@ -164,6 +170,8 @@ const (
 type IncomingEmail struct {
 	From           string `json:"from"`
 	Authentication string `json:"authentication"`
+	// CC are the other addresses on the Cc line, without our own; mail stored before they were kept has none.
+	CC []string `json:"cc,omitempty"`
 	// Via is how the message arrived: ViaPlatform, ViaWorkspace or ViaWebForm. Mail stored before this field
 	// existed has none.
 	Via         string            `json:"via,omitempty"`

@@ -91,6 +91,17 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
   and tags it created (`meta.created`) that nothing else uses, then stored files no longer
   referenced. Conversations with a message not written by the import are kept with their ledger
   rows, so a later import does not duplicate them.
+- **Canned responses** become `saved_replies` (ledger entity `saved_reply`, source id = canned response
+  id). Title is `<folder> / <title>` (the folder name keeps the origin visible; there is no folder
+  column). Text is Freshdesk's plain `content`, else `content_html` through `email.HTMLToText`.
+  `{{ticket.requester.name}}`, `{{ticket.from_name}}` and `{{ticket.agent.name}}` map to the two
+  Colliedesk variables; other placeholders stay and are reported by name. A ledger-`done` reply is never
+  rewritten or recreated, so an agent's edit or deletion survives a rerun. Files on a canned response
+  are not imported (saved replies carry none) and are listed. Personal folders are listed by response id and skipped unless `Options.IncludePersonalCannedResponses` (CLI `--include-personal-canned-responses`). HTML fallback keeps `<a href>` as `text (url)` and warns when an `<img>` is dropped. A folder list that fails for a reason other than 403/404 is a `saved_reply_folder` failure with id `all`; tickets still import. Verification compares the sum of folder
+  `responses_count` with the responses listed; a refused endpoint is a warning plus `UNVERIFIED`; an
+  unreadable folder is a `saved_reply_folder` failure that the next successful read clears. Undo
+  deletes imported replies whose `updated_at` equals `created_at` and keeps (with their ledger rows)
+  the ones an agent edited.
 - **Trial extension.** On Colliedesk Cloud, a real (not dry) run that leaves at least one ticket `done`
   in the ledger moves `workspaces.trial_ends_at` forward by 16 days (14 + 16 = 30 days from the trial
   start) and sets `trial_extended_at`, once. The update is one statement guarded by

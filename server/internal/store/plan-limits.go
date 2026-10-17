@@ -31,12 +31,14 @@ const pendingSeatEmails = `SELECT count(DISTINCT p.email) FROM pairing_links p
 
 // CheckAgentSeat returns a *domain.PlanLimitError when giving email an agent seat would exceed the
 // cap of the workspace's plan. A seat is an agent or a person with a pending invite, so a burst of
-// invites cannot pass the cap. Someone who is already an agent, or who already holds a seat through
-// another pending invite, needs no new seat. A workspace-wide advisory lock makes two concurrent
+// invites cannot pass the cap. Someone who is already an active agent, or who already holds a seat
+// through another pending invite, needs no new seat; a deactivated agent holds none, so reactivating
+// one takes a seat like a new invite does. A workspace-wide advisory lock makes two concurrent
 // invites see each other. The caller runs it only where plan limits apply (the hosted cloud).
+// team25Offered lets the refusal of a Team workspace point to Team 25.
 // ignoreInvite names an invite that is being redeemed, which is about to become the agent it
 // already reserved.
-func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time, email, ignoreInvite string) error {
+func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time, email, ignoreInvite string, team25Offered bool) error {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "agent-seats:"+workspaceID); err != nil {
 		return fmt.Errorf("lock agent seats: %w", err)
 	}
@@ -49,7 +51,7 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 		return &domain.LockedError{}
 	}
 	var known bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE workspace_id=$1 AND email=lower($2))`, workspaceID, email).Scan(&known); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM agents WHERE workspace_id=$1 AND email=lower($2) AND deactivated_at IS NULL)`, workspaceID, email).Scan(&known); err != nil {
 		return fmt.Errorf("check agent: %w", err)
 	}
 	if known {
@@ -58,7 +60,7 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 	plan := access.Plan
 	limit := domain.LimitsFor(plan).Agents
 	var seats int
-	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM agents WHERE workspace_id=$1) +
+	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM agents WHERE workspace_id=$1 AND deactivated_at IS NULL) +
 		(SELECT count(DISTINCT p.email) FROM pairing_links p
 			WHERE p.workspace_id=$1 AND p.kind='invite' AND p.used_at IS NULL AND p.revoked_at IS NULL AND p.expires_at > $2
 			AND p.id::text<>$3 AND p.email<>lower($4)
@@ -67,13 +69,20 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 		return fmt.Errorf("count agent seats: %w", err)
 	}
 	if seats+1 > limit {
-		return &domain.PlanLimitError{Plan: plan, Agents: limit}
+		return &domain.PlanLimitError{Plan: plan, Agents: limit, Team25Offered: team25Offered}
 	}
 	return nil
 }
 
-// repliesInWindow counts the deliveries that use up the trial's daily cap: failed ones never left.
-const repliesInWindow = `SELECT count(*) FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND status <> 'failed'`
+// countedDelivery is a delivery that uses up the trial's daily cap: queued, sent, or failed after it
+// was handed to the relay (sent_at set). A delivery report can fail a reply that already reached its
+// people, and anyone can post one to the workspace's inbound address, so a later failure never gives
+// them back. Only a delivery that failed before leaving does not count.
+const countedDelivery = `(status <> 'failed' OR sent_at IS NOT NULL)`
+
+// recipientsInWindow sums the people reached by the counted deliveries in the window: the contact plus
+// every Cc address of each reply.
+const recipientsInWindow = `SELECT COALESCE(sum(recipients),0) FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND ` + countedDelivery
 
 // customerWroteFirst is true for a conversation that holds a message from the customer: an
 // imported one, or inbound mail that came through the platform forwarder and whose authentication
@@ -100,8 +109,9 @@ func (s *Store) onTrial(ctx context.Context, tx pgx.Tx, workspaceID string, now 
 }
 
 // checkTrialOutbound refuses a new reply the trial does not allow with a *domain.TrialOutboundError:
-// first the customer-wrote-first rule, then the daily cap.
-func (s *Store) checkTrialOutbound(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, domainVerified bool) error {
+// first the customer-wrote-first rule, then the daily cap. recipients is how many people the reply
+// reaches (the contact plus its Cc list).
+func (s *Store) checkTrialOutbound(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, domainVerified bool, recipients int) error {
 	now := s.now()
 	if trial, err := s.onTrial(ctx, tx, workspaceID, now); err != nil || !trial {
 		return err
@@ -115,41 +125,46 @@ func (s *Store) checkTrialOutbound(ctx context.Context, tx pgx.Tx, workspaceID, 
 			return &domain.TrialOutboundError{}
 		}
 	}
-	return s.checkTrialCap(ctx, tx, workspaceID, now)
+	return s.checkTrialCap(ctx, tx, workspaceID, now, recipients)
 }
 
-// checkTrialCap refuses with a *domain.TrialOutboundError carrying RetryAfter when the workspace
-// already has TrialRepliesPerDay deliveries in the window. Both a new reply and the retry of a
-// failed one (which counts again once queued) pass through it. A workspace-wide advisory lock makes
-// two concurrent callers see each other's row before the cap is compared.
-func (s *Store) checkTrialCap(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) error {
+// checkTrialCap refuses with a *domain.TrialOutboundError carrying RetryAfter when sending to
+// recipients more people would take the workspace past TrialRecipientsPerDay in the window. Both a new
+// reply and the retry of a failed one (which counts again once queued) pass through it. A
+// workspace-wide advisory lock makes two concurrent callers see each other's row before the cap is
+// compared.
+func (s *Store) checkTrialCap(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time, recipients int) error {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "outbound-cap:"+workspaceID); err != nil {
 		return fmt.Errorf("lock outbound cap: %w", err)
 	}
 	windowStart := now.Add(-domain.TrialReplyWindow)
-	var sent int
-	if err := tx.QueryRow(ctx, repliesInWindow, workspaceID, windowStart).Scan(&sent); err != nil {
-		return fmt.Errorf("count recent replies: %w", err)
+	var reached int
+	if err := tx.QueryRow(ctx, recipientsInWindow, workspaceID, windowStart).Scan(&reached); err != nil {
+		return fmt.Errorf("count recent recipients: %w", err)
 	}
-	if sent < domain.TrialRepliesPerDay {
+	room := domain.TrialRecipientsPerDay - recipients
+	if reached <= room {
 		return nil
 	}
-	// The cap-th newest counted reply is the one whose leaving the window frees a slot.
+	// Walking from the newest delivery back, the first one at which the running total passes room is
+	// the one whose leaving the window frees enough for this reply.
 	var frees time.Time
-	if err := tx.QueryRow(ctx, `SELECT created_at FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND status <> 'failed'
-		ORDER BY created_at DESC OFFSET $3 LIMIT 1`, workspaceID, windowStart, domain.TrialRepliesPerDay-1).Scan(&frees); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT created_at FROM (
+			SELECT created_at, sum(recipients) OVER (ORDER BY created_at DESC, id ROWS UNBOUNDED PRECEDING) AS total
+			FROM email_outbox WHERE workspace_id=$1 AND created_at > $2 AND `+countedDelivery+`) counted
+		WHERE total > $3 ORDER BY total LIMIT 1`, workspaceID, windowStart, room).Scan(&frees); err != nil {
 		return fmt.Errorf("find next free slot: %w", err)
 	}
 	return &domain.TrialOutboundError{RetryAfter: frees.Add(domain.TrialReplyWindow).Sub(now)}
 }
 
-// repliesLast24h is the trial's cap usage as the admin sees it.
+// repliesLast24h is the trial's cap usage as the admin sees it: the people reached in the window.
 func repliesLast24h(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time) (int, error) {
-	var sent int
-	if err := tx.QueryRow(ctx, repliesInWindow, workspaceID, now.Add(-domain.TrialReplyWindow)).Scan(&sent); err != nil {
-		return 0, fmt.Errorf("count recent replies: %w", err)
+	var reached int
+	if err := tx.QueryRow(ctx, recipientsInWindow, workspaceID, now.Add(-domain.TrialReplyWindow)).Scan(&reached); err != nil {
+		return 0, fmt.Errorf("count recent recipients: %w", err)
 	}
-	return sent, nil
+	return reached, nil
 }
 
 // ownStorageBytes is what the trial's storage cap counts: the bytes of every attachment except those of
@@ -158,15 +173,15 @@ func repliesLast24h(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 // costs one row however many files the workspace holds.
 const ownStorageBytes = `SELECT counted_storage_bytes FROM workspaces WHERE id=$1`
 
-// storedStorageBytes is what the Founding plan's cap counts: every attachment, imported ones included
+// storedStorageBytes is what a paid plan's cap counts: every attachment, imported ones included
 // (see the founding-storage-counter migration).
 const storedStorageBytes = `SELECT stored_storage_bytes FROM workspaces WHERE id=$1`
 
-// storageCap is the cap of plan in bytes, 0 for none. A store built with WithFoundingStorageBytes
-// changes the Founding cap.
+// storageCap is the cap of plan in bytes, 0 for none. A store built with WithPaidStorageBytes
+// changes the cap of every plan that counts imported files.
 func (s *Store) storageCap(plan string) int64 {
-	if plan == domain.PlanFounding && s.foundingStorage > 0 {
-		return s.foundingStorage
+	if domain.StorageCountsImports(plan) && s.paidStorage > 0 {
+		return s.paidStorage
 	}
 	return domain.StorageCap(plan)
 }
@@ -217,7 +232,7 @@ func (s *Store) GetStorageRoom(ctx context.Context, workspaceID string) (Storage
 	return room, nil
 }
 
-// CheckInboundStorage is CheckStorage for a customer's email. A paying Founding workspace never
+// CheckInboundStorage is CheckStorage for a customer's email. A paying workspace never
 // bounces its customers' mail for storage: the mail is stored in full and its bytes still count, so
 // billing shows the usage past the cap. The cap holds for uploads, reply attachments and imports. The
 // trial and a locked workspace keep refusing inbound mail at their 2 GiB, as before.
@@ -229,7 +244,7 @@ func (s *Store) CheckInboundStorage(ctx context.Context, tx pgx.Tx, workspaceID 
 	if err != nil {
 		return err
 	}
-	if access.Plan == domain.PlanFounding {
+	if domain.StorageCountsImports(access.Plan) {
 		return nil
 	}
 	return s.CheckStorage(ctx, tx, workspaceID, addBytes, now)
@@ -239,8 +254,7 @@ func (s *Store) CheckInboundStorage(ctx context.Context, tx pgx.Tx, workspaceID 
 // cap of the workspace's plan. Reaching the cap exactly is allowed. It reads the plan and the usage
 // inside tx and takes no lock, so two requests that arrive together can together pass the cap by at
 // most one request. Every path that stores an attachment an agent or an import supplies calls it
-// before writing the bytes; inbound mail calls CheckInboundStorage. Team and self-hosted workspaces
-// have no cap.
+// before writing the bytes; inbound mail calls CheckInboundStorage. Self-hosted workspaces have no cap.
 func (s *Store) CheckStorage(ctx context.Context, tx pgx.Tx, workspaceID string, addBytes int64, now time.Time) error {
 	if !s.limits {
 		return nil

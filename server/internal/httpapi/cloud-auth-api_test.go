@@ -13,7 +13,7 @@ import (
 func TestCloudAuthDisabled(t *testing.T) {
 	api, _ := testAPI(t)
 	config := request(t, api, http.MethodGet, "/api/v1/config", nil, "", nil)
-	if config.Code != http.StatusOK || config.Body.String() != "{\"billing\":{\"enabled\":false},\"cloud_sign_in\":{\"enabled\":false,\"publishable_key\":null},\"signup\":{\"enabled\":false}}\n" {
+	if config.Code != http.StatusOK || config.Body.String() != "{\"billing\":{\"enabled\":false},\"cloud_sign_in\":{\"enabled\":false,\"publishable_key\":null},\"limits\":{\"outgoing_attachments_bytes\":10485760,\"outgoing_attachments_files\":10},\"signup\":{\"enabled\":false},\"version\":\"dev\"}\n" {
 		t.Fatalf("config status=%d body=%s", config.Code, config.Body.String())
 	}
 	exchanged := exchange(t, api, "not-a-token", "", testOrigin)
@@ -29,7 +29,7 @@ func TestCloudAuthValidTokenCreatesOrdinarySession(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := request(t, fixture.api, http.MethodGet, "/api/v1/config", nil, "", nil)
-	if config.Code != http.StatusOK || config.Body.String() != "{\"billing\":{\"enabled\":false},\"cloud_sign_in\":{\"enabled\":true,\"publishable_key\":\"pk_test_example\"},\"signup\":{\"enabled\":false}}\n" {
+	if config.Code != http.StatusOK || config.Body.String() != "{\"billing\":{\"enabled\":false},\"cloud_sign_in\":{\"enabled\":true,\"publishable_key\":\"pk_test_example\"},\"limits\":{\"outgoing_attachments_bytes\":10485760,\"outgoing_attachments_files\":10},\"signup\":{\"enabled\":false},\"version\":\"dev\"}\n" {
 		t.Fatalf("config status=%d body=%s", config.Code, config.Body.String())
 	}
 	response := exchange(t, fixture.api, fixture.token(t, nil), "", testOrigin)
@@ -170,5 +170,28 @@ func TestCloudAuthThrottlesUnknownKeyRefresh(t *testing.T) {
 	}
 	if requests := fixture.jwksRequests.Load(); requests != 2 {
 		t.Fatalf("JWKS requests=%d, want 2 (initial load plus one unknown-kid refresh)", requests)
+	}
+}
+
+// A cloud session is labelled with the browser that asked for it, like a pairing-link session,
+// so Settings can tell two cloud devices apart; without a label it stays "Cloud sign-in".
+func TestCloudAuthSessionKeepsTheBrowserLabel(t *testing.T) {
+	fixture := newCloudAuthFixture(t)
+	if _, _, err := fixture.service.CreateWorkspace(context.Background(), "Cloud", "admin@cloud.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	const agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15"
+	labelled := newRequest(t, http.MethodPost, "/api/v1/auth/cloud/exchange", map[string]any{"label": agent}, fixture.token(t, nil), nil)
+	labelled.Header.Set("Origin", testOrigin)
+	first := serve(fixture.api, labelled)
+	if first.Code != http.StatusOK {
+		t.Fatalf("exchange status=%d body=%s", first.Code, first.Body.String())
+	}
+	if second := exchange(t, fixture.api, fixture.token(t, nil), "", testOrigin); second.Code != http.StatusOK {
+		t.Fatalf("unlabelled exchange status=%d body=%s", second.Code, second.Body.String())
+	}
+	sessions := request(t, fixture.api, http.MethodGet, "/api/v1/auth/sessions", nil, "", sessionCookie(t, first))
+	if sessions.Code != http.StatusOK || !strings.Contains(sessions.Body.String(), agent) || !strings.Contains(sessions.Body.String(), `"label":"Cloud sign-in"`) {
+		t.Fatalf("sessions status=%d body=%s", sessions.Code, sessions.Body.String())
 	}
 }

@@ -46,10 +46,15 @@ type fakeFreshdesk struct {
 	archiveError         string
 	stallPath            string
 	extraReplyOnTicket6  bool
-	accountID            int
-	fileBody             map[string]string
-	fileLength           map[string]string
-	onRequest            func(path string)
+	// canned serves the canned response fixtures; without it the account has no canned responses.
+	canned bool
+	// cannedExtra are responses added to folder 801; cannedCountBoost is added to its responses_count.
+	cannedExtra      []map[string]any
+	cannedCountBoost int
+	accountID        int
+	fileBody         map[string]string
+	fileLength       map[string]string
+	onRequest        func(path string)
 	// failPathTimes makes the next N API requests to a path answer 500.
 	failPathTimes map[string]int
 	// failPathStatus makes every API request to a path answer with the given status.
@@ -188,11 +193,35 @@ func (f *fakeFreshdesk) serveAPI(w http.ResponseWriter, r *http.Request) {
 				"user_id": 299, "source": 0, "ticket_id": 6, "attachments": []any{}, "created_at": "2025-04-05T10:00:00Z", "updated_at": "2025-04-05T10:00:00Z"})
 		}
 		f.page(w, r, f.withFiles(items, n))
+	case r.URL.Path == "/api/v2/canned_response_folders":
+		f.page(w, r, f.cannedFolders())
+	case len(parts) == 3 && parts[0] == "canned_response_folders" && parts[2] == "responses":
+		f.page(w, r, f.cannedResponses(parts[1]))
 	case len(parts) == 3 && parts[2] == "time_entries":
 		f.page(w, r, f.list("time-entries-"+parts[1]+".json"))
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "not found"})
 	}
+}
+
+func (f *fakeFreshdesk) cannedFolders() []map[string]any {
+	if !f.canned {
+		return []map[string]any{}
+	}
+	folders := f.list("canned-folders.json")
+	folders[0]["responses_count"] = folders[0]["responses_count"].(float64) + float64(len(f.cannedExtra)+f.cannedCountBoost)
+	return folders
+}
+
+func (f *fakeFreshdesk) cannedResponses(folder string) []map[string]any {
+	if !f.canned {
+		return []map[string]any{}
+	}
+	items := f.list("canned-responses-" + folder + ".json")
+	if folder == "801" {
+		items = append(items, f.cannedExtra...)
+	}
+	return items
 }
 
 func (f *fakeFreshdesk) search(w http.ResponseWriter, r *http.Request) {

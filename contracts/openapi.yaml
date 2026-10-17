@@ -52,6 +52,9 @@ paths:
               type: object
               properties:
                 workspace_slug: {type: string, minLength: 1}
+                label:
+                  type: string
+                  description: Names the device in the session list, usually the browser user agent. Defaults to "Cloud sign-in".
       responses:
         '200': {$ref: '#/components/responses/Redeemed'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -244,6 +247,11 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '402': {$ref: '#/components/responses/PlanLimitReached'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '409':
+          description: >
+            The address belongs to a deactivated agent (error code `agent_deactivated`). Reactivate the agent
+            in the team list instead of inviting them again.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/auth/invites/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
     delete:
@@ -290,6 +298,31 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+    patch:
+      operationId: bulkUpdateConversations
+      x-permission: conversations:write
+      summary: Change up to 50 conversations at once
+      description: >
+        All or nothing: one transaction. A conversation id that is missing or belongs to another
+        workspace answers 404 and changes nothing; the response does not say which id. Status,
+        assignee and tags follow the same rules as `PATCH /conversations/{id}`. Tags in
+        `remove_tag_ids` are removed, then tags in `add_tag_ids` are added.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BulkConversationUpdate'}
+      responses:
+        '200':
+          description: Number of conversations changed
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BulkConversationUpdateResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/conversations/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -362,6 +395,25 @@ paths:
     post:
       operationId: createMessage
       x-permission: conversations:write
+      description: >
+        Send JSON for a text-only message, or `multipart/form-data` to attach files: fields `kind` and
+        `body` plus repeated `files` parts, each with a filename. A message carries at most
+        `limits.outgoing_attachments_files` files and `limits.outgoing_attachments_bytes` bytes in total
+        (both from `GET /api/v1/config`); more answers 413 and nothing is stored. A reply emails its
+        files as attachments; a note never leaves the workspace.
+
+
+        A reply may copy other people with `cc`: at most 10 plain addresses (`name@example.com`, no
+        display name), stored lowercase without duplicates. The conversation contact stays the only
+        `To` recipient and is dropped from `cc`; our own support, forwarding and sending addresses are
+        refused with 400, and so is `cc` on a note. In `multipart/form-data` send one `cc` field per
+        address, before the files. On the trial, `cc` may name only addresses the customer wrote from or
+        copied (customer mail through the platform forwarder that did not fail authentication, or
+        imported history) unless the sending domain is verified;
+        another address answers 403 `trial_outbound_restricted` with `refused_cc` listing every
+        refused address, and nothing is stored. Each reply counts its contact and every `cc` address
+        against the trial's 200 people a day. A retry of a
+        failed delivery sends to the same stored list. There is no Bcc.
       requestBody:
         required: true
         content:
@@ -372,6 +424,21 @@ paths:
               properties:
                 kind: {type: string, enum: [outgoing, note]}
                 body: {type: string, minLength: 1, description: Markdown source}
+                cc: {$ref: '#/components/schemas/CopiedAddresses'}
+          multipart/form-data:
+            schema:
+              type: object
+              required: [kind, body]
+              properties:
+                kind: {type: string, enum: [outgoing, note]}
+                body: {type: string, minLength: 1, description: Markdown source}
+                cc: {$ref: '#/components/schemas/CopiedAddresses'}
+                files:
+                  type: array
+                  maxItems: 10
+                  items: {type: string, format: binary}
+            encoding:
+              files: {contentType: application/octet-stream}
       responses:
         '201':
           description: Created reply or private note
@@ -383,7 +450,11 @@ paths:
         '402': {$ref: '#/components/responses/WorkspaceLocked'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '413': {$ref: '#/components/responses/AttachmentsTooLarge'}
         '429': {$ref: '#/components/responses/TrialOutboundLimit'}
+        '507':
+          description: The attachments volume is low on disk space; nothing was sent or stored
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/conversations/{id}/messages/{messageId}/retry:
     parameters:
       - {$ref: '#/components/parameters/ID'}
@@ -558,6 +629,29 @@ paths:
                   items: {type: array, items: {$ref: '#/components/schemas/TimeEntry'}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/inbox/activity:
+    get:
+      operationId: getInboxActivity
+      x-permission: conversations:read
+      description: >-
+        What changed in the inbox after `since`: conversations created, conversations another agent
+        assigned to the caller, and conversations that changed in any way (a new customer message, a
+        status, assignee, priority or tag change, a reply or note). `updated` includes the caller's own
+        changes; only `incoming_at` marks something to announce. Each list holds at most 50 items,
+        newest first; in `updated`, conversations with a customer message in the window come first, so
+        a bulk change cannot push a customer reply out of the list. Send the returned `now`
+        as the next `since`. A `since` older than 10 minutes is treated as 10 minutes old; an agent who
+        was away longer reloads the inbox. A list can repeat an item from the previous call (a short lookback covers conversations that committed late), so the client removes duplicates by id (`updated` items by `id` and `updated_at`). Without `since` the lists are empty and `now` is the first cursor.
+      parameters:
+        - {name: since, in: query, schema: {type: string, format: date-time}}
+      responses:
+        '200':
+          description: Inbox activity after the cursor
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/InboxActivity'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
   /api/v1/attachments/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -653,17 +747,60 @@ paths:
     get:
       operationId: listAgents
       x-permission: access:read
+      description: >
+        Every agent of the workspace, deactivated ones included (old conversations and messages still name
+        them). Clients hide deactivated agents from assignee pickers.
       responses:
         '200':
-          description: Workspace agents
+          description: Workspace team
           content:
             application/json:
               schema:
                 type: object
                 required: [items]
                 properties:
-                  items: {type: array, items: {$ref: '#/components/schemas/Agent'}}
+                  items: {type: array, items: {$ref: '#/components/schemas/TeamMember'}}
         '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/agents/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    patch:
+      operationId: updateAgent
+      x-permission: access:write
+      description: >
+        Change an agent's role or active state; send at least one of `role` and `active`. Deactivating an
+        agent, in one transaction: sets `deactivated_at`, revokes the agent's sessions and unused sign-in
+        links and invites, and moves the agent's open and pending conversations to `reassign_to` (to
+        Unassigned when it is absent). Resolved and closed conversations keep their assignee. A
+        deactivated agent cannot sign in and holds no seat. Reactivating clears `deactivated_at`, takes a
+        seat again and does not restore assignments; the agent signs in through a new link. Sending the
+        state an agent already has changes nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: {$ref: '#/components/schemas/Role'}
+                active: {type: boolean}
+                reassign_to:
+                  type: [string, 'null']
+                  format: uuid
+                  description: 'Only with `active: false`. An active agent of this workspace other than the one being deactivated; an invalid target is `invalid_reassign_target` and nothing changes.'
+      responses:
+        '200':
+          description: The agent after the change
+          content: {application/json: {schema: {$ref: '#/components/schemas/TeamMember'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/PlanLimitReached'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: >
+            The change would leave the workspace without an active admin (error code `last_admin`). Make
+            another agent an admin first.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/workspace/timezone:
     patch:
       operationId: updateWorkspaceTimezone
@@ -795,6 +932,81 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/saved-replies:
+    get:
+      operationId: listSavedReplies
+      x-permission: conversations:read
+      description: >
+        The saved replies every agent in the workspace shares, ordered by title ignoring case. The
+        body may hold the variables `{{customer.name}}` and `{{agent.name}}`; the web app fills them
+        in when an agent inserts the reply. The API returns the text as stored.
+      responses:
+        '200':
+          description: Workspace saved replies
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/SavedReply'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createSavedReply
+      x-permission: conversations:write
+      description: >
+        Any agent may create one. The title is unique in the workspace ignoring case (409
+        `duplicate_title`). A workspace holds at most 500 (409 `saved_reply_limit`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SavedReplyInput'}
+      responses:
+        '201':
+          description: Created saved reply
+          content: {application/json: {schema: {$ref: '#/components/schemas/SavedReply'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/saved-replies/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    patch:
+      operationId: updateSavedReply
+      x-permission: conversations:write
+      description: >
+        Change the title, the body or both. Any agent may edit a shared reply. Send back the
+        `updated_at` you read; when the reply was saved since, nothing changes and the answer is 409
+        `changed_elsewhere`. A taken title is 409 `duplicate_title`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updated_at]
+              properties:
+                updated_at: {type: string, format: date-time}
+                title: {type: string, minLength: 1, maxLength: 200}
+                body: {type: string, minLength: 1, maxLength: 20000}
+      responses:
+        '200':
+          description: Updated saved reply
+          content: {application/json: {schema: {$ref: '#/components/schemas/SavedReply'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: deleteSavedReply
+      x-permission: conversations:write
+      responses:
+        '204': {description: Saved reply deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/billing:
     get:
       operationId: getBilling
@@ -819,7 +1031,7 @@ paths:
       description: >
         Start a hosted checkout for the signed-in workspace. The workspace is taken from the session,
         never from the body. A workspace that already has a paid plan gets 409; it changes or cancels
-        its plan in the portal.
+        its plan in the portal. The `founding` plan gets 409 `founding_closed` once its slots are used up.
       requestBody:
         required: true
         content:
@@ -880,6 +1092,64 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/webhooks/resend:
+    post:
+      operationId: receiveResendWebhook
+      security: [{resendWebhook: []}]
+      x-permission: public
+      description: >
+        Receives Resend email events. Resend owns the envelope sender and rewrites the Message-ID, so its
+        bounces never reach `MAIL_FROM_DOMAIN`; this webhook is how a reply sent through it shows
+        **Delivery failed**. Authenticated by the Svix signature (`svix-id`, `svix-timestamp`,
+        `svix-signature`), not by a session; a missing, wrong or stale signature is 401 and nothing is
+        read. `email.bounced` (permanent) and `email.complained` fail the one reply named by the sender
+        `reply+<token>-<reply id>@MAIL_FROM_DOMAIN` (for the older `reply+<token>@` form, only the reply
+        whose Message-ID the relay kept) when the event names only the conversation's contact; when it
+        names only Cc addresses of the reply, the reply stays sent and the missed copies are added to
+        its note. Every understood event is 200 so Resend stops retrying; `status` is `applied`,
+        `duplicate` (this `svix-id` was already applied) or `ignored` (other event types, a reply sent as
+        a verified support address, no matching reply, the contact next to others or an address the
+        reply was not sent to). Only present when
+        `RESEND_WEBHOOK_SECRET` is set.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        '200':
+          description: Event understood
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebhookResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/founding:
+    get:
+      operationId: getFoundingSlots
+      security: []
+      x-permission: public
+      description: >
+        How many of the Founding slots are taken, for the marketing site. Answered from server memory,
+        never from the billing provider on the request: `taken` is null until the server has counted
+        once after it started. `open` is false once Founding is closed, which is one-way: the slots
+        are used up or the product was archived. Only present when billing is configured.
+      responses:
+        '200':
+          description: Founding slot state
+          headers:
+            Cache-Control:
+              schema: {type: string}
+              description: '`public, max-age=60`'
+            Access-Control-Allow-Origin:
+              schema: {type: string}
+              description: The marketing site origin
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/FoundingSlots'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/export:
     get:
       operationId: exportWorkspace
@@ -1089,6 +1359,7 @@ components:
     sessionCookie: {type: apiKey, in: cookie, name: colliedesk_session}
     inboundSecret: {type: apiKey, in: header, name: X-Colliedesk-Inbound-Secret}
     polarWebhook: {type: apiKey, in: header, name: webhook-signature}
+    resendWebhook: {type: apiKey, in: header, name: svix-signature}
   parameters:
     ID:
       name: id
@@ -1132,6 +1403,9 @@ components:
     BadGateway:
       description: The billing provider failed or could not be reached; nothing changed, try again
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    AttachmentsTooLarge:
+      description: More files than allowed or more bytes than allowed in total for one message; nothing was stored
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     PayloadTooLarge:
       description: Message larger than 25 MiB or with more than 100 attachments; nothing was stored
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
@@ -1158,9 +1432,10 @@ components:
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     TrialOutboundLimit:
       description: >
-        A trial workspace already sent 200 replies in the last 24 hours (error code
-        `trial_outbound_limit`, with `retry_after_seconds` and a `Retry-After` header: the time until
-        the oldest counted reply leaves the window). Nothing was stored. Paid plans have no such limit.
+        Sending this reply would take a trial workspace past 200 people emailed in the last 24 hours,
+        where each reply counts its contact and every Cc address (error code `trial_outbound_limit`,
+        with `retry_after_seconds` and a `Retry-After` header: the time until enough counted replies
+        leave the window). Nothing was stored. Paid plans have no such limit.
       headers:
         Retry-After: {schema: {type: integer}}
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
@@ -1194,7 +1469,8 @@ components:
         `scope_insufficient`; the message names the tier the action needs. On
         `POST /conversations/{id}/messages` a trial workspace gets error code
         `trial_outbound_restricted` for a reply to a conversation the customer did not start
-        (unless it verified its sending domain); nothing was stored.
+        (unless it verified its sending domain), or for a `cc` address the customer never wrote
+        from or copied (then `refused_cc` lists them); nothing was stored.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error404:
       description: Resource not found in this workspace
@@ -1202,8 +1478,15 @@ components:
   schemas:
     PublicConfig:
       type: object
-      required: [cloud_sign_in, billing, signup]
+      required: [cloud_sign_in, billing, signup, limits]
       properties:
+        version: {type: string, description: 'The running build: a release tag such as `v0.0.1`, `edge-<commit>` for a main build, or `dev`.'}
+        limits:
+          type: object
+          required: [outgoing_attachments_bytes, outgoing_attachments_files]
+          properties:
+            outgoing_attachments_bytes: {type: integer, description: Most raw bytes of files one reply or note can carry in total.}
+            outgoing_attachments_files: {type: integer, description: Most files one reply or note can carry.}
         cloud_sign_in:
           type: object
           required: [enabled, publishable_key]
@@ -1226,7 +1509,14 @@ components:
       properties:
         url: {type: string, description: 'Path on this server, for example /api/v1/export/download/<token>.'}
         expires_in_seconds: {type: integer}
-    CheckoutPlan: {type: string, enum: [team_monthly, team_yearly, founding]}
+    CheckoutPlan: {type: string, enum: [team_monthly, team_yearly, team25_monthly, team25_yearly, founding], description: '`team25_*` is refused with 400 on a server that has no Polar product for it.'}
+    FoundingSlots:
+      type: object
+      required: [slots, taken, open]
+      properties:
+        slots: {type: integer, description: Founding slots in total}
+        taken: {type: [integer, 'null'], description: 'Slots held by active, trialing or past due subscriptions; null until counted'}
+        open: {type: boolean, description: Whether Founding can still be bought}
     WebhookResult:
       type: object
       required: [status]
@@ -1234,11 +1524,11 @@ components:
         status: {type: string, enum: [applied, duplicate, stale, ignored]}
     Billing:
       type: object
-      required: [plan, trial_ends_at, locked, status, current_period_end, cancel_at_period_end, active_subscriptions, complimentary, complimentary_until, limits, usage]
+      required: [plan, trial_ends_at, locked, status, current_period_end, cancel_at_period_end, active_subscriptions, complimentary, complimentary_until, limits, usage, checkout_plans]
       properties:
         plan:
           type: string
-          enum: [trial, team, founding, none]
+          enum: [trial, team, team25, founding, none]
           description: The plan in effect now. `trial` is the free trial; `none` means the trial is over and nothing is paid.
         trial_ends_at: {type: string, format: date-time, description: 'When the free trial ends or ended, whatever the plan.'}
         locked: {type: boolean, description: 'True when `plan` is `none`; the workspace refuses every route outside the locked allowlist.'}
@@ -1266,16 +1556,20 @@ components:
           type: [string, 'null']
           format: date-time
           description: 'When a complimentary plan ends; null when it has no end or the plan is not complimentary.'
+        checkout_plans:
+          type: array
+          items: {$ref: '#/components/schemas/CheckoutPlan'}
+          description: 'The plans this server can sell, in the order to offer them. `team25_*` appear only when both Team 25 products are configured; the web app shows a purchase button for each plan listed and for no other. `founding` is dropped once Founding is closed.'
         limits:
           type: object
           required: [agents, storage_bytes, storage_warn_bytes, replies_per_24h]
           properties:
             agents: {type: integer, description: 'Seats of the plan; 0 when locked.'}
-            replies_per_24h: {type: [integer, 'null'], description: 'Emailed replies allowed in any 24 hours on the trial; null on every other plan and self-hosted.'}
+            replies_per_24h: {type: [integer, 'null'], description: 'People that emailed replies may reach in any 24 hours on the trial, each reply counting its contact and every Cc address; null on every other plan and self-hosted.'}
             storage_bytes:
               type: [integer, 'null']
               format: int64
-              description: 'Attachment storage cap in bytes, 2 GiB on the trial and when locked (imported files do not count), 20 GiB on the Founding plan (imported files count); null on Team and on self-hosted, which have none.'
+              description: 'Attachment storage cap in bytes: 2 GiB on the trial and when locked (imported files do not count); 20 GiB on Founding, 100 GiB on Team and 250 GiB on Team 25 (imported files count); null on self-hosted, which has none.'
             storage_warn_bytes:
               type: [integer, 'null']
               format: int64
@@ -1291,7 +1585,7 @@ components:
               description: Attachment bytes counted against `limits.storage_bytes`. On the trial files of imported messages are not counted; on the Founding plan every file is, imported ones included.
             replies_last_24h:
               type: integer
-              description: Emailed replies of the last 24 hours that count against the trial cap of 200; 0 on other plans.
+              description: People reached by the emailed replies of the last 24 hours (the contact plus every Cc address of each reply), which count against the trial cap of 200; 0 on other plans.
             pending_invites:
               type: integer
               description: Unused, unrevoked, unexpired invites. Each holds an agent seat, so agents plus pending invites is compared with `limits.agents`.
@@ -1329,6 +1623,26 @@ components:
         display_name: {type: string}
         role: {$ref: '#/components/schemas/Role'}
         timezone_override: {type: [string, 'null']}
+    TeamMember:
+      type: object
+      required: [id, email, display_name, role, timezone_override, deactivated_at, last_active_at, open_conversations]
+      properties:
+        id: {type: string, format: uuid}
+        email: {type: string, format: email}
+        display_name: {type: string}
+        role: {$ref: '#/components/schemas/Role'}
+        timezone_override: {type: [string, 'null']}
+        deactivated_at:
+          type: [string, 'null']
+          format: date-time
+          description: Null for an active agent.
+        last_active_at:
+          type: [string, 'null']
+          format: date-time
+          description: The last time a session of the agent was used; null when none ever was.
+        open_conversations:
+          type: integer
+          description: Open and pending conversations assigned to the agent; a deactivation moves them.
     Redeemed:
       type: object
       required: [agent, workspace]
@@ -1355,7 +1669,7 @@ components:
             - type: object
               required: [plan, trial_ends_at, locked, trial_extended]
               properties:
-                plan: {type: string, enum: [trial, team, founding, none]}
+                plan: {type: string, enum: [trial, team, team25, founding, none]}
                 trial_ends_at: {type: string, format: date-time}
                 locked: {type: boolean}
                 trial_extended: {type: boolean, description: True when a Freshdesk import already extended the trial.}
@@ -1374,7 +1688,7 @@ components:
         session: {$ref: '#/components/schemas/Session'}
     Session:
       type: object
-      required: [id, agent_id, agent_email, label, scope, created_at, last_seen_at, expires_at, revoked_at]
+      required: [id, agent_id, agent_email, label, scope, current, created_at, last_seen_at, expires_at, revoked_at]
       properties:
         id: {type: string, format: uuid}
         agent_id: {type: string, format: uuid}
@@ -1385,6 +1699,9 @@ components:
           oneOf:
             - type: 'null'
             - $ref: '#/components/schemas/TokenScope'
+        current:
+          type: boolean
+          description: True for the session that made this request, so a client can mark "this device".
         created_at: {type: string, format: date-time}
         last_seen_at: {type: string, format: date-time}
         expires_at: {type: string, format: date-time}
@@ -1425,12 +1742,29 @@ components:
         id: {type: string, format: uuid}
         name: {type: string}
         color: {type: string}
+    SavedReplyInput:
+      type: object
+      required: [title, body]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 200}
+        body: {type: string, minLength: 1, maxLength: 20000}
+    SavedReply:
+      type: object
+      required: [id, title, body, created_by_agent_id, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string}
+        body: {type: string}
+        created_by_agent_id: {type: [string, 'null'], format: uuid}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
     Conversation:
       type: object
-      required: [id, contact_id, subject, status, priority, assignee_id, tags, origin, created_at, updated_at]
+      required: [id, contact_id, contact_name, subject, status, priority, assignee_id, tags, origin, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         contact_id: {type: string, format: uuid}
+        contact_name: {type: string}
         subject: {type: string}
         status: {$ref: '#/components/schemas/ConversationStatus'}
         priority: {$ref: '#/components/schemas/Priority'}
@@ -1455,6 +1789,29 @@ components:
         first_response_due_at: {type: [string, 'null'], format: date-time}
         cc: {type: array, items: {type: string}}
         forwarded_to: {type: array, items: {type: string}}
+    BulkConversationUpdate:
+      type: object
+      required: [ids, changes]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 50
+          uniqueItems: true
+          items: {type: string, format: uuid}
+        changes:
+          type: object
+          minProperties: 1
+          properties:
+            status: {$ref: '#/components/schemas/ConversationStatus'}
+            assignee_id: {type: [string, 'null'], format: uuid}
+            add_tag_ids: {type: array, items: {type: string, format: uuid}, maxItems: 50}
+            remove_tag_ids: {type: array, items: {type: string, format: uuid}, maxItems: 50}
+    BulkConversationUpdateResult:
+      type: object
+      required: [updated]
+      properties:
+        updated: {type: integer, minimum: 1}
     ConversationPage:
       type: object
       required: [items, page, page_size]
@@ -1462,9 +1819,52 @@ components:
         items: {type: array, items: {$ref: '#/components/schemas/Conversation'}}
         page: {type: integer, minimum: 1}
         page_size: {type: integer, minimum: 1}
+    InboxActivity:
+      type: object
+      required: [now, new_conversations, assigned_to_me, updated]
+      properties:
+        now: {type: string, format: date-time}
+        new_conversations:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [id, subject, contact_name, created_at]
+            properties:
+              id: {type: string, format: uuid}
+              subject: {type: string}
+              contact_name: {type: string}
+              created_at: {type: string, format: date-time}
+        assigned_to_me:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [id, subject, contact_name, assigned_at]
+            properties:
+              id: {type: string, format: uuid}
+              subject: {type: string}
+              contact_name: {type: string}
+              assigned_at: {type: string, format: date-time}
+        updated:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [id, subject, contact_name, assignee_id, updated_at, incoming_at]
+            properties:
+              id: {type: string, format: uuid}
+              subject: {type: string}
+              contact_name: {type: string}
+              assignee_id: {type: [string, 'null'], format: uuid}
+              updated_at: {type: string, format: date-time}
+              incoming_at:
+                type: [string, 'null']
+                format: date-time
+                description: Time of the newest customer message inside the polled window, or null when the change was not a customer message.
     Message:
       type: object
-      required: [id, conversation_id, author_agent_id, author_name, agent_token, kind, body, body_html, origin, attachments, created_at, delivery, email]
+      required: [id, conversation_id, author_agent_id, author_name, agent_token, kind, body, body_html, origin, attachments, cc, created_at, delivery, email]
       properties:
         id: {type: string, format: uuid}
         conversation_id: {type: string, format: uuid}
@@ -1488,6 +1888,9 @@ components:
             - {type: 'null'}
             - {$ref: '#/components/schemas/MessageOrigin'}
         attachments: {type: array, items: {$ref: '#/components/schemas/Attachment'}}
+        cc:
+          description: Addresses an outgoing reply was copied to; empty for every other message.
+          allOf: [{$ref: '#/components/schemas/CopiedAddresses'}]
         created_at: {type: string, format: date-time}
         delivery:
           description: Email delivery of an outgoing reply; null when the reply was not emailed.
@@ -1507,6 +1910,11 @@ components:
         label: {type: string, description: 'Name the token was given when it was created, for example Claude Code'}
         scope: {$ref: '#/components/schemas/TokenScope'}
         agent_name: {type: string, description: 'Display name, or the email when there is none, of the agent the token acts as'}
+    CopiedAddresses:
+      type: array
+      maxItems: 10
+      description: Plain email addresses copied on a reply, lowercase, without duplicates.
+      items: {type: string}
     MessageOrigin:
       type: object
       required: [system, external_id, kind, from, to, cc, bcc]
@@ -1553,7 +1961,12 @@ components:
       properties:
         status: {$ref: '#/components/schemas/DeliveryStatus'}
         attempts: {type: integer, minimum: 0}
-        last_error: {type: [string, 'null']}
+        last_error:
+          type: [string, 'null']
+          description: >
+            Why a failed or retried delivery did not go out. On a sent reply, names the copied (Cc)
+            addresses it did not reach: refused by the relay or bounced later. A copy that misses
+            never fails the reply to the contact.
         sent_at: {type: [string, 'null'], format: date-time}
     EmailAuthentication:
       type: string
@@ -1572,6 +1985,12 @@ components:
             Door the message came through; absent on mail stored before this was recorded. `web_form`
             is text typed into the public web form: the address is unverified (authentication `none`).
             Trial replies need `platform`.
+        cc:
+          type: array
+          description: >-
+            Other addresses on the Cc line of the email (not the sender, not our own addresses), as the
+            reply box offers them to copy. Absent on mail stored before Cc was kept.
+          items: {type: string}
         original_attachment_id:
           type: [string, 'null']
           format: uuid
@@ -1665,3 +2084,7 @@ components:
               description: 'Present on validation errors (422), one message per bad field name'
               additionalProperties: {type: string}
             retry_after_seconds: {type: integer, description: 'Only on trial_outbound_limit: seconds until a reply can be sent.'}
+            refused_cc:
+              type: array
+              items: {type: string}
+              description: 'Only on trial_outbound_restricted caused by Cc: exactly the addresses the trial refused to copy.'

@@ -177,6 +177,33 @@ func TestPrivilegedPathSeesEveryWorkspace(t *testing.T) {
 	}
 }
 
+func TestPrivilegedReadOnlySnapshotSeesEveryWorkspaceAndRefusesWrites(t *testing.T) {
+	pool := testPool(t)
+	if err := Migrate(context.Background(), pool); err != nil {
+		t.Fatal(err)
+	}
+	seedTwoWorkspaces(t, pool)
+	var count int
+	var level, readOnly string
+	options := pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}
+	err := New(pool).Privileged(context.Background(), PrivilegeWorkspaceBySlug, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(context.Background(), `SELECT count(*), current_setting('transaction_isolation'), current_setting('transaction_read_only') FROM conversations`).Scan(&count, &level, &readOnly); err != nil {
+			return err
+		}
+		_, err := tx.Exec(context.Background(), `DELETE FROM conversations`)
+		if err == nil {
+			t.Error("a read-only snapshot accepted a write")
+		}
+		return nil
+	}, options)
+	if err == nil {
+		t.Fatal("the failed write must abort the transaction")
+	}
+	if count != 2 || level != "repeatable read" || readOnly != "on" {
+		t.Fatalf("count=%d isolation=%q read_only=%q, want 2, repeatable read, on", count, level, readOnly)
+	}
+}
+
 // securityGaps lists every table of the current schema that needs row-level security and lacks
 // ENABLE, FORCE or the workspace_isolation policy for the app role.
 func securityGaps(t *testing.T, pool *pgxpool.Pool) (checked, gaps []string) {

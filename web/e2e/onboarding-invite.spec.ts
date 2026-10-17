@@ -16,7 +16,7 @@ test('invite teammate: admin invites, teammate joins under the agent ceiling, ad
 
   await admin.getByRole('link', { name: 'Settings' }).click();
   await admin.getByLabel('Invite email').fill(teammateEmail);
-  await admin.getByLabel('Role ceiling').selectOption('agent');
+  await admin.getByRole('combobox', { name: 'Role', exact: true }).selectOption('agent');
   await admin.getByRole('button', { name: 'Create invite' }).click();
   const inviteURL = await admin.getByRole('textbox', { name: 'One-time invite link' }).inputValue();
   expect(inviteURL).toMatch(new RegExp(`^${baseURL}/sign-in\\?token=`));
@@ -71,6 +71,18 @@ test('invite teammate: admin invites, teammate joins under the agent ceiling, ad
 
   // The admin's own session is unaffected.
   expect((await admin.request.get(`${baseURL}/api/v1/auth/me`)).status()).toBe(200);
+
+  // The team list shows the teammate; deactivating asks first, ends their access and can be undone.
+  const team = admin.getByRole('region', { name: 'Team' });
+  const teammateRow = team.getByRole('article').filter({ hasText: teammateEmail.toLowerCase() });
+  await expect(teammateRow).toContainText('Active');
+  await teammateRow.getByRole('button', { name: `Deactivate ${teammateEmail.toLowerCase()}` }).click();
+  await team.getByRole('button', { name: 'Yes, deactivate' }).click();
+  await expect(teammateRow).toContainText('Deactivated');
+  expect((await admin.request.get(`${baseURL}/api/v1/agents`)).status()).toBe(200);
+  await teammateRow.getByRole('button', { name: `Reactivate ${teammateEmail.toLowerCase()}` }).click();
+  await expect(teammateRow).toContainText('Active');
+  await expect(teammateRow).not.toContainText('Deactivated');
 
   // An unused invite can be revoked; its link then signs nobody in.
   await admin.getByLabel('Invite email').fill(`late-${suffix}@example.com`);

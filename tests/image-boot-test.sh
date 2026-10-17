@@ -61,4 +61,12 @@ until "$DOCKER" exec "$NAME-server" /app/collie healthcheck >/dev/null 2>&1; do
   fi
   sleep 1
 done
+# The Release button reads the running build from GET /api/v1/config, so the HTTP API must
+# report the same version as the binary. Bash in the postgres image speaks HTTP over /dev/tcp.
+config=$("$DOCKER" exec "$NAME-postgres" bash -c "exec 3<>/dev/tcp/$NAME-server/8080 &&
+  printf 'GET /api/v1/config HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && cat <&3")
+case $config in
+  *"\"version\":\"$EXPECTED_VERSION\""*) ;;
+  *) echo "GET /api/v1/config does not report version '$EXPECTED_VERSION': $config" >&2; exit 1 ;;
+esac
 echo "image $IMAGE booted healthy at version $actual_version"

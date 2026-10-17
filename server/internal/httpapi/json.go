@@ -12,6 +12,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func decodeJSON(request *http.Request, target any) error {
@@ -35,6 +36,21 @@ func writeError(response http.ResponseWriter, status int, code, message string) 
 
 func writeStoreError(response http.ResponseWriter, err error) {
 	if writePlanLimit(response, err) {
+		return
+	}
+	var database *pgconn.PgError
+	switch {
+	case errors.As(err, &database) && (database.Code == "40P01" || database.Code == "40001"):
+		writeError(response, http.StatusConflict, "conflict", "Another change was in progress on the same conversations. Nothing was changed; try again.")
+		return
+	case errors.Is(err, domain.ErrLastAdmin):
+		writeError(response, http.StatusConflict, "last_admin", domain.ErrLastAdmin.Error()+". Make another agent an admin first.")
+		return
+	case errors.Is(err, domain.ErrAgentDeactivated):
+		writeError(response, http.StatusConflict, "agent_deactivated", domain.ErrAgentDeactivated.Error()+".")
+		return
+	case errors.Is(err, domain.ErrInvalidReassignTarget):
+		writeError(response, http.StatusBadRequest, "invalid_reassign_target", domain.ErrInvalidReassignTarget.Error()+".")
 		return
 	}
 	if errors.Is(err, pgx.ErrNoRows) || strings.Contains(err.Error(), "not found") {
@@ -69,7 +85,11 @@ func writePlanLimit(response http.ResponseWriter, err error) bool {
 // customer did not write first) and 429 trial_outbound_limit, with Retry-After, for the daily cap.
 func writeTrialOutbound(response http.ResponseWriter, refusal *domain.TrialOutboundError) {
 	if !refusal.Limited() {
-		writeError(response, http.StatusForbidden, "trial_outbound_restricted", refusal.Error())
+		body := map[string]any{"code": "trial_outbound_restricted", "message": refusal.Error()}
+		if len(refusal.RefusedCC) > 0 {
+			body["refused_cc"] = refusal.RefusedCC
+		}
+		writeJSON(response, http.StatusForbidden, map[string]any{"error": body})
 		return
 	}
 	seconds := int((refusal.RetryAfter + time.Second - 1) / time.Second)

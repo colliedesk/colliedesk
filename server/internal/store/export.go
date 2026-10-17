@@ -73,6 +73,9 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string, sink ex
 	if err := exportTags(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
+	if err := exportSavedReplies(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
 	return exportConversations(ctx, tx, workspaceID, sink)
 }
 
@@ -87,7 +90,7 @@ func exportWorkspaceRow(ctx context.Context, tx pgx.Tx, workspaceID string, sink
 }
 
 func exportAgents(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,email,display_name,role,timezone_override,created_at
+	rows, err := tx.Query(ctx, `SELECT id::text,email,display_name,role,timezone_override,created_at,deactivated_at
 		FROM agents WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export agents: %w", err)
@@ -95,10 +98,11 @@ func exportAgents(ctx context.Context, tx pgx.Tx, workspaceID string, sink expor
 	defer rows.Close()
 	for rows.Next() {
 		var record export.Agent
-		if err := rows.Scan(&record.ID, &record.Email, &record.DisplayName, &record.Role, &record.TimezoneOverride, &record.CreatedAt); err != nil {
+		if err := rows.Scan(&record.ID, &record.Email, &record.DisplayName, &record.Role, &record.TimezoneOverride, &record.CreatedAt, &record.DeactivatedAt); err != nil {
 			return fmt.Errorf("export agents: %w", err)
 		}
 		record.CreatedAt = domain.UTC(record.CreatedAt)
+		record.DeactivatedAt = domain.UTCOptional(record.DeactivatedAt)
 		if err := sink.Agent(record); err != nil {
 			return err
 		}
@@ -143,6 +147,26 @@ func exportTags(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.
 		}
 	}
 	return rowsError("export tags", rows)
+}
+
+func exportSavedReplies(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	rows, err := tx.Query(ctx, `SELECT id::text,title,body,created_by_agent_id::text,created_at,updated_at
+		FROM saved_replies WHERE workspace_id=$1 ORDER BY id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export saved replies: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var record export.SavedReply
+		if err := rows.Scan(&record.ID, &record.Title, &record.Body, &record.CreatedByAgentID, &record.CreatedAt, &record.UpdatedAt); err != nil {
+			return fmt.Errorf("export saved replies: %w", err)
+		}
+		record.CreatedAt, record.UpdatedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt)
+		if err := sink.SavedReply(record); err != nil {
+			return err
+		}
+	}
+	return rowsError("export saved replies", rows)
 }
 
 func rowsError(what string, rows pgx.Rows) error {
@@ -289,7 +313,7 @@ func exportPageTimeEntries(ctx context.Context, tx pgx.Tx, workspaceID string, i
 
 // exportMessages streams one conversation's messages, one row in memory at a time.
 func exportMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, files map[string][]export.Attachment, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,author_agent_id::text,author_name,kind,body,body_html,origin,email_message_id,email_meta,created_at
+	rows, err := tx.Query(ctx, `SELECT id::text,conversation_id::text,author_agent_id::text,author_name,kind,body,body_html,origin,email_message_id,email_meta,cc,created_at
 		FROM messages WHERE workspace_id=$1 AND conversation_id=$2 ORDER BY created_at,id`, workspaceID, conversationID)
 	if err != nil {
 		return fmt.Errorf("export messages: %w", err)
@@ -299,7 +323,7 @@ func exportMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 		var record export.Message
 		var meta []byte
 		if err := rows.Scan(&record.ID, &record.ConversationID, &record.AuthorAgentID, &record.AuthorName, &record.Kind, &record.Body,
-			&record.BodyHTML, &record.Origin, &record.EmailMessageID, &meta, &record.CreatedAt); err != nil {
+			&record.BodyHTML, &record.Origin, &record.EmailMessageID, &meta, &record.CC, &record.CreatedAt); err != nil {
 			return fmt.Errorf("export messages: %w", err)
 		}
 		record.CreatedAt = domain.UTC(record.CreatedAt)

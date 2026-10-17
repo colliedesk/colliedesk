@@ -21,6 +21,9 @@ type Options struct {
 	// Freshdesk; the id probe always covers at least this far.
 	LastTicketID int64
 	DryRun       bool
+	// IncludePersonalCannedResponses also imports canned responses from personal folders. They become
+	// shared with the whole workspace, so the default leaves them out and lists their ids.
+	IncludePersonalCannedResponses bool
 	// Storage receives attachment bytes; not needed for a dry run.
 	Storage attachments.Storage
 	// Sleep waits between rate-limited requests; tests replace it.
@@ -33,9 +36,9 @@ type Options struct {
 	// Cloud is true on Colliedesk Cloud, the only place a trial exists. A self-hosted run still
 	// moves the stored end (nothing reads it) but reports nothing about it.
 	Cloud bool
-	// FoundingStorageBytes replaces the Founding plan's 20 GiB attachment cap when above zero; tests
+	// PaidStorageBytes replaces the attachment cap of every plan that counts imports when above zero; tests
 	// use a small one.
-	FoundingStorageBytes int64
+	PaidStorageBytes int64
 	// Now is the clock of the trial extension; nil means time.Now.
 	Now func() time.Time
 

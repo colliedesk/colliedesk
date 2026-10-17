@@ -19,14 +19,15 @@ export const publicConfigSchema = z.object({
   cloud_sign_in: z.object({ enabled: z.boolean(), publishable_key: z.string().nullable() }),
   billing: z.object({ enabled: z.boolean() }),
   signup: z.object({ enabled: z.boolean() }),
+  limits: z.object({ outgoing_attachments_bytes: z.number().int(), outgoing_attachments_files: z.number().int() }),
 }) satisfies z.ZodType<Generated<'PublicConfig'>>;
-export const checkoutPlanSchema = z.enum(['team_monthly', 'team_yearly', 'founding']);
-export const planSchema = z.enum(['trial', 'team', 'founding', 'none']);
+export const checkoutPlanSchema = z.enum(['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding']);
+export const planSchema = z.enum(['trial', 'team', 'team25', 'founding', 'none']);
 export const billingSchema = z.object({
   plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(),
   status: z.enum(['none', 'incomplete', 'incomplete_expired', 'trialing', 'active', 'past_due', 'canceled', 'unpaid', 'paused', 'unknown']),
   current_period_end: nullableDate, cancel_at_period_end: z.boolean(), active_subscriptions: z.number().int(),
-  complimentary: z.boolean(), complimentary_until: nullableDate,
+  complimentary: z.boolean(), complimentary_until: nullableDate, checkout_plans: z.array(checkoutPlanSchema),
   limits: z.object({ agents: z.number().int(), replies_per_24h: z.number().int().nullable(), storage_bytes: z.number().int().nullable(), storage_warn_bytes: z.number().int().nullable() }),
   usage: z.object({ agents: z.number().int(), pending_invites: z.number().int(), replies_last_24h: z.number().int(), storage_bytes: z.number().int() }),
 }) satisfies z.ZodType<Generated<'Billing'>>;
@@ -36,6 +37,15 @@ export const agentSchema = z.object({
   id: z.string().uuid(), email: z.string().email(), display_name: z.string(),
   role: roleSchema, timezone_override: z.string().nullable(),
 }) satisfies z.ZodType<Generated<'Agent'>>;
+export const teamMemberSchema = z.object({
+  id: z.string().uuid(), email: z.string().email(), display_name: z.string(),
+  role: roleSchema, timezone_override: z.string().nullable(),
+  deactivated_at: z.string().datetime().nullable(), last_active_at: z.string().datetime().nullable(), open_conversations: z.number().int(),
+}) satisfies z.ZodType<Generated<'TeamMember'>>;
+export const savedReplySchema = z.object({
+  id: z.string().uuid(), title: z.string(), body: z.string(), created_by_agent_id: z.string().uuid().nullable(),
+  created_at: z.string().datetime(), updated_at: z.string().datetime(),
+}) satisfies z.ZodType<Generated<'SavedReply'>>;
 export const tagSchema = z.object({ id: z.string().uuid(), name: z.string(), color: z.string() }) satisfies z.ZodType<Generated<'Tag'>>;
 export const contactSchema = z.object({
   id: z.string().uuid(), name: z.string(), email: z.string().email(), organization: z.string().nullable(),
@@ -56,7 +66,7 @@ export const timeEntrySchema = z.object({
   minutes: z.number().int().nonnegative(), note: z.string(), billable: z.boolean(), executed_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'TimeEntry'>>;
 export const conversationSchema = z.object({
-  id: z.string().uuid(), contact_id: z.string().uuid(), subject: z.string(),
+  id: z.string().uuid(), contact_id: z.string().uuid(), contact_name: z.string(), subject: z.string(),
   status: statusSchema, priority: prioritySchema, assignee_id: z.string().uuid().nullable(),
   tags: z.array(tagSchema), origin: conversationOriginSchema.nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'Conversation'>>;
@@ -68,6 +78,7 @@ export const messageDeliverySchema = z.object({
 export const emailAuthenticationSchema = z.enum(['pass', 'fail', 'none']);
 export const incomingEmailSchema = z.object({
   from: z.string(), authentication: emailAuthenticationSchema, via: z.enum(['platform', 'workspace', 'web_form']).optional(),
+  cc: z.array(z.string()).optional(),
   attachments: z.array(z.object({ filename: z.string(), content_type: z.string() })),
   original_attachment_id: z.string().uuid().nullable(),
 }) satisfies z.ZodType<Generated<'IncomingEmail'>>;
@@ -82,7 +93,7 @@ export const messageSchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), author_agent_id: z.string().uuid().nullable(),
   author_name: z.string().nullable(), agent_token: messageAgentTokenSchema.nullable(), kind: z.enum(['incoming', 'outgoing', 'note']), body: z.string(),
   body_html: z.string().nullable(), origin: messageOriginSchema.nullable(),
-  attachments: z.array(attachmentSchema), created_at: z.string().datetime(),
+  attachments: z.array(attachmentSchema), cc: z.array(z.string()), created_at: z.string().datetime(),
   delivery: messageDeliverySchema.nullable(), email: incomingEmailSchema.nullable(),
 }) satisfies z.ZodType<Generated<'Message'>>;
 export const emailChannelSchema = z.object({
@@ -101,7 +112,7 @@ export const webFormSettingsSchema = z.object({
 export const inboundSecretSchema = z.object({ inbound_secret: z.string().min(1), inbound_url: z.string().url() }) satisfies z.ZodType<JsonResponse<'rotateEmailInboundSecret', 200>>;
 export const sessionSchema = z.object({
   id: z.string().uuid(), agent_id: z.string().uuid(), agent_email: z.string().email(), label: z.string(),
-  scope: z.enum(['read', 'draft', 'send']).nullable(),
+  scope: z.enum(['read', 'draft', 'send']).nullable(), current: z.boolean(),
   created_at: z.string().datetime(), last_seen_at: z.string().datetime(), expires_at: z.string().datetime(), revoked_at: nullableDate,
 }) satisfies z.ZodType<Generated<'Session'>>;
 export const inviteSchema = z.object({
@@ -118,13 +129,22 @@ export const sessionListSchema = z.object({ items: z.array(sessionSchema) }) sat
 export const inviteListSchema = z.object({ items: z.array(inviteSchema) }) satisfies z.ZodType<JsonResponse<'listInvites', 200>>;
 export const inviteCreatedSchema = z.object({ invite: inviteSchema, url: z.string().url() }) satisfies z.ZodType<JsonResponse<'createInvite', 201>>;
 export const conversationPageSchema = z.object({ items: z.array(conversationSchema), page: z.number(), page_size: z.number() }) satisfies z.ZodType<Generated<'ConversationPage'>>;
+export const inboxActivitySchema = z.object({
+  now: z.string().datetime(),
+  new_conversations: z.array(z.object({ id: z.string().uuid(), subject: z.string(), contact_name: z.string(), created_at: z.string().datetime() })),
+  assigned_to_me: z.array(z.object({ id: z.string().uuid(), subject: z.string(), contact_name: z.string(), assigned_at: z.string().datetime() })),
+  updated: z.array(z.object({ id: z.string().uuid(), subject: z.string(), contact_name: z.string(), assignee_id: z.string().uuid().nullable(), updated_at: z.string().datetime(), incoming_at: z.string().datetime().nullable() })),
+}) satisfies z.ZodType<Generated<'InboxActivity'>>;
 export const messageListSchema = z.object({ items: z.array(messageSchema) }) satisfies z.ZodType<JsonResponse<'listMessages', 200>>;
 export const contactListSchema = z.object({ items: z.array(contactSchema) }) satisfies z.ZodType<JsonResponse<'listContacts', 200>>;
-export const agentListSchema = z.object({ items: z.array(agentSchema) }) satisfies z.ZodType<JsonResponse<'listAgents', 200>>;
+export const agentListSchema = z.object({ items: z.array(teamMemberSchema) }) satisfies z.ZodType<JsonResponse<'listAgents', 200>>;
 export const timeEntryListSchema = z.object({ items: z.array(timeEntrySchema) }) satisfies z.ZodType<JsonResponse<'listTimeEntries', 200>>;
+export const savedReplyListSchema = z.object({ items: z.array(savedReplySchema) }) satisfies z.ZodType<JsonResponse<'listSavedReplies', 200>>;
+export const bulkUpdateResultSchema = z.object({ updated: z.number().int() }) satisfies z.ZodType<JsonResponse<'bulkUpdateConversations', 200>>;
 export const tagListSchema = z.object({ items: z.array(tagSchema) }) satisfies z.ZodType<JsonResponse<'listTags', 200>>;
 
 export type Agent = Generated<'Agent'>;
+export type TeamMember = Generated<'TeamMember'>;
 export type Billing = Generated<'Billing'>;
 export type CheckoutPlan = Generated<'CheckoutPlan'>;
 export type Me = Generated<'Me'>;
@@ -140,3 +160,4 @@ export type EmailChannelSettings = Generated<'EmailChannelSettings'>;
 export type WebFormSettings = Generated<'WebFormSettings'>;
 export type Session = Generated<'Session'>;
 export type Tag = Generated<'Tag'>;
+export type SavedReply = Generated<'SavedReply'>;

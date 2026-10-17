@@ -1,10 +1,15 @@
 # Sessions and devices
 
 **Settings → Sessions** lists every browser or client signed in to your account, with when it
-was created and last used.
+was last used. A browser is named by its browser and system, for example **Chrome on Linux**; the
+browser you are using is marked **This device**. This applies to pairing links and cloud sign-in alike;
+a client that sends no browser name shows **Browser session** or **Cloud sign-in**.
 
 - Select **Revoke** to sign a device out immediately. The device stays in the list as **Revoked**;
   a session that ran out shows **Expired**.
+- On **This device** the button reads **Sign out**: it signs this browser out at once.
+- To sign out of the browser you are using, you can also select your avatar at the foot of the left rail (top
+  right on a phone) and choose **Sign out**.
 - Agents see their own sessions. Admins see and can revoke every session in the workspace.
 
 A session lasts 30 days and extends while you use Colliedesk. A browser without a valid session
@@ -32,8 +37,8 @@ it, create a new token and revoke the old one. The agent sends it as `Authorizat
 
 | Scope | The agent can |
 |---|---|
-| `read` | Read conversations, messages, contacts, tags and the team list |
-| `draft` | Everything in `read`, plus change status, priority, assignee and tags of a conversation, create a tag, and add private notes. Nothing reaches a customer. |
+| `read` | Read conversations, messages, contacts, tags, saved replies and the team list |
+| `draft` | Everything in `read`, plus change status, priority, assignee and tags of one conversation or several at once, create a tag, and add private notes. Nothing reaches a customer. |
 | `send` | Everything in `draft`, plus send replies to customers, retry a failed reply, rename and delete tags, and create contacts and conversations |
 
 Start with `read` or `draft`.

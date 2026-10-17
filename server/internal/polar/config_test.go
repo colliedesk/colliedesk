@@ -38,6 +38,26 @@ func TestConfigFromEnvAllSet(t *testing.T) {
 	}
 }
 
+func TestConfigFromEnvTeam25ProductsAreOptional(t *testing.T) {
+	config, err := polar.ConfigFromEnv(env(fullEnv()))
+	if err != nil || !config.Enabled() || config.Products.Team25Monthly != "" || config.Products.Team25Yearly != "" {
+		t.Fatalf("without the Team 25 products: err=%v products=%+v, want billing on and both empty", err, config.Products)
+	}
+	values := fullEnv()
+	values["POLAR_PRODUCT_TEAM25_MONTHLY"], values["POLAR_PRODUCT_TEAM25_YEARLY"] = " prod-t25-monthly ", "prod-t25-yearly"
+	config, err = polar.ConfigFromEnv(env(values))
+	if err != nil || config.Products.Team25Monthly != "prod-t25-monthly" || config.Products.Team25Yearly != "prod-t25-yearly" {
+		t.Fatalf("with the Team 25 products: err=%v products=%+v", err, config.Products)
+	}
+}
+
+func TestConfigFromEnvTeam25ProductsAloneDoNotTurnBillingOn(t *testing.T) {
+	config, err := polar.ConfigFromEnv(env(map[string]string{"POLAR_PRODUCT_TEAM25_MONTHLY": "x"}))
+	if err == nil && config.Enabled() {
+		t.Fatal("a Team 25 product alone enabled billing")
+	}
+}
+
 func TestConfigFromEnvSandboxURLAndTrailingSlash(t *testing.T) {
 	values := fullEnv()
 	values["POLAR_API_URL"] = "https://sandbox-api.polar.sh/"

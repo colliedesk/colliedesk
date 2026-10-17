@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 )
 
@@ -14,11 +15,17 @@ func (a *API) getConfig(response http.ResponseWriter, _ *http.Request) {
 	if enabled {
 		publishableKey = &a.config.CloudAuth.PublishableKey
 	}
+	version := a.config.Version
+	if version == "" {
+		version = "dev"
+	}
 	writeJSON(response, http.StatusOK, map[string]any{
+		"version":       version,
 		"cloud_sign_in": map[string]any{"enabled": enabled, "publishable_key": publishableKey},
 		"billing":       map[string]any{"enabled": a.polar != nil},
 		// Same condition as signUpCloud: 404 unless both are configured, 503 while its settings are missing.
 		"signup": map[string]any{"enabled": enabled && a.polar != nil && !a.config.SignupDisabled},
+		"limits": map[string]any{"outgoing_attachments_bytes": attachments.MaxOutgoingBytes, "outgoing_attachments_files": attachments.MaxOutgoingFiles},
 	})
 }
 
@@ -38,6 +45,7 @@ func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.R
 	}
 	var input struct {
 		WorkspaceSlug string `json:"workspace_slug"`
+		Label         string `json:"label"`
 	}
 	if request.ContentLength != 0 {
 		if err := decodeJSON(request, &input); err != nil {
@@ -50,7 +58,11 @@ func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.R
 		writeError(response, http.StatusUnauthorized, "unauthorized", "A valid cloud session is required.")
 		return
 	}
-	result, choices, err := a.auth.ExchangeCloud(request.Context(), email, input.WorkspaceSlug, "Cloud sign-in")
+	label := input.Label
+	if label == "" {
+		label = "Cloud sign-in"
+	}
+	result, choices, err := a.auth.ExchangeCloud(request.Context(), email, input.WorkspaceSlug, label)
 	if errors.Is(err, auth.ErrCloudAgentNotFound) {
 		writeError(response, http.StatusForbidden, "forbidden", "This email is not an agent of the requested workspace.")
 		return

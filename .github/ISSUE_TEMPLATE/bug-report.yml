@@ -1,6 +1,6 @@
 name: Bug report
 description: Something does not work as documented.
-labels: [bug]
+labels: [bug, needs-triage]
 body:
   - type: textarea
     id: what
@@ -23,7 +23,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: Output of `collie version`, or the image tag you run (for example 0.2.0 or edge).
+      description: Output of `collie version`, or the image tag you run (for example 0.0.1 or edge).
     validations:
       required: true
   - type: dropdown
