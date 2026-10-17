@@ -863,7 +863,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description People only (an agent token gets 403 `person_only`). Runs the stored call once, as the approving person: their role, the workspace lock and every check of the route apply. The answer is 200 with the request (`approved` when the call succeeded, `failed` with `result_status` otherwise, for example 403 when the approver may not do it) and `result`, the call's own answer. When the answer holds a credential, a link or a payment page (new token, inbound secret, export, billing), `result` is shown here once and the request keeps only `result_status` and `result_note`. Approving an export (`GET /api/v1/export` or `POST /api/v1/export/link`) answers the export's one-time download link. `body` replaces the text of a reply draft; it is refused for any other request. A request that is decided or expired, or whose token was revoked, answers 409 and runs nothing; two approvals at once run the call once. */
+        /** @description People only (an agent token gets 403 `person_only`). Runs the stored call once, as the approving person: their role, the workspace lock and every check of the route apply. The answer is 200 with the request (`approved` when the call succeeded, `failed` with `result_status` otherwise, for example 403 when the approver may not do it) and `result`, the call's own answer. When the answer holds a credential, a link or a payment page (new token, inbound secret, export, billing), `result` is shown here once and the request keeps only `result_status` and `result_note`. Approving an export (`GET /api/v1/export` or `POST /api/v1/export/link`) answers the export's one-time download link. `body` replaces the text of a reply draft; it is refused for any other request. A request that is decided or expired, or whose token was revoked, answers 409 and runs nothing; two approvals at once run the call once. A person whose role may not run the call gets 403 and the request keeps waiting (`approvable_by`). `cc` keeps only some of a reply draft's copies; it cannot add one. The approval finishes even if the approver's connection closes. */
         post: operations["approveAgentRequest"];
         delete?: never;
         options?: never;
@@ -942,10 +942,19 @@ export interface components {
             route: string;
             /** @description The concrete path that runs on approval */
             path: string;
-            /** @description The JSON body of the call; null when it had none. */
+            /** @description The JSON body of the call as the token sent it; null when it had none, in a list without detail=full, and 90 days after the decision. */
             body: {
                 [key: string]: unknown;
             } | unknown[] | string | number | boolean | null;
+            /** @description A reply draft as the approver edited it (text changed, copies removed); this is what ran. Null when not edited. */
+            edited_body: {
+                [key: string]: unknown;
+            } | unknown[] | string | number | boolean | null;
+            /**
+             * @description The lowest role whose person can approve it; a person below it gets 403 and the request keeps waiting.
+             * @enum {string}
+             */
+            approvable_by: "agent" | "admin";
             summary: string;
             /** Format: uuid */
             conversation_id: string | null;
@@ -1525,7 +1534,7 @@ export interface components {
         };
     };
     responses: {
-        /** @description An agent token called this above its tier, or the action needs a person's approval for every tier: nothing happened yet. The call is stored as an agent request a person approves or rejects (`GET /api/v1/agent-requests/{request_id}` shows the outcome); it expires after seven days. A token answers 429 `too_many_requests` while 50 of its requests wait, and a call with files gets 403 `files_need_approval` (send the text alone, attach files after approval). */
+        /** @description An agent token called this above its tier, or the action needs a person's approval for every tier: nothing happened yet. The call is stored as an agent request a person approves or rejects (`GET /api/v1/agent-requests/{request_id}` shows the outcome); it expires after seven days. A token gets 429 `too_many_requests` while 50 of its requests wait or after 100 in an hour (with `Retry-After`), 402 `workspace_locked` in a locked workspace, and a call with files gets 403 `files_need_approval` (send the text alone, attach files after approval). */
         AgentRequestAccepted: {
             headers: {
                 [name: string]: unknown;
@@ -2304,7 +2313,7 @@ export interface operations {
                     /** @description Markdown source */
                     body: string;
                     cc?: components["schemas"]["CopiedAddresses"];
-                    /** @description Agent tokens only, with `kind: outgoing`: file the reply as a reply draft (202) that a person edits, sends or discards, whatever the token's tier. A token below `send` gets a draft without it. A person's session answers 400. */
+                    /** @description Agent tokens only, with `kind: outgoing`: file the reply as a reply draft (202) that a person edits, sends or discards, whatever the token's tier. A token below `send` gets a draft without it, and may copy only the contact and addresses already on the conversation (400 otherwise). A person's session answers 400. */
                     draft?: boolean;
                 };
                 "multipart/form-data": {
@@ -3486,6 +3495,8 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["AgentRequestStatus"];
+                /** @description full adds each request's body, edited_body and result; without it they are null so a poll stays small. */
+                detail?: "full";
             };
             header?: never;
             path?: never;
@@ -3548,6 +3559,8 @@ export interface operations {
                 "application/json": {
                     /** @description The edited text of a reply draft (Markdown) */
                     body?: string;
+                    /** @description The copies to keep on a reply draft; only addresses the draft already copied (400 otherwise). */
+                    cc?: string[];
                 };
             };
         };

@@ -8,6 +8,7 @@ import { InboxFilters, defaultInboxFilters } from './inbox-filters';
 import type { AttachmentLimits } from './attachment-picker';
 import { ReplyComposer } from './reply-composer';
 import { ReplyDraftCard } from './reply-draft-card';
+import type { DraftEdit } from './reply-draft-card';
 import { suggestedCc } from './suggested-cc';
 import { TimelinePanel } from './timeline-panel';
 import { messages } from '../../messages';
@@ -58,7 +59,7 @@ interface InboxPageProps {
   // Reply drafts AI agents left on the selected conversation, and the conversations that have one.
   replyDrafts?: AgentRequest[];
   draftConversationIds?: ReadonlySet<string>;
-  onSendDraft?: (draft: AgentRequest, body?: string) => Promise<unknown>;
+  onSendDraft?: (draft: AgentRequest, edit?: DraftEdit) => Promise<unknown>;
   onDiscardDraft?: (draft: AgentRequest) => Promise<unknown>;
 }
 
@@ -150,8 +151,8 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
           detailsOpen={detailsOpen} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}</p>}
         {deliveryNotice && <p role="alert" className="composer-notice">{deliveryNotice}</p>}
-        {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft}
-          onSend={(body) => onSendDraft?.(draft, body) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}
+        {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft} customer={customerName}
+          onSend={(edit) => onSendDraft?.(draft, edit) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}
         {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
         <ReplyComposer key={selected?.id} disabled={!selected} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
           savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState} />

@@ -3,6 +3,7 @@ import { InvalidRequestError } from '../../api/client';
 import type { AgentRequest } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { replyCall } from './request-call';
 
 export interface ApproveOutcome { request: AgentRequest; result: unknown }
 
@@ -12,6 +13,8 @@ interface RequestCardProps {
   // Each action resolves when the server decided and rejects with the reason when it refused.
   onApprove: (id: string) => Promise<ApproveOutcome>;
   onReject: (id: string, reason?: string) => Promise<unknown>;
+  // canApprove is false when the signed-in person's role cannot run the call; only Reject is offered.
+  canApprove?: boolean;
   // initialOutcome is an approval made a moment ago, kept on screen after the list moved on.
   initialOutcome?: ApproveOutcome;
 }
@@ -19,13 +22,9 @@ interface RequestCardProps {
 const resultURL = (result: unknown) =>
   typeof result === 'object' && result !== null && 'url' in result && typeof result.url === 'string' ? result.url : undefined;
 
-// replyText is the text of a reply draft, shown as the customer would read it.
-const replyText = (item: AgentRequest) =>
-  item.kind === 'reply_draft' && typeof item.body === 'object' && item.body !== null && 'body' in item.body && typeof item.body.body === 'string' ? item.body.body : undefined;
-
 // RequestCard is one agent request: what it does, who asked, the exact call and, while it waits,
 // Approve and Reject. A credential or link the approved call answered is shown here once.
-export function RequestCard({ item, timezone, onApprove, onReject, initialOutcome }: RequestCardProps) {
+export function RequestCard({ item, timezone, onApprove, onReject, canApprove = true, initialOutcome }: RequestCardProps) {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
@@ -45,6 +44,8 @@ export function RequestCard({ item, timezone, onApprove, onReject, initialOutcom
   };
   const person = current.requested_by.agent_name ?? messages.someone;
   const url = resultURL(outcome?.result);
+  const reply = current.kind === 'reply_draft' ? replyCall(current.body) : undefined;
+  const edited = current.kind === 'reply_draft' ? replyCall(current.edited_body) : undefined;
   return (
     <article className="request-card" aria-labelledby={headingId} data-status={current.status}>
       <header className="request-head">
@@ -55,9 +56,17 @@ export function RequestCard({ item, timezone, onApprove, onReject, initialOutcom
       <dl className="request-call">
         <dt>{messages.requestCall}</dt><dd><code>{`${current.method} ${current.path}`}</code></dd>
       </dl>
-      {replyText(current) !== undefined
-        ? <p className="request-body reply-draft-text">{replyText(current)}</p>
+      {reply
+        ? <>
+            <p className="request-body reply-draft-text">{reply.text}</p>
+            {reply.cc.length > 0 && <p className="request-recipients">{messages.draftCc(reply.cc)}</p>}
+          </>
         : current.body !== null && <pre className="request-body">{JSON.stringify(current.body, null, 2)}</pre>}
+      {edited && <>
+        <p className="muted-copy">{messages.editedBy(current.decided_by?.name ?? messages.someone)}</p>
+        <p className="request-body reply-draft-text">{edited.text}</p>
+        {edited.cc.length > 0 && <p className="request-recipients">{messages.draftCc(edited.cc)}</p>}
+      </>}
       <p className="muted-copy"><time dateTime={current.created_at}>{formatDate(current.created_at, timezone)}</time>
         {current.status === 'pending' && <> · {messages.requestExpires(formatDate(current.expires_at, timezone))}</>}</p>
       {current.status !== 'pending' && current.decided_by && <p>{messages.requestOutcome(messages.requestDecisionVerb[current.status], current.decided_by.name, current.result_status)}</p>}
@@ -70,8 +79,10 @@ export function RequestCard({ item, timezone, onApprove, onReject, initialOutcom
       {current.requested_by.token_revoked && current.status === 'pending' && <p className="warning-note">{messages.tokenRevoked}</p>}
       {problem && <p role="alert" className="error-copy">{problem}</p>}
       {current.status === 'pending' && <div className="request-actions">
-        <button type="button" className="primary-action" disabled={busy || current.requested_by.token_revoked}
-          onClick={() => void run(async () => setOutcome(await onApprove(item.id)))}>{messages.approve}</button>
+        {canApprove
+          ? <button type="button" className="primary-action" disabled={busy || current.requested_by.token_revoked}
+              onClick={() => void run(async () => setOutcome(await onApprove(item.id)))}>{messages.approve}</button>
+          : <span className="muted-copy">{messages.onlyAdminApproves}</span>}
         <label className="request-reason"><span>{messages.rejectReason}</span>
           <input value={reason} maxLength={1000} onChange={(event) => setReason(event.target.value)} /></label>
         <button type="button" className="danger-action" disabled={busy}

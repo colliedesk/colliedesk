@@ -168,7 +168,8 @@ export const agentRequestStatusSchema = z.enum(['pending', 'approved', 'failed',
 const anyJson = z.unknown() as z.ZodType<Generated<'AgentRequest'>['body']>;
 export const agentRequestSchema = z.object({
   id: z.string().uuid(), kind: z.enum(['reply_draft', 'action']), status: agentRequestStatusSchema,
-  method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']), route: z.string(), path: z.string(), body: anyJson, summary: z.string(),
+  method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']), route: z.string(), path: z.string(), body: anyJson, edited_body: anyJson,
+  approvable_by: z.enum(['agent', 'admin']), summary: z.string(),
   conversation_id: z.string().uuid().nullable(),
   requested_by: z.object({
     token_id: z.string().uuid().nullable(), token_label: z.string(), token_scope: z.enum(['read', 'draft', 'send']), token_revoked: z.boolean(),

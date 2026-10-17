@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { api } from '../../api/client';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
@@ -68,7 +68,10 @@ export function InboxRoute() {
   const pending = usePendingRequests().data?.items;
   const drafts = useMemo(() => (pending ?? []).filter((item) => item.kind === 'reply_draft' && item.conversation_id), [pending]);
   const draftConversationIds = useMemo(() => new Set(drafts.map((item) => item.conversation_id!)), [drafts]);
-  const selectedDrafts = drafts.filter((item) => item.conversation_id === selected?.id);
+  // The poll carries no body, so the open conversation reads its drafts in full.
+  const draftDetails = useQueries({ queries: drafts.filter((item) => item.conversation_id === selected?.id)
+    .map((item) => ({ queryKey: ['agent-requests', 'one', item.id], queryFn: () => api.agentRequest(item.id) })) });
+  const selectedDrafts = draftDetails.flatMap((query) => (query.data?.status === 'pending' ? [query.data] : []));
   const [draftNotice, setDraftNotice] = useState<string>();
   const afterDraft = (conversationId: string | null) => {
     void client.invalidateQueries({ queryKey: ['agent-requests'] });
@@ -115,8 +118,8 @@ export function InboxRoute() {
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })}
     replyDrafts={selectedDrafts} draftConversationIds={draftConversationIds}
-    onSendDraft={async (draft, body) => {
-      const outcome = await api.approveAgentRequest(draft.id, body);
+    onSendDraft={async (draft, edit) => {
+      const outcome = await api.approveAgentRequest(draft.id, edit);
       await afterDraft(draft.conversation_id);
       // Approved but refused by the reply route (for example the trial's limits): say why, the draft is spent.
       setDraftNotice(outcome.request.status === 'failed' ? messages.draftRefused(errorMessage(outcome.result)) : undefined);

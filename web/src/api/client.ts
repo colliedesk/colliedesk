@@ -245,11 +245,19 @@ export const api = {
   createSavedReply: (title: string, body: string) => request('/api/v1/saved-replies', savedReplySchema, { method: 'POST', body: json<'createSavedReply'>({ title, body }) }),
   updateSavedReply: (id: string, value: RequestBody<'updateSavedReply'>) => request(`/api/v1/saved-replies/${id}`, savedReplySchema, { method: 'PATCH', body: json<'updateSavedReply'>(value) }),
   deleteSavedReply: (id: string) => requestNoContent(`/api/v1/saved-replies/${id}`, { method: 'DELETE' }),
-  agentRequests: (status?: NonNullable<operations['listAgentRequests']['parameters']['query']>['status']) =>
-    request(`/api/v1/agent-requests${status ? `?status=${status}` : ''}`, agentRequestListSchema),
-  // Approving runs the agent's call as the signed-in person; body replaces the text of a reply draft.
-  approveAgentRequest: (id: string, body?: string) => request(`/api/v1/agent-requests/${id}/approve`, approvedAgentRequestSchema,
-    { method: 'POST', body: optionalJson<'approveAgentRequest'>(body === undefined ? {} : { body }) }),
+  // Without full a request carries no body: the poll every tab runs stays small.
+  agentRequests: (status?: NonNullable<operations['listAgentRequests']['parameters']['query']>['status'], full = false) => {
+    const query = new URLSearchParams();
+    if (status) query.set('status', status);
+    if (full) query.set('detail', 'full');
+    const search = query.toString();
+    return request(`/api/v1/agent-requests${search ? `?${search}` : ''}`, agentRequestListSchema);
+  },
+  agentRequest: (id: string) => request(`/api/v1/agent-requests/${id}`, agentRequestSchema),
+  // Approving runs the agent's call as the signed-in person. A reply draft may come with its edited
+  // text and the copies to keep (never new ones).
+  approveAgentRequest: (id: string, edit: OptionalBody<'approveAgentRequest'> = {}) => request(`/api/v1/agent-requests/${id}/approve`, approvedAgentRequestSchema,
+    { method: 'POST', body: optionalJson<'approveAgentRequest'>(edit) }),
   rejectAgentRequest: (id: string, reason?: string) => request(`/api/v1/agent-requests/${id}/reject`, agentRequestSchema,
     { method: 'POST', body: optionalJson<'rejectAgentRequest'>(reason ? { reason } : {}) }),
   cancelAgentRequest: (id: string) => request(`/api/v1/agent-requests/${id}/cancel`, agentRequestSchema, { method: 'POST' }),

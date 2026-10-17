@@ -55,3 +55,19 @@ test('a reply draft shows its text as the customer would read it', () => {
   expect(screen.getByText((_, node) => node?.textContent === 'Hello Mai,\nplease restart it.' && node.tagName === 'P')).toBeInTheDocument();
   expect(screen.queryByText(/"kind"/)).not.toBeInTheDocument();
 });
+
+test('a reply draft shows its copies, and an approval the person may not run is left to an admin', () => {
+  render(<RequestCard item={agentRequest({ kind: 'reply_draft', approvable_by: 'admin', body: { kind: 'outgoing', body: 'Hi', cc: ['boss@cust.example.com'] } })}
+    canApprove={false} timezone="UTC" {...actions()} />);
+  expect(screen.getByText('Cc boss@cust.example.com')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+  expect(screen.getByText('Only an admin can approve this.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Reject' })).toBeInTheDocument();
+});
+
+test('an edited reply draft shows who edited it and what was sent', () => {
+  render(<RequestCard item={agentRequest({ kind: 'reply_draft', status: 'approved', decided_by: { agent_id: null, name: 'Bo Agent' },
+    body: { kind: 'outgoing', body: 'Agent text' }, edited_body: { kind: 'outgoing', body: 'Person text' } })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText('Edited by Bo Agent before sending')).toBeInTheDocument();
+  expect(screen.getByText('Person text')).toBeInTheDocument();
+});

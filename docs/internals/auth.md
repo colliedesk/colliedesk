@@ -106,8 +106,19 @@ workspace table). User page: `docs/user/agent-requests.md`.
   storage for days, and a request must replay byte for byte). A request on a conversation route
   checks the conversation exists in the workspace first, so another workspace's id is 404, not a
   request. The summary is built from the route and the body the token sent, never from customer
-  text, because it reaches the model too. A token may have 50 pending requests (429 beyond).
-- **Approving is a replay as the approver.** `ClaimAgentRequest` locks the row (`FOR UPDATE`),
+  text, because it reaches the model too; a reply draft's summary is the exception that names every
+  recipient (contact and cc), so a copy is never hidden behind the text. A token below `send` may
+  copy only addresses already on the conversation (`store.ConversationParticipants`: contact, mail
+  senders and copies, earlier reply copies), so a prompt-injected draft cannot add an outside
+  reader that a busy approver skims past. A token may have 50 pending requests and file 100 in any
+  rolling hour (429 with `Retry-After`; `agent_requests_token_idx`). A locked workspace files
+  nothing (402): its requests could not be approved.
+- **Approving is a replay as the approver.** Before anything changes, the approver's role is checked
+  against the permission of the route the call runs on (`approvalPermission`); a person below it gets
+  403 and the request keeps waiting for someone who may (`approvable_by` in the API, the UI hides
+  Approve). The whole approval (claim, replay, result) runs on `context.WithoutCancel` with a
+  two-minute timeout, so a closed tab never leaves a request claimed without a result
+  (`TestApprovalFinishesWhenTheApproverLeavesMidway`). `ClaimAgentRequest` locks the row (`FOR UPDATE`),
   refuses anything not pending (409 `already_decided`) or from a revoked token (409
   `token_revoked`), and commits `approved` before the call runs, so a double click runs it once
   (`TestDoubleApproveRunsTheCallOnce`). `replayApproved` then builds an in-process request and
@@ -123,11 +134,22 @@ workspace table). User page: `docs/user/agent-requests.md`.
   reach the token that asked, nor sit in the database. `GET /api/v1/export` is replayed as
   `POST /api/v1/export/link` (`approvalRunsAs`): a streamed archive in a request record would be
   useless; the approver gets the same download the settings page uses.
+- **Edits.** The approve call may carry a reply draft's new text and the subset of its copies to
+  keep (`editedReply`; a copy the draft did not ask for is 400). The edit is stored in `edited_body`
+  and is what runs; `body` stays the agent's draft.
 - **Attribution.** A reply sent by approving a draft has `author_agent_id` = the approver,
-  `agent_token_id` = the token that drafted it and `agent_request_id` = the request (composite FK,
+  `agent_token_id` = the token that drafted it (only when the approver did not change the words: an
+  edited text is the person's, so the token is not shown as its writer) and `agent_request_id` = the
+  request (composite FK,
   added `NOT VALID` and validated by the next migration). Other approved actions are recorded on the
   request only (`requested_by`, `decided_by`); they are not attributed in a timeline, the same known
   limit as above.
+- **Retention and payload.** A decided request keeps its `body`, `edited_body` and `result` for 90
+  days; `serve` clears them at start and daily (`PruneAgentRequests`, privileged path
+  `PrivilegeAgentRequestPrune`), keeping the audit row. The list every tab polls returns no bodies
+  (`detail=full` adds them; `GET /agent-requests/{id}` always has them). Export writes
+  `agent-requests.ndjson` (the codebase's NDJSON naming, like `saved-replies.ndjson`) without
+  `result`, and messages carry `agent_request_id`.
 - **Expiry.** Seven days. Reads (list, get, every decision) first mark the workspace's overdue
   pending rows `expired`, in the same transaction; there is no sweeper. A decided request never
   runs again.

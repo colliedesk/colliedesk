@@ -53,6 +53,7 @@ export function MessageItem({ item, timezone, onRetryDelivery, approvedBy }: Mes
         <Avatar name={item.author_name ?? item.email?.from ?? kindLabel(item.kind)} />
         <div className="message-byline">
           {item.author_name && <span className="message-author">{item.author_name}</span>}
+          {!item.agent_token && item.agent_request_id && <span className="message-author">{messages.draftRewritten(approvedBy ?? messages.someone)}</span>}
           {item.agent_token && <span className="message-author" title={item.agent_token.scope}>{item.agent_request_id
             ? messages.draftApproved(item.agent_token.label, approvedBy ?? messages.someone)
             : messages.writtenByAgentToken(item.agent_token.agent_name, item.agent_token.label)}</span>}

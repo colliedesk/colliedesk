@@ -16,9 +16,11 @@ interface RequestsPageProps {
   failed?: boolean;
   onApprove: (id: string) => Promise<ApproveOutcome>;
   onReject: (id: string, reason?: string) => Promise<unknown>;
+  // canApprove says whether the signed-in person's role can run a request's call.
+  canApprove?: (item: AgentRequest) => boolean;
 }
 
-export function RequestsPage({ items = [], approved = [], filter, onFilter, timezone, loading, failed, onApprove, onReject }: RequestsPageProps) {
+export function RequestsPage({ items = [], approved = [], filter, onFilter, timezone, loading, failed, onApprove, onReject, canApprove = () => true }: RequestsPageProps) {
   const shown = new Set(approved.map((outcome) => outcome.request.id));
   const rest = items.filter((item) => !shown.has(item.id));
   const empty = !loading && !failed && rest.length === 0 && approved.length === 0;
@@ -39,7 +41,7 @@ export function RequestsPage({ items = [], approved = [], filter, onFilter, time
       {empty && <p className="empty-copy">{filter === 'pending' ? messages.noPendingRequests : messages.noRequests}</p>}
       <div className="request-list">
         {approved.map((outcome) => <RequestCard key={outcome.request.id} item={outcome.request} initialOutcome={outcome} timezone={timezone} onApprove={onApprove} onReject={onReject} />)}
-        {rest.map((item) => <RequestCard key={item.id} item={item} timezone={timezone} onApprove={onApprove} onReject={onReject} />)}
+        {rest.map((item) => <RequestCard key={item.id} item={item} canApprove={canApprove(item)} timezone={timezone} onApprove={onApprove} onReject={onReject} />)}
       </div>
     </main>
   );

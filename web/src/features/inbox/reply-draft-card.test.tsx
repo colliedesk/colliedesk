@@ -23,7 +23,7 @@ test('Edit lets the person change the text, and Send sends the edited text', () 
   expect(text).toHaveFocus();
   fireEvent.change(text, { target: { value: 'Hello Ada, a technician will call you.' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-  expect(onSend).toHaveBeenCalledWith('Hello Ada, a technician will call you.');
+  expect(onSend).toHaveBeenCalledWith({ body: 'Hello Ada, a technician will call you.' });
 });
 
 test('Discard throws the draft away; a failed send keeps it with the reason', async () => {
@@ -35,4 +35,17 @@ test('Discard throws the draft away; a failed send keeps it with the reason', as
   expect(screen.getByText('Hello Ada, try restarting the printer.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
   expect(onDiscard).toHaveBeenCalled();
+});
+
+test('shows every recipient, and the person can remove a copy before sending but never add one', () => {
+  const onSend = vi.fn().mockResolvedValue(undefined);
+  const copied = { ...draft, body: { kind: 'outgoing', body: 'Hello Ada.', cc: ['boss@cust.example.com', 'it@cust.example.com'] } };
+  render(<ReplyDraftCard draft={copied} customer="Ada Lovelace" onSend={onSend} onDiscard={vi.fn()} />);
+  expect(screen.getByText('To Ada Lovelace')).toBeInTheDocument();
+  expect(screen.getByText('Cc boss@cust.example.com, it@cust.example.com')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  expect(screen.queryByRole('textbox', { name: /cc/i })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Copy boss@cust.example.com' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  expect(onSend).toHaveBeenCalledWith({ cc: ['it@cust.example.com'] });
 });
