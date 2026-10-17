@@ -41,8 +41,10 @@
 - **Locked workspace is 402, not 423.** REST answers `402 workspace_locked` for every route except
   the allowlist in `httpapi/locked.go`; the tools word it ("only export works"). `whoami` still
   answers because `GET /auth/me` is allowed, and reports `workspace_locked`.
-- **A new tool needs its route in `tokenTiers`** (and the hand-written copy in
-  `agent_token_scope_api_test.go`), or every token gets `scope_insufficient`. The tool's tier in
+- **A new tool needs its route open in `tokenTiers`** (and the hand-written copy in
+  `agent_token_scope_api_test.go`), or every token gets `scope_insufficient`;
+  `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails on a tool that lists a closed
+  route. When a tool starts calling a route in `mcpToolPending`, remove it there. The tool's tier in
   the catalog is only used to word the error and to list `tools_you_can_use`; REST decides.
 - **Tags are created by name.** `colliedesk_conversation_update` creates a name in `add_tags` that no
   tag has, because `POST /tags` is a `draft` route and triage must not stall on a missing tag. Every

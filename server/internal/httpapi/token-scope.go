@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"fmt"
+	"maps"
 	"net/http"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
@@ -11,43 +12,130 @@ import (
 // check; the handler refuses it by what the body asks for.
 const gatedByHandler = "handler"
 
-// tokenTiers is the lowest tier of an agent token that may call each route, keyed "METHOD pattern"
-// as listed in Routes(). A route missing here is closed to every token, so a route added later
-// stays out of their reach until someone classifies it on purpose.
+// TokenAccess classifies one route of Routes() for agent tokens. Tier is the lowest tier that may
+// call it (read, draft, send, or gatedByHandler). An empty Tier closes the route to every token, and
+// Closed says why; Target is the tier a TierPending route will open to, and Tracking the issue that
+// opens it.
+type TokenAccess struct {
+	Tier     string
+	Closed   string
+	Target   string
+	Tracking int
+}
+
+// Why a route is closed to every token today.
+const (
+	// ApprovalRequired: risky for any tier (new credentials, money, data leaving); it opens as an agent
+	// request a person approves.
+	ApprovalRequired = "approval_required"
+	// AdminTier: workspace settings, team and channels; it opens to the admin tier.
+	AdminTier = "admin_tier"
+	// TierPending: will open to Target once the issue in Tracking ships (secrets redacted, history kept).
+	TierPending = "tier_pending"
+	// NotForPeople: no session reaches it (public pages, sign-in, provider webhooks), so no token does.
+	NotForPeople = "not_for_people"
+)
+
+func tier(name string) TokenAccess { return TokenAccess{Tier: name} }
+
+// pendingTier closes a route until issue ships, then it opens to target.
+func pendingTier(target string, issue int) TokenAccess {
+	return TokenAccess{Closed: TierPending, Target: target, Tracking: issue}
+}
+
+var (
+	approvalRequired = TokenAccess{Closed: ApprovalRequired, Tracking: 127}
+	adminTier        = TokenAccess{Closed: AdminTier, Tracking: 128}
+	notForPeople     = TokenAccess{Closed: NotForPeople}
+)
+
+// tokenTiers classifies every route in Routes(), keyed "METHOD pattern". refuseToken lets a token
+// through only when Tier is set, so a route missing here is still closed to every token, but
+// TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool keeps a new route from reaching main
+// without a row.
 //
 // read: what triage needs to look at (conversations, messages, contacts, tags, the team list).
 // draft: changes that never reach a customer (status, priority, assignee, tags on one conversation or
-// many at once, creating a tag, private notes). send: everything else an agent may do, such as replying and creating
-// contacts and conversations. Closed on purpose: sessions, tokens and invites (including listing
-// them), changing a teammate, writing saved replies (text a person later sends to customers), and
-// every workspace, channel, billing and export setting. Posting a message is gated by the
-// handler: a note needs draft, an outgoing reply needs send.
-var tokenTiers = map[string]string{
-	"POST /api/v1/auth/logout":                                   auth.ScopeRead,
-	"GET /api/v1/auth/me":                                        auth.ScopeRead,
-	"GET /api/v1/conversations":                                  auth.ScopeRead,
-	"PATCH /api/v1/conversations":                                auth.ScopeDraft,
-	"GET /api/v1/inbox/activity":                                 auth.ScopeRead,
-	"GET /api/v1/saved-replies":                                  auth.ScopeRead,
-	"POST /api/v1/conversations":                                 auth.ScopeSend,
-	"GET /api/v1/conversations/{id}":                             auth.ScopeRead,
-	"PATCH /api/v1/conversations/{id}":                           auth.ScopeDraft,
-	"PUT /api/v1/conversations/{id}/tags/{tagId}":                auth.ScopeDraft,
-	"DELETE /api/v1/conversations/{id}/tags/{tagId}":             auth.ScopeDraft,
-	"GET /api/v1/conversations/{id}/messages":                    auth.ScopeRead,
-	"POST /api/v1/conversations/{id}/messages":                   gatedByHandler,
-	"GET /api/v1/conversations/{id}/time-entries":                auth.ScopeRead,
-	"POST /api/v1/conversations/{id}/messages/{messageId}/retry": auth.ScopeSend,
-	"GET /api/v1/attachments/{id}":                               auth.ScopeRead,
-	"GET /api/v1/contacts":                                       auth.ScopeRead,
-	"POST /api/v1/contacts":                                      auth.ScopeSend,
-	"GET /api/v1/contacts/{id}":                                  auth.ScopeRead,
-	"GET /api/v1/agents":                                         auth.ScopeRead,
-	"GET /api/v1/tags":                                           auth.ScopeRead,
-	"POST /api/v1/tags":                                          auth.ScopeDraft,
-	"PATCH /api/v1/tags/{id}":                                    auth.ScopeSend,
-	"DELETE /api/v1/tags/{id}":                                   auth.ScopeSend,
+// many at once, creating a tag, private notes). send: everything else an agent may do, such as
+// replying and creating contacts and conversations. Posting a message is gated by the handler: a note
+// needs draft, an outgoing reply needs send.
+//
+// Every other route is closed to every token today, with the reason and the issue that opens it:
+// settings that wait for the admin tier (#128), risky actions that will be agent requests a person
+// approves (#127), reads that open once secrets and links are redacted (#128), saved reply writes
+// that open with history and restore (#129), and routes no session reaches (NotForPeople).
+// The closed rows may only shrink.
+var tokenTiers = map[string]TokenAccess{
+	"POST /api/v1/auth/logout":                                   tier(auth.ScopeRead),
+	"GET /api/v1/auth/me":                                        tier(auth.ScopeRead),
+	"GET /api/v1/conversations":                                  tier(auth.ScopeRead),
+	"PATCH /api/v1/conversations":                                tier(auth.ScopeDraft),
+	"GET /api/v1/inbox/activity":                                 tier(auth.ScopeRead),
+	"GET /api/v1/saved-replies":                                  tier(auth.ScopeRead),
+	"POST /api/v1/conversations":                                 tier(auth.ScopeSend),
+	"GET /api/v1/conversations/{id}":                             tier(auth.ScopeRead),
+	"PATCH /api/v1/conversations/{id}":                           tier(auth.ScopeDraft),
+	"PUT /api/v1/conversations/{id}/tags/{tagId}":                tier(auth.ScopeDraft),
+	"DELETE /api/v1/conversations/{id}/tags/{tagId}":             tier(auth.ScopeDraft),
+	"GET /api/v1/conversations/{id}/messages":                    tier(auth.ScopeRead),
+	"POST /api/v1/conversations/{id}/messages":                   tier(gatedByHandler),
+	"GET /api/v1/conversations/{id}/time-entries":                tier(auth.ScopeRead),
+	"POST /api/v1/conversations/{id}/messages/{messageId}/retry": tier(auth.ScopeSend),
+	"GET /api/v1/attachments/{id}":                               tier(auth.ScopeRead),
+	"GET /api/v1/contacts":                                       tier(auth.ScopeRead),
+	"POST /api/v1/contacts":                                      tier(auth.ScopeSend),
+	"GET /api/v1/contacts/{id}":                                  tier(auth.ScopeRead),
+	"GET /api/v1/agents":                                         tier(auth.ScopeRead),
+	"GET /api/v1/tags":                                           tier(auth.ScopeRead),
+	"POST /api/v1/tags":                                          tier(auth.ScopeDraft),
+	"PATCH /api/v1/tags/{id}":                                    tier(auth.ScopeSend),
+	"DELETE /api/v1/tags/{id}":                                   tier(auth.ScopeSend),
+
+	"GET /api/v1/auth/sessions":         pendingTier(auth.ScopeRead, 128),
+	"GET /api/v1/auth/invites":          pendingTier(auth.ScopeRead, 128),
+	"GET /api/v1/channels/email":        pendingTier(auth.ScopeRead, 128),
+	"GET /api/v1/channels/web-form":     pendingTier(auth.ScopeRead, 128),
+	"GET /api/v1/billing":               pendingTier(auth.ScopeRead, 128),
+	"PATCH /api/v1/agents/me/timezone":  pendingTier(auth.ScopeDraft, 128),
+	"POST /api/v1/saved-replies":        pendingTier(auth.ScopeSend, 129),
+	"PATCH /api/v1/saved-replies/{id}":  pendingTier(auth.ScopeSend, 129),
+	"DELETE /api/v1/saved-replies/{id}": pendingTier(auth.ScopeSend, 129),
+
+	"PATCH /api/v1/workspace/timezone": adminTier,
+	"PATCH /api/v1/agents/{id}":        adminTier,
+	// An invite with the admin role stays an approval request even for the admin tier (#127).
+	"POST /api/v1/auth/invites":                       adminTier,
+	"DELETE /api/v1/auth/invites/{id}":                adminTier,
+	"PUT /api/v1/channels/web-form":                   adminTier,
+	"PUT /api/v1/channels/email":                      adminTier,
+	"POST /api/v1/channels/email/domain-verification": adminTier,
+	"DELETE /api/v1/auth/sessions/{id}":               adminTier,
+
+	"POST /api/v1/auth/tokens":           approvalRequired,
+	"GET /api/v1/export":                 approvalRequired,
+	"POST /api/v1/export/link":           approvalRequired,
+	"POST /api/v1/billing/checkout":      approvalRequired,
+	"POST /api/v1/billing/portal":        approvalRequired,
+	"DELETE /api/v1/channels/email":      approvalRequired,
+	"POST /api/v1/channels/email/secret": approvalRequired,
+	"PATCH /api/v1/workspace/slug":       approvalRequired,
+
+	"GET /api/v1/config":                            notForPeople,
+	"POST /api/v1/auth/cloud/exchange":              notForPeople,
+	"POST " + cloudSignupPath:                       notForPeople,
+	"POST /api/v1/auth/redeem":                      notForPeople,
+	"POST /api/v1/channels/email/inbound":           notForPeople,
+	"POST /api/v1/channels/email/inbound/recipient": notForPeople,
+	"POST " + polarWebhookPath:                      notForPeople,
+	"POST " + resendWebhookPath:                     notForPeople,
+	"GET " + foundingPath:                           notForPeople,
+	"POST " + webFormSubmitPattern:                  notForPeople,
+	"GET " + exportLinkPath + "{token}":             notForPeople,
 }
+
+// TokenAccessTable returns a copy of the classification, for the tests that hold it to Routes() and
+// the MCP catalog.
+func TokenAccessTable() map[string]TokenAccess { return maps.Clone(tokenTiers) }
 
 // refuseToken answers 403 scope_insufficient and reports true when who is an agent token and the
 // route is outside its tier. A full session is never refused here.
@@ -55,7 +143,7 @@ func refuseToken(response http.ResponseWriter, route Route, who auth.Principal) 
 	if who.Scope == "" {
 		return false
 	}
-	need := tokenTiers[route.Method+" "+route.Pattern]
+	need := tokenTiers[route.Method+" "+route.Pattern].Tier
 	if need == "" {
 		writeError(response, http.StatusForbidden, "scope_insufficient", "Agent tokens cannot use this route. Sign in as a person to do this.")
 		return true
