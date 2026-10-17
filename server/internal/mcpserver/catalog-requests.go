@@ -106,7 +106,7 @@ func tokenCreateRequestSpec() Spec {
 		`Ask for a new agent token with a label and a tier. The token belongs to the person who approves, who sees it once and passes it on; it is never shown to you.`,
 		[]string{"POST /api/v1/auth/tokens"},
 		`{"type":"object","additionalProperties":false,"required":["label","scope"],"properties":{"label":{"type":"string","minLength":1,"maxLength":80},`+
-			`"scope":{"type":"string","enum":["read","draft","send"]}}}`, tokenCreateRequest)
+			`"scope":{"type":"string","enum":["read","draft","send","admin"],"description":"admin only when the approving person is an admin."}}}`, tokenCreateRequest)
 }
 
 func workspaceExportRequestSpec() Spec {

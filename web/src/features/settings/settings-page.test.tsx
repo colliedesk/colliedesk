@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { SettingsPage } from './settings-page';
+import { sessionSchema } from '../../api/schemas';
 
 test('creates an invite and exposes its one-time URL', () => {
   const onCreateInvite = vi.fn();
@@ -74,6 +75,7 @@ test('an agent token shows its tier and when it ends; a browser session shows ne
     { ...base, id: '11111111-1111-4111-8111-111111111111', label: 'Claude Code', scope: 'draft', expires_at: '2037-10-14T09:30:00Z', revoked_at: null },
     { ...base, id: '22222222-2222-4222-8222-222222222222', label: 'Reader bot', scope: 'read', expires_at: '2037-11-02T18:00:00Z', revoked_at: null },
     { ...base, id: '33333333-3333-4333-8333-333333333333', label: 'Sender bot', scope: 'send', expires_at: '2037-12-24T06:15:00Z', revoked_at: null },
+    { ...base, id: '66666666-6666-4666-8666-666666666666', label: 'Ops bot', scope: 'admin', expires_at: '2037-12-24T06:15:00Z', revoked_at: null },
     { ...base, id: '44444444-4444-4444-8444-444444444444', label: 'Old bot', scope: 'draft', expires_at: '2037-10-14T09:30:00Z', revoked_at: '2026-10-14T00:01:00Z' },
     { ...base, id: '55555555-5555-4555-8555-555555555556', label: 'Chrome', scope: null, expires_at: '2037-10-14T09:30:00Z', revoked_at: null },
   ]} />);
@@ -86,6 +88,8 @@ test('an agent token shows its tier and when it ends; a browser session shows ne
   expect(row('Reader bot')).toHaveTextContent(/Expires Nov 2, 2037/);
   expect(within(row('Sender bot')).getByText('send')).toBeInTheDocument();
   expect(row('Sender bot')).toHaveTextContent(/Expires Dec 24, 2037/);
+  expect(within(row('Ops bot')).getByText('admin')).toHaveAttribute('title', 'Agent token tier');
+  expect(sessionSchema.parse({ ...base, id: '66666666-6666-4666-8666-666666666666', label: 'Ops bot', scope: 'admin', expires_at: '2037-12-24T06:15:00Z', revoked_at: null }).scope).toBe('admin');
 
   // A revoked token keeps its tier but no longer has an end date to look forward to.
   expect(within(row('Old bot')).getByText('draft')).toBeInTheDocument();

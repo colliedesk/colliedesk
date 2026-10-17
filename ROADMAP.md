@@ -19,7 +19,8 @@ database schema.
   report.
 - Team settings: invite, deactivate and reactivate agents.
 - **MCP server** so your AI agent (Claude, Codex, Cursor) can work the queue: search, read and
-  triage conversations and add private notes, with read, draft-only and send agent tokens.
+  triage conversations and add private notes, with read, draft-only, send and admin agent tokens; an
+  admin token runs workspace settings, the team and channels, and risky actions wait for a person.
 - Workspace isolation, per-workspace timezone with per-agent override, full workspace export.
 - **One-command install** and a signed container image.
 - **Colliedesk Cloud**: 14-day free trial, then Team or Founding; a workspace whose trial ended is
@@ -52,7 +53,6 @@ Beta starts when HC Labs announces it. Before that:
 - Usage metering; bring your own AI key.
 - Knowledge base and public help center, including your Freshdesk articles ([#90](https://github.com/colliedesk/colliedesk/issues/90)).
 - Connect any agent host in one step, with setup docs and an Agent Skills pack ([#113](https://github.com/colliedesk/colliedesk/issues/113)).
-- An admin token tier, so an agent can manage workspace settings, the team and channels ([#128](https://github.com/colliedesk/colliedesk/issues/128)).
 
 ## Later
 

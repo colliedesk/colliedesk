@@ -99,7 +99,7 @@ export const attachmentSchema = z.object({
   size: z.number().int().nonnegative(), sha256: z.string().regex(/^[0-9a-f]{64}$/), created_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'Attachment'>>;
 export const messageAgentTokenSchema = z.object({
-  id: z.string().uuid(), label: z.string(), scope: z.enum(['read', 'draft', 'send']), agent_name: z.string(),
+  id: z.string().uuid(), label: z.string(), scope: z.enum(['read', 'draft', 'send', 'admin']), agent_name: z.string(),
 }) satisfies z.ZodType<Generated<'MessageAgentToken'>>;
 export const messageSchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), author_agent_id: z.string().uuid().nullable(),
@@ -125,7 +125,7 @@ export const webFormSettingsSchema = z.object({
 export const inboundSecretSchema = z.object({ inbound_secret: z.string().min(1), inbound_url: z.string().url() }) satisfies z.ZodType<JsonResponse<'rotateEmailInboundSecret', 200>>;
 export const sessionSchema = z.object({
   id: z.string().uuid(), agent_id: z.string().uuid(), agent_email: z.string().email(), label: z.string(),
-  scope: z.enum(['read', 'draft', 'send']).nullable(), current: z.boolean(),
+  scope: z.enum(['read', 'draft', 'send', 'admin']).nullable(), current: z.boolean(),
   created_at: z.string().datetime(), last_seen_at: z.string().datetime(), expires_at: z.string().datetime(), revoked_at: nullableDate,
 }) satisfies z.ZodType<Generated<'Session'>>;
 export const inviteSchema = z.object({
@@ -135,7 +135,7 @@ export const inviteSchema = z.object({
 export const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) }) satisfies z.ZodType<Generated<'Error'>>;
 export const redeemedSchema = z.object({ token: z.string().optional(), agent: agentSchema, workspace: workspaceSchema }) satisfies z.ZodType<Generated<'Redeemed'>>;
 export const meSchema = z.object({
-  agent: agentSchema, workspace: workspaceSchema, timezone: z.string(), scope: z.enum(['read', 'draft', 'send']).nullable(),
+  agent: agentSchema, workspace: workspaceSchema, timezone: z.string(), scope: z.enum(['read', 'draft', 'send', 'admin']).nullable(),
   plan: z.object({ plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(), trial_extended: z.boolean() }).nullable(),
 }) satisfies z.ZodType<Generated<'Me'>>;
 export const sessionListSchema = z.object({ items: z.array(sessionSchema) }) satisfies z.ZodType<JsonResponse<'listSessions', 200>>;
@@ -188,7 +188,7 @@ const anyJson = z.unknown() as z.ZodType<Generated<'AgentRequest'>['body']>;
 export const agentRequestSchema = z.object({
   id: z.string().uuid(), kind: z.enum(['reply_draft', 'action']), status: agentRequestStatusSchema,
   method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']), route: z.string(), path: z.string(), body: anyJson, edited_body: anyJson,
-  approvable_by: z.enum(['agent', 'admin']), summary: z.string(),
+  approvable_by: z.enum(['agent', 'admin', 'owner']), summary: z.string(),
   conversation_id: z.string().uuid().nullable(),
   saved_reply: z.object({
     id: z.string().uuid(),
@@ -197,7 +197,7 @@ export const agentRequestSchema = z.object({
     restores: z.object({ version: z.number().int(), title: z.string(), body: z.string() }).nullable(),
   }).nullable(),
   requested_by: z.object({
-    token_id: z.string().uuid().nullable(), token_label: z.string(), token_scope: z.enum(['read', 'draft', 'send']), token_revoked: z.boolean(),
+    token_id: z.string().uuid().nullable(), token_label: z.string(), token_scope: z.enum(['read', 'draft', 'send', 'admin']), token_revoked: z.boolean(),
     agent_id: z.string().uuid().nullable(), agent_name: z.string().nullable(),
   }),
   decided_by: z.object({ agent_id: z.string().uuid().nullable(), name: z.string() }).nullable(),

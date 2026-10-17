@@ -15,13 +15,14 @@ import (
 // its MCP tool in the same pull request. When a tool starts calling a route, remove it here.
 var mcpToolPending = map[string]int{}
 
-// The gap lists only shrink: these ceilings are their current sizes. Lower a ceiling
-// when a gap closes; raising one needs the maintainer's approval written in the pull request.
+// The gap lists only shrink, and both are empty: every route a person reaches is open to a tier or
+// becomes an agent request. Raising a ceiling needs the maintainer's approval written in the pull
+// request. maxClosedToTokens counts rows closed for any reason other than PersonOnly and NotForPeople.
 // PersonOnly rows are not a gap (a person's decision on an agent request stays a person's), but they
 // are capped too, so the class cannot become a way to close a route without saying so.
 const (
 	maxMCPToolPending = 0
-	maxClosedToTokens = 14 // AdminTier + TierPending rows
+	maxClosedToTokens = 0
 	maxPersonOnly     = 2
 )
 
@@ -45,7 +46,7 @@ func TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool(t *testing.T) {
 		}
 	}
 	tiers := append(slices.Clone(auth.ScopeNames), "handler")
-	closedReasons := []string{httpapi.AdminTier, httpapi.TierPending, httpapi.PersonOnly, httpapi.NotForPeople}
+	closedReasons := []string{httpapi.PersonOnly, httpapi.NotForPeople}
 	// A token calls a route directly at its tier or above, and gets an agent request below it or on an
 	// Approval route: either way an MCP tool must reach it.
 	callable := func(access httpapi.TokenAccess) bool { return access.Tier != "" || access.Approval }
@@ -54,7 +55,7 @@ func TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool(t *testing.T) {
 		access, ok := table[key]
 		if !ok {
 			t.Errorf("%s is not classified for agent tokens: add it to tokenTiers in %s with a tier "+
-				"(read, draft, send), Approval, or a closed reason (AdminTier, TierPending, PersonOnly, NotForPeople) and its tracking issue", key, tokenScopeFile)
+				"(read, draft, send, admin), Approval, PersonOnly with why, or NotForPeople", key, tokenScopeFile)
 			continue
 		}
 		noSession := route.Permission == auth.PermissionPublic || route.Permission == auth.PermissionChannelInbound
@@ -75,10 +76,6 @@ func TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool(t *testing.T) {
 			t.Errorf("%s has tier %q in %s, want one of %v", key, access.Tier, tokenScopeFile, tiers)
 		case !callable(access) && !slices.Contains(closedReasons, access.Closed):
 			t.Errorf("%s is closed for reason %q in %s, want one of %v", key, access.Closed, tokenScopeFile, closedReasons)
-		case (access.Closed == httpapi.AdminTier || access.Closed == httpapi.TierPending) && access.Tracking == 0:
-			t.Errorf("%s is closed (%s) in %s without the issue that opens it: set Tracking", key, access.Closed, tokenScopeFile)
-		case access.Closed == httpapi.TierPending && !slices.Contains(auth.ScopeNames, access.Target):
-			t.Errorf("%s is TierPending in %s without the tier it opens to: set Target", key, tokenScopeFile)
 		case access.Closed == httpapi.PersonOnly && strings.TrimSpace(access.Why) == "":
 			t.Errorf("%s is PersonOnly in %s without saying why a person must do it: set Why", key, tokenScopeFile)
 		}
@@ -110,10 +107,10 @@ func TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool(t *testing.T) {
 	closed, personOnly := 0, 0
 	for _, access := range table {
 		switch {
-		case access.Closed == httpapi.AdminTier || access.Closed == httpapi.TierPending:
-			closed++
 		case access.Closed == httpapi.PersonOnly:
 			personOnly++
+		case access.Closed != "" && access.Closed != httpapi.NotForPeople:
+			closed++
 		}
 	}
 	if closed > maxClosedToTokens {

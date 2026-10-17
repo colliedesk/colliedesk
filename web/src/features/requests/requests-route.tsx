@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import type { ApproveOutcome } from './request-card';
+import { canApproveRequest } from './request-call';
 import { RequestsPage } from './requests-page';
 import type { RequestFilter } from './requests-page';
 
@@ -21,7 +22,7 @@ export function RequestsRoute() {
     void client.invalidateQueries({ queryKey: ['saved-replies'] });
   };
   const role = me.data?.agent?.role;
-  return <RequestsPage items={list.data?.items} canApprove={(item) => role === 'admin' || item.approvable_by === 'agent'} approved={approved} filter={filter} onFilter={setFilter} timezone={me.data?.timezone ?? 'UTC'}
+  return <RequestsPage items={list.data?.items} canApprove={(item) => canApproveRequest(item, { id: me.data?.agent?.id, role })} approved={approved} filter={filter} onFilter={setFilter} timezone={me.data?.timezone ?? 'UTC'}
     loading={list.isPending} failed={list.isError}
     onApprove={async (id) => {
       const outcome = await api.approveAgentRequest(id);

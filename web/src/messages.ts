@@ -446,6 +446,7 @@ export const messages = {
   draftCopy: (address: string) => `Copy ${address}`,
   editedBy: (person: string) => `Edited by ${person} before sending`,
   onlyAdminApproves: 'Only an admin can approve this.',
+  onlyOwnerApproves: 'Only the person who owns this token can approve it: it changes their own settings.',
   draftApproved: (token: string, person: string) => `requested by ${token}, approved by ${person}`,
   draftRefused: (reason?: string) => `The draft was approved but not sent${reason ? `: ${reason}` : '.'}`,
 } as const;

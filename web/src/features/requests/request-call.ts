@@ -9,3 +9,10 @@ export function replyCall(call: AgentRequest['body']): ReplyCall | undefined {
   if (typeof body !== 'string') return undefined;
   return { text: body, cc: Array.isArray(cc) ? cc.filter((item): item is string => typeof item === 'string') : [] };
 }
+
+// canApproveRequest says whether the signed-in person may approve item: an owner request only by the
+// person the token belongs to, an admin request only by an admin, any other by everyone.
+export function canApproveRequest(item: AgentRequest, person: { id?: string; role?: string }): boolean {
+  if (item.approvable_by === 'owner') return item.requested_by.agent_id === person.id;
+  return person.role === 'admin' || item.approvable_by === 'agent';
+}

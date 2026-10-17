@@ -102,6 +102,13 @@
   route has none.
 - **`token_revoke` is `POST /auth/logout`** with the token as bearer: it revokes that session row only.
   The tool's result is the last thing the token can read; `tools/list` after it is 401.
+- **Settings tools** (`catalog-settings.go`, `tools-settings.go`) read at `read` and change at
+  `admin`; below `admin` the REST gate files the change as a request and the tool returns it like any
+  other. They copy only named fields out of the REST answers (`emailChannelView`, `inviteView`,
+  `sessionsList`), so a field added to REST later does not reach a model by accident; the REST
+  answers to tokens already carry no link, token or inbound secret. `billing_get` is `admin` and
+  read only, so its output schema lists the request shape itself (`outputSchema` skips read-only
+  tools). On a self-hosted server the billing route is not mounted and the tool says so.
 - **Size.** One in-process call buffers at most 16 MiB of REST answer; beyond that the tool says the
   answer is too large (`TestAnswerTooLargeForOneCallIsExplainedNotAnInternalError`) instead of
   reporting an internal problem. `detail=full` of a very long thread is the usual cause.

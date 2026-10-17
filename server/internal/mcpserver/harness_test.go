@@ -34,6 +34,8 @@ type workspace struct {
 	read  string
 	draft string
 	send  string
+	// adminTier is an agent token of the admin tier; admin is the admin person's own session.
+	adminTier string
 }
 
 type env struct {
@@ -161,7 +163,7 @@ func (e *env) newWorkspace(name, adminEmail string) workspace {
 	}
 	w := workspace{admin: redeemed["token"].(string)}
 	w.id = redeemed["workspace"].(map[string]any)["id"].(string)
-	for tier, target := range map[string]*string{"read": &w.read, "draft": &w.draft, "send": &w.send} {
+	for tier, target := range map[string]*string{"read": &w.read, "draft": &w.draft, "send": &w.send, "admin": &w.adminTier} {
 		status, issued := e.rest(http.MethodPost, "/api/v1/auth/tokens", map[string]any{"label": "test " + tier, "scope": tier}, w.admin)
 		if status != http.StatusCreated {
 			e.t.Fatalf("create %s token status=%d body=%v", tier, status, issued)

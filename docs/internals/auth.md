@@ -33,19 +33,25 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
   `Authenticate` skips the write while the stored `last_seen_at` is under 60 seconds old; later, the
   write moves `last_seen_at` and slides `expires_at` as before, so the expiry can lag the true last use
   by at most a minute (`TestSessionLastUseIsRecordedAtMostOncePerMinuteAndStillSlidesTheExpiry`).
-- **Role.** A token always has `role_ceiling='agent'`, whoever creates it; a CHECK constraint
-  enforces it. No tier can reach an admin-only permission.
+- **Role.** A `read`, `draft` or `send` token has `role_ceiling='agent'`, whoever creates it; an
+  `admin` token has `role_ceiling='admin'`. The CHECK `sessions_scope_role_ceiling` ties the two.
+  `Authenticate` computes the effective role from the agent's current `role` and the ceiling
+  (`CASE WHEN a.role='agent' OR s.role_ceiling='agent'`), and refuses a deactivated agent, so an
+  admin token of a demoted creator acts as an agent and one of a deactivated creator is a 401, the
+  same as their browser sessions. Only a session whose effective role is admin can create an admin
+  token (`ErrAdminTokenNeedsAdmin`, 403 `admin_token_needs_admin`); the CLI checks the agent's role.
+  A token never has more rights than the person, as they are now.
 - **Every UI action is available to agents.** Every route in `Routes()` has a row in `tokenTiers`
-  (`httpapi/token-scope.go`): a tier, `Approval` (an agent request for every tier), or a reason it
-  is closed today: `AdminTier` (#128), `TierPending` with its target tier and issue, `PersonOnly`
-  (deciding an agent request; `Why` says why) or `NotForPeople` (routes no session reaches: public
-  pages, sign-in, provider webhooks). Every route a token may call, directly or as a request, is in
-  some MCP tool's `Spec.REST`, or in `mcpToolPending` (`mcpserver/agent_parity_test.go`) with its
-  tracking issue. `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails on an
-  unclassified or stale row, a closed row without its issue, a `PersonOnly` row without `Why`, an
-  uncovered callable route, a stale `mcpToolPending` entry, and a tool that calls a closed route; its
-  message names the file to edit. Ceilings: `maxClosedToTokens` (AdminTier + TierPending rows),
-  `maxMCPToolPending` and `maxPersonOnly` only go down without the maintainer's written approval.
+  (`httpapi/token-scope.go`): a tier (`read`, `draft`, `send`, `admin`), `Approval` (an agent
+  request for every tier), `PersonOnly` (deciding an agent request; `Why` says why) or
+  `NotForPeople` (routes no session reaches: public pages, sign-in, provider webhooks). No other
+  route is closed to tokens. Every route a token may call, directly or as a request, is in some MCP
+  tool's `Spec.REST`, or in `mcpToolPending` (`mcpserver/agent_parity_test.go`) with its tracking
+  issue. `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails on an unclassified or
+  stale row, a closed row of any other reason, a `PersonOnly` row without `Why`, an uncovered
+  callable route, a stale `mcpToolPending` entry, and a tool that calls a closed route; its message
+  names the file to edit. Ceilings: `maxClosedToTokens` and `maxMCPToolPending` are 0;
+  `maxPersonOnly` is 2. Raising one needs the maintainer's written approval.
 - **Tiers are a route table.** `tokenTiers` gives each route the lowest tier allowed. `gateToken`
   lets a token through at that tier or above; below it, and on every `Approval` route, the call
   becomes an agent request (below). A route missing at runtime is still closed to every token.
@@ -58,8 +64,10 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
   discarded).
 - **Order of checks.** Authenticate (a token presented as a cookie is a 401) → `gateToken` (202
   agent request, or 403 `scope_insufficient` / `person_only`) → role permission → CSRF → locked
-  workspace. The tier check runs before the role check because a token always has the agent role:
-  a request for an admin route must be filed for an admin to approve, not refused as `forbidden`.
+  workspace. The tier check runs before the role check because a token below `admin` has the agent
+  role: a request for an admin route must be filed for an admin to approve, not refused as
+  `forbidden`. An `admin` token of a demoted creator passes the tier check and is then refused by
+  the role (403 `forbidden`).
 - **What each tier means.** `read`: conversations, messages, time entries, attachments, contacts,
   tags, saved replies, the caller's inbox activity and the team list. `draft`: also status, priority,
   assignee, applying and removing a tag (on one conversation or in bulk), creating a tag, and notes. `send`: also outgoing replies, retrying a reply, renaming and deleting
@@ -71,11 +79,36 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
   even after the reply changes; the replayed PATCH still carries the token's `updated_at`, so a
   stale proposal fails with 409 instead of overwriting. Each change is a row in
   `saved_reply_versions` naming the person (the approver for a request), the token and the request. Changing a tier is one edit to `tokenTiers`.
-- **Closed for every tier today** (each row names the issue that opens it): revoking sessions (a
-  token could sign its owner out), invites, the lists of sessions and invites and the email and web
-  form channel settings, and changing a teammate or a channel. Creating tokens, export, billing, disconnecting the email channel,
-  rotating its secret and changing the slug are agent requests for every tier. `GET /agents` stays
-  open: assignee names need it.
+  `read` also reads the session and invite lists and the email channel and web form settings: none
+  of those answers holds a token, an invite link or the inbound secret (`TestTokensReadSettingsWithoutLinksOrSecrets`
+  scans them). The role still applies: an agent-role token lists only its owner's sessions.
+  `draft` also sets the owner's own timezone. `admin`: workspace timezone, team member role and
+  active state, revoking invites and sessions, the web form, the email
+  channel and domain verification, and `GET /billing` (admin-only by role, so it is classified
+  `admin` and a lower tier files a request instead of a role refusal).
+- **Approval for every tier, `admin` included:** creating tokens, creating invites, export, billing
+  checkout and portal, disconnecting the email channel, rotating its secret, changing the slug
+  (`Approval` rows). The handlers file the rest themselves when the caller is a token
+  (`fileGrantRequest`): `updateAgent` when the change asks for the admin role or the target is an
+  admin now (`touchesAdmin`: promoting, demoting, deactivating, and reactivating an admin, which
+  would hand the role back), and `revokeSession` when the target is a person's sign-in (not a token)
+  of anyone other than the token's own person.
+- **Credentials never reach a token.** Creating an invite is `Approval`, so a token never gets a
+  `201`; the approved call's answer is shown once to the approver and not kept (`withheldResults`),
+  so the token reading its request does not get the link either. A settings request
+  (`settingsFields` in `agent-request-settings.go`) is refused with 400 when its body is not a JSON
+  object or has a field the route does not take, so nothing pasted beside the real fields is stored
+  for days. Its summary says what changes, from what to what (`summarizeSettingsRequest`); a session
+  revoke names the session only when the token's role could list it.
+- **Owner requests.** A `/me` route (`ownerRoutes`: `PATCH /agents/me/timezone`) replays as the
+  approver, so only the person who owns the token may approve it (`approvable_by: owner`, 403
+  `owner_only` for anyone else); otherwise an admin approving would change the admin's own timezone.
+- **Revoking sessions from a token** is allowed at `admin` for agent tokens and the token person's
+  own sign-ins (security-positive: a leaked token can be cut off by an agent). The session list shows
+  the revocation; `revokeSession` also logs the token session that did it.
+- **Domain verification from a token** is limited to 10 checks per workspace per hour (in-process
+  sliding window, 429 with `Retry-After`), so an agent cannot make the server hammer DNS. People are
+  not limited.
 - **Lifetime.** Thirty days of sliding expiry like a browser session, plus an absolute limit of 365
   days from `created_at`: `Authenticate` clamps the slid `expires_at` to it and refuses from that
   instant, however often the token is used. `insertAgentToken` takes `created_at` from the service
@@ -91,7 +124,12 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
   delete, and retrying a reply record the agent but not the token. The repo has no conversation
   change log (a person's change is not attributed either); adding one is the way to close this.
 - **Rollback.** An image older than the migration needs nothing from the operator any more: it
-  cannot find a token (see the first item). Do not rely on a manual `UPDATE` of `sessions`.
+  cannot find a token (see the first item). Do not rely on a manual `UPDATE` of `sessions`. The down
+  migration of the admin tier revokes every admin token and stores it as `send` with the agent
+  ceiling, and records the admin token's requests under `send`, so the older constraints hold. This
+  loses the audit fact that those tokens and requests were `admin`; it is an accepted rollback cost
+  (rollback is not the production recovery path, and the tokens are revoked so nothing they could do
+  survives).
 - **MCP.** `/mcp` accepts a bearer only, authenticated by the same `Authenticate`, and each tool call
   runs through the REST handler with that bearer, so these tiers bind MCP tools without a second
   check (`docs/internals/mcp.md`). A new route a tool uses needs a `tokenTiers` row first.

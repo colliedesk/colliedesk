@@ -147,7 +147,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Creates a bearer token for an AI agent that acts as the signed-in agent. The token has the agent role whatever the creator's role is, so it never reaches administration. A token cannot create tokens. It appears in `GET /api/v1/auth/sessions` (for a person) with its label and scope, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last use, and one year after its creation at the latest. */
+        /** @description Creates a bearer token for an AI agent that acts as the signed-in agent. A `read`, `draft` or `send` token has the agent role whatever the creator's role is. An `admin` token acts with the creator's role, checked on every call; only an admin may create one (403 `admin_token_needs_admin` otherwise). A token's call here is an agent request a person approves. It appears in `GET /api/v1/auth/sessions` (for a person) with its label and scope, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last use, and one year after its creation at the latest. */
         post: operations["createAgentToken"];
         delete?: never;
         options?: never;
@@ -164,6 +164,7 @@ export interface paths {
         };
         get: operations["listInvites"];
         put?: never;
+        /** @description Creates an invite and returns its one-time URL once. An agent token's call, whatever its tier and role ceiling, is filed as an agent request (202): the link is a credential, so only the person who approves sees it, once, and the stored request does not keep it. */
         post: operations["createInvite"];
         delete?: never;
         options?: never;
@@ -315,7 +316,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Look up the TXT record `dns_record_name` and mark the support address domain verified when it holds `dns_record_value`. Changing the support address resets verification. */
+        /** @description Look up the TXT record `dns_record_name` and mark the support address domain verified when it holds `dns_record_value`. Changing the support address resets verification. Agent tokens may check 10 times an hour per workspace (429 with `Retry-After`); a person is not limited. */
         post: operations["verifyEmailDomain"];
         delete?: never;
         options?: never;
@@ -1027,10 +1028,10 @@ export interface components {
                 [key: string]: unknown;
             } | unknown[] | string | number | boolean | null;
             /**
-             * @description The lowest role whose person can approve it; a person below it gets 403 and the request keeps waiting.
+             * @description The lowest role whose person can approve it; a person below it gets 403 and the request keeps waiting. owner: the call changes the settings of the person who owns the token (a /me route), so only that person can approve it (403 owner_only for anyone else).
              * @enum {string}
              */
-            approvable_by: "agent" | "admin";
+            approvable_by: "agent" | "admin" | "owner";
             summary: string;
             /** Format: uuid */
             conversation_id: string | null;
@@ -1265,10 +1266,10 @@ export interface components {
             };
         };
         /**
-         * @description Tier of an agent token. `read`: read what an agent may read. `draft`: also change status, priority, assignee and tags of a conversation, create tags and add private notes. `send`: also send and retry replies, rename and delete tags, and create contacts and conversations.
+         * @description Tier of an agent token. `read`: read what an agent may read, including the session and invite lists and the channel settings without links or secrets. `draft`: also change status, priority, assignee and tags of a conversation, create tags, add private notes and set the owner's own timezone. `send`: also send and retry replies, rename and delete tags, create contacts and conversations, and write saved replies. `admin`: also workspace settings, the team, revoking invites, the web form and email channel, and sessions; it acts with the creator's role, so only an admin can create it and it loses admin rights when its creator is demoted.
          * @enum {string}
          */
-        TokenScope: "read" | "draft" | "send";
+        TokenScope: "read" | "draft" | "send" | "admin";
         AgentToken: {
             /** @description Raw bearer value, starting with cdk_agent_; Colliedesk stores only a hash of it and never shows it again */
             token: string;
@@ -2144,6 +2145,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            202: components["responses"]["AgentRequestAccepted"];
             /** @description Session revoked */
             204: {
                 headers: {
@@ -2229,7 +2231,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Invite and one-time URL */
+            /** @description The invite, and for a person its one-time URL */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -2242,6 +2244,7 @@ export interface operations {
                     };
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["PlanLimitReached"];
@@ -2268,6 +2271,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            202: components["responses"]["AgentRequestAccepted"];
             /** @description Invite revoked */
             204: {
                 headers: {
@@ -2590,6 +2594,7 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["EmailChannelSettings"];
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -2628,10 +2633,12 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["EmailChannelSettings"];
+            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -2944,6 +2951,7 @@ export interface operations {
                     "application/json": components["schemas"]["TeamMember"];
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             402: components["responses"]["PlanLimitReached"];
@@ -2984,6 +2992,7 @@ export interface operations {
                     "application/json": components["schemas"]["Workspace"];
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -3045,6 +3054,7 @@ export interface operations {
                     "application/json": components["schemas"]["Agent"];
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
@@ -3431,6 +3441,7 @@ export interface operations {
                     "application/json": components["schemas"]["Billing"];
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -3630,6 +3641,7 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["WebFormSettings"];
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

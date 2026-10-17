@@ -1,7 +1,15 @@
 package httpapi
 
-import "net/http"
+import (
+	"encoding/json"
+	"net/http"
 
+	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
+)
+
+// createInvite runs for people only: a token's invite is an agent request (Approval), so its
+// one-time link reaches the approving person once and never the token.
 func (a *API) createInvite(response http.ResponseWriter, request *http.Request) {
 	var input struct {
 		Email       string `json:"email"`
@@ -19,6 +27,15 @@ func (a *API) createInvite(response http.ResponseWriter, request *http.Request) 
 	writeJSON(response, http.StatusCreated, map[string]any{"invite": invite, "url": link})
 }
 
+// fileGrantRequest files a token's call that a person must approve whatever the token's tier.
+func (a *API) fileGrantRequest(response http.ResponseWriter, request *http.Request, route Route, who auth.Principal, call any) {
+	encoded, err := json.Marshal(call)
+	if err != nil {
+		writeInternalError(response, err)
+		return
+	}
+	a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, encoded, "")
+}
 func (a *API) listInvites(response http.ResponseWriter, request *http.Request) {
 	items, err := a.auth.ListInvites(request.Context(), principal(request).Workspace.ID)
 	if err != nil {

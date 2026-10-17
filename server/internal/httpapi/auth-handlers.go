@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -88,7 +90,22 @@ func (a *API) listSessions(response http.ResponseWriter, request *http.Request) 
 	writeJSON(response, http.StatusOK, map[string]any{"items": sessions})
 }
 
+var sessionRevokeRoute = Route{http.MethodDelete, "/api/v1/auth/sessions/{id}", auth.PermissionAccessRead}
+
 func (a *API) revokeSession(response http.ResponseWriter, request *http.Request) {
+	// Signing another person out waits for a person whatever the token's tier; the creator's own
+	// sign-ins and any agent token are revoked directly.
+	if who := principal(request); who.Scope != "" {
+		target, found, err := a.workspaceSession(request.Context(), who, request.PathValue("id"))
+		if err != nil {
+			writeStoreError(response, err)
+			return
+		}
+		if found && target.Scope == nil && target.AgentID != who.Agent.ID {
+			a.fileAgentRequest(response, request, sessionRevokeRoute, who, domain.AgentRequestAction, json.RawMessage{}, "")
+			return
+		}
+	}
 	ok, err := a.auth.RevokeSession(request.Context(), principal(request), request.PathValue("id"))
 	if err != nil {
 		writeStoreError(response, err)
@@ -97,6 +114,10 @@ func (a *API) revokeSession(response http.ResponseWriter, request *http.Request)
 	if !ok {
 		writeError(response, http.StatusNotFound, "not_found", "The session was not found.")
 		return
+	}
+	if who := principal(request); who.Scope != "" {
+		// The session list shows the revocation; the log also names the token that did it.
+		slog.Info("agent token revoked a session", "workspace_id", who.Workspace.ID, "token_session_id", who.SessionID, "revoked_session_id", request.PathValue("id"))
 	}
 	response.WriteHeader(http.StatusNoContent)
 }
@@ -114,6 +135,10 @@ func (a *API) createAgentToken(response http.ResponseWriter, request *http.Reque
 	var invalid *auth.InvalidTokenError
 	if errors.As(err, &invalid) {
 		writeError(response, http.StatusBadRequest, "invalid_request", invalid.Reason)
+		return
+	}
+	if errors.Is(err, auth.ErrAdminTokenNeedsAdmin) {
+		writeError(response, http.StatusForbidden, "admin_token_needs_admin", "Only a workspace admin can create an admin token. Choose read, draft or send.")
 		return
 	}
 	if err != nil {

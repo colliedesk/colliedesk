@@ -5,7 +5,7 @@ type Spec struct {
 	Name        string
 	Title       string
 	Description string
-	// Tier is the lowest agent token tier that may call the tool: read, draft or send. "any" means
+	// Tier is the lowest agent token tier that may call the tool: read, draft, send or admin. "any" means
 	// every valid token, because the tool needs nothing a read token lacks.
 	Tier       string
 	ReadOnly   bool
@@ -36,6 +36,9 @@ func Catalog() []Spec {
 		replyDraftSpec(), requestsListSpec(), requestGetSpec(), requestCancelSpec(),
 		tokenCreateRequestSpec(), workspaceExportRequestSpec(), billingRequestSpec(), emailChannelDisconnectRequestSpec(),
 		emailSecretRotateRequestSpec(), workspaceSlugRequestSpec(),
+		workspaceSettingsGetSpec(), workspaceSettingsUpdateSpec(), myTimezoneSetSpec(), teamMemberUpdateSpec(),
+		invitesListSpec(), inviteCreateSpec(), inviteRevokeSpec(), sessionsListSpec(), sessionRevokeSpec(),
+		webFormGetSpec(), webFormUpdateSpec(), emailChannelGetSpec(), emailChannelUpdateSpec(), emailDomainVerifySpec(), billingGetSpec(),
 	}
 }
 

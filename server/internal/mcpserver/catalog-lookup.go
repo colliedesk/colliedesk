@@ -4,13 +4,13 @@ func whoamiSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_whoami",
 		Title: "Show who this token acts as",
-		Description: `Show the workspace and the team member this token acts as, the token's tier (read, draft or send), ` +
+		Description: `Show the workspace and the team member this token acts as, the token's tier (read, draft, send or admin), ` +
 			`whether the workspace is locked, and which tools that tier can use. Call it first, and again when a tool says it needs a higher tier.` +
 			"\n\nTier: any (works with every token).",
 		Tier: "any", ReadOnly: true,
 		REST:   []string{"GET /api/v1/auth/me"},
 		Input:  noArguments,
-		Output: `{"type":"object","required":["workspace","agent","token_tier","workspace_locked","tools_you_can_use"],"properties":{"workspace":{"type":"object"},"agent":{"type":"object"},"token_tier":{"type":"string","enum":["read","draft","send"]},"tier_meaning":{"type":"string"},"workspace_locked":{"type":"boolean"},"tools_you_can_use":{"type":"array","items":{"type":"string"}}}}`,
+		Output: `{"type":"object","required":["workspace","agent","token_tier","workspace_locked","tools_you_can_use"],"properties":{"workspace":{"type":"object"},"agent":{"type":"object"},"token_tier":{"type":"string","enum":["read","draft","send","admin"]},"tier_meaning":{"type":"string"},"workspace_locked":{"type":"boolean"},"tools_you_can_use":{"type":"array","items":{"type":"string"}}}}`,
 		run:    whoami,
 	}
 }

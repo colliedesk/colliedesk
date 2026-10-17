@@ -11,7 +11,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 )
 
-const tokenUsage = "usage: collie token create --workspace <slug> --email <agent email> --scope <read|draft|send> --label <text>"
+const tokenUsage = "usage: collie token create --workspace <slug> --email <agent email> --scope <read|draft|send|admin> --label <text>"
 
 // tokenCommand lets an operator give an agent a scoped token without a browser sign-in.
 func tokenCommand(ctx context.Context, service *auth.Service, args []string, output io.Writer) error {

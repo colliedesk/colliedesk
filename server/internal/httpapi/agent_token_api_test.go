@@ -114,7 +114,7 @@ func TestAgentTokenRequestIsValidated(t *testing.T) {
 		"label too long":    {"label": strings.Repeat("a", 81), "scope": "read"},
 		"missing scope":     {"label": "Agent"},
 		"unknown scope":     {"label": "Agent", "scope": "owner"},
-		"admin is no scope": {"label": "Agent", "scope": "admin"},
+		"owner is no scope": {"label": "Agent", "scope": "owner"},
 		"unknown field":     {"label": "Agent", "scope": "read", "role": "admin"},
 	}
 	for name, body := range cases {

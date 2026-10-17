@@ -13,26 +13,19 @@ import (
 const gatedByHandler = "handler"
 
 // TokenAccess classifies one route of Routes() for agent tokens. Tier is the lowest tier that may
-// call it (read, draft, send, or gatedByHandler); a token below that tier gets an agent request a
-// person approves (202) instead of a refusal. Approval marks a route no tier may call directly: every
-// token gets an agent request. Otherwise the route is closed to every token, and Closed says why;
-// Target is the tier a TierPending route will open to, Tracking the issue that opens it, and Why the
-// reason a PersonOnly route stays with people.
+// call it (read, draft, send, admin, or gatedByHandler); a token below that tier gets an agent request
+// a person approves (202) instead of a refusal. Approval marks a route no tier may call directly: every
+// token gets an agent request. Otherwise the route is closed to every token, and Closed says why; Why
+// is the reason a PersonOnly route stays with people.
 type TokenAccess struct {
 	Tier     string
 	Approval bool
 	Closed   string
-	Target   string
-	Tracking int
 	Why      string
 }
 
-// Why a route is closed to every token today.
+// Why a route is closed to every token.
 const (
-	// AdminTier: workspace settings, team and channels; it opens to the admin tier.
-	AdminTier = "admin_tier"
-	// TierPending: will open to Target once the issue in Tracking ships (secrets redacted, history kept).
-	TierPending = "tier_pending"
 	// PersonOnly: a person's own decision about an agent's request; an agent approving its own request
 	// would make approval meaningless. It never opens to a token, and Why says so.
 	PersonOnly = "person_only"
@@ -42,18 +35,12 @@ const (
 
 func tier(name string) TokenAccess { return TokenAccess{Tier: name} }
 
-// pendingTier closes a route until issue ships, then it opens to target.
-func pendingTier(target string, issue int) TokenAccess {
-	return TokenAccess{Closed: TierPending, Target: target, Tracking: issue}
-}
-
 func personOnly(why string) TokenAccess { return TokenAccess{Closed: PersonOnly, Why: why} }
 
 var (
 	// approvalRequired: risky for any tier (new credentials, money, data leaving); every token's call
 	// becomes an agent request a person approves.
 	approvalRequired = TokenAccess{Approval: true}
-	adminTier        = TokenAccess{Closed: AdminTier, Tracking: 128}
 	notForPeople     = TokenAccess{Closed: NotForPeople}
 )
 
@@ -62,18 +49,24 @@ var (
 // TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool keeps a new route from reaching main
 // without a row.
 //
-// read: what triage needs to look at (conversations, messages, contacts, tags, the team list).
+// read: what triage needs to look at (conversations, messages, contacts, tags, the team list), and the
+// settings a person can see without secrets: the session and invite lists (never a token or a link),
+// the email channel (never the inbound secret or the SMTP password) and the web form.
 // draft: changes that never reach a customer (status, priority, assignee, tags on one conversation or
-// many at once, creating a tag, private notes). send: everything else an agent may do, such as
-// replying, creating contacts and conversations, and writing the saved replies the team sends
-// (every change is a version that can be restored, and a delete stays in the trash for 30 days). Posting a message is gated by the handler: a note
-// needs draft, an outgoing reply needs send.
+// many at once, creating a tag, private notes, the token owner's own timezone). send: everything else
+// an agent may do, such as replying, creating contacts and conversations, and writing the saved replies
+// the team sends (every change is a version that can be restored, and a delete stays in the trash for
+// 30 days). Posting a message is gated by the handler: a note needs draft, an outgoing reply needs send.
+// admin: workspace settings, the team, revoking invites, channels and sessions. An admin token acts
+// with its creator's role, so it reaches these only while that person is an admin, and the role still
+// decides the admin-only reads (billing is classified admin for that reason). The handlers file a
+// request for every tier when the change is risky for people: a change that grants, keeps or takes
+// the admin role (promoting, reactivating, demoting or deactivating an admin) and signing out another
+// person. Creating an invite is Approval: its link is a credential only the approver sees.
 //
 // A token below a route's tier, and every token on an Approval route (new credentials, money, data
 // leaving), gets an agent request a person approves instead of a refusal. Deciding a request is
-// PersonOnly. Every other route is closed to every token today, with the reason and the issue that
-// opens it: settings that wait for the admin tier (#128), reads that open once secrets and links are
-// redacted (#128), and routes no session reaches (NotForPeople). The closed rows may only shrink.
+// PersonOnly; routes no session reaches are NotForPeople. No other route is closed to tokens.
 var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/auth/logout":                                   tier(auth.ScopeRead),
 	"GET /api/v1/auth/me":                                        tier(auth.ScopeRead),
@@ -113,24 +106,22 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/agent-requests/{id}/approve": personOnly("an agent approving its own request would make approval meaningless"),
 	"POST /api/v1/agent-requests/{id}/reject":  personOnly("deciding an agent's request is a person's call"),
 
-	"GET /api/v1/auth/sessions":        pendingTier(auth.ScopeRead, 128),
-	"GET /api/v1/auth/invites":         pendingTier(auth.ScopeRead, 128),
-	"GET /api/v1/channels/email":       pendingTier(auth.ScopeRead, 128),
-	"GET /api/v1/channels/web-form":    pendingTier(auth.ScopeRead, 128),
-	"GET /api/v1/billing":              pendingTier(auth.ScopeRead, 128),
-	"PATCH /api/v1/agents/me/timezone": pendingTier(auth.ScopeDraft, 128),
-
-	"PATCH /api/v1/workspace/timezone": adminTier,
-	"PATCH /api/v1/agents/{id}":        adminTier,
-	// An invite with the admin role stays an approval request even for the admin tier (#127).
-	"POST /api/v1/auth/invites":                       adminTier,
-	"DELETE /api/v1/auth/invites/{id}":                adminTier,
-	"PUT /api/v1/channels/web-form":                   adminTier,
-	"PUT /api/v1/channels/email":                      adminTier,
-	"POST /api/v1/channels/email/domain-verification": adminTier,
-	"DELETE /api/v1/auth/sessions/{id}":               adminTier,
+	"GET /api/v1/auth/sessions":                       tier(auth.ScopeRead),
+	"GET /api/v1/auth/invites":                        tier(auth.ScopeRead),
+	"GET /api/v1/channels/email":                      tier(auth.ScopeRead),
+	"GET /api/v1/channels/web-form":                   tier(auth.ScopeRead),
+	"PATCH /api/v1/agents/me/timezone":                tier(auth.ScopeDraft),
+	"GET /api/v1/billing":                             tier(auth.ScopeAdmin),
+	"PATCH /api/v1/workspace/timezone":                tier(auth.ScopeAdmin),
+	"PATCH /api/v1/agents/{id}":                       tier(auth.ScopeAdmin),
+	"DELETE /api/v1/auth/invites/{id}":                tier(auth.ScopeAdmin),
+	"PUT /api/v1/channels/web-form":                   tier(auth.ScopeAdmin),
+	"PUT /api/v1/channels/email":                      tier(auth.ScopeAdmin),
+	"POST /api/v1/channels/email/domain-verification": tier(auth.ScopeAdmin),
+	"DELETE /api/v1/auth/sessions/{id}":               tier(auth.ScopeAdmin),
 
 	"POST /api/v1/auth/tokens":           approvalRequired,
+	"POST /api/v1/auth/invites":          approvalRequired,
 	"GET /api/v1/export":                 approvalRequired,
 	"POST /api/v1/export/link":           approvalRequired,
 	"POST /api/v1/billing/checkout":      approvalRequired,

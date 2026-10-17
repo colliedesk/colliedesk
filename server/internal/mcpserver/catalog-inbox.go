@@ -48,7 +48,7 @@ func conversationGetSpec() Spec {
 			`"id":{"type":"string"},"kind":{"type":"string","enum":["incoming","outgoing","note"]},"created_at":{"type":"string"},` +
 			`"author":{"type":"string","description":"The team member who wrote an outgoing message or note in Colliedesk."},` +
 			`"written_by_agent_token":{"type":"object","required":["label","scope"],"description":"Present when an AI agent wrote the message through an agent token: model output, not a human decision.",` +
-			`"properties":{"label":{"type":"string"},"scope":{"type":"string","enum":["read","draft","send"]}}},"delivery":{"type":"string"},` +
+			`"properties":{"label":{"type":"string"},"scope":{"type":"string","enum":["read","draft","send","admin"]}}},"delivery":{"type":"string"},` +
 			`"body":{"type":"string","description":"Text written by the team. Customer text is under untrusted_customer_content."},"truncated":{"type":"boolean"},` +
 			`"attachments":{"type":"array","description":"Files of the message, in the order of the names under untrusted_customer_content. Read one with colliedesk_attachment_get.",` +
 			`"items":{"type":"object","required":["id","size"],"properties":{"id":{"type":"string"},"size":{"type":"integer"}}}},` +

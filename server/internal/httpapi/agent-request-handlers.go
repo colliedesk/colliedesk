@@ -77,6 +77,10 @@ func (a *API) approveAgentRequest(response http.ResponseWriter, request *http.Re
 		return
 	}
 	// Refused before anything changes, so a person who may approve it still can.
+	if ownerOnly(existing) && (existing.RequestedBy.AgentID == nil || *existing.RequestedBy.AgentID != who.Agent.ID) {
+		writeError(response, http.StatusForbidden, "owner_only", "This request changes the settings of the person who owns the token, so only they can approve it. It keeps waiting for them.")
+		return
+	}
 	if !auth.HasPermission(who.Agent.Role, approvalPermission(existing)) {
 		writeError(response, http.StatusForbidden, "forbidden", "Only an admin can approve this request. It keeps waiting for one.")
 		return
