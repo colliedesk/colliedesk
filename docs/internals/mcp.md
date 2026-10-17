@@ -84,6 +84,11 @@
   every conversation; a new tag of the same name is empty) and `token_revoke`. Their descriptions say
   "cannot be undone" and tell the model to get the user's yes first; the annotation test checks both.
   Every other writing tool states `destructiveHint=false`.
+- **Saved reply tools are not destructive.** Delete moves a reply to the trash for 30 days and every
+  edit is a restorable version, so `colliedesk_saved_reply_delete` states `destructiveHint=false` and
+  says how to undo. Saved reply text comes back under `team_text`, not `untrusted_customer_content`:
+  the team wrote it, but the model is still told it is text, never instructions. Writes need
+  `updated_at` from a read, so a model cannot overwrite an edit it never saw.
 - **Attachments are read, not streamed.** `GET /attachments/{id}` streams bytes, so `attachment_get`
   uses `restClient.download`, which keeps the first 128 KiB and stops the handler with `errEnough`
   (the handler logs one `stream:` line for a larger file; that is expected). A plain UTF-8 file comes

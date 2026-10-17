@@ -2,7 +2,8 @@
 
 A saved reply is text your whole team inserts into the reply box, for example a greeting or the steps
 of a refund. Every saved reply is shared by the workspace. Every agent can add, edit and delete them;
-there is no admin-only setting.
+there is no admin-only setting. AI agents can work on them too (see [AI agents](#ai-agents)). Every
+change is kept as a version you can restore, and a deleted reply waits in a trash for 30 days.
 
 ## Insert a saved reply
 
@@ -46,23 +47,67 @@ Open **Settings → Saved replies**.
   leave it as it was. The change applies for the whole team at once. If a teammate saved the same
   reply after you opened it, your edit is refused (nothing is overwritten) with "changed by someone
   else"; select **Reload** to see their version, then edit again.
-- **Delete**: select **Delete**, then confirm. This removes the reply for everyone. Conversations
-  and messages that used it are not changed, because inserting only copies text.
+- **Delete**: select **Delete**, then confirm. The reply moves to the trash: it disappears from the
+  list and from **Insert saved reply** for everyone. Conversations and messages that used it are not
+  changed, because inserting only copies text.
+
+Under each reply, a line says who made the latest change and when, for example
+`Edited by Ada via Claude triage`. "via" names the [agent token](sessions.md) an AI agent used;
+"(approved request)" means a person approved the change an agent asked for.
+
+### History and restore
+
+1. Select **History** next to a reply. The panel lists every version, newest first: what changed, who
+   changed it, through which agent token, and the title and text it had.
+2. Select **Restore version N** on an older version. Its title and text become the current reply.
+
+Restoring adds a new version; the history is never rewritten, so you can restore again the same way.
+If someone else saved the reply after you opened the panel, the restore is refused and nothing changes.
+Select **Close history** (or **History** again) to close the panel.
+
+### Trash
+
+1. Select **Trash** under the list. It shows the replies deleted in the last 30 days, who deleted each
+   one, and how many days are left.
+2. Select **Restore** next to a reply. It comes back as it was, with its history.
+
+After 30 days in the trash a reply is deleted for good together with its history. The server checks
+once a day. If another reply took the title in the meantime, the restore is refused: rename one of
+them first.
 
 Rules:
 
-- The title is unique in the workspace. `Refund` and `refund` count as the same title.
+- The title is unique among the replies outside the trash. `Refund` and `refund` count as the same title.
 - A title holds at most 200 characters and the text at most 20 000.
-- A workspace holds at most 500 saved replies.
+- A workspace holds at most 500 saved replies. Replies in the trash do not count.
 - The text is plain text. Saved replies hold no files and no formatting.
+
+## AI agents
+
+An AI agent connected through [MCP](mcp.md) or the API with an agent token can read, write and
+restore saved replies. What happens depends on the tier of its token:
+
+| Token tier | Read, history, trash | Create, edit, delete, restore |
+|---|---|---|
+| `send` | Yes | Yes, at once. The version names the token |
+| `draft`, `read` | Yes | Proposed: Colliedesk files an [agent request](agent-requests.md) and nothing changes until a person approves it |
+
+On **Requests**, a proposed change shows the reply before and after: removed text marked `−`, added
+text marked `+`. Colliedesk keeps the reply as the agent saw it when it asked. If someone changed the
+reply since, the request says so and shows the reply as it is now; approving such an edit fails
+without overwriting anything, and the agent must ask again. A proposed delete shows what would go to
+the trash.
 
 ## API
 
-`GET`, `POST`, `PATCH` and `DELETE` on `/api/v1/saved-replies` (see `contracts/openapi.yaml`). Reading
+`GET`, `POST`, `PATCH` and `DELETE` on `/api/v1/saved-replies`, `GET /api/v1/saved-replies/trash`,
+`POST /api/v1/saved-replies/{id}/restore` (out of the trash), `GET /api/v1/saved-replies/{id}/versions`
+and `POST /api/v1/saved-replies/{id}/versions/{version}/restore` (see `contracts/openapi.yaml`). Reading
 needs `conversations:read`; writing needs `conversations:write`, which every agent has. The API
 returns the text as stored, with the variables unfilled.
 
 ## Import and export
 
 - [Import from Freshdesk](import-freshdesk.md) brings your canned responses over as saved replies.
-- [Export all your data](export.md) includes them in `saved-replies.ndjson`.
+- [Export all your data](export.md) includes them in `saved-replies.ndjson`, the ones in the trash
+  too, and every version in `saved-reply-versions.ndjson`.

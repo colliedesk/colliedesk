@@ -53,7 +53,6 @@ Beta starts when HC Labs announces it. Before that:
 - Knowledge base and public help center, including your Freshdesk articles ([#90](https://github.com/colliedesk/colliedesk/issues/90)).
 - Connect any agent host in one step, with setup docs and an Agent Skills pack ([#113](https://github.com/colliedesk/colliedesk/issues/113)).
 - An admin token tier, so an agent can manage workspace settings, the team and channels ([#128](https://github.com/colliedesk/colliedesk/issues/128)).
-- Saved replies agents can improve: send tokens edit them, draft tokens propose changes, with history and restore ([#129](https://github.com/colliedesk/colliedesk/issues/129)).
 
 ## Later
 
