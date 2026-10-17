@@ -244,10 +244,12 @@ export const api = {
   savedReplies: () => request('/api/v1/saved-replies', savedReplyListSchema),
   createSavedReply: (title: string, body: string) => request('/api/v1/saved-replies', savedReplySchema, { method: 'POST', body: json<'createSavedReply'>({ title, body }) }),
   updateSavedReply: (id: string, value: RequestBody<'updateSavedReply'>) => request(`/api/v1/saved-replies/${id}`, savedReplySchema, { method: 'PATCH', body: json<'updateSavedReply'>(value) }),
-  deleteSavedReply: (id: string) => requestNoContent(`/api/v1/saved-replies/${id}`, { method: 'DELETE' }),
-  trashedSavedReplies: () => request('/api/v1/saved-replies/trash', trashedSavedReplyListSchema),
-  restoreSavedReply: (id: string) => request(`/api/v1/saved-replies/${id}/restore`, savedReplySchema, { method: 'POST' }),
-  savedReplyVersions: (id: string) => request(`/api/v1/saved-replies/${id}/versions`, savedReplyVersionListSchema),
+  // updatedAt is the version the person saw; the server refuses the delete if the reply was saved since.
+  deleteSavedReply: (id: string, updatedAt: string) => requestNoContent(`/api/v1/saved-replies/${id}?${new URLSearchParams({ updated_at: updatedAt })}`, { method: 'DELETE' }),
+  trashedSavedReplies: (cursor?: string) => request(`/api/v1/saved-replies/trash${cursor ? `?${new URLSearchParams({ cursor })}` : ''}`, trashedSavedReplyListSchema),
+  restoreSavedReply: (id: string, updatedAt: string) => request(`/api/v1/saved-replies/${id}/restore`, savedReplySchema,
+    { method: 'POST', body: json<'restoreSavedReply'>({ updated_at: updatedAt }) }),
+  savedReplyVersions: (id: string, beforeVersion?: number) => request(`/api/v1/saved-replies/${id}/versions${beforeVersion ? `?before_version=${beforeVersion}` : ''}`, savedReplyVersionListSchema),
   restoreSavedReplyVersion: (id: string, version: number, updatedAt: string) => request(`/api/v1/saved-replies/${id}/versions/${version}/restore`, savedReplySchema,
     { method: 'POST', body: json<'restoreSavedReplyVersion'>({ updated_at: updatedAt }) }),
   // Without full a request carries no body: the poll every tab runs stays small.

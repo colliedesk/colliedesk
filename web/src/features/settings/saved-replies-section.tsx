@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { ChangedElsewhereError, InvalidRequestError } from '../../api/client';
-import type { SavedReply, SavedReplyVersion, TrashedSavedReply } from '../../api/schemas';
+import type { SavedReply, SavedReplyVersionPage, TrashedSavedReplyPage } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { savedReplyChangeText } from '../../lib/saved-reply-change';
 import { messages } from '../../messages';
@@ -15,14 +15,15 @@ interface SavedRepliesSectionProps {
   onCreate: (title: string, body: string) => Promise<unknown>;
   // updated_at is the version this form was opened on; the server refuses the edit if the reply was saved since.
   onUpdate: (id: string, change: { title: string; body: string; updated_at: string }) => Promise<unknown>;
-  onDelete: (id: string) => Promise<unknown>;
+  // updatedAt is the version the person saw; the server refuses the delete if the reply was saved since.
+  onDelete: (id: string, updatedAt: string) => Promise<unknown>;
   // Loads the list again; used after an edit was refused because someone else saved first.
   onReload?: () => void;
-  loadHistory: (id: string) => Promise<SavedReplyVersion[]>;
+  loadHistory: (id: string, beforeVersion?: number) => Promise<SavedReplyVersionPage>;
   // Makes an earlier version current; updated_at is the version of the reply the list shows.
   onRestoreVersion: (id: string, version: number, updatedAt: string) => Promise<unknown>;
-  loadTrash: () => Promise<TrashedSavedReply[]>;
-  onUndelete: (id: string) => Promise<unknown>;
+  loadTrash: (cursor?: string) => Promise<TrashedSavedReplyPage>;
+  onUndelete: (id: string, updatedAt: string) => Promise<unknown>;
   timezone?: string;
   // now dates the days left in the trash; tests fix it.
   now?: Date;
@@ -98,7 +99,7 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
                   {confirming === reply.id
                     ? <div role="group" aria-label={messages.deleteSavedReplyName(reply.title)} className="saved-reply-actions">
                         <span>{messages.confirmDeleteSavedReply(reply.title)}</span>
-                        <button type="button" className="danger-action" disabled={busy} onClick={() => void run(() => onDelete(reply.id), () => setConfirming(null))}>{messages.confirmDelete}</button>
+                        <button type="button" className="danger-action" disabled={busy} onClick={() => void run(() => onDelete(reply.id, reply.updated_at), () => setConfirming(null))}>{messages.confirmDelete}</button>
                         <button type="button" disabled={busy} onClick={() => setConfirming(null)}>{messages.cancel}</button>
                       </div>
                     : <div className="saved-reply-actions">
@@ -108,7 +109,7 @@ export function SavedRepliesSection({ replies, onCreate, onUpdate, onDelete, onR
                         <button type="button" className="danger-action" aria-label={messages.deleteSavedReplyName(reply.title)} onClick={() => { setProblem(undefined); setConfirming(reply.id); }}>{messages.confirmDelete}</button>
                       </div>}
                   {panel === reply.id && <Suspense fallback={<p className="muted-copy">{messages.loadingSavedReplyHistory}</p>}>
-                    <SavedReplyHistory title={reply.title} timezone={timezone} load={() => loadHistory(reply.id)} onClose={closePanel}
+                    <SavedReplyHistory title={reply.title} timezone={timezone} load={(before) => loadHistory(reply.id, before)} onClose={closePanel}
                       onRestore={(version) => onRestoreVersion(reply.id, version, reply.updated_at)} /></Suspense>}
                 </>}
           </li>

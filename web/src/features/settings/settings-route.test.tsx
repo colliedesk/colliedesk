@@ -120,7 +120,7 @@ test('a plain agent manages the shared saved replies and the list reloads after 
   api.savedReplies.mockResolvedValue({ items: [] });
   fireEvent.click(screen.getByRole('button', { name: 'Delete Closing' }));
   fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-  await waitFor(() => expect(api.deleteSavedReply).toHaveBeenCalledWith(stored.id));
+  await waitFor(() => expect(api.deleteSavedReply).toHaveBeenCalledWith(stored.id, stored.updated_at));
   expect(await screen.findByText('No saved replies yet.')).toBeInTheDocument();
 });
 

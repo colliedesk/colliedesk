@@ -8,6 +8,8 @@ export function savedReplyChangeText(change: Pick<SavedReplyChange, 'kind' | 're
   const what = change.kind === 'restore' && change.restored_from_version !== null
     ? messages.savedReplyRestoredVersion(change.restored_from_version)
     : messages.savedReplyChangeVerb[change.kind];
+  // A baseline names no person: who wrote the text before history started is not known.
+  if (change.kind === 'baseline') return what;
   let text = messages.savedReplyChangeBy(what, change.changed_by?.name ?? messages.someone);
   if (change.token) text = messages.savedReplyChangeVia(text, change.token.label);
   if (change.agent_request_id) text = `${text} (${messages.savedReplyApprovedRequest})`;

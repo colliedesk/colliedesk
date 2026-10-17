@@ -44,7 +44,7 @@ export const teamMemberSchema = z.object({
 }) satisfies z.ZodType<Generated<'TeamMember'>>;
 const savedReplyPersonSchema = z.object({ agent_id: z.string().uuid().nullable(), name: z.string() }) satisfies z.ZodType<Generated<'SavedReplyPerson'>>;
 const savedReplyChangeFields = {
-  version: z.number().int(), kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete']), restored_from_version: z.number().int().nullable(),
+  version: z.number().int(), kind: z.enum(['baseline', 'create', 'edit', 'delete', 'restore', 'undelete']), restored_from_version: z.number().int().nullable(),
   changed_by: savedReplyPersonSchema.nullable(), token: z.object({ id: z.string().uuid().nullable(), label: z.string() }).nullable(),
   agent_request_id: z.string().uuid().nullable(), created_at: z.string().datetime(),
 };
@@ -153,8 +153,8 @@ export const contactListSchema = z.object({ items: z.array(contactSchema) }) sat
 export const agentListSchema = z.object({ items: z.array(teamMemberSchema) }) satisfies z.ZodType<JsonResponse<'listAgents', 200>>;
 export const timeEntryListSchema = z.object({ items: z.array(timeEntrySchema) }) satisfies z.ZodType<JsonResponse<'listTimeEntries', 200>>;
 export const savedReplyListSchema = z.object({ items: z.array(savedReplySchema) }) satisfies z.ZodType<JsonResponse<'listSavedReplies', 200>>;
-export const trashedSavedReplyListSchema = z.object({ items: z.array(trashedSavedReplySchema) }) satisfies z.ZodType<JsonResponse<'listTrashedSavedReplies', 200>>;
-export const savedReplyVersionListSchema = z.object({ items: z.array(savedReplyVersionSchema) }) satisfies z.ZodType<JsonResponse<'listSavedReplyVersions', 200>>;
+export const trashedSavedReplyListSchema = z.object({ items: z.array(trashedSavedReplySchema), next_cursor: z.string().nullable() }) satisfies z.ZodType<JsonResponse<'listTrashedSavedReplies', 200>>;
+export const savedReplyVersionListSchema = z.object({ items: z.array(savedReplyVersionSchema), next_before_version: z.number().int().nullable() }) satisfies z.ZodType<JsonResponse<'listSavedReplyVersions', 200>>;
 export const bulkUpdateResultSchema = z.object({ updated: z.number().int() }) satisfies z.ZodType<JsonResponse<'bulkUpdateConversations', 200>>;
 export const tagListSchema = z.object({ items: z.array(tagSchema) }) satisfies z.ZodType<JsonResponse<'listTags', 200>>;
 
@@ -179,6 +179,8 @@ export type SavedReply = Generated<'SavedReply'>;
 export type SavedReplyChange = Generated<'SavedReplyChange'>;
 export type TrashedSavedReply = Generated<'TrashedSavedReply'>;
 export type SavedReplyVersion = Generated<'SavedReplyVersion'>;
+export type SavedReplyVersionPage = z.infer<typeof savedReplyVersionListSchema>;
+export type TrashedSavedReplyPage = z.infer<typeof trashedSavedReplyListSchema>;
 
 export const agentRequestStatusSchema = z.enum(['pending', 'approved', 'failed', 'rejected', 'cancelled', 'expired']);
 // A stored call body and a call's answer are any JSON value.
@@ -192,6 +194,7 @@ export const agentRequestSchema = z.object({
     id: z.string().uuid(),
     before: z.object({ title: z.string(), body: z.string(), updated_at: z.string().datetime() }).nullable(),
     current: z.object({ title: z.string(), body: z.string(), updated_at: z.string().datetime(), deleted_at: nullableDate }).nullable(),
+    restores: z.object({ version: z.number().int(), title: z.string(), body: z.string() }).nullable(),
   }).nullable(),
   requested_by: z.object({
     token_id: z.string().uuid().nullable(), token_label: z.string(), token_scope: z.enum(['read', 'draft', 'send']), token_revoked: z.boolean(),

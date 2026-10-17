@@ -35,8 +35,11 @@ export function SavedReplyProposal({ item }: { item: AgentRequest }) {
   } else if (item.route.endsWith('/{id}/restore')) {
     content = <><Field to={before.title} /><Field to={before.body} /><p className="muted-copy">{messages.savedReplyProposalUndelete}</p></>;
   } else if (item.route.endsWith('/restore')) {
-    const version = item.path.split('/').at(-2) ?? '';
-    content = <><p className="muted-copy">{messages.savedReplyProposalVersion(version)}</p><Field from={before.title} /><Field from={before.body} /></>;
+    const restores = item.saved_reply?.restores;
+    content = restores
+      ? <><p className="muted-copy">{messages.savedReplyProposalVersion(restores.version)}</p>
+          <Field from={before.title} to={restores.title} /><Field from={before.body} to={restores.body} /></>
+      : <><Field from={before.title} /><Field from={before.body} /></>;
   } else {
     content = <><Field from={before.title} to={proposed.title ?? before.title} /><Field from={before.body} to={proposed.body ?? before.body} /></>;
   }

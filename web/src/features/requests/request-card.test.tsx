@@ -79,7 +79,7 @@ const before = { title: 'Refund', body: 'We refunded you.', updated_at: '2026-10
 
 test('a proposed edit of a saved reply shows the reply before and after', () => {
   render(<RequestCard item={replyRequest({ summary: 'Edit saved reply "Refund"', body: { title: 'Refund done', body: 'We refunded you today.', updated_at: before.updated_at },
-    saved_reply: { id: '55555555-5555-4555-8555-555555555555', before, current: { ...before, deleted_at: null } } })} timezone="UTC" {...actions()} />);
+    saved_reply: { id: '55555555-5555-4555-8555-555555555555', before, current: { ...before, deleted_at: null }, restores: null } })} timezone="UTC" {...actions()} />);
   const proposal = screen.getByRole('group', { name: 'Proposed change to the saved reply' });
   expect(within(proposal).getByText('We refunded you.').closest('del')).not.toBeNull();
   expect(within(proposal).getByText('We refunded you today.').closest('ins')).not.toBeNull();
@@ -90,7 +90,7 @@ test('a proposed edit of a saved reply shows the reply before and after', () => 
 
 test('a proposal says when the saved reply changed after the agent asked', () => {
   render(<RequestCard item={replyRequest({ body: { body: 'New text', updated_at: before.updated_at },
-    saved_reply: { id: '55555555-5555-4555-8555-555555555555', before, current: { ...before, body: 'Edited by a person', updated_at: '2026-10-17T08:00:00Z', deleted_at: null } } })} timezone="UTC" {...actions()} />);
+    saved_reply: { id: '55555555-5555-4555-8555-555555555555', before, current: { ...before, body: 'Edited by a person', updated_at: '2026-10-17T08:00:00Z', deleted_at: null }, restores: null } })} timezone="UTC" {...actions()} />);
   expect(screen.getByText(/changed since the agent asked/)).toBeInTheDocument();
   expect(screen.getByText('Edited by a person')).toBeInTheDocument();
 });
@@ -100,8 +100,19 @@ test('a proposed new saved reply shows its text, and a proposed delete shows wha
   const created = screen.getByRole('group', { name: 'Proposed change to the saved reply' });
   expect(within(created).getByText('Hello there.').closest('ins')).not.toBeNull();
   unmount();
-  render(<RequestCard item={replyRequest({ method: 'DELETE', body: null, saved_reply: { id: '55555555-5555-4555-8555-555555555555', before, current: { ...before, deleted_at: null } } })} timezone="UTC" {...actions()} />);
+  render(<RequestCard item={replyRequest({ method: 'DELETE', body: null, saved_reply: { id: '55555555-5555-4555-8555-555555555555', before, current: { ...before, deleted_at: null }, restores: null } })} timezone="UTC" {...actions()} />);
   const deleted = screen.getByRole('group', { name: 'Proposed change to the saved reply' });
   expect(within(deleted).getByText('We refunded you.').closest('del')).not.toBeNull();
   expect(within(deleted).getByText(/trash for 30 days/)).toBeInTheDocument();
+});
+
+test('a proposed version restore shows the text it would bring back', () => {
+  render(<RequestCard item={replyRequest({ method: 'POST', route: '/api/v1/saved-replies/{id}/versions/{version}/restore',
+    path: '/api/v1/saved-replies/55555555-5555-4555-8555-555555555555/versions/1/restore', body: { updated_at: before.updated_at },
+    saved_reply: { id: '55555555-5555-4555-8555-555555555555', before, current: { ...before, deleted_at: null }, restores: { version: 1, title: 'Refunds', body: 'Refunded in 5 days.' } } })} timezone="UTC" {...actions()} />);
+  const proposal = screen.getByRole('group', { name: 'Proposed change to the saved reply' });
+  expect(within(proposal).getByText('We refunded you.').closest('del')).not.toBeNull();
+  expect(within(proposal).getByText('Refunded in 5 days.').closest('ins')).not.toBeNull();
+  expect(within(proposal).getByText('Refunds').closest('ins')).not.toBeNull();
+  expect(within(proposal).getByText(/version 1/)).toBeInTheDocument();
 });
