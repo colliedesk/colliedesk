@@ -13,14 +13,17 @@ info:
 
     An agent token (`POST /api/v1/auth/tokens`) is a bearer credential for an AI agent. It starts with
     `cdk_agent_` and acts as the agent who created it, limited to a tier: `read` (conversations,
-    messages, contacts, tags and the team list), `draft` (also changes that never reach a customer:
-    status, priority, assignee, tags, new tags, private notes) or `send` (also outgoing replies and
-    creating contacts and conversations). A token never changes administration (sessions, invites,
-    tokens, workspace, channel, billing and export settings), cannot read the lists of sessions and
-    invites or the channel settings, and is refused as a cookie. A call outside the tier answers 403
-    with error code `scope_insufficient`; the message names the tier the action needs. A token expires
-    30 days after its last use and never lives longer than one year from its creation. A message it
-    writes carries `agent_token`, so a person can tell it from their own.
+    messages, contacts, tags, the team list, and the session, invite and channel settings without
+    links or secrets), `draft` (also changes that never reach a customer: status, priority, assignee,
+    tags, new tags, private notes, the owner's own timezone), `send` (also outgoing replies, creating
+    contacts and conversations, saved replies) or `admin` (also workspace settings, the team, invites,
+    channels and sessions, with the creator's admin role while they keep it). A call above the tier,
+    and every call to a route that needs approval for every tier (new tokens, admin invites and
+    promotions, export, billing checkout and portal, disconnecting email, a new inbound secret, the
+    workspace address), answers 202 with an agent request a person approves. An invite link, a token
+    or the inbound secret is never in an answer to a token. A token is refused as a cookie. A token
+    expires 30 days after its last use and never lives longer than one year from its creation. A
+    message it writes carries `agent_token`, so a person can tell it from their own.
 servers:
   - url: /
 security:
@@ -169,6 +172,7 @@ paths:
       operationId: revokeSession
       x-permission: access:read
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '204': {description: Session revoked}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -178,9 +182,10 @@ paths:
       operationId: createAgentToken
       x-permission: authenticated
       description: >
-        Creates a bearer token for an AI agent that acts as the signed-in agent. The token has the
-        agent role whatever the creator's role is, so it never reaches administration. A token cannot
-        create tokens. It appears in `GET /api/v1/auth/sessions` (for a person) with its label and
+        Creates a bearer token for an AI agent that acts as the signed-in agent. A `read`, `draft` or
+        `send` token has the agent role whatever the creator's role is. An `admin` token acts with the
+        creator's role, checked on every call; only an admin may create one (403
+        `admin_token_needs_admin` otherwise). A token's call here is an agent request a person approves. It appears in `GET /api/v1/auth/sessions` (for a person) with its label and
         scope, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last
         use, and one year after its creation at the latest.
       requestBody:
@@ -233,17 +238,23 @@ paths:
               properties:
                 email: {type: string, format: email}
                 role_ceiling: {$ref: '#/components/schemas/Role'}
+      description: >
+        Creates an invite. A person gets the one-time URL in `url`, once. An agent token never does: the
+        link is a credential, so its answer has `note` instead. An agent token's invite with the `admin`
+        role is filed as an agent request (202) whatever its tier.
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '201':
-          description: Invite and one-time URL
+          description: The invite, and for a person its one-time URL
           content:
             application/json:
               schema:
                 type: object
-                required: [invite, url]
+                required: [invite]
                 properties:
                   invite: {$ref: '#/components/schemas/Invite'}
-                  url: {type: string, format: uri}
+                  url: {type: string, format: uri, description: Only for a person's own session.}
+                  note: {type: string, description: 'For an agent token: why the link is not in the answer.'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '402': {$ref: '#/components/responses/PlanLimitReached'}
@@ -259,6 +270,7 @@ paths:
       operationId: revokeInvite
       x-permission: access:write
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '204': {description: Invite revoked}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -515,6 +527,7 @@ paths:
               properties:
                 support_address: {type: string, format: email}
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200': {$ref: '#/components/responses/EmailChannelSettings'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -538,6 +551,7 @@ paths:
         Look up the TXT record `dns_record_name` and mark the support address domain verified when it
         holds `dns_record_value`. Changing the support address resets verification.
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200': {$ref: '#/components/responses/EmailChannelSettings'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -806,6 +820,7 @@ paths:
                   format: uuid
                   description: 'Only with `active: false`. An active agent of this workspace other than the one being deactivated; an invalid target is `invalid_reassign_target` and nothing changes.'
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
           description: The agent after the change
           content: {application/json: {schema: {$ref: '#/components/schemas/TeamMember'}}}
@@ -833,6 +848,7 @@ paths:
               properties:
                 timezone: {type: string, minLength: 1}
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
           description: Updated workspace timezone
           content: {application/json: {schema: {$ref: '#/components/schemas/Workspace'}}}
@@ -880,6 +896,7 @@ paths:
               properties:
                 timezone: {type: [string, 'null']}
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
           description: Updated agent timezone override
           content: {application/json: {schema: {$ref: '#/components/schemas/Agent'}}}
@@ -1169,6 +1186,7 @@ paths:
         The workspace plan, subscription state, the limits of that plan and current usage. Only
         present when billing is configured (the hosted cloud); self-hosted instances answer 404.
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
           description: Plan, subscription state, limits and usage
           content:
@@ -1371,6 +1389,7 @@ paths:
                   maxItems: 20
                   items: {type: string}
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200': {$ref: '#/components/responses/WebFormSettings'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -2060,11 +2079,15 @@ components:
                 trial_extended: {type: boolean, description: True when a Freshdesk import already extended the trial.}
     TokenScope:
       type: string
-      enum: [read, draft, send]
+      enum: [read, draft, send, admin]
       description: >
-        Tier of an agent token. `read`: read what an agent may read. `draft`: also change status, priority,
-        assignee and tags of a conversation, create tags and add private notes. `send`: also send and
-        retry replies, rename and delete tags, and create contacts and conversations.
+        Tier of an agent token. `read`: read what an agent may read, including the session and invite
+        lists and the channel settings without links or secrets. `draft`: also change status, priority,
+        assignee and tags of a conversation, create tags, add private notes and set the owner's own
+        timezone. `send`: also send and retry replies, rename and delete tags, create contacts and
+        conversations, and write saved replies. `admin`: also workspace settings, the team, non-admin
+        invites, the web form and email channel, and sessions; it acts with the creator's role, so only
+        an admin can create it and it loses admin rights when its creator is demoted.
     AgentToken:
       type: object
       required: [token, session]

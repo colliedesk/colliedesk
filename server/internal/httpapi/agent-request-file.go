@@ -66,6 +66,10 @@ func (a *API) fileAgentRequest(response http.ResponseWriter, request *http.Reque
 		}
 		body = raw
 	}
+	if field, unknown := unknownSettingsField(route, body); unknown {
+		writeError(response, http.StatusBadRequest, "invalid_request", "This call does not take the field "+field+". Nothing was filed; send only the fields the route takes.")
+		return
+	}
 	var conversationID *string
 	if strings.HasPrefix(route.Pattern, conversationRoutePrefix) {
 		id := request.PathValue("id")
@@ -86,6 +90,9 @@ func (a *API) fileAgentRequest(response http.ResponseWriter, request *http.Reque
 	}
 	if summary == "" && (savedReply != nil || route.Pattern == "/api/v1/saved-replies") {
 		summary = summarizeSavedReplyRequest(route, body, savedReply, request.PathValue("version"))
+	}
+	if summary == "" {
+		summary = a.summarizeSettingsRequest(request.Context(), request, route, who, body)
 	}
 	if summary == "" {
 		summary = summarizeRequest(route, kind, body)
@@ -143,6 +150,16 @@ var requestTitles = map[string]string{
 	"DELETE /api/v1/channels/email":                              "Disconnect the email channel",
 	"POST /api/v1/channels/email/secret":                         "Rotate the inbound email secret",
 	"PATCH /api/v1/workspace/slug":                               "Change the workspace address",
+	"PATCH /api/v1/workspace/timezone":                           "Change the workspace timezone",
+	"PATCH /api/v1/agents/me/timezone":                           "Change my timezone",
+	"PATCH /api/v1/agents/{id}":                                  "Change a team member",
+	"POST /api/v1/auth/invites":                                  "Invite a team member",
+	"DELETE /api/v1/auth/invites/{id}":                           "Revoke an invite",
+	"DELETE /api/v1/auth/sessions/{id}":                          "Revoke a session",
+	"PUT /api/v1/channels/web-form":                              "Change the web form",
+	"PUT /api/v1/channels/email":                                 "Change the email channel",
+	"POST /api/v1/channels/email/domain-verification":            "Verify the email domain",
+	"GET /api/v1/billing":                                        "Read the plan and billing status",
 	"POST /api/v1/saved-replies":                                 "Create a saved reply",
 	"PATCH /api/v1/saved-replies/{id}":                           "Edit a saved reply",
 	"DELETE /api/v1/saved-replies/{id}":                          "Delete a saved reply",

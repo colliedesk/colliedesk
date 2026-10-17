@@ -23,6 +23,8 @@ type restAgent struct {
 	Email       string `json:"email"`
 	DisplayName string `json:"display_name"`
 	Role        string `json:"role"`
+	// TimezoneOverride is set only in the answer of /auth/me.
+	TimezoneOverride *string `json:"timezone_override"`
 }
 
 type restTag struct {

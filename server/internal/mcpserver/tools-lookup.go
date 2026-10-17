@@ -12,6 +12,8 @@ var tierMeaning = map[string]string{
 	"read":  "You can read the inbox. You cannot change anything.",
 	"draft": "You can read, change status, priority, assignee and tags, and add private notes. Nothing you do reaches a customer.",
 	"send":  "You may do everything a team member can, including replying to customers by email. A reply cannot be called back: confirm it with the user first.",
+	"admin": "You may also change workspace settings, the team, invites, channels and sessions, as the admin who created this token, while that person is an admin. " +
+		"Creating tokens, admin invites, export, billing, disconnecting email, a new inbound secret and the workspace address still wait for a person's approval.",
 }
 
 type whoamiOut struct {

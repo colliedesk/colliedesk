@@ -20,7 +20,7 @@ func TestCatalogToolsMapOntoRealRoutesAndStateTheirTier(t *testing.T) {
 			t.Errorf("tool name %q is duplicated or not underscore_case", spec.Name)
 		}
 		names[spec.Name] = true
-		if !slices.Contains([]string{"read", "draft", "send", "any"}, spec.Tier) {
+		if !slices.Contains([]string{"read", "draft", "send", "admin", "any"}, spec.Tier) {
 			t.Errorf("%s: tier %q", spec.Name, spec.Tier)
 		}
 		for _, route := range spec.REST {

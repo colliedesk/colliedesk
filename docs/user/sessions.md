@@ -32,27 +32,35 @@ docker compose exec server /app/collie token create \
 ```
 
 or with `POST /api/v1/auth/tokens` and a body such as `{"label": "Claude Code", "scope": "draft"}`.
-Settings has no button for it yet. The token is shown once and cannot be recovered. If you lose
+Settings has no button for it yet: create tokens with the command line or the API. The token is shown once and cannot be recovered. If you lose
 it, create a new token and revoke the old one. The agent sends it as `Authorization: Bearer <token>`.
 
 | Scope | The agent can |
 |---|---|
-| `read` | Read conversations, messages, contacts, tags, saved replies and the team list |
-| `draft` | Everything in `read`, plus change status, priority, assignee and tags of one conversation or several at once, create a tag, and add private notes. Nothing reaches a customer. |
+| `read` | Read conversations, messages, contacts, tags, saved replies and the team list, and see the session and invite lists and the email channel and web form settings. No answer ever holds an invite link, a token or the inbound email secret. |
+| `draft` | Everything in `read`, plus change status, priority, assignee and tags of one conversation or several at once, create a tag, add private notes, and set your own timezone. Nothing reaches a customer. |
 | `send` | Everything in `draft`, plus send replies to customers, retry a failed reply, rename and delete tags, create contacts and conversations, and create, edit, delete and restore [saved replies](saved-replies.md#ai-agents) |
+| `admin` | Everything in `send`, plus change the workspace timezone, change a teammate's role, deactivate and reactivate them, create and revoke invites with the agent role, set up the web form and the email channel, verify the email domain, read the plan, and revoke sessions and tokens. Only an admin can create it. |
 
-Start with `read` or `draft`.
+Start with `read` or `draft`. Give `admin` only to an agent you trust to run the workspace.
+
+An `admin` token acts with your role, checked on every call. If you are demoted to agent, the token
+keeps working with the agent role only; if you are deactivated, it stops working. A `read`,
+`draft` or `send` token always has the agent role, even when an admin creates it. An agent that
+asks for an `admin` token files a request; it is created only when an admin approves it.
+
+An invite that an `admin` token creates has no link in the answer: an invite link signs someone
+in, so no token receives it. The invite shows in **Settings → Invites**. To give the person a link,
+revoke the invite there and create it again, or let the agent ask with a lower tier so the person
+who approves the request sees the link once. When an agent token revokes a session, the session
+list shows it as **Revoked** and the server log names the token that did it.
 
 A call above the scope is not refused: it becomes an [agent request](agent-requests.md) that a
 person approves or rejects, and nothing changes until then (HTTP 202). A reply from a token below
-`send` becomes a reply draft a person sends. Creating tokens, export, billing, disconnecting the
-email channel, rotating its secret and changing the workspace address always wait for a person,
-whatever the scope.
-
-A token cannot manage sessions or invites, and cannot change workspace, team, email channel or web
-form settings. It cannot read the lists of sessions and invites or the email and web form settings
-either. This holds when an admin creates the token: it has the agent role. Such a call fails with
-HTTP 403 and the error code `scope_insufficient`.
+`send` becomes a reply draft a person sends. Creating tokens, inviting an admin or making someone an
+admin, export, billing checkout and portal, disconnecting the email channel, rotating its secret and
+changing the workspace address always wait for a person, whatever the scope, `admin` included.
+Approving or rejecting a request is for people only.
 
 A token starts with `cdk_agent_` so that secret scanners recognise it if it ends up in a file by
 mistake. It works only in the `Authorization` header. A browser cookie that holds a token is

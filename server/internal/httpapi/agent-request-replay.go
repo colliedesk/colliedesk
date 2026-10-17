@@ -34,6 +34,7 @@ func approvalOf(ctx context.Context) (approval, bool) {
 // token (or anyone reading the request later) never receives it.
 var withheldResults = map[string]bool{
 	"POST /api/v1/auth/tokens":           true,
+	"POST /api/v1/auth/invites":          true,
 	"POST /api/v1/channels/email/secret": true,
 	"GET /api/v1/export":                 true,
 	"POST /api/v1/export/link":           true,
@@ -83,6 +84,15 @@ func (a *API) replayApproved(ctx context.Context, approver auth.Principal, item 
 	return answer.status, answer.body.Bytes(), !answer.overflow
 }
 
+// requestedScope is the scope a token creation call asks for.
+func requestedScope(call json.RawMessage) string {
+	var fields struct {
+		Scope string `json:"scope"`
+	}
+	_ = json.Unmarshal(call, &fields)
+	return fields.Scope
+}
+
 // replyText is the text of a reply draft's call; empty for anything else.
 func replyText(call json.RawMessage) string {
 	var fields struct {
@@ -107,6 +117,10 @@ var routePermissions = func() map[string]string {
 // runs on.
 func approvalPermission(item domain.AgentRequest) string {
 	key := item.Method + " " + item.Route
+	// Only an admin can create an admin token, so only an admin can approve asking for one.
+	if key == "POST /api/v1/auth/tokens" && requestedScope(item.Body) == auth.ScopeAdmin {
+		return auth.PermissionAccessWrite
+	}
 	if replacement, ok := approvalRunsAs[key]; ok {
 		key = replacement[0] + " " + replacement[1]
 	}

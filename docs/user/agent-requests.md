@@ -11,13 +11,15 @@ edits it if needed, and sends it or throws it away.
 - **Anything above the token's scope.** A `read` token that changes a status, a `draft` token that
   replies to a customer, renames a tag or edits a saved reply. The agent gets an answer at once that
   says the request is waiting; it is never a silent change.
-- **Actions that always need a person**, whatever the scope: creating an agent token, exporting all
-  workspace data (or a download link for it), starting a plan checkout or opening the billing
-  portal, disconnecting the email channel, rotating the inbound email secret, and changing the
-  workspace address.
+- **Actions that always need a person**, whatever the scope, `admin` included: creating an agent
+  token, inviting an admin or making a teammate an admin, exporting all workspace data (or a
+  download link for it), starting a plan checkout or opening the billing portal, disconnecting the
+  email channel, rotating the inbound email secret, and changing the workspace address.
 
-Workspace settings and the team (invites, timezones, channels) stay closed to agent tokens for now.
-They open with the admin scope in a later release.
+A settings change shows what changes, from what to what, for example "Change the workspace
+timezone: UTC → Asia/Tokyo" or "Change ada@example.com: role agent → admin". A settings call with a
+field the setting does not take is refused at once and nothing is saved, so a password pasted next
+to the real fields never sits in a request.
 
 A call that carries files cannot wait: the files would sit in storage for days. The agent is asked
 to send the text alone (it becomes a request) and attach the files after approval.
@@ -32,7 +34,8 @@ shows what it does, who asked and through which token (for example "Asked by Ada
 Code (read)"), the exact call it will make and the data it sends.
 
 - **Approve** runs the call once, **as you**: your role and permissions apply. A request only an
-  admin may run (billing, export, new tokens, the workspace address) shows "Only an admin can
+  admin may run (billing, export, new tokens, the workspace address, team, invites and channel
+  settings) shows "Only an admin can
   approve this" to everyone else, and keeps waiting for an admin. If the call is refused anyway
   (for example the trial's sending limits), the request is marked **Failed**. Two clicks, or two
   people at once, still run it once. Closing the tab after you clicked does not stop it.

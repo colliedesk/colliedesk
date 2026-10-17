@@ -16,16 +16,18 @@ private notes for your team. With a `send` token it can also reply to customers.
 
 | Tier | The agent can |
 |---|---|
-| `read` | Search the inbox, follow what changed, read conversations, attachments, logged time and customers, list tags and team members, and read saved replies with their history and trash. It cannot see invites, the list of sessions or the email and web form settings. |
-| `draft` | Everything in `read`, plus change status, priority, assignee and tags of one or many conversations (a tag name that does not exist yet is created), and add private notes. Nothing reaches a customer. |
+| `read` | Search the inbox, follow what changed, read conversations, attachments, logged time and customers, list tags and team members, read saved replies with their history and trash, and see the workspace settings, invites, sessions, and the email and web form settings. No answer holds an invite link, a token or the inbound email secret. |
+| `draft` | Everything in `read`, plus change status, priority, assignee and tags of one or many conversations (a tag name that does not exist yet is created), add private notes, and set your own timezone. Nothing reaches a customer. |
 | `send` | Everything in `draft`, plus reply to customers, retry a failed reply, open conversations, add customers, rename or delete tags, and create, edit, delete and restore saved replies. With `read` or `draft`, a saved reply change is a proposal a person approves. |
+| `admin` | Everything in `send`, plus change the workspace timezone, change a teammate's role or deactivate and reactivate them, invite agents and revoke invites, revoke sessions and tokens, set up the web form and the email channel, verify the email domain, and read the plan. It acts with the role of the admin who created it. |
 
 A tool used above its tier does not fail: Colliedesk files the call as an
 [agent request](agent-requests.md) that a person approves in **Requests**, and the tool answers
 with `agent_request` (its id, summary and expiry) and `next`, which tells the model that nothing
 changed yet and how to follow it. A reply from a token below `send` becomes a reply draft. Some
-actions wait for a person with every tier: new tokens, export, billing, the email channel and the
-workspace address. No tool approves or rejects; only a person does.
+actions wait for a person with every tier, `admin` included: new tokens, an admin invite or making
+someone an admin, export, billing checkout and portal, disconnecting the email channel, a new
+inbound secret and the workspace address. No tool approves or rejects; only a person does.
 
 ## Connect Claude Code
 
@@ -89,6 +91,21 @@ with `billing` and leave a note with a summary."
 | `colliedesk_email_channel_disconnect_request` | Asks to disconnect the email channel | `read` |
 | `colliedesk_email_secret_rotate_request` | Asks for a new inbound email secret; the approver sees it | `read` |
 | `colliedesk_workspace_slug_change_request` | Asks to change the workspace address | `read` |
+| `colliedesk_workspace_settings_get` | Shows the workspace name, address and timezone, and your own timezone | `read` |
+| `colliedesk_workspace_settings_update` | Sets the workspace timezone | `admin` |
+| `colliedesk_my_timezone_set` | Sets or clears your own timezone | `draft` |
+| `colliedesk_team_member_update` | Changes a teammate's role, or deactivates or reactivates them; making someone an admin always waits for approval | `admin` |
+| `colliedesk_invites_list` | Lists invites and their state, never their links | `read` |
+| `colliedesk_invite_create` | Invites a person with the agent role; the link is never shown to the agent. An admin invite always waits for approval | `admin` |
+| `colliedesk_invite_revoke` | Revokes a pending invite. Cannot be undone | `admin` |
+| `colliedesk_sessions_list` | Lists sign-ins and agent tokens (the whole workspace with `admin`, otherwise your own) | `read` |
+| `colliedesk_session_revoke` | Signs out a session or revokes a token. Cannot be undone | `admin` |
+| `colliedesk_web_form_get` | Shows the web form settings | `read` |
+| `colliedesk_web_form_update` | Turns the web form on or off and sets the allowed origins | `admin` |
+| `colliedesk_email_channel_get` | Shows the email channel, never the inbound secret | `read` |
+| `colliedesk_email_channel_update` | Connects the email channel or changes the support address | `admin` |
+| `colliedesk_email_domain_verify` | Checks the DNS record that verifies the sending domain | `admin` |
+| `colliedesk_billing_get` | Shows the plan, trial and seats on the hosted cloud | `admin` |
 
 Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the
 model to show you what it will do and wait for your yes, unless you already asked for exactly that.

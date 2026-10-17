@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"regexp"
 
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
@@ -19,13 +20,15 @@ func (a *API) listAgents(response http.ResponseWriter, request *http.Request) {
 
 var uuidShape = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
+var agentUpdateRoute = Route{http.MethodPatch, "/api/v1/agents/{id}", auth.PermissionAccessWrite}
+
 // updateAgent changes the role or the active state of an agent. reassign_to only makes sense with
 // active=false: it names the agent that takes over the open and pending conversations.
 func (a *API) updateAgent(response http.ResponseWriter, request *http.Request) {
 	var input struct {
-		Role       *string `json:"role"`
-		Active     *bool   `json:"active"`
-		ReassignTo *string `json:"reassign_to"`
+		Role       *string `json:"role,omitempty"`
+		Active     *bool   `json:"active,omitempty"`
+		ReassignTo *string `json:"reassign_to,omitempty"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Agent changes are invalid.")
@@ -49,6 +52,11 @@ func (a *API) updateAgent(response http.ResponseWriter, request *http.Request) {
 	}
 	if input.ReassignTo != nil && (input.Active == nil || *input.Active) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "reassign_to only applies when active is false.")
+		return
+	}
+	// Granting the admin role waits for a person whatever the token's tier.
+	if who := principal(request); who.Scope != "" && input.Role != nil && *input.Role == "admin" {
+		a.fileGrantRequest(response, request, agentUpdateRoute, who, input)
 		return
 	}
 	member, err := a.store.UpdateAgent(request.Context(), principal(request).Workspace.ID, request.PathValue("id"),

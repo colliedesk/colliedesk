@@ -13,7 +13,7 @@ type toolError struct{ message string }
 
 func (e *toolError) Error() string { return e.message }
 
-var scopeMessage = regexp.MustCompile("has the (read|draft|send) scope; this action needs the (read|draft|send) scope")
+var scopeMessage = regexp.MustCompile("has the (read|draft|send|admin) scope; this action needs the (read|draft|send|admin) scope")
 
 // refuse turns a failure of a REST call into the message a model sees. notFound is the text for a
 // 404, which only the tool knows how to word.
