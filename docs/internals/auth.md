@@ -12,6 +12,70 @@ useful token prefix: an attacker must still guess the complete random token, whi
 transport security remain separate controls. Constant-time comparison is required if a future auth
 path compares raw secrets or low-entropy values in application memory.
 
+## Agent tokens
+
+An agent token is a `sessions` row with a non-null `scope` (`read`, `draft`, `send`); a null scope is
+a person's full session. It reuses the session machinery on purpose: `label`, `last_seen_at` (the
+"last used" time, written at most once a minute), revoke. Code: `auth/token.go`, `auth/scope.go`,
+`auth/tokens.go`, `httpapi/token-scope.go`.
+
+- **Own prefix and hash domain.** The raw token is `cdk_agent_` plus 32 random bytes in base64url.
+  The stored `token_hash` is `sha256("colliedesk-agent-token\x00" + raw)`; a person's session token
+  keeps the plain `sha256(raw)`. `Authenticate` picks the derivation from the prefix
+  (`credentialHash`). Code older than the `scope` column hashes every bearer plainly, so it finds no
+  row for an agent token and answers 401. That is what keeps an image rollback from turning a
+  `read` token into a full agent session; `TestAgentTokenCannotBeFoundByThePlainHashAnOlderImageUses`
+  pins it. The down migration still revokes every token, as a second line of defence. The prefix also
+  lets a secret scanner (gitleaks custom rule, GitHub push protection) catch a token pasted into an
+  agent config: the pattern is `cdk_agent_[A-Za-z0-9_-]{43}`.
+- **Last use is written once a minute.** One MCP tool call authenticates about five times in a moment
+  (its own gate plus each in-process REST call), and each used to `UPDATE` the same `sessions` row.
+  `Authenticate` skips the write while the stored `last_seen_at` is under 60 seconds old; later, the
+  write moves `last_seen_at` and slides `expires_at` as before, so the expiry can lag the true last use
+  by at most a minute (`TestSessionLastUseIsRecordedAtMostOncePerMinuteAndStillSlidesTheExpiry`).
+- **Role.** A token always has `role_ceiling='agent'`, whoever creates it; a CHECK constraint
+  enforces it. No tier can reach an admin-only permission.
+- **Tiers are a route table.** `tokenTiers` maps `"METHOD pattern"` to the lowest tier allowed. A route
+  missing from it is closed to every token, so a new route stays out of reach until someone lists
+  it. `TestEveryRouteIsOpenToTokensOnlyFromItsTier` keeps its own hand-written copy of the table,
+  fails until both agree, and checks that an allowed tier gets the route's success status. Posting a
+  message is gated by the handler: a note needs `draft`, an outgoing reply needs `send`, and the 403
+  names that tier. The multipart form (a message with files) passes the same check; a token below
+  `draft` is refused before a file is read, since the kind arrives only after the files.
+- **Order of checks.** Authenticate (a token presented as a cookie is a 401) → `refuseToken` → role
+  permission → CSRF → locked workspace. The tier check runs before the role check so a closed route
+  answers `scope_insufficient`, not a bare `forbidden`.
+- **What each tier means.** `read`: conversations, messages, time entries, attachments, contacts,
+  tags, saved replies, the caller's inbox activity and the team list. `draft`: also status, priority,
+  assignee, applying and removing a tag (on one conversation or in bulk), creating a tag, and notes. `send`: also outgoing replies, retrying a reply, renaming and deleting
+  tags, and creating contacts and conversations. Changing a tier is one edit to `tokenTiers`.
+- **Closed for every tier:** revoking sessions (a token could sign its owner out), creating tokens (a
+  `read` token could mint a `send` token), invites, and the lists of sessions and invites and the
+  email and web form channel settings, changing a teammate, writing saved replies (text a person
+  later sends to customers), which triage does not need and which would widen what a
+  prompt-injected agent can paste into a reply. `GET /agents` stays open: assignee names need it.
+- **Lifetime.** Thirty days of sliding expiry like a browser session, plus an absolute limit of 365
+  days from `created_at`: `Authenticate` clamps the slid `expires_at` to it and refuses from that
+  instant, however often the token is used. `insertAgentToken` takes `created_at` from the service
+  clock, so tests move one clock. After the limit the owner creates a new token.
+- **Attribution.** A message written with a token carries `messages.agent_token_id` (composite FK to
+  `sessions(workspace_id,id)`, so a message names only a token of its own workspace; added `NOT VALID`
+  and validated by the next migration, because one migration is one transaction and `VALIDATE
+  CONSTRAINT` only stops blocking writes in a transaction of its own) and the API
+  returns it as `agent_token` (`id`, `label`, `scope`, `agent_name`). The web shows "by Ada via
+  Claude Code". The column stays after the token is revoked, so what a revoked token wrote can still
+  be told from what a person wrote. **Known limit:** only notes and replies are attributed. Status,
+  priority, assignee and tag changes, the creation of conversations, contacts and tags, tag rename and
+  delete, and retrying a reply record the agent but not the token. The repo has no conversation
+  change log (a person's change is not attributed either); adding one is the way to close this.
+- **Rollback.** An image older than the migration needs nothing from the operator any more: it
+  cannot find a token (see the first item). Do not rely on a manual `UPDATE` of `sessions`.
+- **MCP.** `/mcp` accepts a bearer only, authenticated by the same `Authenticate`, and each tool call
+  runs through the REST handler with that bearer, so these tiers bind MCP tools without a second
+  check (`docs/internals/mcp.md`). A new route a tool uses needs a `tokenTiers` row first.
+- The CLI (`collie token create`) resolves the workspace by slug through
+  `PrivilegeWorkspaceBySlug`, like `pair`.
+
 ## Optional cloud sign-in
 
 Cloud sign-in is an OIDC-style bridge, not a second Colliedesk session system. The browser obtains

@@ -18,6 +18,8 @@ database schema.
   (checksummed), tags, contacts, companies, time entries and canned responses, with a reconcile
   report.
 - Team settings: invite, deactivate and reactivate agents.
+- **MCP server** so your AI agent (Claude, Codex, Cursor) can work the queue: search, read and
+  triage conversations and add private notes, with read, draft-only and send agent tokens.
 - Workspace isolation, per-workspace timezone with per-agent override, full workspace export.
 - **One-command install** and a signed container image.
 - **Colliedesk Cloud**: 14-day free trial, then Team or Founding; a workspace whose trial ended is
@@ -31,8 +33,6 @@ Beta starts when HC Labs announces it. Before that:
   from the inbox ([#92](https://github.com/colliedesk/colliedesk/issues/92)).
 - Connect a Gmail / Google Workspace or Microsoft 365 mailbox with one click (OAuth); replies
   leave from your own address. Forwarding keeps working ([#95](https://github.com/colliedesk/colliedesk/issues/95)).
-- An MCP server so your AI agent (Claude, Codex, Cursor) can work the queue, with read, draft-only
-  and send tokens ([#112](https://github.com/colliedesk/colliedesk/issues/112)).
 - An upgrade guide, and upgrades tested from the previous release on real data ([#91](https://github.com/colliedesk/colliedesk/issues/91)).
 - Import from Freshdesk inside the app, recent tickets first, with the reconcile report on screen
   ([#97](https://github.com/colliedesk/colliedesk/issues/97)).

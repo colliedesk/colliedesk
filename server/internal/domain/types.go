@@ -17,11 +17,14 @@ type Agent struct {
 	TimezoneOverride *string `json:"timezone_override"`
 }
 
+// Session is a sign-in. Scope is the tier of an agent token (read, draft or send); nil for a
+// person's full session.
 type Session struct {
-	ID         string `json:"id"`
-	AgentID    string `json:"agent_id"`
-	AgentEmail string `json:"agent_email"`
-	Label      string `json:"label"`
+	ID         string  `json:"id"`
+	AgentID    string  `json:"agent_id"`
+	AgentEmail string  `json:"agent_email"`
+	Label      string  `json:"label"`
+	Scope      *string `json:"scope"`
 	// Current marks the session that made the request; it is not stored.
 	Current    bool       `json:"current"`
 	CreatedAt  time.Time  `json:"created_at"`
@@ -110,11 +113,21 @@ type TimeEntry struct {
 	ExecutedAt     time.Time `json:"executed_at"`
 }
 
+// MessageToken names the agent token a message was written with. AgentName is the display name of
+// the agent the token acts as, or their email when they have none.
+type MessageToken struct {
+	ID        string `json:"id"`
+	Label     string `json:"label"`
+	Scope     string `json:"scope"`
+	AgentName string `json:"agent_name"`
+}
+
 type Message struct {
 	ID             string         `json:"id"`
 	ConversationID string         `json:"conversation_id"`
 	AuthorAgentID  *string        `json:"author_agent_id"`
 	AuthorName     *string        `json:"author_name"`
+	AgentToken     *MessageToken  `json:"agent_token"`
 	Kind           string         `json:"kind"`
 	Body           string         `json:"body"`
 	BodyHTML       *string        `json:"body_html"`

@@ -176,7 +176,7 @@ func (e *env) workspace(t *testing.T, name string, trialEnd string, admins ...st
 		t.Fatal(err)
 	}
 	for index := range 2 {
-		message, err := e.store.CreateMessage(ctx, created.ID, conversation.ID, agentID, "outgoing", "hello")
+		message, err := e.store.CreateMessage(ctx, created.ID, conversation.ID, store.Actor{AgentID: agentID}, "outgoing", "hello")
 		if err != nil {
 			t.Fatal(err)
 		}

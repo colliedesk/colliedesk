@@ -86,9 +86,12 @@ export const attachmentSchema = z.object({
   id: z.string().uuid(), message_id: z.string().uuid(), filename: z.string(), content_type: z.string(),
   size: z.number().int().nonnegative(), sha256: z.string().regex(/^[0-9a-f]{64}$/), created_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'Attachment'>>;
+export const messageAgentTokenSchema = z.object({
+  id: z.string().uuid(), label: z.string(), scope: z.enum(['read', 'draft', 'send']), agent_name: z.string(),
+}) satisfies z.ZodType<Generated<'MessageAgentToken'>>;
 export const messageSchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), author_agent_id: z.string().uuid().nullable(),
-  author_name: z.string().nullable(), kind: z.enum(['incoming', 'outgoing', 'note']), body: z.string(),
+  author_name: z.string().nullable(), agent_token: messageAgentTokenSchema.nullable(), kind: z.enum(['incoming', 'outgoing', 'note']), body: z.string(),
   body_html: z.string().nullable(), origin: messageOriginSchema.nullable(),
   attachments: z.array(attachmentSchema), cc: z.array(z.string()), created_at: z.string().datetime(),
   delivery: messageDeliverySchema.nullable(), email: incomingEmailSchema.nullable(),
@@ -108,7 +111,8 @@ export const webFormSettingsSchema = z.object({
 }) satisfies z.ZodType<Generated<'WebFormSettings'>>;
 export const inboundSecretSchema = z.object({ inbound_secret: z.string().min(1), inbound_url: z.string().url() }) satisfies z.ZodType<JsonResponse<'rotateEmailInboundSecret', 200>>;
 export const sessionSchema = z.object({
-  id: z.string().uuid(), agent_id: z.string().uuid(), agent_email: z.string().email(), label: z.string(), current: z.boolean(),
+  id: z.string().uuid(), agent_id: z.string().uuid(), agent_email: z.string().email(), label: z.string(),
+  scope: z.enum(['read', 'draft', 'send']).nullable(), current: z.boolean(),
   created_at: z.string().datetime(), last_seen_at: z.string().datetime(), expires_at: z.string().datetime(), revoked_at: nullableDate,
 }) satisfies z.ZodType<Generated<'Session'>>;
 export const inviteSchema = z.object({
@@ -118,7 +122,7 @@ export const inviteSchema = z.object({
 export const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) }) satisfies z.ZodType<Generated<'Error'>>;
 export const redeemedSchema = z.object({ token: z.string().optional(), agent: agentSchema, workspace: workspaceSchema }) satisfies z.ZodType<Generated<'Redeemed'>>;
 export const meSchema = z.object({
-  agent: agentSchema, workspace: workspaceSchema, timezone: z.string(),
+  agent: agentSchema, workspace: workspaceSchema, timezone: z.string(), scope: z.enum(['read', 'draft', 'send']).nullable(),
   plan: z.object({ plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(), trial_extended: z.boolean() }).nullable(),
 }) satisfies z.ZodType<Generated<'Me'>>;
 export const sessionListSchema = z.object({ items: z.array(sessionSchema) }) satisfies z.ZodType<JsonResponse<'listSessions', 200>>;

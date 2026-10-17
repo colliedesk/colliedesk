@@ -135,6 +135,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/auth/me":                                        {"/api/v1/auth/me", nil, admin, 200, ""},
 		"GET /api/v1/auth/sessions":                                  {"/api/v1/auth/sessions", nil, admin, 200, ""},
 		"DELETE /api/v1/auth/sessions/{id}":                          {"/api/v1/auth/sessions/" + f.sessionID, nil, admin, 204, ""},
+		"POST /api/v1/auth/tokens":                                   {"/api/v1/auth/tokens", map[string]any{"label": "Contract agent", "scope": "draft"}, admin, 201, ""},
 		"POST /api/v1/auth/invites":                                  {"/api/v1/auth/invites", map[string]any{"email": "new@contract.example.com", "role_ceiling": "agent"}, admin, 201, ""},
 		"GET /api/v1/auth/invites":                                   {"/api/v1/auth/invites", nil, admin, 200, ""},
 		"DELETE /api/v1/auth/invites/{id}":                           {"/api/v1/auth/invites/" + f.inviteID, nil, admin, 204, ""},

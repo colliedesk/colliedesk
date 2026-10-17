@@ -10,6 +10,17 @@ info:
     `workspace_locked`, reads included, except the routes that sign in and out, show and pay the
     plan, export the data (`GET /api/v1/export`), and show or disconnect the email channel. Paying unlocks the
     workspace on the next request. Self-hosted instances have no trial and no lock.
+
+    An agent token (`POST /api/v1/auth/tokens`) is a bearer credential for an AI agent. It starts with
+    `cdk_agent_` and acts as the agent who created it, limited to a tier: `read` (conversations,
+    messages, contacts, tags and the team list), `draft` (also changes that never reach a customer:
+    status, priority, assignee, tags, new tags, private notes) or `send` (also outgoing replies and
+    creating contacts and conversations). A token never changes administration (sessions, invites,
+    tokens, workspace, channel, billing and export settings), cannot read the lists of sessions and
+    invites or the channel settings, and is refused as a cookie. A call outside the tier answers 403
+    with error code `scope_insufficient`; the message names the tier the action needs. A token expires
+    30 days after its last use and never lives longer than one year from its creation. A message it
+    writes carries `agent_token`, so a person can tell it from their own.
 servers:
   - url: /
 security:
@@ -162,6 +173,37 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/auth/tokens:
+    post:
+      operationId: createAgentToken
+      x-permission: authenticated
+      description: >
+        Creates a bearer token for an AI agent that acts as the signed-in agent. The token has the
+        agent role whatever the creator's role is, so it never reaches administration. A token cannot
+        create tokens. It appears in `GET /api/v1/auth/sessions` (for a person) with its label and
+        scope, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last
+        use, and one year after its creation at the latest.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label, scope]
+              properties:
+                label: {type: string, minLength: 1, maxLength: 80, description: 'Name shown in the session list, for example the agent host'}
+                scope: {$ref: '#/components/schemas/TokenScope'}
+      responses:
+        '201':
+          description: The token and its session. The raw token is in this response only.
+          headers:
+            Cache-Control: {schema: {type: string, enum: [no-store]}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AgentToken'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/auth/invites:
     get:
       operationId: listInvites
@@ -636,6 +678,21 @@ paths:
       x-permission: contacts:read
       parameters:
         - {name: search, in: query, schema: {type: string}}
+        - name: ids
+          in: query
+          description: >-
+            Comma-separated contact ids (UUIDs), at most 100. Only these contacts of the workspace are
+            returned, in name order; an unknown id, or an id of another workspace, is skipped. More than
+            100 ids, an empty entry or a value that is not a UUID answers 400 and names the problem.
+            Combines with search.
+          schema: {type: string}
+        - name: limit
+          in: query
+          description: >-
+            Return at most this many contacts (1 to 200), the first in name order. Without it every
+            matching contact is returned. With it, `has_more` says whether more matched. Any other
+            value answers 400.
+          schema: {type: integer, minimum: 1, maximum: 200}
       responses:
         '200':
           description: Workspace contacts
@@ -646,6 +703,10 @@ paths:
                 required: [items]
                 properties:
                   items: {type: array, items: {$ref: '#/components/schemas/Contact'}}
+                  has_more:
+                    type: boolean
+                    description: Present only when `limit` was given. True when more contacts matched than were returned.
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
     post:
       operationId: createContact
@@ -1404,9 +1465,11 @@ components:
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error403:
       description: >
-        Permission or CSRF check failed. On `POST /conversations/{id}/messages` a trial workspace gets
-        error code `trial_outbound_restricted` for a reply to a conversation the customer did not
-        start (unless it verified its sending domain), or for a `cc` address the customer never wrote
+        Permission or CSRF check failed. An agent token outside its tier gets error code
+        `scope_insufficient`; the message names the tier the action needs. On
+        `POST /conversations/{id}/messages` a trial workspace gets error code
+        `trial_outbound_restricted` for a reply to a conversation the customer did not start
+        (unless it verified its sending domain), or for a `cc` address the customer never wrote
         from or copied (then `refused_cc` lists them); nothing was stored.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error404:
@@ -1589,11 +1652,16 @@ components:
         workspace: {$ref: '#/components/schemas/Workspace'}
     Me:
       type: object
-      required: [agent, workspace, timezone, plan]
+      required: [agent, workspace, timezone, scope, plan]
       properties:
         agent: {$ref: '#/components/schemas/Agent'}
         workspace: {$ref: '#/components/schemas/Workspace'}
         timezone: {type: string}
+        scope:
+          description: The tier of the agent token making the call (read, draft or send); null for a person's own session.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/TokenScope'}
         plan:
           description: The trial and lock state, so every agent sees it. Null on self-hosted instances.
           oneOf:
@@ -1605,14 +1673,32 @@ components:
                 trial_ends_at: {type: string, format: date-time}
                 locked: {type: boolean}
                 trial_extended: {type: boolean, description: True when a Freshdesk import already extended the trial.}
+    TokenScope:
+      type: string
+      enum: [read, draft, send]
+      description: >
+        Tier of an agent token. `read`: read what an agent may read. `draft`: also change status, priority,
+        assignee and tags of a conversation, create tags and add private notes. `send`: also send and
+        retry replies, rename and delete tags, and create contacts and conversations.
+    AgentToken:
+      type: object
+      required: [token, session]
+      properties:
+        token: {type: string, description: 'Raw bearer value, starting with cdk_agent_; Colliedesk stores only a hash of it and never shows it again'}
+        session: {$ref: '#/components/schemas/Session'}
     Session:
       type: object
-      required: [id, agent_id, agent_email, label, current, created_at, last_seen_at, expires_at, revoked_at]
+      required: [id, agent_id, agent_email, label, scope, current, created_at, last_seen_at, expires_at, revoked_at]
       properties:
         id: {type: string, format: uuid}
         agent_id: {type: string, format: uuid}
         agent_email: {type: string, format: email}
         label: {type: string}
+        scope:
+          description: The tier of an agent token; null for a person's session, which has no tier.
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/TokenScope'
         current:
           type: boolean
           description: True for the session that made this request, so a client can mark "this device".
@@ -1778,12 +1864,17 @@ components:
                 description: Time of the newest customer message inside the polled window, or null when the change was not a customer message.
     Message:
       type: object
-      required: [id, conversation_id, author_agent_id, author_name, kind, body, body_html, origin, attachments, cc, created_at, delivery, email]
+      required: [id, conversation_id, author_agent_id, author_name, agent_token, kind, body, body_html, origin, attachments, cc, created_at, delivery, email]
       properties:
         id: {type: string, format: uuid}
         conversation_id: {type: string, format: uuid}
         author_agent_id: {type: [string, 'null'], format: uuid}
         author_name: {type: [string, 'null'], description: 'Display name of an author without a Colliedesk agent account (customer or imported agent)'}
+        agent_token:
+          description: The agent token the message was written with; null for what a person wrote and for incoming mail.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/MessageAgentToken'}
         kind: {type: string, enum: [incoming, outgoing, note]}
         body: {type: string}
         body_html:
@@ -1811,6 +1902,14 @@ components:
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/IncomingEmail'}
+    MessageAgentToken:
+      type: object
+      required: [id, label, scope, agent_name]
+      properties:
+        id: {type: string, format: uuid}
+        label: {type: string, description: 'Name the token was given when it was created, for example Claude Code'}
+        scope: {$ref: '#/components/schemas/TokenScope'}
+        agent_name: {type: string, description: 'Display name, or the email when there is none, of the agent the token acts as'}
     CopiedAddresses:
       type: array
       maxItems: 10

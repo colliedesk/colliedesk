@@ -45,7 +45,10 @@ it must keep its MIT notice in `THIRD-PARTY-NOTICES.md`.
    browsers, or a bearer token for API and CLI clients. Sessions are stored hashed with a label
    (browser/OS), created and last-seen times, 30-day sliding expiry, and can be revoked. A
    **Sessions** settings page lists the agent's own sessions (admins: the whole workspace) with
-   Revoke. A rejected credential never falls back to another credential.
+   Revoke. A rejected credential never falls back to another credential. An **agent token** is a
+   session for an AI agent with a scope (`read`, `draft` or `send`): bearer only (`cdk_agent_` prefix),
+   agent role, tier enforced on every route, 30-day sliding expiry and a one-year limit from creation
+   (`docs/internals/auth.md`).
 5. **Every route declares its permission.** Permissions: `conversations:read`, `conversations:write`,
    `contacts:read`, `contacts:write`, `access:read`, `access:write`, `workspace:export` (admins only: the bulk export of the whole workspace); `channels:inbound` marks channel routes authenticated by a channel secret instead of a session. Roles map to permission sets. A test
    enumerates every registered API route and fails if one has no declared permission.
@@ -86,7 +89,7 @@ it must keep its MIT notice in `THIRD-PARTY-NOTICES.md`.
 | Time tracking | Time entries per conversation, CSV export (MSP need) | later |
 | CSAT and reports | Rating after resolve; response/resolution times, volume per agent | later |
 | Live chat widget | Embeddable website chat into the same inbox | later |
-| MCP + Agent Skills | Agents (Claude, Codex) work the queue through MCP with read, draft and send tokens; every inbox action available to them | beta (MCP server), AI included (skills, drafts) |
+| MCP + Agent Skills | Agents (Claude, Codex) work the queue through MCP with read, draft and send tokens: `/mcp` serves read and triage tools (`docs/user/mcp.md`); every inbox action available to them later | alpha (MCP read and triage tools), AI included (skills, drafts) |
 | Billing | 14-day free trial, then a Polar subscription; an expired workspace is locked (sign in, pay, export only) | cloud only |
 
 ## v0.1 acceptance

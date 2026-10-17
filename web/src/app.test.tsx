@@ -15,7 +15,7 @@ const locked = { error: { code: 'workspace_locked', message: 'This workspace is 
 const meBody = (role: 'admin' | 'agent', plan: unknown) => ({
   agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role, timezone_override: null },
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
-  timezone: 'UTC', plan,
+  timezone: 'UTC', scope: null, plan,
 });
 const config = { cloud_sign_in: { enabled: true, publishable_key: 'pk' }, billing: { enabled: true }, signup: { enabled: true }, limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 } };
 const billing = {

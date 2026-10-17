@@ -38,7 +38,7 @@ func (f fixture) replyWithFiles(t *testing.T, storage attachments.Storage, files
 		stored = append(stored, store.NewAttachment{Filename: file.name, ContentType: file.contentType, Object: object})
 		keys = append(keys, object.Key)
 	}
-	message, err := f.store.CreateMessage(context.Background(), f.workspaceID, f.conversationID, f.agentID, "outgoing", "Files are attached.", stored...)
+	message, err := f.store.CreateMessage(context.Background(), f.workspaceID, f.conversationID, store.Actor{AgentID: f.agentID}, "outgoing", "Files are attached.", stored...)
 	if err != nil {
 		t.Fatal(err)
 	}

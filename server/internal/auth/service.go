@@ -37,6 +37,8 @@ type Principal struct {
 	Agent     domain.Agent
 	SessionID string
 	ViaCookie bool
+	// Scope is the tier of an agent token (read, draft or send); empty for a full session.
+	Scope string
 	// Access is the workspace's plan at the time of the request, derived inside the transaction that
 	// authenticated the session so the lock check costs no transaction of its own. The zero value
 	// (self-hosted, no plan limits) is never locked.

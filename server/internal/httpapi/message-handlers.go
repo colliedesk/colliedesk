@@ -4,6 +4,9 @@ import (
 	"mime"
 	"net/http"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
 func (a *API) listMessages(response http.ResponseWriter, request *http.Request) {
@@ -36,6 +39,10 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	identity := principal(request)
+	actor, ok := messageActor(response, identity, input.Kind)
+	if !ok {
+		return
+	}
 	// A conversation of another workspace is refused before anything about the Cc list is said.
 	if _, err := a.store.GetConversation(request.Context(), identity.Workspace.ID, request.PathValue("id")); err != nil {
 		writeStoreError(response, err)
@@ -46,10 +53,29 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		a.writeUploadError(response, refusal)
 		return
 	}
-	item, err := a.store.CreateMessageWithCC(request.Context(), identity.Workspace.ID, request.PathValue("id"), identity.Agent.ID, input.Kind, input.Body, cc)
+	item, err := a.store.CreateMessageWithCC(request.Context(), identity.Workspace.ID, request.PathValue("id"), actor, input.Kind, input.Body, cc)
 	if err != nil {
 		writeStoreError(response, err)
 		return
 	}
 	writeJSON(response, http.StatusCreated, item)
+}
+
+// messageActor refuses an agent token whose tier does not cover the message kind (a note needs
+// draft, an outgoing reply needs send) and returns who writes the message. What an agent token
+// writes is marked with the token so the timeline shows it as the token's work.
+func messageActor(response http.ResponseWriter, identity auth.Principal, kind string) (store.Actor, bool) {
+	need := auth.ScopeDraft
+	if kind == "outgoing" {
+		need = auth.ScopeSend
+	}
+	if !auth.ScopeAllows(identity.Scope, need) {
+		writeScopeInsufficient(response, identity.Scope, need)
+		return store.Actor{}, false
+	}
+	actor := store.Actor{AgentID: identity.Agent.ID}
+	if identity.Scope != "" {
+		actor.TokenID = identity.SessionID
+	}
+	return actor, true
 }

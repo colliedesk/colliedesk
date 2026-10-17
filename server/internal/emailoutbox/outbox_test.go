@@ -62,7 +62,7 @@ func newFixture(t *testing.T) fixture {
 
 func (f fixture) write(t *testing.T, kind, body string) domain.Message {
 	t.Helper()
-	message, err := f.store.CreateMessage(context.Background(), f.workspaceID, f.conversationID, f.agentID, kind, body)
+	message, err := f.store.CreateMessage(context.Background(), f.workspaceID, f.conversationID, store.Actor{AgentID: f.agentID}, kind, body)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +294,7 @@ func (f fixture) secondConversationReply(t *testing.T, contactEmail, body string
 	if err != nil {
 		t.Fatal(err)
 	}
-	message, err := f.store.CreateMessage(ctx, f.workspaceID, conversation.ID, f.agentID, "outgoing", body)
+	message, err := f.store.CreateMessage(ctx, f.workspaceID, conversation.ID, store.Actor{AgentID: f.agentID}, "outgoing", body)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -90,7 +90,7 @@ func TestMessageNeverReferencesAnObjectThatIsGone(t *testing.T) {
 		t.Fatal(err)
 	}
 	agent := queryString(t, f.pool, `SELECT id::text FROM agents WHERE workspace_id=$1`, workspace)
-	_, err = store.New(f.pool).WithObjects(storage).CreateMessage(context.Background(), workspace, f.conversationA, agent, "note", "x",
+	_, err = store.New(f.pool).WithObjects(storage).CreateMessage(context.Background(), workspace, f.conversationA, store.Actor{AgentID: agent}, "note", "x",
 		store.NewAttachment{Filename: "v.txt", Object: object})
 	if !errors.Is(err, store.ErrObjectMissing) {
 		t.Fatalf("err = %v, want ErrObjectMissing", err)

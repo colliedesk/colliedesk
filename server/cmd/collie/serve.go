@@ -20,6 +20,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/colliedesk/colliedesk/server/internal/telemetry"
@@ -109,7 +110,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	}
 	server := &http.Server{
 		Addr:              *address,
-		Handler:           webui.Handler(api),
+		Handler:           mcpserver.Mount(mcpserver.Config{API: api, Auth: auth.NewWithDB(db, origin), Version: version}, webui.Handler(api)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	done := make(chan error, 1)

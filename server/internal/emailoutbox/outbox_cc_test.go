@@ -7,11 +7,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
 func (f fixture) replyCopying(t *testing.T, cc ...string) string {
 	t.Helper()
-	message, err := f.store.CreateMessageWithCC(context.Background(), f.workspaceID, f.conversationID, f.agentID, "outgoing", "Copying your colleagues.", cc)
+	message, err := f.store.CreateMessageWithCC(context.Background(), f.workspaceID, f.conversationID, store.Actor{AgentID: f.agentID}, "outgoing", "Copying your colleagues.", cc)
 	if err != nil {
 		t.Fatal(err)
 	}

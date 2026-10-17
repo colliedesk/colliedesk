@@ -6,7 +6,7 @@ func (a *API) routeSpecs() []routeSpec {
 	routes := Routes()
 	handlers := []http.HandlerFunc{
 		a.getConfig, a.exchangeCloudSession, a.signUpCloud,
-		a.redeem, a.logout, a.me, a.listSessions, a.revokeSession,
+		a.redeem, a.logout, a.me, a.listSessions, a.revokeSession, a.createAgentToken,
 		a.createInvite, a.listInvites, a.revokeInvite,
 		a.listConversations, a.createConversation, a.bulkUpdateConversations, a.getConversation, a.updateConversation,
 		a.addConversationTag, a.removeConversationTag,

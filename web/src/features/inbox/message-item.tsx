@@ -51,6 +51,7 @@ export function MessageItem({ item, timezone, onRetryDelivery }: MessageItemProp
         <Avatar name={item.author_name ?? item.email?.from ?? kindLabel(item.kind)} />
         <div className="message-byline">
           {item.author_name && <span className="message-author">{item.author_name}</span>}
+          {item.agent_token && <span className="message-author" title={item.agent_token.scope}>{messages.writtenByAgentToken(item.agent_token.agent_name, item.agent_token.label)}</span>}
           <span className="message-kind">{item.kind === 'note' && <LockIcon />}{kindLabel(item.kind)}</span>
         </div>
         <time dateTime={item.created_at}>{formatDate(item.created_at, timezone)}</time>

@@ -14,6 +14,7 @@ One page per feature. Each page says what the feature does, how to use it, and i
 - [Saved replies](saved-replies.md)
 - [Timezones](timezones.md)
 - [Sessions and devices](sessions.md)
+- [Connect an AI agent (MCP)](mcp.md)
 - [Import from Freshdesk](import-freshdesk.md)
 - [Export all your data](export.md)
 - [Usage report (telemetry)](telemetry.md)

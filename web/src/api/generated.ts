@@ -138,6 +138,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Creates a bearer token for an AI agent that acts as the signed-in agent. The token has the agent role whatever the creator's role is, so it never reaches administration. A token cannot create tokens. It appears in `GET /api/v1/auth/sessions` (for a person) with its label and scope, and `DELETE /api/v1/auth/sessions/{id}` revokes it. It expires 30 days after its last use, and one year after its creation at the latest. */
+        post: operations["createAgentToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/invites": {
         parameters: {
             query?: never;
@@ -968,6 +985,8 @@ export interface components {
             agent: components["schemas"]["Agent"];
             workspace: components["schemas"]["Workspace"];
             timezone: string;
+            /** @description The tier of the agent token making the call (read, draft or send); null for a person's own session. */
+            scope: null | components["schemas"]["TokenScope"];
             /** @description The trial and lock state, so every agent sees it. Null on self-hosted instances. */
             plan: null | {
                 /** @enum {string} */
@@ -979,6 +998,16 @@ export interface components {
                 trial_extended: boolean;
             };
         };
+        /**
+         * @description Tier of an agent token. `read`: read what an agent may read. `draft`: also change status, priority, assignee and tags of a conversation, create tags and add private notes. `send`: also send and retry replies, rename and delete tags, and create contacts and conversations.
+         * @enum {string}
+         */
+        TokenScope: "read" | "draft" | "send";
+        AgentToken: {
+            /** @description Raw bearer value, starting with cdk_agent_; Colliedesk stores only a hash of it and never shows it again */
+            token: string;
+            session: components["schemas"]["Session"];
+        };
         Session: {
             /** Format: uuid */
             id: string;
@@ -987,6 +1016,8 @@ export interface components {
             /** Format: email */
             agent_email: string;
             label: string;
+            /** @description The tier of an agent token; null for a person's session, which has no tier. */
+            scope: null | components["schemas"]["TokenScope"];
             /** @description True for the session that made this request, so a client can mark "this device". */
             current: boolean;
             /** Format: date-time */
@@ -1150,6 +1181,8 @@ export interface components {
             author_agent_id: string | null;
             /** @description Display name of an author without a Colliedesk agent account (customer or imported agent) */
             author_name: string | null;
+            /** @description The agent token the message was written with; null for what a person wrote and for incoming mail. */
+            agent_token: null | components["schemas"]["MessageAgentToken"];
             /** @enum {string} */
             kind: "incoming" | "outgoing" | "note";
             body: string;
@@ -1166,6 +1199,15 @@ export interface components {
             delivery: null | components["schemas"]["MessageDelivery"];
             /** @description Envelope details of an incoming email; null for messages that did not arrive by email. */
             email: null | components["schemas"]["IncomingEmail"];
+        };
+        MessageAgentToken: {
+            /** Format: uuid */
+            id: string;
+            /** @description Name the token was given when it was created, for example Claude Code */
+            label: string;
+            scope: components["schemas"]["TokenScope"];
+            /** @description Display name, or the email when there is none, of the agent the token acts as */
+            agent_name: string;
         };
         /** @description Plain email addresses copied on a reply, lowercase, without duplicates. */
         CopiedAddresses: string[];
@@ -1509,7 +1551,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Permission or CSRF check failed. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them); nothing was stored. */
+        /** @description Permission or CSRF check failed. An agent token outside its tier gets error code `scope_insufficient`; the message names the tier the action needs. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them); nothing was stored. */
         Error403: {
             headers: {
                 [name: string]: unknown;
@@ -1753,6 +1795,38 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    createAgentToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Name shown in the session list, for example the agent host */
+                    label: string;
+                    scope: components["schemas"]["TokenScope"];
+                };
+            };
+        };
+        responses: {
+            /** @description The token and its session. The raw token is in this response only. */
+            201: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentToken"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     listInvites: {
@@ -2360,6 +2434,10 @@ export interface operations {
         parameters: {
             query?: {
                 search?: string;
+                /** @description Comma-separated contact ids (UUIDs), at most 100. Only these contacts of the workspace are returned, in name order; an unknown id, or an id of another workspace, is skipped. More than 100 ids, an empty entry or a value that is not a UUID answers 400 and names the problem. Combines with search. */
+                ids?: string;
+                /** @description Return at most this many contacts (1 to 200), the first in name order. Without it every matching contact is returned. With it, `has_more` says whether more matched. Any other value answers 400. */
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -2375,9 +2453,12 @@ export interface operations {
                 content: {
                     "application/json": {
                         items: components["schemas"]["Contact"][];
+                        /** @description Present only when `limit` was given. True when more contacts matched than were returned. */
+                        has_more?: boolean;
                     };
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };
