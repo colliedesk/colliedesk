@@ -248,9 +248,9 @@ func (r *run) writeSavedReply(ctx context.Context, key, title, body string) erro
 		return fmt.Errorf("begin saved reply import: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
-	reply, err := store.InsertSavedReply(ctx, tx, r.workspaceID, nil, fitTitle(title, ""), body)
+	reply, err := store.InsertSavedReply(ctx, tx, r.workspaceID, store.Actor{}, fitTitle(title, ""), body)
 	if errors.Is(err, domain.ErrDuplicateTitle) {
-		reply, err = store.InsertSavedReply(ctx, tx, r.workspaceID, nil, fitTitle(title, " (Freshdesk "+key+")"), body)
+		reply, err = store.InsertSavedReply(ctx, tx, r.workspaceID, store.Actor{}, fitTitle(title, " (Freshdesk "+key+")"), body)
 	}
 	if err != nil {
 		return err

@@ -68,7 +68,14 @@ func newExportFixture(t *testing.T) exportFixture {
 		t.Fatalf("tag conversation status=%d", response.Code)
 	}
 	create(t, api, admin, "/api/v1/saved-replies", map[string]any{"title": "Refund steps", "body": "Hi {{customer.name}}, we refunded you."})
-	create(t, api, admin, "/api/v1/saved-replies", map[string]any{"title": "Closing", "body": "Thanks."})
+	closing := create(t, api, admin, "/api/v1/saved-replies", map[string]any{"title": "Closing", "body": "Thanks."})
+	if response := patchReply(t, api, admin, closing, map[string]any{"body": "Thanks a lot."}); response.Code != http.StatusOK {
+		t.Fatalf("edit saved reply status=%d", response.Code)
+	}
+	trashed := create(t, api, admin, "/api/v1/saved-replies", map[string]any{"title": "Old macro", "body": "Retired text."})
+	if response := request(t, api, http.MethodDelete, "/api/v1/saved-replies/"+trashed, nil, admin, nil); response.Code != http.StatusNoContent {
+		t.Fatalf("trash saved reply status=%d", response.Code)
+	}
 	workspace := workspaceID(t, api, admin)
 	attachmentID := seedAttachment(t, pool, storage, admin, api, firstMessage, "hello.txt", "hello")
 	seedImportDetails(t, pool, workspace, conversations[0], firstMessage)
@@ -153,7 +160,7 @@ func TestExportStreamsTheWholeWorkspaceAsZip(t *testing.T) {
 	if manifest.Format != "colliedesk-export" || manifest.Version != 1 || manifest.Workspace["slug"] != "export-acme" {
 		t.Fatalf("manifest header = %+v", manifest)
 	}
-	for key, want := range map[string]int{"contacts": 2, "conversations": 3, "messages": 5, "tags": 1, "saved_replies": 2, "attachments": 1, "agents": 2, "time_entries": 1} {
+	for key, want := range map[string]int{"contacts": 2, "conversations": 3, "messages": 5, "tags": 1, "saved_replies": 3, "saved_reply_versions": 5, "attachments": 1, "agents": 2, "time_entries": 1} {
 		if manifest.Counts[key] != want {
 			t.Errorf("counts[%s]=%d, want %d", key, manifest.Counts[key], want)
 		}
@@ -173,13 +180,30 @@ func TestExportStreamsTheWholeWorkspaceAsZip(t *testing.T) {
 		t.Errorf("tags.ndjson has %d lines", got)
 	}
 	replies := ndjsonLines(t, entries["saved-replies.ndjson"])
-	if len(replies) != 2 {
-		t.Fatalf("saved-replies.ndjson has %d lines", len(replies))
+	if len(replies) != 3 {
+		t.Fatalf("saved-replies.ndjson has %d lines, want the 2 replies and the one in the trash", len(replies))
 	}
 	for _, line := range replies {
-		if line["title"] == "Refund steps" && (line["body"] != "Hi {{customer.name}}, we refunded you." || line["created_at"] == nil || line["updated_at"] == nil || line["id"] == nil || len(line) != 6) {
+		if line["title"] == "Refund steps" && (line["body"] != "Hi {{customer.name}}, we refunded you." || line["created_at"] == nil || line["updated_at"] == nil || line["id"] == nil || line["deleted_at"] != nil || len(line) != 8) {
 			t.Errorf("saved reply record = %v", line)
 		}
+		if line["title"] == "Old macro" && (line["deleted_at"] == nil || line["deleted_by_agent_id"] == nil || line["body"] != "Retired text.") {
+			t.Errorf("trashed saved reply record = %v, want deleted_at and who deleted it", line)
+		}
+	}
+	versions := ndjsonLines(t, entries["saved-reply-versions.ndjson"])
+	kinds := map[string]int{}
+	for _, line := range versions {
+		kinds[line["kind"].(string)]++
+		if line["saved_reply_id"] == nil || line["version"] == nil || line["title"] == nil || line["body"] == nil || line["created_at"] == nil {
+			t.Errorf("saved reply version record = %v", line)
+		}
+		if strings.Contains(line["body"].(string), "rival-only") {
+			t.Errorf("another workspace's saved reply history leaked: %v", line)
+		}
+	}
+	if len(versions) != 5 || kinds["create"] != 3 || kinds["edit"] != 1 || kinds["delete"] != 1 {
+		t.Fatalf("saved-reply-versions.ndjson = %d lines %v, want 3 create, 1 edit, 1 delete", len(versions), kinds)
 	}
 	if got := len(ndjsonLines(t, entries["agents.ndjson"])); got != 2 {
 		t.Errorf("agents.ndjson has %d lines", got)

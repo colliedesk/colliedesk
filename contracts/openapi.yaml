@@ -961,7 +961,9 @@ paths:
       description: >
         The saved replies every agent in the workspace shares, ordered by title ignoring case. The
         body may hold the variables `{{customer.name}}` and `{{agent.name}}`; the web app fills them
-        in when an agent inserts the reply. The API returns the text as stored.
+        in when an agent inserts the reply. The API returns the text as stored. A reply in the trash
+        is not listed here (see `GET /api/v1/saved-replies/trash`). `last_change` says who made the
+        latest version, and through which agent token or approved agent request.
       responses:
         '200':
           description: Workspace saved replies
@@ -977,14 +979,17 @@ paths:
       operationId: createSavedReply
       x-permission: conversations:write
       description: >
-        Any agent may create one. The title is unique in the workspace ignoring case (409
-        `duplicate_title`). A workspace holds at most 500 (409 `saved_reply_limit`).
+        Any agent may create one, and a `send` agent token. A lower tier files an agent request a
+        person approves. The title is unique among the replies not in the trash, ignoring case (409
+        `duplicate_title`). A workspace holds at most 500 outside the trash (409 `saved_reply_limit`).
+        The new reply has version 1 in its history.
       requestBody:
         required: true
         content:
           application/json:
             schema: {$ref: '#/components/schemas/SavedReplyInput'}
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '201':
           description: Created saved reply
           content: {application/json: {schema: {$ref: '#/components/schemas/SavedReply'}}}
@@ -992,15 +997,36 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/saved-replies/trash:
+    get:
+      operationId: listTrashedSavedReplies
+      x-permission: conversations:read
+      description: >
+        Saved replies deleted in the last 30 days, most recently deleted first. Each can be restored
+        with `POST /api/v1/saved-replies/{id}/restore` until `purges_at`; after that it is deleted for
+        good with its history.
+      responses:
+        '200':
+          description: Saved replies in the trash
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/TrashedSavedReply'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
   /api/v1/saved-replies/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
     patch:
       operationId: updateSavedReply
       x-permission: conversations:write
       description: >
-        Change the title, the body or both. Any agent may edit a shared reply. Send back the
-        `updated_at` you read; when the reply was saved since, nothing changes and the answer is 409
-        `changed_elsewhere`. A taken title is 409 `duplicate_title`.
+        Change the title, the body or both. Any agent may edit a shared reply, and a `send` agent
+        token; a lower tier files an agent request whose detail shows the reply before and after. Send
+        back the `updated_at` you read; when the reply was saved since, nothing changes and the answer
+        is 409 `changed_elsewhere`. A taken title is 409 `duplicate_title`. Every edit adds a version
+        to the history. A reply in the trash is 404.
       requestBody:
         required: true
         content:
@@ -1013,6 +1039,7 @@ paths:
                 title: {type: string, minLength: 1, maxLength: 200}
                 body: {type: string, minLength: 1, maxLength: 20000}
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
           description: Updated saved reply
           content: {application/json: {schema: {$ref: '#/components/schemas/SavedReply'}}}
@@ -1024,11 +1051,88 @@ paths:
     delete:
       operationId: deleteSavedReply
       x-permission: conversations:write
+      description: >
+        Move the reply to the trash. It disappears from the list and the reply box, and can be
+        restored for 30 days with `POST /api/v1/saved-replies/{id}/restore`. A `send` agent token may
+        delete; a lower tier files an agent request.
       responses:
-        '204': {description: Saved reply deleted}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '204': {description: Saved reply moved to the trash}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/saved-replies/{id}/restore:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: restoreSavedReply
+      x-permission: conversations:write
+      description: >
+        Take a reply out of the trash, as it was when deleted. 404 when it is not in the trash. 409
+        `duplicate_title` when another reply took its title meanwhile (rename that one first), 409
+        `saved_reply_limit` when the workspace is full. A `send` agent token may restore; a lower tier
+        files an agent request.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: Restored saved reply
+          content: {application/json: {schema: {$ref: '#/components/schemas/SavedReply'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/saved-replies/{id}/versions:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: listSavedReplyVersions
+      x-permission: conversations:read
+      description: >
+        Every version of a saved reply, newest first: who made it, through which agent token or
+        approved agent request, and the title and text it had. A reply in the trash keeps its history.
+        Versions are never changed or removed while the reply exists; restoring one adds a new version.
+      responses:
+        '200':
+          description: Versions of the saved reply
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/SavedReplyVersion'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/saved-replies/{id}/versions/{version}/restore:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: version, in: path, required: true, schema: {type: integer, minimum: 1}}
+    post:
+      operationId: restoreSavedReplyVersion
+      x-permission: conversations:write
+      description: >
+        Make an earlier version the current one. The title and text of that version become a new
+        version; nothing in the history is rewritten. Send back the `updated_at` you read (409
+        `changed_elsewhere` when the reply was saved since). 409 `duplicate_title` when another reply
+        has that title now. A reply in the trash is 404: restore it from the trash first. A `send`
+        agent token may restore; a lower tier files an agent request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updated_at]
+              properties:
+                updated_at: {type: string, format: date-time}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: Saved reply with the restored text
+          content: {application/json: {schema: {$ref: '#/components/schemas/SavedReply'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/billing:
     get:
       operationId: getBilling
@@ -1656,7 +1760,7 @@ components:
         message: {type: string}
     AgentRequest:
       type: object
-      required: [id, kind, status, method, route, path, body, edited_body, approvable_by, summary, conversation_id, requested_by, decided_by, decided_at, reason, result_status, result, result_note, created_at, expires_at]
+      required: [id, kind, status, method, route, path, body, edited_body, approvable_by, summary, conversation_id, saved_reply, requested_by, decided_by, decided_at, reason, result_status, result, result_note, created_at, expires_at]
       properties:
         id: {type: string, format: uuid}
         kind: {type: string, enum: [reply_draft, action], description: 'reply_draft: an outgoing reply a token may not send; action: any other call'}
@@ -1669,6 +1773,31 @@ components:
         approvable_by: {type: string, enum: [agent, admin], description: The lowest role whose person can approve it; a person below it gets 403 and the request keeps waiting.}
         summary: {type: string}
         conversation_id: {type: [string, 'null'], format: uuid}
+        saved_reply:
+          description: >
+            For a request that edits, deletes or restores a saved reply: the reply as it was when the
+            token asked (before) and as it is now (current, null once it is deleted for good), so the
+            change can be shown as a difference. Only with detail=full and on a single request; null otherwise.
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [id, before, current]
+              properties:
+                id: {type: string, format: uuid}
+                before:
+                  oneOf:
+                    - {type: 'null'}
+                    - {$ref: '#/components/schemas/SavedReplyText'}
+                current:
+                  oneOf:
+                    - {type: 'null'}
+                    - type: object
+                      required: [title, body, updated_at, deleted_at]
+                      properties:
+                        title: {type: string}
+                        body: {type: string}
+                        updated_at: {type: string, format: date-time}
+                        deleted_at: {type: [string, 'null'], format: date-time}
         requested_by:
           type: object
           required: [token_id, token_label, token_scope, token_revoked, agent_id, agent_name]
@@ -1968,13 +2097,100 @@ components:
         body: {type: string, minLength: 1, maxLength: 20000}
     SavedReply:
       type: object
-      required: [id, title, body, created_by_agent_id, created_at, updated_at]
+      required: [id, title, body, created_by_agent_id, created_at, updated_at, last_change]
       properties:
         id: {type: string, format: uuid}
         title: {type: string}
         body: {type: string}
         created_by_agent_id: {type: [string, 'null'], format: uuid}
         created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        last_change:
+          description: The latest version of the reply; null only for a reply no history reaches.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyChange'}
+    TrashedSavedReply:
+      type: object
+      required: [id, title, body, created_by_agent_id, created_at, updated_at, last_change, deleted_at, deleted_by, purges_at]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string}
+        body: {type: string}
+        created_by_agent_id: {type: [string, 'null'], format: uuid}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        last_change:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyChange'}
+        deleted_at: {type: string, format: date-time}
+        deleted_by:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
+        purges_at: {type: string, format: date-time, description: When the reply and its history are deleted for good (30 days after deleted_at).}
+    SavedReplyPerson:
+      type: object
+      required: [agent_id, name]
+      properties:
+        agent_id: {type: [string, 'null'], format: uuid}
+        name: {type: string}
+    SavedReplyChange:
+      type: object
+      required: [version, kind, restored_from_version, changed_by, token, agent_request_id, created_at]
+      properties:
+        version: {type: integer, minimum: 1}
+        kind:
+          type: string
+          enum: [create, edit, delete, restore, undelete]
+          description: 'restore: an earlier version made current again; undelete: taken out of the trash.'
+        restored_from_version: {type: [integer, 'null'], description: The version a restore copied.}
+        changed_by:
+          description: The person who made the change (or approved the agent request that made it); null for an import or a removed person.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
+        token:
+          description: The agent token that made or asked for the change; null when a person made it in the web app.
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [id, label]
+              properties:
+                id: {type: [string, 'null'], format: uuid}
+                label: {type: string}
+        agent_request_id: {type: [string, 'null'], format: uuid, description: The approved agent request that made the change.}
+        created_at: {type: string, format: date-time}
+    SavedReplyVersion:
+      type: object
+      required: [version, kind, restored_from_version, changed_by, token, agent_request_id, created_at, title, body]
+      properties:
+        version: {type: integer, minimum: 1}
+        kind: {type: string, enum: [create, edit, delete, restore, undelete]}
+        restored_from_version: {type: [integer, 'null']}
+        changed_by:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
+        token:
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [id, label]
+              properties:
+                id: {type: [string, 'null'], format: uuid}
+                label: {type: string}
+        agent_request_id: {type: [string, 'null'], format: uuid}
+        created_at: {type: string, format: date-time}
+        title: {type: string, description: The title after this change.}
+        body: {type: string, description: The text after this change.}
+    SavedReplyText:
+      type: object
+      required: [title, body, updated_at]
+      properties:
+        title: {type: string}
+        body: {type: string}
         updated_at: {type: string, format: date-time}
     Conversation:
       type: object
