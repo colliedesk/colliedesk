@@ -35,9 +35,18 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
   by at most a minute (`TestSessionLastUseIsRecordedAtMostOncePerMinuteAndStillSlidesTheExpiry`).
 - **Role.** A token always has `role_ceiling='agent'`, whoever creates it; a CHECK constraint
   enforces it. No tier can reach an admin-only permission.
-- **Tiers are a route table.** `tokenTiers` maps `"METHOD pattern"` to the lowest tier allowed. A route
-  missing from it is closed to every token, so a new route stays out of reach until someone lists
-  it. `TestEveryRouteIsOpenToTokensOnlyFromItsTier` keeps its own hand-written copy of the table,
+- **Every UI action is available to agents.** Every route in `Routes()` has a row in `tokenTiers`
+  (`httpapi/token-scope.go`): a tier, or a reason it is closed today with the issue that opens it
+  (`AdminTier` #128, `ApprovalRequired` #127, `TierPending` with its target tier, or `NotForPeople`
+  for routes no session reaches: public pages, sign-in, provider webhooks). Every route a token may
+  call is in some MCP tool's `Spec.REST`, or in `mcpToolPending` (`mcpserver/agent_parity_test.go`)
+  with its tracking issue. `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails on an
+  unclassified or stale row, a closed row without its issue, an uncovered open route, a stale
+  `mcpToolPending` entry, and a tool that calls a closed route; its message names the file to edit.
+  The closed rows and `mcpToolPending` only shrink. A new route ships with its row and its tool.
+- **Tiers are a route table.** `tokenTiers` gives each route the lowest tier allowed. `refuseToken`
+  lets a token through only when a tier is set, so a route missing at runtime is still closed to
+  every token. `TestEveryRouteIsOpenToTokensOnlyFromItsTier` keeps its own hand-written copy of the table,
   fails until both agree, and checks that an allowed tier gets the route's success status. Posting a
   message is gated by the handler: a note needs `draft`, an outgoing reply needs `send`, and the 403
   names that tier. The multipart form (a message with files) passes the same check; a token below
@@ -49,7 +58,7 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
   tags, saved replies, the caller's inbox activity and the team list. `draft`: also status, priority,
   assignee, applying and removing a tag (on one conversation or in bulk), creating a tag, and notes. `send`: also outgoing replies, retrying a reply, renaming and deleting
   tags, and creating contacts and conversations. Changing a tier is one edit to `tokenTiers`.
-- **Closed for every tier:** revoking sessions (a token could sign its owner out), creating tokens (a
+- **Closed for every tier today** (each row names the issue that opens it): revoking sessions (a token could sign its owner out), creating tokens (a
   `read` token could mint a `send` token), invites, and the lists of sessions and invites and the
   email and web form channel settings, changing a teammate, writing saved replies (text a person
   later sends to customers), which triage does not need and which would widen what a

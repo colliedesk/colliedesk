@@ -16,6 +16,13 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
    feature that only works on the hosted cloud when it could work self-hosted.
 5. **Open at the core.** Roadmap, decisions and code are public. Write as if a stranger will read
    it tomorrow.
+6. **Agents can do what people can do.** Every action in the web app is available to an AI agent:
+   through an API route classified for a token tier in `server/internal/httpapi/token-scope.go`
+   and an MCP tool, or as a request a person approves. A new feature ships its route
+   classification and its MCP tool in the same PR; a gap is listed with its tracking issue
+   (closed rows in `tokenTiers`, `mcpToolPending`) and those lists only shrink (ceilings in the test).
+   `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails otherwise, and
+   `TestEveryAPIPathTheWebAppCallsIsARoute` keeps the web app on those routes.
 
 ## Glossary
 
@@ -40,8 +47,8 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
 
 ## Hit every surface
 
-- **Entry points:** a feature reachable in the UI is also reachable through the API, and later
-  through MCP with the right permission tier (read / draft only / send).
+- **Entry points:** a feature reachable in the UI is also reachable through the API and through
+  MCP with the right token tier (item 6 above; the gate test names what to edit).
 - **Reverse states:** every way in has a way out and a way to see it.
 - **Contracts:** anything crossing the wire is typed in `contracts/openapi.yaml`.
 - **Docs:** a user-visible change updates its page in `docs/user/`. Internal docs record decisions
