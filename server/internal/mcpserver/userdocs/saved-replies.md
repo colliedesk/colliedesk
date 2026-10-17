@@ -48,7 +48,8 @@ Open **Settings → Saved replies**.
   reply after you opened it, your edit is refused (nothing is overwritten) with "changed by someone
   else"; select **Reload** to see their version, then edit again.
 - **Delete**: select **Delete**, then confirm. The reply moves to the trash: it disappears from the
-  list and from **Insert saved reply** for everyone. Conversations and messages that used it are not
+  list and from **Insert saved reply** for everyone. If a teammate saved the reply after you opened
+  the page, the delete is refused like an edit, so you never delete text you have not seen. Conversations and messages that used it are not
   changed, because inserting only copies text.
 
 Under each reply, a line says who made the latest change and when, for example
@@ -57,9 +58,14 @@ Under each reply, a line says who made the latest change and when, for example
 
 ### History and restore
 
-1. Select **History** next to a reply. The panel lists every version, newest first: what changed, who
-   changed it, through which agent token, and the title and text it had.
+1. Select **History** next to a reply. The panel lists the versions, newest first: who changed it,
+   through which agent token, the title and text it had, and whether that version changed the title,
+   the text or both. A long text is folded; select **Show all** to read it. **Show older versions**
+   loads the next 50.
 2. Select **Restore version N** on an older version. Its title and text become the current reply.
+
+A reply that existed before history was kept starts with **State before history**: its text at that
+moment, with no author, because who last edited it is not known.
 
 Restoring adds a new version; the history is never rewritten, so you can restore again the same way.
 If someone else saved the reply after you opened the panel, the restore is refused and nothing changes.
@@ -68,7 +74,7 @@ Select **Close history** (or **History** again) to close the panel.
 ### Trash
 
 1. Select **Trash** under the list. It shows the replies deleted in the last 30 days, who deleted each
-   one, and how many days are left.
+   one, and how many days are left. **Show more** loads the next 50.
 2. Select **Restore** next to a reply. It comes back as it was, with its history.
 
 After 30 days in the trash a reply is deleted for good together with its history. The server checks
@@ -79,7 +85,9 @@ Rules:
 
 - The title is unique among the replies outside the trash. `Refund` and `refund` count as the same title.
 - A title holds at most 200 characters and the text at most 20 000.
-- A workspace holds at most 500 saved replies. Replies in the trash do not count.
+- A workspace holds at most 500 saved replies, counting the ones in the trash. Deleting does not make
+  room until the reply leaves the trash after 30 days; this keeps a create-and-delete loop from
+  growing the trash without bound.
 - The text is plain text. Saved replies hold no files and no formatting.
 
 ## AI agents
@@ -94,15 +102,18 @@ restore saved replies. What happens depends on the tier of its token:
 
 On **Requests**, a proposed change shows the reply before and after: removed text marked `−`, added
 text marked `+`. Colliedesk keeps the reply as the agent saw it when it asked. If someone changed the
-reply since, the request says so and shows the reply as it is now; approving such an edit fails
-without overwriting anything, and the agent must ask again. A proposed delete shows what would go to
-the trash.
+reply since, the request says so and shows the reply as it is now; approving such an edit or delete
+fails without changing anything, and the agent must ask again. A proposed delete shows what would go
+to the trash. A proposed restore shows the version it brings back against the current text.
 
 ## API
 
 `GET`, `POST`, `PATCH` and `DELETE` on `/api/v1/saved-replies`, `GET /api/v1/saved-replies/trash`,
 `POST /api/v1/saved-replies/{id}/restore` (out of the trash), `GET /api/v1/saved-replies/{id}/versions`
-and `POST /api/v1/saved-replies/{id}/versions/{version}/restore` (see `contracts/openapi.yaml`). Reading
+and `POST /api/v1/saved-replies/{id}/versions/{version}/restore` (see `contracts/openapi.yaml`). Every
+write sends back the `updated_at` the caller read (`DELETE` as `?updated_at=`); a reply saved since
+answers 409 `changed_elsewhere`. The trash and the versions come in pages (`limit`, at most 200;
+`cursor` / `before_version`). Reading
 needs `conversations:read`; writing needs `conversations:write`, which every agent has. The API
 returns the text as stored, with the variables unfilled.
 

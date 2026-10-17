@@ -1,6 +1,7 @@
 package mcpserver
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -51,13 +52,14 @@ type savedReplyChangeOut struct {
 }
 
 type savedReplyOut struct {
-	ID         string               `json:"id"`
-	UpdatedAt  string               `json:"updated_at"`
-	TeamText   teamText             `json:"team_text"`
-	LastChange *savedReplyChangeOut `json:"last_change"`
-	DeletedAt  string               `json:"deleted_at,omitempty"`
-	DeletedBy  *string              `json:"deleted_by,omitempty"`
-	PurgesAt   string               `json:"purges_at,omitempty"`
+	ID            string               `json:"id"`
+	UpdatedAt     string               `json:"updated_at"`
+	TeamText      teamText             `json:"team_text"`
+	BodyTruncated *bool                `json:"body_truncated,omitempty"`
+	LastChange    *savedReplyChangeOut `json:"last_change"`
+	DeletedAt     string               `json:"deleted_at,omitempty"`
+	DeletedBy     *string              `json:"deleted_by,omitempty"`
+	PurgesAt      string               `json:"purges_at,omitempty"`
 }
 
 func changeOut(change *restSavedReplyChange) *savedReplyChangeOut {
@@ -93,6 +95,27 @@ func (c *call) savedReplyList(path string) ([]restSavedReply, error) {
 	return page.Items, nil
 }
 
+// trashPage reads one page of the trash.
+func (c *call) trashPage(query url.Values) ([]restSavedReply, *string, error) {
+	var page struct {
+		Items      []restSavedReply `json:"items"`
+		NextCursor *string          `json:"next_cursor"`
+	}
+	if err := c.get("/api/v1/saved-replies/trash", query, &page); err != nil {
+		return nil, nil, err
+	}
+	return page.Items, page.NextCursor, nil
+}
+
+// cutReplyBody shortens text to replyBodyLimit characters and says whether it did.
+func cutReplyBody(text string) (string, bool) {
+	runes := []rune(text)
+	if len(runes) <= replyBodyLimit {
+		return text, false
+	}
+	return string(runes[:replyBodyLimit]), true
+}
+
 func savedReplyPath(id string, rest ...string) string {
 	return "/api/v1/saved-replies/" + url.PathEscape(id) + strings.Join(rest, "")
 }
@@ -106,8 +129,34 @@ func savedRepliesList(c *call, _ map[string]any) (any, error) {
 	return listOut(c, "/api/v1/saved-replies")
 }
 
-func savedRepliesTrash(c *call, _ map[string]any) (any, error) {
-	return listOut(c, "/api/v1/saved-replies/trash")
+func savedRepliesTrash(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[struct {
+		Limit  int    `json:"limit"`
+		Cursor string `json:"cursor"`
+	}](arguments)
+	if err != nil {
+		return nil, err
+	}
+	query := url.Values{}
+	if args.Limit > 0 {
+		query.Set("limit", strconv.Itoa(args.Limit))
+	}
+	if args.Cursor != "" {
+		query.Set("cursor", args.Cursor)
+	}
+	items, next, err := c.trashPage(query)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]savedReplyOut, 0, len(items))
+	for _, item := range items {
+		view := savedReplyView(item)
+		var truncated bool
+		view.TeamText.Body, truncated = cutReplyBody(view.TeamText.Body)
+		view.BodyTruncated = &truncated
+		out = append(out, view)
+	}
+	return map[string]any{"saved_replies": out, "next_cursor": next}, nil
 }
 
 func listOut(c *call, path string) (any, error) {
@@ -136,23 +185,31 @@ func savedReplyGet(c *call, arguments map[string]any) (any, error) {
 	matches := func(reply restSavedReply) bool {
 		return reply.ID == args.ID || (args.Title != "" && strings.EqualFold(reply.Title, strings.TrimSpace(args.Title)))
 	}
-	for _, source := range []struct {
-		path  string
-		trash bool
-	}{{"/api/v1/saved-replies", false}, {"/api/v1/saved-replies/trash", true}} {
-		items, err := c.savedReplyList(source.path)
+	live, err := c.savedReplyList("/api/v1/saved-replies")
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range live {
+		if matches(item) {
+			return map[string]any{"saved_reply": savedReplyView(item), "in_trash": false}, nil
+		}
+	}
+	// The trash holds at most as many replies as the workspace limit, so a few pages cover it.
+	query := url.Values{"limit": {"200"}}
+	for {
+		items, next, err := c.trashPage(query)
 		if err != nil {
 			return nil, err
 		}
 		for _, item := range items {
 			if matches(item) {
-				out := map[string]any{"saved_reply": savedReplyView(item), "in_trash": source.trash}
-				if source.trash {
-					out["purges_at"] = item.PurgesAt
-				}
-				return out, nil
+				return map[string]any{"saved_reply": savedReplyView(item), "in_trash": true, "purges_at": item.PurgesAt}, nil
 			}
 		}
+		if next == nil {
+			break
+		}
+		query.Set("cursor", *next)
 	}
 	if args.ID != "" {
 		c.forReply(args.ID)
@@ -206,13 +263,14 @@ func savedReplyUpdate(c *call, arguments map[string]any) (any, error) {
 
 func savedReplyDelete(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
-		ID string `json:"saved_reply_id"`
+		ID        string `json:"saved_reply_id"`
+		UpdatedAt string `json:"updated_at"`
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
 	c.forReply(args.ID)
-	if err := c.send(http.MethodDelete, savedReplyPath(args.ID), nil, nil); err != nil {
+	if err := c.send(http.MethodDelete, savedReplyPath(args.ID, "?updated_at=", url.QueryEscape(args.UpdatedAt)), nil, nil); err != nil {
 		return nil, err
 	}
 	return map[string]any{"saved_reply_id": args.ID, "in_trash": true,
@@ -221,14 +279,15 @@ func savedReplyDelete(c *call, arguments map[string]any) (any, error) {
 
 func savedReplyUndelete(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
-		ID string `json:"saved_reply_id"`
+		ID        string `json:"saved_reply_id"`
+		UpdatedAt string `json:"updated_at"`
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
 	c.notFound = "No saved reply " + args.ID + " in the trash of this workspace. List the trash with colliedesk_saved_replies_trash."
 	var restored restSavedReply
-	if err := c.send(http.MethodPost, savedReplyPath(args.ID, "/restore"), nil, &restored); err != nil {
+	if err := c.send(http.MethodPost, savedReplyPath(args.ID, "/restore"), map[string]any{"updated_at": args.UpdatedAt}, &restored); err != nil {
 		return nil, err
 	}
 	return map[string]any{"saved_reply": savedReplyView(restored)}, nil
@@ -236,31 +295,59 @@ func savedReplyUndelete(c *call, arguments map[string]any) (any, error) {
 
 func savedReplyHistory(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
-		ID string `json:"saved_reply_id"`
+		ID            string `json:"saved_reply_id"`
+		Limit         int    `json:"limit"`
+		BeforeVersion int    `json:"before_version"`
+		Version       int    `json:"version"`
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
 	c.forReply(args.ID)
+	query := url.Values{}
+	switch {
+	case args.Version > 0:
+		query.Set("limit", "1")
+		query.Set("before_version", strconv.Itoa(args.Version+1))
+	default:
+		if args.Limit > 0 {
+			query.Set("limit", strconv.Itoa(args.Limit))
+		}
+		if args.BeforeVersion > 0 {
+			query.Set("before_version", strconv.Itoa(args.BeforeVersion))
+		}
+	}
 	var page struct {
 		Items []struct {
 			restSavedReplyChange
 			Title string `json:"title"`
 			Body  string `json:"body"`
 		} `json:"items"`
+		NextBeforeVersion *int `json:"next_before_version"`
 	}
-	if err := c.get(savedReplyPath(args.ID, "/versions"), nil, &page); err != nil {
+	if err := c.get(savedReplyPath(args.ID, "/versions"), query, &page); err != nil {
 		return nil, err
 	}
 	type versionOut struct {
 		savedReplyChangeOut
-		TeamText teamText `json:"team_text"`
+		TeamText      teamText `json:"team_text"`
+		BodyTruncated bool     `json:"body_truncated"`
 	}
 	versions := make([]versionOut, 0, len(page.Items))
 	for _, item := range page.Items {
-		versions = append(versions, versionOut{*changeOut(&item.restSavedReplyChange), teamText{item.Title, item.Body}})
+		body, truncated := item.Body, false
+		if args.Version == 0 {
+			body, truncated = cutReplyBody(body)
+		}
+		versions = append(versions, versionOut{*changeOut(&item.restSavedReplyChange), teamText{item.Title, body}, truncated})
 	}
-	return map[string]any{"saved_reply_id": args.ID, "versions": versions}, nil
+	if args.Version > 0 {
+		if len(versions) == 0 || versions[0].Version != args.Version {
+			return nil, &toolError{fmt.Sprintf("Saved reply %s has no version %d. See colliedesk_saved_reply_history.", args.ID, args.Version)}
+		}
+		page.NextBeforeVersion = nil
+	}
+	return map[string]any{"saved_reply_id": args.ID, "versions": versions, "next_before_version": page.NextBeforeVersion}, nil
 }
 
 func savedReplyVersionRestore(c *call, arguments map[string]any) (any, error) {
