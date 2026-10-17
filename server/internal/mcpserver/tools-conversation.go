@@ -36,7 +36,15 @@ type messageOut struct {
 	// Body is text the team wrote in Colliedesk. Any other text is in UntrustedCustomerContent.
 	Body                     string            `json:"body,omitempty"`
 	Truncated                bool              `json:"truncated"`
+	Attachments              []attachmentRef   `json:"attachments,omitempty"`
 	UntrustedCustomerContent *untrustedMessage `json:"untrusted_customer_content,omitempty"`
+}
+
+// attachmentRef points at a file of a message; its name, which someone outside the team may have
+// chosen, stays under untrusted_customer_content or comes from colliedesk_attachment_get.
+type attachmentRef struct {
+	ID   string `json:"id"`
+	Size int64  `json:"size"`
 }
 
 type conversationGetOut struct {
@@ -144,6 +152,9 @@ func messageView(message restMessage, agents map[string]restAgent, full bool) (m
 	view := messageOut{ID: message.ID, Kind: message.Kind, CreatedAt: utc(message.CreatedAt), Truncated: wasCut}
 	if message.Delivery != nil {
 		view.Delivery = message.Delivery.Status
+	}
+	for _, file := range message.Attachments {
+		view.Attachments = append(view.Attachments, attachmentRef{ID: file.ID, Size: file.Size})
 	}
 	if nativeTeamMessage(message) {
 		view.Body = body

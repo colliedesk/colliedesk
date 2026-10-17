@@ -33,6 +33,12 @@ func (c *call) get(path string, query url.Values, into any) error {
 	return c.refuse(c.rest.do(c.ctx, c.token, http.MethodGet, path, query, nil, into), c.notFound)
 }
 
+// download reads at most limit bytes of a file as the caller; a failure comes back worded for a model.
+func (c *call) download(path string, limit int) (http.Header, []byte, error) {
+	header, body, err := c.rest.download(c.ctx, c.token, path, limit)
+	return header, body, c.refuse(err, c.notFound)
+}
+
 // send changes data as the caller; a failure comes back worded for a model, and a success is remembered.
 func (c *call) send(method, path string, body, into any) error {
 	err := c.rest.do(c.ctx, c.token, method, path, nil, body, into)

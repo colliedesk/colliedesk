@@ -18,6 +18,9 @@ const maxRESTResponse = 16 << 20
 // errTooLarge is an answer longer than maxRESTResponse.
 var errTooLarge = errors.New("response too large")
 
+// errEnough stops a download once the tool has the bytes it needs; the handler stops streaming.
+var errEnough = errors.New("the MCP tool read enough of the body")
+
 // restClient serves requests through the REST API handler without a network hop.
 type restClient struct{ api http.Handler }
 
@@ -74,6 +77,22 @@ func (r *restClient) do(ctx context.Context, token, method, path string, query u
 	return nil
 }
 
+// download fetches path as the caller and returns the headers and at most limit bytes of a 2xx body,
+// so a large file is never buffered whole. Any other status comes back as a *restError.
+func (r *restClient) download(ctx context.Context, token, path string, limit int) (http.Header, []byte, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build request: %w", err)
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	recorder := &recorder{header: http.Header{}, limit: limit}
+	r.api.ServeHTTP(recorder, request)
+	if recorder.status < 200 || recorder.status > 299 {
+		return nil, nil, parseRESTError(recorder)
+	}
+	return recorder.header, recorder.body.Bytes(), nil
+}
+
 func parseRESTError(r *recorder) *restError {
 	failure := &restError{Status: r.status, RetryAfter: r.header.Get("Retry-After")}
 	var envelope struct {
@@ -94,6 +113,8 @@ type recorder struct {
 	status   int
 	body     bytes.Buffer
 	overflow bool
+	// limit, when above zero, keeps only the first limit bytes and then stops the handler with errEnough.
+	limit int
 }
 
 func (r *recorder) Header() http.Header { return r.header }
@@ -107,6 +128,11 @@ func (r *recorder) WriteHeader(status int) {
 func (r *recorder) Write(data []byte) (int, error) {
 	if r.status == 0 {
 		r.status = http.StatusOK
+	}
+	if r.limit > 0 && r.body.Len()+len(data) > r.limit {
+		room := r.limit - r.body.Len()
+		r.body.Write(data[:room])
+		return room, errEnough
 	}
 	if r.body.Len()+len(data) > maxRESTResponse {
 		r.overflow = true

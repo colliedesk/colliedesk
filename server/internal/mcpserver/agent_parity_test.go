@@ -13,24 +13,13 @@ import (
 // issue that adds the tool. This list may only shrink: a new route that tokens may call ships with
 // its MCP tool in the same pull request. When a tool starts calling a route, remove it here.
 var mcpToolPending = map[string]int{
-	"POST /api/v1/auth/logout":                                   131,
-	"GET /api/v1/inbox/activity":                                 131,
-	"GET /api/v1/conversations/{id}/time-entries":                131,
-	"GET /api/v1/attachments/{id}":                               131,
-	"GET /api/v1/contacts/{id}":                                  131,
-	"PATCH /api/v1/conversations":                                131,
-	"POST /api/v1/conversations":                                 131,
-	"POST /api/v1/contacts":                                      131,
-	"POST /api/v1/conversations/{id}/messages/{messageId}/retry": 131,
-	"PATCH /api/v1/tags/{id}":                                    131,
-	"DELETE /api/v1/tags/{id}":                                   131,
-	"GET /api/v1/saved-replies":                                  129,
+	"GET /api/v1/saved-replies": 129,
 }
 
-// The gap lists only shrink: these ceilings are their sizes when the gate went in. Lower a ceiling
+// The gap lists only shrink: these ceilings are their current sizes. Lower a ceiling
 // when a gap closes; raising one needs the maintainer's approval written in the pull request.
 const (
-	maxMCPToolPending = 12
+	maxMCPToolPending = 1
 	maxClosedToTokens = 25 // ApprovalRequired + AdminTier + TierPending rows
 )
 
