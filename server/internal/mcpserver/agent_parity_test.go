@@ -27,6 +27,13 @@ var mcpToolPending = map[string]int{
 	"GET /api/v1/saved-replies":                                  129,
 }
 
+// The gap lists only shrink: these ceilings are their sizes when the gate went in. Lower a ceiling
+// when a gap closes; raising one needs the maintainer's approval written in the pull request.
+const (
+	maxMCPToolPending = 12
+	maxClosedToTokens = 25 // ApprovalRequired + AdminTier + TierPending rows
+)
+
 const (
 	tokenScopeFile = "server/internal/httpapi/token-scope.go"
 	pendingFile    = "server/internal/mcpserver/agent_parity_test.go"
@@ -97,6 +104,20 @@ func TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool(t *testing.T) {
 		if issue == 0 {
 			t.Errorf("mcpToolPending in %s lists %s without a tracking issue", pendingFile, key)
 		}
+	}
+	if len(mcpToolPending) > maxMCPToolPending {
+		t.Errorf("mcpToolPending in %s has %d routes, over the ceiling of %d: ship the MCP tool with the route instead of adding a gap",
+			pendingFile, len(mcpToolPending), maxMCPToolPending)
+	}
+	closed := 0
+	for _, access := range table {
+		if access.Tier == "" && access.Closed != httpapi.NotForPeople {
+			closed++
+		}
+	}
+	if closed > maxClosedToTokens {
+		t.Errorf("%d routes in %s are closed to every token, over the ceiling of %d: classify the new route for a tier instead",
+			closed, tokenScopeFile, maxClosedToTokens)
 	}
 	for rest, tool := range covered {
 		if access := table[rest]; access.Tier == "" {

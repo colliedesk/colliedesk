@@ -20,8 +20,9 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
    through an API route classified for a token tier in `server/internal/httpapi/token-scope.go`
    and an MCP tool, or as a request a person approves. A new feature ships its route
    classification and its MCP tool in the same PR; a gap is listed with its tracking issue
-   (closed rows in `tokenTiers`, `mcpToolPending`) and those lists only shrink.
-   `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails otherwise.
+   (closed rows in `tokenTiers`, `mcpToolPending`) and those lists only shrink (ceilings in the test).
+   `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails otherwise, and
+   `TestEveryAPIPathTheWebAppCallsIsARoute` keeps the web app on those routes.
 
 ## Glossary
 
