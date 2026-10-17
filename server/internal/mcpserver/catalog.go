@@ -29,6 +29,9 @@ func Catalog() []Spec {
 		conversationUpdateSpec(), conversationsBulkUpdateSpec(), noteAddSpec(), replySendSpec(), replyRetrySpec(), conversationCreateSpec(),
 		contactsFindSpec(), contactGetSpec(), contactCreateSpec(), tagsListSpec(), tagRenameSpec(), tagDeleteSpec(), agentsListSpec(),
 		tokenRevokeSpec(), docsSearchSpec(),
+		replyDraftSpec(), requestsListSpec(), requestGetSpec(), requestCancelSpec(),
+		tokenCreateRequestSpec(), workspaceExportRequestSpec(), billingRequestSpec(), emailChannelDisconnectRequestSpec(),
+		emailSecretRotateRequestSpec(), workspaceSlugRequestSpec(),
 	}
 }
 

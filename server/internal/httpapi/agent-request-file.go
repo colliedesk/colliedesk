@@ -37,7 +37,12 @@ func (a *API) fileAgentRequest(response http.ResponseWriter, request *http.Reque
 			writeFilesNeedApproval(response)
 			return
 		}
-		raw, err := io.ReadAll(io.LimitReader(request.Body, domain.MaxAgentRequestBody+1))
+		// An in-process call (an MCP tool) without a body has no Body at all.
+		var source io.Reader = http.NoBody
+		if request.Body != nil {
+			source = request.Body
+		}
+		raw, err := io.ReadAll(io.LimitReader(source, domain.MaxAgentRequestBody+1))
 		if err != nil {
 			writeError(response, http.StatusBadRequest, "invalid_request", "The request body could not be read.")
 			return

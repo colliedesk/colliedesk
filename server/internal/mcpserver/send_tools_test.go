@@ -16,15 +16,18 @@ func withSMTP(config *httpapi.Config) {
 	config.Email = email.Config{SMTP: email.SMTPConfig{Host: "smtp.test.invalid", Port: 587, StartTLS: true}, FromPolicy: email.FromPolicyAny}
 }
 
-// refusedForTier calls the tool with a token one tier too low and requires the tier message.
-func refusedForTier(t *testing.T, e *env, token, tool string, args map[string]any, have, need string) {
+// requestedForTier calls the tool with a token one tier too low: the call is filed as an agent request
+// a person approves, which the model reads as a result (not an error) that says nothing changed yet.
+func requestedForTier(t *testing.T, e *env, token, tool string, args map[string]any) map[string]any {
 	t.Helper()
-	message := e.fails(e.connect(token, ""), tool, args)
-	for _, want := range []string{"`" + have + "`", "`" + need + "`", "admin"} {
-		if !strings.Contains(message, want) {
-			t.Errorf("%s with a %s token: message %q lacks %q", tool, have, message, want)
-		}
+	out := e.ok(e.connect(token, ""), tool, args)
+	if id, _ := at(t, out, "agent_request", "id").(string); id == "" {
+		t.Fatalf("%s below its tier: result %v, want an agent request", tool, out)
 	}
+	if next, _ := out["next"].(string); !strings.Contains(next, "did not do this yet") || !strings.Contains(next, "colliedesk_request_get") {
+		t.Errorf("%s below its tier: next %q must say nothing happened yet and how to follow the request", tool, next)
+	}
+	return out
 }
 
 func messageKinds(t *testing.T, e *env, w workspace, conversationID string) []string {
@@ -48,9 +51,11 @@ func TestReplySendEmailsTheCustomerOnlyWithASendToken(t *testing.T) {
 	}
 	args := map[string]any{"conversation_id": f.c2, "body": "Your refund is on its way."}
 
-	refusedForTier(t, e, f.w.draft, "colliedesk_reply_send", args, "draft", "send")
+	if out := requestedForTier(t, e, f.w.draft, "colliedesk_reply_send", args); at(t, out, "agent_request", "kind") != "reply_draft" {
+		t.Errorf("a draft token's reply must become a reply draft: %v", out)
+	}
 	if kinds := messageKinds(t, e, f.w, f.c2); len(kinds) != 0 {
-		t.Fatalf("a refused reply left messages: %v", kinds)
+		t.Fatalf("a reply waiting for approval left messages: %v", kinds)
 	}
 	out := e.ok(e.connect(f.w.send, ""), "colliedesk_reply_send", args)
 	if at(t, out, "message", "kind") != "outgoing" || at(t, out, "message", "delivery") != "queued" || at(t, out, "message", "written_by_agent_token", "scope") != "send" {
@@ -77,7 +82,7 @@ func TestReplyRetryRequeuesAFailedDelivery(t *testing.T) {
 	}
 	args := map[string]any{"conversation_id": f.c2, "message_id": reply}
 
-	refusedForTier(t, e, f.w.draft, "colliedesk_reply_retry", args, "draft", "send")
+	requestedForTier(t, e, f.w.draft, "colliedesk_reply_retry", args)
 	if message := e.fails(e.connect(f.other.send, ""), "colliedesk_reply_retry", args); !strings.Contains(message, "No reply") {
 		t.Errorf("another workspace's token: %q", message)
 	}
@@ -95,7 +100,7 @@ func TestConversationAndContactCreateNeedTheSendTier(t *testing.T) {
 	f := seedInbox(t, e)
 	contactArgs := map[string]any{"name": "Linus", "email": "linus@cust.example.com"}
 
-	refusedForTier(t, e, f.w.draft, "colliedesk_contact_create", contactArgs, "draft", "send")
+	requestedForTier(t, e, f.w.draft, "colliedesk_contact_create", contactArgs)
 	send := e.connect(f.w.send, "")
 	contact := e.ok(send, "colliedesk_contact_create", contactArgs)
 	contactID := at(t, contact, "contact", "id").(string)
@@ -104,7 +109,7 @@ func TestConversationAndContactCreateNeedTheSendTier(t *testing.T) {
 	}
 
 	conversationArgs := map[string]any{"contact_id": contactID, "subject": "Welcome aboard"}
-	refusedForTier(t, e, f.w.draft, "colliedesk_conversation_create", conversationArgs, "draft", "send")
+	requestedForTier(t, e, f.w.draft, "colliedesk_conversation_create", conversationArgs)
 	out := e.ok(send, "colliedesk_conversation_create", conversationArgs)
 	created := restConversation(t, e, f.w, at(t, out, "conversation", "id").(string))
 	if created["subject"] != "Welcome aboard" || created["contact_id"] != contactID || at(t, out, "conversation", "status") != "open" {
@@ -126,7 +131,7 @@ func TestTagRenameAndDeleteNeedTheSendTierAndStayInTheWorkspace(t *testing.T) {
 	f := seedInbox(t, e)
 	e.created("/api/v1/tags", map[string]any{"name": "billing"}, f.other.admin)
 
-	refusedForTier(t, e, f.w.draft, "colliedesk_tag_rename", map[string]any{"tag": "billing", "new_name": "invoices"}, "draft", "send")
+	requestedForTier(t, e, f.w.draft, "colliedesk_tag_rename", map[string]any{"tag": "billing", "new_name": "invoices"})
 	send := e.connect(f.w.send, "")
 	out := e.ok(send, "colliedesk_tag_rename", map[string]any{"tag": "billing", "new_name": "invoices"})
 	if at(t, out, "tag", "name") != "invoices" {
@@ -139,7 +144,7 @@ func TestTagRenameAndDeleteNeedTheSendTierAndStayInTheWorkspace(t *testing.T) {
 		t.Errorf("the other workspace's tag changed: %v", got)
 	}
 
-	refusedForTier(t, e, f.w.draft, "colliedesk_tag_delete", map[string]any{"tag": "invoices"}, "draft", "send")
+	requestedForTier(t, e, f.w.draft, "colliedesk_tag_delete", map[string]any{"tag": "invoices"})
 	if message := e.fails(send, "colliedesk_tag_delete", map[string]any{"tag": "billing"}); !strings.Contains(message, "No tag named") {
 		t.Errorf("deleting a name only the other workspace has: %q", message)
 	}
@@ -163,7 +168,7 @@ func TestConversationsBulkUpdateChangesManyAtOnceAndAllOrNothing(t *testing.T) {
 	f := seedInbox(t, e)
 	args := map[string]any{"conversation_ids": []string{f.c2, f.c3}, "status": "resolved", "assignee": "me", "add_tags": []string{"billing"}}
 
-	refusedForTier(t, e, f.w.read, "colliedesk_conversations_bulk_update", args, "read", "draft")
+	requestedForTier(t, e, f.w.read, "colliedesk_conversations_bulk_update", args)
 	draft := e.connect(f.w.draft, "")
 	out := e.ok(draft, "colliedesk_conversations_bulk_update", args)
 	if at(t, out, "updated") != float64(2) {
