@@ -13,17 +13,15 @@ import (
 // mcpToolPending lists routes an agent token may call that no MCP tool calls yet, each with the
 // issue that adds the tool. This list may only shrink: a new route that tokens may call ships with
 // its MCP tool in the same pull request. When a tool starts calling a route, remove it here.
-var mcpToolPending = map[string]int{
-	"GET /api/v1/saved-replies": 129,
-}
+var mcpToolPending = map[string]int{}
 
 // The gap lists only shrink: these ceilings are their current sizes. Lower a ceiling
 // when a gap closes; raising one needs the maintainer's approval written in the pull request.
 // PersonOnly rows are not a gap (a person's decision on an agent request stays a person's), but they
 // are capped too, so the class cannot become a way to close a route without saying so.
 const (
-	maxMCPToolPending = 1
-	maxClosedToTokens = 17 // AdminTier + TierPending rows
+	maxMCPToolPending = 0
+	maxClosedToTokens = 14 // AdminTier + TierPending rows
 	maxPersonOnly     = 2
 )
 
