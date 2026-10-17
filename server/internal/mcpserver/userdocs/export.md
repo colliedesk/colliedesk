@@ -52,6 +52,7 @@ not match its recorded checksum, it aborts the download. You then get a broken Z
 | `contacts.ndjson` | One contact per line: `id`, `name`, `email`, `organization`, `created_at`, `updated_at` |
 | `tags.ndjson` | One tag per line: `id`, `name`, `color`, `created_at` |
 | `saved-replies.ndjson` | One saved reply per line: `id`, `title`, `body`, `created_by_agent_id` (an agent id or `null`), `created_at`, `updated_at`. The body keeps the variables `{{customer.name}}` and `{{agent.name}}` unfilled |
+| `agent-requests.ndjson` | One [agent request](agent-requests.md) per line: `id`, `kind`, `status`, `method`, `route`, `path`, `body` (the call as the token sent it), `edited_body` (a reply draft as a person edited it, or `null`), `summary`, `conversation_id`, `token_id`, `token_label`, `token_scope`, `requested_by_agent_id`, `decided_by_agent_id`, `decided_at`, `reason`, `result_status`, `result_note`, `created_at`, `expires_at`. The answer of an approved call is not exported. `body` and `edited_body` are `null` 90 days after the decision |
 | `conversations.ndjson` | One conversation per line, with its messages and time entries |
 | `attachments/<attachment id>/<file name>` | The original bytes of each attachment |
 
@@ -66,7 +67,8 @@ Each message has `id`, `conversation_id`, `author_agent_id`, `author_name`, `kin
 `email_meta` (the sender, authentication result, `via`, Cc addresses and attachment names of a
 received message; `via` is `platform` or `workspace` for email and `web_form` for text typed into
 the web form, whose sender address is unverified and whose `authentication` is `none`), `cc` (the
-addresses a reply was copied to, or `null`), `created_at` and `attachments`. Each attachment entry has `id`, `filename`, `content_type`,
+addresses a reply was copied to, or `null`), `agent_request_id` (the agent request whose approval sent
+this reply, or `null`), `created_at` and `attachments`. Each attachment entry has `id`, `filename`, `content_type`,
 `size`, `sha256`, `created_at` and `path`, the file's location in the ZIP.
 
 Each time entry has `id`, `conversation_id`, `agent_id`, `agent_name`, `minutes`, `note`,
