@@ -194,6 +194,7 @@ paths:
                 label: {type: string, minLength: 1, maxLength: 80, description: 'Name shown in the session list, for example the agent host'}
                 scope: {$ref: '#/components/schemas/TokenScope'}
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '201':
           description: The token and its session. The raw token is in this response only.
           headers:
@@ -294,6 +295,7 @@ paths:
                 contact_id: {type: string, format: uuid}
                 subject: {type: string, minLength: 1}
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '201': {$ref: '#/components/responses/Conversation'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -313,6 +315,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/BulkConversationUpdate'}
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
           description: Number of conversations changed
           content:
@@ -347,6 +350,7 @@ paths:
                 assignee_id: {type: [string, 'null'], format: uuid}
                 tag_ids: {type: array, items: {type: string, format: uuid}}
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200': {$ref: '#/components/responses/Conversation'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -363,6 +367,7 @@ paths:
       operationId: addConversationTag
       x-permission: conversations:write
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200': {$ref: '#/components/responses/Conversation'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -371,6 +376,7 @@ paths:
       operationId: removeConversationTag
       x-permission: conversations:write
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200': {$ref: '#/components/responses/Conversation'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -425,6 +431,12 @@ paths:
                 kind: {type: string, enum: [outgoing, note]}
                 body: {type: string, minLength: 1, description: Markdown source}
                 cc: {$ref: '#/components/schemas/CopiedAddresses'}
+                draft:
+                  type: boolean
+                  description: >-
+                    Agent tokens only, with `kind: outgoing`: file the reply as a reply draft (202) that a
+                    person edits, sends or discards, whatever the token's tier. A token below `send` gets a
+                    draft without it. A person's session answers 400.
           multipart/form-data:
             schema:
               type: object
@@ -440,6 +452,7 @@ paths:
             encoding:
               files: {contentType: application/octet-stream}
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '201':
           description: Created reply or private note
           content:
@@ -469,6 +482,7 @@ paths:
         Requeue a reply whose email delivery failed. Only `failed` deliveries can be retried, and only
         while outgoing email can work (SMTP configured, domain verified or a platform sender set); 409 says why not.
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
           description: Reply with its delivery requeued
           content:
@@ -510,6 +524,7 @@ paths:
       x-permission: access:write
       description: Disconnect the email channel. Conversations and messages stay; the inbound secret stops working.
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '204': {description: Email channel disconnected}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -534,6 +549,7 @@ paths:
       x-permission: access:write
       description: Create or replace the inbound secret. The raw secret is returned once; the previous one stops working.
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
           description: New inbound secret, shown once
           content:
@@ -722,6 +738,7 @@ paths:
                 name: {type: string, minLength: 1}
                 email: {type: string, format: email}
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '201':
           description: Created contact
           content:
@@ -839,6 +856,7 @@ paths:
               properties:
                 slug: {type: string, minLength: 1, maxLength: 63}
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
           description: Updated workspace
           content: {application/json: {schema: {$ref: '#/components/schemas/Workspace'}}}
@@ -896,6 +914,7 @@ paths:
                 name: {type: string, minLength: 1}
                 color: {type: string, default: '#64748b'}
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '201':
           description: Created tag
           content: {application/json: {schema: {$ref: '#/components/schemas/Tag'}}}
@@ -917,6 +936,7 @@ paths:
               properties:
                 name: {type: string, minLength: 1}
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
           description: Renamed tag
           content: {application/json: {schema: {$ref: '#/components/schemas/Tag'}}}
@@ -928,6 +948,7 @@ paths:
       operationId: deleteTag
       x-permission: conversations:write
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '204': {description: Tag deleted}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -1043,6 +1064,7 @@ paths:
               properties:
                 plan: {$ref: '#/components/schemas/CheckoutPlan'}
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200': {$ref: '#/components/responses/BillingLink'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -1059,6 +1081,7 @@ paths:
         Open the billing portal, where the customer changes the card, downloads invoices or cancels.
         404 until the workspace has had a subscription. The portal stays available after one ends.
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200': {$ref: '#/components/responses/BillingLink'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -1167,6 +1190,7 @@ paths:
         a time (409 until it has sent its last byte), and a server runs at most two exports at once
         (429 with `Retry-After`).
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
           description: The workspace archive
           headers:
@@ -1307,6 +1331,7 @@ paths:
         that navigates to it streams the file to disk, so a large archive is never held in memory. Links
         live in the memory of one server process: a restart invalidates them.
       responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '201':
           description: The one-time link
           content:
@@ -1353,6 +1378,126 @@ paths:
         '405':
           description: Not GET. The token is not spent.
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  /api/v1/agent-requests:
+    get:
+      operationId: listAgentRequests
+      x-permission: authenticated
+      description: >-
+        Calls of agent tokens that wait for a person, and what became of them: pending first, then newest
+        first, at most 200. An agent token sees only the requests it made; a person sees the whole
+        workspace's. A pending request past its `expires_at` (seven days) is answered as `expired`.
+      parameters:
+        - {name: status, in: query, required: false, schema: {$ref: '#/components/schemas/AgentRequestStatus'}}
+      responses:
+        '200':
+          description: Agent requests
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/AgentRequest'}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+  /api/v1/agent-requests/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getAgentRequest
+      x-permission: authenticated
+      description: One agent request. An agent token finds only the requests it made (404 otherwise).
+      responses:
+        '200':
+          description: The agent request
+          content: {application/json: {schema: {$ref: '#/components/schemas/AgentRequest'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/agent-requests/{id}/approve:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: approveAgentRequest
+      x-permission: authenticated
+      description: >-
+        People only (an agent token gets 403 `person_only`). Runs the stored call once, as the approving
+        person: their role, the workspace lock and every check of the route apply. The answer is 200 with
+        the request (`approved` when the call succeeded, `failed` with `result_status` otherwise, for
+        example 403 when the approver may not do it) and `result`, the call's own answer. When the answer
+        holds a credential, a link or a payment page (new token, inbound secret, export, billing), `result`
+        is shown here once and the request keeps only `result_status` and `result_note`. Approving an
+        export (`GET /api/v1/export` or `POST /api/v1/export/link`) answers the export's one-time download
+        link. `body` replaces the text of a reply draft; it is refused for any other request. A request
+        that is decided or expired, or whose token was revoked, answers 409 and runs nothing; two
+        approvals at once run the call once.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                body: {type: string, minLength: 1, description: 'The edited text of a reply draft (Markdown)'}
+      responses:
+        '200':
+          description: The decided request and the answer of its call
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [request, result]
+                properties:
+                  request: {$ref: '#/components/schemas/AgentRequest'}
+                  result: {type: [object, array, string, number, integer, boolean, 'null'], description: The JSON answer of the approved call; null when it had none or was too large.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/agent-requests/{id}/reject:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: rejectAgentRequest
+      x-permission: authenticated
+      description: People only. Refuses the request (a discarded reply draft); nothing runs, and it can never run later.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reason: {type: string, maxLength: 1000, description: Shown to the agent that asked}
+      responses:
+        '200':
+          description: The rejected request
+          content: {application/json: {schema: {$ref: '#/components/schemas/AgentRequest'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/agent-requests/{id}/cancel:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: cancelAgentRequest
+      x-permission: authenticated
+      description: >-
+        Withdraws a pending request. The token that made it, or the person who owns that token, may
+        cancel it (another token gets 404, another person 403: they reject instead).
+      responses:
+        '200':
+          description: The cancelled request
+          content: {application/json: {schema: {$ref: '#/components/schemas/AgentRequest'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
@@ -1367,6 +1512,14 @@ components:
       required: true
       schema: {type: string, format: uuid}
   responses:
+    AgentRequestAccepted:
+      description: >-
+        An agent token called this above its tier, or the action needs a person's approval for every
+        tier: nothing happened yet. The call is stored as an agent request a person approves or rejects
+        (`GET /api/v1/agent-requests/{request_id}` shows the outcome); it expires after seven days. A
+        token answers 429 `too_many_requests` while 50 of its requests wait, and a call with files gets
+        403 `files_need_approval` (send the text alone, attach files after approval).
+      content: {application/json: {schema: {$ref: '#/components/schemas/AgentRequestAccepted'}}}
     Redeemed:
       description: Session created from a one-time link
       headers:
@@ -1465,8 +1618,10 @@ components:
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error403:
       description: >
-        Permission or CSRF check failed. An agent token outside its tier gets error code
-        `scope_insufficient`; the message names the tier the action needs. On
+        Permission or CSRF check failed. An agent token on a route closed to every token gets error
+        code `scope_insufficient`, and `person_only` on a decision only a person makes (approving or
+        rejecting an agent request); a token below a route's tier gets 202 instead (an agent request).
+        A call with files that would need approval gets `files_need_approval`. On
         `POST /conversations/{id}/messages` a trial workspace gets error code
         `trial_outbound_restricted` for a reply to a conversation the customer did not start
         (unless it verified its sending domain), or for a `cc` address the customer never wrote
@@ -1476,6 +1631,57 @@ components:
       description: Resource not found in this workspace
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   schemas:
+    AgentRequestStatus:
+      type: string
+      enum: [pending, approved, failed, rejected, cancelled, expired]
+    AgentRequestAccepted:
+      type: object
+      required: [request_id, kind, status, summary, expires_at, message]
+      properties:
+        request_id: {type: string, format: uuid}
+        kind: {type: string, enum: [reply_draft, action]}
+        status: {$ref: '#/components/schemas/AgentRequestStatus'}
+        summary: {type: string, description: 'What the call does, for the person deciding'}
+        expires_at: {type: string, format: date-time}
+        message: {type: string}
+    AgentRequest:
+      type: object
+      required: [id, kind, status, method, route, path, body, summary, conversation_id, requested_by, decided_by, decided_at, reason, result_status, result, result_note, created_at, expires_at]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [reply_draft, action], description: 'reply_draft: an outgoing reply a token may not send; action: any other call'}
+        status: {$ref: '#/components/schemas/AgentRequestStatus'}
+        method: {type: string, enum: [GET, POST, PUT, PATCH, DELETE]}
+        route: {type: string, description: 'The route pattern, for example /api/v1/conversations/{id}'}
+        path: {type: string, description: The concrete path that runs on approval}
+        body: {type: [object, array, string, number, integer, boolean, 'null'], description: The JSON body of the call; null when it had none.}
+        summary: {type: string}
+        conversation_id: {type: [string, 'null'], format: uuid}
+        requested_by:
+          type: object
+          required: [token_id, token_label, token_scope, token_revoked, agent_id, agent_name]
+          properties:
+            token_id: {type: [string, 'null'], format: uuid}
+            token_label: {type: string}
+            token_scope: {$ref: '#/components/schemas/TokenScope'}
+            token_revoked: {type: boolean, description: A request of a revoked token can only be rejected.}
+            agent_id: {type: [string, 'null'], format: uuid}
+            agent_name: {type: [string, 'null'], description: The person who owns the token}
+        decided_by:
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [agent_id, name]
+              properties:
+                agent_id: {type: [string, 'null'], format: uuid}
+                name: {type: string}
+        decided_at: {type: [string, 'null'], format: date-time}
+        reason: {type: [string, 'null']}
+        result_status: {type: [integer, 'null'], description: HTTP status the approved call answered}
+        result: {type: [object, array, string, number, integer, boolean, 'null'], description: 'The JSON answer of the approved call, at most 64 KiB; null when withheld (see result_note) or none.'}
+        result_note: {type: [string, 'null']}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
     PublicConfig:
       type: object
       required: [cloud_sign_in, billing, signup, limits]
@@ -1864,7 +2070,7 @@ components:
                 description: Time of the newest customer message inside the polled window, or null when the change was not a customer message.
     Message:
       type: object
-      required: [id, conversation_id, author_agent_id, author_name, agent_token, kind, body, body_html, origin, attachments, cc, created_at, delivery, email]
+      required: [id, conversation_id, author_agent_id, author_name, agent_token, agent_request_id, kind, body, body_html, origin, attachments, cc, created_at, delivery, email]
       properties:
         id: {type: string, format: uuid}
         conversation_id: {type: string, format: uuid}
@@ -1875,6 +2081,12 @@ components:
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/MessageAgentToken'}
+        agent_request_id:
+          type: [string, 'null']
+          format: uuid
+          description: >-
+            The agent request whose approval sent this message (a reply draft): `agent_token` drafted it,
+            `author_agent_id` approved and sent it. Null otherwise.
         kind: {type: string, enum: [incoming, outgoing, note]}
         body: {type: string}
         body_html:

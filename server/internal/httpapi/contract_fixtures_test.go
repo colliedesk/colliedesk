@@ -26,6 +26,9 @@ type contractFixture struct {
 	failedReplyID                string
 	deleteChannelToken           string
 	portalToken, webhookBody     string
+	// requestToken filed three pending agent requests, one for each decision.
+	requestToken                                       string
+	approveRequestID, rejectRequestID, cancelRequestID string
 }
 
 func newContractFixture(t *testing.T) contractFixture {
@@ -111,7 +114,20 @@ func newContractFixture(t *testing.T) contractFixture {
 	}
 
 	agentID := memberIDByEmail(t, api, adminToken, "agent@contract-all.example.com")
-	return contractFixture{agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
+	requestToken := issueToken(t, api, adminToken, "Contract requester", "read").Token
+	fileRequest := func() string {
+		response := request(t, api, http.MethodPatch, "/api/v1/conversations/"+conversationID, map[string]any{"priority": "high"}, requestToken, nil)
+		var accepted struct {
+			RequestID string `json:"request_id"`
+		}
+		decode(t, response, &accepted)
+		if accepted.RequestID == "" {
+			t.Fatalf("file agent request status=%d body=%s", response.Code, response.Body.String())
+		}
+		return accepted.RequestID
+	}
+	approveRequestID, rejectRequestID, cancelRequestID := fileRequest(), fileRequest(), fileRequest()
+	return contractFixture{requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, attachmentID: attachmentID, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token}
 }

@@ -21,6 +21,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.exportWorkspace,
 		a.getWebForm, a.putWebForm, a.submitWebForm,
 		a.createExportLink, a.downloadExport,
+		a.listAgentRequests, a.getAgentRequest, a.approveAgentRequest, a.rejectAgentRequest, a.cancelAgentRequest,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {

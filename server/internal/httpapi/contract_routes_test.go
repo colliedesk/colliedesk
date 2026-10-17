@@ -189,6 +189,11 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/export/download/{token}":           {path: "/api/v1/export/download/not-a-link", status: 303},
 		"GET /api/v1/channels/web-form":                 {path: "/api/v1/channels/web-form", token: admin, status: 200},
 		"PUT /api/v1/channels/web-form":                 {path: "/api/v1/channels/web-form", body: map[string]any{"enabled": true, "allowed_origins": []string{"https://contract.example.com"}}, token: admin, status: 200},
+		"GET /api/v1/agent-requests":                    {path: "/api/v1/agent-requests?status=pending", token: admin, status: 200},
+		"GET /api/v1/agent-requests/{id}":               {path: "/api/v1/agent-requests/" + f.approveRequestID, token: f.requestToken, status: 200},
+		"POST /api/v1/agent-requests/{id}/approve":      {path: "/api/v1/agent-requests/" + f.approveRequestID + "/approve", token: admin, status: 200},
+		"POST /api/v1/agent-requests/{id}/reject":       {path: "/api/v1/agent-requests/" + f.rejectRequestID + "/reject", body: map[string]any{"reason": "Not now"}, token: admin, status: 200},
+		"POST /api/v1/agent-requests/{id}/cancel":       {path: "/api/v1/agent-requests/" + f.cancelRequestID + "/cancel", token: f.requestToken, status: 200},
 		"POST /api/v1/public/forms/{workspace_slug}":    {path: "/api/v1/public/forms/contract-desk" /* the slug set by PATCH /api/v1/workspace/slug, which runs earlier */, body: map[string]any{"email": "visitor@contract.example.com", "source": "site:updates"}, status: 202},
 	}
 }

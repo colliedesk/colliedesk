@@ -102,6 +102,8 @@ type API struct {
 	polar          *polar.Client
 	founding       foundingState
 	now            func() time.Time
+	// mux serves every route; an approved agent request is replayed through it as the approver.
+	mux *http.ServeMux
 }
 
 type routeSpec struct {
@@ -156,6 +158,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		api.polar = polar.NewClient(config.Billing)
 	}
 	mux := http.NewServeMux()
+	api.mux = mux
 	for _, route := range api.routeSpecs() {
 		if billingRoute(route.Route) && api.polar == nil {
 			continue
@@ -232,6 +235,11 @@ func Routes() []Route {
 		{http.MethodPost, webFormSubmitPattern, auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/export/link", auth.PermissionWorkspaceExport},
 		{http.MethodGet, exportLinkPath + "{token}", auth.PermissionPublic},
+		{http.MethodGet, "/api/v1/agent-requests", auth.PermissionAuthenticated},
+		{http.MethodGet, "/api/v1/agent-requests/{id}", auth.PermissionAuthenticated},
+		{http.MethodPost, "/api/v1/agent-requests/{id}/approve", auth.PermissionAuthenticated},
+		{http.MethodPost, "/api/v1/agent-requests/{id}/reject", auth.PermissionAuthenticated},
+		{http.MethodPost, "/api/v1/agent-requests/{id}/cancel", auth.PermissionAuthenticated},
 	}
 }
 
@@ -243,18 +251,30 @@ func (a *API) authorize(route Route, next http.HandlerFunc) http.HandlerFunc {
 			next(response, request)
 			return
 		}
-		raw, viaCookie, ok := credential(request)
-		if !ok {
-			writeError(response, http.StatusUnauthorized, "unauthorized", "A valid session is required.")
-			return
-		}
-		principal, err := a.auth.Authenticate(request.Context(), raw, viaCookie)
-		if err != nil {
-			writeError(response, http.StatusUnauthorized, "unauthorized", "A valid session is required.")
-			return
-		}
-		if refuseToken(response, route, principal) {
-			return
+		// An approved agent request replays its call in process as the approving person, who was
+		// authenticated (and checked for CSRF) on the approve call itself.
+		replay, replaying := approvalOf(request.Context())
+		var raw string
+		var viaCookie bool
+		var principal auth.Principal
+		if replaying {
+			principal = replay.approver
+		} else {
+			var ok bool
+			raw, viaCookie, ok = credential(request)
+			if !ok {
+				writeError(response, http.StatusUnauthorized, "unauthorized", "A valid session is required.")
+				return
+			}
+			var err error
+			principal, err = a.auth.Authenticate(request.Context(), raw, viaCookie)
+			if err != nil {
+				writeError(response, http.StatusUnauthorized, "unauthorized", "A valid session is required.")
+				return
+			}
+			if a.gateToken(response, request, route, principal) {
+				return
+			}
 		}
 		if !auth.HasPermission(principal.Agent.Role, permission) {
 			writeError(response, http.StatusForbidden, "forbidden", "This session does not have permission.")

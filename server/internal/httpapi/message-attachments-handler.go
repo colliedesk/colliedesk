@@ -59,9 +59,10 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 	identity := principal(request)
 	workspaceID, conversationID := identity.Workspace.ID, request.PathValue("id")
 	// A token that may not write any message is refused before a byte is stored; the kind, and so
-	// whether a reply needs the send tier, is known only once the fields are read.
+	// whether a reply needs the send tier, is known only once the fields are read. Files cannot wait
+	// days for a person's approval, so such a call is refused with the way forward.
 	if !auth.ScopeAllows(identity.Scope, auth.ScopeDraft) {
-		writeScopeInsufficient(response, identity.Scope, auth.ScopeDraft)
+		writeFilesNeedApproval(response)
 		return
 	}
 	// A conversation of another workspace is refused before a byte is stored.
@@ -92,8 +93,9 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 		a.writeUploadError(response, err)
 		return
 	}
-	actor, ok := messageActor(response, identity, fields.kind)
+	actor, ok := messageActor(request.Context(), identity, fields.kind)
 	if !ok {
+		writeFilesNeedApproval(response)
 		return
 	}
 	cc, refusal := a.cleanCC(request.Context(), workspaceID, fields.kind, fields.cc)

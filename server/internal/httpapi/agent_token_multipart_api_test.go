@@ -14,18 +14,20 @@ func TestMessageWithFilesIsGatedByTokenTierLikeJSON(t *testing.T) {
 	draft := issueToken(t, f.api, f.tokenA, "drafter", "draft")
 	file := []upload{{name: "log.txt", contentType: "text/plain", data: []byte("printer log")}}
 
-	refused := func(label, token, kind, tierNeeded string) {
+	// Below the tier a JSON call becomes an agent request; files cannot wait days for a person, so the
+	// multipart call is refused with the way forward.
+	refused := func(label, token, kind string) {
 		t.Helper()
 		response := f.post(t, f.conversationA, token, kind, file)
-		ok, message := scopeRefused(t, response)
-		if !ok || !strings.Contains(message, "needs the "+tierNeeded+" scope") {
-			t.Errorf("%s: status=%d body=%s, want scope_insufficient naming the %s scope", label, response.Code, response.Body.String(), tierNeeded)
+		if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "files_need_approval") ||
+			!strings.Contains(response.Body.String(), "attach the files after approval") {
+			t.Errorf("%s: status=%d body=%s, want 403 files_need_approval", label, response.Code, response.Body.String())
 		}
 	}
-	refused("read adds a note with a file", read, "note", "draft")
+	refused("read adds a note with a file", read, "note")
 	// The kind is read after the files, so a token that may write no message is refused up front.
-	refused("read replies with a file", read, "outgoing", "draft")
-	refused("draft replies with a file", draft.Token, "outgoing", "send")
+	refused("read replies with a file", read, "outgoing")
+	refused("draft replies with a file", draft.Token, "outgoing")
 	f.wantNothingStored(t)
 
 	response := f.post(t, f.conversationA, draft.Token, "note", file)
