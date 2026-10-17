@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
-import { agentRequest } from '../requests/fixtures';
+import { agentRequest } from '../requests/request.test.fixture';
 import { ReplyDraftCard } from './reply-draft-card';
 
 const draft = agentRequest({ kind: 'reply_draft', method: 'POST', summary: 'Reply to the customer: Hello Ada',

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { InvalidRequestError } from '../../api/client';
-import { agentRequest } from './fixtures';
+import { agentRequest } from './request.test.fixture';
 import { RequestCard } from './request-card';
 
 const actions = () => ({ onApprove: vi.fn().mockResolvedValue({ request: agentRequest({ status: 'approved' }), result: null }), onReject: vi.fn().mockResolvedValue(undefined) });

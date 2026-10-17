@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
-import { agentRequest } from './fixtures';
+import { agentRequest } from './request.test.fixture';
 import { RequestsPage } from './requests-page';
 
 const handlers = () => ({ onApprove: vi.fn(), onReject: vi.fn(), onFilter: vi.fn() });

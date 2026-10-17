@@ -60,8 +60,9 @@ func TestTokenCreatePrintsATokenThatAuthenticatesWithItsScope(t *testing.T) {
 	if created := tokenAPICall(t, env, http.MethodPost, "/api/v1/tags", token, `{"name":"x"}`); created.Code != http.StatusCreated {
 		t.Fatalf("a draft token could not create a tag: status=%d body=%s", created.Code, created.Body.String())
 	}
-	if sent := tokenAPICall(t, env, http.MethodPost, "/api/v1/conversations", token, `{"contact_id":"00000000-0000-4000-8000-000000000000","subject":"x"}`); sent.Code != http.StatusForbidden || !strings.Contains(sent.Body.String(), "scope_insufficient") {
-		t.Fatalf("a draft token created a conversation: status=%d body=%s", sent.Code, sent.Body.String())
+	// Above the draft scope the call waits for a person as an agent request instead of running.
+	if sent := tokenAPICall(t, env, http.MethodPost, "/api/v1/conversations", token, `{"contact_id":"00000000-0000-4000-8000-000000000000","subject":"x"}`); sent.Code != http.StatusAccepted || !strings.Contains(sent.Body.String(), `"request_id"`) {
+		t.Fatalf("a draft token's conversation must wait for a person: status=%d body=%s", sent.Code, sent.Body.String())
 	}
 }
 

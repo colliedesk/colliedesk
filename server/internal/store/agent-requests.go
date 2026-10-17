@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"regexp"
 
@@ -258,9 +257,4 @@ func (s *Store) CancelAgentRequest(ctx context.Context, workspaceID, id, agentID
 			WHERE workspace_id=$1 AND id=$2`, workspaceID, id, agentID, s.now())
 		return err
 	})
-}
-
-// IsAgentRequestRefusal reports whether err is a refusal of a decision rather than a failure.
-func IsAgentRequestRefusal(err error) bool {
-	return errors.Is(err, domain.ErrAgentRequestDecided) || errors.Is(err, domain.ErrAgentRequestTokenRevoked) || errors.Is(err, domain.ErrNotRequestOwner)
 }

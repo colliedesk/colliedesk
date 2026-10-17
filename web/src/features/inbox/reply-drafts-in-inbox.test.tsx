@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import type { Message } from '../../api/schemas';
-import { agentRequest } from '../requests/fixtures';
+import { agentRequest } from '../requests/request.test.fixture';
 import { InboxPage } from './inbox-page';
 import { TimelinePanel } from './timeline-panel';
 

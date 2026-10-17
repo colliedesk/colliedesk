@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"fmt"
 	"maps"
 	"net/http"
 
@@ -177,10 +176,4 @@ func (a *API) gateToken(response http.ResponseWriter, request *http.Request, rou
 	}
 	a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, nil)
 	return true
-}
-
-// writeScopeInsufficient names the tier the action needs so an agent can tell its owner what to grant.
-func writeScopeInsufficient(response http.ResponseWriter, have, need string) {
-	writeError(response, http.StatusForbidden, "scope_insufficient",
-		fmt.Sprintf("This token has the %s scope; this action needs the %s scope.", have, need))
 }
