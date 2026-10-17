@@ -36,33 +36,40 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
 - **Role.** A token always has `role_ceiling='agent'`, whoever creates it; a CHECK constraint
   enforces it. No tier can reach an admin-only permission.
 - **Every UI action is available to agents.** Every route in `Routes()` has a row in `tokenTiers`
-  (`httpapi/token-scope.go`): a tier, or a reason it is closed today with the issue that opens it
-  (`AdminTier` #128, `ApprovalRequired` #127, `TierPending` with its target tier, or `NotForPeople`
-  for routes no session reaches: public pages, sign-in, provider webhooks). Every route a token may
-  call is in some MCP tool's `Spec.REST`, or in `mcpToolPending` (`mcpserver/agent_parity_test.go`)
-  with its tracking issue. `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails on an
-  unclassified or stale row, a closed row without its issue, an uncovered open route, a stale
-  `mcpToolPending` entry, and a tool that calls a closed route; its message names the file to edit.
-  The closed rows and `mcpToolPending` only shrink. A new route ships with its row and its tool.
-- **Tiers are a route table.** `tokenTiers` gives each route the lowest tier allowed. `refuseToken`
-  lets a token through only when a tier is set, so a route missing at runtime is still closed to
-  every token. `TestEveryRouteIsOpenToTokensOnlyFromItsTier` keeps its own hand-written copy of the table,
-  fails until both agree, and checks that an allowed tier gets the route's success status. Posting a
-  message is gated by the handler: a note needs `draft`, an outgoing reply needs `send`, and the 403
-  names that tier. The multipart form (a message with files) passes the same check; a token below
-  `draft` is refused before a file is read, since the kind arrives only after the files.
-- **Order of checks.** Authenticate (a token presented as a cookie is a 401) → `refuseToken` → role
-  permission → CSRF → locked workspace. The tier check runs before the role check so a closed route
-  answers `scope_insufficient`, not a bare `forbidden`.
+  (`httpapi/token-scope.go`): a tier, `Approval` (an agent request for every tier), or a reason it
+  is closed today: `AdminTier` (#128), `TierPending` with its target tier and issue, `PersonOnly`
+  (deciding an agent request; `Why` says why) or `NotForPeople` (routes no session reaches: public
+  pages, sign-in, provider webhooks). Every route a token may call, directly or as a request, is in
+  some MCP tool's `Spec.REST`, or in `mcpToolPending` (`mcpserver/agent_parity_test.go`) with its
+  tracking issue. `TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool` fails on an
+  unclassified or stale row, a closed row without its issue, a `PersonOnly` row without `Why`, an
+  uncovered callable route, a stale `mcpToolPending` entry, and a tool that calls a closed route; its
+  message names the file to edit. Ceilings: `maxClosedToTokens` (AdminTier + TierPending rows),
+  `maxMCPToolPending` and `maxPersonOnly` only go down without the maintainer's written approval.
+- **Tiers are a route table.** `tokenTiers` gives each route the lowest tier allowed. `gateToken`
+  lets a token through at that tier or above; below it, and on every `Approval` route, the call
+  becomes an agent request (below). A route missing at runtime is still closed to every token.
+  `TestEveryRouteIsOpenToTokensOnlyFromItsTier` keeps its own hand-written copy of the table, fails
+  until both agree, and checks that an allowed tier gets the route's success status and a lower one
+  gets 202. Posting a message is gated by the handler: a note needs `draft`, an outgoing reply
+  `send`; below that the JSON call becomes a request (a reply becomes a reply draft). The multipart
+  form (a message with files) is refused with 403 `files_need_approval` instead: a token below
+  `draft` before a file is read, a reply below `send` once the kind is read (the stored files are
+  discarded).
+- **Order of checks.** Authenticate (a token presented as a cookie is a 401) → `gateToken` (202
+  agent request, or 403 `scope_insufficient` / `person_only`) → role permission → CSRF → locked
+  workspace. The tier check runs before the role check because a token always has the agent role:
+  a request for an admin route must be filed for an admin to approve, not refused as `forbidden`.
 - **What each tier means.** `read`: conversations, messages, time entries, attachments, contacts,
   tags, saved replies, the caller's inbox activity and the team list. `draft`: also status, priority,
   assignee, applying and removing a tag (on one conversation or in bulk), creating a tag, and notes. `send`: also outgoing replies, retrying a reply, renaming and deleting
   tags, and creating contacts and conversations. Changing a tier is one edit to `tokenTiers`.
-- **Closed for every tier today** (each row names the issue that opens it): revoking sessions (a token could sign its owner out), creating tokens (a
-  `read` token could mint a `send` token), invites, and the lists of sessions and invites and the
-  email and web form channel settings, changing a teammate, writing saved replies (text a person
-  later sends to customers), which triage does not need and which would widen what a
-  prompt-injected agent can paste into a reply. `GET /agents` stays open: assignee names need it.
+- **Closed for every tier today** (each row names the issue that opens it): revoking sessions (a
+  token could sign its owner out), invites, the lists of sessions and invites and the email and web
+  form channel settings, changing a teammate or a channel, and writing saved replies (text a person
+  later sends to customers). Creating tokens, export, billing, disconnecting the email channel,
+  rotating its secret and changing the slug are agent requests for every tier. `GET /agents` stays
+  open: assignee names need it.
 - **Lifetime.** Thirty days of sliding expiry like a browser session, plus an absolute limit of 365
   days from `created_at`: `Authenticate` clamps the slid `expires_at` to it and refuses from that
   instant, however often the token is used. `insertAgentToken` takes `created_at` from the service
@@ -84,6 +91,52 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
   check (`docs/internals/mcp.md`). A new route a tool uses needs a `tokenTiers` row first.
 - The CLI (`collie token create`) resolves the workspace by slug through
   `PrivilegeWorkspaceBySlug`, like `pair`.
+
+## Agent requests
+
+A call an agent token may not make alone is stored as an agent request a person approves (#127);
+a reply from a token below `send` is the first kind, the reply draft (#114). Code:
+`httpapi/agent-request-*.go`, `store/agent-requests.go`, table `agent_requests` (RLS like every
+workspace table). User page: `docs/user/agent-requests.md`.
+
+- **Filing.** `gateToken` (or `createMessage` for a message) answers 202 with `request_id`,
+  `kind`, `status`, `summary`, `expires_at`. The row keeps method, route pattern, concrete path,
+  the JSON body (at most 64 KiB), the token id, label and tier, and the person who owns the token.
+  Only JSON or empty bodies are filed; multipart is 403 `files_need_approval` (files would sit in
+  storage for days, and a request must replay byte for byte). A request on a conversation route
+  checks the conversation exists in the workspace first, so another workspace's id is 404, not a
+  request. The summary is built from the route and the body the token sent, never from customer
+  text, because it reaches the model too. A token may have 50 pending requests (429 beyond).
+- **Approving is a replay as the approver.** `ClaimAgentRequest` locks the row (`FOR UPDATE`),
+  refuses anything not pending (409 `already_decided`) or from a revoked token (409
+  `token_revoked`), and commits `approved` before the call runs, so a double click runs it once
+  (`TestDoubleApproveRunsTheCallOnce`). `replayApproved` then builds an in-process request and
+  serves it through the API's own mux with an unexported context key that carries the approving
+  principal: `authorize` skips credential, gate and CSRF (all done on the approve call itself) and
+  applies the role permission and the lock as for that person. A non-2xx answer marks the request
+  `failed` with `result_status` (an agent approving an admin action: 403). The trade-off: a crash
+  between the claim and the result leaves `approved` with no `result_status`; we prefer that to
+  holding a row lock across a call that may send an email.
+- **What is kept.** The answer is stored up to 64 KiB, except for routes in `withheldResults`
+  (new token, inbound secret, export link, billing pages): the approver gets it once in the approve
+  answer, the row keeps `result_status` and a `result_note`. A credential or a payment page must not
+  reach the token that asked, nor sit in the database. `GET /api/v1/export` is replayed as
+  `POST /api/v1/export/link` (`approvalRunsAs`): a streamed archive in a request record would be
+  useless; the approver gets the same download the settings page uses.
+- **Attribution.** A reply sent by approving a draft has `author_agent_id` = the approver,
+  `agent_token_id` = the token that drafted it and `agent_request_id` = the request (composite FK,
+  added `NOT VALID` and validated by the next migration). Other approved actions are recorded on the
+  request only (`requested_by`, `decided_by`); they are not attributed in a timeline, the same known
+  limit as above.
+- **Expiry.** Seven days. Reads (list, get, every decision) first mark the workspace's overdue
+  pending rows `expired`, in the same transaction; there is no sweeper. A decided request never
+  runs again.
+- **Who sees what.** A token lists and reads only its own requests (another token's id is 404); a
+  person sees the workspace's. Approve and reject are `PersonOnly`: no token can decide, so an agent
+  never approves its own request. Cancel is open to the token that asked and to the person who owns
+  it; another person rejects instead.
+- **Rollback.** The down migration refuses while any request exists, like saved replies: requests
+  are the record of what agents asked and who approved it.
 
 ## Optional cloud sign-in
 
