@@ -1449,7 +1449,7 @@ paths:
                 required: [request, result]
                 properties:
                   request: {$ref: '#/components/schemas/AgentRequest'}
-                  result: {type: [object, array, string, number, integer, boolean, 'null'], description: The JSON answer of the approved call; null when it had none or was too large.}
+                  result: {type: [object, array, string, number, integer, boolean, 'null'], additionalProperties: true, description: The JSON answer of the approved call; null when it had none or was too large.}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '402': {$ref: '#/components/responses/WorkspaceLocked'}
@@ -1654,7 +1654,7 @@ components:
         method: {type: string, enum: [GET, POST, PUT, PATCH, DELETE]}
         route: {type: string, description: 'The route pattern, for example /api/v1/conversations/{id}'}
         path: {type: string, description: The concrete path that runs on approval}
-        body: {type: [object, array, string, number, integer, boolean, 'null'], description: The JSON body of the call; null when it had none.}
+        body: {type: [object, array, string, number, integer, boolean, 'null'], additionalProperties: true, description: The JSON body of the call; null when it had none.}
         summary: {type: string}
         conversation_id: {type: [string, 'null'], format: uuid}
         requested_by:
@@ -1678,7 +1678,7 @@ components:
         decided_at: {type: [string, 'null'], format: date-time}
         reason: {type: [string, 'null']}
         result_status: {type: [integer, 'null'], description: HTTP status the approved call answered}
-        result: {type: [object, array, string, number, integer, boolean, 'null'], description: 'The JSON answer of the approved call, at most 64 KiB; null when withheld (see result_note) or none.'}
+        result: {type: [object, array, string, number, integer, boolean, 'null'], additionalProperties: true, description: 'The JSON answer of the approved call, at most 64 KiB; null when withheld (see result_note) or none.'}
         result_note: {type: [string, 'null']}
         created_at: {type: string, format: date-time}
         expires_at: {type: string, format: date-time}

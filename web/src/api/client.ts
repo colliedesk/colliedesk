@@ -8,7 +8,7 @@ import {
   agentListSchema, agentSchema, contactDetailSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, emailChannelSettingsSchema, inboundSecretSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, messageListSchema, messageSchema, timeEntryListSchema,
-  billingLinkSchema, bulkUpdateResultSchema, billingSchema, publicConfigSchema, redeemedSchema, savedReplyListSchema, savedReplySchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
+  agentRequestListSchema, agentRequestSchema, approvedAgentRequestSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, publicConfigSchema, redeemedSchema, savedReplyListSchema, savedReplySchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
 import type { WorkspaceChoice } from './schemas';
 
@@ -143,6 +143,11 @@ export type BulkConversationChanges = RequestBody<'bulkUpdateConversations'>['ch
 
 const json = <Operation extends keyof operations>(value: RequestBody<Operation>): string => JSON.stringify(value);
 
+// The JSON body of an operation whose body is optional.
+type OptionalBody<Operation extends keyof operations> =
+  NonNullable<operations[Operation]['requestBody']> extends { content: { 'application/json': infer Body } } ? Body : never;
+const optionalJson = <Operation extends keyof operations>(value: OptionalBody<Operation>): string => JSON.stringify(value);
+
 function messageForm(kind: string, body: string, files: File[], cc: string[]): FormData {
   const form = new FormData();
   form.append('kind', kind);
@@ -240,4 +245,12 @@ export const api = {
   createSavedReply: (title: string, body: string) => request('/api/v1/saved-replies', savedReplySchema, { method: 'POST', body: json<'createSavedReply'>({ title, body }) }),
   updateSavedReply: (id: string, value: RequestBody<'updateSavedReply'>) => request(`/api/v1/saved-replies/${id}`, savedReplySchema, { method: 'PATCH', body: json<'updateSavedReply'>(value) }),
   deleteSavedReply: (id: string) => requestNoContent(`/api/v1/saved-replies/${id}`, { method: 'DELETE' }),
+  agentRequests: (status?: NonNullable<operations['listAgentRequests']['parameters']['query']>['status']) =>
+    request(`/api/v1/agent-requests${status ? `?status=${status}` : ''}`, agentRequestListSchema),
+  // Approving runs the agent's call as the signed-in person; body replaces the text of a reply draft.
+  approveAgentRequest: (id: string, body?: string) => request(`/api/v1/agent-requests/${id}/approve`, approvedAgentRequestSchema,
+    { method: 'POST', body: optionalJson<'approveAgentRequest'>(body === undefined ? {} : { body }) }),
+  rejectAgentRequest: (id: string, reason?: string) => request(`/api/v1/agent-requests/${id}/reject`, agentRequestSchema,
+    { method: 'POST', body: optionalJson<'rejectAgentRequest'>(reason ? { reason } : {}) }),
+  cancelAgentRequest: (id: string) => request(`/api/v1/agent-requests/${id}/cancel`, agentRequestSchema, { method: 'POST' }),
 };

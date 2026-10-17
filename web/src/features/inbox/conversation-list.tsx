@@ -31,12 +31,14 @@ interface ConversationListProps {
   onToggle?: (id: string) => void;
   onToggleAll?: (checked: boolean) => void;
   selectAllRef?: Ref<HTMLInputElement>;
+  // draftIds are the conversations with a reply draft an AI agent left for a person to send.
+  draftIds?: ReadonlySet<string>;
 }
 
 const visibleTags = 2;
 
 export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
-  failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef }: ConversationListProps) {
+  failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef, draftIds }: ConversationListProps) {
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
   const now = useNow(timezone);
   const settled = !loading && !failed;
@@ -97,6 +99,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
             <span className="conversation-meta">
               <StatusLabel status={item.status} />
               <PriorityLabel priority={item.priority} />
+              {draftIds?.has(item.id) && <span className="badge badge-draft">{messages.draftWaiting}</span>}
               {item.tags.slice(0, visibleTags).map((tag) => <span className="tag-pill" key={tag.id}>{tag.name}</span>)}
               {item.tags.length > visibleTags && <span className="tag-pill">+{item.tags.length - visibleTags}</span>}
             </span>

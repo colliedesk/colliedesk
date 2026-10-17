@@ -38,9 +38,11 @@ interface MessageItemProps {
   item: Message;
   timezone: string;
   onRetryDelivery?: (messageId: string) => void;
+  // approvedBy names the person who sent a reply an AI agent drafted (the message's author).
+  approvedBy?: string;
 }
 
-export function MessageItem({ item, timezone, onRetryDelivery }: MessageItemProps) {
+export function MessageItem({ item, timezone, onRetryDelivery, approvedBy }: MessageItemProps) {
   const [showOriginal, setShowOriginal] = useState(false);
   // The stored raw email is offered on its own, not mixed with the customer's files.
   const originalID = item.email?.original_attachment_id ?? null;
@@ -51,7 +53,9 @@ export function MessageItem({ item, timezone, onRetryDelivery }: MessageItemProp
         <Avatar name={item.author_name ?? item.email?.from ?? kindLabel(item.kind)} />
         <div className="message-byline">
           {item.author_name && <span className="message-author">{item.author_name}</span>}
-          {item.agent_token && <span className="message-author" title={item.agent_token.scope}>{messages.writtenByAgentToken(item.agent_token.agent_name, item.agent_token.label)}</span>}
+          {item.agent_token && <span className="message-author" title={item.agent_token.scope}>{item.agent_request_id
+            ? messages.draftApproved(item.agent_token.label, approvedBy ?? messages.someone)
+            : messages.writtenByAgentToken(item.agent_token.agent_name, item.agent_token.label)}</span>}
           <span className="message-kind">{item.kind === 'note' && <LockIcon />}{kindLabel(item.kind)}</span>
         </div>
         <time dateTime={item.created_at}>{formatDate(item.created_at, timezone)}</time>

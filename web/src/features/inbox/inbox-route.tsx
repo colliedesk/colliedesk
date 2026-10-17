@@ -9,6 +9,14 @@ import { defaultInboxFilters } from './inbox-filters';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
 import { retryRefusalText } from './refusal-text';
+import { usePendingRequests } from '../requests/use-pending-requests';
+
+// errorMessage reads the message of an API error body, when the answer is one.
+function errorMessage(result: unknown): string | undefined {
+  if (typeof result !== 'object' || result === null || !('error' in result)) return undefined;
+  const { error } = result as { error?: { message?: unknown } };
+  return typeof error?.message === 'string' ? error.message : undefined;
+}
 
 export function InboxRoute() {
   const client = useQueryClient();
@@ -56,6 +64,17 @@ export function InboxRoute() {
   const timeline = useQuery({ queryKey: ['messages', selected?.id], queryFn: () => api.messages(selected!.id), enabled: Boolean(selected),
     // Poll while a reply waits in the email outbox so its delivery status updates without a reload.
     refetchInterval: (query) => (query.state.data?.items.some((item) => item.delivery?.status === 'queued') ? 5000 : false) });
+  // Reply drafts AI agents left: the list marks their conversations, the open one shows them above the composer.
+  const pending = usePendingRequests().data?.items;
+  const drafts = useMemo(() => (pending ?? []).filter((item) => item.kind === 'reply_draft' && item.conversation_id), [pending]);
+  const draftConversationIds = useMemo(() => new Set(drafts.map((item) => item.conversation_id!)), [drafts]);
+  const selectedDrafts = drafts.filter((item) => item.conversation_id === selected?.id);
+  const [draftNotice, setDraftNotice] = useState<string>();
+  const afterDraft = (conversationId: string | null) => {
+    void client.invalidateQueries({ queryKey: ['agent-requests'] });
+    if (conversationId) void client.invalidateQueries({ queryKey: ['messages', conversationId] });
+    return refresh();
+  };
   const timeEntries = useQuery({ queryKey: ['time-entries', selected?.id], queryFn: () => api.timeEntries(selected!.id), enabled: Boolean(selected) });
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
@@ -88,11 +107,19 @@ export function InboxRoute() {
     // A new tab, so the draft and the files in this reply box stay where they are.
     onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
-    outboundNotice={outboundNotice} deliveryNotice={retryError ? retryRefusalText(retryError) : undefined} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
+    outboundNotice={outboundNotice} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}
     failed={conversations.isError} onRetry={() => void conversations.refetch()}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
     canManage={me.data?.agent?.role === 'admin'} onOpenSettings={() => void navigate({ to: '/settings' })}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
-    onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })} />;
+    onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })}
+    replyDrafts={selectedDrafts} draftConversationIds={draftConversationIds}
+    onSendDraft={async (draft, body) => {
+      const outcome = await api.approveAgentRequest(draft.id, body);
+      await afterDraft(draft.conversation_id);
+      // Approved but refused by the reply route (for example the trial's limits): say why, the draft is spent.
+      setDraftNotice(outcome.request.status === 'failed' ? messages.draftRefused(errorMessage(outcome.result)) : undefined);
+    }}
+    onDiscardDraft={async (draft) => { await api.rejectAgentRequest(draft.id); await afterDraft(draft.conversation_id); }} />;
 }
