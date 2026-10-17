@@ -49,3 +49,9 @@ test('a decided request shows who decided and how the call went, with no buttons
   expect(screen.getByText(/Approved by Bo Agent.*answered 403/)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
 });
+
+test('a reply draft shows its text as the customer would read it', () => {
+  render(<RequestCard item={agentRequest({ kind: 'reply_draft', body: { kind: 'outgoing', body: 'Hello Mai,\nplease restart it.' } })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText((_, node) => node?.textContent === 'Hello Mai,\nplease restart it.' && node.tagName === 'P')).toBeInTheDocument();
+  expect(screen.queryByText(/"kind"/)).not.toBeInTheDocument();
+});

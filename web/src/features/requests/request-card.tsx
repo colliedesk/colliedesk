@@ -19,6 +19,10 @@ interface RequestCardProps {
 const resultURL = (result: unknown) =>
   typeof result === 'object' && result !== null && 'url' in result && typeof result.url === 'string' ? result.url : undefined;
 
+// replyText is the text of a reply draft, shown as the customer would read it.
+const replyText = (item: AgentRequest) =>
+  item.kind === 'reply_draft' && typeof item.body === 'object' && item.body !== null && 'body' in item.body && typeof item.body.body === 'string' ? item.body.body : undefined;
+
 // RequestCard is one agent request: what it does, who asked, the exact call and, while it waits,
 // Approve and Reject. A credential or link the approved call answered is shown here once.
 export function RequestCard({ item, timezone, onApprove, onReject, initialOutcome }: RequestCardProps) {
@@ -51,7 +55,9 @@ export function RequestCard({ item, timezone, onApprove, onReject, initialOutcom
       <dl className="request-call">
         <dt>{messages.requestCall}</dt><dd><code>{`${current.method} ${current.path}`}</code></dd>
       </dl>
-      {current.body !== null && <pre className="request-body">{JSON.stringify(current.body, null, 2)}</pre>}
+      {replyText(current) !== undefined
+        ? <p className="request-body reply-draft-text">{replyText(current)}</p>
+        : current.body !== null && <pre className="request-body">{JSON.stringify(current.body, null, 2)}</pre>}
       <p className="muted-copy"><time dateTime={current.created_at}>{formatDate(current.created_at, timezone)}</time>
         {current.status === 'pending' && <> · {messages.requestExpires(formatDate(current.expires_at, timezone))}</>}</p>
       {current.status !== 'pending' && current.decided_by && <p>{messages.requestOutcome(messages.requestDecisionVerb[current.status], current.decided_by.name, current.result_status)}</p>}
