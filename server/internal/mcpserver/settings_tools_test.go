@@ -50,11 +50,15 @@ func TestAdminTierRunsTheWorkspaceThroughTheTools(t *testing.T) {
 	}
 	e.ok(session, "colliedesk_team_member_update", map[string]any{"member": "agent@settings-tools.example.com", "active": true})
 
-	invite := e.ok(session, "colliedesk_invite_create", map[string]any{"email": "new@settings-tools.example.com"})
-	inviteID, _ := at(t, invite, "invite", "id").(string)
-	if inviteID == "" || at(t, invite, "invite", "state") != "pending" || strings.Contains(stringify(invite), "token=") {
-		t.Fatalf("invite = %v", invite)
+	asked := requestedForTier(t, e, w.adminTier, "colliedesk_invite_create", map[string]any{"email": "asked@settings-tools.example.com"})
+	if strings.Contains(stringify(asked), "token=") {
+		t.Fatalf("invite request = %v", asked)
 	}
+	status, invited := e.rest(http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "new@settings-tools.example.com", "role_ceiling": "agent"}, w.admin)
+	if status != http.StatusCreated {
+		t.Fatalf("a person invites: %d %v", status, invited)
+	}
+	inviteID := at(t, invited, "invite", "id").(string)
 	if listed := stringify(e.ok(session, "colliedesk_invites_list", nil)); !strings.Contains(listed, inviteID) || strings.Contains(listed, "token=") {
 		t.Fatalf("invites = %s", listed)
 	}

@@ -188,7 +188,7 @@ const anyJson = z.unknown() as z.ZodType<Generated<'AgentRequest'>['body']>;
 export const agentRequestSchema = z.object({
   id: z.string().uuid(), kind: z.enum(['reply_draft', 'action']), status: agentRequestStatusSchema,
   method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']), route: z.string(), path: z.string(), body: anyJson, edited_body: anyJson,
-  approvable_by: z.enum(['agent', 'admin']), summary: z.string(),
+  approvable_by: z.enum(['agent', 'admin', 'owner']), summary: z.string(),
   conversation_id: z.string().uuid().nullable(),
   saved_reply: z.object({
     id: z.string().uuid(),

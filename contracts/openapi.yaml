@@ -16,10 +16,10 @@ info:
     messages, contacts, tags, the team list, and the session, invite and channel settings without
     links or secrets), `draft` (also changes that never reach a customer: status, priority, assignee,
     tags, new tags, private notes, the owner's own timezone), `send` (also outgoing replies, creating
-    contacts and conversations, saved replies) or `admin` (also workspace settings, the team, invites,
-    channels and sessions, with the creator's admin role while they keep it). A call above the tier,
-    and every call to a route that needs approval for every tier (new tokens, admin invites and
-    promotions, export, billing checkout and portal, disconnecting email, a new inbound secret, the
+    contacts and conversations, saved replies) or `admin` (also workspace settings, the team, revoking
+    invites, channels and sessions, with the creator's admin role while they keep it). A call above the tier,
+    and every call to a route that needs approval for every tier (new tokens, invites, granting,
+    keeping or taking the admin role, signing out another person, export, billing checkout and portal, disconnecting email, a new inbound secret, the
     workspace address), answers 202 with an agent request a person approves. An invite link, a token
     or the inbound secret is never in an answer to a token. A token is refused as a cookie. A token
     expires 30 days after its last use and never lives longer than one year from its creation. A
@@ -239,9 +239,9 @@ paths:
                 email: {type: string, format: email}
                 role_ceiling: {$ref: '#/components/schemas/Role'}
       description: >
-        Creates an invite. A person gets the one-time URL in `url`, once. An agent token never does: the
-        link is a credential, so its answer has `note` instead. An agent token's invite with the `admin`
-        role is filed as an agent request (202) whatever its tier.
+        Creates an invite and returns its one-time URL once. An agent token's call, whatever its tier
+        and role ceiling, is filed as an agent request (202): the link is a credential, so only the
+        person who approves sees it, once, and the stored request does not keep it.
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '201':
@@ -250,11 +250,10 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [invite]
+                required: [invite, url]
                 properties:
                   invite: {$ref: '#/components/schemas/Invite'}
-                  url: {type: string, format: uri, description: Only for a person's own session.}
-                  note: {type: string, description: 'For an agent token: why the link is not in the answer.'}
+                  url: {type: string, format: uri}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '402': {$ref: '#/components/responses/PlanLimitReached'}
@@ -549,7 +548,8 @@ paths:
       x-permission: access:write
       description: >
         Look up the TXT record `dns_record_name` and mark the support address domain verified when it
-        holds `dns_record_value`. Changing the support address resets verification.
+        holds `dns_record_value`. Changing the support address resets verification. Agent tokens may
+        check 10 times an hour per workspace (429 with `Retry-After`); a person is not limited.
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200': {$ref: '#/components/responses/EmailChannelSettings'}
@@ -557,6 +557,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
         '500': {$ref: '#/components/responses/InternalError'}
   /api/v1/channels/email/secret:
     post:
@@ -1817,7 +1818,7 @@ components:
         path: {type: string, description: The concrete path that runs on approval}
         body: {type: [object, array, string, number, integer, boolean, 'null'], additionalProperties: true, description: 'The JSON body of the call as the token sent it; null when it had none, in a list without detail=full, and 90 days after the decision.'}
         edited_body: {type: [object, array, string, number, integer, boolean, 'null'], additionalProperties: true, description: 'A reply draft as the approver edited it (text changed, copies removed); this is what ran. Null when not edited.'}
-        approvable_by: {type: string, enum: [agent, admin], description: The lowest role whose person can approve it; a person below it gets 403 and the request keeps waiting.}
+        approvable_by: {type: string, enum: [agent, admin, owner], description: 'The lowest role whose person can approve it; a person below it gets 403 and the request keeps waiting. owner: the call changes the settings of the person who owns the token (a /me route), so only that person can approve it (403 owner_only for anyone else).'}
         summary: {type: string}
         conversation_id: {type: [string, 'null'], format: uuid}
         saved_reply:
@@ -2085,7 +2086,7 @@ components:
         lists and the channel settings without links or secrets. `draft`: also change status, priority,
         assignee and tags of a conversation, create tags, add private notes and set the owner's own
         timezone. `send`: also send and retry replies, rename and delete tags, create contacts and
-        conversations, and write saved replies. `admin`: also workspace settings, the team, non-admin
+        conversations, and write saved replies. `admin`: also workspace settings, the team, revoking
         invites, the web form and email channel, and sessions; it acts with the creator's role, so only
         an admin can create it and it loses admin rights when its creator is demoted.
     AgentToken:

@@ -31,6 +31,7 @@ const (
 type webFormLimiter struct {
 	mu      sync.Mutex
 	limit   int
+	window  time.Duration
 	maxKeys int
 	order   *list.List // front is the most recently used key
 	index   map[string]*list.Element
@@ -42,7 +43,12 @@ type limiterEntry struct {
 }
 
 func newWebFormLimiter(limit, maxKeys int) *webFormLimiter {
-	return &webFormLimiter{limit: limit, maxKeys: maxKeys, order: list.New(), index: map[string]*list.Element{}}
+	return newWindowLimiter(limit, maxKeys, webFormWindow)
+}
+
+// newWindowLimiter allows limit attempts per key in a sliding window of the given length.
+func newWindowLimiter(limit, maxKeys int, window time.Duration) *webFormLimiter {
+	return &webFormLimiter{limit: limit, window: window, maxKeys: maxKeys, order: list.New(), index: map[string]*list.Element{}}
 }
 
 // allow records one attempt for key at now. When refused it reports how long until a slot frees.
@@ -64,13 +70,13 @@ func (l *webFormLimiter) allow(key string, now time.Time) (bool, time.Duration) 
 	entry := element.Value.(*limiterEntry)
 	recent := entry.hits[:0]
 	for _, hit := range entry.hits {
-		if now.Sub(hit) < webFormWindow {
+		if now.Sub(hit) < l.window {
 			recent = append(recent, hit)
 		}
 	}
 	if len(recent) >= l.limit {
 		entry.hits = recent
-		return false, webFormWindow - now.Sub(recent[0])
+		return false, l.window - now.Sub(recent[0])
 	}
 	entry.hits = append(recent, now)
 	return true, 0

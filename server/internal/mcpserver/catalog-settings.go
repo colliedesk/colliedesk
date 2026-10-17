@@ -3,8 +3,9 @@ package mcpserver
 // The tools below read and change workspace settings: the workspace timezone, the team, invites,
 // sessions, the web form, the email channel and the plan. Reading needs read (invite links, tokens
 // and the inbound secret are never in an answer). Changing needs the admin tier, which acts with the
-// creator's admin role; a lower tier's call is filed as an agent request a person approves. Granting
-// the admin role (an admin invite, promoting a teammate) is a request for every tier.
+// creator's admin role; a lower tier's call is filed as an agent request a person approves. Some
+// changes are requests for every tier: creating an invite, any change to an admin or that makes one,
+// and signing out another person.
 
 const (
 	belowAdmin = `With a token below admin, Colliedesk files the change as an agent request a person approves in Colliedesk (Requests); follow it with colliedesk_request_get.`
@@ -76,7 +77,7 @@ func teamMemberUpdateSpec() Spec {
 		Title: "Change a team member's role or access",
 		Description: `Change a team member's role (agent or admin), or deactivate or reactivate them. Deactivating ends their sessions and tokens and moves their open and pending ` +
 			`conversations to reassign_to, or leaves them unassigned; reactivating lets them sign in again with a new link. The last admin cannot be demoted or deactivated. ` +
-			`Making someone an admin always waits for a person's approval, whatever your tier. ` + belowAdmin + "\n\nTier: admin.",
+			`A change to an admin (demoting, deactivating, reactivating) or making someone an admin always waits for a person's approval, whatever your tier. ` + belowAdmin + "\n\nTier: admin.",
 		Tier: "admin",
 		REST: []string{"PATCH /api/v1/agents/{id}", "GET /api/v1/agents"},
 		Input: `{"type":"object","additionalProperties":false,"required":["member"],"properties":{` + memberProperty + `,` +
@@ -101,19 +102,12 @@ func invitesListSpec() Spec {
 }
 
 func inviteCreateSpec() Spec {
-	return Spec{
-		Name:  "colliedesk_invite_create",
-		Title: "Invite a team member",
-		Description: `Invite a person by email with the agent role. On the hosted cloud a pending invite takes a seat. The one-time link is a credential and is never shown to you: ` +
-			`with the admin tier the invite is created and a workspace admin must share a link; with a lower tier the person who approves the request sees the link once and shares it. ` +
-			`An invite with the admin role always waits for a person's approval. ` + belowAdmin + "\n\nTier: admin.",
-		Tier: "admin",
-		REST: []string{"POST /api/v1/auth/invites"},
-		Input: `{"type":"object","additionalProperties":false,"required":["email"],"properties":{"email":{"type":"string","minLength":3,"maxLength":254},` +
-			`"role":{"type":"string","enum":["agent","admin"],"default":"agent"}}}`,
-		Output: `{"type":"object","required":["invite","next"],"properties":{"invite":` + inviteSchema + `,"next":{"type":"string"}}}`,
-		run:    inviteCreate,
-	}
+	return approvalSpec("colliedesk_invite_create", "Ask to invite a team member",
+		`Ask to invite a person by email, with the agent role (default) or the admin role. On the hosted cloud a pending invite takes a seat. `+
+			`The one-time invite link is a credential: the person who approves sees it once and shares it with the invitee; it is never shown to you.`,
+		[]string{"POST /api/v1/auth/invites"},
+		`{"type":"object","additionalProperties":false,"required":["email"],"properties":{"email":{"type":"string","minLength":3,"maxLength":254},`+
+			`"role":{"type":"string","enum":["agent","admin"],"default":"agent"}}}`, inviteCreate)
 }
 
 func inviteRevokeSpec() Spec {
@@ -149,7 +143,8 @@ func sessionRevokeSpec() Spec {
 		Name:  "colliedesk_session_revoke",
 		Title: "Revoke a session or agent token",
 		Description: `Sign out a session or revoke an agent token of the workspace, for example a lost laptop or a leaked token. It cannot be undone: the person signs in again, ` +
-			`or an admin creates a new token. To revoke the token you use now, call colliedesk_token_revoke. ` + confirmFirst + " " + belowAdmin + "\n\nTier: admin.",
+			`or an admin creates a new token. Signing out another person (not an agent token, not the person this token acts as) always waits for a person's approval. ` +
+			`To revoke the token you use now, call colliedesk_token_revoke. ` + confirmFirst + " " + belowAdmin + "\n\nTier: admin.",
 		Tier: "admin", Destructive: true,
 		REST:   []string{"DELETE /api/v1/auth/sessions/{id}"},
 		Input:  `{"type":"object","additionalProperties":false,"required":["session_id"],"properties":{"session_id":{"type":"string",` + uuid + `,"description":"From colliedesk_sessions_list."}}}`,

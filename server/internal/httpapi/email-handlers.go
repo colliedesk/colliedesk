@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/mail"
+	"strconv"
 	"strings"
 	"time"
 
@@ -58,7 +59,18 @@ func (a *API) emailSettings(workspaceSlug string, channel *domain.EmailChannel) 
 	return settings
 }
 
+// tokenDomainChecksPerHour bounds the DNS lookups agent tokens can trigger for one workspace; a person
+// clicking Verify is not limited.
+const tokenDomainChecksPerHour = 10
+
 func (a *API) verifyEmailDomain(response http.ResponseWriter, request *http.Request) {
+	if who := principal(request); who.Scope != "" {
+		if allowed, wait := a.domainChecks.allow(who.Workspace.ID, a.now()); !allowed {
+			response.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+			writeError(response, http.StatusTooManyRequests, "rate_limited", "Agent tokens may check the email domain 10 times an hour. Try again later.")
+			return
+		}
+	}
 	channel, err := a.store.VerifyEmailDomain(request.Context(), principal(request).Workspace.ID, a.config.LookupTXT, time.Now().UTC())
 	if errors.Is(err, store.ErrDomainRecordMissing) {
 		writeError(response, http.StatusConflict, "dns_record_not_found",

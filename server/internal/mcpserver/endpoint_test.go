@@ -119,7 +119,7 @@ var wantAnnotations = map[string]struct {
 	"colliedesk_my_timezone_set":                  {idempotent: true, tier: "draft"},
 	"colliedesk_team_member_update":               {tier: "admin"},
 	"colliedesk_invites_list":                     {readOnly: true, tier: "read"},
-	"colliedesk_invite_create":                    {tier: "admin"},
+	"colliedesk_invite_create":                    {tier: "read"},
 	"colliedesk_invite_revoke":                    {destructive: true, tier: "admin"},
 	"colliedesk_sessions_list":                    {readOnly: true, tier: "read"},
 	"colliedesk_session_revoke":                   {destructive: true, tier: "admin"},

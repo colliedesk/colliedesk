@@ -12,9 +12,10 @@ edits it if needed, and sends it or throws it away.
   replies to a customer, renames a tag or edits a saved reply. The agent gets an answer at once that
   says the request is waiting; it is never a silent change.
 - **Actions that always need a person**, whatever the scope, `admin` included: creating an agent
-  token, inviting an admin or making a teammate an admin, exporting all workspace data (or a
-  download link for it), starting a plan checkout or opening the billing portal, disconnecting the
-  email channel, rotating the inbound email secret, and changing the workspace address.
+  token, creating an invite, making a teammate an admin or changing an admin (demoting,
+  deactivating, reactivating), signing out another person's device, exporting all workspace data
+  (or a download link for it), starting a plan checkout or opening the billing portal, disconnecting
+  the email channel, rotating the inbound email secret, and changing the workspace address.
 
 A settings change shows what changes, from what to what, for example "Change the workspace
 timezone: UTC → Asia/Tokyo" or "Change ada@example.com: role agent → admin". A settings call with a
@@ -36,7 +37,9 @@ Code (read)"), the exact call it will make and the data it sends.
 - **Approve** runs the call once, **as you**: your role and permissions apply. A request only an
   admin may run (billing, export, new tokens, the workspace address, team, invites and channel
   settings) shows "Only an admin can
-  approve this" to everyone else, and keeps waiting for an admin. If the call is refused anyway
+  approve this" to everyone else, and keeps waiting for an admin. A request that changes the token
+  owner's own settings (their timezone) can be approved only by that person, because it runs as the
+  person who approves. If the call is refused anyway
   (for example the trial's sending limits), the request is marked **Failed**. Two clicks, or two
   people at once, still run it once. Closing the tab after you clicked does not stop it.
 - **Reject** refuses it, with a reason the agent can read if you write one. A rejected request

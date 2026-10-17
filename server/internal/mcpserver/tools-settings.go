@@ -184,15 +184,7 @@ func inviteCreate(c *call, arguments map[string]any) (any, error) {
 	if args.Role == "" {
 		args.Role = "agent"
 	}
-	var created struct {
-		Invite restInvite `json:"invite"`
-	}
-	if err := c.send(http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": strings.TrimSpace(args.Email), "role_ceiling": args.Role}, &created); err != nil {
-		return nil, err
-	}
-	return map[string]any{"invite": inviteView(created.Invite),
-		"next": "The invite is pending. Its one-time link is never shown to an agent: tell the user that a workspace admin must share a link with " + created.Invite.Email +
-			" (for example by revoking this invite and creating it again in Settings → Invites)."}, nil
+	return ask(c, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": strings.TrimSpace(args.Email), "role_ceiling": args.Role})
 }
 
 func inviteRevoke(c *call, arguments map[string]any) (any, error) {

@@ -98,11 +98,6 @@ func TestGrantingTheAdminRoleIsARequestEvenForTheAdminTier(t *testing.T) {
 			}
 		}
 	}
-	// A non-admin invite and a demotion run directly for the admin tier.
-	created := request(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "helper@admin-grant.example.com", "role_ceiling": "agent"}, token, nil)
-	if created.Code != http.StatusCreated {
-		t.Fatalf("admin token creating an agent invite: status=%d body=%s", created.Code, created.Body.String())
-	}
 }
 
 // An invite link and the inbound secret are credentials: no token ever receives them, directly, in a
@@ -117,8 +112,8 @@ func TestNoInviteLinkOrSecretReachesAToken(t *testing.T) {
 	read := issueToken(t, api, admin, "Reader", "read").Token
 
 	direct := request(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "direct@secret-keeper.example.com", "role_ceiling": "agent"}, adminToken, nil)
-	if direct.Code != http.StatusCreated {
-		t.Fatalf("admin token invite: status=%d body=%s", direct.Code, direct.Body.String())
+	if direct.Code != http.StatusAccepted {
+		t.Fatalf("admin token invite: status=%d body=%s, want 202", direct.Code, direct.Body.String())
 	}
 	asked := accepted(t, api, http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "asked@secret-keeper.example.com", "role_ceiling": "agent"}, send)
 	approved := approve(t, api, admin, asked.RequestID, nil)

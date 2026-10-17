@@ -20,7 +20,7 @@ var routeTiers = map[string]string{
 	"GET /api/v1/auth/sessions":                                  "read",
 	"DELETE /api/v1/auth/sessions/{id}":                          "admin",
 	"POST /api/v1/auth/tokens":                                   "approval",
-	"POST /api/v1/auth/invites":                                  "admin",
+	"POST /api/v1/auth/invites":                                  "approval",
 	"GET /api/v1/auth/invites":                                   "read",
 	"DELETE /api/v1/auth/invites/{id}":                           "admin",
 	"GET /api/v1/conversations":                                  "read",

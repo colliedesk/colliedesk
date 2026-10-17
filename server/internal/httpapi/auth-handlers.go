@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -89,7 +90,22 @@ func (a *API) listSessions(response http.ResponseWriter, request *http.Request) 
 	writeJSON(response, http.StatusOK, map[string]any{"items": sessions})
 }
 
+var sessionRevokeRoute = Route{http.MethodDelete, "/api/v1/auth/sessions/{id}", auth.PermissionAccessRead}
+
 func (a *API) revokeSession(response http.ResponseWriter, request *http.Request) {
+	// Signing another person out waits for a person whatever the token's tier; the creator's own
+	// sign-ins and any agent token are revoked directly.
+	if who := principal(request); who.Scope != "" {
+		target, found, err := a.workspaceSession(request.Context(), who, request.PathValue("id"))
+		if err != nil {
+			writeStoreError(response, err)
+			return
+		}
+		if found && target.Scope == nil && target.AgentID != who.Agent.ID {
+			a.fileAgentRequest(response, request, sessionRevokeRoute, who, domain.AgentRequestAction, json.RawMessage{}, "")
+			return
+		}
+	}
 	ok, err := a.auth.RevokeSession(request.Context(), principal(request), request.PathValue("id"))
 	if err != nil {
 		writeStoreError(response, err)

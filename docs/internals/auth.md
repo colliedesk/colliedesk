@@ -83,23 +83,32 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
   of those answers holds a token, an invite link or the inbound secret (`TestTokensReadSettingsWithoutLinksOrSecrets`
   scans them). The role still applies: an agent-role token lists only its owner's sessions.
   `draft` also sets the owner's own timezone. `admin`: workspace timezone, team member role and
-  active state, invites with the agent role, revoking invites and sessions, the web form, the email
+  active state, revoking invites and sessions, the web form, the email
   channel and domain verification, and `GET /billing` (admin-only by role, so it is classified
   `admin` and a lower tier files a request instead of a role refusal).
-- **Approval for every tier, `admin` included:** creating tokens, export, billing checkout and
-  portal, disconnecting the email channel, rotating its secret, changing the slug (`Approval` rows),
-  and granting the admin role: `createInvite` with `role_ceiling: admin` and `updateAgent` with
-  `role: admin` file the request themselves (`fileGrantRequest`) when the caller is a token.
-- **Credentials never reach a token.** `createInvite` leaves `url` out of a token's answer and says
-  why in `note`; an approved invite request keeps no result (`withheldResults`), so the token
-  reading its request does not get the link either; the approver sees it once. A settings request
-  (`settingsFields` in `agent-request-settings.go`) is refused with 400 when its body has a field
-  the route does not take, so nothing pasted beside the real fields is stored for days. Its summary
-  says what changes from what to what (`summarizeSettingsRequest`).
-- **Revoking sessions from a token** is allowed at `admin` (security-positive: a leaked token can
-  be cut off by an agent). The session list shows the revocation; `revokeSession` also logs the token
-  session that did it. An admin token can revoke its creator's browser sessions; the creator signs
-  in again with a pairing link, so nothing locks people out for good.
+- **Approval for every tier, `admin` included:** creating tokens, creating invites, export, billing
+  checkout and portal, disconnecting the email channel, rotating its secret, changing the slug
+  (`Approval` rows). The handlers file the rest themselves when the caller is a token
+  (`fileGrantRequest`): `updateAgent` when the change asks for the admin role or the target is an
+  admin now (`touchesAdmin`: promoting, demoting, deactivating, and reactivating an admin, which
+  would hand the role back), and `revokeSession` when the target is a person's sign-in (not a token)
+  of anyone other than the token's own person.
+- **Credentials never reach a token.** Creating an invite is `Approval`, so a token never gets a
+  `201`; the approved call's answer is shown once to the approver and not kept (`withheldResults`),
+  so the token reading its request does not get the link either. A settings request
+  (`settingsFields` in `agent-request-settings.go`) is refused with 400 when its body is not a JSON
+  object or has a field the route does not take, so nothing pasted beside the real fields is stored
+  for days. Its summary says what changes, from what to what (`summarizeSettingsRequest`); a session
+  revoke names the session only when the token's role could list it.
+- **Owner requests.** A `/me` route (`ownerRoutes`: `PATCH /agents/me/timezone`) replays as the
+  approver, so only the person who owns the token may approve it (`approvable_by: owner`, 403
+  `owner_only` for anyone else); otherwise an admin approving would change the admin's own timezone.
+- **Revoking sessions from a token** is allowed at `admin` for agent tokens and the token person's
+  own sign-ins (security-positive: a leaked token can be cut off by an agent). The session list shows
+  the revocation; `revokeSession` also logs the token session that did it.
+- **Domain verification from a token** is limited to 10 checks per workspace per hour (in-process
+  sliding window, 429 with `Retry-After`), so an agent cannot make the server hammer DNS. People are
+  not limited.
 - **Lifetime.** Thirty days of sliding expiry like a browser session, plus an absolute limit of 365
   days from `created_at`: `Authenticate` clamps the slid `expires_at` to it and refuses from that
   instant, however often the token is used. `insertAgentToken` takes `created_at` from the service
@@ -117,7 +126,10 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
 - **Rollback.** An image older than the migration needs nothing from the operator any more: it
   cannot find a token (see the first item). Do not rely on a manual `UPDATE` of `sessions`. The down
   migration of the admin tier revokes every admin token and stores it as `send` with the agent
-  ceiling, and records the admin token's requests under `send`, so the older constraints hold.
+  ceiling, and records the admin token's requests under `send`, so the older constraints hold. This
+  loses the audit fact that those tokens and requests were `admin`; it is an accepted rollback cost
+  (rollback is not the production recovery path, and the tokens are revoked so nothing they could do
+  survives).
 - **MCP.** `/mcp` accepts a bearer only, authenticated by the same `Authenticate`, and each tool call
   runs through the REST handler with that bearer, so these tiers bind MCP tools without a second
   check (`docs/internals/mcp.md`). A new route a tool uses needs a `tokenTiers` row first.

@@ -57,10 +57,12 @@ var (
 // an agent may do, such as replying, creating contacts and conversations, and writing the saved replies
 // the team sends (every change is a version that can be restored, and a delete stays in the trash for
 // 30 days). Posting a message is gated by the handler: a note needs draft, an outgoing reply needs send.
-// admin: workspace settings, the team, invites, channels and sessions. An admin token acts with its
-// creator's role, so it reaches these only while that person is an admin, and the role still decides
-// the admin-only reads (billing is classified admin for that reason). Granting the admin role (an
-// admin invite, promoting a teammate) becomes an agent request for every tier, filed by the handler.
+// admin: workspace settings, the team, revoking invites, channels and sessions. An admin token acts
+// with its creator's role, so it reaches these only while that person is an admin, and the role still
+// decides the admin-only reads (billing is classified admin for that reason). The handlers file a
+// request for every tier when the change is risky for people: a change that grants, keeps or takes
+// the admin role (promoting, reactivating, demoting or deactivating an admin) and signing out another
+// person. Creating an invite is Approval: its link is a credential only the approver sees.
 //
 // A token below a route's tier, and every token on an Approval route (new credentials, money, data
 // leaving), gets an agent request a person approves instead of a refusal. Deciding a request is
@@ -112,7 +114,6 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/billing":                             tier(auth.ScopeAdmin),
 	"PATCH /api/v1/workspace/timezone":                tier(auth.ScopeAdmin),
 	"PATCH /api/v1/agents/{id}":                       tier(auth.ScopeAdmin),
-	"POST /api/v1/auth/invites":                       tier(auth.ScopeAdmin),
 	"DELETE /api/v1/auth/invites/{id}":                tier(auth.ScopeAdmin),
 	"PUT /api/v1/channels/web-form":                   tier(auth.ScopeAdmin),
 	"PUT /api/v1/channels/email":                      tier(auth.ScopeAdmin),
@@ -120,6 +121,7 @@ var tokenTiers = map[string]TokenAccess{
 	"DELETE /api/v1/auth/sessions/{id}":               tier(auth.ScopeAdmin),
 
 	"POST /api/v1/auth/tokens":           approvalRequired,
+	"POST /api/v1/auth/invites":          approvalRequired,
 	"GET /api/v1/export":                 approvalRequired,
 	"POST /api/v1/export/link":           approvalRequired,
 	"POST /api/v1/billing/checkout":      approvalRequired,

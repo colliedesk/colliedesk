@@ -3,6 +3,7 @@ import { expect, test, vi } from 'vitest';
 import { InvalidRequestError } from '../../api/client';
 import { agentRequest } from './request.test.fixture';
 import { RequestCard } from './request-card';
+import { canApproveRequest } from './request-call';
 
 const actions = () => ({ onApprove: vi.fn().mockResolvedValue({ request: agentRequest({ status: 'approved' }), result: null }), onReject: vi.fn().mockResolvedValue(undefined) });
 
@@ -115,4 +116,15 @@ test('a proposed version restore shows the text it would bring back', () => {
   expect(within(proposal).getByText('Refunded in 5 days.').closest('ins')).not.toBeNull();
   expect(within(proposal).getByText('Refunds').closest('ins')).not.toBeNull();
   expect(within(proposal).getByText(/version 1/)).toBeInTheDocument();
+});
+
+test('a request that changes the token owner\'s own settings is approved only by that person', () => {
+  const item = agentRequest({ approvable_by: 'owner', summary: 'Change the timezone of ada@example.com: UTC → Asia/Tokyo' });
+  const owner = item.requested_by.agent_id!;
+  expect(canApproveRequest(item, { id: owner, role: 'agent' })).toBe(true);
+  expect(canApproveRequest(item, { id: '99999999-9999-4999-8999-999999999999', role: 'admin' })).toBe(false);
+  expect(canApproveRequest(agentRequest({ approvable_by: 'admin' }), { id: owner, role: 'agent' })).toBe(false);
+  expect(canApproveRequest(agentRequest({ approvable_by: 'agent' }), { id: owner, role: 'agent' })).toBe(true);
+  render(<RequestCard item={item} canApprove={false} timezone="UTC" {...actions()} />);
+  expect(screen.getByText('Only the person who owns this token can approve it: it changes their own settings.')).toBeInTheDocument();
 });

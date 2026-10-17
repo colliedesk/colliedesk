@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 // settingsFields lists, for each settings route a token may ask for, the fields its call takes. A
@@ -29,22 +30,23 @@ var settingsFields = map[string][]string{
 	"GET /api/v1/billing":                             {},
 }
 
-// unknownSettingsField names the first field of body that route does not take, or "" when there is none.
-func unknownSettingsField(route Route, body json.RawMessage) (string, bool) {
+// settingsBodyProblem says why body cannot be filed for a settings route: it is not a JSON object, or
+// it has a field the route does not take. It returns "" when the body may be filed.
+func settingsBodyProblem(route Route, body json.RawMessage) string {
 	allowed, ok := settingsFields[route.Method+" "+route.Pattern]
 	if !ok || len(body) == 0 {
-		return "", false
+		return ""
 	}
 	var fields map[string]json.RawMessage
-	if json.Unmarshal(body, &fields) != nil {
-		return "", false
+	if json.Unmarshal(body, &fields) != nil || fields == nil {
+		return "The body of this call must be a JSON object. Nothing was filed."
 	}
 	for _, name := range slices.Sorted(maps.Keys(fields)) {
 		if !slices.Contains(allowed, name) {
-			return name, true
+			return "This call does not take the field " + name + ". Nothing was filed; send only the fields the route takes."
 		}
 	}
-	return "", false
+	return ""
 }
 
 // summarizeSettingsRequest is what a person reads before approving a settings change: what changes,
@@ -88,11 +90,20 @@ func (a *API) summarizeSettingsRequest(ctx context.Context, request *http.Reques
 		return "Revoke the invite " + id
 	case "PUT /api/v1/channels/web-form":
 		form, err := a.store.GetWebForm(ctx, who.Workspace.ID)
-		if err != nil || call.Enabled == nil {
+		if err != nil {
 			return ""
 		}
-		return fmt.Sprintf("Change the web form: %s → %s; allowed origins: %s → %s",
-			onOff(form.Enabled), onOff(*call.Enabled), originList(form.AllowedOrigins), originList(call.AllowedOrigins))
+		var changes []string
+		if call.Enabled != nil && *call.Enabled != form.Enabled {
+			changes = append(changes, onOff(form.Enabled)+" → "+onOff(*call.Enabled))
+		}
+		if call.AllowedOrigins != nil && !slices.Equal(call.AllowedOrigins, form.AllowedOrigins) {
+			changes = append(changes, "allowed origins: "+originList(form.AllowedOrigins)+" → "+originList(call.AllowedOrigins))
+		}
+		if len(changes) == 0 {
+			changes = append(changes, "no change")
+		}
+		return "Change the web form: " + strings.Join(changes, "; ")
 	case "PUT /api/v1/channels/email":
 		before := "not connected"
 		if channel, err := a.store.GetEmailChannel(ctx, who.Workspace.ID); err == nil && channel != nil {
@@ -150,20 +161,33 @@ func (a *API) summarizeTeamChange(ctx context.Context, workspaceID, id string, r
 	return "Change " + who + ": " + strings.Join(changes, "; ")
 }
 
-func (a *API) summarizeSessionRevoke(ctx context.Context, who auth.Principal, id string) string {
-	// The lookup lists the whole workspace's sessions, so the summary names any session the approver
-	// (an admin) could revoke; it reads only label and owner, never a token.
+// workspaceSession finds a session of the caller's workspace by id, whoever owns it. It is for
+// decisions and summaries only; what the caller may see is decided by its own role.
+func (a *API) workspaceSession(ctx context.Context, who auth.Principal, id string) (domain.Session, bool, error) {
 	everyone := who
 	everyone.Agent.Role = "admin"
 	sessions, err := a.auth.ListSessions(ctx, everyone)
-	if err == nil {
-		for _, session := range sessions {
-			if session.ID == id {
-				return fmt.Sprintf("Revoke the session %q of %s", session.Label, session.AgentEmail)
-			}
+	if err != nil {
+		return domain.Session{}, false, err
+	}
+	for _, session := range sessions {
+		if session.ID == id {
+			return session, true, nil
 		}
 	}
-	return "Revoke the session " + id
+	return domain.Session{}, false, nil
+}
+
+// summarizeSessionRevoke names the session only when the token's own role could list it.
+func (a *API) summarizeSessionRevoke(ctx context.Context, who auth.Principal, id string) string {
+	session, found, err := a.workspaceSession(ctx, who, id)
+	if err != nil || !found {
+		return "Revoke the session " + id
+	}
+	if who.Agent.Role != "admin" && session.AgentID != who.Agent.ID {
+		return "Revoke a session"
+	}
+	return fmt.Sprintf("Revoke the session %q of %s", session.Label, session.AgentEmail)
 }
 
 func orNone(value *string, none string) string {

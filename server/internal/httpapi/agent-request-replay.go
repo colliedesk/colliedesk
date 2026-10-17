@@ -127,8 +127,19 @@ func approvalPermission(item domain.AgentRequest) string {
 	return routePermissions[key]
 }
 
-// approvableBy is the lowest role that may approve item.
+// ownerRoutes act on the person the token belongs to (the "me" of the path). Approving one replays it
+// as the approver, so only that person may approve it; anyone else would change their own settings.
+var ownerRoutes = map[string]bool{"PATCH /api/v1/agents/me/timezone": true}
+
+// ownerOnly reports whether only the token's person may approve item.
+func ownerOnly(item domain.AgentRequest) bool { return ownerRoutes[item.Method+" "+item.Route] }
+
+// approvableBy is who may approve item: "owner" (only the person the token belongs to), or the lowest
+// role, "agent" or "admin".
 func approvableBy(item domain.AgentRequest) string {
+	if ownerOnly(item) {
+		return "owner"
+	}
 	if auth.HasPermission("agent", approvalPermission(item)) {
 		return "agent"
 	}

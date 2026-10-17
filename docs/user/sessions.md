@@ -40,7 +40,7 @@ it, create a new token and revoke the old one. The agent sends it as `Authorizat
 | `read` | Read conversations, messages, contacts, tags, saved replies and the team list, and see the session and invite lists and the email channel and web form settings. No answer ever holds an invite link, a token or the inbound email secret. |
 | `draft` | Everything in `read`, plus change status, priority, assignee and tags of one conversation or several at once, create a tag, add private notes, and set your own timezone. Nothing reaches a customer. |
 | `send` | Everything in `draft`, plus send replies to customers, retry a failed reply, rename and delete tags, create contacts and conversations, and create, edit, delete and restore [saved replies](saved-replies.md#ai-agents) |
-| `admin` | Everything in `send`, plus change the workspace timezone, change a teammate's role, deactivate and reactivate them, create and revoke invites with the agent role, set up the web form and the email channel, verify the email domain, read the plan, and revoke sessions and tokens. Only an admin can create it. |
+| `admin` | Everything in `send`, plus change the workspace timezone, deactivate and reactivate agents, revoke invites, set up the web form and the email channel, verify the email domain (10 times an hour), read the plan, revoke agent tokens, and sign out your own devices. Only an admin can create it. |
 
 Start with `read` or `draft`. Give `admin` only to an agent you trust to run the workspace.
 
@@ -49,16 +49,16 @@ keeps working with the agent role only; if you are deactivated, it stops working
 `draft` or `send` token always has the agent role, even when an admin creates it. An agent that
 asks for an `admin` token files a request; it is created only when an admin approves it.
 
-An invite that an `admin` token creates has no link in the answer: an invite link signs someone
-in, so no token receives it. The invite shows in **Settings → Invites**. To give the person a link,
-revoke the invite there and create it again, or let the agent ask with a lower tier so the person
-who approves the request sees the link once. When an agent token revokes a session, the session
-list shows it as **Revoked** and the server log names the token that did it.
+These actions are always requests, for every tier including `admin`: creating an invite (the
+person who approves sees its link once; no token ever does), making someone an admin, any change to
+an admin (demoting, deactivating, reactivating), and signing out another person's device. When an
+agent token revokes a session, the session list shows it as **Revoked** and the server log names
+the token that did it.
 
 A call above the scope is not refused: it becomes an [agent request](agent-requests.md) that a
 person approves or rejects, and nothing changes until then (HTTP 202). A reply from a token below
-`send` becomes a reply draft a person sends. Creating tokens, inviting an admin or making someone an
-admin, export, billing checkout and portal, disconnecting the email channel, rotating its secret and
+`send` becomes a reply draft a person sends. Creating tokens, invites, any change to an admin or that makes
+one, signing out another person, export, billing checkout and portal, disconnecting the email channel, rotating its secret and
 changing the workspace address always wait for a person, whatever the scope, `admin` included.
 Approving or rejecting a request is for people only.
 

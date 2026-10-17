@@ -66,8 +66,8 @@ func (a *API) fileAgentRequest(response http.ResponseWriter, request *http.Reque
 		}
 		body = raw
 	}
-	if field, unknown := unknownSettingsField(route, body); unknown {
-		writeError(response, http.StatusBadRequest, "invalid_request", "This call does not take the field "+field+". Nothing was filed; send only the fields the route takes.")
+	if problem := settingsBodyProblem(route, body); problem != "" {
+		writeError(response, http.StatusBadRequest, "invalid_request", problem)
 		return
 	}
 	var conversationID *string

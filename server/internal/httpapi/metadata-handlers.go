@@ -22,6 +22,24 @@ var uuidShape = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4
 
 var agentUpdateRoute = Route{http.MethodPatch, "/api/v1/agents/{id}", auth.PermissionAccessWrite}
 
+// touchesAdmin reports whether a team change is about the admin role: it asks for it, or the target
+// has it now. An unknown target is not (the update answers 404).
+func (a *API) touchesAdmin(request *http.Request, role *string) (bool, error) {
+	if role != nil && *role == "admin" {
+		return true, nil
+	}
+	members, err := a.store.ListAgents(request.Context(), principal(request).Workspace.ID)
+	if err != nil {
+		return false, err
+	}
+	for _, member := range members {
+		if member.ID == request.PathValue("id") {
+			return member.Role == "admin", nil
+		}
+	}
+	return false, nil
+}
+
 // updateAgent changes the role or the active state of an agent. reassign_to only makes sense with
 // active=false: it names the agent that takes over the open and pending conversations.
 func (a *API) updateAgent(response http.ResponseWriter, request *http.Request) {
@@ -54,10 +72,18 @@ func (a *API) updateAgent(response http.ResponseWriter, request *http.Request) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "reassign_to only applies when active is false.")
 		return
 	}
-	// Granting the admin role waits for a person whatever the token's tier.
-	if who := principal(request); who.Scope != "" && input.Role != nil && *input.Role == "admin" {
-		a.fileGrantRequest(response, request, agentUpdateRoute, who, input)
-		return
+	// A change that grants, keeps or takes the admin role waits for a person whatever the token's tier:
+	// promoting, reactivating an admin (it keeps the role), demoting or deactivating an admin.
+	if who := principal(request); who.Scope != "" {
+		touchesAdmin, err := a.touchesAdmin(request, input.Role)
+		if err != nil {
+			writeStoreError(response, err)
+			return
+		}
+		if touchesAdmin {
+			a.fileGrantRequest(response, request, agentUpdateRoute, who, input)
+			return
+		}
 	}
 	member, err := a.store.UpdateAgent(request.Context(), principal(request).Workspace.ID, request.PathValue("id"),
 		store.AgentUpdate{Role: input.Role, Active: input.Active, ReassignTo: input.ReassignTo})

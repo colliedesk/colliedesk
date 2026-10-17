@@ -13,10 +13,10 @@ the person already has a higher role. Revoke an unused invite with **Revoke** in
 Each invite shows its state: **Pending** (not used yet), **Accepted**, **Revoked** or **Expired**.
 Only a pending invite can be revoked. To end a teammate's access after they joined, deactivate them in [Manage your team](team.md).
 
-An AI agent with an `admin` [agent token](sessions.md#agent-tokens) can create and revoke invites
-with the **Agent** role. It never sees the link: the invite appears in the list, and an admin
-shares a link. An invite with the **Admin** role from any agent waits for an admin to approve it in
-[Requests](agent-requests.md); the person who approves sees the link once.
+An AI agent can ask for an invite with any [agent token](sessions.md#agent-tokens). The invite is
+created only when a person approves it in [Requests](agent-requests.md), and the person who
+approves sees the link once and sends it; the agent never sees it. An agent with an `admin` token
+can revoke invites directly.
 
 Roles:
 

@@ -8,12 +8,8 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
-var inviteRoute = Route{http.MethodPost, "/api/v1/auth/invites", auth.PermissionAccessWrite}
-
-// tokenInviteNote tells an agent token why its invite answer has no link.
-const tokenInviteNote = "The invite exists, but its one-time link is a credential and is never shown to an agent token. " +
-	"A person shares the link: approving an invite requested through Colliedesk shows it to them once."
-
+// createInvite runs for people only: a token's invite is an agent request (Approval), so its
+// one-time link reaches the approving person once and never the token.
 func (a *API) createInvite(response http.ResponseWriter, request *http.Request) {
 	var input struct {
 		Email       string `json:"email"`
@@ -23,25 +19,15 @@ func (a *API) createInvite(response http.ResponseWriter, request *http.Request) 
 		writeError(response, http.StatusBadRequest, "invalid_request", "Email and role ceiling are required.")
 		return
 	}
-	who := principal(request)
-	// Granting the admin role waits for a person whatever the token's tier.
-	if who.Scope != "" && input.RoleCeiling == "admin" {
-		a.fileGrantRequest(response, request, inviteRoute, who, input)
-		return
-	}
-	invite, link, err := a.auth.CreateInvite(request.Context(), who, input.Email, input.RoleCeiling)
+	invite, link, err := a.auth.CreateInvite(request.Context(), principal(request), input.Email, input.RoleCeiling)
 	if err != nil {
 		writeStoreError(response, err)
-		return
-	}
-	if who.Scope != "" {
-		writeJSON(response, http.StatusCreated, map[string]any{"invite": invite, "note": tokenInviteNote})
 		return
 	}
 	writeJSON(response, http.StatusCreated, map[string]any{"invite": invite, "url": link})
 }
 
-// fileGrantRequest files a token's call that would grant the admin role as an agent request.
+// fileGrantRequest files a token's call that a person must approve whatever the token's tier.
 func (a *API) fileGrantRequest(response http.ResponseWriter, request *http.Request, route Route, who auth.Principal, call any) {
 	encoded, err := json.Marshal(call)
 	if err != nil {
@@ -50,7 +36,6 @@ func (a *API) fileGrantRequest(response http.ResponseWriter, request *http.Reque
 	}
 	a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, encoded, "")
 }
-
 func (a *API) listInvites(response http.ResponseWriter, request *http.Request) {
 	items, err := a.auth.ListInvites(request.Context(), principal(request).Workspace.ID)
 	if err != nil {
