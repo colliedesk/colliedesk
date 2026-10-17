@@ -10,7 +10,9 @@ type Spec struct {
 	Tier       string
 	ReadOnly   bool
 	Idempotent bool
-	// Destructive marks a tool whose effect cannot be undone: it reaches a customer, deletes, or revokes.
+	// Destructive marks a tool whose effect cannot be undone now: it reaches a customer, deletes for
+	// good, or revokes. A delete that waits in a trash (saved replies, restorable for 30 days) is not
+	// destructive; its description says when it becomes permanent.
 	Destructive bool
 	// REST lists the routes the tool calls, as "METHOD pattern" strings of httpapi.Routes.
 	REST []string
@@ -28,6 +30,8 @@ func Catalog() []Spec {
 		whoamiSpec(), inboxSearchSpec(), inboxActivitySpec(), conversationGetSpec(), timeEntriesListSpec(), attachmentGetSpec(),
 		conversationUpdateSpec(), conversationsBulkUpdateSpec(), noteAddSpec(), replySendSpec(), replyRetrySpec(), conversationCreateSpec(),
 		contactsFindSpec(), contactGetSpec(), contactCreateSpec(), tagsListSpec(), tagRenameSpec(), tagDeleteSpec(), agentsListSpec(),
+		savedRepliesListSpec(), savedReplyGetSpec(), savedReplyCreateSpec(), savedReplyUpdateSpec(), savedReplyDeleteSpec(),
+		savedReplyHistorySpec(), savedReplyVersionRestoreSpec(), savedRepliesTrashSpec(), savedReplyUndeleteSpec(),
 		tokenRevokeSpec(), docsSearchSpec(),
 		replyDraftSpec(), requestsListSpec(), requestGetSpec(), requestCancelSpec(),
 		tokenCreateRequestSpec(), workspaceExportRequestSpec(), billingRequestSpec(), emailChannelDisconnectRequestSpec(),

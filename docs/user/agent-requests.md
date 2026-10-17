@@ -9,8 +9,8 @@ edits it if needed, and sends it or throws it away.
 ## What becomes a request
 
 - **Anything above the token's scope.** A `read` token that changes a status, a `draft` token that
-  replies to a customer or renames a tag. The agent gets an answer at once that says the request
-  is waiting; it is never a silent change.
+  replies to a customer, renames a tag or edits a saved reply. The agent gets an answer at once that
+  says the request is waiting; it is never a silent change.
 - **Actions that always need a person**, whatever the scope: creating an agent token, exporting all
   workspace data (or a download link for it), starting a plan checkout or opening the billing
   portal, disconnecting the email channel, rotating the inbound email secret, and changing the
@@ -46,6 +46,9 @@ A request waits seven days, then expires and can no longer be approved. 90 days 
 decided, Colliedesk deletes the call it carried (and an edited draft); the record of who asked,
 what for, and who decided stays. The agent can withdraw its
 own request before anyone decides. A request of a token that was revoked can only be rejected.
+
+A proposed change to a [saved reply](saved-replies.md#ai-agents) shows the reply before and after
+instead of the raw call, and says when the reply changed after the agent asked.
 
 ## Reply drafts
 

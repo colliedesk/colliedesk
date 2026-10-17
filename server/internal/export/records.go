@@ -47,11 +47,31 @@ type SavedReply struct {
 	CreatedByAgentID *string   `json:"created_by_agent_id"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
+	// DeletedAt is set while the reply is in the trash; it is deleted for good 30 days later.
+	DeletedAt        *time.Time `json:"deleted_at"`
+	DeletedByAgentID *string    `json:"deleted_by_agent_id"`
+}
+
+// SavedReplyVersion is one version of a saved reply: what it said after a change, who made the change,
+// through which agent token, and the agent request a person approved for it.
+type SavedReplyVersion struct {
+	SavedReplyID        string    `json:"saved_reply_id"`
+	Version             int       `json:"version"`
+	Kind                string    `json:"kind"`
+	RestoredFromVersion *int      `json:"restored_from_version"`
+	Title               string    `json:"title"`
+	Body                string    `json:"body"`
+	ChangedByAgentID    *string   `json:"changed_by_agent_id"`
+	TokenID             *string   `json:"token_id"`
+	TokenLabel          *string   `json:"token_label"`
+	AgentRequestID      *string   `json:"agent_request_id"`
+	CreatedAt           time.Time `json:"created_at"`
 }
 
 // AgentRequest is a call an agent token asked a person to approve, and what became of it. The answer
 // of an approved call is not exported: credentials and links are never stored, and other answers are
-// the records exported elsewhere. Body and EditedBody are null once 90 days passed after the decision.
+// the records exported elsewhere. Body, EditedBody and SavedReplyBefore are null once 90 days passed
+// after the decision.
 type AgentRequest struct {
 	ID                 string          `json:"id"`
 	Kind               string          `json:"kind"`
@@ -74,6 +94,10 @@ type AgentRequest struct {
 	ResultNote         *string         `json:"result_note"`
 	CreatedAt          time.Time       `json:"created_at"`
 	ExpiresAt          time.Time       `json:"expires_at"`
+	// SavedReplyID and SavedReplyBefore name the saved reply a request acts on and keep it as the token
+	// saw it (with the version a restore applies).
+	SavedReplyID     *string         `json:"saved_reply_id"`
+	SavedReplyBefore json.RawMessage `json:"saved_reply_before"`
 }
 
 // Attachment describes one file. Path is its location in the archive; StorageKey is where the
@@ -130,7 +154,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// Tag*, SavedReply*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// Tag*, SavedReply*, SavedReplyVersion*, AgentRequest*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -138,6 +162,7 @@ type Sink interface {
 	Contact(Contact) error
 	Tag(Tag) error
 	SavedReply(SavedReply) error
+	SavedReplyVersion(SavedReplyVersion) error
 	AgentRequest(AgentRequest) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error

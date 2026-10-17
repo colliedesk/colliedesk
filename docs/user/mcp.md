@@ -16,9 +16,9 @@ private notes for your team. With a `send` token it can also reply to customers.
 
 | Tier | The agent can |
 |---|---|
-| `read` | Search the inbox, follow what changed, read conversations, attachments, logged time and customers, list tags and team members. It cannot see invites, the list of sessions or the email and web form settings. |
+| `read` | Search the inbox, follow what changed, read conversations, attachments, logged time and customers, list tags and team members, and read saved replies with their history and trash. It cannot see invites, the list of sessions or the email and web form settings. |
 | `draft` | Everything in `read`, plus change status, priority, assignee and tags of one or many conversations (a tag name that does not exist yet is created), and add private notes. Nothing reaches a customer. |
-| `send` | Everything in `draft`, plus reply to customers, retry a failed reply, open conversations, add customers, and rename or delete tags. |
+| `send` | Everything in `draft`, plus reply to customers, retry a failed reply, open conversations, add customers, rename or delete tags, and create, edit, delete and restore saved replies. With `read` or `draft`, a saved reply change is a proposal a person approves. |
 
 A tool used above its tier does not fail: Colliedesk files the call as an
 [agent request](agent-requests.md) that a person approves in **Requests**, and the tool answers
@@ -68,6 +68,15 @@ with `billing` and leave a note with a summary."
 | `colliedesk_tag_rename` | Renames a tag everywhere | `send` |
 | `colliedesk_tag_delete` | Deletes a tag and takes it off every conversation. Cannot be undone | `send` |
 | `colliedesk_agents_list` | Lists team members for assigning | `read` |
+| `colliedesk_saved_replies_list` | Lists the team's saved replies with who changed each one last | `read` |
+| `colliedesk_saved_reply_get` | Reads one saved reply by id or title, also from the trash | `read` |
+| `colliedesk_saved_reply_create` | Adds a saved reply | `send` |
+| `colliedesk_saved_reply_update` | Edits the title or text of a saved reply; every edit is a version | `send` |
+| `colliedesk_saved_reply_delete` | Moves a saved reply to the trash. Restorable for 30 days, so not marked destructive; after that it is gone with its history | `send` |
+| `colliedesk_saved_reply_history` | Lists the versions of a saved reply a page at a time: who, through which token, and the text (cut after 2,000 characters; one version by number comes whole) | `read` |
+| `colliedesk_saved_reply_version_restore` | Makes an earlier version current again, as a new version | `send` |
+| `colliedesk_saved_replies_trash` | Lists the saved replies in the trash a page at a time, with when each is deleted for good | `read` |
+| `colliedesk_saved_reply_undelete` | Takes a saved reply out of the trash | `send` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any |
 | `colliedesk_docs_search` | Searches these user guides | any |
 | `colliedesk_reply_draft` | Leaves a reply draft that a person edits, sends or discards; never emails by itself | `read` |
@@ -108,6 +117,10 @@ could not do with the API directly. Another workspace is never visible.
 - **Attachments.** `colliedesk_attachment_get` returns the text of a plain UTF-8 text file, cut
   after 20,000 characters, and only the name, size, SHA-256 and detected type of any other file
   (an image, PDF or archive). Open those in the web app. The file name and text are customer text.
+- **Saved replies are team text.** Their title and text appear under `team_text`: the team wrote
+  them for customers. The tool descriptions tell the model to treat them as text to send or improve,
+  never as instructions. Writes carry the `updated_at` the model read, so it cannot overwrite or
+  delete a version it never saw.
 - **Who wrote it.** When an agent token wrote a note or a reply, the message also shows
   `written_by_agent_token` with the label and tier of the token. The server tells the model to read
   such text as model output, not as a decision of the person the token acts as.

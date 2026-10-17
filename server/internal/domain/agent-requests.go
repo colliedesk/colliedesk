@@ -66,18 +66,45 @@ type AgentRequest struct {
 	// EditedBody is the call a person edited before approving it (a reply draft); Body stays the agent's.
 	EditedBody json.RawMessage `json:"edited_body"`
 	// ApprovableBy is the lowest role whose person can run the call: agent or admin.
-	ApprovableBy   string          `json:"approvable_by"`
-	Summary        string          `json:"summary"`
-	ConversationID *string         `json:"conversation_id"`
-	RequestedBy    AgentRequester  `json:"requested_by"`
-	DecidedBy      *AgentDecider   `json:"decided_by"`
-	DecidedAt      *time.Time      `json:"decided_at"`
-	Reason         *string         `json:"reason"`
-	ResultStatus   *int            `json:"result_status"`
-	Result         json.RawMessage `json:"result"`
-	ResultNote     *string         `json:"result_note"`
-	CreatedAt      time.Time       `json:"created_at"`
-	ExpiresAt      time.Time       `json:"expires_at"`
+	ApprovableBy   string  `json:"approvable_by"`
+	Summary        string  `json:"summary"`
+	ConversationID *string `json:"conversation_id"`
+	// SavedReply is the saved reply the request edits, deletes or restores, before and now; filled
+	// only with the full detail.
+	SavedReply   *AgentRequestSavedReply `json:"saved_reply"`
+	RequestedBy  AgentRequester          `json:"requested_by"`
+	DecidedBy    *AgentDecider           `json:"decided_by"`
+	DecidedAt    *time.Time              `json:"decided_at"`
+	Reason       *string                 `json:"reason"`
+	ResultStatus *int                    `json:"result_status"`
+	Result       json.RawMessage         `json:"result"`
+	ResultNote   *string                 `json:"result_note"`
+	CreatedAt    time.Time               `json:"created_at"`
+	ExpiresAt    time.Time               `json:"expires_at"`
+}
+
+// AgentRequestSavedReply is the saved reply a request acts on: as the token saw it when asking, and as
+// it is now (nil once it was deleted for good).
+type AgentRequestSavedReply struct {
+	ID      string           `json:"id"`
+	Before  *SavedReplyText  `json:"before"`
+	Current *SavedReplyState `json:"current"`
+	// Restores is the version a restore request applies, as it was when the token asked.
+	Restores *SavedReplyRestoredVersion `json:"restores"`
+}
+
+// SavedReplyRestoredVersion is the number, title and text of the version a request restores.
+type SavedReplyRestoredVersion struct {
+	Version int    `json:"version"`
+	Title   string `json:"title"`
+	Body    string `json:"body"`
+}
+
+// SavedReplyText is the title and text of a saved reply at one moment.
+type SavedReplyText struct {
+	Title     string    `json:"title"`
+	Body      string    `json:"body"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // AgentRequester is the token that asked and the person who owns it. The label and tier are kept

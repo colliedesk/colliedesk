@@ -63,11 +63,17 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
 - **What each tier means.** `read`: conversations, messages, time entries, attachments, contacts,
   tags, saved replies, the caller's inbox activity and the team list. `draft`: also status, priority,
   assignee, applying and removing a tag (on one conversation or in bulk), creating a tag, and notes. `send`: also outgoing replies, retrying a reply, renaming and deleting
-  tags, and creating contacts and conversations. Changing a tier is one edit to `tokenTiers`.
+  tags, creating contacts and conversations, and writing saved replies (create, edit, delete to the
+  trash, restore a version, undelete). Saved replies are text a person later sends to customers, so
+  they sit at `send`; `read` and `draft` propose through agent requests. Their routes on one reply
+  snapshot the reply into `agent_requests.saved_reply_before` when filed (and refuse a missing or
+  wrong-state reply with 404 instead of filing), so the Requests card shows a correct before/after
+  even after the reply changes; the replayed PATCH still carries the token's `updated_at`, so a
+  stale proposal fails with 409 instead of overwriting. Each change is a row in
+  `saved_reply_versions` naming the person (the approver for a request), the token and the request. Changing a tier is one edit to `tokenTiers`.
 - **Closed for every tier today** (each row names the issue that opens it): revoking sessions (a
   token could sign its owner out), invites, the lists of sessions and invites and the email and web
-  form channel settings, changing a teammate or a channel, and writing saved replies (text a person
-  later sends to customers). Creating tokens, export, billing, disconnecting the email channel,
+  form channel settings, and changing a teammate or a channel. Creating tokens, export, billing, disconnecting the email channel,
   rotating its secret and changing the slug are agent requests for every tier. `GET /agents` stays
   open: assignee names need it.
 - **Lifetime.** Thirty days of sliding expiry like a browser session, plus an absolute limit of 365
@@ -292,3 +298,27 @@ signs in again to use a higher role.
   Colliedesk origin, and list every real Colliedesk origin explicitly.
 - The exchange writes an HttpOnly Colliedesk cookie. It therefore requires the same exact `Origin`
   check as other cookie-writing requests.
+
+## Saved reply history and trash
+
+- **Versions.** `saved_reply_versions` is append-only for the app role (`SELECT, INSERT`). Each write
+  updates the reply row first, then inserts `max(version)+1` in the same transaction: the row lock
+  orders concurrent writes of one reply, so numbers never collide. Restoring a version copies it into
+  a new version (`restored_from_version`); history is never rewritten. The migration backfilled
+  version 1 for every existing reply: kind `create` by its author when it was never edited, otherwise
+  kind `baseline` with no person (who wrote the current text is unknown). A restore request snapshots
+  the version it applies (`saved_reply_before.restores`) so the card shows the target text.
+- **Optimistic writes everywhere.** PATCH, DELETE (`?updated_at=`), restore-version and undelete all
+  compare `updated_at`; delete and undelete bump it. A stored agent request keeps the token's
+  `updated_at` in its path or body, so approving it after anyone changed the reply answers 409 and
+  changes nothing. A delete proposal without `updated_at` is refused with 400 before it is filed.
+  Side effect: a Freshdesk-imported reply that was trashed and restored counts as edited, so `import
+  undo` keeps it.
+- **Trash.** Delete sets `deleted_at`; the title index is partial (`WHERE deleted_at IS NULL`) so a
+  trashed title can be reused, and undelete then answers 409 `duplicate_title` instead of hiding the
+  clash. The 500-reply limit counts trashed replies too, so create-and-delete loops cannot grow the
+  trash without bound; versions and trash are listed in pages (at most 200). The daily `serve` sweep purges replies deleted
+  more than 30 days ago (`PrivilegeSavedReplyPurge`); versions go by cascade, and the server logs the
+  count. `deleted_at` comes from the store clock so tests move one clock.
+- **Rollback.** The down migration refuses while a reply is in the trash, a reply has more than the
+  backfilled version, or a request keeps a snapshot: rolling back would drop that history silently.

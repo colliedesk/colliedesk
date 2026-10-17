@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { InvalidRequestError } from '../../api/client';
 import { agentRequest } from './request.test.fixture';
@@ -70,4 +70,49 @@ test('an edited reply draft shows who edited it and what was sent', () => {
     body: { kind: 'outgoing', body: 'Agent text' }, edited_body: { kind: 'outgoing', body: 'Person text' } })} timezone="UTC" {...actions()} />);
   expect(screen.getByText('Edited by Bo Agent before sending')).toBeInTheDocument();
   expect(screen.getByText('Person text')).toBeInTheDocument();
+});
+
+const replyRequest = (overrides: Parameters<typeof agentRequest>[0]) => agentRequest({
+  route: '/api/v1/saved-replies/{id}', path: '/api/v1/saved-replies/55555555-5555-4555-8555-555555555555', conversation_id: null, ...overrides,
+});
+const before = { title: 'Refund', body: 'We refunded you.', updated_at: '2026-10-16T09:00:00Z' };
+
+test('a proposed edit of a saved reply shows the reply before and after', () => {
+  render(<RequestCard item={replyRequest({ summary: 'Edit saved reply "Refund"', body: { title: 'Refund done', body: 'We refunded you today.', updated_at: before.updated_at },
+    saved_reply: { id: '55555555-5555-4555-8555-555555555555', before, current: { ...before, deleted_at: null }, restores: null } })} timezone="UTC" {...actions()} />);
+  const proposal = screen.getByRole('group', { name: 'Proposed change to the saved reply' });
+  expect(within(proposal).getByText('We refunded you.').closest('del')).not.toBeNull();
+  expect(within(proposal).getByText('We refunded you today.').closest('ins')).not.toBeNull();
+  expect(within(proposal).getByText('Refund done').closest('ins')).not.toBeNull();
+  expect(screen.queryByText(/"updated_at"/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/changed since/)).not.toBeInTheDocument();
+});
+
+test('a proposal says when the saved reply changed after the agent asked', () => {
+  render(<RequestCard item={replyRequest({ body: { body: 'New text', updated_at: before.updated_at },
+    saved_reply: { id: '55555555-5555-4555-8555-555555555555', before, current: { ...before, body: 'Edited by a person', updated_at: '2026-10-17T08:00:00Z', deleted_at: null }, restores: null } })} timezone="UTC" {...actions()} />);
+  expect(screen.getByText(/changed since the agent asked/)).toBeInTheDocument();
+  expect(screen.getByText('Edited by a person')).toBeInTheDocument();
+});
+
+test('a proposed new saved reply shows its text, and a proposed delete shows what would go to the trash', () => {
+  const { unmount } = render(<RequestCard item={replyRequest({ method: 'POST', route: '/api/v1/saved-replies', path: '/api/v1/saved-replies', body: { title: 'Greeting', body: 'Hello there.' } })} timezone="UTC" {...actions()} />);
+  const created = screen.getByRole('group', { name: 'Proposed change to the saved reply' });
+  expect(within(created).getByText('Hello there.').closest('ins')).not.toBeNull();
+  unmount();
+  render(<RequestCard item={replyRequest({ method: 'DELETE', body: null, saved_reply: { id: '55555555-5555-4555-8555-555555555555', before, current: { ...before, deleted_at: null }, restores: null } })} timezone="UTC" {...actions()} />);
+  const deleted = screen.getByRole('group', { name: 'Proposed change to the saved reply' });
+  expect(within(deleted).getByText('We refunded you.').closest('del')).not.toBeNull();
+  expect(within(deleted).getByText(/trash for 30 days/)).toBeInTheDocument();
+});
+
+test('a proposed version restore shows the text it would bring back', () => {
+  render(<RequestCard item={replyRequest({ method: 'POST', route: '/api/v1/saved-replies/{id}/versions/{version}/restore',
+    path: '/api/v1/saved-replies/55555555-5555-4555-8555-555555555555/versions/1/restore', body: { updated_at: before.updated_at },
+    saved_reply: { id: '55555555-5555-4555-8555-555555555555', before, current: { ...before, deleted_at: null }, restores: { version: 1, title: 'Refunds', body: 'Refunded in 5 days.' } } })} timezone="UTC" {...actions()} />);
+  const proposal = screen.getByRole('group', { name: 'Proposed change to the saved reply' });
+  expect(within(proposal).getByText('We refunded you.').closest('del')).not.toBeNull();
+  expect(within(proposal).getByText('Refunded in 5 days.').closest('ins')).not.toBeNull();
+  expect(within(proposal).getByText('Refunds').closest('ins')).not.toBeNull();
+  expect(within(proposal).getByText(/version 1/)).toBeInTheDocument();
 });

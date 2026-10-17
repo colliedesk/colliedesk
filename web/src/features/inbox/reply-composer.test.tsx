@@ -208,7 +208,7 @@ test('a storage refusal shows the server reason and keeps the text and files', a
 });
 
 const savedReply = (id: string, title: string, body: string) => ({
-  id, title, body, created_by_agent_id: null, created_at: '2026-10-15T00:00:00Z', updated_at: '2026-10-15T00:00:00Z',
+  id, title, body, created_by_agent_id: null, created_at: '2026-10-15T00:00:00Z', updated_at: '2026-10-15T00:00:00Z', last_change: null,
 });
 const greeting = savedReply('11111111-1111-4111-8111-111111111111', 'Greeting', 'Hi {{customer.name}}, I am {{agent.name}}.');
 const refund = savedReply('22222222-2222-4222-8222-222222222222', 'Refund steps', 'We refunded you.');

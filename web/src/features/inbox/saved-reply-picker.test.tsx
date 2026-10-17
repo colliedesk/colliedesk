@@ -4,7 +4,7 @@ import type { SavedReply } from '../../api/schemas';
 import { SavedReplyPicker } from './saved-reply-picker';
 
 const reply = (id: string, title: string, body = `${title} text`): SavedReply => ({
-  id, title, body, created_by_agent_id: null, created_at: '2026-10-15T00:00:00Z', updated_at: '2026-10-15T00:00:00Z',
+  id, title, body, created_by_agent_id: null, created_at: '2026-10-15T00:00:00Z', updated_at: '2026-10-15T00:00:00Z', last_change: null,
 });
 const replies = [reply('1', 'Chào hỏi'), reply('2', 'Refund steps'), reply('3', 'Shipping delay')];
 

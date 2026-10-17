@@ -44,7 +44,7 @@ export function SettingsRoute() {
   const refreshSavedReplies = () => refresh('saved-replies');
   const createSavedReply = useMutation({ mutationFn: ({ title, body }: { title: string; body: string }) => api.createSavedReply(title, body), onSuccess: refreshSavedReplies });
   const updateSavedReply = useMutation({ mutationFn: ({ id, ...change }: { id: string; title: string; body: string; updated_at: string }) => api.updateSavedReply(id, change), onSuccess: refreshSavedReplies });
-  const deleteSavedReply = useMutation({ mutationFn: (id: string) => api.deleteSavedReply(id), onSuccess: refreshSavedReplies });
+  const deleteSavedReply = useMutation({ mutationFn: ({ id, updatedAt }: { id: string; updatedAt: string }) => api.deleteSavedReply(id, updatedAt), onSuccess: refreshSavedReplies });
   const isAdmin = me.data?.agent.role === 'admin';
   // Plan and billing exists only on the hosted cloud and only admins manage it.
   const showBilling = isAdmin && config.data?.billing.enabled === true;
@@ -62,7 +62,11 @@ export function SettingsRoute() {
     savedRepliesSection={<SavedRepliesSection replies={savedReplies.data?.items ?? []}
       onCreate={(title, body) => createSavedReply.mutateAsync({ title, body })}
       onUpdate={(id, change) => updateSavedReply.mutateAsync({ id, ...change })}
-      onDelete={(id) => deleteSavedReply.mutateAsync(id)} onReload={() => void refreshSavedReplies()} />}
+      onDelete={(id, updatedAt) => deleteSavedReply.mutateAsync({ id, updatedAt })} onReload={() => void refreshSavedReplies()} timezone={me.data?.timezone ?? 'UTC'}
+      loadHistory={(id, before) => api.savedReplyVersions(id, before)}
+      onRestoreVersion={async (id, version, updatedAt) => { await api.restoreSavedReplyVersion(id, version, updatedAt); await refreshSavedReplies(); }}
+      loadTrash={(cursor) => api.trashedSavedReplies(cursor)}
+      onUndelete={async (id, updatedAt) => { await api.restoreSavedReply(id, updatedAt); await refreshSavedReplies(); }} />}
     emailSection={<EmailChannelSection settings={emailChannel.data} timezone={me.data?.timezone ?? 'UTC'} canManage={isAdmin} workspaceSlug={me.data?.workspace.slug} addressSave={saveState(saveEmail)} slugSave={saveState(workspaceSlug)}
       onSaveSlug={(slug) => workspaceSlug.mutate(slug)} createdSecret={rotateSecret.data?.inbound_secret} onSave={(address) => saveEmail.mutate(address)}
       onRotate={() => rotateSecret.mutate()} onVerifyDomain={() => verifyDomain.mutate()} onDisconnect={() => disconnectEmail.mutate()} />}

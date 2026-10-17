@@ -589,11 +589,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The saved replies every agent in the workspace shares, ordered by title ignoring case. The body may hold the variables `{{customer.name}}` and `{{agent.name}}`; the web app fills them in when an agent inserts the reply. The API returns the text as stored. */
+        /** @description The saved replies every agent in the workspace shares, ordered by title ignoring case. The body may hold the variables `{{customer.name}}` and `{{agent.name}}`; the web app fills them in when an agent inserts the reply. The API returns the text as stored. A reply in the trash is not listed here (see `GET /api/v1/saved-replies/trash`). `last_change` says who made the latest version, and through which agent token or approved agent request. */
         get: operations["listSavedReplies"];
         put?: never;
-        /** @description Any agent may create one. The title is unique in the workspace ignoring case (409 `duplicate_title`). A workspace holds at most 500 (409 `saved_reply_limit`). */
+        /** @description Any agent may create one, and a `send` agent token. A lower tier files an agent request a person approves. The title is unique among the replies not in the trash, ignoring case (409 `duplicate_title`). A workspace holds at most 500, counting the ones in the trash (409 `saved_reply_limit`). The new reply has version 1 in its history. */
         post: operations["createSavedReply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/saved-replies/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Saved replies deleted in the last 30 days, most recently deleted first, in pages. Each can be restored with `POST /api/v1/saved-replies/{id}/restore` until `purges_at`; after that it is deleted for good with its history. Replies in the trash count toward the 500 of a workspace. */
+        get: operations["listTrashedSavedReplies"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -612,11 +629,70 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
+        /** @description Move the reply to the trash. It disappears from the list and the reply box, and can be restored for 30 days with `POST /api/v1/saved-replies/{id}/restore`. Send the `updated_at` you read: when the reply was saved since, nothing is deleted and the answer is 409 `changed_elsewhere` (an agent request approved after someone edited the reply fails the same way). A `send` agent token may delete; a lower tier files an agent request. */
         delete: operations["deleteSavedReply"];
         options?: never;
         head?: never;
-        /** @description Change the title, the body or both. Any agent may edit a shared reply. Send back the `updated_at` you read; when the reply was saved since, nothing changes and the answer is 409 `changed_elsewhere`. A taken title is 409 `duplicate_title`. */
+        /** @description Change the title, the body or both. Any agent may edit a shared reply, and a `send` agent token; a lower tier files an agent request whose detail shows the reply before and after. Send back the `updated_at` you read; when the reply was saved since, nothing changes and the answer is 409 `changed_elsewhere`. A taken title is 409 `duplicate_title`. Every edit adds a version to the history. A reply in the trash is 404. */
         patch: operations["updateSavedReply"];
+        trace?: never;
+    };
+    "/api/v1/saved-replies/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Take a reply out of the trash, as it was when deleted. Send the `updated_at` of the trashed reply as you read it (409 `changed_elsewhere` when it changed since). 404 when it is not in the trash. 409 `duplicate_title` when another reply took its title meanwhile (rename that one first). A `send` agent token may restore; a lower tier files an agent request. */
+        post: operations["restoreSavedReply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/saved-replies/{id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The versions of a saved reply, newest first, in pages: who made each, through which agent token or approved agent request, and the title and text it had. A reply in the trash keeps its history. Versions are never changed or removed while the reply exists; restoring one adds a new version. */
+        get: operations["listSavedReplyVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/saved-replies/{id}/versions/{version}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                version: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Make an earlier version the current one. The title and text of that version become a new version; nothing in the history is rewritten. Send back the `updated_at` you read (409 `changed_elsewhere` when the reply was saved since). 409 `duplicate_title` when another reply has that title now. A reply in the trash is 404: restore it from the trash first. A `send` agent token may restore; a lower tier files an agent request. */
+        post: operations["restoreSavedReplyVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/billing": {
@@ -958,6 +1034,26 @@ export interface components {
             summary: string;
             /** Format: uuid */
             conversation_id: string | null;
+            /** @description For a request that edits, deletes or restores a saved reply: the reply as it was when the token asked (before) and as it is now (current, null once it is deleted for good), so the change can be shown as a difference. Only with detail=full and on a single request; null otherwise. */
+            saved_reply: null | {
+                /** Format: uuid */
+                id: string;
+                before: null | components["schemas"]["SavedReplyText"];
+                /** @description For a request that restores a version, that version's number, title and text as they were when the token asked; null otherwise. */
+                restores: null | {
+                    version: number;
+                    title: string;
+                    body: string;
+                };
+                current: null | {
+                    title: string;
+                    body: string;
+                    /** Format: date-time */
+                    updated_at: string;
+                    /** Format: date-time */
+                    deleted_at: string | null;
+                };
+            };
             requested_by: {
                 /** Format: uuid */
                 token_id: string | null;
@@ -1251,6 +1347,85 @@ export interface components {
             created_by_agent_id: string | null;
             /** Format: date-time */
             created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** @description The latest version of the reply; null only for a reply no history reaches. */
+            last_change: null | components["schemas"]["SavedReplyChange"];
+        };
+        TrashedSavedReply: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            body: string;
+            /** Format: uuid */
+            created_by_agent_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            last_change: null | components["schemas"]["SavedReplyChange"];
+            /** Format: date-time */
+            deleted_at: string;
+            deleted_by: null | components["schemas"]["SavedReplyPerson"];
+            /**
+             * Format: date-time
+             * @description When the reply and its history are deleted for good (30 days after deleted_at).
+             */
+            purges_at: string;
+        };
+        SavedReplyPerson: {
+            /** Format: uuid */
+            agent_id: string | null;
+            name: string;
+        };
+        SavedReplyChange: {
+            version: number;
+            /**
+             * @description baseline: the reply as it was when history started (edited before, so its author is unknown); restore: an earlier version made current again; undelete: taken out of the trash.
+             * @enum {string}
+             */
+            kind: "baseline" | "create" | "edit" | "delete" | "restore" | "undelete";
+            /** @description The version a restore copied. */
+            restored_from_version: number | null;
+            /** @description The person who made the change (or approved the agent request that made it); null for an import or a removed person. */
+            changed_by: null | components["schemas"]["SavedReplyPerson"];
+            /** @description The agent token that made or asked for the change; null when a person made it in the web app. */
+            token: null | {
+                /** Format: uuid */
+                id: string | null;
+                label: string;
+            };
+            /**
+             * Format: uuid
+             * @description The approved agent request that made the change.
+             */
+            agent_request_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        SavedReplyVersion: {
+            version: number;
+            /** @enum {string} */
+            kind: "baseline" | "create" | "edit" | "delete" | "restore" | "undelete";
+            restored_from_version: number | null;
+            changed_by: null | components["schemas"]["SavedReplyPerson"];
+            token: null | {
+                /** Format: uuid */
+                id: string | null;
+                label: string;
+            };
+            /** Format: uuid */
+            agent_request_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** @description The title after this change. */
+            title: string;
+            /** @description The text after this change. */
+            body: string;
+        };
+        SavedReplyText: {
+            title: string;
+            body: string;
             /** Format: date-time */
             updated_at: string;
         };
@@ -3032,15 +3207,48 @@ export interface operations {
                     "application/json": components["schemas"]["SavedReply"];
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];
         };
     };
+    listTrashedSavedReplies: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description The next_cursor of the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved replies in the trash */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["TrashedSavedReply"][];
+                        /** @description Null on the last page. */
+                        next_cursor: string | null;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
     deleteSavedReply: {
         parameters: {
-            query?: never;
+            query: {
+                updated_at: string;
+            };
             header?: never;
             path: {
                 id: components["parameters"]["ID"];
@@ -3049,16 +3257,19 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Saved reply deleted */
+            202: components["responses"]["AgentRequestAccepted"];
+            /** @description Saved reply moved to the trash */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     updateSavedReply: {
@@ -3090,6 +3301,111 @@ export interface operations {
                     "application/json": components["schemas"]["SavedReply"];
                 };
             };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    restoreSavedReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Restored saved reply */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedReply"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listSavedReplyVersions: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description Only versions older than this one (the next_before_version of the previous page). */
+                before_version?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Versions of the saved reply */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["SavedReplyVersion"][];
+                        /** @description Null on the last page. */
+                        next_before_version: number | null;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    restoreSavedReplyVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Saved reply with the restored text */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedReply"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

@@ -153,7 +153,7 @@ func exportTags(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.
 }
 
 func exportSavedReplies(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,title,body,created_by_agent_id::text,created_at,updated_at
+	rows, err := tx.Query(ctx, `SELECT id::text,title,body,created_by_agent_id::text,created_at,updated_at,deleted_at,deleted_by_agent_id::text
 		FROM saved_replies WHERE workspace_id=$1 ORDER BY id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export saved replies: %w", err)
@@ -161,20 +161,44 @@ func exportSavedReplies(ctx context.Context, tx pgx.Tx, workspaceID string, sink
 	defer rows.Close()
 	for rows.Next() {
 		var record export.SavedReply
-		if err := rows.Scan(&record.ID, &record.Title, &record.Body, &record.CreatedByAgentID, &record.CreatedAt, &record.UpdatedAt); err != nil {
+		if err := rows.Scan(&record.ID, &record.Title, &record.Body, &record.CreatedByAgentID, &record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID); err != nil {
 			return fmt.Errorf("export saved replies: %w", err)
 		}
-		record.CreatedAt, record.UpdatedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt)
+		record.CreatedAt, record.UpdatedAt, record.DeletedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt), domain.UTCOptional(record.DeletedAt)
 		if err := sink.SavedReply(record); err != nil {
 			return err
 		}
 	}
-	return rowsError("export saved replies", rows)
+	if err := rowsError("export saved replies", rows); err != nil {
+		return err
+	}
+	return exportSavedReplyVersions(ctx, tx, workspaceID, sink)
+}
+
+func exportSavedReplyVersions(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	rows, err := tx.Query(ctx, `SELECT saved_reply_id::text,version,kind,restored_from_version,title,body,changed_by_agent_id::text,token_id::text,token_label,agent_request_id::text,created_at
+		FROM saved_reply_versions WHERE workspace_id=$1 ORDER BY saved_reply_id,version`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export saved reply versions: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var record export.SavedReplyVersion
+		if err := rows.Scan(&record.SavedReplyID, &record.Version, &record.Kind, &record.RestoredFromVersion, &record.Title, &record.Body,
+			&record.ChangedByAgentID, &record.TokenID, &record.TokenLabel, &record.AgentRequestID, &record.CreatedAt); err != nil {
+			return fmt.Errorf("export saved reply versions: %w", err)
+		}
+		record.CreatedAt = domain.UTC(record.CreatedAt)
+		if err := sink.SavedReplyVersion(record); err != nil {
+			return err
+		}
+	}
+	return rowsError("export saved reply versions", rows)
 }
 
 func exportAgentRequests(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
 	rows, err := tx.Query(ctx, `SELECT id::text,kind,status,method,route,path,body,edited_body,summary,conversation_id::text,token_id::text,token_label,token_scope,
-		requested_by_agent_id::text,decided_by_agent_id::text,decided_at,reason,result_status,result_note,created_at,expires_at
+		requested_by_agent_id::text,decided_by_agent_id::text,decided_at,reason,result_status,result_note,created_at,expires_at,saved_reply_id::text,saved_reply_before
 		FROM agent_requests WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export agent requests: %w", err)
@@ -182,13 +206,13 @@ func exportAgentRequests(ctx context.Context, tx pgx.Tx, workspaceID string, sin
 	defer rows.Close()
 	for rows.Next() {
 		var record export.AgentRequest
-		var body, edited []byte
+		var body, edited, replyBefore []byte
 		if err := rows.Scan(&record.ID, &record.Kind, &record.Status, &record.Method, &record.Route, &record.Path, &body, &edited, &record.Summary,
 			&record.ConversationID, &record.TokenID, &record.TokenLabel, &record.TokenScope, &record.RequestedByAgentID, &record.DecidedByAgentID,
-			&record.DecidedAt, &record.Reason, &record.ResultStatus, &record.ResultNote, &record.CreatedAt, &record.ExpiresAt); err != nil {
+			&record.DecidedAt, &record.Reason, &record.ResultStatus, &record.ResultNote, &record.CreatedAt, &record.ExpiresAt, &record.SavedReplyID, &replyBefore); err != nil {
 			return fmt.Errorf("export agent requests: %w", err)
 		}
-		record.Body, record.EditedBody = body, edited
+		record.Body, record.EditedBody, record.SavedReplyBefore = body, edited, replyBefore
 		record.CreatedAt, record.ExpiresAt, record.DecidedAt = domain.UTC(record.CreatedAt), domain.UTC(record.ExpiresAt), domain.UTCOptional(record.DecidedAt)
 		if err := sink.AgentRequest(record); err != nil {
 			return err

@@ -4,6 +4,7 @@ import type { AgentRequest } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { replyCall } from './request-call';
+import { isSavedReplyRequest, SavedReplyProposal } from './saved-reply-proposal';
 
 export interface ApproveOutcome { request: AgentRequest; result: unknown }
 
@@ -61,7 +62,8 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
             <p className="request-body reply-draft-text">{reply.text}</p>
             {reply.cc.length > 0 && <p className="request-recipients">{messages.draftCc(reply.cc)}</p>}
           </>
-        : current.body !== null && <pre className="request-body">{JSON.stringify(current.body, null, 2)}</pre>}
+        : isSavedReplyRequest(current) ? <SavedReplyProposal item={current} />
+          : current.body !== null && <pre className="request-body">{JSON.stringify(current.body, null, 2)}</pre>}
       {edited && <>
         <p className="muted-copy">{messages.editedBy(current.decided_by?.name ?? messages.someone)}</p>
         <p className="request-body reply-draft-text">{edited.text}</p>

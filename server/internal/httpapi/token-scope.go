@@ -65,15 +65,15 @@ var (
 // read: what triage needs to look at (conversations, messages, contacts, tags, the team list).
 // draft: changes that never reach a customer (status, priority, assignee, tags on one conversation or
 // many at once, creating a tag, private notes). send: everything else an agent may do, such as
-// replying and creating contacts and conversations. Posting a message is gated by the handler: a note
+// replying, creating contacts and conversations, and writing the saved replies the team sends
+// (every change is a version that can be restored, and a delete stays in the trash for 30 days). Posting a message is gated by the handler: a note
 // needs draft, an outgoing reply needs send.
 //
 // A token below a route's tier, and every token on an Approval route (new credentials, money, data
 // leaving), gets an agent request a person approves instead of a refusal. Deciding a request is
 // PersonOnly. Every other route is closed to every token today, with the reason and the issue that
 // opens it: settings that wait for the admin tier (#128), reads that open once secrets and links are
-// redacted (#128), saved reply writes that open with history and restore (#129), and routes no
-// session reaches (NotForPeople). The closed rows may only shrink.
+// redacted (#128), and routes no session reaches (NotForPeople). The closed rows may only shrink.
 var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/auth/logout":                                   tier(auth.ScopeRead),
 	"GET /api/v1/auth/me":                                        tier(auth.ScopeRead),
@@ -81,6 +81,13 @@ var tokenTiers = map[string]TokenAccess{
 	"PATCH /api/v1/conversations":                                tier(auth.ScopeDraft),
 	"GET /api/v1/inbox/activity":                                 tier(auth.ScopeRead),
 	"GET /api/v1/saved-replies":                                  tier(auth.ScopeRead),
+	"GET /api/v1/saved-replies/trash":                            tier(auth.ScopeRead),
+	"GET /api/v1/saved-replies/{id}/versions":                    tier(auth.ScopeRead),
+	"POST /api/v1/saved-replies":                                 tier(auth.ScopeSend),
+	"PATCH /api/v1/saved-replies/{id}":                           tier(auth.ScopeSend),
+	"DELETE /api/v1/saved-replies/{id}":                          tier(auth.ScopeSend),
+	"POST /api/v1/saved-replies/{id}/restore":                    tier(auth.ScopeSend),
+	"POST /api/v1/saved-replies/{id}/versions/{version}/restore": tier(auth.ScopeSend),
 	"POST /api/v1/conversations":                                 tier(auth.ScopeSend),
 	"GET /api/v1/conversations/{id}":                             tier(auth.ScopeRead),
 	"PATCH /api/v1/conversations/{id}":                           tier(auth.ScopeDraft),
@@ -106,15 +113,12 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/agent-requests/{id}/approve": personOnly("an agent approving its own request would make approval meaningless"),
 	"POST /api/v1/agent-requests/{id}/reject":  personOnly("deciding an agent's request is a person's call"),
 
-	"GET /api/v1/auth/sessions":         pendingTier(auth.ScopeRead, 128),
-	"GET /api/v1/auth/invites":          pendingTier(auth.ScopeRead, 128),
-	"GET /api/v1/channels/email":        pendingTier(auth.ScopeRead, 128),
-	"GET /api/v1/channels/web-form":     pendingTier(auth.ScopeRead, 128),
-	"GET /api/v1/billing":               pendingTier(auth.ScopeRead, 128),
-	"PATCH /api/v1/agents/me/timezone":  pendingTier(auth.ScopeDraft, 128),
-	"POST /api/v1/saved-replies":        pendingTier(auth.ScopeSend, 129),
-	"PATCH /api/v1/saved-replies/{id}":  pendingTier(auth.ScopeSend, 129),
-	"DELETE /api/v1/saved-replies/{id}": pendingTier(auth.ScopeSend, 129),
+	"GET /api/v1/auth/sessions":        pendingTier(auth.ScopeRead, 128),
+	"GET /api/v1/auth/invites":         pendingTier(auth.ScopeRead, 128),
+	"GET /api/v1/channels/email":       pendingTier(auth.ScopeRead, 128),
+	"GET /api/v1/channels/web-form":    pendingTier(auth.ScopeRead, 128),
+	"GET /api/v1/billing":              pendingTier(auth.ScopeRead, 128),
+	"PATCH /api/v1/agents/me/timezone": pendingTier(auth.ScopeDraft, 128),
 
 	"PATCH /api/v1/workspace/timezone": adminTier,
 	"PATCH /api/v1/agents/{id}":        adminTier,

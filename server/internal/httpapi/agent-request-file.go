@@ -76,6 +76,17 @@ func (a *API) fileAgentRequest(response http.ResponseWriter, request *http.Reque
 		}
 		conversationID = &id
 	}
+	var savedReply *store.SavedReplySnapshot
+	if strings.HasPrefix(route.Pattern, savedReplyRoutePrefix) {
+		snapshot, ok := a.savedReplyBefore(response, request, route, who)
+		if !ok {
+			return
+		}
+		savedReply = &snapshot
+	}
+	if summary == "" && (savedReply != nil || route.Pattern == "/api/v1/saved-replies") {
+		summary = summarizeSavedReplyRequest(route, body, savedReply, request.PathValue("version"))
+	}
 	if summary == "" {
 		summary = summarizeRequest(route, kind, body)
 	}
@@ -85,7 +96,7 @@ func (a *API) fileAgentRequest(response http.ResponseWriter, request *http.Reque
 	}
 	created, err := a.store.CreateAgentRequest(request.Context(), who.Workspace.ID, store.NewAgentRequest{
 		TokenID: who.SessionID, AgentID: who.Agent.ID, Kind: kind, Method: route.Method, Route: route.Pattern, Path: path,
-		Body: body, Summary: clip(summary), ConversationID: conversationID,
+		Body: body, Summary: clip(summary), ConversationID: conversationID, SavedReply: savedReply,
 	})
 	var rate *domain.AgentRequestRateError
 	if errors.As(err, &rate) {
@@ -132,6 +143,11 @@ var requestTitles = map[string]string{
 	"DELETE /api/v1/channels/email":                              "Disconnect the email channel",
 	"POST /api/v1/channels/email/secret":                         "Rotate the inbound email secret",
 	"PATCH /api/v1/workspace/slug":                               "Change the workspace address",
+	"POST /api/v1/saved-replies":                                 "Create a saved reply",
+	"PATCH /api/v1/saved-replies/{id}":                           "Edit a saved reply",
+	"DELETE /api/v1/saved-replies/{id}":                          "Delete a saved reply",
+	"POST /api/v1/saved-replies/{id}/restore":                    "Restore a saved reply from the trash",
+	"POST /api/v1/saved-replies/{id}/versions/{version}/restore": "Restore an earlier version of a saved reply",
 }
 
 const summaryDetail = 300

@@ -13,11 +13,12 @@ export function RequestsRoute() {
   // The page shows each call, so it asks for the full requests; the rail badge polls the light list.
   const list = useQuery({ queryKey: ['agent-requests', filter, 'full'],
     queryFn: () => api.agentRequests(filter === 'pending' ? 'pending' : undefined, true), refetchInterval: 20_000 });
-  // An approved call may have changed conversations, messages or settings anywhere in the app.
+  // An approved call may have changed conversations, messages, saved replies or settings anywhere in the app.
   const refresh = () => {
     void client.invalidateQueries({ queryKey: ['agent-requests'] });
     void client.invalidateQueries({ queryKey: ['conversations'] });
     void client.invalidateQueries({ queryKey: ['messages'] });
+    void client.invalidateQueries({ queryKey: ['saved-replies'] });
   };
   const role = me.data?.agent?.role;
   return <RequestsPage items={list.data?.items} canApprove={(item) => role === 'admin' || item.approvable_by === 'agent'} approved={approved} filter={filter} onFilter={setFilter} timezone={me.data?.timezone ?? 'UTC'}

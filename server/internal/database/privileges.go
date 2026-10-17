@@ -16,6 +16,9 @@ const (
 	// PrivilegeAgentRequestPrune clears the call and answer of agent requests decided more than 90
 	// days ago, in every workspace; the audit rows stay.
 	PrivilegeAgentRequestPrune Privilege = "agent-request-prune"
+	// PrivilegeSavedReplyPurge deletes, in every workspace, the saved replies that have been in the
+	// trash for more than 30 days, with their history.
+	PrivilegeSavedReplyPurge Privilege = "saved-reply-purge"
 	// PrivilegeRetention finds locked workspaces, records and sends their deletion notice, and deletes
 	// the ones locked for a year with their attachment files.
 	PrivilegeRetention Privilege = "retention"

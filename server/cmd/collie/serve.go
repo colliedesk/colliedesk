@@ -91,7 +91,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	hostedCloud := cloudAuth.Enabled() && billing.Enabled()
 	telemetryConfig := telemetry.ConfigFromEnv(os.Getenv, origin, hostedCloud, version)
 	go telemetry.New(db, telemetryConfig, nil).Run(ctx, slog.Default())
-	go sweepAgentRequests(ctx, store.NewWithDB(db))
+	go sweepDaily(ctx, store.NewWithDB(db))
 	if billing.Enabled() {
 		retentionService, err := newRetentionService(db, origin, billing, retentionSettingsForServe(os.Getenv, slog.Default()))
 		if err != nil {
@@ -180,9 +180,10 @@ func sweepSignupAddresses(ctx context.Context, service *auth.Service) {
 	}
 }
 
-// sweepAgentRequests clears the call and answer of agent requests decided more than 90 days ago, at
-// start and then daily until ctx ends. The rows stay as the record of who asked and who decided.
-func sweepAgentRequests(ctx context.Context, data *store.Store) {
+// sweepDaily runs the daily clean-up at start and then daily until ctx ends: it clears the call and
+// answer of agent requests decided more than 90 days ago (the rows stay as the record of who asked and
+// who decided), and deletes for good the saved replies that have been in the trash for 30 days.
+func sweepDaily(ctx context.Context, data *store.Store) {
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	for {
@@ -190,6 +191,11 @@ func sweepAgentRequests(ctx context.Context, data *store.Store) {
 			slog.Error("prune old agent requests", "error", err)
 		} else if pruned > 0 {
 			slog.Info("pruned old agent requests", "count", pruned)
+		}
+		if purged, err := data.PurgeSavedReplyTrash(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("purge saved reply trash", "error", err)
+		} else if purged > 0 {
+			slog.Info("purged saved replies deleted more than 30 days ago", "count", purged)
 		}
 		select {
 		case <-ctx.Done():
