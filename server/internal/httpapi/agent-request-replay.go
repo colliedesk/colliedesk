@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -19,6 +20,8 @@ type approval struct {
 	approver  auth.Principal
 	requestID string
 	tokenID   string
+	// textEdited is true when the approver changed the words of a reply draft.
+	textEdited bool
 }
 
 func approvalOf(ctx context.Context) (approval, bool) {
@@ -50,30 +53,72 @@ var approvalRunsAs = map[string][2]string{
 // the answer and whether the answer fit in domain.MaxAgentRequestBody.
 func (a *API) replayApproved(ctx context.Context, approver auth.Principal, item domain.AgentRequest) (int, []byte, bool) {
 	method, path := item.Method, item.Path
+	call := item.Body
+	if len(item.EditedBody) > 0 {
+		call = item.EditedBody
+	}
 	if replacement, ok := approvalRunsAs[item.Method+" "+item.Route]; ok {
 		method, path = replacement[0], replacement[1]
 	}
 	var body io.Reader = http.NoBody
-	if len(item.Body) > 0 {
-		body = bytes.NewReader(item.Body)
+	if len(call) > 0 {
+		body = bytes.NewReader(call)
 	}
-	replay := approval{approver: approver, requestID: item.ID}
+	replay := approval{approver: approver, requestID: item.ID, textEdited: replyText(item.EditedBody) != "" && replyText(item.EditedBody) != replyText(item.Body)}
 	if item.RequestedBy.TokenID != nil {
 		replay.tokenID = *item.RequestedBy.TokenID
 	}
-	call, err := http.NewRequestWithContext(context.WithValue(ctx, approvalKey{}, replay), method, path, body)
+	request, err := http.NewRequestWithContext(context.WithValue(ctx, approvalKey{}, replay), method, path, body)
 	if err != nil {
 		return http.StatusBadRequest, nil, true
 	}
-	if len(item.Body) > 0 {
-		call.Header.Set("Content-Type", "application/json")
+	if len(call) > 0 {
+		request.Header.Set("Content-Type", "application/json")
 	}
 	answer := &cappedRecorder{header: http.Header{}, limit: domain.MaxAgentRequestBody}
-	a.mux.ServeHTTP(answer, call)
+	a.mux.ServeHTTP(answer, request)
 	if answer.status == 0 {
 		answer.status = http.StatusOK
 	}
 	return answer.status, answer.body.Bytes(), !answer.overflow
+}
+
+// replyText is the text of a reply draft's call; empty for anything else.
+func replyText(call json.RawMessage) string {
+	var fields struct {
+		Body string `json:"body"`
+	}
+	if json.Unmarshal(call, &fields) != nil {
+		return ""
+	}
+	return fields.Body
+}
+
+// routePermissions maps "METHOD pattern" to the role permission the route needs.
+var routePermissions = func() map[string]string {
+	permissions := map[string]string{}
+	for _, route := range Routes() {
+		permissions[route.Method+" "+route.Pattern] = route.Permission
+	}
+	return permissions
+}()
+
+// approvalPermission is the permission the person approving item needs: that of the route its call
+// runs on.
+func approvalPermission(item domain.AgentRequest) string {
+	key := item.Method + " " + item.Route
+	if replacement, ok := approvalRunsAs[key]; ok {
+		key = replacement[0] + " " + replacement[1]
+	}
+	return routePermissions[key]
+}
+
+// approvableBy is the lowest role that may approve item.
+func approvableBy(item domain.AgentRequest) string {
+	if auth.HasPermission("agent", approvalPermission(item)) {
+		return "agent"
+	}
+	return "admin"
 }
 
 var errAnswerTooLarge = errors.New("the answer of an approved request is larger than the record keeps")

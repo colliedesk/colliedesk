@@ -76,9 +76,38 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 
 // fileMessageRequest turns a message the token may not write into an agent request: a reply becomes a
 // reply draft a person edits, sends or discards; a note from a read token waits like any other action.
+// A reply draft names every recipient in its summary, and a token below send may copy only people who
+// are already on the conversation, so a draft cannot slip a new address past the person who sends it.
 func (a *API) fileMessageRequest(response http.ResponseWriter, request *http.Request, identity auth.Principal, kind, body string, cc []string) {
+	conversationID := request.PathValue("id")
 	call := map[string]any{"kind": kind, "body": body}
-	if len(cc) > 0 {
+	requestKind, summary := domain.AgentRequestAction, ""
+	if kind == "outgoing" {
+		requestKind = domain.AgentRequestReplyDraft
+		clean, refusal := a.cleanCC(request.Context(), identity.Workspace.ID, kind, cc)
+		if refusal != nil {
+			a.writeUploadError(response, refusal)
+			return
+		}
+		contact, known, err := a.store.ConversationParticipants(request.Context(), identity.Workspace.ID, conversationID)
+		if err != nil {
+			writeStoreError(response, err)
+			return
+		}
+		if !auth.ScopeAllows(identity.Scope, auth.ScopeSend) {
+			for _, address := range clean {
+				if !known[address] {
+					writeError(response, http.StatusBadRequest, "invalid_request", address+" is not on this conversation. "+
+						"A draft from a token below send may copy only the customer and people already copied; a person can add others when sending.")
+					return
+				}
+			}
+		}
+		if len(clean) > 0 {
+			call["cc"] = clean
+		}
+		summary = replySummary(contact, clean, body)
+	} else if len(cc) > 0 {
 		call["cc"] = cc
 	}
 	encoded, err := json.Marshal(call)
@@ -86,11 +115,16 @@ func (a *API) fileMessageRequest(response http.ResponseWriter, request *http.Req
 		writeInternalError(response, err)
 		return
 	}
-	requestKind := domain.AgentRequestAction
-	if kind == "outgoing" {
-		requestKind = domain.AgentRequestReplyDraft
+	a.fileAgentRequest(response, request, messageRoute, identity, requestKind, encoded, summary)
+}
+
+// replySummary names every recipient before the text, so a copy is never hidden behind a long reply.
+func replySummary(contact string, cc []string, body string) string {
+	recipients := "to " + contact
+	if len(cc) > 0 {
+		recipients += ", cc " + strings.Join(cc, ", ")
 	}
-	a.fileAgentRequest(response, request, messageRoute, identity, requestKind, encoded)
+	return "Reply to the customer (" + recipients + "): " + strings.Join(strings.Fields(body), " ")
 }
 
 // messageActor returns who writes the message and whether the caller may write this kind now: a note
@@ -110,7 +144,11 @@ func messageActor(ctx context.Context, identity auth.Principal, kind string) (st
 		actor.TokenID = identity.SessionID
 	}
 	if replay, ok := approvalOf(ctx); ok {
-		actor.TokenID, actor.RequestID = replay.tokenID, replay.requestID
+		// A reply whose text the approver changed is theirs; it still names the request it came from.
+		actor.RequestID = replay.requestID
+		if !replay.textEdited {
+			actor.TokenID = replay.tokenID
+		}
 	}
 	return actor, true
 }

@@ -174,6 +174,6 @@ func (a *API) gateToken(response http.ResponseWriter, request *http.Request, rou
 		writeError(response, http.StatusForbidden, "scope_insufficient", "Agent tokens cannot use this route. Sign in as a person to do this.")
 		return true
 	}
-	a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, nil)
+	a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, nil, "")
 	return true
 }

@@ -29,7 +29,19 @@ const (
 	MaxPendingAgentRequests = 50
 	// MaxAgentRequestBody bounds the stored call and the stored answer, in bytes of JSON.
 	MaxAgentRequestBody = 64 << 10
+	// MaxAgentRequestsPerHour is how many requests one token may file in any rolling hour.
+	MaxAgentRequestsPerHour = 100
+	// AgentRequestCallRetention is how long a decided request keeps its call and answer; the audit
+	// row (who, which route, the summary, the decision, the times) stays.
+	AgentRequestCallRetention = 90 * 24 * time.Hour
 )
+
+// AgentRequestRateError means the token filed MaxAgentRequestsPerHour requests in the last hour.
+type AgentRequestRateError struct{ RetryAfter time.Duration }
+
+func (e *AgentRequestRateError) Error() string {
+	return "this token filed 100 requests in the last hour; wait before filing more"
+}
 
 var (
 	// ErrAgentRequestDecided means the request was approved, rejected, cancelled or expired already.
@@ -44,13 +56,17 @@ var (
 
 // AgentRequest is a call an agent token made that waits for a person.
 type AgentRequest struct {
-	ID             string          `json:"id"`
-	Kind           string          `json:"kind"`
-	Status         string          `json:"status"`
-	Method         string          `json:"method"`
-	Route          string          `json:"route"`
-	Path           string          `json:"path"`
-	Body           json.RawMessage `json:"body"`
+	ID     string          `json:"id"`
+	Kind   string          `json:"kind"`
+	Status string          `json:"status"`
+	Method string          `json:"method"`
+	Route  string          `json:"route"`
+	Path   string          `json:"path"`
+	Body   json.RawMessage `json:"body"`
+	// EditedBody is the call a person edited before approving it (a reply draft); Body stays the agent's.
+	EditedBody json.RawMessage `json:"edited_body"`
+	// ApprovableBy is the lowest role whose person can run the call: agent or admin.
+	ApprovableBy   string          `json:"approvable_by"`
 	Summary        string          `json:"summary"`
 	ConversationID *string         `json:"conversation_id"`
 	RequestedBy    AgentRequester  `json:"requested_by"`

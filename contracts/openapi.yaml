@@ -436,7 +436,8 @@ paths:
                   description: >-
                     Agent tokens only, with `kind: outgoing`: file the reply as a reply draft (202) that a
                     person edits, sends or discards, whatever the token's tier. A token below `send` gets a
-                    draft without it. A person's session answers 400.
+                    draft without it, and may copy only the contact and addresses already on the
+                    conversation (400 otherwise). A person's session answers 400.
           multipart/form-data:
             schema:
               type: object
@@ -1388,6 +1389,7 @@ paths:
         workspace's. A pending request past its `expires_at` (seven days) is answered as `expired`.
       parameters:
         - {name: status, in: query, required: false, schema: {$ref: '#/components/schemas/AgentRequestStatus'}}
+        - {name: detail, in: query, required: false, description: 'full adds each request''s body, edited_body and result; without it they are null so a poll stays small.', schema: {type: string, enum: [full]}}
       responses:
         '200':
           description: Agent requests
@@ -1429,7 +1431,9 @@ paths:
         export (`GET /api/v1/export` or `POST /api/v1/export/link`) answers the export's one-time download
         link. `body` replaces the text of a reply draft; it is refused for any other request. A request
         that is decided or expired, or whose token was revoked, answers 409 and runs nothing; two
-        approvals at once run the call once.
+        approvals at once run the call once. A person whose role may not run the call gets 403 and the
+        request keeps waiting (`approvable_by`). `cc` keeps only some of a reply draft's copies; it
+        cannot add one. The approval finishes even if the approver's connection closes.
       requestBody:
         required: false
         content:
@@ -1439,6 +1443,11 @@ paths:
               additionalProperties: false
               properties:
                 body: {type: string, minLength: 1, description: 'The edited text of a reply draft (Markdown)'}
+                cc:
+                  type: array
+                  maxItems: 10
+                  items: {type: string}
+                  description: The copies to keep on a reply draft; only addresses the draft already copied (400 otherwise).
       responses:
         '200':
           description: The decided request and the answer of its call
@@ -1517,8 +1526,9 @@ components:
         An agent token called this above its tier, or the action needs a person's approval for every
         tier: nothing happened yet. The call is stored as an agent request a person approves or rejects
         (`GET /api/v1/agent-requests/{request_id}` shows the outcome); it expires after seven days. A
-        token answers 429 `too_many_requests` while 50 of its requests wait, and a call with files gets
-        403 `files_need_approval` (send the text alone, attach files after approval).
+        token gets 429 `too_many_requests` while 50 of its requests wait or after 100 in an hour (with
+        `Retry-After`), 402 `workspace_locked` in a locked workspace, and a call with files gets 403
+        `files_need_approval` (send the text alone, attach files after approval).
       content: {application/json: {schema: {$ref: '#/components/schemas/AgentRequestAccepted'}}}
     Redeemed:
       description: Session created from a one-time link
@@ -1646,7 +1656,7 @@ components:
         message: {type: string}
     AgentRequest:
       type: object
-      required: [id, kind, status, method, route, path, body, summary, conversation_id, requested_by, decided_by, decided_at, reason, result_status, result, result_note, created_at, expires_at]
+      required: [id, kind, status, method, route, path, body, edited_body, approvable_by, summary, conversation_id, requested_by, decided_by, decided_at, reason, result_status, result, result_note, created_at, expires_at]
       properties:
         id: {type: string, format: uuid}
         kind: {type: string, enum: [reply_draft, action], description: 'reply_draft: an outgoing reply a token may not send; action: any other call'}
@@ -1654,7 +1664,9 @@ components:
         method: {type: string, enum: [GET, POST, PUT, PATCH, DELETE]}
         route: {type: string, description: 'The route pattern, for example /api/v1/conversations/{id}'}
         path: {type: string, description: The concrete path that runs on approval}
-        body: {type: [object, array, string, number, integer, boolean, 'null'], additionalProperties: true, description: The JSON body of the call; null when it had none.}
+        body: {type: [object, array, string, number, integer, boolean, 'null'], additionalProperties: true, description: 'The JSON body of the call as the token sent it; null when it had none, in a list without detail=full, and 90 days after the decision.'}
+        edited_body: {type: [object, array, string, number, integer, boolean, 'null'], additionalProperties: true, description: 'A reply draft as the approver edited it (text changed, copies removed); this is what ran. Null when not edited.'}
+        approvable_by: {type: string, enum: [agent, admin], description: The lowest role whose person can approve it; a person below it gets 403 and the request keeps waiting.}
         summary: {type: string}
         conversation_id: {type: [string, 'null'], format: uuid}
         requested_by:

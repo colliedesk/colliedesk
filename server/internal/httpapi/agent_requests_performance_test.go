@@ -14,7 +14,8 @@ const pendingRequestsBudget = 20 * time.Millisecond
 
 // TestPendingAgentRequestsLatencyBudget times the store query behind GET /api/v1/agent-requests?status=pending,
 // which every open tab polls for the Requests badge and the reply drafts. The fixture is two workspaces with
-// 5,000 requests each from one busy token: 20 still pending, the rest decided over the last week.
+// 5,000 requests each from one busy token: 20 still pending with bodies near the 64 KiB cap, the rest
+// decided over the last week with 2 KiB bodies. The poll reads summary fields only.
 func TestPendingAgentRequestsLatencyBudget(t *testing.T) {
 	api, service, pool := testAPIWithPool(t)
 	tokenA := createSession(t, api, service, "Requests Budget A", "admin-a@requests-budget.example.com")
@@ -60,7 +61,9 @@ func TestPendingAgentRequestsLatencyBudget(t *testing.T) {
 func seedRequests(t *testing.T, pool *pgxpool.Pool, workspaceID, tokenID string) {
 	t.Helper()
 	if _, err := pool.Exec(context.Background(), `INSERT INTO agent_requests(workspace_id,token_id,token_label,token_scope,requested_by_agent_id,kind,method,route,path,body,summary,status,decided_at,created_at,expires_at)
-		SELECT $1,s.id,s.label,s.scope,s.agent_id,'action','PATCH','/api/v1/tags/{id}','/api/v1/tags/x','{"name":"n"}','Rename a tag: name n',
+		SELECT $1,s.id,s.label,s.scope,s.agent_id,'action','PATCH','/api/v1/tags/{id}','/api/v1/tags/x',
+			jsonb_build_object('name', (SELECT string_agg(md5(n::text || '-' || g::text), '') FROM generate_series(1, CASE WHEN n <= 20 THEN 1900 ELSE 64 END) g)),
+			'Rename a tag: name n',
 			CASE WHEN n <= 20 THEN 'pending' ELSE 'rejected' END,
 			CASE WHEN n <= 20 THEN NULL ELSE now() - n * interval '2 minutes' END,
 			now() - n * interval '2 minutes', now() - n * interval '2 minutes' + interval '7 days'

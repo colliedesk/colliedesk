@@ -15,7 +15,10 @@ CREATE TABLE agent_requests (
     method text NOT NULL CHECK (method IN ('GET', 'POST', 'PUT', 'PATCH', 'DELETE')),
     route text NOT NULL CHECK (char_length(route) BETWEEN 1 AND 200),
     path text NOT NULL CHECK (char_length(path) BETWEEN 1 AND 500),
+    -- The call as the token sent it. A reply draft a person edited keeps the agent's version here and
+    -- the edited call in edited_body, which is what ran. Both are cleared 90 days after the decision.
     body jsonb CHECK (body IS NULL OR octet_length(body::text) <= 65536),
+    edited_body jsonb CHECK (edited_body IS NULL OR octet_length(edited_body::text) <= 65536),
     summary text NOT NULL CHECK (char_length(summary) BETWEEN 1 AND 500),
     -- The conversation a request acts on, so the conversation view can show a reply draft.
     conversation_id uuid,
@@ -41,7 +44,12 @@ CREATE TABLE agent_requests (
 
 -- The open tab polls the pending list; the list shows pending first, newest first.
 CREATE INDEX agent_requests_workspace_status_idx ON agent_requests(workspace_id, status, created_at DESC);
+-- The hourly filing limit counts one token's recent requests; the pending cap counts its waiting ones.
 CREATE INDEX agent_requests_token_idx ON agent_requests(workspace_id, token_id, created_at DESC);
+CREATE INDEX agent_requests_token_pending_idx ON agent_requests(workspace_id, token_id) WHERE status = 'pending';
+-- A conversation shows its reply drafts; the 90-day prune finds old decided rows.
+CREATE INDEX agent_requests_conversation_idx ON agent_requests(workspace_id, conversation_id) WHERE conversation_id IS NOT NULL;
+CREATE INDEX agent_requests_decided_idx ON agent_requests(decided_at) WHERE status <> 'pending' AND (body IS NOT NULL OR edited_body IS NOT NULL OR result IS NOT NULL);
 
 -- Same isolation as saved_replies.
 DO $$

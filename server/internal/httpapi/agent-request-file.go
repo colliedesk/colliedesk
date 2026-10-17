@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"maps"
 	"mime"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,8 +32,14 @@ func writeFilesNeedApproval(response http.ResponseWriter) {
 const conversationRoutePrefix = "/api/v1/conversations/{id}"
 
 // fileAgentRequest stores the call of an agent token as a request a person approves and answers 202.
-// body is the call's JSON; nil reads it from the request, which must then be JSON or empty.
-func (a *API) fileAgentRequest(response http.ResponseWriter, request *http.Request, route Route, who auth.Principal, kind string, body json.RawMessage) {
+// body is the call's JSON; nil reads it from the request, which must then be JSON or empty. summary,
+// when not empty, replaces the one built from the route and body.
+func (a *API) fileAgentRequest(response http.ResponseWriter, request *http.Request, route Route, who auth.Principal, kind string, body json.RawMessage, summary string) {
+	// A locked workspace cannot approve anything, so nothing is filed that would only expire.
+	if a.limits && who.Access.Locked {
+		writeLocked(response)
+		return
+	}
 	if body == nil {
 		if mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type")); err == nil && mediaType == "multipart/form-data" {
 			writeFilesNeedApproval(response)
@@ -68,14 +76,25 @@ func (a *API) fileAgentRequest(response http.ResponseWriter, request *http.Reque
 		}
 		conversationID = &id
 	}
+	if summary == "" {
+		summary = summarizeRequest(route, kind, body)
+	}
 	path := request.URL.EscapedPath()
 	if request.URL.RawQuery != "" {
 		path += "?" + request.URL.RawQuery
 	}
 	created, err := a.store.CreateAgentRequest(request.Context(), who.Workspace.ID, store.NewAgentRequest{
 		TokenID: who.SessionID, AgentID: who.Agent.ID, Kind: kind, Method: route.Method, Route: route.Pattern, Path: path,
-		Body: body, Summary: summarizeRequest(route, kind, body), ConversationID: conversationID,
+		Body: body, Summary: clip(summary), ConversationID: conversationID,
 	})
+	var rate *domain.AgentRequestRateError
+	if errors.As(err, &rate) {
+		seconds := int((rate.RetryAfter + time.Second - 1) / time.Second)
+		response.Header().Set("Retry-After", strconv.Itoa(max(seconds, 1)))
+		writeError(response, http.StatusTooManyRequests, "too_many_requests",
+			fmt.Sprintf("This token filed %d requests in the last hour. Try again in %d seconds.", domain.MaxAgentRequestsPerHour, max(seconds, 1)))
+		return
+	}
 	if errors.Is(err, domain.ErrTooManyAgentRequests) {
 		writeError(response, http.StatusTooManyRequests, "too_many_requests", domain.ErrTooManyAgentRequests.Error()+".")
 		return

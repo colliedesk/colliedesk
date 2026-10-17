@@ -13,6 +13,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type acceptedView struct {
@@ -33,6 +34,8 @@ type agentRequestView struct {
 	Body           json.RawMessage `json:"body"`
 	Summary        string          `json:"summary"`
 	ConversationID *string         `json:"conversation_id"`
+	EditedBody     json.RawMessage `json:"edited_body"`
+	ApprovableBy   string          `json:"approvable_by"`
 	RequestedBy    struct {
 		TokenLabel   string  `json:"token_label"`
 		TokenScope   string  `json:"token_scope"`
@@ -123,16 +126,17 @@ type requestDesk struct {
 	conversation, contact string
 	clock                 *testClock
 	service               *auth.Service
+	pool                  *pgxpool.Pool
 }
 
 func newRequestDesk(t *testing.T, name string) requestDesk {
 	t.Helper()
 	clock := &testClock{now: time.Date(2026, time.October, 17, 9, 0, 0, 0, time.UTC)}
-	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.Now = clock.Now })
+	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.Now = clock.Now })
 	admin := createSession(t, api, service, name, "admin@"+strings.ToLower(strings.ReplaceAll(name, " ", "-"))+".example.com")
 	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Ada", "email": "ada@" + strings.ToLower(strings.ReplaceAll(name, " ", "-")) + ".example.com"})
 	conversation := create(t, api, admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Printer jam"})
-	return requestDesk{api: api, admin: admin, conversation: conversation, contact: contact, clock: clock, service: service}
+	return requestDesk{api: api, admin: admin, conversation: conversation, contact: contact, clock: clock, service: service, pool: pool}
 }
 
 func conversationStatus(t *testing.T, api http.Handler, token, id string) string {
@@ -162,8 +166,15 @@ func TestReadTokenWriteBecomesARequestAndChangesNothingUntilApproved(t *testing.
 		mine[0].Route != "/api/v1/conversations/{id}" || mine[0].RequestedBy.TokenLabel != "Claude triage" || mine[0].RequestedBy.TokenScope != "read" {
 		t.Fatalf("the token's own list = %+v", mine)
 	}
-	if !strings.Contains(string(mine[0].Body), `"pending"`) {
-		t.Errorf("stored body = %s, want the exact call", mine[0].Body)
+	// The list every tab polls stays small: the call's body comes with one request, or with detail=full.
+	if len(mine[0].Body) > 0 && string(mine[0].Body) != "null" {
+		t.Errorf("list carries the body %s, want only the summary fields", mine[0].Body)
+	}
+	if full := listRequests(t, desk.api, read, "?detail=full"); len(full) != 1 || !strings.Contains(string(full[0].Body), `"pending"`) {
+		t.Errorf("detail=full = %+v, want the body", full)
+	}
+	if one := getRequest(t, desk.api, read, created.RequestID); !strings.Contains(string(one.Body), `"pending"`) {
+		t.Errorf("stored body = %s, want the exact call", one.Body)
 	}
 	if mine[0].ConversationID == nil || *mine[0].ConversationID != desk.conversation {
 		t.Errorf("conversation_id = %v, want %s", mine[0].ConversationID, desk.conversation)
@@ -230,8 +241,9 @@ func TestReplyDraftIsSentOnlyWhenAPersonApprovesItWithTheirEdit(t *testing.T) {
 	if sent.Kind != "outgoing" || sent.Body != "Hello Ada, please restart the printer." {
 		t.Errorf("sent reply = %+v, want the edited body", sent)
 	}
-	if sent.AgentRequestID == nil || *sent.AgentRequestID != created.RequestID || sent.AgentToken == nil || sent.AgentToken.Label != "Claude drafts" {
-		t.Errorf("sent reply must name the request and the token that drafted it: %+v", sent)
+	// The words are the approver's now: the reply names the request, not the token as its writer.
+	if sent.AgentRequestID == nil || *sent.AgentRequestID != created.RequestID || sent.AgentToken != nil {
+		t.Errorf("an edited reply must name the request and not the token as its writer: %+v", sent)
 	}
 	var me struct {
 		Agent struct {
@@ -243,8 +255,8 @@ func TestReplyDraftIsSentOnlyWhenAPersonApprovesItWithTheirEdit(t *testing.T) {
 		t.Errorf("sent reply must be written by the person who approved it (%s): %+v", me.Agent.ID, sent)
 	}
 	stored := getRequest(t, desk.api, desk.admin, created.RequestID)
-	if !strings.Contains(string(stored.Body), "please restart") {
-		t.Errorf("the request keeps what was sent; body = %s", stored.Body)
+	if !strings.Contains(string(stored.Body), "try turning it off") || !strings.Contains(string(stored.EditedBody), "please restart") {
+		t.Errorf("the request keeps the agent's draft and the edit apart; body = %s, edited_body = %s", stored.Body, stored.EditedBody)
 	}
 
 	// An action request takes no edited body.
@@ -352,20 +364,24 @@ func TestDoubleApproveRunsTheCallOnce(t *testing.T) {
 	}
 }
 
-func TestApproverWithoutPermissionRecordsTheFailure(t *testing.T) {
+func TestApproverWithoutPermissionIsRefusedAndTheRequestKeepsWaiting(t *testing.T) {
 	desk := newRequestDesk(t, "Permission Desk")
 	send := issueToken(t, desk.api, desk.admin, "sender", "send").Token
 	agent := joinAsAgent(t, desk.api, desk.admin, "agent@permission-desk.example.com")
 
 	created := accepted(t, desk.api, http.MethodPatch, "/api/v1/workspace/slug", map[string]any{"slug": "renamed-desk"}, send)
-	response := approve(t, desk.api, agent, created.RequestID, nil)
-	if response.Code != http.StatusOK {
-		t.Fatalf("approve by an agent status=%d body=%s", response.Code, response.Body.String())
+	if got := getRequest(t, desk.api, agent, created.RequestID); got.ApprovableBy != "admin" {
+		t.Errorf("approvable_by = %q, want admin", got.ApprovableBy)
 	}
-	var outcome approvedView
-	decode(t, response, &outcome)
-	if outcome.Request.Status != "failed" || outcome.Request.ResultStatus == nil || *outcome.Request.ResultStatus != http.StatusForbidden {
-		t.Fatalf("approval by a person without permission = %+v, want failed with 403", outcome.Request)
+	response := approve(t, desk.api, agent, created.RequestID, nil)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("approve by an agent status=%d body=%s, want 403", response.Code, response.Body.String())
+	}
+	if got := getRequest(t, desk.api, desk.admin, created.RequestID); got.Status != "pending" || got.DecidedBy != nil {
+		t.Fatalf("a refused approval changed the request: %+v", got)
+	}
+	if response := approve(t, desk.api, desk.admin, created.RequestID, nil); response.Code != http.StatusOK {
+		t.Fatalf("an admin approves: status=%d body=%s", response.Code, response.Body.String())
 	}
 	var me struct {
 		Workspace struct {
@@ -373,11 +389,8 @@ func TestApproverWithoutPermissionRecordsTheFailure(t *testing.T) {
 		} `json:"workspace"`
 	}
 	decode(t, request(t, desk.api, http.MethodGet, "/api/v1/auth/me", nil, desk.admin, nil), &me)
-	if me.Workspace.Slug == "renamed-desk" {
-		t.Fatal("the slug changed although the approver may not change it")
-	}
-	if response := approve(t, desk.api, desk.admin, created.RequestID, nil); response.Code != http.StatusConflict {
-		t.Errorf("a failed request is decided: status=%d, want 409", response.Code)
+	if me.Workspace.Slug != "renamed-desk" {
+		t.Fatalf("slug = %q after the admin approved, want renamed-desk", me.Workspace.Slug)
 	}
 }
 

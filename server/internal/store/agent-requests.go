@@ -5,36 +5,45 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
 )
 
 // agentRequestSelect returns requests with the token's state and the names of the people involved.
-// A token row that is gone counts as revoked.
-const agentRequestSelect = `SELECT r.id::text,r.kind,r.status,r.method,r.route,r.path,r.body,r.summary,r.conversation_id::text,
+// A token row that is gone counts as revoked. Without full the call and its answer are left out: the
+// list every open tab polls carries only what a row shows.
+func agentRequestSelect(full bool) string {
+	payload := `r.body,r.edited_body,r.result`
+	if !full {
+		payload = `NULL::jsonb,NULL::jsonb,NULL::jsonb`
+	}
+	return `SELECT r.id::text,r.kind,r.status,r.method,r.route,r.path,` + payload + `,r.summary,r.conversation_id::text,
 	r.token_id::text,r.token_label,r.token_scope,(t.id IS NULL OR t.revoked_at IS NOT NULL),r.requested_by_agent_id::text,COALESCE(NULLIF(ra.display_name,''),ra.email),
-	r.decided_by_agent_id::text,COALESCE(NULLIF(da.display_name,''),da.email),r.decided_at,r.reason,r.result_status,r.result,r.result_note,r.created_at,r.expires_at
+	r.decided_by_agent_id::text,COALESCE(NULLIF(da.display_name,''),da.email),r.decided_at,r.reason,r.result_status,r.result_note,r.created_at,r.expires_at
 	FROM agent_requests r
 	LEFT JOIN sessions t ON t.workspace_id=r.workspace_id AND t.id=r.token_id
 	LEFT JOIN agents ra ON ra.workspace_id=r.workspace_id AND ra.id=r.requested_by_agent_id
 	LEFT JOIN agents da ON da.workspace_id=r.workspace_id AND da.id=r.decided_by_agent_id`
+}
 
 var requestID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 func scanAgentRequest(row pgx.Row) (domain.AgentRequest, error) {
 	var item domain.AgentRequest
-	var body, result []byte
+	var body, edited, result []byte
 	var resultStatus *int32
 	var deciderID, deciderName *string
-	err := row.Scan(&item.ID, &item.Kind, &item.Status, &item.Method, &item.Route, &item.Path, &body, &item.Summary, &item.ConversationID,
+	err := row.Scan(&item.ID, &item.Kind, &item.Status, &item.Method, &item.Route, &item.Path, &body, &edited, &result, &item.Summary, &item.ConversationID,
 		&item.RequestedBy.TokenID, &item.RequestedBy.TokenLabel, &item.RequestedBy.TokenScope, &item.RequestedBy.TokenRevoked,
 		&item.RequestedBy.AgentID, &item.RequestedBy.AgentName, &deciderID, &deciderName, &item.DecidedAt, &item.Reason,
-		&resultStatus, &result, &item.ResultNote, &item.CreatedAt, &item.ExpiresAt)
+		&resultStatus, &item.ResultNote, &item.CreatedAt, &item.ExpiresAt)
 	if err != nil {
 		return domain.AgentRequest{}, err
 	}
-	item.Body, item.Result = body, result
+	item.Body, item.EditedBody, item.Result = body, edited, result
 	if resultStatus != nil {
 		status := int(*resultStatus)
 		item.ResultStatus = &status
@@ -71,7 +80,7 @@ func (s *Store) expireAgentRequests(ctx context.Context, tx pgx.Tx, workspaceID 
 }
 
 func getAgentRequest(ctx context.Context, tx pgx.Tx, workspaceID, id string, lock bool) (domain.AgentRequest, error) {
-	query := agentRequestSelect + ` WHERE r.workspace_id=$1 AND r.id=$2`
+	query := agentRequestSelect(true) + ` WHERE r.workspace_id=$1 AND r.id=$2`
 	if lock {
 		query += ` FOR UPDATE OF r`
 	}
@@ -97,11 +106,20 @@ func (s *Store) CreateAgentRequest(ctx context.Context, workspaceID string, in N
 		if waiting >= domain.MaxPendingAgentRequests {
 			return domain.AgentRequest{}, domain.ErrTooManyAgentRequests
 		}
+		now := s.now()
+		var filed int
+		var oldest *time.Time
+		if err := tx.QueryRow(ctx, `SELECT count(*),min(created_at) FROM agent_requests WHERE workspace_id=$1 AND token_id=$2 AND created_at>$3`,
+			workspaceID, in.TokenID, now.Add(-time.Hour)).Scan(&filed, &oldest); err != nil {
+			return domain.AgentRequest{}, fmt.Errorf("count recent agent requests: %w", err)
+		}
+		if filed >= domain.MaxAgentRequestsPerHour && oldest != nil {
+			return domain.AgentRequest{}, &domain.AgentRequestRateError{RetryAfter: oldest.Add(time.Hour).Sub(now)}
+		}
 		var body any
 		if len(in.Body) > 0 {
 			body = string(in.Body)
 		}
-		now := s.now()
 		var id string
 		err := tx.QueryRow(ctx, `INSERT INTO agent_requests(workspace_id,token_id,token_label,token_scope,requested_by_agent_id,kind,method,route,path,body,summary,conversation_id,created_at,expires_at)
 			SELECT $1,s.id,s.label,s.scope,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12 FROM sessions s
@@ -115,10 +133,12 @@ func (s *Store) CreateAgentRequest(ctx context.Context, workspaceID string, in N
 	})
 }
 
-// AgentRequestFilter narrows a list. TokenID, when set, keeps only that token's requests.
+// AgentRequestFilter narrows a list. TokenID, when set, keeps only that token's requests; Full adds
+// each request's call and answer.
 type AgentRequestFilter struct {
 	Status  string
 	TokenID string
+	Full    bool
 }
 
 // maxListedAgentRequests bounds one list; pending requests come first.
@@ -130,7 +150,7 @@ func (s *Store) ListAgentRequests(ctx context.Context, workspaceID string, filte
 		if err := s.expireAgentRequests(ctx, tx, workspaceID); err != nil {
 			return nil, err
 		}
-		query := agentRequestSelect + ` WHERE r.workspace_id=$1`
+		query := agentRequestSelect(filter.Full) + ` WHERE r.workspace_id=$1`
 		args := []any{workspaceID}
 		if filter.Status != "" {
 			args = append(args, filter.Status)
@@ -195,18 +215,19 @@ func (s *Store) decide(ctx context.Context, workspaceID, id string, change func(
 }
 
 // ClaimAgentRequest marks a pending request approved by agentID before its call runs, so a second
-// approval (a double click, a second tab) finds it decided and runs nothing. A non-nil body replaces
-// the stored call's body (an edited reply draft). A request of a revoked token is refused.
-func (s *Store) ClaimAgentRequest(ctx context.Context, workspaceID, id, agentID string, body json.RawMessage) (domain.AgentRequest, error) {
+// approval (a double click, a second tab) finds it decided and runs nothing. A non-nil edited is the
+// call as the person edited it (a reply draft); it is kept beside the agent's own. A request of a
+// revoked token is refused.
+func (s *Store) ClaimAgentRequest(ctx context.Context, workspaceID, id, agentID string, edited json.RawMessage) (domain.AgentRequest, error) {
 	return s.decide(ctx, workspaceID, id, func(tx pgx.Tx, item domain.AgentRequest) error {
 		if item.RequestedBy.TokenRevoked {
 			return domain.ErrAgentRequestTokenRevoked
 		}
 		var replacement any
-		if body != nil {
-			replacement = string(body)
+		if edited != nil {
+			replacement = string(edited)
 		}
-		_, err := tx.Exec(ctx, `UPDATE agent_requests SET status='approved',decided_by_agent_id=$3,decided_at=$4,body=COALESCE($5::jsonb,body)
+		_, err := tx.Exec(ctx, `UPDATE agent_requests SET status='approved',decided_by_agent_id=$3,decided_at=$4,edited_body=$5::jsonb
 			WHERE workspace_id=$1 AND id=$2`, workspaceID, id, agentID, s.now(), replacement)
 		return err
 	})
@@ -257,4 +278,50 @@ func (s *Store) CancelAgentRequest(ctx context.Context, workspaceID, id, agentID
 			WHERE workspace_id=$1 AND id=$2`, workspaceID, id, agentID, s.now())
 		return err
 	})
+}
+
+// PruneAgentRequests clears the call, the edit and the answer of every request decided more than
+// domain.AgentRequestCallRetention ago, in every workspace. The row stays as the record of who asked
+// for what and who decided. serve runs it at start and daily.
+func (s *Store) PruneAgentRequests(ctx context.Context) (int64, error) {
+	var pruned int64
+	err := s.db.Privileged(ctx, database.PrivilegeAgentRequestPrune, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `UPDATE agent_requests SET body=NULL,edited_body=NULL,result=NULL
+			WHERE status<>'pending' AND decided_at<$1 AND (body IS NOT NULL OR edited_body IS NOT NULL OR result IS NOT NULL)`,
+			s.now().Add(-domain.AgentRequestCallRetention))
+		if err != nil {
+			return fmt.Errorf("prune agent requests: %w", err)
+		}
+		pruned = tag.RowsAffected()
+		return nil
+	})
+	return pruned, err
+}
+
+// ConversationParticipants returns the conversation's contact address and every address already on
+// it: the senders and copies of its mail, and the copies of the team's replies, all lowercased.
+func (s *Store) ConversationParticipants(ctx context.Context, workspaceID, conversationID string) (string, map[string]bool, error) {
+	var contact string
+	known := map[string]bool{}
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(ctx, `SELECT lower(ct.email) FROM conversations c JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
+			WHERE c.workspace_id=$1 AND c.id=$2`, workspaceID, conversationID).Scan(&contact); err != nil {
+			return err
+		}
+		known[contact] = true
+		rows, err := tx.Query(ctx, `SELECT lower(a) FROM messages m, LATERAL (
+				SELECT m.email_meta->>'from' UNION ALL SELECT jsonb_array_elements_text(COALESCE(m.email_meta->'cc','[]'::jsonb))
+				UNION ALL SELECT m.origin->>'from' UNION ALL SELECT jsonb_array_elements_text(COALESCE(m.origin->'cc','[]'::jsonb))
+				UNION ALL SELECT unnest(COALESCE(m.cc,'{}'::text[]))) AS addresses(a)
+			WHERE m.workspace_id=$1 AND m.conversation_id=$2 AND a IS NOT NULL`, workspaceID, conversationID)
+		if err != nil {
+			return fmt.Errorf("load conversation participants: %w", err)
+		}
+		addresses, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		for _, address := range addresses {
+			known[address] = true
+		}
+		return err
+	})
+	return contact, known, err
 }

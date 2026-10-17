@@ -1,13 +1,16 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
@@ -27,10 +30,14 @@ func (a *API) listAgentRequests(response http.ResponseWriter, request *http.Requ
 		return
 	}
 	who := principal(request)
-	items, err := a.store.ListAgentRequests(request.Context(), who.Workspace.ID, store.AgentRequestFilter{Status: status, TokenID: requestScope(request)})
+	full := request.URL.Query().Get("detail") == "full"
+	items, err := a.store.ListAgentRequests(request.Context(), who.Workspace.ID, store.AgentRequestFilter{Status: status, TokenID: requestScope(request), Full: full})
 	if err != nil {
 		writeInternalError(response, err)
 		return
+	}
+	for index := range items {
+		items[index].ApprovableBy = approvableBy(items[index])
 	}
 	writeJSON(response, http.StatusOK, map[string]any{"items": items})
 }
@@ -41,38 +48,51 @@ func (a *API) getAgentRequest(response http.ResponseWriter, request *http.Reques
 		writeStoreError(response, err)
 		return
 	}
+	item.ApprovableBy = approvableBy(item)
 	writeJSON(response, http.StatusOK, item)
 }
 
-// approveAgentRequest marks the request approved, then runs its call as the approving person and
-// records what the call answered. The answer goes back to the approver whole; the stored copy leaves
-// out credentials and links (withheldResults).
+// approveTimeout bounds one approval, call included. It does not follow the approver's connection: a
+// closed tab must not leave a request claimed with no result.
+const approveTimeout = 2 * time.Minute
+
+// approveAgentRequest checks the person may run the call, marks the request approved, then runs the
+// call as that person and records what it answered. The answer goes back to the approver whole; the
+// stored copy leaves out credentials and links (withheldResults).
 func (a *API) approveAgentRequest(response http.ResponseWriter, request *http.Request) {
 	var input struct {
-		Body *string `json:"body"`
+		Body *string   `json:"body"`
+		CC   *[]string `json:"cc"`
 	}
 	if !decodeOptionalJSON(response, request, &input) {
 		return
 	}
 	who := principal(request)
 	workspaceID, id := who.Workspace.ID, request.PathValue("id")
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(request.Context()), approveTimeout)
+	defer cancel()
+	existing, err := a.store.GetAgentRequest(ctx, workspaceID, id, "")
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	// Refused before anything changes, so a person who may approve it still can.
+	if !auth.HasPermission(who.Agent.Role, approvalPermission(existing)) {
+		writeError(response, http.StatusForbidden, "forbidden", "Only an admin can approve this request. It keeps waiting for one.")
+		return
+	}
 	var edited json.RawMessage
-	if input.Body != nil {
-		existing, err := a.store.GetAgentRequest(request.Context(), workspaceID, id, "")
-		if err != nil {
-			writeStoreError(response, err)
-			return
-		}
-		if edited, err = editedReply(existing, *input.Body); err != nil {
+	if input.Body != nil || input.CC != nil {
+		if edited, err = editedReply(existing, input.Body, input.CC); err != nil {
 			writeError(response, http.StatusBadRequest, "invalid_request", err.Error())
 			return
 		}
 	}
-	claimed, err := a.store.ClaimAgentRequest(request.Context(), workspaceID, id, who.Agent.ID, edited)
+	claimed, err := a.store.ClaimAgentRequest(ctx, workspaceID, id, who.Agent.ID, edited)
 	if writeDecisionError(response, err) {
 		return
 	}
-	status, answer, complete := a.replayApproved(request.Context(), who, claimed)
+	status, answer, complete := a.replayApproved(ctx, who, claimed)
 	stored, note := json.RawMessage(nil), (*string)(nil)
 	switch {
 	case !complete:
@@ -83,11 +103,12 @@ func (a *API) approveAgentRequest(response http.ResponseWriter, request *http.Re
 	case json.Valid(answer):
 		stored = answer
 	}
-	finished, err := a.store.FinishAgentRequest(request.Context(), workspaceID, id, status, stored, note)
+	finished, err := a.store.FinishAgentRequest(ctx, workspaceID, id, status, stored, note)
 	if err != nil {
 		writeInternalError(response, err)
 		return
 	}
+	finished.ApprovableBy = approvableBy(finished)
 	var result json.RawMessage
 	if json.Valid(answer) {
 		result = answer
@@ -119,6 +140,7 @@ func (a *API) rejectAgentRequest(response http.ResponseWriter, request *http.Req
 	if writeDecisionError(response, err) {
 		return
 	}
+	item.ApprovableBy = approvableBy(item)
 	writeJSON(response, http.StatusOK, item)
 }
 
@@ -128,6 +150,7 @@ func (a *API) cancelAgentRequest(response http.ResponseWriter, request *http.Req
 	if writeDecisionError(response, err) {
 		return
 	}
+	item.ApprovableBy = approvableBy(item)
 	writeJSON(response, http.StatusOK, item)
 }
 
@@ -148,19 +171,44 @@ func writeDecisionError(response http.ResponseWriter, err error) bool {
 	return true
 }
 
-// editedReply returns the stored call of a reply draft with its text replaced.
-func editedReply(item domain.AgentRequest, text string) (json.RawMessage, error) {
+// editedReply returns the call of a reply draft as the approver edited it: text replaced, copies
+// removed. The approval can only take copies away: an address the token did not ask for, and that no
+// one saw in the request, is never added here.
+func editedReply(item domain.AgentRequest, text *string, cc *[]string) (json.RawMessage, error) {
 	if item.Kind != domain.AgentRequestReplyDraft {
 		return nil, errors.New("Only a reply draft can be edited before approval; approve or reject this request as it is.")
-	}
-	if strings.TrimSpace(text) == "" {
-		return nil, errors.New("The reply is empty. Discard the draft instead.")
 	}
 	var call map[string]any
 	if err := json.Unmarshal(item.Body, &call); err != nil || call == nil {
 		return nil, errors.New("This draft cannot be edited.")
 	}
-	call["body"] = text
+	if text != nil {
+		if strings.TrimSpace(*text) == "" {
+			return nil, errors.New("The reply is empty. Discard the draft instead.")
+		}
+		call["body"] = *text
+	}
+	if cc != nil {
+		asked := map[string]bool{}
+		if listed, ok := call["cc"].([]any); ok {
+			for _, address := range listed {
+				if value, ok := address.(string); ok {
+					asked[strings.ToLower(value)] = true
+				}
+			}
+		}
+		kept := make([]string, 0, len(*cc))
+		for _, address := range *cc {
+			if !asked[strings.ToLower(address)] {
+				return nil, errors.New(address + " was not copied on the draft. Approving can remove copies, not add them; add the address in a new reply.")
+			}
+			kept = append(kept, strings.ToLower(address))
+		}
+		delete(call, "cc")
+		if len(kept) > 0 {
+			call["cc"] = kept
+		}
+	}
 	return json.Marshal(call)
 }
 
