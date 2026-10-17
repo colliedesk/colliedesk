@@ -89,6 +89,15 @@ type AgentRequestSavedReply struct {
 	ID      string           `json:"id"`
 	Before  *SavedReplyText  `json:"before"`
 	Current *SavedReplyState `json:"current"`
+	// Restores is the version a restore request applies, as it was when the token asked.
+	Restores *SavedReplyRestoredVersion `json:"restores"`
+}
+
+// SavedReplyRestoredVersion is the number, title and text of the version a request restores.
+type SavedReplyRestoredVersion struct {
+	Version int    `json:"version"`
+	Title   string `json:"title"`
+	Body    string `json:"body"`
 }
 
 // SavedReplyText is the title and text of a saved reply at one moment.

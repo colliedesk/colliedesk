@@ -22,7 +22,7 @@ CREATE TABLE saved_reply_versions (
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     saved_reply_id uuid NOT NULL,
     version integer NOT NULL CHECK (version >= 1),
-    kind text NOT NULL CHECK (kind IN ('create', 'edit', 'delete', 'restore', 'undelete')),
+    kind text NOT NULL CHECK (kind IN ('baseline', 'create', 'edit', 'delete', 'restore', 'undelete')),
     -- The version a restore copied; set only for kind restore.
     restored_from_version integer CHECK ((kind = 'restore') = (restored_from_version IS NOT NULL)),
     title text NOT NULL CHECK (char_length(title) BETWEEN 1 AND 200),
@@ -41,9 +41,16 @@ CREATE TABLE saved_reply_versions (
     FOREIGN KEY (workspace_id, agent_request_id) REFERENCES agent_requests(workspace_id, id) ON DELETE SET NULL (agent_request_id)
 );
 
--- History starts here: each existing reply gets version 1 with the text it has now.
+-- History starts here: each existing reply gets version 1 with the text it has now. A reply never
+-- edited is its creation, by its author. A reply edited before history existed is a baseline: who
+-- wrote the current text is unknown, so no person is named.
 INSERT INTO saved_reply_versions(workspace_id, saved_reply_id, version, kind, title, body, changed_by_agent_id, created_at)
-    SELECT workspace_id, id, 1, 'create', title, body, created_by_agent_id, updated_at FROM saved_replies;
+    SELECT workspace_id, id, 1,
+        CASE WHEN updated_at > created_at THEN 'baseline' ELSE 'create' END,
+        title, body,
+        CASE WHEN updated_at > created_at THEN NULL ELSE created_by_agent_id END,
+        updated_at
+    FROM saved_replies;
 
 -- A request that edits, deletes or restores a saved reply names it, and keeps the reply as the token
 -- saw it when asking, so the person deciding sees a correct before and after even if the reply

@@ -198,7 +198,7 @@ func exportSavedReplyVersions(ctx context.Context, tx pgx.Tx, workspaceID string
 
 func exportAgentRequests(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
 	rows, err := tx.Query(ctx, `SELECT id::text,kind,status,method,route,path,body,edited_body,summary,conversation_id::text,token_id::text,token_label,token_scope,
-		requested_by_agent_id::text,decided_by_agent_id::text,decided_at,reason,result_status,result_note,created_at,expires_at
+		requested_by_agent_id::text,decided_by_agent_id::text,decided_at,reason,result_status,result_note,created_at,expires_at,saved_reply_id::text,saved_reply_before
 		FROM agent_requests WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export agent requests: %w", err)
@@ -206,13 +206,13 @@ func exportAgentRequests(ctx context.Context, tx pgx.Tx, workspaceID string, sin
 	defer rows.Close()
 	for rows.Next() {
 		var record export.AgentRequest
-		var body, edited []byte
+		var body, edited, replyBefore []byte
 		if err := rows.Scan(&record.ID, &record.Kind, &record.Status, &record.Method, &record.Route, &record.Path, &body, &edited, &record.Summary,
 			&record.ConversationID, &record.TokenID, &record.TokenLabel, &record.TokenScope, &record.RequestedByAgentID, &record.DecidedByAgentID,
-			&record.DecidedAt, &record.Reason, &record.ResultStatus, &record.ResultNote, &record.CreatedAt, &record.ExpiresAt); err != nil {
+			&record.DecidedAt, &record.Reason, &record.ResultStatus, &record.ResultNote, &record.CreatedAt, &record.ExpiresAt, &record.SavedReplyID, &replyBefore); err != nil {
 			return fmt.Errorf("export agent requests: %w", err)
 		}
-		record.Body, record.EditedBody = body, edited
+		record.Body, record.EditedBody, record.SavedReplyBefore = body, edited, replyBefore
 		record.CreatedAt, record.ExpiresAt, record.DecidedAt = domain.UTC(record.CreatedAt), domain.UTC(record.ExpiresAt), domain.UTCOptional(record.DecidedAt)
 		if err := sink.AgentRequest(record); err != nil {
 			return err

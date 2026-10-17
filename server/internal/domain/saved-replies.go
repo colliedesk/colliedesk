@@ -13,6 +13,9 @@ const (
 	MaxSavedReplies    = 500
 	MaxSavedReplyTitle = 200
 	MaxSavedReplyBody  = 20000
+	// MaxSavedReplyPage bounds one page of versions or of the trash; DefaultSavedReplyPage is the default.
+	MaxSavedReplyPage     = 200
+	DefaultSavedReplyPage = 50
 	// SavedReplyTrashRetention is how long a deleted reply stays in the trash, restorable, before the
 	// server deletes it and its history for good.
 	SavedReplyTrashRetention = 30 * 24 * time.Hour
@@ -20,6 +23,7 @@ const (
 
 // Kinds of saved reply versions.
 const (
+	SavedReplyBaseline  = "baseline"
 	SavedReplyCreated   = "create"
 	SavedReplyEdited    = "edit"
 	SavedReplyDeleted   = "delete"

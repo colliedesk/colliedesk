@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -163,11 +164,11 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/saved-replies":                                  {"/api/v1/saved-replies", nil, admin, 200, ""},
 		"POST /api/v1/saved-replies":                                 {"/api/v1/saved-replies", map[string]any{"title": "Created contract reply", "body": "Thanks"}, admin, 201, ""},
 		"PATCH /api/v1/saved-replies/{id}":                           {"/api/v1/saved-replies/" + f.updateReplyID, map[string]any{"body": "Updated", "updated_at": f.updateReplySeen}, admin, 200, ""},
-		"DELETE /api/v1/saved-replies/{id}":                          {"/api/v1/saved-replies/" + f.deleteReplyID, nil, admin, 204, ""},
+		"DELETE /api/v1/saved-replies/{id}":                          {"/api/v1/saved-replies/" + f.deleteReplyID + "?updated_at=" + url.QueryEscape(f.deleteReplySeen), nil, admin, 204, ""},
 		"GET /api/v1/saved-replies/trash":                            {"/api/v1/saved-replies/trash", nil, admin, 200, ""},
 		"GET /api/v1/saved-replies/{id}/versions":                    {"/api/v1/saved-replies/" + f.restoreReplyID + "/versions", nil, admin, 200, ""},
 		"POST /api/v1/saved-replies/{id}/versions/{version}/restore": {"/api/v1/saved-replies/" + f.restoreReplyID + "/versions/1/restore", map[string]any{"updated_at": f.restoreReplySeen}, admin, 200, ""},
-		"POST /api/v1/saved-replies/{id}/restore":                    {"/api/v1/saved-replies/" + f.trashReplyID + "/restore", nil, admin, 200, ""},
+		"POST /api/v1/saved-replies/{id}/restore":                    {"/api/v1/saved-replies/" + f.trashReplyID + "/restore", map[string]any{"updated_at": f.trashReplySeen}, admin, 200, ""},
 		"POST /api/v1/conversations/{id}/messages/{messageId}/retry": {path: "/api/v1/conversations/" + f.conversationID + "/messages/" + f.failedReplyID + "/retry", token: admin, status: 200},
 		"GET /api/v1/channels/email":                                 {path: "/api/v1/channels/email", token: admin, status: 200},
 		"PUT /api/v1/channels/email":                                 {path: "/api/v1/channels/email", body: map[string]any{"support_address": "support@contract-all.example.com"}, token: admin, status: 200},

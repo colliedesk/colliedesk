@@ -70,7 +70,8 @@ type SavedReplyVersion struct {
 
 // AgentRequest is a call an agent token asked a person to approve, and what became of it. The answer
 // of an approved call is not exported: credentials and links are never stored, and other answers are
-// the records exported elsewhere. Body and EditedBody are null once 90 days passed after the decision.
+// the records exported elsewhere. Body, EditedBody and SavedReplyBefore are null once 90 days passed
+// after the decision.
 type AgentRequest struct {
 	ID                 string          `json:"id"`
 	Kind               string          `json:"kind"`
@@ -93,6 +94,10 @@ type AgentRequest struct {
 	ResultNote         *string         `json:"result_note"`
 	CreatedAt          time.Time       `json:"created_at"`
 	ExpiresAt          time.Time       `json:"expires_at"`
+	// SavedReplyID and SavedReplyBefore name the saved reply a request acts on and keep it as the token
+	// saw it (with the version a restore applies).
+	SavedReplyID     *string         `json:"saved_reply_id"`
+	SavedReplyBefore json.RawMessage `json:"saved_reply_before"`
 }
 
 // Attachment describes one file. Path is its location in the archive; StorageKey is where the

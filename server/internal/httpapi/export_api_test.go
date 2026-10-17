@@ -73,8 +73,12 @@ func newExportFixture(t *testing.T) exportFixture {
 		t.Fatalf("edit saved reply status=%d", response.Code)
 	}
 	trashed := create(t, api, admin, "/api/v1/saved-replies", map[string]any{"title": "Old macro", "body": "Retired text."})
-	if response := request(t, api, http.MethodDelete, "/api/v1/saved-replies/"+trashed, nil, admin, nil); response.Code != http.StatusNoContent {
+	if response := request(t, api, http.MethodDelete, deletePath(t, api, admin, trashed), nil, admin, nil); response.Code != http.StatusNoContent {
 		t.Fatalf("trash saved reply status=%d", response.Code)
+	}
+	drafter := issueToken(t, api, admin, "Export drafter", "draft").Token
+	if response := request(t, api, http.MethodDelete, deletePath(t, api, admin, closing), nil, drafter, nil); response.Code != http.StatusAccepted {
+		t.Fatalf("propose deleting a saved reply status=%d", response.Code)
 	}
 	workspace := workspaceID(t, api, admin)
 	attachmentID := seedAttachment(t, pool, storage, admin, api, firstMessage, "hello.txt", "hello")
@@ -201,6 +205,20 @@ func TestExportStreamsTheWholeWorkspaceAsZip(t *testing.T) {
 		if strings.Contains(line["body"].(string), "rival-only") {
 			t.Errorf("another workspace's saved reply history leaked: %v", line)
 		}
+	}
+	proposals := 0
+	for _, line := range ndjsonLines(t, entries["agent-requests.ndjson"]) {
+		if line["route"] != "/api/v1/saved-replies/{id}" {
+			continue
+		}
+		proposals++
+		before, _ := line["saved_reply_before"].(map[string]any)
+		if line["saved_reply_id"] == nil || before == nil || before["title"] != "Closing" || before["body"] != "Thanks a lot." {
+			t.Errorf("saved reply request record = %v, want the reply it acts on and its snapshot", line)
+		}
+	}
+	if proposals != 1 {
+		t.Errorf("agent-requests.ndjson has %d saved reply requests, want 1", proposals)
 	}
 	if len(versions) != 5 || kinds["create"] != 3 || kinds["edit"] != 1 || kinds["delete"] != 1 {
 		t.Fatalf("saved-reply-versions.ndjson = %d lines %v, want 3 create, 1 edit, 1 delete", len(versions), kinds)

@@ -109,10 +109,10 @@ func TestAnyAgentCreatesEditsAndDeletesSharedSavedReplies(t *testing.T) {
 	if renamed.Code != http.StatusOK || !strings.Contains(renamed.Body.String(), `"title":"Apology"`) || !strings.Contains(renamed.Body.String(), `"body":"We are sorry."`) {
 		t.Fatalf("rename status=%d body=%s", renamed.Code, renamed.Body.String())
 	}
-	if deleted := request(t, api, http.MethodDelete, "/api/v1/saved-replies/"+adminReply.ID, nil, agent, nil); deleted.Code != http.StatusNoContent {
+	if deleted := request(t, api, http.MethodDelete, deletePath(t, api, agent, adminReply.ID), nil, agent, nil); deleted.Code != http.StatusNoContent {
 		t.Fatalf("agent delete status=%d body=%s", deleted.Code, deleted.Body.String())
 	}
-	if again := request(t, api, http.MethodDelete, "/api/v1/saved-replies/"+adminReply.ID, nil, agent, nil); again.Code != http.StatusNotFound {
+	if again := request(t, api, http.MethodDelete, "/api/v1/saved-replies/"+adminReply.ID+"?updated_at="+anyTime, nil, agent, nil); again.Code != http.StatusNotFound {
 		t.Fatalf("second delete status=%d, want 404", again.Code)
 	}
 	if got := len(listSavedReplies(t, api, admin)); got != 2 {
@@ -206,16 +206,20 @@ func TestSavedReplyCountIsLimitedPerWorkspace(t *testing.T) {
 	if ok := request(t, api, http.MethodPost, "/api/v1/saved-replies", map[string]any{"title": "Fits", "body": "x"}, beta, nil); ok.Code != http.StatusCreated {
 		t.Fatalf("other workspace status=%d body=%s", ok.Code, ok.Body.String())
 	}
-	// Deleting one makes room again, and editing a full workspace's reply still works.
+	// Editing a full workspace's reply still works. A reply in the trash still counts, so a create and
+	// delete loop cannot grow the trash without bound; only the purge after 30 days makes room.
 	first := listSavedReplies(t, api, alpha)[0]
 	if edit := patchReply(t, api, alpha, first.ID, map[string]any{"body": "edited"}); edit.Code != http.StatusOK {
 		t.Fatalf("edit in a full workspace status=%d body=%s", edit.Code, edit.Body.String())
 	}
-	if gone := request(t, api, http.MethodDelete, "/api/v1/saved-replies/"+first.ID, nil, alpha, nil); gone.Code != http.StatusNoContent {
+	if gone := request(t, api, http.MethodDelete, deletePath(t, api, alpha, first.ID), nil, alpha, nil); gone.Code != http.StatusNoContent {
 		t.Fatalf("delete status=%d", gone.Code)
 	}
-	if again := request(t, api, http.MethodPost, "/api/v1/saved-replies", map[string]any{"title": "One too many", "body": "x"}, alpha, nil); again.Code != http.StatusCreated {
-		t.Fatalf("create after delete status=%d body=%s", again.Code, again.Body.String())
+	if again := request(t, api, http.MethodPost, "/api/v1/saved-replies", map[string]any{"title": "One too many", "body": "x"}, alpha, nil); again.Code != http.StatusConflict || !strings.Contains(again.Body.String(), "saved_reply_limit") {
+		t.Fatalf("create while the trash fills the workspace status=%d body=%s, want 409 saved_reply_limit", again.Code, again.Body.String())
+	}
+	if back := request(t, api, http.MethodPost, "/api/v1/saved-replies/"+first.ID+"/restore", undeleteBody(t, api, alpha, first.ID), alpha, nil); back.Code != http.StatusOK {
+		t.Fatalf("undelete in a full workspace status=%d body=%s", back.Code, back.Body.String())
 	}
 }
 
@@ -240,7 +244,7 @@ func TestSavedRepliesStayWorkspaceScoped(t *testing.T) {
 		if patch.Code != http.StatusNotFound {
 			t.Errorf("PATCH %s status=%d body=%s, want 404", id, patch.Code, patch.Body.String())
 		}
-		if del := request(t, api, http.MethodDelete, "/api/v1/saved-replies/"+id, nil, beta, nil); del.Code != http.StatusNotFound {
+		if del := request(t, api, http.MethodDelete, "/api/v1/saved-replies/"+id+"?updated_at="+anyTime, nil, beta, nil); del.Code != http.StatusNotFound {
 			t.Errorf("DELETE %s status=%d, want 404", id, del.Code)
 		}
 	}

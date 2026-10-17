@@ -49,7 +49,7 @@ func (s *Store) ListSavedReplies(ctx context.Context, workspaceID string) ([]dom
 
 // InsertSavedReply adds a saved reply and its first version inside tx. It answers
 // domain.ErrSavedReplyLimit when the workspace is full and domain.ErrDuplicateTitle when the title is
-// taken; replies in the trash count for neither. An advisory lock keeps two concurrent inserts from
+// taken by a reply outside the trash. An advisory lock keeps two concurrent inserts from
 // passing the count together.
 func InsertSavedReply(ctx context.Context, tx pgx.Tx, workspaceID string, actor Actor, title, body string) (domain.SavedReply, error) {
 	title, err := domain.CleanSavedReplyTitle(title)
@@ -86,13 +86,14 @@ func InsertSavedReply(ctx context.Context, tx pgx.Tx, workspaceID string, actor 
 }
 
 // checkSavedReplyRoom locks the workspace's saved replies and answers domain.ErrSavedReplyLimit when
-// MaxSavedReplies are outside the trash.
+// the workspace holds MaxSavedReplies. Replies in the trash count, so a create and delete loop cannot
+// grow the trash without bound; the purge after 30 days makes room.
 func checkSavedReplyRoom(ctx context.Context, tx pgx.Tx, workspaceID string) error {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('saved-replies|' || $1::text, 0))`, workspaceID); err != nil {
 		return fmt.Errorf("lock saved replies: %w", err)
 	}
 	var count int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM saved_replies WHERE workspace_id=$1 AND deleted_at IS NULL`, workspaceID).Scan(&count); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM saved_replies WHERE workspace_id=$1`, workspaceID).Scan(&count); err != nil {
 		return fmt.Errorf("count saved replies: %w", err)
 	}
 	if count >= domain.MaxSavedReplies {
@@ -182,39 +183,38 @@ func (s *Store) changeSavedReply(ctx context.Context, workspaceID string, actor 
 	return reply, nil
 }
 
-// DeleteSavedReply moves a reply to the trash and reports whether it was outside it in the workspace.
-func (s *Store) DeleteSavedReply(ctx context.Context, workspaceID string, actor Actor, id string) (bool, error) {
+// DeleteSavedReply moves a reply to the trash. seen is the updated_at the caller read: when the reply
+// was saved since, nothing is deleted and it answers domain.ErrSavedReplyChanged. A reply already in
+// the trash, or not in the workspace, is domain.ErrSavedReplyNotFound. The delete bumps updated_at, so
+// an undelete must have read the reply in the trash.
+func (s *Store) DeleteSavedReply(ctx context.Context, workspaceID string, actor Actor, id string, seen time.Time) error {
 	if !savedReplyID.MatchString(id) {
-		return false, nil
+		return domain.ErrSavedReplyNotFound
 	}
-	deleted, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
-		result, err := tx.Exec(ctx, `UPDATE saved_replies SET deleted_at=$3, deleted_by_agent_id=$4 WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL`,
-			workspaceID, id, s.now(), optionalID(actor.AgentID))
-		if err != nil || result.RowsAffected() != 1 {
-			return false, err
-		}
-		_, err = addSavedReplyVersion(ctx, tx, workspaceID, id, actor, domain.SavedReplyDeleted, nil)
-		return err == nil, err
+	_, err := s.changeSavedReply(ctx, workspaceID, actor, id, domain.SavedReplyDeleted, nil, func(tx pgx.Tx) pgx.Row {
+		return tx.QueryRow(ctx, `UPDATE saved_replies SET deleted_at=$3, deleted_by_agent_id=$4, updated_at=clock_timestamp()
+			WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL AND updated_at=$5 RETURNING `+savedReplyColumns,
+			workspaceID, id, s.now(), optionalID(actor.AgentID), seen)
 	})
-	if err != nil {
-		return false, fmt.Errorf("delete saved reply: %w", err)
-	}
-	return deleted, nil
+	return err
 }
 
-// UndeleteSavedReply takes a reply out of the trash as it was. A reply not in the trash is not found;
-// a title another reply took meanwhile is domain.ErrDuplicateTitle, a full workspace
-// domain.ErrSavedReplyLimit.
-func (s *Store) UndeleteSavedReply(ctx context.Context, workspaceID string, actor Actor, id string) (domain.SavedReply, error) {
+// UndeleteSavedReply takes a reply out of the trash as it was. seen is the updated_at the caller read
+// in the trash (domain.ErrSavedReplyChanged when it changed since). A reply not in the trash is not
+// found; a title another reply took meanwhile is domain.ErrDuplicateTitle.
+func (s *Store) UndeleteSavedReply(ctx context.Context, workspaceID string, actor Actor, id string, seen time.Time) (domain.SavedReply, error) {
 	if !savedReplyID.MatchString(id) {
 		return domain.SavedReply{}, domain.ErrSavedReplyNotFound
 	}
 	reply, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.SavedReply, error) {
-		if err := checkSavedReplyRoom(ctx, tx, workspaceID); err != nil {
-			return domain.SavedReply{}, err
+		reply, err := scanSavedReply(tx.QueryRow(ctx, `UPDATE saved_replies SET deleted_at=NULL, deleted_by_agent_id=NULL, updated_at=clock_timestamp()
+			WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NOT NULL AND updated_at=$3 RETURNING `+savedReplyColumns, workspaceID, id, seen))
+		if errors.Is(err, pgx.ErrNoRows) {
+			var trashed bool
+			if checkErr := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM saved_replies WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NOT NULL)`, workspaceID, id).Scan(&trashed); checkErr == nil && trashed {
+				return domain.SavedReply{}, domain.ErrSavedReplyChanged
+			}
 		}
-		reply, err := scanSavedReply(tx.QueryRow(ctx, `UPDATE saved_replies SET deleted_at=NULL, deleted_by_agent_id=NULL
-			WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NOT NULL RETURNING `+savedReplyColumns, workspaceID, id))
 		if err != nil {
 			return domain.SavedReply{}, err
 		}
@@ -226,7 +226,7 @@ func (s *Store) UndeleteSavedReply(ctx context.Context, workspaceID string, acto
 		return domain.SavedReply{}, domain.ErrSavedReplyNotFound
 	case isDuplicateTitle(err):
 		return domain.SavedReply{}, domain.ErrDuplicateTitle
-	case errors.Is(err, domain.ErrSavedReplyLimit):
+	case errors.Is(err, domain.ErrSavedReplyChanged):
 		return domain.SavedReply{}, err
 	case err != nil:
 		return domain.SavedReply{}, fmt.Errorf("undelete saved reply: %w", err)

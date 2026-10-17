@@ -22,6 +22,8 @@ type contractFixture struct {
 	updateReplySeen              string
 	trashReplyID, restoreReplyID string
 	restoreReplySeen             string
+	deleteReplySeen              string
+	trashReplySeen               string
 	attachmentID                 string
 	redeemToken, logoutToken     string
 	inboundSecret                string
@@ -63,10 +65,12 @@ func newContractFixture(t *testing.T) contractFixture {
 	updateReplyID := create(t, api, adminToken, "/api/v1/saved-replies", map[string]any{"title": "Update contract reply", "body": "Hello {{customer.name}}"})
 	updateReplySeen := seenAt(t, api, adminToken, updateReplyID)
 	deleteReplyID := create(t, api, adminToken, "/api/v1/saved-replies", map[string]any{"title": "Delete contract reply", "body": "Bye"})
+	deleteReplySeen := seenAt(t, api, adminToken, deleteReplyID)
 	trashReplyID := create(t, api, adminToken, "/api/v1/saved-replies", map[string]any{"title": "Trashed contract reply", "body": "Back soon"})
-	if response := request(t, api, http.MethodDelete, "/api/v1/saved-replies/"+trashReplyID, nil, adminToken, nil); response.Code != http.StatusNoContent {
+	if response := request(t, api, http.MethodDelete, deletePath(t, api, adminToken, trashReplyID), nil, adminToken, nil); response.Code != http.StatusNoContent {
 		t.Fatalf("trash contract reply status=%d body=%s", response.Code, response.Body.String())
 	}
+	trashReplySeen := undeleteBody(t, api, adminToken, trashReplyID)["updated_at"].(string)
 	restoreReplyID := create(t, api, adminToken, "/api/v1/saved-replies", map[string]any{"title": "Restore contract reply", "body": "First"})
 	if response := patchReply(t, api, adminToken, restoreReplyID, map[string]any{"body": "Second"}); response.Code != http.StatusOK {
 		t.Fatalf("edit contract reply status=%d body=%s", response.Code, response.Body.String())
@@ -140,7 +144,7 @@ func newContractFixture(t *testing.T) contractFixture {
 	approveRequestID, rejectRequestID, cancelRequestID := fileRequest(), fileRequest(), fileRequest()
 	return contractFixture{requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, inviteID: inviteID, sessionID: sessionID,
-		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, attachmentID: attachmentID, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token}
+		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, attachmentID: attachmentID, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token}
 }
 
 func createContractInvite(t *testing.T, api http.Handler, token, email, role string) (string, string) {

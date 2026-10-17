@@ -2,8 +2,11 @@ package store
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"math"
+	"strings"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
@@ -104,10 +107,24 @@ func addSavedReplyVersion(ctx context.Context, tx pgx.Tx, workspaceID, replyID s
 	return change.change(), nil
 }
 
-// ListTrashedSavedReplies returns the workspace's replies in the trash, most recently deleted first.
-func (s *Store) ListTrashedSavedReplies(ctx context.Context, workspaceID string) ([]domain.TrashedSavedReply, error) {
+// ErrBadCursor means a trash cursor that this server did not hand out.
+var ErrBadCursor = errors.New("bad cursor")
+
+// ListTrashedSavedReplies returns one page of the workspace's replies in the trash, most recently
+// deleted first, and the cursor of the next page ("" on the last one).
+func (s *Store) ListTrashedSavedReplies(ctx context.Context, workspaceID string, limit int, cursor string) ([]domain.TrashedSavedReply, string, error) {
+	query := savedReplyListSelect(true) + ` WHERE r.workspace_id=$1 AND r.deleted_at IS NOT NULL`
+	args := []any{workspaceID, limit + 1}
+	if cursor != "" {
+		at, id, err := decodeTrashCursor(cursor)
+		if err != nil {
+			return nil, "", err
+		}
+		query += ` AND (r.deleted_at, r.id) < ($3, $4)`
+		args = append(args, at, id)
+	}
 	items, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.TrashedSavedReply, error) {
-		rows, err := tx.Query(ctx, savedReplyListSelect(true)+` WHERE r.workspace_id=$1 AND r.deleted_at IS NOT NULL ORDER BY r.deleted_at DESC, r.id`, workspaceID)
+		rows, err := tx.Query(ctx, query+` ORDER BY r.deleted_at DESC, r.id DESC LIMIT $2`, args...)
 		if err != nil {
 			return nil, err
 		}
@@ -116,15 +133,39 @@ func (s *Store) ListTrashedSavedReplies(ctx context.Context, workspaceID string)
 		})
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list saved reply trash: %w", err)
+		return nil, "", fmt.Errorf("list saved reply trash: %w", err)
 	}
-	return items, nil
+	next := ""
+	if len(items) > limit {
+		items = items[:limit]
+		last := items[limit-1]
+		next = base64.RawURLEncoding.EncodeToString([]byte(last.DeletedAt.Format(time.RFC3339Nano) + " " + last.ID))
+	}
+	return items, next, nil
 }
 
-// SavedReplyVersions returns every version of a reply, in or out of the trash, newest first.
-func (s *Store) SavedReplyVersions(ctx context.Context, workspaceID, id string) ([]domain.SavedReplyVersion, error) {
+func decodeTrashCursor(cursor string) (time.Time, string, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return time.Time{}, "", ErrBadCursor
+	}
+	stamp, id, ok := strings.Cut(string(raw), " ")
+	at, parseErr := time.Parse(time.RFC3339Nano, stamp)
+	if !ok || parseErr != nil || !savedReplyID.MatchString(id) {
+		return time.Time{}, "", ErrBadCursor
+	}
+	return at, id, nil
+}
+
+// SavedReplyVersions returns one page of the versions of a reply, in or out of the trash, newest
+// first: at most limit versions older than before (0 means from the newest), and the version to pass
+// as before for the next page (0 on the last one).
+func (s *Store) SavedReplyVersions(ctx context.Context, workspaceID, id string, limit, before int) ([]domain.SavedReplyVersion, int, error) {
 	if !savedReplyID.MatchString(id) {
-		return nil, domain.ErrSavedReplyNotFound
+		return nil, 0, domain.ErrSavedReplyNotFound
+	}
+	if before <= 0 {
+		before = math.MaxInt32
 	}
 	versions, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.SavedReplyVersion, error) {
 		var exists bool
@@ -136,7 +177,7 @@ func (s *Store) SavedReplyVersions(ctx context.Context, workspaceID, id string) 
 		}
 		rows, err := tx.Query(ctx, `SELECT `+savedReplyChangeColumns+`,v.title,v.body FROM saved_reply_versions v
 			LEFT JOIN agents a ON a.workspace_id=v.workspace_id AND a.id=v.changed_by_agent_id
-			WHERE v.workspace_id=$1 AND v.saved_reply_id=$2 ORDER BY v.version DESC`, workspaceID, id)
+			WHERE v.workspace_id=$1 AND v.saved_reply_id=$2 AND v.version<$3 ORDER BY v.version DESC LIMIT $4`, workspaceID, id, before, limit+1)
 		if err != nil {
 			return nil, err
 		}
@@ -151,12 +192,34 @@ func (s *Store) SavedReplyVersions(ctx context.Context, workspaceID, id string) 
 		})
 	})
 	if errors.Is(err, domain.ErrSavedReplyNotFound) {
-		return nil, err
+		return nil, 0, err
 	}
 	if err != nil {
-		return nil, fmt.Errorf("list saved reply versions: %w", err)
+		return nil, 0, fmt.Errorf("list saved reply versions: %w", err)
 	}
-	return versions, nil
+	next := 0
+	if len(versions) > limit {
+		versions = versions[:limit]
+		next = versions[limit-1].Version
+	}
+	return versions, next, nil
+}
+
+// SavedReplyVersionOf returns the title and text of one version of a reply of the workspace.
+func (s *Store) SavedReplyVersionOf(ctx context.Context, workspaceID, id string, version int) (domain.SavedReplyRestoredVersion, error) {
+	if !savedReplyID.MatchString(id) {
+		return domain.SavedReplyRestoredVersion{}, domain.ErrSavedReplyNotFound
+	}
+	found, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.SavedReplyRestoredVersion, error) {
+		found := domain.SavedReplyRestoredVersion{Version: version}
+		err := tx.QueryRow(ctx, `SELECT title,body FROM saved_reply_versions WHERE workspace_id=$1 AND saved_reply_id=$2 AND version=$3`,
+			workspaceID, id, version).Scan(&found.Title, &found.Body)
+		return found, err
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.SavedReplyRestoredVersion{}, domain.ErrSavedReplyVersionNotFound
+	}
+	return found, err
 }
 
 // SavedReplyStateOf returns a reply of the workspace as it is now, in or out of the trash.

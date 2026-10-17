@@ -57,7 +57,8 @@ func scanAgentRequest(row pgx.Row) (domain.AgentRequest, error) {
 		if err := json.Unmarshal(replyBefore, &before); err != nil {
 			return domain.AgentRequest{}, fmt.Errorf("read saved reply snapshot: %w", err)
 		}
-		item.SavedReply = &domain.AgentRequestSavedReply{ID: before.ID, Before: &domain.SavedReplyText{Title: before.Title, Body: before.Body, UpdatedAt: domain.UTC(before.UpdatedAt)}}
+		item.SavedReply = &domain.AgentRequestSavedReply{ID: before.ID, Before: &domain.SavedReplyText{Title: before.Title, Body: before.Body, UpdatedAt: domain.UTC(before.UpdatedAt)},
+			Restores: before.Restores}
 		if current.title != nil && current.body != nil && current.updatedAt != nil {
 			item.SavedReply.Current = &domain.SavedReplyState{Title: *current.title, Body: *current.body, UpdatedAt: domain.UTC(*current.updatedAt), DeletedAt: domain.UTCOptional(current.deletedAt)}
 		}
@@ -97,6 +98,8 @@ type SavedReplySnapshot struct {
 	Title     string    `json:"title"`
 	Body      string    `json:"body"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// Restores is the version a restore request applies.
+	Restores *domain.SavedReplyRestoredVersion `json:"restores,omitempty"`
 }
 
 // expireAgentRequests marks the workspace's requests that waited past their expiry. Reads call it, so

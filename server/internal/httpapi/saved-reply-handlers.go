@@ -93,31 +93,64 @@ func (a *API) updateSavedReply(response http.ResponseWriter, request *http.Reque
 }
 
 func (a *API) deleteSavedReply(response http.ResponseWriter, request *http.Request) {
-	who := principal(request)
-	ok, err := a.store.DeleteSavedReply(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"))
+	seen, err := time.Parse(time.RFC3339Nano, request.URL.Query().Get("updated_at"))
 	if err != nil {
-		writeStoreError(response, err)
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at you last read as a query parameter: ?updated_at=<RFC 3339 time>.")
 		return
 	}
-	if !ok {
-		writeError(response, http.StatusNotFound, "not_found", "The saved reply was not found.")
+	who := principal(request)
+	if err := a.store.DeleteSavedReply(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), seen); err != nil {
+		writeSavedReplyError(response, err)
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)
 }
 
+// savedReplyPage reads limit (default domain.DefaultSavedReplyPage, at most domain.MaxSavedReplyPage).
+func savedReplyPage(response http.ResponseWriter, request *http.Request) (int, bool) {
+	raw := request.URL.Query().Get("limit")
+	if raw == "" {
+		return domain.DefaultSavedReplyPage, true
+	}
+	limit, err := strconv.Atoi(raw)
+	if err != nil || limit < 1 || limit > domain.MaxSavedReplyPage {
+		writeError(response, http.StatusBadRequest, "invalid_request", "limit must be a whole number from 1 to 200.")
+		return 0, false
+	}
+	return limit, true
+}
+
 func (a *API) listTrashedSavedReplies(response http.ResponseWriter, request *http.Request) {
-	items, err := a.store.ListTrashedSavedReplies(request.Context(), principal(request).Workspace.ID)
+	limit, ok := savedReplyPage(response, request)
+	if !ok {
+		return
+	}
+	items, next, err := a.store.ListTrashedSavedReplies(request.Context(), principal(request).Workspace.ID, limit, request.URL.Query().Get("cursor"))
+	if errors.Is(err, store.ErrBadCursor) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "cursor must be the next_cursor of the previous page.")
+		return
+	}
 	if err != nil {
 		writeStoreError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusOK, map[string]any{"items": items})
+	var cursor *string
+	if next != "" {
+		cursor = &next
+	}
+	writeJSON(response, http.StatusOK, map[string]any{"items": items, "next_cursor": cursor})
 }
 
 func (a *API) restoreSavedReply(response http.ResponseWriter, request *http.Request) {
+	var input struct {
+		UpdatedAt *time.Time `json:"updated_at"`
+	}
+	if err := decodeJSON(request, &input); err != nil || input.UpdatedAt == nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send the updated_at of the reply as the trash shows it.")
+		return
+	}
 	who := principal(request)
-	reply, err := a.store.UndeleteSavedReply(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"))
+	reply, err := a.store.UndeleteSavedReply(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), *input.UpdatedAt)
 	if errors.Is(err, domain.ErrSavedReplyNotFound) {
 		writeError(response, http.StatusNotFound, "not_found", "No saved reply with this id is in the trash.")
 		return
@@ -130,12 +163,29 @@ func (a *API) restoreSavedReply(response http.ResponseWriter, request *http.Requ
 }
 
 func (a *API) listSavedReplyVersions(response http.ResponseWriter, request *http.Request) {
-	items, err := a.store.SavedReplyVersions(request.Context(), principal(request).Workspace.ID, request.PathValue("id"))
+	limit, ok := savedReplyPage(response, request)
+	if !ok {
+		return
+	}
+	before := 0
+	if raw := request.URL.Query().Get("before_version"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 {
+			writeError(response, http.StatusBadRequest, "invalid_request", "before_version must be a version number, 1 or more.")
+			return
+		}
+		before = parsed
+	}
+	items, next, err := a.store.SavedReplyVersions(request.Context(), principal(request).Workspace.ID, request.PathValue("id"), limit, before)
 	if err != nil {
 		writeSavedReplyError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusOK, map[string]any{"items": items})
+	var nextVersion *int
+	if next > 0 {
+		nextVersion = &next
+	}
+	writeJSON(response, http.StatusOK, map[string]any{"items": items, "next_before_version": nextVersion})
 }
 
 func (a *API) restoreSavedReplyVersion(response http.ResponseWriter, request *http.Request) {

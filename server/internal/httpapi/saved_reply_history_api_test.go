@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -85,6 +86,26 @@ func listRepliesWithChanges(t *testing.T, api http.Handler, token string) []repl
 	return page.Items
 }
 
+// anyTime is an updated_at for calls that are refused before it is compared.
+const anyTime = "2026-10-17T09:00:00Z"
+
+// deletePath is the DELETE of a reply as the web app sends it, with the updated_at it last read.
+func deletePath(t *testing.T, api http.Handler, token, id string) string {
+	t.Helper()
+	return "/api/v1/saved-replies/" + id + "?updated_at=" + url.QueryEscape(seenAt(t, api, token, id))
+}
+
+// undeleteBody is the body of an undelete with the updated_at of the reply as the trash shows it.
+func undeleteBody(t *testing.T, api http.Handler, token, id string) map[string]any {
+	t.Helper()
+	for _, item := range replyTrash(t, api, token) {
+		if item.ID == id {
+			return map[string]any{"updated_at": item.UpdatedAt}
+		}
+	}
+	return map[string]any{"updated_at": anyTime}
+}
+
 func versionKinds(versions []replyChangeView) []string {
 	kinds := make([]string, len(versions))
 	for index, version := range versions {
@@ -117,7 +138,7 @@ func TestSendTokenWritesSavedRepliesDirectlyAndEveryChangeIsAVersion(t *testing.
 		t.Fatalf("last change = %+v, want version 2 edit by the token's owner via Reply writer", last)
 	}
 
-	if deleted := request(t, api, http.MethodDelete, "/api/v1/saved-replies/"+reply.ID, nil, token, nil); deleted.Code != http.StatusNoContent {
+	if deleted := request(t, api, http.MethodDelete, deletePath(t, api, token, reply.ID), nil, token, nil); deleted.Code != http.StatusNoContent {
 		t.Fatalf("send token delete status=%d body=%s", deleted.Code, deleted.Body.String())
 	}
 	if remaining := listSavedReplies(t, api, admin); len(remaining) != 0 {
@@ -131,7 +152,7 @@ func TestSendTokenWritesSavedRepliesDirectlyAndEveryChangeIsAVersion(t *testing.
 		t.Fatalf("purges_at - deleted_at = %s, want 30 days", days)
 	}
 
-	restored := request(t, api, http.MethodPost, "/api/v1/saved-replies/"+reply.ID+"/restore", nil, token, nil)
+	restored := request(t, api, http.MethodPost, "/api/v1/saved-replies/"+reply.ID+"/restore", undeleteBody(t, api, token, reply.ID), token, nil)
 	if restored.Code != http.StatusOK {
 		t.Fatalf("send token undelete status=%d body=%s", restored.Code, restored.Body.String())
 	}
@@ -199,17 +220,17 @@ func TestTrashKeepsTitlesFreeAndUndeleteRefusesATakenTitle(t *testing.T) {
 	api, service := testAPI(t)
 	admin := createSession(t, api, service, "Title Desk", "admin@title.example.com")
 	first := create(t, api, admin, "/api/v1/saved-replies", map[string]any{"title": "Welcome", "body": "Hi"})
-	if deleted := request(t, api, http.MethodDelete, "/api/v1/saved-replies/"+first, nil, admin, nil); deleted.Code != http.StatusNoContent {
+	if deleted := request(t, api, http.MethodDelete, deletePath(t, api, admin, first), nil, admin, nil); deleted.Code != http.StatusNoContent {
 		t.Fatalf("delete status=%d", deleted.Code)
 	}
-	if again := request(t, api, http.MethodDelete, "/api/v1/saved-replies/"+first, nil, admin, nil); again.Code != http.StatusNotFound {
+	if again := request(t, api, http.MethodDelete, "/api/v1/saved-replies/"+first+"?updated_at="+anyTime, nil, admin, nil); again.Code != http.StatusNotFound {
 		t.Fatalf("deleting a reply already in the trash status=%d, want 404", again.Code)
 	}
 	if edit := request(t, api, http.MethodPatch, "/api/v1/saved-replies/"+first, map[string]any{"body": "x", "updated_at": "2026-01-01T00:00:00Z"}, admin, nil); edit.Code != http.StatusNotFound {
 		t.Fatalf("editing a reply in the trash status=%d, want 404", edit.Code)
 	}
 	create(t, api, admin, "/api/v1/saved-replies", map[string]any{"title": "welcome", "body": "Hello"})
-	undelete := request(t, api, http.MethodPost, "/api/v1/saved-replies/"+first+"/restore", nil, admin, nil)
+	undelete := request(t, api, http.MethodPost, "/api/v1/saved-replies/"+first+"/restore", undeleteBody(t, api, admin, first), admin, nil)
 	if undelete.Code != http.StatusConflict || !strings.Contains(undelete.Body.String(), "duplicate_title") {
 		t.Fatalf("undelete over a taken title status=%d body=%s, want 409 duplicate_title", undelete.Code, undelete.Body.String())
 	}
@@ -225,7 +246,7 @@ func TestTrashIsPurgedAfterThirtyDaysAndUndeleteWorksUntilThen(t *testing.T) {
 	kept := create(t, api, admin, "/api/v1/saved-replies", map[string]any{"title": "Kept", "body": "Restored on day 29"})
 	gone := create(t, api, admin, "/api/v1/saved-replies", map[string]any{"title": "Gone", "body": "Purged on day 31"})
 	for _, id := range []string{kept, gone} {
-		if deleted := request(t, api, http.MethodDelete, "/api/v1/saved-replies/"+id, nil, admin, nil); deleted.Code != http.StatusNoContent {
+		if deleted := request(t, api, http.MethodDelete, deletePath(t, api, admin, id), nil, admin, nil); deleted.Code != http.StatusNoContent {
 			t.Fatalf("delete status=%d", deleted.Code)
 		}
 	}
@@ -235,7 +256,7 @@ func TestTrashIsPurgedAfterThirtyDaysAndUndeleteWorksUntilThen(t *testing.T) {
 	if purged, err := data.PurgeSavedReplyTrash(context.Background()); err != nil || purged != 0 {
 		t.Fatalf("purge on day 29 = %d, %v; want nothing purged", purged, err)
 	}
-	if restored := request(t, api, http.MethodPost, "/api/v1/saved-replies/"+kept+"/restore", nil, admin, nil); restored.Code != http.StatusOK {
+	if restored := request(t, api, http.MethodPost, "/api/v1/saved-replies/"+kept+"/restore", undeleteBody(t, api, admin, kept), admin, nil); restored.Code != http.StatusOK {
 		t.Fatalf("undelete on day 29 status=%d body=%s", restored.Code, restored.Body.String())
 	}
 
@@ -246,7 +267,7 @@ func TestTrashIsPurgedAfterThirtyDaysAndUndeleteWorksUntilThen(t *testing.T) {
 	if trash := replyTrash(t, api, admin); len(trash) != 0 {
 		t.Fatalf("trash after the purge = %+v", trash)
 	}
-	if late := request(t, api, http.MethodPost, "/api/v1/saved-replies/"+gone+"/restore", nil, admin, nil); late.Code != http.StatusNotFound {
+	if late := request(t, api, http.MethodPost, "/api/v1/saved-replies/"+gone+"/restore", map[string]any{"updated_at": anyTime}, admin, nil); late.Code != http.StatusNotFound {
 		t.Fatalf("undelete after the purge status=%d, want 404", late.Code)
 	}
 	if versions := request(t, api, http.MethodGet, "/api/v1/saved-replies/"+gone+"/versions", nil, admin, nil); versions.Code != http.StatusNotFound {
@@ -265,7 +286,7 @@ func TestSavedReplyHistoryAndTrashStayInTheirWorkspace(t *testing.T) {
 	rivalDraft := issueToken(t, api, rival, "Rival drafter", "draft").Token
 	live := create(t, api, owner, "/api/v1/saved-replies", map[string]any{"title": "Owner live", "body": "Private"})
 	trashed := create(t, api, owner, "/api/v1/saved-replies", map[string]any{"title": "Owner trashed", "body": "Private too"})
-	request(t, api, http.MethodDelete, "/api/v1/saved-replies/"+trashed, nil, owner, nil)
+	request(t, api, http.MethodDelete, deletePath(t, api, owner, trashed), nil, owner, nil)
 	seen := seenAt(t, api, owner, live)
 
 	for _, caller := range []string{rival, rivalToken, rivalDraft} {
@@ -276,9 +297,9 @@ func TestSavedReplyHistoryAndTrashStayInTheirWorkspace(t *testing.T) {
 			{http.MethodGet, "/api/v1/saved-replies/" + live + "/versions", nil},
 			{http.MethodGet, "/api/v1/saved-replies/" + trashed + "/versions", nil},
 			{http.MethodPost, "/api/v1/saved-replies/" + live + "/versions/1/restore", map[string]any{"updated_at": seen}},
-			{http.MethodPost, "/api/v1/saved-replies/" + trashed + "/restore", nil},
+			{http.MethodPost, "/api/v1/saved-replies/" + trashed + "/restore", map[string]any{"updated_at": anyTime}},
 			{http.MethodPatch, "/api/v1/saved-replies/" + live, map[string]any{"body": "taken", "updated_at": seen}},
-			{http.MethodDelete, "/api/v1/saved-replies/" + live, nil},
+			{http.MethodDelete, "/api/v1/saved-replies/" + live + "?updated_at=" + url.QueryEscape(seen), nil},
 		} {
 			if response := request(t, api, call.method, call.path, call.body, caller, nil); response.Code != http.StatusNotFound {
 				t.Errorf("%s %s from another workspace status=%d body=%s, want 404", call.method, call.path, response.Code, response.Body.String())
@@ -306,4 +327,71 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func TestHistoryAndTrashComeInPages(t *testing.T) {
+	api, service := testAPI(t)
+	admin := createSession(t, api, service, "Paging Desk", "admin@paging.example.com")
+	id := create(t, api, admin, "/api/v1/saved-replies", map[string]any{"title": "Long lived", "body": "v1"})
+	for _, body := range []string{"v2", "v3", "v4", "v5"} {
+		patchReply(t, api, admin, id, map[string]any{"body": body})
+	}
+	page := func(path string) (items []replyChangeView, next *int) {
+		response := request(t, api, http.MethodGet, path, nil, admin, nil)
+		if response.Code != http.StatusOK {
+			t.Fatalf("GET %s status=%d body=%s", path, response.Code, response.Body.String())
+		}
+		validateContractResponse(t, newRequest(t, http.MethodGet, path, nil, admin, nil), response)
+		var body struct {
+			Items []replyChangeView `json:"items"`
+			Next  *int              `json:"next_before_version"`
+		}
+		decode(t, response, &body)
+		return body.Items, body.Next
+	}
+	first, next := page("/api/v1/saved-replies/" + id + "/versions?limit=2")
+	if got := versionKinds(first); !equalStrings(got, []string{"5:edit", "4:edit"}) || next == nil || *next != 4 {
+		t.Fatalf("first page = %v next %v", got, next)
+	}
+	last, end := page("/api/v1/saved-replies/" + id + "/versions?limit=3&before_version=4")
+	if got := versionKinds(last); !equalStrings(got, []string{"3:edit", "2:edit", "1:create"}) || end != nil {
+		t.Fatalf("last page = %v next %v", got, end)
+	}
+	for _, bad := range []string{"limit=0", "limit=201", "before_version=0", "limit=x"} {
+		if response := request(t, api, http.MethodGet, "/api/v1/saved-replies/"+id+"/versions?"+bad, nil, admin, nil); response.Code != http.StatusBadRequest {
+			t.Errorf("versions?%s status=%d, want 400", bad, response.Code)
+		}
+	}
+
+	for _, title := range []string{"Old A", "Old B", "Old C"} {
+		trashed := create(t, api, admin, "/api/v1/saved-replies", map[string]any{"title": title, "body": "x"})
+		request(t, api, http.MethodDelete, deletePath(t, api, admin, trashed), nil, admin, nil)
+	}
+	trashPage := func(path string) (titles []string, next *string) {
+		response := request(t, api, http.MethodGet, path, nil, admin, nil)
+		if response.Code != http.StatusOK {
+			t.Fatalf("GET %s status=%d body=%s", path, response.Code, response.Body.String())
+		}
+		validateContractResponse(t, newRequest(t, http.MethodGet, path, nil, admin, nil), response)
+		var body struct {
+			Items []trashedReplyView `json:"items"`
+			Next  *string            `json:"next_cursor"`
+		}
+		decode(t, response, &body)
+		for _, item := range body.Items {
+			titles = append(titles, item.Title)
+		}
+		return titles, body.Next
+	}
+	newest, cursor := trashPage("/api/v1/saved-replies/trash?limit=2")
+	if !equalStrings(newest, []string{"Old C", "Old B"}) || cursor == nil {
+		t.Fatalf("first trash page = %v cursor %v", newest, cursor)
+	}
+	oldest, done := trashPage("/api/v1/saved-replies/trash?limit=2&cursor=" + url.QueryEscape(*cursor))
+	if !equalStrings(oldest, []string{"Old A"}) || done != nil {
+		t.Fatalf("second trash page = %v cursor %v", oldest, done)
+	}
+	if response := request(t, api, http.MethodGet, "/api/v1/saved-replies/trash?cursor=garbage", nil, admin, nil); response.Code != http.StatusBadRequest {
+		t.Errorf("trash with a bad cursor status=%d, want 400", response.Code)
+	}
 }

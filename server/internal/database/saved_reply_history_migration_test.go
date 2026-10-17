@@ -21,13 +21,15 @@ func TestSavedReplyHistoryMigrationGivesEveryReplyVersionOneAndRollsBackOnlyWith
 			}
 		}
 	}
-	var reply, imported, author string
+	var reply, imported, authored, author string
 	if err := pool.QueryRow(ctx, `WITH w AS (INSERT INTO workspaces(slug,name) VALUES('history-a','A') RETURNING id),
 		a AS (INSERT INTO agents(workspace_id,email,role) SELECT id,'admin@history.example','admin' FROM w RETURNING id,workspace_id),
 		r AS (INSERT INTO saved_replies(workspace_id,title,body,created_by_agent_id,created_at,updated_at)
 			SELECT workspace_id,'Refund','We refunded you.',id,'2026-10-01T08:00:00Z','2026-10-02T08:00:00Z' FROM a RETURNING id),
-		i AS (INSERT INTO saved_replies(workspace_id,title,body) SELECT id,'Imported','From Freshdesk' FROM w RETURNING id)
-		SELECT r.id::text,i.id::text,a.id::text FROM r,i,a`).Scan(&reply, &imported, &author); err != nil {
+		i AS (INSERT INTO saved_replies(workspace_id,title,body) SELECT id,'Imported','From Freshdesk' FROM w RETURNING id),
+		n AS (INSERT INTO saved_replies(workspace_id,title,body,created_by_agent_id,created_at,updated_at)
+			SELECT workspace_id,'Authored','Hello',id,'2026-10-03T08:00:00Z','2026-10-03T08:00:00Z' FROM a RETURNING id)
+		SELECT r.id::text,i.id::text,n.id::text,a.id::text FROM r,i,n,a`).Scan(&reply, &imported, &authored, &author); err != nil {
 		t.Fatalf("seed on the previous schema: %v", err)
 	}
 
@@ -42,12 +44,16 @@ func TestSavedReplyHistoryMigrationGivesEveryReplyVersionOneAndRollsBackOnlyWith
 		FROM saved_reply_versions WHERE saved_reply_id=$1`, reply).Scan(&version, &kind, &title, &body, &changedBy, &createdAt); err != nil {
 		t.Fatalf("version 1 of an existing reply: %v", err)
 	}
-	if version != 1 || kind != "create" || title != "Refund" || body != "We refunded you." || changedBy == nil || *changedBy != author || createdAt != "2026-10-02T08:00" {
-		t.Fatalf("backfilled version = %d %s %q %q by %v at %s", version, kind, title, body, changedBy, createdAt)
+	// Edited after it was created: who wrote the current text is unknown, so it is the baseline, not
+	// a create by the author.
+	if version != 1 || kind != "baseline" || title != "Refund" || body != "We refunded you." || changedBy != nil || createdAt != "2026-10-02T08:00" {
+		t.Fatalf("backfilled version of an edited reply = %d %s %q %q by %v at %s", version, kind, title, body, changedBy, createdAt)
 	}
-	var importedVersions int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM saved_reply_versions WHERE saved_reply_id=$1 AND changed_by_agent_id IS NULL`, imported).Scan(&importedVersions); err != nil || importedVersions != 1 {
-		t.Fatalf("imported reply versions = %d, %v; want one with no person", importedVersions, err)
+	if err := pool.QueryRow(ctx, `SELECT kind,changed_by_agent_id::text FROM saved_reply_versions WHERE saved_reply_id=$1`, imported).Scan(&kind, &changedBy); err != nil || kind != "create" || changedBy != nil {
+		t.Fatalf("backfilled version of a never edited reply = %s by %v (%v), want create", kind, changedBy, err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT kind,changed_by_agent_id::text FROM saved_reply_versions WHERE saved_reply_id=$1`, authored).Scan(&kind, &changedBy); err != nil || kind != "create" || changedBy == nil || *changedBy != author {
+		t.Fatalf("backfilled version of a never edited reply with an author = %s by %v (%v), want create by %s", kind, changedBy, err, author)
 	}
 
 	// A trashed title can be taken again.
@@ -70,7 +76,7 @@ func TestSavedReplyHistoryMigrationGivesEveryReplyVersionOneAndRollsBackOnlyWith
 		t.Fatalf("down with only the backfilled versions: %v", err)
 	}
 	var count int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM saved_replies`).Scan(&count); err != nil || count != 2 {
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM saved_replies`).Scan(&count); err != nil || count != 3 {
 		t.Fatalf("the rollback lost saved replies: %d, %v", count, err)
 	}
 	if err := Migrate(ctx, pool); err != nil {
