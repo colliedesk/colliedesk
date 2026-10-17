@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -57,6 +58,12 @@ func (f messageFields) validate() error {
 func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http.Request) {
 	identity := principal(request)
 	workspaceID, conversationID := identity.Workspace.ID, request.PathValue("id")
+	// A token that may not write any message is refused before a byte is stored; the kind, and so
+	// whether a reply needs the send tier, is known only once the fields are read.
+	if !auth.ScopeAllows(identity.Scope, auth.ScopeDraft) {
+		writeScopeInsufficient(response, identity.Scope, auth.ScopeDraft)
+		return
+	}
 	// A conversation of another workspace is refused before a byte is stored.
 	if _, err := a.store.GetConversation(request.Context(), workspaceID, conversationID); err != nil {
 		writeStoreError(response, err)
@@ -85,12 +92,16 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 		a.writeUploadError(response, err)
 		return
 	}
+	actor, ok := messageActor(response, identity, fields.kind)
+	if !ok {
+		return
+	}
 	cc, refusal := a.cleanCC(request.Context(), workspaceID, fields.kind, fields.cc)
 	if refusal != nil {
 		a.writeUploadError(response, refusal)
 		return
 	}
-	item, err := a.store.CreateMessageWithCC(request.Context(), workspaceID, conversationID, store.Actor{AgentID: identity.Agent.ID}, fields.kind, fields.body, cc, files...)
+	item, err := a.store.CreateMessageWithCC(request.Context(), workspaceID, conversationID, actor, fields.kind, fields.body, cc, files...)
 	if errors.Is(err, store.ErrObjectMissing) {
 		writeError(response, http.StatusInternalServerError, "internal_error", "A file was lost while the message was saved. Nothing was sent; try again.")
 		return

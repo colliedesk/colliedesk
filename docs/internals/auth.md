@@ -40,7 +40,8 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
   it. `TestEveryRouteIsOpenToTokensOnlyFromItsTier` keeps its own hand-written copy of the table,
   fails until both agree, and checks that an allowed tier gets the route's success status. Posting a
   message is gated by the handler: a note needs `draft`, an outgoing reply needs `send`, and the 403
-  names that tier.
+  names that tier. The multipart form (a message with files) passes the same check; a token below
+  `draft` is refused before a file is read, since the kind arrives only after the files.
 - **Order of checks.** Authenticate (a token presented as a cookie is a 401) → `refuseToken` → role
   permission → CSRF → locked workspace. The tier check runs before the role check so a closed route
   answers `scope_insufficient`, not a bare `forbidden`.
