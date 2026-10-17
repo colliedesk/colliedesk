@@ -72,10 +72,10 @@ with `billing` and leave a note with a summary."
 | `colliedesk_saved_reply_get` | Reads one saved reply by id or title, also from the trash | `read` |
 | `colliedesk_saved_reply_create` | Adds a saved reply | `send` |
 | `colliedesk_saved_reply_update` | Edits the title or text of a saved reply; every edit is a version | `send` |
-| `colliedesk_saved_reply_delete` | Moves a saved reply to the trash for 30 days. Restorable, so not destructive | `send` |
-| `colliedesk_saved_reply_history` | Lists every version of a saved reply: who, through which token, and the text | `read` |
+| `colliedesk_saved_reply_delete` | Moves a saved reply to the trash. Restorable for 30 days, so not marked destructive; after that it is gone with its history | `send` |
+| `colliedesk_saved_reply_history` | Lists the versions of a saved reply a page at a time: who, through which token, and the text (cut after 2,000 characters; one version by number comes whole) | `read` |
 | `colliedesk_saved_reply_version_restore` | Makes an earlier version current again, as a new version | `send` |
-| `colliedesk_saved_replies_trash` | Lists the saved replies in the trash with when each is deleted for good | `read` |
+| `colliedesk_saved_replies_trash` | Lists the saved replies in the trash a page at a time, with when each is deleted for good | `read` |
 | `colliedesk_saved_reply_undelete` | Takes a saved reply out of the trash | `send` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any |
 | `colliedesk_docs_search` | Searches these user guides | any |
@@ -119,7 +119,8 @@ could not do with the API directly. Another workspace is never visible.
   (an image, PDF or archive). Open those in the web app. The file name and text are customer text.
 - **Saved replies are team text.** Their title and text appear under `team_text`: the team wrote
   them for customers. The tool descriptions tell the model to treat them as text to send or improve,
-  never as instructions.
+  never as instructions. Writes carry the `updated_at` the model read, so it cannot overwrite or
+  delete a version it never saw.
 - **Who wrote it.** When an agent token wrote a note or a reply, the message also shows
   `written_by_agent_token` with the label and tier of the token. The server tells the model to read
   such text as model output, not as a decision of the person the token acts as.

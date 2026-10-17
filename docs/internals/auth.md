@@ -305,10 +305,19 @@ signs in again to use a higher role.
   updates the reply row first, then inserts `max(version)+1` in the same transaction: the row lock
   orders concurrent writes of one reply, so numbers never collide. Restoring a version copies it into
   a new version (`restored_from_version`); history is never rewritten. The migration backfilled
-  version 1 (kind `create`, the text at upgrade time) for every existing reply.
+  version 1 for every existing reply: kind `create` by its author when it was never edited, otherwise
+  kind `baseline` with no person (who wrote the current text is unknown). A restore request snapshots
+  the version it applies (`saved_reply_before.restores`) so the card shows the target text.
+- **Optimistic writes everywhere.** PATCH, DELETE (`?updated_at=`), restore-version and undelete all
+  compare `updated_at`; delete and undelete bump it. A stored agent request keeps the token's
+  `updated_at` in its path or body, so approving it after anyone changed the reply answers 409 and
+  changes nothing. A delete proposal without `updated_at` is refused with 400 before it is filed.
+  Side effect: a Freshdesk-imported reply that was trashed and restored counts as edited, so `import
+  undo` keeps it.
 - **Trash.** Delete sets `deleted_at`; the title index is partial (`WHERE deleted_at IS NULL`) so a
   trashed title can be reused, and undelete then answers 409 `duplicate_title` instead of hiding the
-  clash. The 500-reply limit counts live replies only. The daily `serve` sweep purges replies deleted
+  clash. The 500-reply limit counts trashed replies too, so create-and-delete loops cannot grow the
+  trash without bound; versions and trash are listed in pages (at most 200). The daily `serve` sweep purges replies deleted
   more than 30 days ago (`PrivilegeSavedReplyPurge`); versions go by cascade, and the server logs the
   count. `deleted_at` comes from the store clock so tests move one clock.
 - **Rollback.** The down migration refuses while a reply is in the trash, a reply has more than the
