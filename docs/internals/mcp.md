@@ -66,6 +66,24 @@
 - **Attribution is free.** A note a tool adds goes through `POST /messages` with the caller's bearer,
   so it carries the token (`TestNoteAddedThroughMCPNamesTheTokenInTheTimeline`). The known limit
   (changes other than notes are not attributed) is in `docs/internals/auth.md`.
+- **Destructive tools.** `Spec.Destructive` sets the MCP `destructiveHint` for a tool whose effect
+  cannot be undone: `reply_send` and `reply_retry` (an email left), `tag_delete` (the tag is gone from
+  every conversation; a new tag of the same name is empty) and `token_revoke`. Their descriptions say
+  "cannot be undone" and tell the model to get the user's yes first; the annotation test checks both.
+  Every other writing tool states `destructiveHint=false`.
+- **Attachments are read, not streamed.** `GET /attachments/{id}` streams bytes, so `attachment_get`
+  uses `restClient.download`, which keeps the first 128 KiB and stops the handler with `errEnough`
+  (the handler logs one `stream:` line for a larger file; that is expected). A plain UTF-8 file comes
+  back as text cut after 20,000 characters; anything else as name, size, SHA-256 and a sniffed type
+  only. No base64 and no link: an image or a PDF in the model context is one more injection channel,
+  and the web app already opens files. The file name is customer text even on a team note, because a
+  team member often forwards a customer's file. `conversation_get` lists attachment ids and sizes.
+- **Bulk update creates no tag.** `PATCH /conversations` is one transaction; creating a missing tag
+  before it would leave the tag behind when the transaction refuses an id. So
+  `conversations_bulk_update` takes only existing tag names. It has no priority because the REST bulk
+  route has none.
+- **`token_revoke` is `POST /auth/logout`** with the token as bearer: it revokes that session row only.
+  The tool's result is the last thing the token can read; `tools/list` after it is 401.
 - **Size.** One in-process call buffers at most 16 MiB of REST answer; beyond that the tool says the
   answer is too large (`TestAnswerTooLargeForOneCallIsExplainedNotAnInternalError`) instead of
   reporting an internal problem. `detail=full` of a very long thread is the usual cause.

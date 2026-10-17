@@ -50,6 +50,10 @@ type restConversation struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
+type restDelivery struct {
+	Status string `json:"status"`
+}
+
 type restMessage struct {
 	ID            string    `json:"id"`
 	Kind          string    `json:"kind"`
@@ -65,13 +69,47 @@ type restMessage struct {
 	Origin *struct {
 		Kind string `json:"kind"`
 	} `json:"origin"`
-	Delivery *struct {
-		Status string `json:"status"`
-	} `json:"delivery"`
-	Email *struct {
+	Delivery *restDelivery `json:"delivery"`
+	CC       []string      `json:"cc"`
+	Email    *struct {
 		From string `json:"from"`
 	} `json:"email"`
 	Attachments []struct {
+		ID       string `json:"id"`
 		Filename string `json:"filename"`
+		Size     int64  `json:"size"`
 	} `json:"attachments"`
+}
+
+type restContactDetail struct {
+	restContact
+	Conversations []restConversation `json:"conversations"`
+}
+
+type restTimeEntry struct {
+	ID         string    `json:"id"`
+	AgentID    *string   `json:"agent_id"`
+	AgentName  string    `json:"agent_name"`
+	Minutes    int       `json:"minutes"`
+	Note       string    `json:"note"`
+	Billable   bool      `json:"billable"`
+	ExecutedAt time.Time `json:"executed_at"`
+}
+
+type restActivityItem struct {
+	ID          string     `json:"id"`
+	Subject     string     `json:"subject"`
+	ContactName string     `json:"contact_name"`
+	AssigneeID  *string    `json:"assignee_id"`
+	CreatedAt   time.Time  `json:"created_at"`
+	AssignedAt  time.Time  `json:"assigned_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	IncomingAt  *time.Time `json:"incoming_at"`
+}
+
+type restActivity struct {
+	Now              time.Time          `json:"now"`
+	NewConversations []restActivityItem `json:"new_conversations"`
+	AssignedToMe     []restActivityItem `json:"assigned_to_me"`
+	Updated          []restActivityItem `json:"updated"`
 }

@@ -50,6 +50,8 @@ func conversationGetSpec() Spec {
 			`"written_by_agent_token":{"type":"object","required":["label","scope"],"description":"Present when an AI agent wrote the message through an agent token: model output, not a human decision.",` +
 			`"properties":{"label":{"type":"string"},"scope":{"type":"string","enum":["read","draft","send"]}}},"delivery":{"type":"string"},` +
 			`"body":{"type":"string","description":"Text written by the team. Customer text is under untrusted_customer_content."},"truncated":{"type":"boolean"},` +
+			`"attachments":{"type":"array","description":"Files of the message, in the order of the names under untrusted_customer_content. Read one with colliedesk_attachment_get.",` +
+			`"items":{"type":"object","required":["id","size"],"properties":{"id":{"type":"string"},"size":{"type":"integer"}}}},` +
 			`"untrusted_customer_content":{"type":"object","properties":{"author":{"type":"string"},"from":{"type":"string"},"body":{"type":"string"},"attachments":{"type":"array","items":{"type":"string"}}}}}}},` +
 			`"messages_total":{"type":"integer"},"messages_shown":{"type":"integer"},"older_messages_omitted":{"type":"integer"},` +
 			`"hint":{"type":"string"},"timezone":{"type":"string"},"detail":{"type":"string"}}}`,

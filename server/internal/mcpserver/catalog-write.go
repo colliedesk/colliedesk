@@ -47,3 +47,28 @@ func noteAddSpec() Spec {
 		run: noteAdd,
 	}
 }
+
+func conversationsBulkUpdateSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_conversations_bulk_update",
+		Title: "Update many conversations at once",
+		Description: `Change the status, assignee or tags of up to 50 conversations in one call. All or nothing: if one id is not a conversation of this workspace, nothing is changed. ` +
+			`It is safe to repeat: you state the result you want. Give at least one change. ` +
+			`assignee takes "me", "unassigned", or a team member's email, name or id (see colliedesk_agents_list). ` +
+			`add_tags and remove_tags take names of existing tags (see colliedesk_tags_list), matched like in colliedesk_conversation_update; this tool creates no tag. ` +
+			`To change the priority, or to add a tag that does not exist yet, use colliedesk_conversation_update on each conversation. ` +
+			`It never sends anything to the customer and deletes nothing; every change can be undone by another call.` +
+			"\n\nTier: draft.",
+		Tier: "draft", Idempotent: true,
+		REST: []string{"PATCH /api/v1/conversations", "GET /api/v1/agents", "GET /api/v1/tags", "GET /api/v1/auth/me"},
+		Input: `{"type":"object","additionalProperties":false,"required":["conversation_ids"],"properties":{` +
+			`"conversation_ids":{"type":"array","minItems":1,"maxItems":50,"uniqueItems":true,"items":{"type":"string",` + uuid + `}},` +
+			`"status":{"type":"string","enum":["open","pending","resolved","closed"]},` +
+			`"assignee":{"type":"string","maxLength":200,"description":"me, unassigned, or a team member's email, name or id."},` +
+			`"add_tags":{"type":"array","maxItems":20,"items":{"type":"string","minLength":1,"maxLength":100},"description":"Names of existing tags to put on every conversation."},` +
+			`"remove_tags":{"type":"array","maxItems":20,"items":{"type":"string","maxLength":100},"description":"Names of tags to take off every conversation."}}}`,
+		Output: `{"type":"object","required":["updated","conversation_ids"],"properties":{"updated":{"type":"integer","description":"How many conversations were changed."},` +
+			`"conversation_ids":{"type":"array","items":{"type":"string"}}}}`,
+		run: conversationsBulkUpdate,
+	}
+}

@@ -30,7 +30,7 @@ func register(server *mcp.Server, spec Spec, rest *restClient) {
 	}
 	annotations := &mcp.ToolAnnotations{Title: spec.Title, ReadOnlyHint: spec.ReadOnly, IdempotentHint: spec.Idempotent, OpenWorldHint: new(bool)}
 	if !spec.ReadOnly {
-		annotations.DestructiveHint = new(bool)
+		annotations.DestructiveHint = &spec.Destructive
 	}
 	tool := &mcp.Tool{Name: spec.Name, Title: spec.Title, Description: spec.Description, Annotations: annotations,
 		InputSchema: json.RawMessage(spec.Input), OutputSchema: json.RawMessage(spec.Output)}

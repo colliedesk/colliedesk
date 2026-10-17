@@ -2,8 +2,8 @@
 
 Colliedesk speaks the Model Context Protocol (MCP), so an AI agent such as Claude Code or Codex can
 work your inbox: find conversations, read them, set status, priority, assignee and tags, and leave
-private notes for your team. The agent never sends anything to a customer, and a person stays in
-charge.
+private notes for your team. With a `send` token it can also reply to customers. Give an agent the
+`send` tier only when you want it to write to customers; a person stays in charge of the rest.
 
 ## Endpoint and sign-in
 
@@ -16,9 +16,9 @@ charge.
 
 | Tier | The agent can |
 |---|---|
-| `read` | Search the inbox, read conversations, find contacts, list tags and team members. It cannot see invites, the list of sessions or the email and web form settings. |
-| `draft` | Everything in `read`, plus change status, priority, assignee and tags (a tag name that does not exist yet is created), and add private notes |
-| `send` | Everything in `draft` that a person may do. The tools of this server never send a reply. |
+| `read` | Search the inbox, follow what changed, read conversations, attachments, logged time and customers, list tags and team members. It cannot see invites, the list of sessions or the email and web form settings. |
+| `draft` | Everything in `read`, plus change status, priority, assignee and tags of one or many conversations (a tag name that does not exist yet is created), and add private notes. Nothing reaches a customer. |
+| `send` | Everything in `draft`, plus reply to customers, retry a failed reply, open conversations, add customers, and rename or delete tags. |
 
 A tool that needs a higher tier answers with a message that names the tier and says an admin can
 create a token with it. Nothing else changes.
@@ -47,13 +47,29 @@ with `billing` and leave a note with a summary."
 |---|---|---|
 | `colliedesk_whoami` | Shows the workspace, the team member, the token tier and the tools you can use | any |
 | `colliedesk_inbox_search` | Lists conversations by status, assignee, tag or text, newest first, in pages | `read` |
-| `colliedesk_conversation_get` | Reads one conversation with its messages and customer | `read` |
+| `colliedesk_inbox_activity` | Lists what changed since the last call: new conversations, conversations assigned to you, conversations that changed | `read` |
+| `colliedesk_conversation_get` | Reads one conversation with its messages, attachment ids and customer | `read` |
+| `colliedesk_time_entries_list` | Lists the time logged on a conversation, with the total | `read` |
+| `colliedesk_attachment_get` | Reads an attachment: name, size, type, and the text of a plain text file | `read` |
 | `colliedesk_conversation_update` | Sets status, priority, assignee and adds or removes tags in one idempotent call; a tag name that does not exist yet is created | `draft` |
+| `colliedesk_conversations_bulk_update` | Sets status, assignee and tags of up to 50 conversations at once, all or nothing | `draft` |
 | `colliedesk_note_add` | Adds a private note | `draft` |
+| `colliedesk_reply_send` | Sends a reply to the customer by email. Cannot be undone | `send` |
+| `colliedesk_reply_retry` | Sends again a reply whose delivery failed. Cannot be undone | `send` |
+| `colliedesk_conversation_create` | Opens a conversation with a customer; sends nothing | `send` |
 | `colliedesk_contacts_find` | Finds customers by part of a name or email; `truncated` says when more matched than were returned | `read` |
+| `colliedesk_contact_get` | Reads one customer with their conversations | `read` |
+| `colliedesk_contact_create` | Adds a customer | `send` |
 | `colliedesk_tags_list` | Lists tags | `read` |
+| `colliedesk_tag_rename` | Renames a tag everywhere | `send` |
+| `colliedesk_tag_delete` | Deletes a tag and takes it off every conversation. Cannot be undone | `send` |
 | `colliedesk_agents_list` | Lists team members for assigning | `read` |
+| `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any |
 | `colliedesk_docs_search` | Searches these user guides | any |
+
+Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the
+model to show you what it will do and wait for your yes, unless you already asked for exactly that.
+Many clients also ask you before such a call.
 
 Tools read and change data through the same API as the web app, so a tool can do nothing the token
 could not do with the API directly. Another workspace is never visible.
@@ -75,7 +91,10 @@ could not do with the API directly. Another workspace is never visible.
   text unless it was a reply or a private note of a team member: a Freshdesk public note or a
   forward can have been written by the customer. A message with no team member as author is marked
   too, author name included.
-- **Who wrote it.** When an agent token wrote a note, the message also shows
+- **Attachments.** `colliedesk_attachment_get` returns the text of a plain UTF-8 text file, cut
+  after 20,000 characters, and only the name, size, SHA-256 and detected type of any other file
+  (an image, PDF or archive). Open those in the web app. The file name and text are customer text.
+- **Who wrote it.** When an agent token wrote a note or a reply, the message also shows
   `written_by_agent_token` with the label and tier of the token. The server tells the model to read
   such text as model output, not as a decision of the person the token acts as.
 
@@ -93,6 +112,9 @@ could not do with the API directly. Another workspace is never visible.
 - `colliedesk_conversation_update` makes several changes one after another. If one fails after
   another was saved, the error says that some changes may already be applied. Repeat the same call:
   it applies only what is missing, and a tag created by the first try is reused.
-- A note an agent writes appears in the conversation as "by <team member> via <token label>", so
-  you can tell it from a colleague's note. Status, priority, assignee and tag changes are not marked
-  that way yet.
+- A note or reply an agent writes appears in the conversation as "by <team member> via <token
+  label>", so you can tell it from a colleague's. Status, priority, assignee and tag changes are not
+  marked that way yet.
+- `colliedesk_conversations_bulk_update` is all or nothing: if one id is not a conversation of the
+  workspace, nothing changes. It takes only existing tag names and cannot set priority; use
+  `colliedesk_conversation_update` for those.

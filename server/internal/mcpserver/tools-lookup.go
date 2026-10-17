@@ -11,7 +11,7 @@ import (
 var tierMeaning = map[string]string{
 	"read":  "You can read the inbox. You cannot change anything.",
 	"draft": "You can read, change status, priority, assignee and tags, and add private notes. Nothing you do reaches a customer.",
-	"send":  "You may do everything a team member can. The tools of this server still never send a message to a customer.",
+	"send":  "You may do everything a team member can, including replying to customers by email. A reply cannot be called back: confirm it with the user first.",
 }
 
 type whoamiOut struct {

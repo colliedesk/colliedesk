@@ -10,6 +10,8 @@ type Spec struct {
 	Tier       string
 	ReadOnly   bool
 	Idempotent bool
+	// Destructive marks a tool whose effect cannot be undone: it reaches a customer, deletes, or revokes.
+	Destructive bool
 	// REST lists the routes the tool calls, as "METHOD pattern" strings of httpapi.Routes.
 	REST []string
 	// Input and Output are JSON schemas.
@@ -23,8 +25,10 @@ type Spec struct {
 // server registers from it and the user guide and the generated references read it.
 func Catalog() []Spec {
 	return []Spec{
-		whoamiSpec(), inboxSearchSpec(), conversationGetSpec(), conversationUpdateSpec(), noteAddSpec(),
-		contactsFindSpec(), tagsListSpec(), agentsListSpec(), docsSearchSpec(),
+		whoamiSpec(), inboxSearchSpec(), inboxActivitySpec(), conversationGetSpec(), timeEntriesListSpec(), attachmentGetSpec(),
+		conversationUpdateSpec(), conversationsBulkUpdateSpec(), noteAddSpec(), replySendSpec(), replyRetrySpec(), conversationCreateSpec(),
+		contactsFindSpec(), contactGetSpec(), contactCreateSpec(), tagsListSpec(), tagRenameSpec(), tagDeleteSpec(), agentsListSpec(),
+		tokenRevokeSpec(), docsSearchSpec(),
 	}
 }
 

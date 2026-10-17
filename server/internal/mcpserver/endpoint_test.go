@@ -12,30 +12,55 @@ import (
 // toolNames is the list a client sees, written out by hand: the SDK lists tools by name.
 var toolNames = []string{
 	"colliedesk_agents_list",
+	"colliedesk_attachment_get",
+	"colliedesk_contact_create",
+	"colliedesk_contact_get",
 	"colliedesk_contacts_find",
+	"colliedesk_conversation_create",
 	"colliedesk_conversation_get",
 	"colliedesk_conversation_update",
+	"colliedesk_conversations_bulk_update",
 	"colliedesk_docs_search",
+	"colliedesk_inbox_activity",
 	"colliedesk_inbox_search",
 	"colliedesk_note_add",
+	"colliedesk_reply_retry",
+	"colliedesk_reply_send",
+	"colliedesk_tag_delete",
+	"colliedesk_tag_rename",
 	"colliedesk_tags_list",
+	"colliedesk_time_entries_list",
+	"colliedesk_token_revoke",
 	"colliedesk_whoami",
 }
 
-// wantAnnotations: read only, idempotent, and the tier each description must state.
+// wantAnnotations: read only, idempotent, destructive (cannot be undone: it reaches a customer, deletes, or
+// revokes), and the tier each description must state.
 var wantAnnotations = map[string]struct {
-	readOnly, idempotent bool
-	tier                 string
+	readOnly, idempotent, destructive bool
+	tier                              string
 }{
-	"colliedesk_agents_list":         {readOnly: true, tier: "read"},
-	"colliedesk_contacts_find":       {readOnly: true, tier: "read"},
-	"colliedesk_conversation_get":    {readOnly: true, tier: "read"},
-	"colliedesk_conversation_update": {idempotent: true, tier: "draft"},
-	"colliedesk_docs_search":         {readOnly: true, tier: "any"},
-	"colliedesk_inbox_search":        {readOnly: true, tier: "read"},
-	"colliedesk_note_add":            {tier: "draft"},
-	"colliedesk_tags_list":           {readOnly: true, tier: "read"},
-	"colliedesk_whoami":              {readOnly: true, tier: "any"},
+	"colliedesk_agents_list":               {readOnly: true, tier: "read"},
+	"colliedesk_attachment_get":            {readOnly: true, tier: "read"},
+	"colliedesk_contact_create":            {tier: "send"},
+	"colliedesk_contact_get":               {readOnly: true, tier: "read"},
+	"colliedesk_contacts_find":             {readOnly: true, tier: "read"},
+	"colliedesk_conversation_create":       {tier: "send"},
+	"colliedesk_conversation_get":          {readOnly: true, tier: "read"},
+	"colliedesk_conversation_update":       {idempotent: true, tier: "draft"},
+	"colliedesk_conversations_bulk_update": {idempotent: true, tier: "draft"},
+	"colliedesk_docs_search":               {readOnly: true, tier: "any"},
+	"colliedesk_inbox_activity":            {readOnly: true, tier: "read"},
+	"colliedesk_inbox_search":              {readOnly: true, tier: "read"},
+	"colliedesk_note_add":                  {tier: "draft"},
+	"colliedesk_reply_retry":               {destructive: true, tier: "send"},
+	"colliedesk_reply_send":                {destructive: true, tier: "send"},
+	"colliedesk_tag_delete":                {destructive: true, tier: "send"},
+	"colliedesk_tag_rename":                {tier: "send"},
+	"colliedesk_tags_list":                 {readOnly: true, tier: "read"},
+	"colliedesk_time_entries_list":         {readOnly: true, tier: "read"},
+	"colliedesk_token_revoke":              {destructive: true, tier: "any"},
+	"colliedesk_whoami":                    {readOnly: true, tier: "any"},
 }
 
 func TestToolsListIsTheCatalogInFixedOrderWithAnnotations(t *testing.T) {
@@ -64,8 +89,11 @@ func TestToolsListIsTheCatalogInFixedOrderWithAnnotations(t *testing.T) {
 				if a == nil || a.ReadOnlyHint != want.readOnly || a.IdempotentHint != want.idempotent || a.Title == "" || tool.Title == "" {
 					t.Errorf("%s: annotations=%+v title=%q, want readOnly=%v idempotent=%v and a title", tool.Name, a, tool.Title, want.readOnly, want.idempotent)
 				}
-				if !want.readOnly && (a == nil || a.DestructiveHint == nil || *a.DestructiveHint) {
-					t.Errorf("%s: a writing tool here never destroys data, destructiveHint must be false", tool.Name)
+				if !want.readOnly && (a == nil || a.DestructiveHint == nil || *a.DestructiveHint != want.destructive) {
+					t.Errorf("%s: a writing tool must state destructiveHint=%v", tool.Name, want.destructive)
+				}
+				if want.destructive && !strings.Contains(tool.Description, "cannot be undone") {
+					t.Errorf("%s: a destructive tool must say it cannot be undone\n%s", tool.Name, tool.Description)
 				}
 				if !strings.Contains(tool.Description, "Tier: "+want.tier) {
 					t.Errorf("%s: description does not state %q\n%s", tool.Name, "Tier: "+want.tier, tool.Description)
