@@ -1,14 +1,20 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { ChangedElsewhereError, InvalidRequestError } from '../../api/client';
-import type { SavedReply } from '../../api/schemas';
+import type { SavedReply, SavedReplyVersion, TrashedSavedReply } from '../../api/schemas';
 import { SavedRepliesSection } from './saved-replies-section';
 
 const reply = (id: string, title: string, body: string): SavedReply => ({
-  id, title, body, created_by_agent_id: null, created_at: '2026-10-15T00:00:00Z', updated_at: '2026-10-15T00:00:00Z',
+  id, title, body, created_by_agent_id: null, created_at: '2026-10-15T00:00:00Z', updated_at: '2026-10-15T00:00:00Z', last_change: null,
 });
 const replies = [reply('1', 'Greeting', 'Hi {{customer.name}}'), reply('2', 'Refund steps', 'We refunded you.')];
-const handlers = () => ({ onCreate: vi.fn().mockResolvedValue(undefined), onUpdate: vi.fn().mockResolvedValue(undefined), onDelete: vi.fn().mockResolvedValue(undefined), onReload: vi.fn() });
+const handlers = () => ({ onCreate: vi.fn().mockResolvedValue(undefined), onUpdate: vi.fn().mockResolvedValue(undefined), onDelete: vi.fn().mockResolvedValue(undefined), onReload: vi.fn(),
+  loadHistory: vi.fn().mockResolvedValue([]), onRestoreVersion: vi.fn().mockResolvedValue(undefined), loadTrash: vi.fn().mockResolvedValue([]), onUndelete: vi.fn().mockResolvedValue(undefined) });
+const ada = { agent_id: '44444444-4444-4444-8444-444444444444', name: 'Ada Admin' };
+const version = (number: number, kind: SavedReplyVersion['kind'], body: string, token: string | null): SavedReplyVersion => ({
+  version: number, kind, restored_from_version: null, changed_by: ada, token: token ? { id: null, label: token } : null, agent_request_id: null,
+  created_at: '2026-10-16T09:00:00Z', title: 'Greeting', body,
+});
 
 test('lists every saved reply with its title and the start of its text, and names the variables', () => {
   render(<SavedRepliesSection replies={replies} {...handlers()} />);
@@ -109,10 +115,10 @@ test('delete asks first and only deletes on confirmation', async () => {
   const actions = handlers();
   render(<SavedRepliesSection replies={replies} {...actions} />);
   fireEvent.click(screen.getByRole('button', { name: 'Delete Refund steps' }));
-  expect(screen.getByText('Delete "Refund steps" for everyone on the team?')).toBeInTheDocument();
+  expect(screen.getByText('Move "Refund steps" to the trash? It can be restored for 30 days.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
   expect(actions.onDelete).not.toHaveBeenCalled();
-  expect(screen.queryByText('Delete "Refund steps" for everyone on the team?')).not.toBeInTheDocument();
+  expect(screen.queryByText('Move "Refund steps" to the trash? It can be restored for 30 days.')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Delete Refund steps' }));
   fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
   expect(actions.onDelete).toHaveBeenCalledExactlyOnceWith('2');
@@ -140,4 +146,56 @@ test('an edit made from an older version is refused, says who won, and Reload sh
   expect(actions.onReload).toHaveBeenCalledOnce();
   expect(screen.queryByRole('form', { name: 'Edit Greeting' })).not.toBeInTheDocument();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+test('each reply says who made its latest change and through which agent token', () => {
+  const edited = { ...reply('1', 'Greeting', 'Hi'), last_change: { ...version(3, 'edit', 'Hi', 'Claude triage'), title: undefined, body: undefined } };
+  const restored = { ...reply('2', 'Refund steps', 'We refunded you.'), last_change: { ...version(4, 'restore', 'x', null), restored_from_version: 2, title: undefined, body: undefined } };
+  render(<SavedRepliesSection replies={[edited, restored]} timezone="UTC" {...handlers()} />);
+  const items = screen.getAllByRole('listitem');
+  expect(within(items[0]).getByText(/Edited by Ada Admin via Claude triage/)).toBeInTheDocument();
+  expect(within(items[1]).getByText(/Version 2 restored by Ada Admin/)).toBeInTheDocument();
+});
+
+test('History lists every version, newest first, and Restore makes an old one current', async () => {
+  const actions = handlers();
+  actions.loadHistory.mockResolvedValue([version(2, 'edit', 'Hello {{customer.name}}', 'Claude triage'), version(1, 'create', 'Hi {{customer.name}}', null)]);
+  render(<SavedRepliesSection replies={replies} timezone="UTC" {...actions} />);
+  fireEvent.click(screen.getByRole('button', { name: 'History of Greeting' }));
+  const panel = await screen.findByRole('region', { name: 'History of Greeting' });
+  expect(actions.loadHistory).toHaveBeenCalledWith('1');
+  const versions = await within(panel).findAllByRole('listitem');
+  expect(versions).toHaveLength(2);
+  expect(within(versions[0]).getByText(/Version 2/)).toBeInTheDocument();
+  expect(within(versions[0]).getByText(/via Claude triage/)).toBeInTheDocument();
+  expect(within(versions[1]).getByText('Hi {{customer.name}}')).toBeInTheDocument();
+  expect(within(versions[0]).queryByRole('button', { name: /Restore/ })).not.toBeInTheDocument();
+  fireEvent.click(within(versions[1]).getByRole('button', { name: 'Restore version 1' }));
+  await waitFor(() => expect(actions.onRestoreVersion).toHaveBeenCalledWith('1', 1, '2026-10-15T00:00:00Z'));
+  fireEvent.click(within(panel).getByRole('button', { name: 'Close history' }));
+  expect(screen.queryByRole('region', { name: 'History of Greeting' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'History of Greeting' })).toHaveFocus();
+});
+
+test('Trash lists deleted replies with the days left and restores one', async () => {
+  const actions = handlers();
+  const trashed: TrashedSavedReply = { ...reply('9', 'Old macro', 'Retired text.'), deleted_at: '2026-10-16T09:00:00Z', deleted_by: ada, purges_at: '2026-11-15T09:00:00Z' };
+  actions.loadTrash.mockResolvedValueOnce([trashed]);
+  render(<SavedRepliesSection replies={replies} timezone="UTC" now={new Date('2026-10-17T09:00:00Z')} {...actions} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Trash' }));
+  const panel = await screen.findByRole('region', { name: 'Trash' });
+  const item = await within(panel).findByText('Old macro');
+  expect(within(panel).getByText(/29 days left/)).toBeInTheDocument();
+  expect(within(panel).getByText(/Deleted by Ada Admin/)).toBeInTheDocument();
+  expect(item).toBeInTheDocument();
+  fireEvent.click(within(panel).getByRole('button', { name: 'Restore Old macro' }));
+  await waitFor(() => expect(actions.onUndelete).toHaveBeenCalledWith('9'));
+  await waitFor(() => expect(within(panel).queryByText('Old macro')).not.toBeInTheDocument());
+});
+
+test('an empty trash says so', async () => {
+  const actions = handlers();
+  render(<SavedRepliesSection replies={replies} timezone="UTC" {...actions} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Trash' }));
+  expect(await screen.findByText('The trash is empty.')).toBeInTheDocument();
 });

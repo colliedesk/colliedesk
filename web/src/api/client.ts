@@ -8,7 +8,7 @@ import {
   agentListSchema, agentSchema, contactDetailSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, emailChannelSettingsSchema, inboundSecretSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, messageListSchema, messageSchema, timeEntryListSchema,
-  agentRequestListSchema, agentRequestSchema, approvedAgentRequestSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, publicConfigSchema, redeemedSchema, savedReplyListSchema, savedReplySchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
+  agentRequestListSchema, agentRequestSchema, approvedAgentRequestSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, publicConfigSchema, redeemedSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
 import type { WorkspaceChoice } from './schemas';
 
@@ -245,6 +245,11 @@ export const api = {
   createSavedReply: (title: string, body: string) => request('/api/v1/saved-replies', savedReplySchema, { method: 'POST', body: json<'createSavedReply'>({ title, body }) }),
   updateSavedReply: (id: string, value: RequestBody<'updateSavedReply'>) => request(`/api/v1/saved-replies/${id}`, savedReplySchema, { method: 'PATCH', body: json<'updateSavedReply'>(value) }),
   deleteSavedReply: (id: string) => requestNoContent(`/api/v1/saved-replies/${id}`, { method: 'DELETE' }),
+  trashedSavedReplies: () => request('/api/v1/saved-replies/trash', trashedSavedReplyListSchema),
+  restoreSavedReply: (id: string) => request(`/api/v1/saved-replies/${id}/restore`, savedReplySchema, { method: 'POST' }),
+  savedReplyVersions: (id: string) => request(`/api/v1/saved-replies/${id}/versions`, savedReplyVersionListSchema),
+  restoreSavedReplyVersion: (id: string, version: number, updatedAt: string) => request(`/api/v1/saved-replies/${id}/versions/${version}/restore`, savedReplySchema,
+    { method: 'POST', body: json<'restoreSavedReplyVersion'>({ updated_at: updatedAt }) }),
   // Without full a request carries no body: the poll every tab runs stays small.
   agentRequests: (status?: NonNullable<operations['listAgentRequests']['parameters']['query']>['status'], full = false) => {
     const query = new URLSearchParams();
