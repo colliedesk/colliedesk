@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -57,7 +58,7 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("resend: HTTP %d %s: %s", e.Status, e.Name, e.Message)
 }
 
-// Rejected reports an answer that refuses this domain (invalid, already registered, over a plan limit)
+// Rejected reports an answer that refuses this domain (for example an invalid name or a plan limit; Resend does not refuse a name already in the account)
 // rather than a server or credential problem. Retrying the same request will not help.
 func (e *APIError) Rejected() bool {
 	return e.Status == http.StatusBadRequest || e.Status == http.StatusForbidden || e.Status == http.StatusConflict || e.Status == http.StatusUnprocessableEntity
@@ -83,6 +84,16 @@ func (c *Client) GetDomain(ctx context.Context, id string) (Domain, error) {
 	var domain Domain
 	err := c.do(ctx, http.MethodGet, "/domains/"+url.PathEscape(id), nil, &domain)
 	return domain, err
+}
+
+// DeleteDomain removes the domain from the account. A domain that is already gone (404) is not an error.
+func (c *Client) DeleteDomain(ctx context.Context, id string) error {
+	err := c.do(ctx, http.MethodDelete, "/domains/"+url.PathEscape(id), nil, nil)
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
+		return nil
+	}
+	return err
 }
 
 // VerifyDomain asks Resend to check the domain's records now. The answer carries no status; read it

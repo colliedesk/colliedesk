@@ -69,6 +69,13 @@ func (s *Store) UpsertEmailChannel(ctx context.Context, workspaceID, supportAddr
 		return domain.EmailChannel{}, err
 	}
 	channel, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.EmailChannel, error) {
+		// The provider domain of the old address is no longer used when the domain changes.
+		if _, err := tx.Exec(ctx, `INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id)
+			SELECT workspace_id,provider_domain_id FROM email_channels
+			WHERE workspace_id=$1 AND provider_domain_id IS NOT NULL AND split_part(support_address,'@',2)<>split_part(lower($2),'@',2)
+			ON CONFLICT DO NOTHING`, workspaceID, supportAddress); err != nil {
+			return domain.EmailChannel{}, err
+		}
 		return scanChannel(tx.QueryRow(ctx, `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token)
 			VALUES($1,lower($2),$3)
 			ON CONFLICT(workspace_id) DO UPDATE SET
@@ -148,9 +155,43 @@ func (s *Store) SaveProviderDomain(ctx context.Context, workspaceID, supportAddr
 	return channel, nil
 }
 
-// DeleteEmailChannel disconnects email. Conversations, messages and delivery history stay.
+// UnusedProviderDomains lists the provider domain ids of this workspace that still have to be deleted
+// at the provider.
+func (s *Store) UnusedProviderDomains(ctx context.Context, workspaceID string) ([]string, error) {
+	ids, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]string, error) {
+		rows, err := tx.Query(ctx, `SELECT provider_domain_id FROM email_provider_domain_trash WHERE workspace_id=$1 ORDER BY created_at,provider_domain_id`, workspaceID)
+		if err != nil {
+			return nil, err
+		}
+		return pgx.CollectRows(rows, pgx.RowTo[string])
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list unused provider domains: %w", err)
+	}
+	return ids, nil
+}
+
+// ForgetProviderDomain removes the record of a provider domain once the provider confirmed it is gone.
+func (s *Store) ForgetProviderDomain(ctx context.Context, workspaceID, providerDomainID string) error {
+	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
+		_, err := tx.Exec(ctx, `DELETE FROM email_provider_domain_trash WHERE workspace_id=$1 AND provider_domain_id=$2`, workspaceID, providerDomainID)
+		return struct{}{}, err
+	})
+	if err != nil {
+		return fmt.Errorf("forget provider domain: %w", err)
+	}
+	return nil
+}
+
+// DeleteEmailChannel disconnects email. Conversations, messages and delivery history stay. The provider
+// domain is queued for deletion at the provider.
 func (s *Store) DeleteEmailChannel(ctx context.Context, workspaceID string) (bool, error) {
 	deleted, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
+		if _, err := tx.Exec(ctx, `INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id)
+			SELECT workspace_id,provider_domain_id FROM email_channels WHERE workspace_id=$1 AND provider_domain_id IS NOT NULL
+			ON CONFLICT DO NOTHING`, workspaceID); err != nil {
+			return false, err
+		}
 		result, err := tx.Exec(ctx, `DELETE FROM email_channels WHERE workspace_id=$1`, workspaceID)
 		return result.RowsAffected() == 1, err
 	})

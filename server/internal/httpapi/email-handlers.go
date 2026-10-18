@@ -142,14 +142,7 @@ func (a *API) putEmailChannel(response http.ResponseWriter, request *http.Reques
 		writeEmailStoreError(response, err)
 		return
 	}
-	if a.resend != nil && channel.ProviderDomainID == "" {
-		// The address is saved either way; verification retries creating the domain.
-		if created, err := a.createProviderDomain(request.Context(), principal(request).Workspace.ID, channel); err != nil {
-			slog.Warn("create email provider domain", "workspace", principal(request).Workspace.ID, "error", err)
-		} else {
-			channel = created
-		}
-	}
+	a.deleteUnusedProviderDomains(request.Context(), principal(request).Workspace.ID)
 	a.writeEmailSettings(response, request, &channel)
 }
 
@@ -178,6 +171,7 @@ func (a *API) deleteEmailChannel(response http.ResponseWriter, request *http.Req
 		writeError(response, http.StatusNotFound, "not_found", "The email channel is not connected.")
 		return
 	}
+	a.deleteUnusedProviderDomains(request.Context(), principal(request).Workspace.ID)
 	response.WriteHeader(http.StatusNoContent)
 }
 

@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,8 +19,12 @@ const fakeResendKey = "re_test_key_not_a_secret"
 type fakeResend struct {
 	mu      sync.Mutex
 	domains map[string]*fakeResendDomain
+	// byName holds the newest domain of each name: Resend lets the same name be added again as a new domain.
 	byName  map[string]string
+	created int
 	calls   []string
+	// failDelete makes DELETE answer 500.
+	failDelete bool
 	// status is what a domain reports once created and after a verify call.
 	status string
 	down   bool
@@ -47,6 +52,23 @@ func (f *fakeResend) called(call string) int {
 		}
 	}
 	return count
+}
+
+// live lists the ids of the domains still in the account.
+func (f *fakeResend) live() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	ids := make([]string, 0, len(f.domains))
+	for id := range f.domains {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func (f *fakeResend) idOf(name string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.byName[name]
 }
 
 func (f *fakeResend) setStatus(name, status string) {
@@ -85,15 +107,29 @@ func (f *fakeResend) ServeHTTP(response http.ResponseWriter, request *http.Reque
 			Name string `json:"name"`
 		}
 		_ = json.NewDecoder(request.Body).Decode(&body)
-		if _, taken := f.byName[body.Name]; taken {
-			response.WriteHeader(http.StatusForbidden)
-			_, _ = response.Write([]byte(`{"statusCode":403,"name":"validation_error","message":"The ` + body.Name + ` domain has been registered already."}`))
+		if strings.HasPrefix(body.Name, "bad.") {
+			response.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = response.Write([]byte(`{"statusCode":422,"message":"Invalid domain name.","name":"validation_error"}`))
 			return
 		}
-		domain := &fakeResendDomain{ID: "d91cd9bd-" + strings.ReplaceAll(body.Name, ".", "-"), Name: body.Name, Status: f.status}
+		f.created++
+		domain := &fakeResendDomain{ID: fmt.Sprintf("d91cd9bd-%d-%s", f.created, strings.ReplaceAll(body.Name, ".", "-")), Name: body.Name, Status: f.status}
 		f.domains[domain.ID], f.byName[body.Name] = domain, domain.ID
 		_ = json.NewEncoder(response).Encode(map[string]any{"id": domain.ID, "name": domain.Name, "created_at": "2026-10-18T00:00:00.000Z",
 			"status": domain.Status, "capabilities": map[string]string{"sending": "enabled", "receiving": "disabled"}, "records": f.records(domain), "region": "us-east-1"})
+	case request.Method == http.MethodDelete && strings.HasPrefix(path, "/"):
+		id := strings.TrimPrefix(path, "/")
+		if f.failDelete {
+			response.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if _, ok := f.domains[id]; !ok {
+			response.WriteHeader(http.StatusNotFound)
+			_, _ = response.Write([]byte(`{"statusCode":404,"name":"not_found","message":"Domain not found"}`))
+			return
+		}
+		delete(f.domains, id)
+		_ = json.NewEncoder(response).Encode(map[string]any{"object": "domain", "id": id, "deleted": true})
 	case request.Method == http.MethodGet && strings.HasPrefix(path, "/"):
 		domain, ok := f.domains[strings.TrimPrefix(path, "/")]
 		if !ok {
@@ -149,25 +185,42 @@ func providerState(t *testing.T, api http.Handler, token string) providerSetting
 
 const verifyDomainPath = "/api/v1/channels/email/domain-verification"
 
-func TestSavingTheSupportAddressCreatesTheProviderDomainOnceAndListsItsRecords(t *testing.T) {
+func putAddress(t *testing.T, api http.Handler, admin, address string) {
+	t.Helper()
+	if response := request(t, api, http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": address}, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("PUT %s status=%d body=%s", address, response.Code, response.Body.String())
+	}
+}
+
+func TestSavingTheAddressNeverCallsTheProviderAndVerifyCreatesTheDomainOnce(t *testing.T) {
 	fake, server := newFakeResend(t)
 	api, service, _, _ := testAPIWithConfig(t, resendDomainConfig(server))
 	admin := createSession(t, api, service, "Provider Desk", "admin@provider-desk.example.com")
 
-	for _, address := range []string{"support@provider-desk.example.com", "help@provider-desk.example.com"} {
-		if response := request(t, api, http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": address}, admin, nil); response.Code != http.StatusOK {
-			t.Fatalf("PUT %s status=%d body=%s", address, response.Code, response.Body.String())
+	putAddress(t, api, admin, "support@provider-desk.example.com")
+	putAddress(t, api, admin, "help@provider-desk.example.com")
+	if len(fake.calls) != 0 {
+		t.Fatalf("saving the address called the provider: %v", fake.calls)
+	}
+	settings := providerState(t, api, admin)
+	if settings.DomainVerification != "provider" || len(settings.Channel.DNSRecords) != 0 {
+		t.Fatalf("before the first verify there are no records: %+v", settings)
+	}
+
+	for range 2 {
+		if response := request(t, api, http.MethodPost, verifyDomainPath, nil, admin, nil); response.Code != http.StatusConflict {
+			t.Fatalf("verify status=%d body=%s", response.Code, response.Body.String())
 		}
 	}
 	if created := fake.called("POST /domains"); created != 1 {
-		t.Fatalf("provider domain created %d times, want once for one domain", created)
+		t.Fatalf("provider domain created %d times, want once", created)
 	}
-	settings := providerState(t, api, admin)
-	if settings.DomainVerification != "provider" || len(settings.Channel.DNSRecords) != 3 {
-		t.Fatalf("settings: %+v", settings)
+	settings = providerState(t, api, admin)
+	if len(settings.Channel.DNSRecords) != 3 {
+		t.Fatalf("records after verify: %+v", settings.Channel.DNSRecords)
 	}
 	mx := settings.Channel.DNSRecords[2]
-	if mx.Record != "SPF" || mx.Type != "MX" || mx.Name != "send" || mx.Priority == nil || *mx.Priority != 10 || mx.Status != "not_started" {
+	if mx.Record != "SPF" || mx.Type != "MX" || mx.Name != "send" || mx.Priority == nil || *mx.Priority != 10 {
 		t.Fatalf("MX record: %+v", mx)
 	}
 	if first := settings.Channel.DNSRecords[0]; first.Record != "DKIM" || first.Priority != nil || first.Value == "" {
@@ -176,17 +229,6 @@ func TestSavingTheSupportAddressCreatesTheProviderDomainOnceAndListsItsRecords(t
 	if settings.Channel.DomainVerifiedAt != nil {
 		t.Fatal("a new domain must start unverified")
 	}
-	if fake.called("GET /domains/d91cd9bd-provider-desk-example-com") != 0 {
-		t.Fatal("reading settings must not call the provider")
-	}
-
-	// Another domain gets its own provider domain.
-	if response := request(t, api, http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "help@other-brand.example.com"}, admin, nil); response.Code != http.StatusOK {
-		t.Fatalf("PUT other domain status=%d", response.Code)
-	}
-	if created := fake.called("POST /domains"); created != 2 {
-		t.Fatalf("provider domain created %d times, want 2 after changing domain", created)
-	}
 }
 
 func TestProviderDomainVerificationFollowsTheProviderStatus(t *testing.T) {
@@ -194,6 +236,8 @@ func TestProviderDomainVerificationFollowsTheProviderStatus(t *testing.T) {
 	api, service, pool, _ := testAPIWithConfig(t, resendDomainConfig(server))
 	admin := createSession(t, api, service, "Provider Verify", "admin@provider-verify.example.com")
 	_ = connectEmail(t, api, admin, "support@provider-verify.example.com")
+	// The first verify creates the domain; the fake reports the status it is given for the rest.
+	_ = request(t, api, http.MethodPost, verifyDomainPath, nil, admin, nil)
 
 	for _, status := range []string{"pending", "failed"} {
 		fake.setStatus("provider-verify.example.com", status)
@@ -206,7 +250,7 @@ func TestProviderDomainVerificationFollowsTheProviderStatus(t *testing.T) {
 			t.Fatalf("%s: verified=%v records=%+v", status, settings.Channel.DomainVerifiedAt, settings.Channel.DNSRecords)
 		}
 	}
-	if fake.called("POST /domains/d91cd9bd-provider-verify-example-com/verify") == 0 {
+	if fake.called("POST /domains/"+fake.idOf("provider-verify.example.com")+"/verify") == 0 {
 		t.Fatal("an unverified domain must ask the provider to check its records")
 	}
 	if got := queryString(t, pool, `SELECT COALESCE(domain_verified_at::text,'') FROM email_channels`); got != "" {
@@ -235,7 +279,6 @@ func TestProviderDomainVerificationWhenTheProviderIsUnreachableRecordsNothing(t 
 	api, service, pool, _ := testAPIWithConfig(t, resendDomainConfig(server))
 	admin := createSession(t, api, service, "Provider Down", "admin@provider-down.example.com")
 	_ = connectEmail(t, api, admin, "support@provider-down.example.com")
-	fake.setStatus("provider-down.example.com", "verified")
 	fake.mu.Lock()
 	fake.down = true
 	fake.mu.Unlock()
@@ -243,63 +286,124 @@ func TestProviderDomainVerificationWhenTheProviderIsUnreachableRecordsNothing(t 
 	if response := request(t, api, http.MethodPost, verifyDomainPath, nil, admin, nil); response.Code != http.StatusBadGateway {
 		t.Fatalf("unreachable provider status=%d body=%s, want 502", response.Code, response.Body.String())
 	}
-	if got := queryString(t, pool, `SELECT COALESCE(domain_verified_at::text,'') FROM email_channels`); got != "" {
+	if got := queryString(t, pool, `SELECT COALESCE(domain_verified_at::text,'')||COALESCE(provider_domain_id,'') FROM email_channels`); got != "" {
 		t.Fatalf("nothing may be recorded while the provider is down: %q", got)
 	}
 }
 
-func TestSavingTheAddressSurvivesAnUnreachableProviderAndVerifyCreatesTheDomain(t *testing.T) {
-	fake, server := newFakeResend(t)
+func TestAProviderRefusalOfTheDomainNameIsShownNotRetried(t *testing.T) {
+	_, server := newFakeResend(t)
 	api, service, _, _ := testAPIWithConfig(t, resendDomainConfig(server))
-	admin := createSession(t, api, service, "Provider Late", "admin@provider-late.example.com")
-	fake.mu.Lock()
-	fake.down = true
-	fake.mu.Unlock()
-	if response := request(t, api, http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "support@provider-late.example.com"}, admin, nil); response.Code != http.StatusOK {
-		t.Fatalf("PUT while provider down status=%d", response.Code)
-	}
-	if settings := providerState(t, api, admin); settings.Channel.Domain == "" || len(settings.Channel.DNSRecords) != 0 {
-		t.Fatalf("channel must be saved without records: %+v", settings)
-	}
-	fake.mu.Lock()
-	fake.down = false
-	fake.mu.Unlock()
-	if response := request(t, api, http.MethodPost, verifyDomainPath, nil, admin, nil); response.Code != http.StatusConflict {
-		t.Fatalf("verify after recovery status=%d body=%s", response.Code, response.Body.String())
-	}
-	if settings := providerState(t, api, admin); len(settings.Channel.DNSRecords) != 3 {
-		t.Fatalf("records after verify created the domain: %+v", settings.Channel.DNSRecords)
+	admin := createSession(t, api, service, "Provider Bad", "admin@provider-bad.example.com")
+	_ = connectEmail(t, api, admin, "support@bad.example.com")
+	response := request(t, api, http.MethodPost, verifyDomainPath, nil, admin, nil)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "email_domain_unavailable") || !strings.Contains(response.Body.String(), "Invalid domain name.") {
+		t.Fatalf("status=%d body=%s, want 409 email_domain_unavailable with the provider's reason", response.Code, response.Body.String())
 	}
 }
 
+// A second workspace claiming a domain another one verified gets its own new provider domain, which
+// stays unverified until its own DNS carries that domain's records.
 func TestProviderDomainsAreWorkspaceScoped(t *testing.T) {
 	fake, server := newFakeResend(t)
 	api, service, pool, _ := testAPIWithConfig(t, resendDomainConfig(server))
 	adminA := createSession(t, api, service, "Provider Alpha", "admin@provider-alpha.example.com")
 	adminB := createSession(t, api, service, "Provider Beta", "admin@provider-beta.example.com")
 	_ = connectEmail(t, api, adminA, "support@alpha-brand.example.com")
+	_ = request(t, api, http.MethodPost, verifyDomainPath, nil, adminA, nil)
 	fake.setStatus("alpha-brand.example.com", "verified")
 	if response := request(t, api, http.MethodPost, verifyDomainPath, nil, adminA, nil); response.Code != http.StatusOK {
 		t.Fatalf("A verify status=%d", response.Code)
 	}
 
-	// B claims A's verified domain: the provider refuses a second registration, and B stays unverified.
-	if response := request(t, api, http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "support@alpha-brand.example.com"}, adminB, nil); response.Code != http.StatusOK {
-		t.Fatalf("B PUT status=%d", response.Code)
+	putAddress(t, api, adminB, "support@alpha-brand.example.com")
+	if response := request(t, api, http.MethodPost, verifyDomainPath, nil, adminB, nil); response.Code != http.StatusConflict {
+		t.Fatalf("B verify of A's domain status=%d body=%s, want 409 (its own copy is not verified)", response.Code, response.Body.String())
 	}
-	if response := request(t, api, http.MethodPost, verifyDomainPath, nil, adminB, nil); response.Code != http.StatusConflict ||
-		!strings.Contains(response.Body.String(), "email_domain_unavailable") {
-		t.Fatalf("B verify of A's domain status=%d body=%s, want 409 email_domain_unavailable", response.Code, response.Body.String())
-	}
-	settingsB := providerState(t, api, adminB)
-	if settingsB.Channel.DomainVerifiedAt != nil || len(settingsB.Channel.DNSRecords) != 0 {
-		t.Fatalf("B received A's domain state: %+v", settingsB.Channel)
+	if settingsB := providerState(t, api, adminB); settingsB.Channel.DomainVerifiedAt != nil {
+		t.Fatalf("B inherited A's verification: %+v", settingsB.Channel)
 	}
 	if providerState(t, api, adminA).Channel.DomainVerifiedAt == nil {
 		t.Fatal("A lost its verification")
 	}
-	if count := queryString(t, pool, `SELECT count(*)::text FROM email_channels WHERE provider_domain_id IS NOT NULL`); count != "1" {
-		t.Fatalf("provider domain ids stored: %s, want only A's", count)
+	if count := queryString(t, pool, `SELECT count(DISTINCT provider_domain_id)::text FROM email_channels WHERE provider_domain_id IS NOT NULL`); count != "2" {
+		t.Fatalf("each workspace needs its own provider domain, got %s", count)
+	}
+	if len(fake.live()) != 2 {
+		t.Fatalf("live provider domains: %v", fake.live())
+	}
+}
+
+func TestChangingTheDomainRepeatedlyLeavesOneLiveProviderDomain(t *testing.T) {
+	fake, server := newFakeResend(t)
+	api, service, pool, _ := testAPIWithConfig(t, resendDomainConfig(server))
+	adminA := createSession(t, api, service, "Churn Alpha", "admin@churn-alpha.example.com")
+	adminB := createSession(t, api, service, "Churn Beta", "admin@churn-beta.example.com")
+	_ = connectEmail(t, api, adminB, "support@churn-beta-brand.example.com")
+	_ = request(t, api, http.MethodPost, verifyDomainPath, nil, adminB, nil)
+	betaDomain := fake.idOf("churn-beta-brand.example.com")
+
+	putAddress(t, api, adminA, "support@churn-0.example.com")
+	for i := 0; i < 6; i++ {
+		_ = request(t, api, http.MethodPost, verifyDomainPath, nil, adminA, nil)
+		putAddress(t, api, adminA, fmt.Sprintf("support@churn-%d.example.com", i+1))
+	}
+	_ = request(t, api, http.MethodPost, verifyDomainPath, nil, adminA, nil)
+	if live := fake.live(); len(live) != 2 {
+		t.Fatalf("live provider domains after churn: %v, want A's current one and B's", live)
+	}
+	if got := queryString(t, pool, `SELECT provider_domain_id FROM email_channels e JOIN workspaces w ON w.id=e.workspace_id WHERE w.name='Churn Alpha'`); got != fake.idOf("churn-6.example.com") {
+		t.Fatalf("A keeps %q, want its newest domain", got)
+	}
+
+	if response := request(t, api, http.MethodDelete, "/api/v1/channels/email", nil, adminA, nil); response.Code != http.StatusNoContent {
+		t.Fatalf("DELETE status=%d", response.Code)
+	}
+	if live := fake.live(); len(live) != 1 || live[0] != betaDomain {
+		t.Fatalf("disconnecting A must remove A's domain and only that: %v (B's is %s)", live, betaDomain)
+	}
+	if left := queryString(t, pool, `SELECT count(*)::text FROM email_provider_domain_trash`); left != "0" {
+		t.Fatalf("cleanup records left: %s", left)
+	}
+}
+
+func TestAFailedProviderDeleteIsRetriedAndAnAlreadyGoneDomainIsForgotten(t *testing.T) {
+	fake, server := newFakeResend(t)
+	api, service, pool, _ := testAPIWithConfig(t, resendDomainConfig(server))
+	admin := createSession(t, api, service, "Retry Delete", "admin@retry-delete.example.com")
+	_ = connectEmail(t, api, admin, "support@retry-one.example.com")
+	_ = request(t, api, http.MethodPost, verifyDomainPath, nil, admin, nil)
+	first := fake.idOf("retry-one.example.com")
+
+	fake.mu.Lock()
+	fake.failDelete = true
+	fake.mu.Unlock()
+	putAddress(t, api, admin, "support@retry-two.example.com")
+	if live := fake.live(); len(live) != 1 || live[0] != first {
+		t.Fatalf("the old domain should still exist while delete fails: %v", live)
+	}
+	if kept := queryString(t, pool, `SELECT provider_domain_id FROM email_provider_domain_trash`); kept != first {
+		t.Fatalf("the id to delete must not be lost: %q", kept)
+	}
+
+	fake.mu.Lock()
+	fake.failDelete = false
+	fake.mu.Unlock()
+	_ = request(t, api, http.MethodPost, verifyDomainPath, nil, admin, nil)
+	if live := fake.live(); len(live) != 1 || live[0] != fake.idOf("retry-two.example.com") {
+		t.Fatalf("next verify must finish the cleanup: %v", live)
+	}
+	if left := queryString(t, pool, `SELECT count(*)::text FROM email_provider_domain_trash`); left != "0" {
+		t.Fatalf("cleanup records left: %s", left)
+	}
+
+	// A domain removed in the Resend dashboard answers 404 and counts as gone.
+	fake.mu.Lock()
+	delete(fake.domains, fake.byName["retry-two.example.com"])
+	fake.mu.Unlock()
+	putAddress(t, api, admin, "support@retry-three.example.com")
+	if left := queryString(t, pool, `SELECT count(*)::text FROM email_provider_domain_trash`); left != "0" {
+		t.Fatalf("a 404 on delete must clear the record: %s left", left)
 	}
 }
 

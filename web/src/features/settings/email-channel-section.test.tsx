@@ -208,7 +208,7 @@ test('lists the provider DNS records with their status instead of the TXT record
 test('says the records are not available yet when the provider has not created the domain', () => {
   render(<EmailChannelSection settings={{ ...provider, channel: { ...provider.channel!, dns_records: [] } }} timezone="UTC" canManage />);
   expect(screen.queryByRole('table')).not.toBeInTheDocument();
-  expect(screen.getByText(/records are not ready yet/i)).toBeInTheDocument();
+  expect(screen.getByText(/select verify domain to get the dns records/i)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /verify domain/i })).toBeInTheDocument();
 });
 

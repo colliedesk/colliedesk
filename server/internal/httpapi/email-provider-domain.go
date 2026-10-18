@@ -14,13 +14,44 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
+// deleteUnusedProviderDomains deletes, at the provider, the domains this workspace stopped using, so a
+// workspace that changes its domain over and over never holds more than one in the account. A failed
+// delete is logged and its id stays recorded; the next save, verify or disconnect tries again.
+func (a *API) deleteUnusedProviderDomains(ctx context.Context, workspaceID string) {
+	if a.resend == nil {
+		return
+	}
+	ids, err := a.store.UnusedProviderDomains(ctx, workspaceID)
+	if err != nil {
+		slog.Error("list unused email provider domains", "workspace", workspaceID, "error", err)
+		return
+	}
+	for _, id := range ids {
+		if err := a.resend.DeleteDomain(ctx, id); err != nil {
+			slog.Warn("delete unused email provider domain", "workspace", workspaceID, "domain", id, "error", err)
+			continue
+		}
+		if err := a.store.ForgetProviderDomain(ctx, workspaceID, id); err != nil {
+			slog.Error("forget deleted email provider domain", "workspace", workspaceID, "domain", id, "error", err)
+		}
+	}
+}
+
 // createProviderDomain adds the channel's domain to the provider once and keeps its id and records.
 func (a *API) createProviderDomain(ctx context.Context, workspaceID string, channel domain.EmailChannel) (domain.EmailChannel, error) {
 	created, err := a.resend.CreateDomain(ctx, channel.Domain)
 	if err != nil {
 		return channel, err
 	}
-	return a.store.SaveProviderDomain(ctx, workspaceID, channel.SupportAddress, providerDomain(created), time.Now().UTC())
+	saved, err := a.store.SaveProviderDomain(ctx, workspaceID, channel.SupportAddress, providerDomain(created), time.Now().UTC())
+	if err != nil {
+		// The address changed or the channel went while the provider was answering: do not leave the new domain behind.
+		if deleteErr := a.resend.DeleteDomain(context.WithoutCancel(ctx), created.ID); deleteErr != nil {
+			slog.Error("delete email provider domain that was not saved", "workspace", workspaceID, "domain", created.ID, "error", deleteErr)
+		}
+		return channel, err
+	}
+	return saved, nil
 }
 
 func providerDomain(provider resend.Domain) store.ProviderDomain {
@@ -45,6 +76,7 @@ func (a *API) verifyProviderDomain(response http.ResponseWriter, request *http.R
 		writeError(response, http.StatusNotFound, "not_found", "The email channel is not connected.")
 		return
 	}
+	a.deleteUnusedProviderDomains(ctx, workspace.ID)
 	provider, err := a.checkProviderDomain(ctx, workspace.ID, *channel)
 	if err != nil {
 		writeProviderError(response, err)

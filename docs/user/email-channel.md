@@ -90,7 +90,8 @@ outgoing replies. Conversations and messages stay.
 
 **When the server has a Resend key** (`RESEND_API_KEY`, the hosted cloud), Settings shows a table
 **DNS records to publish** instead of the TXT record: DKIM, SPF and an MX record for bounces, each
-with its status (Not started, Pending, Verified, Failed).
+with its status (Not started, Pending, Verified, Failed) once you have selected **Verify domain**
+the first time.
 
 1. Add every record in the table at your DNS provider.
 2. Select **Verify domain**. The domain is verified only when Resend reports it verified. Until then
@@ -98,8 +99,10 @@ with its status (Not started, Pending, Verified, Failed).
    a day. Select **Verify domain** again later.
 3. If Resend cannot be reached, nothing changes. Try again in a minute.
 
-If the same domain is already registered by another workspace, Colliedesk cannot use it and says so;
-ask your operator. Replies signed with your own domain are what keep them out of spam folders.
+The table appears after your first **Verify domain**; until then Settings tells you to select it.
+If Resend refuses the domain name, Colliedesk shows Resend's reason. Changing the support address to
+another domain replaces the list with one for the new domain; the old one is deleted at Resend.
+Replies signed with your own domain are what keep them out of spam folders.
 
 Until the domain is verified, replies are sent as **"Your workspace via Colliedesk"** from
 `reply+…@<MAIL_FROM_DOMAIN>`, with `Reply-To` set to your support address. Customer replies still
