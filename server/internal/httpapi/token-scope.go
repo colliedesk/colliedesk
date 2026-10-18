@@ -53,7 +53,7 @@ var (
 // settings a person can see without secrets: the session and invite lists (never a token or a link),
 // the email channel (never the inbound secret or the SMTP password) and the web form.
 // draft: changes that never reach a customer (status, priority, assignee, tags on one conversation or
-// many at once, creating a tag, private notes, the token owner's own timezone). send: everything else
+// many at once, creating a tag, private notes, the token owner's own timezone and display name). send: everything else
 // an agent may do, such as replying, creating contacts and conversations, and writing the saved replies
 // the team sends (every change is a version that can be restored, and a delete stays in the trash for
 // 30 days). Posting a message is gated by the handler: a note needs draft, an outgoing reply needs send.
@@ -111,6 +111,7 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/channels/email":                      tier(auth.ScopeRead),
 	"GET /api/v1/channels/web-form":                   tier(auth.ScopeRead),
 	"PATCH /api/v1/agents/me/timezone":                tier(auth.ScopeDraft),
+	"PATCH /api/v1/agents/me/display-name":            tier(auth.ScopeDraft),
 	"GET /api/v1/billing":                             tier(auth.ScopeAdmin),
 	"PATCH /api/v1/workspace/timezone":                tier(auth.ScopeAdmin),
 	"PATCH /api/v1/agents/{id}":                       tier(auth.ScopeAdmin),

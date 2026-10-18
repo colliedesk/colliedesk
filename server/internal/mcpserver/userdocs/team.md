@@ -2,8 +2,27 @@
 
 **Settings → Team** lists everyone who can sign in to the workspace: name, email, role, whether they
 are **Active** or **Deactivated**, and when they were last active. Agents see the list read-only.
-Admins can change roles, deactivate and reactivate people. To add someone, see
+Admins can rename people, change roles, deactivate and reactivate them. To add someone, see
 [Invite your team](invites.md).
+
+## Set a display name
+
+A display name is what the team sees instead of the email address: in the team list, the assignee
+lists, on notes, and in the account menu. The `{{agent.name}}` variable of a saved reply uses it too.
+
+- **Your own name:** in **Settings → Profile**, type it in **Display name**, then select **Save
+  name**.
+- **Someone else's name (admins):** select **Rename** in their row, type the name, then select
+  **Save**. Use it to correct a typo or to name someone who has not signed in yet.
+
+Spaces at the start and end are removed. A name has at most 80 characters and no line breaks. To
+remove a name, clear the field and save: the email address is shown again. The email address stays
+visible next to the name in the team list.
+
+An AI agent can do the same through MCP: `colliedesk_my_display_name_set` (draft tier) for the
+person the token acts as, and `colliedesk_team_member_update` with `display_name` (admin tier) for
+anyone in the workspace. Renaming is not a change to the admin role, so it never waits for approval
+at the admin tier.
 
 ## Change a role
 

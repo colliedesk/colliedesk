@@ -342,6 +342,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .team-list .team-person small { overflow: hidden; color: var(--text-3); text-overflow: ellipsis; white-space: nowrap; }
 .team-confirm { display: grid; flex: 1 0 100%; gap: var(--space-2); border-left: 2px solid var(--danger); padding-left: var(--space-3); }
 .team-confirm label { display: flex; align-items: center; gap: var(--space-2); }
+.team-rename { flex: 1 0 100%; }
 .team-role { display: flex; gap: var(--space-2); align-items: center; }
 
 /* Settings details: a warning that needs action, the saved state of a form, copyable values. */

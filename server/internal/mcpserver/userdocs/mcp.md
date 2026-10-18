@@ -94,7 +94,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_workspace_settings_get` | Shows the workspace name, address and timezone, and your own timezone | `read` |
 | `colliedesk_workspace_settings_update` | Sets the workspace timezone | `admin` |
 | `colliedesk_my_timezone_set` | Sets or clears your own timezone | `draft` |
-| `colliedesk_team_member_update` | Deactivates or reactivates an agent; making someone an admin or changing an admin always waits for approval | `admin` |
+| `colliedesk_my_display_name_set` | Sets or clears your own display name | `draft` |
+| `colliedesk_team_member_update` | Renames, deactivates or reactivates an agent; making someone an admin or changing an admin always waits for approval | `admin` |
 | `colliedesk_invites_list` | Lists invites and their state, never their links | `read` |
 | `colliedesk_invite_create` | Asks to invite a person; the approver sees the link once, the agent never does | `read` |
 | `colliedesk_invite_revoke` | Revokes a pending invite. Cannot be undone | `admin` |
