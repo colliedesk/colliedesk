@@ -2365,7 +2365,7 @@ components:
         id: {type: string, format: uuid}
         conversation_id: {type: string, format: uuid}
         author_agent_id: {type: [string, 'null'], format: uuid}
-        author_name: {type: [string, 'null'], description: 'Display name of an author without a Colliedesk agent account (customer or imported agent)'}
+        author_name: {type: [string, 'null'], description: 'Who wrote the message: the name stored with an imported message, else the team member''s display name (or email), else for incoming mail the conversation contact''s name when the contact sent it; null when none applies'}
         agent_token:
           description: The agent token the message was written with; null for what a person wrote and for incoming mail.
           oneOf:

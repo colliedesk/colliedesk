@@ -63,7 +63,9 @@ A conversation line has `id`, `contact_id`, `subject`, `status`, `priority`, `as
 (an agent id or `null`), `origin` (where an imported ticket came from, or `null`), `tag_ids`,
 `created_at`, `updated_at`, `messages` and `time_entries`.
 
-Each message has `id`, `conversation_id`, `author_agent_id`, `author_name`, `kind`
+Each message has `id`, `conversation_id`, `author_agent_id`, `author_name` (as stored: the author
+name of an imported message, `null` for a message written in Colliedesk, whose author is
+`author_agent_id`, and for received mail, whose sender is in `email_meta`), `kind`
 (`incoming`, `outgoing` or `note`), `body`, `body_html`, `origin`, `email_message_id`,
 `email_meta` (the sender, authentication result, `via`, Cc addresses and attachment names of a
 received message; `via` is `platform` or `workspace` for email and `web_form` for text typed into

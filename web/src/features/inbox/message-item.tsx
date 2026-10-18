@@ -47,15 +47,18 @@ export function MessageItem({ item, timezone, onRetryDelivery, approvedBy }: Mes
   // The stored raw email is offered on its own, not mixed with the customer's files.
   const originalID = item.email?.original_attachment_id ?? null;
   const files = item.attachments.filter((file) => file.id !== originalID);
+  const sender = approvedBy ?? item.author_name ?? messages.someone;
+  // A token or draft line already names the person; the plain name would repeat it.
+  const plainAuthor = item.author_name && !item.agent_token && !item.agent_request_id;
   return (
     <article className={`message message-${item.kind}`}>
       <header className="message-meta">
         <Avatar name={item.author_name ?? item.email?.from ?? kindLabel(item.kind)} />
         <div className="message-byline">
-          {item.author_name && <span className="message-author">{item.author_name}</span>}
-          {!item.agent_token && item.agent_request_id && <span className="message-author">{messages.draftRewritten(approvedBy ?? messages.someone)}</span>}
+          {plainAuthor && <span className="message-author">{item.author_name}</span>}
+          {!item.agent_token && item.agent_request_id && <span className="message-author">{messages.draftRewritten(sender)}</span>}
           {item.agent_token && <span className="message-author" title={item.agent_token.scope}>{item.agent_request_id
-            ? messages.draftApproved(item.agent_token.label, approvedBy ?? messages.someone)
+            ? messages.draftApproved(item.agent_token.label, sender)
             : messages.writtenByAgentToken(item.agent_token.agent_name, item.agent_token.label)}</span>}
           <span className="message-kind">{item.kind === 'note' && <LockIcon />}{kindLabel(item.kind)}</span>
         </div>
