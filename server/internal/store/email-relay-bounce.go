@@ -51,17 +51,19 @@ type RelayBounce struct {
 	SenderDomain bool
 }
 
-// WorkspaceForVerifiedSender finds the workspace that sends as an address on the domain, when exactly one
-// workspace's support domain is verified through the email provider. The provider verifies only one copy
-// of a domain name, so a match is unambiguous; a TXT-verified or unverified domain never matches.
-func (s *Store) WorkspaceForVerifiedSender(ctx context.Context, senderDomain string) (string, bool, error) {
+// WorkspacesForVerifiedSender finds the workspaces that send as an address on the domain with the domain
+// verified through the email provider. One workspace can hold a name (a unique index), so there is one
+// match; if rows from before that rule give several, all are returned and a complaint is counted for each
+// of them instead of for none.
+func (s *Store) WorkspacesForVerifiedSender(ctx context.Context, senderDomain string) ([]string, error) {
 	if senderDomain == "" {
-		return "", false, nil
+		return nil, nil
 	}
 	var ids []string
 	err := s.db.Privileged(ctx, database.PrivilegeVerifiedSender, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `SELECT workspace_id::text FROM email_channels
-			WHERE provider_domain_id IS NOT NULL AND domain_verified_at IS NOT NULL AND split_part(support_address,'@',2)=lower($1) LIMIT 2`, senderDomain)
+			WHERE provider_domain_id IS NOT NULL AND domain_verified_at IS NOT NULL AND split_part(support_address,'@',2)=lower($1)
+			ORDER BY workspace_id LIMIT 20`, senderDomain)
 		if err != nil {
 			return err
 		}
@@ -69,12 +71,9 @@ func (s *Store) WorkspaceForVerifiedSender(ctx context.Context, senderDomain str
 		return err
 	})
 	if err != nil {
-		return "", false, fmt.Errorf("find verified sender: %w", err)
+		return nil, fmt.Errorf("find verified sender: %w", err)
 	}
-	if len(ids) != 1 {
-		return "", false, nil
-	}
-	return ids[0], true, nil
+	return ids, nil
 }
 
 // MarkRelayBounce applies the relay event to the reply it names, once per webhook id. When the event

@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -287,7 +288,7 @@ func TestTwoVerifiesAtOnceLeaveOneProviderDomain(t *testing.T) {
 	fake, server := newFakeResend(t)
 	// Every clock read is 31 s later, so the limiter lets both requests through and only the lock is left.
 	fake.set(func(f *fakeResend) { f.autoAdvance = 31 * time.Second; f.createDelay = 150 * time.Millisecond })
-	api, service, _, dns := testAPIWithConfig(t, resendDomainConfig(fake, server))
+	api, service, pool, dns := testAPIWithConfig(t, resendDomainConfig(fake, server))
 	admin := createSession(t, api, service, "Race Desk", "admin@race-desk.example.com")
 	_ = connectEmail(t, api, admin, "support@race-desk.example.com")
 	prove(t, api, dns, admin)
@@ -301,7 +302,12 @@ func TestTwoVerifiesAtOnceLeaveOneProviderDomain(t *testing.T) {
 		}()
 	}
 	wg.Wait()
-	if live := fake.live(); len(live) != 1 {
+	// The request that lost the race queued the domain it created; the sweep deletes it.
+	clock := time.Now().Add(time.Minute)
+	if err := newSweeper(pool, server.URL, &clock).Sweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if live := fake.live(); len(live) != 1 || live[0] != queryString(t, pool, `SELECT provider_domain_id FROM email_channels`) {
 		t.Fatalf("two simultaneous verifies left %d provider domains: %v", len(live), live)
 	}
 }

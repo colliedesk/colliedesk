@@ -28,19 +28,6 @@ func (s *Store) QueueProviderDomainDeletion(ctx context.Context, workspaceID, pr
 	return nil
 }
 
-// WithProviderDomainLock runs fn while holding a lock that only one request per workspace can hold, so two
-// simultaneous verifications cannot both create a provider domain. fn reads and writes through the
-// store as usual; the lock only orders the requests.
-func (s *Store) WithProviderDomainLock(ctx context.Context, workspaceID string, fn func(context.Context) error) error {
-	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
-		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('email-provider-domain:'||$1::text,0))`, workspaceID); err != nil {
-			return struct{}{}, err
-		}
-		return struct{}{}, fn(ctx)
-	})
-	return err
-}
-
 // DueProviderDomainDeletions lists the queued provider domains whose next attempt is due, across
 // workspaces, including those of workspaces that no longer exist.
 func (s *Store) DueProviderDomainDeletions(ctx context.Context, now time.Time, limit int) ([]ProviderDomainDeletion, error) {

@@ -18,6 +18,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const channelColumns = `support_address,secret_key_id IS NOT NULL,secret_rotated_at,domain_verification_token,domain_verified_at,COALESCE(provider_domain_id,''),provider_domain_records,created_at,updated_at`
@@ -133,28 +134,69 @@ type ProviderDomain struct {
 	Verified bool
 }
 
-// SaveProviderDomain stores the provider's id and record snapshot for the channel whose support address is
-// supportAddress, and records the verification when the provider reports the domain verified. It matches
-// the address so a result for a domain the admin has since replaced is not written onto the new one.
+// ErrProviderDomainHeld means another workspace already has this domain name verified through the provider.
+var ErrProviderDomainHeld = errors.New("domain is verified by another workspace")
+
+// AttachProviderDomain stores a provider domain just created for the channel with this support address,
+// but only while the channel still holds expectedID (empty for none). It reports false when the channel
+// changed meanwhile, for example another request attached its own domain first; the caller then queues
+// the domain it created for deletion. An id it replaces is queued here, in the same transaction. No
+// provider call is made while the transaction is open.
+func (s *Store) AttachProviderDomain(ctx context.Context, workspaceID, supportAddress, expectedID string, provider ProviderDomain, now time.Time) (domain.EmailChannel, bool, error) {
+	records, err := json.Marshal(provider.Records)
+	if err != nil {
+		return domain.EmailChannel{}, false, fmt.Errorf("encode provider domain records: %w", err)
+	}
+	type outcome struct {
+		channel  domain.EmailChannel
+		attached bool
+	}
+	result, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (outcome, error) {
+		var current string
+		err := tx.QueryRow(ctx, `SELECT COALESCE(provider_domain_id,'') FROM email_channels WHERE workspace_id=$1 AND support_address=$2 FOR UPDATE`,
+			workspaceID, supportAddress).Scan(&current)
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && current != expectedID) {
+			return outcome{}, nil
+		}
+		if err != nil {
+			return outcome{}, err
+		}
+		if current != "" {
+			if _, err := tx.Exec(ctx, `INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, workspaceID, current); err != nil {
+				return outcome{}, err
+			}
+		}
+		channel, err := scanChannel(tx.QueryRow(ctx, `UPDATE email_channels SET provider_domain_id=$3,provider_domain_records=$4,domain_verified_at=NULL,updated_at=$5
+			WHERE workspace_id=$1 AND support_address=$2 RETURNING `+channelColumns, workspaceID, supportAddress, provider.ID, records, now))
+		return outcome{channel: channel, attached: err == nil}, err
+	})
+	if err != nil {
+		return domain.EmailChannel{}, false, fmt.Errorf("attach provider domain: %w", err)
+	}
+	return result.channel, result.attached, nil
+}
+
+// SaveProviderDomain stores the provider's record snapshot for the provider domain the channel holds, and
+// sets or clears the verification to match what the provider reports: a domain the provider no longer
+// verifies stops being verified here. It writes only while the channel still has this support address and
+// this provider domain, and never for a domain queued for deletion, so a check that raced a change cannot
+// bring an old domain back. pgx.ErrNoRows (wrapped) means the channel changed; ErrProviderDomainHeld
+// means another workspace has the name verified.
 func (s *Store) SaveProviderDomain(ctx context.Context, workspaceID, supportAddress string, provider ProviderDomain, now time.Time) (domain.EmailChannel, error) {
 	records, err := json.Marshal(provider.Records)
 	if err != nil {
 		return domain.EmailChannel{}, fmt.Errorf("encode provider domain records: %w", err)
 	}
 	channel, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.EmailChannel, error) {
-		// An id this replaces (the stored domain vanished at the provider, say) is queued for deletion.
-		if _, err := tx.Exec(ctx, `INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id)
-			SELECT workspace_id,provider_domain_id FROM email_channels
-			WHERE workspace_id=$1 AND support_address=$2 AND provider_domain_id IS NOT NULL AND provider_domain_id<>$3
-			ON CONFLICT DO NOTHING`, workspaceID, supportAddress, provider.ID); err != nil {
-			return domain.EmailChannel{}, err
-		}
-		return scanChannel(tx.QueryRow(ctx, `UPDATE email_channels SET provider_domain_id=$3,provider_domain_records=$4,
-				domain_verified_at=CASE WHEN $5 THEN COALESCE(domain_verified_at,$6) ELSE domain_verified_at END,updated_at=$6
-			WHERE workspace_id=$1 AND support_address=$2 RETURNING `+channelColumns, workspaceID, supportAddress, provider.ID, records, provider.Verified, now))
+		return scanChannel(tx.QueryRow(ctx, `UPDATE email_channels SET provider_domain_records=$4,
+				domain_verified_at=CASE WHEN $5 THEN COALESCE(domain_verified_at,$6) END,updated_at=$6
+			WHERE workspace_id=$1 AND support_address=$2 AND provider_domain_id=$3
+				AND NOT EXISTS (SELECT 1 FROM email_provider_domain_trash WHERE provider_domain_id=$3)
+			RETURNING `+channelColumns, workspaceID, supportAddress, provider.ID, records, provider.Verified, now))
 	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.EmailChannel{}, fmt.Errorf("save provider domain: email channel not found")
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return domain.EmailChannel{}, ErrProviderDomainHeld
 	}
 	if err != nil {
 		return domain.EmailChannel{}, fmt.Errorf("save provider domain: %w", err)

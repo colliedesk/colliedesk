@@ -34,6 +34,10 @@ type fakeResend struct {
 	createDelay time.Duration
 	// forcedCreate, when set, is the answer to POST /domains.
 	forcedCreate *forcedResendError
+	// onVerify runs while a POST /domains/{id}/verify is in flight, before it answers.
+	onVerify func()
+	// deleteDelay widens the window of a DELETE.
+	deleteDelay time.Duration
 	// clock is the API's time source: tests move it instead of sleeping past the verify interval.
 	offset      time.Duration
 	autoAdvance time.Duration
@@ -130,7 +134,7 @@ func (f *fakeResend) records(domain *fakeResendDomain) []map[string]any {
 func (f *fakeResend) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	f.mu.Lock()
 	f.calls = append(f.calls, request.Method+" "+request.URL.Path)
-	delay, forced, down, failDelete := f.createDelay, f.forcedCreate, f.down, f.failDelete
+	delay, forced, down, failDelete, hook, deleteDelay := f.createDelay, f.forcedCreate, f.down, f.failDelete, f.onVerify, f.deleteDelay
 	f.mu.Unlock()
 	response.Header().Set("Content-Type", "application/json")
 	if request.Header.Get("Authorization") != "Bearer "+fakeResendKey {
@@ -145,6 +149,12 @@ func (f *fakeResend) ServeHTTP(response http.ResponseWriter, request *http.Reque
 	path := strings.TrimPrefix(request.URL.Path, "/domains")
 	if request.Method == http.MethodPost && path == "" {
 		time.Sleep(delay)
+	}
+	if request.Method == http.MethodDelete {
+		time.Sleep(deleteDelay)
+	}
+	if request.Method == http.MethodPost && strings.HasSuffix(path, "/verify") && hook != nil {
+		hook()
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -213,4 +223,20 @@ func resendDomainConfig(fake *fakeResend, server *httptest.Server) func(*httpapi
 		config.Email.ResendAPIBase = server.URL
 		config.Now = fake.now
 	}
+}
+
+func (f *fakeResend) domainsByID() map[string]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	ids := map[string]string{}
+	for id := range f.domains {
+		ids[id] = id
+	}
+	return ids
+}
+
+func (f *fakeResend) setStatusByID(id, status string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.domains[id].Status = status
 }

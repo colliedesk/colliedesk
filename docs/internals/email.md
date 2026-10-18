@@ -48,8 +48,12 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
      again. `domain_verified_at` is set only on `verified`; anything else is 409
      `dns_record_not_verified` with each record's status. Saving the address never calls Resend, and
      settings read the stored snapshot, so a person never waits on Resend.
-  A per-workspace lock (`pg_advisory_xact_lock`, re-read under the lock) lets one request create the domain
-  when two arrive together. Checks that reach Resend are limited to one per workspace per 30 s
+  No database transaction stays open during a Resend call (a held connection plus a nested one deadlocks the
+  pool). Two requests that both see no domain both create one; the new id is stored with a compare-and-set
+  on the id read before (`AttachProviderDomain`), and the request that loses queues its domain for deletion
+  and uses the stored one. A snapshot is written only for the provider domain the channel still holds and
+  never for one queued for deletion (`SaveProviderDomain`), so a check that raced an address change cannot
+  bring a deleted domain back. Checks that reach Resend are limited to one per workspace per 30 s
   (`domain.ProviderCheckMinInterval`; 429 with `Retry-After`, no call), because the Resend account and its
   request limit are shared by every tenant. A stored id that Resend no longer knows (404) is replaced by a
   new domain in the same request.
@@ -59,7 +63,11 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   error name, never the key.
   **Duplicates.** Resend does not refuse a name already in the account: it creates a second domain with a
   new id and DKIM key (same selector `resend._domainkey`). Only one copy can have its records in DNS, so
-  **only one workspace can hold a given domain name verified**. Two teams of one company that both use
+  **only one workspace can hold a given domain name verified**: a partial unique index on the domain of
+  provider-verified rows enforces it, and the second workspace gets 409 `email_domain_unavailable`. When
+  Resend reports a stored domain no longer verified, `domain_verified_at` is cleared, so the workspace sends
+  from the platform address again. If rows from before the rule still give several holders, a complaint
+  about that name is counted for every one of them. Two teams of one company that both use
   `support@` and `billing@` of the same domain cannot both verify it this way; the second stays
   unverified and sends from the platform address. Ownership is proved by the TXT record first and then by
   the copy's own DNS records.

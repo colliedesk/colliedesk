@@ -15,6 +15,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/jackc/pgx/v5"
 )
 
 func providerDomain(provider resend.Domain) store.ProviderDomain {
@@ -67,76 +68,86 @@ func (a *API) verifyProviderDomain(response http.ResponseWriter, request *http.R
 		writeError(response, http.StatusTooManyRequests, "rate_limited", "The domain was checked a moment ago. Try again in a few seconds.")
 		return
 	}
-	var provider resend.Domain
-	var saved domain.EmailChannel
-	var changed bool
-	err = a.store.WithProviderDomainLock(ctx, workspace.ID, func(ctx context.Context) error {
-		// Read again under the lock: another request may have created the domain, or the address changed.
-		current, err := a.store.GetEmailChannel(ctx, workspace.ID)
-		if err != nil {
-			return err
+	provider, current, err := a.checkProviderDomain(ctx, workspace.ID, *channel)
+	if err == nil {
+		var saved domain.EmailChannel
+		if saved, err = a.store.SaveProviderDomain(ctx, workspace.ID, current.SupportAddress, providerDomain(provider), time.Now().UTC()); err == nil {
+			if !provider.Verified() {
+				writeError(response, http.StatusConflict, "dns_record_not_verified", unverifiedMessage(saved.DNSRecords))
+				return
+			}
+			a.writeEmailSettings(response, request, &saved)
+			return
 		}
-		if current == nil || current.SupportAddress != channel.SupportAddress {
-			changed = true
-			return nil
-		}
-		if provider, err = a.checkProviderDomain(ctx, workspace.ID, *current); err != nil {
-			return err
-		}
-		saved, err = a.store.SaveProviderDomain(ctx, workspace.ID, current.SupportAddress, providerDomain(provider), time.Now().UTC())
-		return err
-	})
-	switch {
-	case changed:
-		writeError(response, http.StatusConflict, "conflict", "The support address changed while the domain was being checked. Nothing was recorded; try again.")
-		return
-	case err != nil:
-		writeProviderError(response, err)
-		return
-	case !provider.Verified():
-		writeError(response, http.StatusConflict, "dns_record_not_verified", unverifiedMessage(saved.DNSRecords))
-		return
 	}
-	a.writeEmailSettings(response, request, &saved)
+	switch {
+	case errors.Is(err, errChannelChanged), errors.Is(err, pgx.ErrNoRows):
+		writeError(response, http.StatusConflict, "conflict", "The support address changed while the domain was being checked. Nothing was recorded; try again.")
+	case errors.Is(err, store.ErrProviderDomainHeld):
+		writeError(response, http.StatusConflict, "email_domain_unavailable", "Another workspace already has this domain verified with the email provider. Only one workspace can send as a given domain name; ask its owner or your operator.")
+	default:
+		writeProviderError(response, err)
+	}
 }
 
-// checkProviderDomain reads the stored provider domain, asking the provider to re-check it when it is not
-// verified. A domain that is no longer at the provider (404) is created again; the id it replaces is queued
-// for deletion.
-func (a *API) checkProviderDomain(ctx context.Context, workspaceID string, channel domain.EmailChannel) (resend.Domain, error) {
-	var provider resend.Domain
-	if channel.ProviderDomainID != "" {
-		var err error
-		provider, err = a.resend.GetDomain(ctx, channel.ProviderDomainID)
-		var apiErr *resend.APIError
-		switch {
-		case errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound:
-			channel.ProviderDomainID = ""
-		case err != nil || provider.Verified():
-			return provider, err
-		}
-	}
-	if channel.ProviderDomainID == "" {
-		created, err := a.resend.CreateDomain(ctx, channel.Domain)
-		if err != nil {
-			return resend.Domain{}, err
-		}
-		if _, err := a.store.SaveProviderDomain(ctx, workspaceID, channel.SupportAddress, providerDomain(created), time.Now().UTC()); err != nil {
-			// The channel went away while the provider was answering: queue the new domain for deletion.
-			if queueErr := a.store.QueueProviderDomainDeletion(context.WithoutCancel(ctx), workspaceID, created.ID); queueErr != nil {
-				slog.Error("queue email provider domain that was not saved", "workspace", workspaceID, "domain", created.ID, "error", queueErr)
+// errChannelChanged means the support address or the provider domain changed while a check was running.
+var errChannelChanged = errors.New("email channel changed during the domain check")
+
+// checkProviderDomain creates the provider domain when the channel has none, then asks the provider to
+// re-check it and reads it. No transaction is open during any provider call. The new domain is stored with
+// a compare-and-set on the id read before: if another request stored one first, the domain created here is
+// queued for deletion and the stored one is used. A stored domain the provider no longer knows (404) is
+// replaced the same way, and the id it replaces is queued for deletion.
+func (a *API) checkProviderDomain(ctx context.Context, workspaceID string, channel domain.EmailChannel) (resend.Domain, domain.EmailChannel, error) {
+	for range 2 {
+		var provider resend.Domain
+		stored := channel.ProviderDomainID
+		if stored != "" {
+			var err error
+			provider, err = a.resend.GetDomain(ctx, stored)
+			var apiErr *resend.APIError
+			if errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
+				provider = resend.Domain{}
+			} else if err != nil || provider.Verified() {
+				return provider, channel, err
 			}
-			return resend.Domain{}, err
 		}
-		provider, channel.ProviderDomainID = created, created.ID
+		if provider.ID == "" {
+			created, err := a.resend.CreateDomain(ctx, channel.Domain)
+			if err != nil {
+				return resend.Domain{}, channel, err
+			}
+			attached, ok, err := a.store.AttachProviderDomain(ctx, workspaceID, channel.SupportAddress, stored, providerDomain(created), time.Now().UTC())
+			if err != nil || !ok {
+				if queueErr := a.store.QueueProviderDomainDeletion(context.WithoutCancel(ctx), workspaceID, created.ID); queueErr != nil {
+					slog.Error("queue email provider domain that was not stored", "workspace", workspaceID, "domain", created.ID, "error", queueErr)
+				}
+				if err != nil {
+					return resend.Domain{}, channel, err
+				}
+				// Another request stored a domain first, or the address changed: read it again.
+				fresh, err := a.store.GetEmailChannel(ctx, workspaceID)
+				if err != nil {
+					return resend.Domain{}, channel, err
+				}
+				if fresh == nil || fresh.SupportAddress != channel.SupportAddress {
+					return resend.Domain{}, channel, errChannelChanged
+				}
+				channel = *fresh
+				continue
+			}
+			channel, provider = attached, created
+		}
+		if provider.Verified() {
+			return provider, channel, nil
+		}
+		if err := a.resend.VerifyDomain(ctx, provider.ID); err != nil {
+			return resend.Domain{}, channel, err
+		}
+		again, err := a.resend.GetDomain(ctx, provider.ID)
+		return again, channel, err
 	}
-	if provider.Verified() {
-		return provider, nil
-	}
-	if err := a.resend.VerifyDomain(ctx, channel.ProviderDomainID); err != nil {
-		return resend.Domain{}, err
-	}
-	return a.resend.GetDomain(ctx, channel.ProviderDomainID)
+	return resend.Domain{}, channel, errChannelChanged
 }
 
 func unverifiedMessage(records []domain.DNSRecord) string {

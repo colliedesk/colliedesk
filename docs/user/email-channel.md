@@ -101,8 +101,10 @@ outgoing replies. Conversations and messages stay.
 If Resend refuses the domain name, Colliedesk shows Resend's reason; any other Resend problem shows as
 "could not be reached" and the operator is told. If Resend cannot be reached, nothing changes. Changing the
 support address to another domain replaces the list; the old domain is deleted at Resend in the background.
-**Only one workspace can verify a given domain name this way.** If two teams of one company need the same
-domain, the second one keeps sending from the platform address.
+**Only one workspace can verify a given domain name this way.** If another workspace already has the
+domain verified, Colliedesk says so and you keep sending from the platform address. If Resend later
+stops verifying your domain (for example the records were removed), Colliedesk stops sending as your
+address until you verify it again.
 
 Until the domain is verified, replies are sent as **"Your workspace via Colliedesk"** from
 `reply+…@<MAIL_FROM_DOMAIN>`, with `Reply-To` set to your support address. Customer replies still
