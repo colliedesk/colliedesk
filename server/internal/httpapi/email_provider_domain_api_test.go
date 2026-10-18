@@ -13,11 +13,12 @@ import (
 type providerSettings struct {
 	DomainVerification string `json:"domain_verification"`
 	Channel            struct {
-		Domain           string  `json:"domain"`
-		DomainVerifiedAt *string `json:"domain_verified_at"`
-		DNSRecordName    string  `json:"dns_record_name"`
-		DNSRecordValue   string  `json:"dns_record_value"`
-		DNSRecords       []struct {
+		Domain              string  `json:"domain"`
+		DomainVerifiedAt    *string `json:"domain_verified_at"`
+		DNSRecordName       string  `json:"dns_record_name"`
+		DNSRecordValue      string  `json:"dns_record_value"`
+		DNSRecordsExpiredAt *string `json:"dns_records_expired_at"`
+		DNSRecords          []struct {
 			Record   string `json:"record"`
 			Type     string `json:"type"`
 			Name     string `json:"name"`

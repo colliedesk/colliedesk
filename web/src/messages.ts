@@ -301,6 +301,7 @@ export const messages = {
   domainVerificationHelp: 'Add this TXT record at your DNS provider, then select Verify domain. Changing the support address resets verification.',
   emailSendingPausedTitle: 'Email sending is paused',
   emailSendingPausedBody: (reason: string, when: string) => `Paused ${when}: ${reason} Replies you write stay queued and go out when sending resumes. Contact support to lift the pause.`,
+  dnsRecordsExpired: (when: string) => `The DNS records from before ${when} expired because the domain was not verified within 7 days. Select Verify domain to get new ones; the old records no longer work.`,
   dnsRecordsHeading: 'DNS records to publish',
   dnsRecordsHelp: 'Add these records at your DNS provider, then select Verify domain. They let Colliedesk sign your replies with your own domain. Changing the support address to another domain starts a new list.',
   dnsRecordsNotReady: 'No DNS records yet. Add the TXT record above, then select Verify domain to get the DNS records to publish.',

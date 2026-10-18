@@ -2521,7 +2521,7 @@ components:
               content_type: {type: string}
     EmailChannel:
       type: object
-      required: [support_address, secret_set, secret_rotated_at, domain, domain_verified_at, dns_record_name, dns_record_value, dns_records, created_at, updated_at]
+      required: [support_address, secret_set, secret_rotated_at, domain, domain_verified_at, dns_record_name, dns_record_value, dns_records, dns_records_expired_at, created_at, updated_at]
       properties:
         support_address: {type: string, format: email}
         secret_set: {type: boolean}
@@ -2532,6 +2532,12 @@ components:
             (`domain_verification` is `provider`), with the provider's last reported status for each.
             Empty when it uses the TXT record above, or before the provider has created the domain.
           items: {$ref: '#/components/schemas/EmailDNSRecord'}
+        dns_records_expired_at:
+          type: [string, 'null']
+          format: date-time
+          description: >
+            Set when the provider domain stayed unverified for 7 days and was released, so `dns_records` is empty.
+            Verifying again creates a new one and clears this.
         secret_rotated_at: {type: [string, 'null'], format: date-time}
         domain: {type: string}
         domain_verified_at: {type: [string, 'null'], format: date-time}

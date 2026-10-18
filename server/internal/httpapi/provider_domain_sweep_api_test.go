@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 
 func newSweeper(pool *pgxpool.Pool, serverURL string, clock *time.Time) *providerdomain.Sweeper {
 	client := &resend.Client{APIKey: fakeResendKey, Base: serverURL}
-	return providerdomain.New(store.New(pool), client, providerdomain.Options{Now: func() time.Time { return *clock }})
+	return providerdomain.New(store.New(pool), client, providerdomain.Options{Now: func() time.Time { return *clock }, Delay: time.Nanosecond})
 }
 
 func trashCount(t *testing.T, pool *pgxpool.Pool) string {
@@ -114,5 +115,79 @@ func TestAFailedProviderDeleteIsKeptAndRetriedAndAnAlreadyGoneDomainIsForgotten(
 	}
 	if trashCount(t, pool) != "0" {
 		t.Fatalf("a 404 on delete must clear the record: %s left", trashCount(t, pool))
+	}
+}
+
+func TestAProviderDomainThatStaysUnverifiedForAWeekIsReleasedAndTheTenantIsToldToVerifyAgain(t *testing.T) {
+	fake, server := newFakeResend(t)
+	api, service, pool, dns := testAPIWithConfig(t, resendDomainConfig(fake, server))
+	slow := createSession(t, api, service, "Expire Slow", "admin@expire-slow.example.com")
+	done := createSession(t, api, service, "Expire Done", "admin@expire-done.example.com")
+	_ = connectEmail(t, api, slow, "support@expire-slow.example.com")
+	_ = connectEmail(t, api, done, "support@expire-done.example.com")
+	for _, admin := range []string{slow, done} {
+		prove(t, api, dns, admin)
+		_ = verify(t, api, fake, admin)
+	}
+	fake.setStatus("expire-done.example.com", "verified")
+	_ = verify(t, api, fake, done)
+	slowDomain, doneDomain := fake.idOf("expire-slow.example.com"), fake.idOf("expire-done.example.com")
+	if _, err := pool.Exec(context.Background(), `UPDATE email_channels SET provider_domain_created_at=now()-interval '8 days'`); err != nil {
+		t.Fatal(err)
+	}
+
+	clock := time.Now().Add(time.Minute)
+	if err := newSweeper(pool, server.URL, &clock).Sweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if live := fake.live(); len(live) != 1 || live[0] != doneDomain {
+		t.Fatalf("only the verified domain may stay at the provider: %v (slow was %s)", live, slowDomain)
+	}
+	settings := providerState(t, api, slow)
+	if len(settings.Channel.DNSRecords) != 0 || settings.Channel.DNSRecordsExpiredAt == nil {
+		t.Fatalf("the tenant must be told the records expired: %+v", settings.Channel)
+	}
+	if providerState(t, api, done).Channel.DomainVerifiedAt == nil {
+		t.Fatal("a verified domain must not expire")
+	}
+
+	// Verifying again starts over with a new domain and clears the notice.
+	_ = verify(t, api, fake, slow)
+	settings = providerState(t, api, slow)
+	if len(settings.Channel.DNSRecords) != 3 || settings.Channel.DNSRecordsExpiredAt != nil || len(fake.live()) != 2 {
+		t.Fatalf("after verifying again: %+v live=%v", settings.Channel, fake.live())
+	}
+}
+
+func TestTwoSweepersNeverDeleteTheSameDomainTwice(t *testing.T) {
+	fake, server := newFakeResend(t)
+	api, service, pool, _ := testAPIWithConfig(t, resendDomainConfig(fake, server))
+	admin := createSession(t, api, service, "Claim Desk", "admin@claim-desk.example.com")
+	workspace := workspaceID(t, api, admin)
+	fake.set(func(f *fakeResend) { f.deleteDelay = 150 * time.Millisecond })
+	for i := range 6 {
+		id := fmt.Sprintf("dom_claim_%d", i)
+		fake.set(func(f *fakeResend) { f.domains[id] = &fakeResendDomain{ID: id, Name: id} })
+		if _, err := pool.Exec(context.Background(), `INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id) VALUES($1,$2)`, workspace, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	clock := time.Now().Add(time.Minute)
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = newSweeper(pool, server.URL, &clock).Sweep(context.Background())
+		}()
+	}
+	wg.Wait()
+	for i := range 6 {
+		if n := fake.called(fmt.Sprintf("DELETE /domains/dom_claim_%d", i)); n != 1 {
+			t.Errorf("domain %d was deleted %d times by two sweepers, want once", i, n)
+		}
+	}
+	if len(fake.live()) != 0 || trashCount(t, pool) != "0" {
+		t.Fatalf("after the sweeps: live=%v trash=%s", fake.live(), trashCount(t, pool))
 	}
 }

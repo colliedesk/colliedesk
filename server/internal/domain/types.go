@@ -199,6 +199,8 @@ type EmailChannel struct {
 	// DNSRecords are the records the email provider lists for the domain; empty when verification is by TXT
 	// record or the provider has not created the domain yet.
 	DNSRecords []DNSRecord `json:"dns_records"`
+	// DNSRecordsExpiredAt is set when the provider domain stayed unverified too long and was released; verifying again clears it.
+	DNSRecordsExpiredAt *time.Time `json:"dns_records_expired_at"`
 	// ProviderDomainID is the provider's id for the domain; it never leaves the server.
 	ProviderDomainID string    `json:"-"`
 	CreatedAt        time.Time `json:"created_at"`

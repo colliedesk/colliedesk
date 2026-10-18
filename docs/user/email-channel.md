@@ -98,6 +98,9 @@ outgoing replies. Conversations and messages stay.
    can take from a few minutes to a day. The button works once every 30 seconds per workspace and is
    disabled while a check runs.
 
+The records stay valid for 7 days. A domain that is still not verified after that is released at Resend
+and Settings says the records expired; select **Verify domain** to get new ones.
+
 If Resend refuses the domain name, Colliedesk shows Resend's reason; any other Resend problem shows as
 "could not be reached" and the operator is told. If Resend cannot be reached, nothing changes. Changing the
 support address to another domain replaces the list; the old domain is deleted at Resend in the background.

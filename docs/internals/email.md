@@ -79,6 +79,16 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   `internal/providerdomain.Sweeper` runs every minute beside the outbox worker and calls
   `DELETE /domains/{id}`: 404 counts as gone; a failure keeps the row with `attempts`, `last_error` and a
   backoff of 1 minute doubling to 1 hour, and logs a warning. Requests never call Resend to delete.
+  **Unverified copies expire.** The sweep also releases a provider domain that stayed unverified for 7
+  days (`domain.ProviderDomainUnverifiedTTL`, counted from `provider_domain_created_at`): it queues the id
+  for deletion, clears it from the channel and sets `provider_domain_expired_at`, which settings show as
+  "expired, verify again". A verified domain never expires. This bounds what a trial can hold: the TXT
+  proof is per name, so subdomains of one domain could otherwise each keep a slot until retention deletes
+  the workspace. The sweep claims rows with `FOR UPDATE SKIP LOCKED` and a 5-minute lease before it calls
+  Resend, so replicas do not delete one domain twice, and it waits 250 ms between calls to spare the
+  shared request limit.
+  Resend's 403 "domain has been registered already" has the generic name `validation_error` (the same
+  name as an unverified-domain error and an inbox limit), so it is not told apart and shows as a 502.
   Region: the client sends none, so Resend's default (us-east-1) applies and the SPF MX value follows it; an
   account whose other domains sit in another region gets different records for these. Without the key the
   TXT check above is unchanged (self-host). The client is `internal/resend`; tests run it against an

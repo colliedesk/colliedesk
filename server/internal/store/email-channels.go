@@ -21,7 +21,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-const channelColumns = `support_address,secret_key_id IS NOT NULL,secret_rotated_at,domain_verification_token,domain_verified_at,COALESCE(provider_domain_id,''),provider_domain_records,created_at,updated_at`
+const channelColumns = `support_address,secret_key_id IS NOT NULL,secret_rotated_at,domain_verification_token,domain_verified_at,COALESCE(provider_domain_id,''),provider_domain_records,provider_domain_expired_at,created_at,updated_at`
 
 // DomainRecordPrefix names the TXT record that proves control of the support address domain.
 const DomainRecordPrefix = "_colliedesk."
@@ -31,7 +31,7 @@ func scanChannel(row pgx.Row) (domain.EmailChannel, error) {
 	var token string
 	var records []byte
 	if err := row.Scan(&channel.SupportAddress, &channel.SecretSet, &channel.SecretRotatedAt, &token, &channel.DomainVerifiedAt,
-		&channel.ProviderDomainID, &records, &channel.CreatedAt, &channel.UpdatedAt); err != nil {
+		&channel.ProviderDomainID, &records, &channel.DNSRecordsExpiredAt, &channel.CreatedAt, &channel.UpdatedAt); err != nil {
 		return domain.EmailChannel{}, err
 	}
 	channel.DNSRecords = []domain.DNSRecord{}
@@ -42,6 +42,7 @@ func scanChannel(row pgx.Row) (domain.EmailChannel, error) {
 	channel.DNSRecordName = DomainRecordPrefix + channel.Domain
 	channel.DNSRecordValue = "colliedesk-verification=" + token
 	channel.DomainVerifiedAt = domain.UTCOptional(channel.DomainVerifiedAt)
+	channel.DNSRecordsExpiredAt = domain.UTCOptional(channel.DNSRecordsExpiredAt)
 	channel.SecretRotatedAt = domain.UTCOptional(channel.SecretRotatedAt)
 	channel.CreatedAt, channel.UpdatedAt = domain.UTC(channel.CreatedAt), domain.UTC(channel.UpdatedAt)
 	return channel, nil
@@ -88,6 +89,10 @@ func (s *Store) UpsertEmailChannel(ctx context.Context, workspaceID, supportAddr
 					THEN email_channels.provider_domain_id END,
 				provider_domain_records=CASE WHEN split_part(email_channels.support_address,'@',2)=split_part(EXCLUDED.support_address,'@',2)
 					THEN email_channels.provider_domain_records ELSE '[]'::jsonb END,
+				provider_domain_created_at=CASE WHEN split_part(email_channels.support_address,'@',2)=split_part(EXCLUDED.support_address,'@',2)
+					THEN email_channels.provider_domain_created_at END,
+				provider_domain_expired_at=CASE WHEN split_part(email_channels.support_address,'@',2)=split_part(EXCLUDED.support_address,'@',2)
+					THEN email_channels.provider_domain_expired_at END,
 				support_address=EXCLUDED.support_address,updated_at=now()
 			RETURNING `+channelColumns, workspaceID, supportAddress, token))
 	})
@@ -166,7 +171,7 @@ func (s *Store) AttachProviderDomain(ctx context.Context, workspaceID, supportAd
 				return outcome{}, err
 			}
 		}
-		channel, err := scanChannel(tx.QueryRow(ctx, `UPDATE email_channels SET provider_domain_id=$3,provider_domain_records=$4,domain_verified_at=NULL,updated_at=$5
+		channel, err := scanChannel(tx.QueryRow(ctx, `UPDATE email_channels SET provider_domain_id=$3,provider_domain_records=$4,domain_verified_at=NULL,provider_domain_created_at=$5,provider_domain_expired_at=NULL,updated_at=$5
 			WHERE workspace_id=$1 AND support_address=$2 RETURNING `+channelColumns, workspaceID, supportAddress, provider.ID, records, now))
 		return outcome{channel: channel, attached: err == nil}, err
 	})

@@ -28,13 +28,22 @@ func (s *Store) QueueProviderDomainDeletion(ctx context.Context, workspaceID, pr
 	return nil
 }
 
-// DueProviderDomainDeletions lists the queued provider domains whose next attempt is due, across
-// workspaces, including those of workspaces that no longer exist.
-func (s *Store) DueProviderDomainDeletions(ctx context.Context, now time.Time, limit int) ([]ProviderDomainDeletion, error) {
+// providerDomainClaimLease is how long a claimed deletion is hidden from other sweepers while its provider
+// call runs; a call that fails or never finishes comes due again after it.
+const providerDomainClaimLease = 5 * time.Minute
+
+// ClaimProviderDomainDeletions takes the queued provider domains whose next attempt is due, across
+// workspaces, including those of workspaces that no longer exist. A row another sweeper holds is skipped,
+// and claimed rows are hidden for a lease, so replicas do not delete the same domain twice. The claim is
+// committed before any provider call.
+func (s *Store) ClaimProviderDomainDeletions(ctx context.Context, now time.Time, limit int) ([]ProviderDomainDeletion, error) {
 	var due []ProviderDomainDeletion
 	err := s.db.Privileged(ctx, database.PrivilegeProviderDomainSweep, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT workspace_id::text,provider_domain_id,attempts FROM email_provider_domain_trash
-			WHERE next_attempt_at<=$1 ORDER BY next_attempt_at LIMIT $2`, now, limit)
+		rows, err := tx.Query(ctx, `UPDATE email_provider_domain_trash SET next_attempt_at=$3
+			WHERE (workspace_id,provider_domain_id) IN (
+				SELECT workspace_id,provider_domain_id FROM email_provider_domain_trash
+				WHERE next_attempt_at<=$1 ORDER BY next_attempt_at LIMIT $2 FOR UPDATE SKIP LOCKED)
+			RETURNING workspace_id::text,provider_domain_id,attempts`, now, limit, now.Add(providerDomainClaimLease))
 		if err != nil {
 			return err
 		}
@@ -46,9 +55,32 @@ func (s *Store) DueProviderDomainDeletions(ctx context.Context, now time.Time, l
 		return err
 	})
 	if err != nil {
-		return nil, fmt.Errorf("list provider domains to delete: %w", err)
+		return nil, fmt.Errorf("claim provider domains to delete: %w", err)
 	}
 	return due, nil
+}
+
+// ExpireUnverifiedProviderDomains releases the provider domains that stayed unverified since before
+// olderThan: each is queued for deletion and cleared from its channel, which records when. A verified
+// domain is never touched. It returns how many were released.
+func (s *Store) ExpireUnverifiedProviderDomains(ctx context.Context, olderThan, now time.Time) (int, error) {
+	var released int
+	err := s.db.Privileged(ctx, database.PrivilegeProviderDomainSweep, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `WITH old AS (
+				SELECT workspace_id,provider_domain_id FROM email_channels
+				WHERE provider_domain_id IS NOT NULL AND domain_verified_at IS NULL AND provider_domain_created_at<=$1 FOR UPDATE),
+			cleared AS (
+				UPDATE email_channels c SET provider_domain_id=NULL,provider_domain_records='[]'::jsonb,provider_domain_created_at=NULL,provider_domain_expired_at=$2,updated_at=$2
+				FROM old WHERE c.workspace_id=old.workspace_id RETURNING c.workspace_id),
+			queued AS (
+				INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id) SELECT workspace_id,provider_domain_id FROM old
+				ON CONFLICT DO NOTHING RETURNING 1)
+			SELECT count(*) FROM cleared`, olderThan, now).Scan(&released)
+	})
+	if err != nil {
+		return 0, fmt.Errorf("expire unverified provider domains: %w", err)
+	}
+	return released, nil
 }
 
 // ProviderDomainDeleted removes the record once the provider confirmed the domain is gone.

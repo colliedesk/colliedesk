@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -18,6 +19,7 @@ const (
 	firstBackoff   = time.Minute
 	maxBackoff     = time.Hour
 	maxErrorLength = 300
+	defaultDelay   = 250 * time.Millisecond
 )
 
 // Deleter removes one domain at the provider; a domain that is already gone is not an error.
@@ -29,6 +31,8 @@ type Deleter interface {
 type Options struct {
 	Now    func() time.Time
 	Logger *slog.Logger
+	// Delay is the pause between two provider calls; zero uses 250 ms.
+	Delay time.Duration
 }
 
 // Sweeper drains the queue of provider domains to delete.
@@ -45,6 +49,9 @@ func New(st *store.Store, domains Deleter, options Options) *Sweeper {
 	}
 	if options.Logger == nil {
 		options.Logger = slog.Default()
+	}
+	if options.Delay == 0 {
+		options.Delay = defaultDelay
 	}
 	return &Sweeper{store: st, domains: domains, options: options}
 }
@@ -65,14 +72,20 @@ func Backoff(attempts int) time.Duration {
 // first error of the pass is returned after the rest were tried.
 func (s *Sweeper) Sweep(ctx context.Context) error {
 	var errs []error
+	if _, err := s.store.ExpireUnverifiedProviderDomains(ctx, s.options.Now().Add(-domain.ProviderDomainUnverifiedTTL), s.options.Now()); err != nil {
+		errs = append(errs, err)
+	}
 	for {
 		now := s.options.Now()
-		due, err := s.store.DueProviderDomainDeletions(ctx, now, batchSize)
+		due, err := s.store.ClaimProviderDomainDeletions(ctx, now, batchSize)
 		if err != nil {
 			return errors.Join(append(errs, err)...)
 		}
 		settled := 0
 		for _, item := range due {
+			if err := s.pause(ctx); err != nil {
+				return errors.Join(append(errs, err)...)
+			}
 			if err := s.domains.DeleteDomain(ctx, item.ProviderDomainID); err != nil {
 				s.options.Logger.Warn("delete unused email provider domain", "workspace", item.WorkspaceID, "domain", item.ProviderDomainID, "attempts", item.Attempts+1, "error", err)
 				reason := err.Error()
@@ -94,6 +107,17 @@ func (s *Sweeper) Sweep(ctx context.Context) error {
 		if len(due) < batchSize || settled == 0 {
 			return errors.Join(errs...)
 		}
+	}
+}
+
+func (s *Sweeper) pause(ctx context.Context) error {
+	timer := time.NewTimer(s.options.Delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
 }
 

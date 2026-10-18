@@ -97,7 +97,7 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
               <p className="muted-copy">{settings?.domain_verification === 'provider' ? messages.providerProofHelp : messages.domainVerificationHelp}</p>
               <label className="invite-link"><span className="field-label">{messages.dnsRecordName}</span><input readOnly value={channel.dns_record_name} /></label>
               <label className="invite-link"><span className="field-label">{messages.dnsRecordValue}</span><input readOnly value={channel.dns_record_value} /></label>
-              {settings?.domain_verification === 'provider' && <DnsRecordsTable records={channel.dns_records} />}
+              {settings?.domain_verification === 'provider' && <DnsRecordsTable records={channel.dns_records} expiredAt={channel.dns_records_expired_at} timezone={timezone} />}
               {verifyError && <p role="alert" className="error-copy">{verifyError}</p>}
               {canManage && <span className="button-row"><button type="button" disabled={verifyPending} onClick={() => onVerifyDomain?.()}>{verifyPending ? messages.verifyingDomain : messages.verifyDomain}</button></span>}
             </div>)}
@@ -116,8 +116,8 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   );
 }
 
-function DnsRecordsTable({ records }: { records: EmailDnsRecord[] }) {
-  if (records.length === 0) return <p className="muted-copy">{messages.dnsRecordsNotReady}</p>;
+function DnsRecordsTable({ records, expiredAt, timezone }: { records: EmailDnsRecord[]; expiredAt: string | null; timezone: string }) {
+  if (records.length === 0) return <p className="muted-copy">{expiredAt ? messages.dnsRecordsExpired(formatDate(expiredAt, timezone)) : messages.dnsRecordsNotReady}</p>;
   return <>
     <p className="muted-copy">{messages.dnsRecordsHelp}</p>
     <table aria-label={messages.dnsRecordsHeading}>

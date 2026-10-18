@@ -1643,6 +1643,11 @@ export interface components {
             secret_set: boolean;
             /** @description Records to publish when the server verifies domains through its email provider (`domain_verification` is `provider`), with the provider's last reported status for each. Empty when it uses the TXT record above, or before the provider has created the domain. */
             dns_records: components["schemas"]["EmailDNSRecord"][];
+            /**
+             * Format: date-time
+             * @description Set when the provider domain stayed unverified for 7 days and was released, so `dns_records` is empty. Verifying again creates a new one and clears this.
+             */
+            dns_records_expired_at: string | null;
             /** Format: date-time */
             secret_rotated_at: string | null;
             domain: string;

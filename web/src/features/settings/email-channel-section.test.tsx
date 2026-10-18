@@ -17,7 +17,7 @@ const connected: EmailChannelSettings = {
   ...disconnected,
   channel: {
     support_address: 'support@example.com', secret_set: true, secret_rotated_at: '2026-10-14T09:00:00Z',
-    domain: 'example.com', domain_verified_at: null, dns_record_name: '_colliedesk.example.com', dns_record_value: 'colliedesk-verification=abc123', dns_records: [],
+    domain: 'example.com', domain_verified_at: null, dns_record_name: '_colliedesk.example.com', dns_record_value: 'colliedesk-verification=abc123', dns_records: [], dns_records_expired_at: null,
     created_at: '2026-10-14T08:00:00Z', updated_at: '2026-10-14T09:00:00Z',
   },
   sending_from: 'reply+…@mail.colliedesk.example',
@@ -235,4 +235,11 @@ test('shows that sending is paused after spam complaints, why, and that only sup
 test('shows no pause notice for a workspace that is sending', () => {
   render(<EmailChannelSection settings={connected} timezone="UTC" canManage />);
   expect(screen.queryByText(/email sending is paused/i)).not.toBeInTheDocument();
+});
+
+test('says the records expired and to verify again', () => {
+  const expired = { ...provider, channel: { ...provider.channel!, dns_records: [], dns_records_expired_at: '2026-10-18T08:30:00Z' } };
+  render(<EmailChannelSection settings={expired} timezone="UTC" canManage />);
+  expect(screen.getByText(/expired because the domain was not verified within 7 days/i)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /verify domain/i })).toBeInTheDocument();
 });
