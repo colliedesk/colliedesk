@@ -33,6 +33,8 @@ var privilegedCallSites = []string{
 	"internal/store/email-channels.go: PrivilegeInboundSecret",
 	"internal/store/email-inbound.go: PrivilegeReplyToken",
 	"internal/store/email-outbox.go: PrivilegeOutboxClaim",
+	"internal/store/email-provider-domains.go: PrivilegeProviderDomainSweep",
+	"internal/store/email-relay-bounce.go: PrivilegeVerifiedSender",
 	"internal/store/saved-reply-history.go: PrivilegeSavedReplyPurge",
 	"internal/telemetry/usage.go: PrivilegeTelemetry",
 }
@@ -42,6 +44,7 @@ var privilegedCallSites = []string{
 var poolFiles = []string{
 	"cmd/collie/billing.go",
 	"cmd/collie/commands.go",
+	"cmd/collie/email.go",
 	"cmd/collie/import.go",
 	"cmd/collie/plan.go",
 	"cmd/collie/retention.go",

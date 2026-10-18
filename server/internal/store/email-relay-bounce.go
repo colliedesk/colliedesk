@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -29,6 +30,8 @@ const (
 	RelayBounceOtherRecipient RelayBounceResult = "other recipient"
 	// RelayBounceAlreadyFailed means the reply is already failed.
 	RelayBounceAlreadyFailed RelayBounceResult = "already failed"
+	// RelayBounceCounted recorded a complaint about a verified sender that matched no reply of ours.
+	RelayBounceCounted RelayBounceResult = "counted"
 )
 
 // RelayBounce is a delivery failure the outbound relay reported for a reply sent from
@@ -43,6 +46,34 @@ type RelayBounce struct {
 	MessageID  string
 	Recipients []string
 	Complaint  bool
+	// SenderDomain marks an event for mail sent as the workspace's verified support address, which names
+	// no conversation: the reply is found by MessageID alone, and a complaint that finds none still counts.
+	SenderDomain bool
+}
+
+// WorkspacesForVerifiedSender finds the workspaces that send as an address on the domain with the domain
+// verified through the email provider. One workspace can hold a name (a unique index), so there is one
+// match; if rows from before that rule give several, all are returned and a complaint is counted for each
+// of them instead of for none.
+func (s *Store) WorkspacesForVerifiedSender(ctx context.Context, senderDomain string) ([]string, error) {
+	if senderDomain == "" {
+		return nil, nil
+	}
+	var ids []string
+	err := s.db.Privileged(ctx, database.PrivilegeVerifiedSender, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT workspace_id::text FROM email_channels
+			WHERE provider_domain_id IS NOT NULL AND domain_verified_at IS NOT NULL AND split_part(support_address,'@',2)=lower($1)
+			ORDER BY workspace_id LIMIT 20`, senderDomain)
+		if err != nil {
+			return err
+		}
+		ids, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("find verified sender: %w", err)
+	}
+	return ids, nil
 }
 
 // MarkRelayBounce applies the relay event to the reply it names, once per webhook id. When the event
@@ -67,9 +98,12 @@ func (s *Store) MarkRelayBounce(ctx context.Context, workspaceID string, bounce 
 		err := tx.QueryRow(ctx, `SELECT m.id::text,lower(ct.email),COALESCE(m.cc,'{}') FROM messages m
 			JOIN conversations c ON c.workspace_id=m.workspace_id AND c.id=m.conversation_id
 			JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
-			WHERE m.workspace_id=$1 AND c.email_reply_token=$2 AND m.kind='outgoing'
-				AND (($3<>'' AND left(m.email_message_id,15)='cd.'||$3) OR ($3='' AND $4<>'' AND m.email_message_id=$4))`,
-			workspaceID, bounce.ReplyToken, bounce.ReplyID, bounce.MessageID).Scan(&messageID, &contactEmail, &cc)
+			WHERE m.workspace_id=$1 AND m.kind='outgoing' AND ($5 OR c.email_reply_token=$2)
+				AND (($3<>'' AND left(m.email_message_id,15)='cd.'||$3) OR (($3='' OR $5) AND $4<>'' AND m.email_message_id=$4))`,
+			workspaceID, bounce.ReplyToken, bounce.ReplyID, bounce.MessageID, bounce.SenderDomain).Scan(&messageID, &contactEmail, &cc)
+		if errors.Is(err, pgx.ErrNoRows) && bounce.SenderDomain && bounce.Complaint {
+			return countComplaint(ctx, tx, workspaceID, bounce)
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			return RelayBounceNoReply, nil
 		}
@@ -78,6 +112,9 @@ func (s *Store) MarkRelayBounce(ctx context.Context, workspaceID string, bounce 
 		}
 		copies := allIn(recipients, cc)
 		if !copies && !allIn(recipients, []string{contactEmail}) {
+			if bounce.SenderDomain && bounce.Complaint {
+				return countComplaint(ctx, tx, workspaceID, bounce)
+			}
 			return RelayBounceOtherRecipient, nil
 		}
 		recorded, err := tx.Exec(ctx, `INSERT INTO relay_webhook_events(workspace_id,webhook_id,event_type,message_id) VALUES($1,$2,$3,$4)
@@ -109,6 +146,20 @@ func (s *Store) MarkRelayBounce(ctx context.Context, workspaceID string, bounce 
 		return "", fmt.Errorf("record relay bounce: %w", err)
 	}
 	return result, nil
+}
+
+// countComplaint records a complaint about a verified sender that names no reply we can fail. It adds to
+// the workspace's complaint count once per webhook id.
+func countComplaint(ctx context.Context, tx pgx.Tx, workspaceID string, bounce RelayBounce) (RelayBounceResult, error) {
+	recorded, err := tx.Exec(ctx, `INSERT INTO relay_webhook_events(workspace_id,webhook_id,event_type,message_id) VALUES($1,$2,$3,NULL)
+		ON CONFLICT DO NOTHING`, workspaceID, bounce.WebhookID, bounce.EventType)
+	if err != nil {
+		return "", err
+	}
+	if recorded.RowsAffected() == 0 {
+		return RelayBounceDuplicate, nil
+	}
+	return RelayBounceCounted, nil
 }
 
 func copyNote(complaint bool) string {

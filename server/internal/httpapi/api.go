@@ -13,8 +13,10 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
 	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
+	"github.com/colliedesk/colliedesk/server/internal/resend"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -40,8 +42,8 @@ type Config struct {
 	RequestPool *pgxpool.Pool
 	// Billing turns on Polar billing for the hosted cloud; the zero value leaves it off.
 	Billing polar.Config
-	// AlertEmail is the operator address told about a paid subscription that matches no workspace
-	// (BILLING_ALERT_EMAIL). Empty, or without AlertMailer or Email.MailFromDomain, turns the alert off.
+	// AlertEmail is the operator address told about a paid subscription that matches no workspace and about
+	// a workspace whose email sending was paused for spam complaints (BILLING_ALERT_EMAIL). Empty, or without AlertMailer or Email.MailFromDomain, turns the alert off.
 	AlertEmail  string
 	AlertMailer Mailer
 	// Now is the clock for the trial, the lock and plan limits; nil uses the system clock.
@@ -101,9 +103,13 @@ type API struct {
 	webFormClients *webFormLimiter
 	// domainChecks limits how often agent tokens make the server look up DNS for one workspace.
 	domainChecks *webFormLimiter
-	polar        *polar.Client
-	founding     foundingState
-	now          func() time.Time
+	// providerChecks limits the domain checks of one workspace that reach the email provider.
+	providerChecks *webFormLimiter
+	polar          *polar.Client
+	// resend verifies sending domains through the provider; nil when RESEND_API_KEY is not set.
+	resend   *resend.Client
+	founding foundingState
+	now      func() time.Time
 	// mux serves every route; an approved agent request is replayed through it as the approver.
 	mux *http.ServeMux
 }
@@ -147,10 +153,14 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	limits := config.Billing.Enabled()
 	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), exportLinks: newExportLinks(), webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
-		domainChecks: newWindowLimiter(tokenDomainChecksPerHour, webFormMaxKeys, time.Hour),
-		auth:         auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25()),
-		store:        store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25())}
+		domainChecks:   newWindowLimiter(tokenDomainChecksPerHour, webFormMaxKeys, time.Hour),
+		providerChecks: newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
+		auth:           auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25()),
+		store:          store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25())}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
+	if config.Email.ResendAPIKey != "" {
+		api.resend = &resend.Client{APIKey: config.Email.ResendAPIKey, Base: config.Email.ResendAPIBase}
+	}
 	if config.Random != nil {
 		api.auth = api.auth.WithRandom(config.Random)
 	}

@@ -10,12 +10,14 @@ const disconnected: EmailChannelSettings = {
   from_policy: 'verified',
   sending_from: null,
   hosted_address: null,
+  domain_verification: 'txt',
+  sending_pause: null,
 };
 const connected: EmailChannelSettings = {
   ...disconnected,
   channel: {
     support_address: 'support@example.com', secret_set: true, secret_rotated_at: '2026-10-14T09:00:00Z',
-    domain: 'example.com', domain_verified_at: null, dns_record_name: '_colliedesk.example.com', dns_record_value: 'colliedesk-verification=abc123',
+    domain: 'example.com', domain_verified_at: null, dns_record_name: '_colliedesk.example.com', dns_record_value: 'colliedesk-verification=abc123', dns_records: [], dns_records_expired_at: null,
     created_at: '2026-10-14T08:00:00Z', updated_at: '2026-10-14T09:00:00Z',
   },
   sending_from: 'reply+…@mail.colliedesk.example',
@@ -172,4 +174,72 @@ test('the inbound URL has its own copy button', async () => {
 test('outgoing email that is not configured reads as a warning, not a footnote', () => {
   render(<EmailChannelSection settings={disconnected} timezone="UTC" canManage />);
   expect(screen.getByRole('note')).toHaveTextContent(/outgoing email is not configured/i);
+});
+
+const provider: EmailChannelSettings = {
+  ...connected,
+  domain_verification: 'provider',
+  channel: {
+    ...connected.channel!,
+    dns_records: [
+      { record: 'DKIM', type: 'TXT', name: 'resend._domainkey', value: 'p=MIGfMA0GCSqGSIb3DQEBAQUAA4GN', priority: null, status: 'verified' },
+      { record: 'SPF', type: 'MX', name: 'send', value: 'feedback-smtp.us-east-1.amazonses.com', priority: 10, status: 'pending' },
+    ],
+  },
+};
+
+test('asks for the TXT proof first and lists the provider DNS records with their status', () => {
+  const onVerifyDomain = vi.fn();
+  render(<EmailChannelSection settings={provider} timezone="UTC" canManage onVerifyDomain={onVerifyDomain} />);
+  expect(screen.getByRole('textbox', { name: /txt record name/i })).toHaveValue('_colliedesk.example.com');
+  expect(screen.getByRole('textbox', { name: /txt record value/i })).toHaveValue('colliedesk-verification=abc123');
+  const table = screen.getByRole('table', { name: /dns records to publish/i });
+  const rows = within(table).getAllByRole('row');
+  expect(rows).toHaveLength(3);
+  expect(within(rows[1]).getByText('resend._domainkey')).toBeInTheDocument();
+  expect(within(rows[1]).getByText('p=MIGfMA0GCSqGSIb3DQEBAQUAA4GN')).toBeInTheDocument();
+  expect(within(rows[1]).getByText('Verified')).toBeInTheDocument();
+  expect(within(rows[2]).getByText('MX')).toBeInTheDocument();
+  expect(within(rows[2]).getByText('10')).toBeInTheDocument();
+  expect(within(rows[2]).getByText('Pending')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /verify domain/i }));
+  expect(onVerifyDomain).toHaveBeenCalled();
+});
+
+test('disables Verify domain while a check is running', () => {
+  render(<EmailChannelSection settings={provider} timezone="UTC" canManage verifyPending />);
+  expect(screen.getByRole('button', { name: /checking/i })).toBeDisabled();
+});
+
+test('says the records are not available yet when the provider has not created the domain', () => {
+  render(<EmailChannelSection settings={{ ...provider, channel: { ...provider.channel!, dns_records: [] } }} timezone="UTC" canManage />);
+  expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  expect(screen.getByText(/select verify domain to get the dns records/i)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /verify domain/i })).toBeInTheDocument();
+});
+
+test('shows why the last verification did not succeed', () => {
+  render(<EmailChannelSection settings={provider} timezone="UTC" canManage verifyError="Publish the DNS records listed in the email settings." />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Publish the DNS records listed in the email settings.');
+});
+
+test('shows that sending is paused after spam complaints, why, and that only support can lift it', () => {
+  const paused: EmailChannelSettings = { ...connected, sending_pause: { paused_at: '2026-10-18T08:30:00Z', reason: '3 spam complaints on 100 replies sent in the last 7 days (3.00%).' } };
+  render(<EmailChannelSection settings={paused} timezone="UTC" canManage />);
+  const note = screen.getByRole('alert', { name: /email sending is paused/i });
+  expect(note).toHaveTextContent('3 spam complaints on 100 replies sent in the last 7 days (3.00%).');
+  expect(note).toHaveTextContent(/replies you write stay queued/i);
+  expect(note).toHaveTextContent(/contact support/i);
+});
+
+test('shows no pause notice for a workspace that is sending', () => {
+  render(<EmailChannelSection settings={connected} timezone="UTC" canManage />);
+  expect(screen.queryByText(/email sending is paused/i)).not.toBeInTheDocument();
+});
+
+test('says the records expired and to verify again', () => {
+  const expired = { ...provider, channel: { ...provider.channel!, dns_records: [], dns_records_expired_at: '2026-10-18T08:30:00Z' } };
+  render(<EmailChannelSection settings={expired} timezone="UTC" canManage />);
+  expect(screen.getByText(/expired because the domain was not verified within 7 days/i)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /verify domain/i })).toBeInTheDocument();
 });

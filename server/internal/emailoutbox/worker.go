@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
@@ -28,6 +29,8 @@ const (
 	maxErrorLength     = 500
 	defaultHourlyLimit = 300
 	limitDeferral      = 10 * time.Minute
+	// pauseDeferral is how often a paused workspace's replies are looked at again; resuming makes them due at once.
+	pauseDeferral = 10 * time.Minute
 )
 
 // Sender hands one composed reply to a mail relay: to must accept it, a refused copy is skipped and
@@ -144,6 +147,9 @@ func (w *Worker) deliver(ctx context.Context, item store.Delivery) error {
 	}
 	if item.SupportAddress == "" {
 		return w.store.MarkDeliveryFailed(ctx, item, "The email channel is not connected.")
+	}
+	if item.EmailPaused {
+		return w.store.DeferDeliveryForPause(ctx, item, w.options.Now().Add(pauseDeferral), domain.EmailPausedDeliveryNote)
 	}
 	sent, err := w.store.CountSentSince(ctx, item.WorkspaceID, w.options.Now().Add(-time.Hour))
 	if err != nil {

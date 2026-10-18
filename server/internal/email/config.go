@@ -32,10 +32,15 @@ type Config struct {
 	// ResendWebhookSecret turns on POST /api/v1/webhooks/resend, which marks replies the relay could not
 	// deliver. Relays such as Resend own the envelope sender, so their bounces never reach MAIL_FROM_DOMAIN.
 	ResendWebhookSecret string
+	// ResendAPIKey turns on domain verification through the Resend Domains API: the workspace publishes the
+	// records Resend lists (DKIM, SPF) instead of a TXT record. Empty keeps the TXT check.
+	ResendAPIKey string
+	// ResendAPIBase replaces the Resend API address; tests point it at a local server. Not read from the environment.
+	ResendAPIBase string
 }
 
 // ConfigFromEnv reads SMTP_*, EMAIL_FROM_POLICY (verified), MAIL_FROM_DOMAIN, MAIL_FROM_INBOUND_SECRET and
-// EMAIL_TRUSTED_AUTHSERV_ID, HOSTED_MAIL_DOMAIN and RESEND_WEBHOOK_SECRET.
+// EMAIL_TRUSTED_AUTHSERV_ID, HOSTED_MAIL_DOMAIN, RESEND_WEBHOOK_SECRET and RESEND_API_KEY.
 func ConfigFromEnv(getenv func(string) string) (Config, error) {
 	smtp, err := SMTPConfigFromEnv(getenv)
 	if err != nil {
@@ -43,7 +48,8 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 	}
 	config := Config{SMTP: smtp, FromPolicy: FromPolicyVerified, MailFromDomain: strings.ToLower(strings.TrimSpace(getenv("MAIL_FROM_DOMAIN"))),
 		TrustedAuthServID: strings.TrimSpace(getenv("EMAIL_TRUSTED_AUTHSERV_ID")), PlatformInboundSecret: strings.TrimSpace(getenv("MAIL_FROM_INBOUND_SECRET")),
-		HostedMailDomain: strings.ToLower(strings.TrimSpace(getenv("HOSTED_MAIL_DOMAIN"))), ResendWebhookSecret: strings.TrimSpace(getenv("RESEND_WEBHOOK_SECRET"))}
+		HostedMailDomain: strings.ToLower(strings.TrimSpace(getenv("HOSTED_MAIL_DOMAIN"))), ResendWebhookSecret: strings.TrimSpace(getenv("RESEND_WEBHOOK_SECRET")),
+		ResendAPIKey: strings.TrimSpace(getenv("RESEND_API_KEY"))}
 	if value := strings.TrimSpace(getenv("EMAIL_FROM_POLICY")); value != "" {
 		config.FromPolicy = value
 	}

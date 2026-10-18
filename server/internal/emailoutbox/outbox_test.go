@@ -31,19 +31,26 @@ type fixture struct {
 func newFixture(t *testing.T) fixture {
 	t.Helper()
 	pool := testPool(t)
-	ctx := context.Background()
-	if err := database.Migrate(ctx, pool); err != nil {
+	if err := database.Migrate(context.Background(), pool); err != nil {
 		t.Fatal(err)
 	}
-	workspace, _, err := auth.New(pool, "https://desk.example.com").CreateWorkspace(ctx, "Outbound Desk", "admin@outbound.example.com")
+	return addWorkspace(t, pool, "Outbound Desk", "outbound.example.com")
+}
+
+// addWorkspace creates a workspace with a connected email channel and one inbound conversation on the
+// pool; its domain also names its admin and its customer's Message-ID.
+func addWorkspace(t *testing.T, pool *pgxpool.Pool, name, domainName string) fixture {
+	t.Helper()
+	ctx := context.Background()
+	workspace, _, err := auth.New(pool, "https://desk.example.com").CreateWorkspace(ctx, name, "admin@"+domainName)
 	if err != nil {
 		t.Fatal(err)
 	}
 	st := store.New(pool).WithOutbound(store.OutboundPolicy{Enabled: true})
-	if _, err := st.UpsertEmailChannel(ctx, workspace.ID, "support@outbound.example.com"); err != nil {
+	if _, err := st.UpsertEmailChannel(ctx, workspace.ID, "support@"+domainName); err != nil {
 		t.Fatal(err)
 	}
-	parsed, err := email.Parse([]byte("From: Olive Customer <olive@customer.example>\r\nTo: support@outbound.example.com\r\n"+
+	parsed, err := email.Parse([]byte("From: Olive Customer <olive@customer.example>\r\nTo: support@"+domainName+"\r\n"+
 		"Subject: Broken export\r\nMessage-ID: <export-1@customer.example>\r\n\r\nExport fails.\r\n"), "")
 	if err != nil {
 		t.Fatal(err)

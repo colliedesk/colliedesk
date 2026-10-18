@@ -54,6 +54,7 @@ run `docker compose up -d`.
 | `MAIL_FROM_DOMAIN` | empty | Domain used to send for workspaces whose domain is not verified, for example `mail.example.com`. |
 | `MAIL_FROM_INBOUND_SECRET` | empty | Secret (32+ characters) for the forwarder of `MAIL_FROM_DOMAIN` (step 5). |
 | `HOSTED_MAIL_DOMAIN` | empty | Hosted cloud only. Turns on `support@<workspace slug>.<this domain>` for every workspace. Needs `MAIL_FROM_INBOUND_SECRET`. Leave empty when you self-host. |
+| `RESEND_API_KEY` | empty | Resend API key. When set, step 3 uses the DNS records Resend lists (DKIM and SPF) instead of one TXT record. Needs a key that can add and verify domains. |
 | `EMAIL_TRUSTED_AUTHSERV_ID` | empty | Name of the receiving mail server whose SPF/DKIM/DMARC result you trust (step 4). Empty: no result is trusted. |
 
 **Self-hosted with your own relay:** set `EMAIL_FROM_POLICY=any`. You own the relay, so every
@@ -87,11 +88,33 @@ outgoing replies. Conversations and messages stay.
 2. Add that TXT record at your DNS provider.
 3. Select **Verify domain**. DNS changes can take a few minutes; try again if it fails.
 
+**When the server has a Resend key** (`RESEND_API_KEY`, the hosted cloud), verification has two steps:
+
+1. Publish the TXT record shown in Settings. It proves you control the domain. Select **Verify domain**;
+   until the TXT record is found, Colliedesk asks for it and does nothing else.
+2. Colliedesk then lists a table **DNS records to publish** (DKIM, SPF and an MX record for bounces),
+   each with its status (Not started, Pending, Verified, Failed). Add every record at your DNS provider and
+   select **Verify domain** again. The domain is verified only when Resend reports it verified; DNS changes
+   can take from a few minutes to a day. The button works once every 30 seconds per workspace and is
+   disabled while a check runs.
+
+The records stay valid for 7 days. A domain that was never verified and is still not verified after that is released at Resend
+and Settings says the records expired; select **Verify domain** to get new ones.
+
+If Resend refuses the domain name, Colliedesk shows Resend's reason; any other Resend problem shows as
+"could not be reached" and the operator is told. If Resend cannot be reached, nothing changes. Changing the
+support address to another domain replaces the list; the old domain is deleted at Resend in the background.
+**Only one workspace can verify a given domain name this way.** If another workspace already has the
+domain verified, Colliedesk says so and you keep sending from the platform address; if you own the domain,
+contact support and the operator can release it (`collie email release-domain <domain>`). If Resend later
+stops verifying your domain (for example the records were removed), Colliedesk stops sending as your
+address until you verify it again.
+
 Until the domain is verified, replies are sent as **"Your workspace via Colliedesk"** from
 `reply+…@<MAIL_FROM_DOMAIN>`, with `Reply-To` set to your support address. Customer replies still
 reach you and thread. Settings shows **Replies are sent from …** with the current address.
 
-Changing the support address resets verification and creates a new TXT value.
+Changing the support address resets verification. With a TXT record it also creates a new value; with Resend the same domain keeps its records and a new domain gets its own list.
 
 ## 4. Forward mail to Colliedesk
 
@@ -241,6 +264,24 @@ names exactly one reply; a customer who answers that address still reaches the c
 - A temporary bounce or an `email.delivery_delayed` event changes nothing; the relay keeps trying.
 - Resend sends an event again until it gets an answer; a repeated event changes nothing.
 
+### Sending pauses after spam complaints
+
+When the Resend webhook above is on, Colliedesk counts spam complaints per workspace. A workspace is
+paused when it has **3 or more complaints in the last 7 days and they are more than 0.3% of the
+replies it sent in those 7 days** (3 on 1,000 replies is exactly 0.3% and does not pause; 4 does).
+
+- **Settings → Email channel** shows **Email sending is paused** with the counts. Admins cannot lift it.
+- Replies written during the pause stay **Queued** with the note "Email sending is paused after spam
+  complaints; contact support." Nothing is failed and no attempt is used up. They are sent after
+  the pause ends.
+- The operator gets one email at `BILLING_ALERT_EMAIL` (needs `SMTP_HOST` and `MAIL_FROM_DOMAIN`);
+  without it the server only logs a warning.
+- The operator lifts the pause after checking the complaints:
+  `collie email resume <workspace slug>`. Replies held by the pause then go out at once. Counting starts
+  again from that moment, so earlier complaints do not pause the workspace a second time.
+- Complaints count for replies sent from the platform address and for replies sent as your own verified
+  support address.
+
 ## What you see in the inbox
 
 - Incoming messages show the sender address and are shown as plain text: no remote images load,
@@ -327,6 +368,9 @@ send one `cc` field per address before the files. See `createMessage` in `contra
 - One sender can send 10 messages per 10 minutes, and a workspace can open 200 new conversations
   per 10 minutes. Above that the forwarder gets `429` and should retry.
 - Each workspace sends at most 300 emailed replies per hour; more wait and send later.
+- Mail Colliedesk writes by itself (operator alerts, notices, reports) carries
+  `Auto-Submitted: auto-generated` (RFC 3834). Colliedesk drops inbound mail with that header, so an
+  automatic answer to it never opens a conversation. Replies you write carry no such header.
 - Text longer than 5 MiB is cut and marked. Subjects longer than 250 characters are shortened in
   replies.
 - Replies are plain text. Markdown is sent as written.

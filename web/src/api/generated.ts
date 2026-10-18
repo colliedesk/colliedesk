@@ -316,7 +316,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Look up the TXT record `dns_record_name` and mark the support address domain verified when it holds `dns_record_value`. Changing the support address resets verification. Agent tokens may check 10 times an hour per workspace (429 with `Retry-After`); a person is not limited. */
+        /** @description Look up the TXT record `dns_record_name` and mark the support address domain verified when it holds `dns_record_value`. When the server has an email provider account (`domain_verification` is `provider`), that TXT record is the proof of control and is checked first (409 `dns_record_not_found` without it, and the provider is not called). Then the domain is created at the provider on the first check and each check asks the provider to re-check: the domain is verified only when the provider reports it `verified`, and a 409 `dns_record_not_verified` means the records in `channel.dns_records` are not all verified yet. Checks that reach the provider are limited to one per workspace every 30 seconds (429 with `Retry-After`). 409 `email_domain_unavailable` is the provider's validation refusal of the domain name; any other provider failure is 502. Changing the support address resets verification. Agent tokens may check 10 times an hour per workspace (429 with `Retry-After`); a person is not limited. */
         post: operations["verifyEmailDomain"];
         delete?: never;
         options?: never;
@@ -1660,6 +1660,13 @@ export interface components {
             /** Format: email */
             support_address: string;
             secret_set: boolean;
+            /** @description Records to publish when the server verifies domains through its email provider (`domain_verification` is `provider`), with the provider's last reported status for each. Empty when it uses the TXT record above, or before the provider has created the domain. */
+            dns_records: components["schemas"]["EmailDNSRecord"][];
+            /**
+             * Format: date-time
+             * @description Set when the provider domain stayed unverified for 7 days and was released, so `dns_records` is empty. Verifying again creates a new one and clears this.
+             */
+            dns_records_expired_at: string | null;
             /** Format: date-time */
             secret_rotated_at: string | null;
             domain: string;
@@ -1674,6 +1681,25 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        EmailSendingPause: {
+            /** Format: date-time */
+            paused_at: string;
+            /** @description The complaint count and rate that caused the pause */
+            reason: string;
+        };
+        EmailDNSRecord: {
+            /** @description Purpose of the record as the provider names it, for example SPF or DKIM */
+            record: string;
+            /** @description DNS record type, for example TXT, CNAME or MX */
+            type: string;
+            /** @description Host name to publish the record under */
+            name: string;
+            value: string;
+            /** @description MX priority; null for other types */
+            priority: number | null;
+            /** @description Provider status, for example not_started, pending, verified, failed */
+            status: string;
+        };
         SMTPStatus: {
             configured: boolean;
             host: string;
@@ -1682,6 +1708,13 @@ export interface components {
             authenticated: boolean;
         };
         EmailChannelSettings: {
+            /** @description Set when the workspace's email sending is paused after spam complaints (3 or more in 7 days and more than 0.3% of the replies sent). Replies can still be written; they stay queued with a note until an operator resumes sending with `collie email resume`. Admins cannot clear it. */
+            sending_pause: null | components["schemas"]["EmailSendingPause"];
+            /**
+             * @description How the support address domain is verified. `txt`: publish `channel.dns_record_name` and `channel.dns_record_value`. `provider`: publish the records in `channel.dns_records`, which give replies a DKIM signature for the domain.
+             * @enum {string}
+             */
+            domain_verification: "txt" | "provider";
             /** @description Forwarding address of this workspace on the hosted cloud, `support@<slug>.<HOSTED_MAIL_DOMAIN>`. Null when the server has no HOSTED_MAIL_DOMAIN (self-host) or the slug cannot be a mail subdomain; change the slug with `PATCH /api/v1/workspace/slug`. */
             hosted_address: string | null;
             /**
@@ -2659,6 +2692,7 @@ export interface operations {
             409: components["responses"]["Conflict"];
             429: components["responses"]["TooManyRequests"];
             500: components["responses"]["InternalError"];
+            502: components["responses"]["BadGateway"];
         };
     };
     rotateEmailInboundSecret: {

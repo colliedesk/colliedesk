@@ -26,10 +26,10 @@ var clock = func() time.Time { return time.Now().UTC() }
 
 func run(ctx context.Context, args []string, output io.Writer, databaseURL, origin string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("expected subcommand: serve, migrate, create-workspace, pair, token, import, trial, plan, billing, retention, healthcheck, or version")
+		return fmt.Errorf("expected subcommand: serve, migrate, create-workspace, pair, token, import, trial, plan, billing, email, retention, healthcheck, or version")
 	}
 	if args[0] == "--help" || args[0] == "help" {
-		_, err := fmt.Fprintln(output, "Usage: collie <serve|migrate|create-workspace|pair|token|import|trial|plan|billing|retention|healthcheck|version>")
+		_, err := fmt.Fprintln(output, "Usage: collie <serve|migrate|create-workspace|pair|token|import|trial|plan|billing|email|retention|healthcheck|version>")
 		return err
 	}
 	if args[0] == "version" {
@@ -79,6 +79,8 @@ func run(ctx context.Context, args []string, output io.Writer, databaseURL, orig
 		return planCommand(ctx, pool, args[1:], output)
 	case "billing":
 		return billingCommand(ctx, pool, args[1:], output)
+	case "email":
+		return emailCommand(ctx, pool, args[1:], output)
 	case "retention":
 		return retentionCommand(ctx, pool, origin, args[1:], output)
 	default:

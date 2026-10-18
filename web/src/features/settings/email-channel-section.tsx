@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { EmailChannelSettings } from '../../api/schemas';
+import type { EmailChannelSettings, EmailDnsRecord } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { useSaveFeedback } from './save-feedback';
@@ -18,9 +18,12 @@ interface EmailChannelSectionProps {
   onRotate?: () => void;
   onDisconnect?: () => void;
   onVerifyDomain?: () => void;
+  // Why the last domain check did not verify; the server's own wording.
+  verifyError?: string;
+  verifyPending?: boolean;
 }
 
-export function EmailChannelSection({ settings, timezone, canManage, workspaceSlug, createdSecret, addressSave, slugSave, onSave, onSaveSlug, onRotate, onDisconnect, onVerifyDomain }: EmailChannelSectionProps) {
+export function EmailChannelSection({ settings, timezone, canManage, workspaceSlug, createdSecret, addressSave, slugSave, onSave, onSaveSlug, onRotate, onDisconnect, onVerifyDomain, verifyError, verifyPending }: EmailChannelSectionProps) {
   const channel = settings?.channel ?? null;
   const [address, setAddress] = useState(channel?.support_address ?? '');
   useEffect(() => setAddress(channel?.support_address ?? ''), [channel?.support_address]);
@@ -90,11 +93,18 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
         </div>}
         {channel && (channel.domain_verified_at
           ? <p className="muted-copy">{messages.domainVerified(channel.domain, formatDate(channel.domain_verified_at, timezone))}</p>
-          : <div className="email-channel-dns"><p className="muted-copy">{messages.domainVerificationHelp}</p>
+          : <div className="email-channel-dns">
+              <p className="muted-copy">{settings?.domain_verification === 'provider' ? messages.providerProofHelp : messages.domainVerificationHelp}</p>
               <label className="invite-link"><span className="field-label">{messages.dnsRecordName}</span><input readOnly value={channel.dns_record_name} /></label>
               <label className="invite-link"><span className="field-label">{messages.dnsRecordValue}</span><input readOnly value={channel.dns_record_value} /></label>
-              {canManage && <span className="button-row"><button type="button" onClick={() => onVerifyDomain?.()}>{messages.verifyDomain}</button></span>}
+              {settings?.domain_verification === 'provider' && <DnsRecordsTable records={channel.dns_records} expiredAt={channel.dns_records_expired_at} timezone={timezone} />}
+              {verifyError && <p role="alert" className="error-copy">{verifyError}</p>}
+              {canManage && <span className="button-row"><button type="button" disabled={verifyPending} onClick={() => onVerifyDomain?.()}>{verifyPending ? messages.verifyingDomain : messages.verifyDomain}</button></span>}
             </div>)}
+        {settings?.sending_pause && <div role="alert" aria-labelledby="email-paused-heading" className="warning-note">
+          <strong id="email-paused-heading">{messages.emailSendingPausedTitle}</strong>
+          <p>{messages.emailSendingPausedBody(settings.sending_pause.reason, formatDate(settings.sending_pause.paused_at, timezone))}</p>
+        </div>}
         {channel && (settings?.sending_from
           ? <p className="muted-copy">{messages.sendingFrom(settings.sending_from)}</p>
           : <p role="status" className="error-copy">{messages.cannotSend}</p>)}
@@ -104,4 +114,18 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
       </div>
     </section>
   );
+}
+
+function DnsRecordsTable({ records, expiredAt, timezone }: { records: EmailDnsRecord[]; expiredAt: string | null; timezone: string }) {
+  if (records.length === 0) return <p className="muted-copy">{expiredAt ? messages.dnsRecordsExpired(formatDate(expiredAt, timezone)) : messages.dnsRecordsNotReady}</p>;
+  return <>
+    <p className="muted-copy">{messages.dnsRecordsHelp}</p>
+    <table aria-label={messages.dnsRecordsHeading}>
+      <thead><tr><th>{messages.dnsColumnPurpose}</th><th>{messages.dnsColumnType}</th><th>{messages.dnsColumnName}</th><th>{messages.dnsColumnValue}</th><th>{messages.dnsColumnPriority}</th><th>{messages.dnsColumnStatus}</th></tr></thead>
+      <tbody>{records.map((record) => <tr key={`${record.type}-${record.name}-${record.value}`}>
+        <td>{record.record}</td><td>{record.type}</td><td>{record.name}</td><td><code>{record.value}</code></td>
+        <td>{record.priority ?? ''}</td><td>{messages.dnsRecordStatus(record.status)}</td>
+      </tr>)}</tbody>
+    </table>
+  </>;
 }

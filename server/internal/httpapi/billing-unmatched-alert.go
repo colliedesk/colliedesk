@@ -58,19 +58,11 @@ func (a *API) alertUnmatchedPayment(ctx context.Context, event polar.Event, webh
 	if sub == nil || sub.Status != polarStatusActive {
 		return
 	}
-	config := a.config
-	if config.AlertEmail == "" || config.AlertMailer == nil || config.Email.MailFromDomain == "" {
+	if !a.operatorAlertReady() {
 		slog.Warn("paid subscription has no workspace and no operator alert is configured (set BILLING_ALERT_EMAIL, SMTP_HOST and MAIL_FROM_DOMAIN)", "subscription_id", sub.ID, "webhook_id", webhookID)
 		return
 	}
 	if !a.alerted.first(sub.ID) {
-		return
-	}
-	from := "noreply@" + config.Email.MailFromDomain
-	messageID, err := email.NewMessageID(config.Email.MailFromDomain)
-	if err != nil {
-		slog.Error("compose operator alert", "error", err, "subscription_id", sub.ID)
-		a.alerted.forget(sub.ID)
 		return
 	}
 	plan := a.planOfProduct(sub.ProductID)
@@ -91,20 +83,36 @@ Webhook: %s
 
 Create or find the buyer's workspace and apply the plan (collie plan), or refund the subscription in Polar.
 `, reason, valueOrDash(sub.CustomerEmail), plan, sub.ProductID, sub.ID, sub.CustomerID, sub.Status, event.Type, webhookID)
-	message, err := email.Compose(email.Outgoing{FromName: "Colliedesk", FromAddress: from, ToAddress: config.AlertEmail,
-		Subject: "Colliedesk: paid subscription without a workspace (" + plan + ")", Body: body,
-		MessageID: messageID, Date: a.now(), Standalone: true})
-	if err != nil {
-		slog.Error("compose operator alert", "error", err, "subscription_id", sub.ID)
-		a.alerted.forget(sub.ID)
-		return
-	}
-	sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), alertSendTimeout)
-	defer cancel()
-	if err := config.AlertMailer.Send(sendCtx, from, []string{config.AlertEmail}, message); err != nil {
+	if err := a.sendOperatorAlert(ctx, "Colliedesk: paid subscription without a workspace ("+plan+")", body); err != nil {
 		slog.Error("send operator alert", "error", err, "subscription_id", sub.ID)
 		a.alerted.forget(sub.ID)
 	}
+}
+
+// operatorAlertReady reports whether an operator alert can be sent: an address, a relay and a platform
+// domain to send from.
+func (a *API) operatorAlertReady() bool {
+	config := a.config
+	return config.AlertEmail != "" && config.AlertMailer != nil && config.Email.MailFromDomain != ""
+}
+
+// sendOperatorAlert mails the operator address (BILLING_ALERT_EMAIL) from noreply@MAIL_FROM_DOMAIN. The
+// send outlives the request that caused it, so a client that gives up does not drop the alert.
+func (a *API) sendOperatorAlert(ctx context.Context, subject, body string) error {
+	config := a.config
+	from := "noreply@" + config.Email.MailFromDomain
+	messageID, err := email.NewMessageID(config.Email.MailFromDomain)
+	if err != nil {
+		return fmt.Errorf("compose operator alert: %w", err)
+	}
+	message, err := email.Compose(email.Outgoing{FromName: "Colliedesk", FromAddress: from, ToAddress: config.AlertEmail,
+		Subject: subject, Body: body, MessageID: messageID, Date: a.now(), Standalone: true})
+	if err != nil {
+		return fmt.Errorf("compose operator alert: %w", err)
+	}
+	sendCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), alertSendTimeout)
+	defer cancel()
+	return config.AlertMailer.Send(sendCtx, from, []string{config.AlertEmail}, message)
 }
 
 func valueOrDash(value string) string {

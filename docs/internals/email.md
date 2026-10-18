@@ -35,6 +35,90 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   From and envelope sender, with `Reply-To: support+r-<token>@<support domain>`; replies thread
   through Reply-To and In-Reply-To. Without `MAIL_FROM_DOMAIN` an unverified workspace cannot send.
   `any` keeps the support address always (self-host, operator owns the relay).
+- **Domain verification through Resend (`RESEND_API_KEY`).** TXT proves control of a domain but not that
+  Resend will send for it or that the customer's DMARC aligns, so on the hosted cloud the domain is
+  verified by Resend. Both steps are needed, in this order:
+  1. **Proof of control.** `POST .../domain-verification` first checks the `_colliedesk` TXT record
+     (the self-host mechanism). Without it the answer is 409 `dns_record_not_found` and Resend is not
+     called. Resend adds any name it is given, and its account has a fixed number of domain slots shared by
+     all workspaces, so a domain nobody proved must not cost one.
+  2. **Resend's records.** With the proof, the first check creates the domain
+     (`email_channels.provider_domain_id`), keeps the records it lists and their status in
+     `provider_domain_records`, asks Resend to re-check (a domain is `pending` while it checks) and reads it
+     again. `domain_verified_at` is set only on `verified`; anything else is 409
+     `dns_record_not_verified` with each record's status. Saving the address never calls Resend, and
+     settings read the stored snapshot, so a person never waits on Resend.
+  No database transaction stays open during a Resend call (a held connection plus a nested one deadlocks the
+  pool). Two requests that both see no domain both create one; the new id is stored with a compare-and-set
+  on the id read before (`AttachProviderDomain`), and the request that loses queues its domain for deletion
+  and uses the stored one. A snapshot is written only for the provider domain the channel still holds and
+  never for one queued for deletion (`SaveProviderDomain`), so a check that raced an address change cannot
+  bring a deleted domain back. Checks that reach Resend are limited to one per workspace per 30 s
+  (`domain.ProviderCheckMinInterval`; 429 with `Retry-After`, no call), because the Resend account and its
+  request limit are shared by every tenant. A stored id that Resend no longer knows (404) is replaced by a
+  new domain in the same request.
+  **Errors.** Only Resend's 422 `validation_error` (a name it refuses) is shown to the tenant, as 409
+  `email_domain_unavailable`. Anything else (bad or restricted key, suspended key, 409 `resource_locked`, 429,
+  5xx, network) is the operator's: the tenant sees a generic 502 and the log has the status and Resend's
+  error name, never the key.
+  **Duplicates.** Resend does not refuse a name already in the account: it creates a second domain with a
+  new id and DKIM key (same selector `resend._domainkey`). Only one copy can have its records in DNS, so
+  **only one workspace can hold a given domain name verified**: a partial unique index on the domain of
+  provider-verified rows enforces it, and the second workspace gets 409 `email_domain_unavailable`. When
+  Resend reports a stored domain no longer verified, `domain_verified_at` is cleared, so the workspace sends
+  from the platform address again. If rows from before the rule still give several holders, a complaint
+  about that name is counted for every one of them. Two teams of one company that both use
+  `support@` and `billing@` of the same domain cannot both verify it this way; the second stays
+  unverified and sends from the platform address. Ownership is proved by the TXT record first and then by
+  the copy's own DNS records.
+  **Slots are freed in the background.** A domain a workspace stops using (support domain changed, channel
+  disconnected, a stored id replaced, or the workspace deleted by retention) is written to
+  `email_provider_domain_trash` in the same transaction. That table has no foreign key to `workspaces`, so
+  rows survive the workspace; `workspace_id` stays as a record of who held the domain, and the table keeps
+  row-level security (tenant transactions only enqueue, the sweep reads it as a reviewed privileged path).
+  `internal/providerdomain.Sweeper` runs every minute beside the outbox worker and calls
+  `DELETE /domains/{id}`: 404 counts as gone; a failure keeps the row with `attempts`, `last_error` and a
+  backoff of 1 minute doubling to 1 hour, and logs a warning. Requests never call Resend to delete.
+  **Abandoned holder.** `collie email release-domain [--by <name>] <domain>` queues the holder's provider
+  domain for deletion and clears its provider domain and verification, so the real owner can verify; the
+  second workspace's 409 tells the tenant to contact support. No API route does it.
+  **Unverified copies expire.** The sweep also releases a provider domain that stayed unverified for 7
+  days (`domain.ProviderDomainUnverifiedTTL`, counted from `provider_domain_created_at`): it queues the id
+  for deletion, clears it from the channel and sets `provider_domain_expired_at`, which settings show as
+  "expired, verify again". Only a domain Resend has never reported verified expires
+  (`provider_domain_first_verified_at` empty): one that was verified and later reads pending keeps its
+  provider domain and records, because the customer published its DKIM key; only `domain_verified_at` is
+  cleared (sending falls back) and the next verify restores it. This bounds what a trial can hold: the TXT
+  proof is per name, so subdomains of one domain could otherwise each keep a slot until retention deletes
+  the workspace. The sweep claims rows with `FOR UPDATE SKIP LOCKED` and a 5-minute lease before it calls
+  Resend, so replicas do not delete one domain twice, and it waits 250 ms between calls to spare the
+  shared request limit.
+  Resend's 403 "domain has been registered already" has the generic name `validation_error` (the same
+  name as an unverified-domain error and an inbox limit), so it is not told apart and shows as a 502.
+  Region: the client sends none, so Resend's default (us-east-1) applies and the SPF MX value follows it; an
+  account whose other domains sit in another region gets different records for these. Without the key the
+  TXT check above is unchanged (self-host). The client is `internal/resend`; tests run it against an
+  `httptest` server shaped like the real API (duplicate names allowed, DELETE, 422/404 bodies, a different
+  DKIM key per domain).
+- **Complaint pause.** After a complaint webhook is recorded (applied, copy or duplicate), the handler
+  counts, for that workspace over 7 days, `email.complained` rows in `relay_webhook_events` and outbox rows
+  with a `sent_at` (a reply failed by a complaint keeps `sent_at`, so it still counts as sent). 3 or more
+  complaints and `complaints * 1000 > sent * 3` (strictly over 0.3%) set `workspaces.email_paused_at` and
+  `email_pause_reason`. The limits are constants in `internal/domain/email-pause.go`. The pause is on the
+  workspace, not the channel, so disconnecting and reconnecting the channel does not clear it. The
+  `UPDATE ... WHERE email_paused_at IS NULL` decides who made the pause, so only that call mails the
+  operator (`BILLING_ALERT_EMAIL`; a warn log when unset; a failed alert is logged and the pause stands).
+  A duplicate webhook is evaluated too, because the first delivery may have recorded the event and then
+  failed before the pause; it cannot add a complaint, since `(workspace_id, webhook_id)` is the key. The
+  worker defers a paused workspace's rows 10 minutes at a time without spending the attempt, with the
+  reason in `last_error`; rows can still be queued. `collie email resume <slug>` clears the pause and
+  makes due only the rows the pause held (`email_outbox.held_by_pause`), not rows in error backoff, and
+  starts a fresh window (`workspaces.email_pause_resumed_at`): complaints and sends before the resume stop
+  counting. No API route clears it: an admin who could would defeat the control.
+- **Automatic mail says so (RFC 3834).** `Compose` with `Standalone` (operator alerts, retention notices,
+  reconcile reports) writes `Auto-Submitted: auto-generated`; agent replies carry no such header because
+  a person wrote them. Inbound drops any `Auto-Submitted` other than `no`, so an auto-responder's answer
+  to a notice never opens a conversation.
 - **Replies that cannot be sent fail visibly at once.** With no SMTP relay, or an unverified domain
   and no platform domain, the outbox row is created `failed` with the reason. Retry returns 409
   until the cause is fixed, so a reply never sits in `queued` forever.
@@ -74,8 +158,11 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   (`status='sent'`) does not. A `from` that `net/mail` rejects (unquoted "Acme, Inc.") is read from its
   last angle brackets. Ignored failures are logged at Warn with ids only. The SMTP `250`
   reply does not document the Resend email id and tags exist only on the HTTP API, so SMTP stays the
-  only transport. Replies sent as a verified support address are not matched: support addresses are
-  not unique across workspaces.
+  only transport. Replies sent as a verified support address carry no token. Their events map to a workspace
+  by the From domain, only when exactly one workspace holds that domain verified through the email provider
+  (a TXT-only domain never matches, since support addresses are not unique across workspaces). A bounce
+  there fails the reply only when the event's Message-ID is one we stored; a complaint is counted for the
+  pause either way, with no message on the event row.
 - **Inbound limits are a loop guard plus a ceiling.** 10 messages per sender address per 10
   minutes (the header From, which a sender controls) and 200 new conversations per workspace per
   10 minutes (holds when From rotates). A per-(workspace, sender) advisory lock serializes the

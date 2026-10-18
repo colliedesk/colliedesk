@@ -22,11 +22,13 @@ type Delivery struct {
 	Attempts                         int
 	WorkspaceName, SupportAddress    string
 	DomainVerified                   bool
-	ContactName, ContactEmail        string
-	Subject, Body                    string
-	EmailMessageID, ReplyToken       string
-	InReplyTo                        string
-	References                       []string
+	// EmailPaused is set while the workspace's sending is paused after spam complaints.
+	EmailPaused                bool
+	ContactName, ContactEmail  string
+	Subject, Body              string
+	EmailMessageID, ReplyToken string
+	InReplyTo                  string
+	References                 []string
 	// CC is the list stored with the reply; a retry sends to the same addresses.
 	CC    []string
 	Files []DeliveryFile
@@ -84,14 +86,14 @@ func (s *Store) loadDelivery(ctx context.Context, item *Delivery) error {
 func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
 	var conversationID string
 	var createdAt time.Time
-	err := tx.QueryRow(ctx, `SELECT w.name,COALESCE(ch.support_address,''),COALESCE(ch.domain_verified_at IS NOT NULL,false),
+	err := tx.QueryRow(ctx, `SELECT w.name,COALESCE(ch.support_address,''),COALESCE(ch.domain_verified_at IS NOT NULL,false),w.email_paused_at IS NOT NULL,
 			ct.name,ct.email,c.subject,m.body,COALESCE(m.email_message_id,''),COALESCE(c.email_reply_token,''),c.id::text,m.created_at,m.cc
 		FROM messages m JOIN conversations c ON c.workspace_id=m.workspace_id AND c.id=m.conversation_id
 		JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
 		JOIN workspaces w ON w.id=m.workspace_id
 		LEFT JOIN email_channels ch ON ch.workspace_id=m.workspace_id
 		WHERE m.workspace_id=$1 AND m.id=$2`, item.WorkspaceID, item.MessageID).
-		Scan(&item.WorkspaceName, &item.SupportAddress, &item.DomainVerified, &item.ContactName, &item.ContactEmail, &item.Subject, &item.Body,
+		Scan(&item.WorkspaceName, &item.SupportAddress, &item.DomainVerified, &item.EmailPaused, &item.ContactName, &item.ContactEmail, &item.Subject, &item.Body,
 			&item.EmailMessageID, &item.ReplyToken, &conversationID, &createdAt, &item.CC)
 	if err != nil {
 		return fmt.Errorf("load delivery %s: %w", item.OutboxID, err)
@@ -171,6 +173,12 @@ func (s *Store) DeferDelivery(ctx context.Context, item Delivery, next time.Time
 	return s.finishDelivery(ctx, item, `next_attempt_at=$4,last_error=$5,attempts=GREATEST(attempts-1,0)`, next, reason)
 }
 
+// DeferDeliveryForPause postpones a claimed row because the workspace's sending is paused, without spending
+// the attempt. The row is marked so that lifting the pause releases it and nothing else.
+func (s *Store) DeferDeliveryForPause(ctx context.Context, item Delivery, next time.Time, reason string) error {
+	return s.finish(ctx, item, true, `next_attempt_at=$4,last_error=$5,attempts=GREATEST(attempts-1,0)`, next, reason)
+}
+
 // MarkDeliveryFailed stops automatic retries; an agent can requeue with RetryDelivery.
 func (s *Store) MarkDeliveryFailed(ctx context.Context, item Delivery, reason string) error {
 	return s.finishDelivery(ctx, item, `status='failed',last_error=$4`, reason)
@@ -179,8 +187,12 @@ func (s *Store) MarkDeliveryFailed(ctx context.Context, item Delivery, reason st
 // finishDelivery applies a result only while this worker still holds the claim, so a worker whose
 // lease expired cannot overwrite the result of the worker that reclaimed the row.
 func (s *Store) finishDelivery(ctx context.Context, item Delivery, set string, args ...any) error {
+	return s.finish(ctx, item, false, set, args...)
+}
+
+func (s *Store) finish(ctx context.Context, item Delivery, heldByPause bool, set string, args ...any) error {
 	updated, err := scoped(ctx, s, item.WorkspaceID, func(tx pgx.Tx) (int64, error) {
-		result, err := tx.Exec(ctx, `UPDATE email_outbox SET `+set+`,locked_until=NULL,claim_token=NULL,updated_at=now()
+		result, err := tx.Exec(ctx, `UPDATE email_outbox SET `+set+fmt.Sprintf(",held_by_pause=%t", heldByPause)+`,locked_until=NULL,claim_token=NULL,updated_at=now()
 			WHERE workspace_id=$1 AND id=$2 AND claim_token=$3::uuid AND status='queued'`,
 			append([]any{item.WorkspaceID, item.OutboxID, item.ClaimToken}, args...)...)
 		return result.RowsAffected(), err

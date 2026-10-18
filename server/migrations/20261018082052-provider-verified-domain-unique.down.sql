@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS email_channels_provider_verified_domain_key;
