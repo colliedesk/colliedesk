@@ -92,11 +92,30 @@ type AttachmentCount struct {
 
 // InlineImageCount counts images in message HTML that Freshdesk hosts. Their size is unknown until they
 // are downloaded, so there is no source byte total; Source is the number of distinct images found.
+// Recoverable is the count a run is judged on: images Freshdesk still had, not the ones it removed.
+func (c InlineImageCount) Recoverable() EntityCount {
+	count := c.EntityCount
+	count.Source -= c.Gone
+	return count
+}
+
 type InlineImageCount struct {
 	EntityCount
-	ImportedBytes      int64    `json:"imported_bytes"`
-	ChecksumVerified   int      `json:"checksum_verified"`
-	ChecksumMismatches []string `json:"checksum_mismatches"`
+	// Gone counts images Freshdesk no longer has (HTTP 404 or 410). They are not recoverable, so they
+	// are listed in GoneImages and are not failures; Source includes them.
+	Gone               int         `json:"gone"`
+	GoneImages         []GoneImage `json:"gone_images"`
+	ImportedBytes      int64       `json:"imported_bytes"`
+	ChecksumVerified   int         `json:"checksum_verified"`
+	ChecksumMismatches []string    `json:"checksum_mismatches"`
+}
+
+// GoneImage is an image Freshdesk answered 404 or 410 for. Its original link stays in the message HTML.
+type GoneImage struct {
+	TicketID string `json:"ticket_id"`
+	// Message names the message that shows the image: "description" or "reply <id>".
+	Message string `json:"message"`
+	Detail  string `json:"detail"`
 }
 
 type CompanyCount struct {

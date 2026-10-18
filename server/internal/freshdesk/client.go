@@ -19,7 +19,9 @@ var (
 	errNotFound   = errors.New("not found in Freshdesk")
 	errForbidden  = errors.New("forbidden by Freshdesk")
 	errURLExpired = errors.New("attachment URL expired")
-	linkNext      = regexp.MustCompile(`<([^>]+)>\s*;\s*rel="?next"?`)
+	// errGone is HTTP 410: the file was removed for good. A download answered with it also matches errURLExpired.
+	errGone  = errors.New("removed from Freshdesk")
+	linkNext = regexp.MustCompile(`<([^>]+)>\s*;\s*rel="?next"?`)
 )
 
 const (

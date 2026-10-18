@@ -170,6 +170,11 @@ func (r *run) importInlineImages(ctx context.Context, ticketKey, messageID, enti
 				r.internalErr = err
 			}
 			return failed + 1
+		case errors.Is(err, errNotFound), errors.Is(err, errGone):
+			// Freshdesk no longer has the file and never will: record it for the report, keep the link.
+			if mark := r.ledger.mark(ctx, nil, ledgerMark{entity: entityInlineImage, sourceID: id, parentID: ticketKey, status: ledgerSkipped, errText: err.Error()}); mark != nil && r.internalErr == nil {
+				r.internalErr = mark
+			}
 		default:
 			r.itemFailed(ctx, entityInlineImage, id, ticketKey, err)
 			failed++

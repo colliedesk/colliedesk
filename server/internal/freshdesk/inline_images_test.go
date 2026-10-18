@@ -151,7 +151,6 @@ func TestUndoRemovesInlineImagesAndTheirFiles(t *testing.T) {
 
 func TestInlineImageThatCannotBeDownloadedFailsTheImportAndKeepsTheLink(t *testing.T) {
 	cases := map[string]func(*fakeFreshdesk){
-		"not found":         func(f *fakeFreshdesk) { f.fileStatus["inline-5001"] = http.StatusNotFound },
 		"expired signature": func(f *fakeFreshdesk) { f.fileStatus["inline-5001"] = http.StatusForbidden },
 		"not an image":      func(f *fakeFreshdesk) { f.fileType["inline-5001"] = "text/html" },
 		"too large":         func(f *fakeFreshdesk) { f.fileBody["inline-5001"] = strings.Repeat("x", 5<<20+1) },
@@ -234,7 +233,7 @@ func TestInlineImageMarkdownReportsCountsBytesAndChecksums(t *testing.T) {
 	env := newImportEnv(t)
 	env.fake.inlineImages = true
 	markdown := env.mustRun(t).Markdown()
-	for _, want := range []string{"| Inline images | 2 | 2 | 0 |", "Inline image bytes: 31 stored. SHA-256 re-verified from storage: 2."} {
+	for _, want := range []string{"| Inline images | 2 | 2 | 0 |", "Inline image bytes: 31 stored. SHA-256 re-verified from storage: 2. Already gone in Freshdesk: 0"} {
 		if !strings.Contains(markdown, want) {
 			t.Errorf("markdown lacks %q:\n%s", want, markdown)
 		}
@@ -394,5 +393,62 @@ func TestFreshdeskLookingImageThatIsNotFetchedIsWarnedAndLazySrcIsIgnored(t *tes
 	html := env.messageHTML(t, "conversation", "7001")
 	if !strings.Contains(html, `src="https://images.example.org/lazy.gif"`) || strings.Contains(html, "data:") || env.fake.count("/helpdesk/attachments/6002") != 0 {
 		t.Fatalf("data-src was treated as src: %q", html)
+	}
+}
+
+func TestImageGoneInFreshdeskIsListedAndDoesNotFailTheImport(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusGone} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			env := newImportEnv(t)
+			env.fake.inlineImages = true
+			env.fake.fileStatus["inline-5001"] = status
+			report := env.mustRun(t)
+
+			if report.Status != freshdesk.StatusOK || len(report.Failures) != 0 || len(report.Missing) != 0 {
+				t.Fatalf("status=%s missing=%v failures=%+v, want OK: the image is gone for good", report.Status, report.Missing, report.Failures)
+			}
+			assertCount(t, "inline images", report.InlineImages.EntityCount, 2, 1)
+			if report.InlineImages.Gone != 1 || len(report.InlineImages.GoneImages) != 1 {
+				t.Fatalf("inline images = %+v", report.InlineImages)
+			}
+			if g := report.InlineImages.GoneImages[0]; g.TicketID != "1" || g.Message != "reply 7002" {
+				t.Fatalf("gone image = %+v, want ticket 1, reply 7002", g)
+			}
+			markdown := report.Markdown()
+			for _, want := range []string{"Images already gone in Freshdesk (not recoverable)", "ticket 1: reply 7002"} {
+				if !strings.Contains(markdown, want) {
+					t.Errorf("markdown lacks %q:\n%s", want, markdown)
+				}
+			}
+			if strings.Contains(markdown, "Signature=") {
+				t.Error("the report leaks the signed query string")
+			}
+			if html := env.messageHTML(t, "conversation", "7002"); !strings.Contains(html, "/inline-5001?Signature=abc") {
+				t.Fatalf("the original link was not kept: %q", html)
+			}
+			// A rerun does not ask Freshdesk for the same missing file again while the ticket is unchanged.
+			asked := env.fake.count("/files/inline-5001")
+			if again := env.mustRun(t); again.Status != freshdesk.StatusOK || again.InlineImages.Gone != 1 || env.fake.count("/files/inline-5001") != asked {
+				t.Fatalf("rerun status=%s gone=%d asked %d -> %d", again.Status, again.InlineImages.Gone, asked, env.fake.count("/files/inline-5001"))
+			}
+		})
+	}
+}
+
+func TestImageGoneInFreshdeskIsCheckedAgainWhenTheTicketChanges(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.inlineImages = true
+	env.fake.fileStatus["inline-5001"] = http.StatusNotFound
+	env.mustRun(t)
+	asked := env.fake.count("/files/inline-5001")
+	// Ticket 1 changed in Freshdesk, and the file is back: the next run takes it.
+	env.fake.ticket1Updated = true
+	delete(env.fake.fileStatus, "inline-5001")
+	report := env.mustRun(t)
+	if report.Status != freshdesk.StatusOK || report.InlineImages.Gone != 0 || report.InlineImages.Imported != 2 || env.fake.count("/files/inline-5001") == asked {
+		t.Fatalf("status=%s inline=%+v", report.Status, report.InlineImages)
+	}
+	if !strings.Contains(env.messageHTML(t, "conversation", "7002"), inlineDataURI) {
+		t.Fatal("the recovered image is not embedded")
 	}
 }

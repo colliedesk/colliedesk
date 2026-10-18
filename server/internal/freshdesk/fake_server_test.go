@@ -52,6 +52,7 @@ type fakeFreshdesk struct {
 	archiveError         string
 	stallPath            string
 	extraReplyOnTicket6  bool
+	ticket1Updated       bool
 	// canned serves the canned response fixtures; without it the account has no canned responses.
 	canned bool
 	// cannedExtra are responses added to folder 801; cannedCountBoost is added to its responses_count.
@@ -298,7 +299,7 @@ func (f *fakeFreshdesk) archived(w http.ResponseWriter, id string, n int) {
 func (f *fakeFreshdesk) listedTicket(id string) map[string]any {
 	for _, item := range f.list("tickets.json") {
 		if fmt.Sprint(item["id"]) == id {
-			if id == "6" && f.extraReplyOnTicket6 {
+			if (id == "6" && f.extraReplyOnTicket6) || (id == "1" && f.ticket1Updated) {
 				item["updated_at"] = "2025-04-05T10:00:00Z"
 			}
 			return item
@@ -326,7 +327,7 @@ func (f *fakeFreshdesk) ticketList(since string) []map[string]any {
 	}
 	var items []map[string]any
 	for _, item := range f.list("tickets.json") {
-		if fmt.Sprint(item["id"]) == "6" && f.extraReplyOnTicket6 {
+		if (fmt.Sprint(item["id"]) == "6" && f.extraReplyOnTicket6) || (fmt.Sprint(item["id"]) == "1" && f.ticket1Updated) {
 			item["updated_at"] = "2025-04-05T10:00:00Z"
 		}
 		updated, _ := time.Parse(time.RFC3339, item["updated_at"].(string))

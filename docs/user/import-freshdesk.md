@@ -188,13 +188,19 @@ Each message embeds at most 5 MiB of images. A further image is still stored as 
 message, but **Show original** keeps its Freshdesk link, and the report lists the ticket under the
 warning `inline_image_not_embedded`.
 
-An image counts as one item in the report (**Inline images**). If an image cannot be brought
-over, the status is `FAILED`, not `OK`. The cause can be a missing file (404), an expired link, a
-file that is not a PNG, JPEG, GIF or WebP image (an SVG is refused), a redirect to another host, or
-an image over 5 MB. The **Failures** table lists the image with its
-ticket id and the reason, and the message keeps its original Freshdesk link. Run the same
-command again: a temporary problem is retried. If the image no longer exists in Freshdesk, open
-the ticket there and save it yourself before you close the account.
+An image counts as one item in the report (**Inline images**). Two things can stop an image:
+
+- **Freshdesk no longer has it** (the file was deleted: HTTP 404 or 410). Nothing can bring it
+  back, so this does not fail the import. The report lists it under **Images already gone in
+  Freshdesk (not recoverable)** with the ticket id and the message, and the message keeps its
+  original link, which no longer works. A run does not ask for it again while the ticket is
+  unchanged. If the ticket changes in Freshdesk, the next run checks the image once more.
+- **Anything else**: a temporary error, an expired link, a file that is not a PNG, JPEG, GIF or
+  WebP image (an SVG is refused), a redirect to another host, or an image over 5 MB. The status is
+  `FAILED`. The **Failures** table lists the image with its ticket id and the reason, and the
+  message keeps its original Freshdesk link. Run the same command again: a temporary problem is
+  retried. If it still fails, open the ticket in Freshdesk and save the image yourself before you
+  close the account.
 
 ## Undo an import
 
@@ -235,6 +241,9 @@ tools.
   not return while the archive is refused. Not counted as absent. Check them in Freshdesk.
 - **Deleted in Freshdesk during the import**, **In Freshdesk Trash**, **In Freshdesk Spam**:
   tickets that were not imported, by id.
+- **Images already gone in Freshdesk (not recoverable)**: inline images that Freshdesk answers
+  404 or 410 for, by ticket id and message. They do not change the status. Nothing can be
+  recovered; the report is the record that they were already missing.
 - **Warnings**: data that was imported with a change you should know about, for example a
   contact without an email or a Freshdesk agent who has no Colliedesk account.
 

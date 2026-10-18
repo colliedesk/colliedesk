@@ -122,9 +122,18 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
     `body_html` is returned with every timeline message, so the budget also bounds that payload.
   - *A failed image makes the report FAILED.* The image is lost the day the account closes; the
     report must not say OK. The ticket stays `failed`, the next run reads it again and retries the
-    image. The HTML keeps the original link. Trade-off: an image already deleted in Freshdesk keeps
-    the status FAILED until the customer accepts it by saving the image by hand. We chose that over
-    a silent OK, matching a failed attachment.
+    image. The HTML keeps the original link. This covers every transient or fixable cause: 5xx,
+    timeout, an expired link (400/403), a refused redirect, a wrong or hostile type, an image over 5 MiB.
+  - *An image Freshdesk no longer has is not a failure (owner decision 18/10).* HTTP 404, or 410
+    (`errGone`, which also matches `errURLExpired` so attachments still refresh), from an allowed host
+    cannot be fixed by a rerun, and failing forever would stop the customer from ever seeing OK. The
+    ledger row becomes `skipped` with the redacted error (no target). Reconcile lists it under
+    `inline_images.gone_images` and in the Markdown section "Images already gone in Freshdesk (not
+    recoverable)" (ticket + message), subtracts it from the expected count (`Recoverable()`), and
+    leaves the status alone. The link stays in the HTML. The ticket finishes `done`, so a rerun skips
+    it and does not ask again; if the ticket's `updated_at` moves, the ticket is read again and the
+    skipped image is retried once (it is not `done`), which recovers a file that came back. Undo drops
+    the row with the rest.
   - *Counts.* `ticketMeta.inline_images` is the number of distinct hosted images per ticket
     (`Report.InlineImages.Source`). Freshdesk reports no size, so there is no source byte total;
     `ImportedBytes` and the SHA-256 re-verification (`verifyAttachments`) cover the stored files.
