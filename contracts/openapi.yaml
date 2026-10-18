@@ -2546,7 +2546,7 @@ components:
         executed_at: {type: string, format: date-time}
     Attachment:
       type: object
-      required: [id, message_id, filename, content_type, size, sha256, created_at]
+      required: [id, message_id, filename, content_type, size, sha256, inline, created_at]
       properties:
         id: {type: string, format: uuid}
         message_id: {type: string, format: uuid}
@@ -2554,6 +2554,12 @@ components:
         content_type: {type: string}
         size: {type: integer, minimum: 0}
         sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        inline:
+          type: boolean
+          description: >-
+            True when the bytes are embedded in the message's `body_html` (an inline image shown in the
+            formatted message), so the message view need not list the file again. The file stays stored and
+            downloadable. Set by the server only when the image was actually embedded.
         created_at: {type: string, format: date-time}
     DeliveryStatus: {type: string, enum: [queued, sent, failed]}
     MessageDelivery:

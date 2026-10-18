@@ -21,7 +21,10 @@ type File struct {
 	ContentType string
 	ContentID   string
 	Inline      bool
-	Data        []byte
+	// Embedded is true when inlineImages wrote this part into the HTML as a data: URI, so the message
+	// already shows it.
+	Embedded bool
+	Data     []byte
 }
 
 func decodeFile(encoding string, body io.Reader) []byte {
@@ -42,10 +45,10 @@ var cidPattern = regexp.MustCompile(`(?i)cid:([^"'\s)>]+)`)
 // the sandboxed original shows inline images without loading anything from the network. References
 // to missing or non-image parts, or beyond the size budget, are removed.
 func inlineImages(html string, files []File) string {
-	byID := make(map[string]File, len(files))
-	for _, file := range files {
-		if file.ContentID != "" {
-			byID[strings.ToLower(file.ContentID)] = file
+	byID := make(map[string]*File, len(files))
+	for i := range files {
+		if files[i].ContentID != "" {
+			byID[strings.ToLower(files[i].ContentID)] = &files[i]
 		}
 	}
 	budget := maxInlineImageBytes
@@ -60,6 +63,7 @@ func inlineImages(html string, files []File) string {
 			return ""
 		}
 		budget -= len(file.Data)
+		file.Embedded = true
 		encoded[id] = "data:" + file.ContentType + ";base64," + base64.StdEncoding.EncodeToString(file.Data)
 		return encoded[id]
 	})

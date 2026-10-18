@@ -1634,6 +1634,8 @@ export interface components {
             content_type: string;
             size: number;
             sha256: string;
+            /** @description True when the bytes are embedded in the message's `body_html` (an inline image shown in the formatted message), so the message view need not list the file again. The file stays stored and downloadable. Set by the server only when the image was actually embedded. */
+            inline: boolean;
             /** Format: date-time */
             created_at: string;
         };

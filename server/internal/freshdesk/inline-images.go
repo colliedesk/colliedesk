@@ -259,7 +259,7 @@ func (r *run) commitInlineImages(ctx context.Context, ticketKey, messageID strin
 	}
 	embeds := map[string]string{}
 	for _, image := range images {
-		input := store.NewAttachment{MessageID: messageID, Filename: "inline-image-" + image.ref.key + imageExtension(image.contentType), ContentType: image.contentType, Object: image.object}
+		input := store.NewAttachment{MessageID: messageID, Filename: "inline-image-" + image.ref.key + imageExtension(image.contentType), ContentType: image.contentType, Object: image.object, Inline: image.dataURI != ""}
 		targetID, err := r.saveAttachment(ctx, tx, image.entry, image.found, input)
 		if err != nil {
 			return err

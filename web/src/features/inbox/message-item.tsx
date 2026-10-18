@@ -9,12 +9,6 @@ import { LockIcon, PaperclipIcon } from '../../ui/icons';
 import { EmailFrame } from './email-frame';
 import { PlainTextBody } from './plain-text-body';
 
-// The importer stores a Freshdesk-hosted inline image as a file named inline-image-<16 hex>.<ext> and
-// also embeds it in the HTML (server/internal/freshdesk/inline-images.go). While the HTML is shown the
-// image is already on screen, so its file row would only repeat it; the file stays stored and
-// downloadable, and the row returns in the plain-text view, where nothing else shows the image.
-const inlineImageFile = /^inline-image-[0-9a-f]{16}\.(?:png|jpe?g|gif|webp)$/;
-
 interface MessageItemProps {
   item: Message;
   timezone: string;
@@ -29,7 +23,10 @@ export function MessageItem({ item, timezone, onRetryDelivery, approvedBy }: Mes
   // The stored raw email is offered on its own, not mixed with the customer's files.
   const originalID = item.email?.original_attachment_id ?? null;
   const stored = item.attachments.filter((file) => file.id !== originalID);
-  const files = showHTML ? stored.filter((file) => !inlineImageFile.test(file.filename)) : stored;
+  // The server marks a file inline only when its bytes are embedded in the HTML. While the HTML is shown such
+  // an image is already on screen, so its row would repeat it; the file stays stored and downloadable, and
+  // the row returns in the plain-text view, where nothing else shows the image.
+  const files = showHTML ? stored.filter((file) => !file.inline) : stored;
   const sender = approvedBy ?? item.author_name ?? messages.someone;
   // A token or draft line already names the person; the plain name would repeat it.
   const plainAuthor = item.author_name && !item.agent_token && !item.agent_request_id;

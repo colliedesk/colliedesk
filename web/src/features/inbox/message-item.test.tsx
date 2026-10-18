@@ -9,7 +9,7 @@ const base: Message = {
   attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null,
   email: { from: 'vic@customer.example', authentication: 'pass', attachments: [], original_attachment_id: null, cc: [] },
 };
-const file = (id: string, filename: string, content_type: string) => ({ id, message_id: base.id, filename, content_type, size: 2048, sha256: 'a'.repeat(64), created_at: base.created_at });
+const file = (id: string, filename: string, content_type: string, inline = false) => ({ id, message_id: base.id, filename, content_type, size: 2048, sha256: 'a'.repeat(64), inline, created_at: base.created_at });
 
 test('incoming mail with HTML shows the rendered HTML by default, inline in the conversation', () => {
   const { container } = render(<MessageItem item={{ ...base, body_html: '<h1>Weekly report</h1><table><tr><td>42</td></tr></table>' }} timezone="UTC" />);
@@ -55,25 +55,32 @@ test('replies and notes written in Colliedesk have no HTML view', () => {
   expect(screen.getByText('On its way.')).toBeInTheDocument();
 });
 
-test('an inline image the HTML already shows is not listed again as a file', () => {
+test('a file the server marked as embedded in the HTML is not listed again', () => {
   const item = { ...base, body_html: '<img src="data:image/png;base64,AAAA">', attachments: [
-    file('a1', 'inline-image-1a2b3c4d5e6f7a8b.png', 'image/png'),
+    file('a1', 'logo.png', 'image/png', true),
     file('a2', 'invoice.pdf', 'application/pdf'),
-    file('a3', 'inline-image-notes.txt', 'text/plain'),
-    file('a4', 'photo.png', 'image/png'),
   ] };
   render(<MessageItem item={item} timezone="UTC" />);
-  const list = screen.getByRole('list', { name: /attachments/i });
-  const names = Array.from(list.querySelectorAll('a')).map((link) => link.textContent);
-  expect(names).toEqual(['invoice.pdf', 'inline-image-notes.txt', 'photo.png']);
+  const names = Array.from(screen.getByRole('list', { name: /attachments/i }).querySelectorAll('a')).map((link) => link.textContent);
+  expect(names).toEqual(['invoice.pdf']);
 });
 
-test('in the plain-text view the inline image is a file row again, since nothing else shows it', () => {
-  const item = { ...base, body_html: '<img src="data:image/png;base64,AAAA">', attachments: [file('a1', 'inline-image-1a2b3c4d5e6f7a8b.png', 'image/png')] };
+test('the file name decides nothing: an image that was not embedded stays listed, however it is named', () => {
+  const item = { ...base, body_html: '<p>Hi</p>', attachments: [
+    file('a1', 'inline-image-1a2b3c4d5e6f7a8b.png', 'image/png', false), // over the embed budget, or a sender's choice of name
+    file('a2', 'photo.png', 'image/png', true),
+  ] };
+  render(<MessageItem item={item} timezone="UTC" />);
+  const names = Array.from(screen.getByRole('list', { name: /attachments/i }).querySelectorAll('a')).map((link) => link.textContent);
+  expect(names).toEqual(['inline-image-1a2b3c4d5e6f7a8b.png']);
+});
+
+test('in the plain-text view an embedded file is a row again, since nothing else shows it', () => {
+  const item = { ...base, body_html: '<img src="data:image/png;base64,AAAA">', attachments: [file('a1', 'logo.png', 'image/png', true)] };
   render(<MessageItem item={item} timezone="UTC" />);
   expect(screen.queryByRole('list', { name: /attachments/i })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Show plain text' }));
-  expect(screen.getByRole('link', { name: 'inline-image-1a2b3c4d5e6f7a8b.png' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'logo.png' })).toBeInTheDocument();
 });
 
 test('the stored raw email stays out of the file list as before', () => {

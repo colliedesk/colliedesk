@@ -102,7 +102,7 @@ test('shows the author name and attachment download links on a timeline message'
       filename: 'server.log',
       content_type: 'text/plain',
       size: 2048,
-      sha256: 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9',
+      sha256: 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9', inline: false,
       created_at: '2026-10-14T00:00:00Z',
     }],
     cc: [],
