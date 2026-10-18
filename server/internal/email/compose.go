@@ -31,7 +31,8 @@ type Outgoing struct {
 	Date       time.Time
 	// Files are attached to the message; with none, the message is a single text part.
 	Files []File
-	// Standalone keeps Subject as written; a reply gets "Re: " in front.
+	// Standalone is mail the system writes by itself (alerts, notices, reports): Subject stays as written,
+	// not "Re: " in front, and the message is marked Auto-Submitted: auto-generated.
 	Standalone bool
 }
 
@@ -69,6 +70,10 @@ func Compose(message Outgoing) ([]byte, error) {
 	header("Subject", foldEncodedWords(mime.QEncoding.Encode("utf-8", subjectFor(message))))
 	header("Date", message.Date.UTC().Format(time.RFC1123Z))
 	header("Message-ID", angle(message.MessageID))
+	if message.Standalone {
+		// RFC 3834: mail the system writes says so, and an auto-responder must not answer it.
+		header("Auto-Submitted", "auto-generated")
+	}
 	header("In-Reply-To", angle(message.InReplyTo))
 	references := make([]string, 0, len(message.References))
 	for _, reference := range message.References {
