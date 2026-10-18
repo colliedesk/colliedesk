@@ -93,6 +93,8 @@ func (s *Store) UpsertEmailChannel(ctx context.Context, workspaceID, supportAddr
 					THEN email_channels.provider_domain_created_at END,
 				provider_domain_expired_at=CASE WHEN split_part(email_channels.support_address,'@',2)=split_part(EXCLUDED.support_address,'@',2)
 					THEN email_channels.provider_domain_expired_at END,
+				provider_domain_first_verified_at=CASE WHEN split_part(email_channels.support_address,'@',2)=split_part(EXCLUDED.support_address,'@',2)
+					THEN email_channels.provider_domain_first_verified_at END,
 				support_address=EXCLUDED.support_address,updated_at=now()
 			RETURNING `+channelColumns, workspaceID, supportAddress, token))
 	})
@@ -171,7 +173,7 @@ func (s *Store) AttachProviderDomain(ctx context.Context, workspaceID, supportAd
 				return outcome{}, err
 			}
 		}
-		channel, err := scanChannel(tx.QueryRow(ctx, `UPDATE email_channels SET provider_domain_id=$3,provider_domain_records=$4,domain_verified_at=NULL,provider_domain_created_at=$5,provider_domain_expired_at=NULL,updated_at=$5
+		channel, err := scanChannel(tx.QueryRow(ctx, `UPDATE email_channels SET provider_domain_id=$3,provider_domain_records=$4,domain_verified_at=NULL,provider_domain_first_verified_at=NULL,provider_domain_created_at=$5,provider_domain_expired_at=NULL,updated_at=$5
 			WHERE workspace_id=$1 AND support_address=$2 RETURNING `+channelColumns, workspaceID, supportAddress, provider.ID, records, now))
 		return outcome{channel: channel, attached: err == nil}, err
 	})
@@ -194,7 +196,8 @@ func (s *Store) SaveProviderDomain(ctx context.Context, workspaceID, supportAddr
 	}
 	channel, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.EmailChannel, error) {
 		return scanChannel(tx.QueryRow(ctx, `UPDATE email_channels SET provider_domain_records=$4,
-				domain_verified_at=CASE WHEN $5 THEN COALESCE(domain_verified_at,$6) END,updated_at=$6
+				domain_verified_at=CASE WHEN $5 THEN COALESCE(domain_verified_at,$6) END,
+				provider_domain_first_verified_at=CASE WHEN $5 THEN COALESCE(provider_domain_first_verified_at,$6) ELSE provider_domain_first_verified_at END,updated_at=$6
 			WHERE workspace_id=$1 AND support_address=$2 AND provider_domain_id=$3
 				AND NOT EXISTS (SELECT 1 FROM email_provider_domain_trash WHERE provider_domain_id=$3)
 			RETURNING `+channelColumns, workspaceID, supportAddress, provider.ID, records, provider.Verified, now))

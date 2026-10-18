@@ -191,3 +191,48 @@ func TestTwoSweepersNeverDeleteTheSameDomainTwice(t *testing.T) {
 		t.Fatalf("after the sweeps: live=%v trash=%s", fake.live(), trashCount(t, pool))
 	}
 }
+
+func TestADomainThatWasVerifiedOnceIsNeverReleasedByTheUnverifiedTimeout(t *testing.T) {
+	fake, server := newFakeResend(t)
+	api, service, pool, dns := testAPIWithConfig(t, resendDomainConfig(fake, server))
+	admin := createSession(t, api, service, "Once Verified", "admin@once-verified.example.com")
+	_ = connectEmail(t, api, admin, "support@once-verified.example.com")
+	prove(t, api, dns, admin)
+	_ = verify(t, api, fake, admin)
+	fake.setStatus("once-verified.example.com", "verified")
+	if response := verify(t, api, fake, admin); response.Code != http.StatusOK {
+		t.Fatalf("setup: status=%d", response.Code)
+	}
+	id := fake.idOf("once-verified.example.com")
+
+	// Resend later reads the domain as pending (a temporary DNS problem): sending falls back, nothing is released.
+	fake.setStatus("once-verified.example.com", "pending")
+	if response := verify(t, api, fake, admin); response.Code != http.StatusConflict {
+		t.Fatalf("re-check status=%d, want 409", response.Code)
+	}
+	if providerState(t, api, admin).Channel.DomainVerifiedAt != nil {
+		t.Fatal("setup: the domain should read as not verified now")
+	}
+	if _, err := pool.Exec(context.Background(), `UPDATE email_channels SET provider_domain_created_at=now()-interval '30 days'`); err != nil {
+		t.Fatal(err)
+	}
+
+	clock := time.Now().Add(time.Minute)
+	if err := newSweeper(pool, server.URL, &clock).Sweep(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if live := fake.live(); len(live) != 1 || live[0] != id {
+		t.Fatalf("a domain that was verified once must stay at the provider: %v", live)
+	}
+	if trashCount(t, pool) != "0" || queryString(t, pool, `SELECT COALESCE(provider_domain_id,'') FROM email_channels`) != id {
+		t.Fatal("the channel must keep its provider domain and nothing may be queued")
+	}
+
+	fake.setStatus("once-verified.example.com", "verified")
+	if response := verify(t, api, fake, admin); response.Code != http.StatusOK {
+		t.Fatalf("restoring status=%d, want 200", response.Code)
+	}
+	if providerState(t, api, admin).Channel.DomainVerifiedAt == nil {
+		t.Fatal("the next verify must restore verification")
+	}
+}

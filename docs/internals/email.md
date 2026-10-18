@@ -79,10 +79,16 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   `internal/providerdomain.Sweeper` runs every minute beside the outbox worker and calls
   `DELETE /domains/{id}`: 404 counts as gone; a failure keeps the row with `attempts`, `last_error` and a
   backoff of 1 minute doubling to 1 hour, and logs a warning. Requests never call Resend to delete.
+  **Abandoned holder.** `collie email release-domain [--by <name>] <domain>` queues the holder's provider
+  domain for deletion and clears its provider domain and verification, so the real owner can verify; the
+  second workspace's 409 tells the tenant to contact support. No API route does it.
   **Unverified copies expire.** The sweep also releases a provider domain that stayed unverified for 7
   days (`domain.ProviderDomainUnverifiedTTL`, counted from `provider_domain_created_at`): it queues the id
   for deletion, clears it from the channel and sets `provider_domain_expired_at`, which settings show as
-  "expired, verify again". A verified domain never expires. This bounds what a trial can hold: the TXT
+  "expired, verify again". Only a domain Resend has never reported verified expires
+  (`provider_domain_first_verified_at` empty): one that was verified and later reads pending keeps its
+  provider domain and records, because the customer published its DKIM key; only `domain_verified_at` is
+  cleared (sending falls back) and the next verify restores it. This bounds what a trial can hold: the TXT
   proof is per name, so subdomains of one domain could otherwise each keep a slot until retention deletes
   the workspace. The sweep claims rows with `FOR UPDATE SKIP LOCKED` and a 5-minute lease before it calls
   Resend, so replicas do not delete one domain twice, and it waits 250 ms between calls to spare the
