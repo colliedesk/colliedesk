@@ -20,6 +20,8 @@ const (
 	entityDescription = "description"
 	entityMessage     = "conversation"
 	entityAttachment  = "attachment"
+	// entityInlineImage is an image in message HTML that Freshdesk hosts, stored as an attachment row.
+	entityInlineImage = "inline_image"
 	entityTimeEntry   = "time_entry"
 	entityTag         = "tag"
 	entitySavedReply  = "saved_reply"
@@ -56,6 +58,8 @@ type ticketMeta struct {
 	Attachments     int   `json:"attachments"`
 	AttachmentBytes int64 `json:"attachment_bytes"`
 	TimeEntries     int   `json:"time_entries"`
+	// InlineImages counts the distinct Freshdesk-hosted images in the ticket's message HTML.
+	InlineImages int `json:"inline_images,omitempty"`
 }
 
 type ledgerEntry struct {

@@ -182,7 +182,7 @@ func (e *env) incoming(w workspace, conversationID, body string) {
 	}
 }
 
-// nameAgents gives every agent of the workspace the display name; the REST API cannot set one.
+// nameAgents gives every agent of the workspace the same display name in one statement.
 func (e *env) nameAgents(w workspace, name string) {
 	e.t.Helper()
 	if _, err := e.pool.Exec(context.Background(), `UPDATE agents SET display_name=$2 WHERE workspace_id=$1`, w.id, name); err != nil {

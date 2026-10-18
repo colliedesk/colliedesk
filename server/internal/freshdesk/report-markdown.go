@@ -39,11 +39,13 @@ func (r *Report) Markdown() string {
 	for _, row := range []struct {
 		name  string
 		count EntityCount
-	}{{"Contacts", r.Contacts}, {"Tickets", r.Tickets.EntityCount}, {"Messages", r.Messages}, {"Attachments", r.Attachments.EntityCount}, {"Time entries", r.TimeEntries}, {"Saved replies", r.SavedReplies.EntityCount}} {
+	}{{"Contacts", r.Contacts}, {"Tickets", r.Tickets.EntityCount}, {"Messages", r.Messages}, {"Attachments", r.Attachments.EntityCount}, {"Inline images", r.InlineImages.EntityCount}, {"Time entries", r.TimeEntries}, {"Saved replies", r.SavedReplies.EntityCount}} {
 		fmt.Fprintf(&b, "| %s | %d | %d | %d |\n", row.name, row.count.Source, row.count.Imported, row.count.Failed)
 	}
 	fmt.Fprintf(&b, "\nAttachment bytes: %d in Freshdesk, %d stored. SHA-256 re-verified from storage: %d.\n",
 		r.Attachments.SourceBytes, r.Attachments.ImportedBytes, r.Attachments.ChecksumVerified)
+	fmt.Fprintf(&b, "Inline image bytes: %d stored. SHA-256 re-verified from storage: %d. Already gone in Freshdesk: %d (counted in the first column, listed below).\n",
+		r.InlineImages.ImportedBytes, r.InlineImages.ChecksumVerified, r.InlineImages.Gone)
 	fmt.Fprintf(&b, "Companies: %d, %d kept as contact organization. Agents: %d, %d matched to Colliedesk agents by email.\n",
 		r.Companies.Source, r.Companies.Attached, r.Agents.Source, r.Agents.Matched)
 	absentLabel := "Ticket ids that do not exist in Freshdesk"
@@ -84,6 +86,7 @@ func (r *Report) Markdown() string {
 			fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", failure.Entity, failure.FreshdeskID, failure.TicketID, strings.ReplaceAll(failure.Error, "|", "/"))
 		}
 	}
+	writeList(&b, "Images already gone in Freshdesk (not recoverable)", goneLines(r.InlineImages.GoneImages))
 	writeList(&b, "Canned responses with no text, not imported (Freshdesk ids)", r.SavedReplies.EmptySkipped)
 	writeList(&b, "Canned responses in personal folders, not imported (Freshdesk ids; run again with --include-personal-canned-responses to share them)", r.SavedReplies.PersonalNotImported)
 	writeList(&b, "Canned responses whose files were not imported (Freshdesk ids)", r.SavedReplies.ResponsesWithAttachments)
@@ -135,6 +138,14 @@ func placeholderLines(placeholders map[string][]string) []string {
 	lines := make([]string, 0, len(names))
 	for _, name := range names {
 		lines = append(lines, "{{"+name+"}}"+idSuffix(placeholders[name]))
+	}
+	return lines
+}
+
+func goneLines(images []GoneImage) []string {
+	lines := make([]string, 0, len(images))
+	for _, image := range images {
+		lines = append(lines, fmt.Sprintf("ticket %s: %s. The message keeps its Freshdesk link, which no longer works. %s", image.TicketID, image.Message, image.Detail))
 	}
 	return lines
 }

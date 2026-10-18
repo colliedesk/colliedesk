@@ -1,6 +1,7 @@
 package mcpserver
 
-// The tools below read and change workspace settings: the workspace timezone, the team, invites,
+// The tools below read and change workspace settings: the workspace timezone, your own timezone and
+// display name, the team, invites,
 // sessions, the web form, the email channel and the plan. Reading needs read (invite links, tokens
 // and the inbound secret are never in an answer). Changing needs the admin tier, which acts with the
 // creator's admin role; a lower tier's call is filed as an agent request a person approves. Some
@@ -71,19 +72,36 @@ func myTimezoneSetSpec() Spec {
 	}
 }
 
+const displayNameProperty = `"display_name":{"type":"string","maxLength":80,"description":"Shown instead of the email address. Spaces at the ends are removed; an empty string clears it."}`
+
+func myDisplayNameSetSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_my_display_name_set",
+		Title: "Change your own display name",
+		Description: `Set the display name of the team member this token acts as: the name the team sees instead of the email address in the team list, ` +
+			`on assignments and on notes. An empty string clears it, and the email address is shown again. At most 80 characters, no line breaks. ` +
+			`It is safe to repeat. With a read token Colliedesk files it as an agent request.` + "\n\nTier: draft.",
+		Tier: "draft", Idempotent: true,
+		REST:   []string{"PATCH /api/v1/agents/me/display-name"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["display_name"],"properties":{` + displayNameProperty + `}}`,
+		Output: `{"type":"object","required":["your_display_name"],"properties":{"your_display_name":{"type":"string","description":"Empty when cleared."}}}`,
+		run:    myDisplayNameSet,
+	}
+}
+
 func teamMemberUpdateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_team_member_update",
-		Title: "Change a team member's role or access",
-		Description: `Change a team member's role (agent or admin), or deactivate or reactivate them. Deactivating ends their sessions and tokens and moves their open and pending ` +
+		Title: "Change a team member's name, role or access",
+		Description: `Change a team member's display name (an empty string clears it), role (agent or admin), or deactivate or reactivate them. Deactivating ends their sessions and tokens and moves their open and pending ` +
 			`conversations to reassign_to, or leaves them unassigned; reactivating lets them sign in again with a new link. The last admin cannot be demoted or deactivated. ` +
-			`A change to an admin (demoting, deactivating, reactivating) or making someone an admin always waits for a person's approval, whatever your tier. ` + belowAdmin + "\n\nTier: admin.",
+			`Renaming alone is not a change to the admin role. A change to an admin (demoting, deactivating, reactivating) or making someone an admin always waits for a person's approval, whatever your tier. ` + belowAdmin + "\n\nTier: admin.",
 		Tier: "admin",
 		REST: []string{"PATCH /api/v1/agents/{id}", "GET /api/v1/agents"},
-		Input: `{"type":"object","additionalProperties":false,"required":["member"],"properties":{` + memberProperty + `,` +
+		Input: `{"type":"object","additionalProperties":false,"required":["member"],"properties":{` + memberProperty + `,` + displayNameProperty + `,` +
 			`"role":{"type":"string","enum":["agent","admin"]},"active":{"type":"boolean"},` +
 			`"reassign_to":{"type":"string","maxLength":254,"description":"With active false: the email or id of the member who takes over the open conversations."}}}`,
-		Output: `{"type":"object","required":["member"],"properties":{"member":{"type":"object","properties":{"id":{"type":"string"},"email":{"type":"string"},"role":{"type":"string"},"active":{"type":"boolean"}}}}}`,
+		Output: `{"type":"object","required":["member"],"properties":{"member":{"type":"object","properties":{"id":{"type":"string"},"email":{"type":"string"},"display_name":{"type":"string"},"role":{"type":"string"},"active":{"type":"boolean"}}}}}`,
 		run:    teamMemberUpdate,
 	}
 }

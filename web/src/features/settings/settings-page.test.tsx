@@ -263,3 +263,29 @@ test('an admin of a billed workspace finds Plan and billing last in the workspac
   expect(links.at(-1)).toHaveTextContent('Plan and billing');
   expect(links.at(-1)).toHaveAttribute('href', '/settings/billing');
 });
+
+test('your display name is saved with its button, trimmed, and saving an empty field clears it', () => {
+  const onSetDisplayName = vi.fn();
+  render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" email="ada@example.com" displayName="Ada" onSetDisplayName={onSetDisplayName} />);
+  const profile = screen.getByRole('region', { name: 'Profile' });
+  const input = within(profile).getByRole('textbox', { name: 'Display name' });
+  expect(input).toHaveValue('Ada');
+  expect(input).toHaveAttribute('placeholder', 'ada@example.com');
+  expect(input).toHaveAttribute('maxLength', '80');
+  fireEvent.change(input, { target: { value: '  Ada Lovelace ' } });
+  fireEvent.click(within(profile).getByRole('button', { name: 'Save name' }));
+  expect(onSetDisplayName).toHaveBeenLastCalledWith('Ada Lovelace');
+  fireEvent.change(input, { target: { value: '' } });
+  fireEvent.click(within(profile).getByRole('button', { name: 'Save name' }));
+  expect(onSetDisplayName).toHaveBeenLastCalledWith('');
+});
+
+test('a display name save shows Saving…, Saved or why it was refused', () => {
+  const { rerender } = render(<SettingsPage sessions={[]} invites={[]} timezone="UTC" displayName="" displayNameSave={{ pending: true }} />);
+  expect(screen.getByRole('button', { name: 'Saving…' })).toBeInTheDocument();
+  rerender(<SettingsPage sessions={[]} invites={[]} timezone="UTC" displayName="Ada" displayNameSave={{ saved: true }} />);
+  expect(screen.getByRole('status')).toHaveTextContent('Saved');
+  expect(screen.getByRole('textbox', { name: 'Display name' })).toHaveValue('Ada');
+  rerender(<SettingsPage sessions={[]} invites={[]} timezone="UTC" displayName="Ada" displayNameSave={{ error: 'display_name must be a string of at most 80 characters.' }} />);
+  expect(screen.getByRole('alert')).toHaveTextContent('at most 80 characters');
+});

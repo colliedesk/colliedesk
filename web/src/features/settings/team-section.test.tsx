@@ -149,3 +149,35 @@ test('the only active admin cannot deactivate or demote themself; with a second 
   expect(screen.getByRole('button', { name: 'Deactivate Ada Admin' })).toBeInTheDocument();
   expect(screen.getByRole('combobox', { name: 'Role of Ada Admin' })).toBeEnabled();
 });
+
+test('an admin renames a member from their row, and saving an empty name clears it', () => {
+  const onRename = vi.fn();
+  render(<TeamSection members={[admin, ann, bob]} currentAgentId={admin.id} canManage timezone="UTC" onRename={onRename} />);
+  fireEvent.click(within(row('Bob Builder')).getByRole('button', { name: 'Rename Bob Builder' }));
+  const input = screen.getByRole('textbox', { name: 'Display name of Bob Builder' });
+  expect(input).toHaveValue('Bob Builder');
+  expect(input).toHaveFocus();
+  fireEvent.change(input, { target: { value: '  Robert  ' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(onRename).toHaveBeenLastCalledWith(bob.id, 'Robert');
+  expect(screen.queryByRole('textbox', { name: 'Display name of Bob Builder' })).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Rename Bob Builder' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Display name of Bob Builder' }), { target: { value: '' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(onRename).toHaveBeenLastCalledWith(bob.id, '');
+});
+
+test('a member without a name is renamed from an empty field that shows the email, and cancel changes nothing', () => {
+  const onRename = vi.fn();
+  render(<TeamSection members={[admin, ann]} currentAgentId={admin.id} canManage timezone="UTC" onRename={onRename} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Rename ann@example.com' }));
+  const input = screen.getByRole('textbox', { name: 'Display name of ann@example.com' });
+  expect(input).toHaveValue('');
+  expect(input).toHaveAttribute('placeholder', 'ann@example.com');
+  expect(input).toHaveAttribute('maxLength', '80');
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Rename ann@example.com' })).toHaveFocus();
+  expect(onRename).not.toHaveBeenCalled();
+});

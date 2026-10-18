@@ -11,6 +11,7 @@ import (
 type restMember struct {
 	ID            string     `json:"id"`
 	Email         string     `json:"email"`
+	DisplayName   string     `json:"display_name"`
 	Role          string     `json:"role"`
 	DeactivatedAt *time.Time `json:"deactivated_at"`
 }
@@ -89,6 +90,14 @@ func myTimezoneSet(c *call, arguments map[string]any) (any, error) {
 	return map[string]any{"your_timezone": agent.TimezoneOverride}, nil
 }
 
+func myDisplayNameSet(c *call, arguments map[string]any) (any, error) {
+	var agent restAgent
+	if err := c.send(http.MethodPatch, "/api/v1/agents/me/display-name", map[string]any{"display_name": arguments["display_name"]}, &agent); err != nil {
+		return nil, err
+	}
+	return map[string]any{"your_display_name": agent.DisplayName}, nil
+}
+
 // memberByEmailOrID finds a team member of this workspace, deactivated ones included.
 func (c *call) memberByEmailOrID(value string) (restMember, error) {
 	var page struct {
@@ -108,22 +117,26 @@ func (c *call) memberByEmailOrID(value string) (restMember, error) {
 
 func teamMemberUpdate(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
-		Member     string  `json:"member"`
-		Role       *string `json:"role"`
-		Active     *bool   `json:"active"`
-		ReassignTo string  `json:"reassign_to"`
+		Member      string  `json:"member"`
+		DisplayName *string `json:"display_name"`
+		Role        *string `json:"role"`
+		Active      *bool   `json:"active"`
+		ReassignTo  string  `json:"reassign_to"`
 	}](arguments)
 	if err != nil {
 		return nil, err
 	}
-	if args.Role == nil && args.Active == nil {
-		return nil, &toolError{"Nothing to change. Give role, active, or both."}
+	if args.DisplayName == nil && args.Role == nil && args.Active == nil {
+		return nil, &toolError{"Nothing to change. Give display_name, role, active, or several of them."}
 	}
 	member, err := c.memberByEmailOrID(args.Member)
 	if err != nil {
 		return nil, err
 	}
 	body := map[string]any{}
+	if args.DisplayName != nil {
+		body["display_name"] = *args.DisplayName
+	}
 	if args.Role != nil {
 		body["role"] = *args.Role
 	}
@@ -142,7 +155,8 @@ func teamMemberUpdate(c *call, arguments map[string]any) (any, error) {
 	if err := c.send(http.MethodPatch, "/api/v1/agents/"+url.PathEscape(member.ID), body, &updated); err != nil {
 		return nil, err
 	}
-	return map[string]any{"member": map[string]any{"id": updated.ID, "email": updated.Email, "role": updated.Role, "active": updated.DeactivatedAt == nil}}, nil
+	return map[string]any{"member": map[string]any{"id": updated.ID, "email": updated.Email, "display_name": updated.DisplayName,
+		"role": updated.Role, "active": updated.DeactivatedAt == nil}}, nil
 }
 
 func inviteView(invite restInvite) map[string]any {

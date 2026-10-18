@@ -20,7 +20,8 @@ import (
 var settingsFields = map[string][]string{
 	"PATCH /api/v1/workspace/timezone":                {"timezone"},
 	"PATCH /api/v1/agents/me/timezone":                {"timezone"},
-	"PATCH /api/v1/agents/{id}":                       {"role", "active", "reassign_to"},
+	"PATCH /api/v1/agents/me/display-name":            {"display_name"},
+	"PATCH /api/v1/agents/{id}":                       {"display_name", "role", "active", "reassign_to"},
 	"POST /api/v1/auth/invites":                       {"email", "role_ceiling"},
 	"DELETE /api/v1/auth/invites/{id}":                {},
 	"PUT /api/v1/channels/web-form":                   {"enabled", "allowed_origins"},
@@ -54,6 +55,7 @@ func settingsBodyProblem(route Route, body json.RawMessage) string {
 func (a *API) summarizeSettingsRequest(ctx context.Context, request *http.Request, route Route, who auth.Principal, body json.RawMessage) string {
 	var call struct {
 		Timezone       *string  `json:"timezone"`
+		DisplayName    *string  `json:"display_name"`
 		Role           *string  `json:"role"`
 		Active         *bool    `json:"active"`
 		ReassignTo     *string  `json:"reassign_to"`
@@ -74,8 +76,10 @@ func (a *API) summarizeSettingsRequest(ctx context.Context, request *http.Reques
 			before = *who.Agent.TimezoneOverride
 		}
 		return fmt.Sprintf("Change the timezone of %s: %s → %s", who.Agent.Email, before, orNone(call.Timezone, "the workspace timezone"))
+	case "PATCH /api/v1/agents/me/display-name":
+		return fmt.Sprintf("Change the display name of %s: %s", who.Agent.Email, nameChange(who.Agent.DisplayName, call.DisplayName))
 	case "PATCH /api/v1/agents/{id}":
-		return a.summarizeTeamChange(ctx, who.Workspace.ID, id, call.Role, call.Active, call.ReassignTo)
+		return a.summarizeTeamChange(ctx, who.Workspace.ID, id, call.DisplayName, call.Role, call.Active, call.ReassignTo)
 	case "POST /api/v1/auth/invites":
 		return fmt.Sprintf("Invite %s to the team as %s", call.Email, call.RoleCeiling)
 	case "DELETE /api/v1/auth/invites/{id}":
@@ -123,24 +127,27 @@ func (a *API) summarizeSettingsRequest(ctx context.Context, request *http.Reques
 	return ""
 }
 
-func (a *API) summarizeTeamChange(ctx context.Context, workspaceID, id string, role *string, active *bool, reassignTo *string) string {
+func (a *API) summarizeTeamChange(ctx context.Context, workspaceID, id string, displayName, role *string, active *bool, reassignTo *string) string {
 	members, err := a.store.ListAgents(ctx, workspaceID)
 	if err != nil {
 		return ""
 	}
 	names := map[string]string{}
-	var who, currentRole string
+	var who, currentName, currentRole string
 	activeNow := true
 	for _, member := range members {
 		names[member.ID] = member.Email
 		if member.ID == id {
-			who, currentRole, activeNow = member.Email, member.Role, member.DeactivatedAt == nil
+			who, currentName, currentRole, activeNow = member.Email, member.DisplayName, member.Role, member.DeactivatedAt == nil
 		}
 	}
 	if who == "" {
 		return "Change the team member " + id
 	}
 	var changes []string
+	if displayName != nil {
+		changes = append(changes, "display name "+nameChange(currentName, displayName))
+	}
 	if role != nil {
 		changes = append(changes, "role "+currentRole+" → "+*role)
 	}
@@ -188,6 +195,21 @@ func (a *API) summarizeSessionRevoke(ctx context.Context, who auth.Principal, id
 		return "Revoke a session"
 	}
 	return fmt.Sprintf("Revoke the session %q of %s", session.Label, session.AgentEmail)
+}
+
+// nameChange shows a display name change as "before → after"; an empty name is shown as (none).
+func nameChange(before string, after *string) string {
+	shown := func(name string) string {
+		if name = strings.TrimSpace(name); name == "" {
+			return "(none)"
+		}
+		return name
+	}
+	next := ""
+	if after != nil {
+		next = *after
+	}
+	return shown(before) + " → " + shown(next)
 }
 
 func orNone(value *string, none string) string {

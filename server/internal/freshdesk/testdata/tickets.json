@@ -107,7 +107,7 @@
     "tags": [
       "vendor"
     ],
-    "description": "<p>Outbound: we contacted the vendor.</p>",
+    "description": "<p>Outbound: we contacted the vendor.{{inline-account}}</p>",
     "description_text": "Outbound: we contacted the vendor.",
     "attachments": [],
     "created_at": "2025-03-31T22:15:00Z",

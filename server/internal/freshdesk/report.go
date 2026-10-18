@@ -90,6 +90,34 @@ type AttachmentCount struct {
 	ChecksumMismatches []string `json:"checksum_mismatches"`
 }
 
+// InlineImageCount counts images in message HTML that Freshdesk hosts. Their size is unknown until they
+// are downloaded, so there is no source byte total; Source is the number of distinct images found.
+// Recoverable is the count a run is judged on: images Freshdesk still had, not the ones it removed.
+func (c InlineImageCount) Recoverable() EntityCount {
+	count := c.EntityCount
+	count.Source -= c.Gone
+	return count
+}
+
+type InlineImageCount struct {
+	EntityCount
+	// Gone counts images Freshdesk no longer has (HTTP 404 or 410). They are not recoverable, so they
+	// are listed in GoneImages and are not failures; Source includes them.
+	Gone               int         `json:"gone"`
+	GoneImages         []GoneImage `json:"gone_images"`
+	ImportedBytes      int64       `json:"imported_bytes"`
+	ChecksumVerified   int         `json:"checksum_verified"`
+	ChecksumMismatches []string    `json:"checksum_mismatches"`
+}
+
+// GoneImage is an image Freshdesk answered 404 or 410 for. Its original link stays in the message HTML.
+type GoneImage struct {
+	TicketID string `json:"ticket_id"`
+	// Message names the message that shows the image: "description" or "reply <id>".
+	Message string `json:"message"`
+	Detail  string `json:"detail"`
+}
+
 type CompanyCount struct {
 	Source     int      `json:"source"`
 	Attached   int      `json:"attached_to_contacts"`
@@ -118,27 +146,28 @@ type Warning struct {
 // Report is the reconcile report of one import run: source counts versus
 // what Colliedesk holds, so a customer can prove nothing was lost.
 type Report struct {
-	Status       string          `json:"status"`
-	Domain       string          `json:"domain"`
-	Workspace    string          `json:"workspace"`
-	DryRun       bool            `json:"dry_run"`
-	Since        *time.Time      `json:"since"`
-	StartedAt    time.Time       `json:"started_at"`
-	FinishedAt   time.Time       `json:"finished_at"`
-	Contacts     EntityCount     `json:"contacts"`
-	Companies    CompanyCount    `json:"companies"`
-	Agents       AgentCount      `json:"agents"`
-	Tickets      TicketCount     `json:"tickets"`
-	Messages     EntityCount     `json:"messages"`
-	Attachments  AttachmentCount `json:"attachments"`
-	TimeEntries  EntityCount     `json:"time_entries"`
-	SavedReplies SavedReplyCount `json:"saved_replies"`
-	Verification Verifications   `json:"verification"`
-	RateLimit    RateLimitStats  `json:"rate_limit"`
-	Missing      []string        `json:"missing"`
-	Failures     []Failure       `json:"failures"`
-	Warnings     []Warning       `json:"warnings"`
-	NotImported  []string        `json:"not_imported"`
+	Status       string           `json:"status"`
+	Domain       string           `json:"domain"`
+	Workspace    string           `json:"workspace"`
+	DryRun       bool             `json:"dry_run"`
+	Since        *time.Time       `json:"since"`
+	StartedAt    time.Time        `json:"started_at"`
+	FinishedAt   time.Time        `json:"finished_at"`
+	Contacts     EntityCount      `json:"contacts"`
+	Companies    CompanyCount     `json:"companies"`
+	Agents       AgentCount       `json:"agents"`
+	Tickets      TicketCount      `json:"tickets"`
+	Messages     EntityCount      `json:"messages"`
+	Attachments  AttachmentCount  `json:"attachments"`
+	InlineImages InlineImageCount `json:"inline_images"`
+	TimeEntries  EntityCount      `json:"time_entries"`
+	SavedReplies SavedReplyCount  `json:"saved_replies"`
+	Verification Verifications    `json:"verification"`
+	RateLimit    RateLimitStats   `json:"rate_limit"`
+	Missing      []string         `json:"missing"`
+	Failures     []Failure        `json:"failures"`
+	Warnings     []Warning        `json:"warnings"`
+	NotImported  []string         `json:"not_imported"`
 	// TrialExtendedTo is the new trial end when this run extended the workspace's trial.
 	TrialExtendedTo *time.Time `json:"trial_extended_to,omitempty"`
 	// TrialExtensionError is set when the import finished but the trial could not be extended;
@@ -172,7 +201,7 @@ var notImported = []string{
 	"Satisfaction ratings, SLA policies, automations",
 	"Files attached to canned responses (saved replies hold text only; the report lists the canned responses that had files)",
 	"Solution (knowledge base) articles",
-	"Inline images inside message HTML stay links to Freshdesk; the original HTML is kept (see warnings)",
+	"Images in message HTML that are not hosted by Freshdesk (other sites, tracking pixels) stay links; the original HTML is kept",
 	"Tickets in Freshdesk Trash or Spam (listed by id in this report)",
 	"Time entries of archived tickets (the Freshdesk API documents no endpoint for them)",
 	"A re-run takes subject, status, priority and assignee from Freshdesk again and only adds tags; tags removed in Freshdesk stay",

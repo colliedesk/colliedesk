@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -24,7 +25,7 @@ func (r *run) reconcile(ctx context.Context, report *Report) (*Report, error) {
 	report.Tickets.HighestID, report.Tickets.HighestProbedID, report.Tickets.ProbedIDs = r.highestExisting, r.highestProbed, r.probed
 	report.Verification = r.verification
 	report.RateLimit = r.client.rateLimitStats()
-	steps := []func(context.Context, *Report, []string, []string) error{r.countTickets, r.countChildren, r.collectFailures, r.countSavedReplies}
+	steps := []func(context.Context, *Report, []string, []string) error{r.countTickets, r.countChildren, r.collectFailures, r.collectGoneImages, r.countSavedReplies}
 	if !r.opts.DryRun {
 		// Verify first: a damaged file turns its ledger rows back to failed.
 		steps = append([]func(context.Context, *Report, []string, []string) error{r.verifyAttachments}, steps...)
@@ -113,6 +114,7 @@ func (r *run) countTickets(ctx context.Context, report *Report, ticketIDs, conta
 			report.Messages.Source += meta.Messages
 			report.Attachments.Source += meta.Attachments
 			report.Attachments.SourceBytes += meta.AttachmentBytes
+			report.InlineImages.Source += meta.InlineImages
 			report.TimeEntries.Source += meta.TimeEntries
 		}
 		addStatus(target, status)
@@ -139,7 +141,7 @@ func (r *run) countChildren(ctx context.Context, report *Report, ticketIDs, _ []
 			return fmt.Errorf("reconcile items: %w", err)
 		}
 		target := map[string]*EntityCount{entityDescription: &report.Messages, entityMessage: &report.Messages,
-			entityAttachment: &report.Attachments.EntityCount, entityTimeEntry: &report.TimeEntries}[entity]
+			entityAttachment: &report.Attachments.EntityCount, entityInlineImage: &report.InlineImages.EntityCount, entityTimeEntry: &report.TimeEntries}[entity]
 		for range count {
 			addStatus(target, status)
 		}
@@ -190,7 +192,7 @@ func missing(report *Report) []string {
 		name  string
 		count EntityCount
 	}{{"contacts", report.Contacts}, {"tickets", report.Tickets.EntityCount}, {"messages", report.Messages},
-		{"attachments", report.Attachments.EntityCount}, {"time entries", report.TimeEntries}, {"saved replies", report.SavedReplies.EntityCount}} {
+		{"attachments", report.Attachments.EntityCount}, {"inline images", report.InlineImages.Recoverable()}, {"time entries", report.TimeEntries}, {"saved replies", report.SavedReplies.EntityCount}} {
 		if !report.DryRun && row.count.Imported < row.count.Source {
 			out = append(out, fmt.Sprintf("%s: %d of %d not imported", row.name, row.count.Source-row.count.Imported, row.count.Source))
 		}
@@ -200,6 +202,9 @@ func missing(report *Report) []string {
 	}
 	if n := len(report.Attachments.ChecksumMismatches); n > 0 {
 		out = append(out, fmt.Sprintf("attachments: %d stored files no longer match their recorded SHA-256", n))
+	}
+	if n := len(report.InlineImages.ChecksumMismatches); n > 0 {
+		out = append(out, fmt.Sprintf("inline images: %d stored files no longer match their recorded SHA-256", n))
 	}
 	return out
 }
@@ -245,4 +250,40 @@ func (r *run) countSavedReplies(ctx context.Context, report *Report, _, _ []stri
 		}
 	}
 	return rows.Err()
+}
+
+// collectGoneImages lists the images Freshdesk answered 404 or 410 for. They are not failures: the
+// file no longer exists, so a rerun cannot bring it over. The message keeps its Freshdesk link.
+func (r *run) collectGoneImages(ctx context.Context, report *Report, ticketIDs, _ []string) error {
+	tx, err := r.begin(ctx)
+	if err != nil {
+		return fmt.Errorf("reconcile gone images: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // read only
+	rows, err := tx.Query(ctx, `SELECT source_id,parent_source_id,error FROM import_items
+		WHERE workspace_id=$1 AND source=$2 AND entity=$3 AND status='skipped' AND parent_source_id=ANY($4)
+		ORDER BY length(parent_source_id),parent_source_id,source_id`, r.workspaceID, r.ledger.source, entityInlineImage, ticketIDs)
+	if err != nil {
+		return fmt.Errorf("reconcile gone images: %w", err)
+	}
+	defer rows.Close()
+	report.InlineImages.GoneImages = []GoneImage{}
+	for rows.Next() {
+		var id, ticket, detail string
+		if err := rows.Scan(&id, &ticket, &detail); err != nil {
+			return fmt.Errorf("reconcile gone images: %w", err)
+		}
+		report.InlineImages.GoneImages = append(report.InlineImages.GoneImages, GoneImage{TicketID: ticket, Message: goneMessageLabel(id), Detail: detail})
+	}
+	report.InlineImages.Gone = len(report.InlineImages.GoneImages)
+	return rows.Err()
+}
+
+// goneMessageLabel turns an inline image ledger id (<entity>:<message id>:<key>) into "description" or "reply <id>".
+func goneMessageLabel(id string) string {
+	parts := strings.SplitN(id, ":", 3)
+	if len(parts) == 3 && parts[0] == entityMessage {
+		return "reply " + parts[1]
+	}
+	return "description"
 }

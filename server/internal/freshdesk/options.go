@@ -52,8 +52,10 @@ type Options struct {
 
 // testHooks are set only by tests (export_test.go).
 type testHooks struct {
-	rootCAs                 *x509.CertPool
-	allowDial               map[string]bool
+	rootCAs   *x509.CertPool
+	allowDial map[string]bool
+	// imageHosts are hosts (host:port) the fake servers answer on; the importer treats them as Freshdesk-hosted.
+	imageHosts              map[string]bool
 	apiTimeout, idleTimeout time.Duration
 	probeAhead              int
 }

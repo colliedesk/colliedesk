@@ -183,7 +183,8 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   writes nothing. A storage error rolls back the message, contact and conversation and returns
   500, so the forwarder retries.
 - **Inline images become `data:` URIs** in `body_html` (5 MiB budget per message). The sandboxed
-  original allows only `data:` images, so nothing is fetched from the network.
+  original allows only `data:` images, so nothing is fetched from the network. The Freshdesk importer
+  uses the same representation for images Freshdesk hosts (`freshdesk-import.md`, Inline images).
 - **Limits before storage:** 25 MiB request body, 100 files; both are 413. A trial or locked workspace
   also has a 2 GiB attachment cap: mail that would pass it is 403 `storage_limit_reached` (a permanent
   failure like `mailbox_closed`; see `billing.md`, Storage cap).

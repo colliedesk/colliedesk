@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Invite, Session } from '../../api/schemas';
 import { messages } from '../../messages';
+import { DisplayNameField } from './display-name-field';
 import { InvitesSection } from './invites-section';
 import { PreferencesSection } from './preferences-section';
 import type { SaveState } from './save-feedback';
@@ -16,6 +17,11 @@ interface SettingsPageProps {
   canManageWorkspace?: boolean;
   workspaceTimezone?: string;
   timezoneOverride?: string | null;
+  // email and displayName are the person signed in; an empty name shows the email.
+  email?: string;
+  displayName?: string;
+  onSetDisplayName?: (name: string) => void;
+  displayNameSave?: SaveState;
   createdInviteUrl?: string;
   onCreateInvite?: (email: string, role: 'admin' | 'agent') => void;
   onRevokeSession?: (id: string) => void;
@@ -44,7 +50,7 @@ interface SettingsPageProps {
 // workspace shares. A section nav jumps to each; it lists only the sections this person can see,
 // plus Plan and billing (its own page) for admins of a billed workspace.
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
-  workspaceTimezone = 'UTC', timezoneOverride = null, createdInviteUrl, onCreateInvite, onRevokeInvite,
+  workspaceTimezone = 'UTC', timezoneOverride = null, email, displayName = '', onSetDisplayName, displayNameSave, createdInviteUrl, onCreateInvite, onRevokeInvite,
   onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, emailSection, savedRepliesSection, webFormSection, exportSection, showBilling = false }: SettingsPageProps) {
   return (
     <main className="settings-page panel">
@@ -58,6 +64,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
           <section className="settings-card" aria-labelledby="profile-heading">
             <div className="section-heading"><h2 id="profile-heading">{messages.profile}</h2><p>{messages.profileDescription}</p></div>
             <div className="settings-body">
+              <DisplayNameField value={displayName} email={email} save={displayNameSave} onSave={onSetDisplayName} />
               <TimezoneSelect label={messages.yourTimezone} value={timezoneOverride ?? ''} emptyOption={messages.sameAsWorkspace(workspaceTimezone)}
                 save={personalTimezoneSave} onChange={(value) => onSetAgentTimezone?.(value || null)} />
             </div>
