@@ -7,7 +7,7 @@ CREATE TABLE mail_image_cache (
     -- SHA-256 (hex) of the original URL.
     url_hash text NOT NULL CHECK (url_hash ~ '^[0-9a-f]{64}$'),
     storage_key text NOT NULL,
-    content_type text NOT NULL CHECK (content_type IN ('image/png', 'image/jpeg', 'image/gif', 'image/webp')),
+    content_type text NOT NULL CHECK (content_type IN ('image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml')),
     size bigint NOT NULL CHECK (size > 0),
     fetched_at timestamptz NOT NULL DEFAULT now(),
     -- When a person last saw the image (kept to the day). The periodic sweep evicts the least recently

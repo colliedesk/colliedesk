@@ -25,8 +25,8 @@ const (
 )
 
 var (
-	// ErrNotImage means the bytes are not a PNG, JPEG, GIF or WebP image (SVG included).
-	ErrNotImage = errors.New("the response is not a PNG, JPEG, GIF or WebP image")
+	// ErrNotImage means the bytes are not a PNG, JPEG, GIF, WebP or SVG image.
+	ErrNotImage = errors.New("the response is not a PNG, JPEG, GIF, WebP or SVG image")
 	// ErrTooLarge means the image is over the size cap.
 	ErrTooLarge = errors.New("the image is over the size limit")
 )
@@ -63,7 +63,7 @@ type Options struct {
 	AllowAddresses map[string]bool
 }
 
-// Image is a fetched raster image. ContentType comes from its bytes, never from the source's header.
+// Image is a fetched image. ContentType comes from its bytes, never from the source's header.
 type Image struct {
 	Data        []byte
 	ContentType string
@@ -144,7 +144,7 @@ func (f *Fetcher) Fetch(ctx context.Context, rawURL string) (Image, error) {
 	case int64(len(data)) > f.maxBytes:
 		return Image{}, ErrTooLarge
 	}
-	contentType := SniffRaster(data)
+	contentType := SniffImage(data)
 	if contentType == "" {
 		return Image{}, ErrNotImage
 	}

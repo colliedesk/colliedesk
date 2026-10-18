@@ -724,7 +724,7 @@ paths:
         (the original URL) and `s` (an HMAC over the workspace and the URL). Only signed addresses are
         served. The server refuses private, loopback, link-local, CGNAT, multicast and metadata
         addresses (also after DNS and on every redirect, at most 3), serves only PNG, JPEG, GIF and
-        WebP (checked from the bytes; SVG is refused), caps an image at 5 MiB, and keeps a fetched
+        WebP, or an SVG document (checked from the bytes; an SVG is served with a sandboxing Content-Security-Policy and only ever shown through img), caps an image at 5 MiB, and keeps a fetched
         image per workspace so a second view does not call the source again. An agent token cannot
         use it; it reads the original HTML.
       parameters:
@@ -740,6 +740,7 @@ paths:
             image/jpeg: {schema: {type: string, format: binary}}
             image/gif: {schema: {type: string, format: binary}}
             image/webp: {schema: {type: string, format: binary}}
+            image/svg+xml: {schema: {type: string, format: binary}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403':
           description: The signature is wrong, or the address is private or internal.
@@ -752,7 +753,7 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
         '415':
-          description: The response is not a PNG, JPEG, GIF or WebP image.
+          description: The response is not a PNG, JPEG, GIF, WebP or SVG image.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
@@ -2524,10 +2525,12 @@ components:
         external_id: {type: string}
         kind:
           type: string
-          enum: [description, reply, incoming, private_note, public_note, forward, forwarded_email, other]
+          enum: [description, reply, incoming, automated_response, private_note, public_note, forward, forwarded_email, other]
           description: >-
             How the source system classified the item. public_note was visible to the customer there;
-            forward went to a third party, not to the customer.
+            forward went to a third party, not to the customer; automated_response is an automatic reply
+            from the customer side (an out-of-office or a messenger acknowledgement) that the source
+            flagged, which the timeline folds into one line.
         from: {type: [string, 'null']}
         to: {type: array, items: {type: string}}
         cc: {type: array, items: {type: string}}

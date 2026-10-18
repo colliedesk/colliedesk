@@ -3,6 +3,8 @@
 package mailimage
 
 import (
+	"bytes"
+	"encoding/xml"
 	"errors"
 	"io"
 	"net/http"
@@ -69,6 +71,56 @@ func ParseSrc(src string) (*url.URL, bool) {
 		return nil, false
 	}
 	return u, true
+}
+
+// SVGType is the media type the proxy serves for a vector image.
+const SVGType = "image/svg+xml"
+
+const svgNamespace = "http://www.w3.org/2000/svg"
+
+// SniffImage returns the media type of an image the proxy may serve: a raster (see SniffRaster) or an SVG
+// document, or "". An SVG is accepted only when the whole body parses as XML whose root element is svg in the
+// SVG namespace; a script inside it is harmless in an <img>, which the proxy's headers and the email frame
+// both rely on (nothing may embed it as a document).
+func SniffImage(data []byte) string {
+	if raster := SniffRaster(data); raster != "" {
+		return raster
+	}
+	if isSVG(data) {
+		return SVGType
+	}
+	return ""
+}
+
+func isSVG(data []byte) bool {
+	decoder := xml.NewDecoder(bytes.NewReader(bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))))
+	decoder.Strict = true
+	root, depth := false, 0
+	for {
+		token, err := decoder.Token()
+		if errors.Is(err, io.EOF) {
+			return root && depth == 0
+		}
+		if err != nil {
+			return false
+		}
+		switch element := token.(type) {
+		case xml.StartElement:
+			if depth == 0 {
+				if root || element.Name.Local != "svg" || element.Name.Space != svgNamespace {
+					return false
+				}
+				root = true
+			}
+			depth++
+		case xml.EndElement:
+			depth--
+		case xml.CharData:
+			if depth == 0 && len(bytes.TrimSpace(element)) > 0 {
+				return false
+			}
+		}
+	}
 }
 
 // SniffRaster returns the raster media type (PNG, JPEG, GIF or WebP) of the first bytes of data, or

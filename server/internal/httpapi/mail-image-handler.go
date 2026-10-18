@@ -154,7 +154,14 @@ func writeMailImage(response http.ResponseWriter, contentType string, size int64
 	header.Set("Content-Length", strconv.FormatInt(size, 10))
 	header.Set("X-Content-Type-Options", "nosniff")
 	// Nothing the image holds may run or load, even if a browser opened it as a page.
-	header.Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	if contentType == mailimage.SVGType {
+		// An SVG opened as a page could run script and load things; these headers make that inert. It is only
+		// ever shown through <img>, where it cannot do either.
+		header.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+		header.Set("Content-Disposition", "inline; filename=image.svg")
+	} else {
+		header.Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	}
 	// Private: the address works only with a session. Immutable: the signed address never changes meaning.
 	header.Set("Cache-Control", "private, max-age="+strconv.Itoa(int(MailImageLifetime/time.Second))+", immutable")
 	response.WriteHeader(http.StatusOK)
@@ -168,7 +175,7 @@ func writeMailImageError(response http.ResponseWriter, err error) {
 	case errors.Is(err, netguard.ErrBlockedAddress), errors.Is(err, mailimage.ErrPortRefused):
 		writeError(response, http.StatusForbidden, "address_refused", "This image is on a private or internal address, or not on a web port.")
 	case errors.Is(err, mailimage.ErrNotImage):
-		writeError(response, http.StatusUnsupportedMediaType, "not_an_image", "Only PNG, JPEG, GIF and WebP images are shown.")
+		writeError(response, http.StatusUnsupportedMediaType, "not_an_image", "Only PNG, JPEG, GIF, WebP and SVG images are shown.")
 	case errors.Is(err, mailimage.ErrTooLarge):
 		writeError(response, http.StatusRequestEntityTooLarge, "image_too_large", "This image is over the size limit.")
 	default:

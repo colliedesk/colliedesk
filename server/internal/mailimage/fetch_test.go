@@ -50,7 +50,12 @@ func TestFetchServesRasterImagesAndFixesTheirType(t *testing.T) {
 }
 
 func TestFetchRefusesWhatIsNotARasterImage(t *testing.T) {
-	cases := map[string][]byte{"svg": svgBytes, "html": []byte("<html><body>hi</body></html>"), "empty": nil, "text": []byte("just text")}
+	cases := map[string][]byte{"html": []byte("<html><body>hi</body></html>"), "empty": nil, "text": []byte("just text"),
+		"rss":              []byte(`<?xml version="1.0"?><rss version="2.0"><channel/></rss>`),
+		"svg no namespace": []byte(`<svg width="1" height="1"><path d="M0 0"/></svg>`),
+		"svg cut short":    []byte(`<svg xmlns="http://www.w3.org/2000/svg"><g><path d="M0 0"/>`),
+		"svg then junk":    []byte(`<svg xmlns="http://www.w3.org/2000/svg"></svg><<<`),
+		"svg in html":      []byte(`<html><svg xmlns="http://www.w3.org/2000/svg"></svg></html>`)}
 	for name, body := range cases {
 		srv, _, fetcher := serve(t, func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "image/png") // declared as an image, bytes say otherwise
@@ -58,6 +63,26 @@ func TestFetchRefusesWhatIsNotARasterImage(t *testing.T) {
 		})
 		if _, err := fetcher.Fetch(context.Background(), srv.URL+"/a"); !errors.Is(err, mailimage.ErrNotImage) {
 			t.Errorf("%s: got %v, want ErrNotImage", name, err)
+		}
+	}
+}
+
+// Vector logos (messengers' icons, brand marks) are common in mail and Freshdesk shows them. An SVG shown by
+// <img> runs no script and loads nothing, so it is allowed when the bytes really are an SVG document.
+func TestFetchAcceptsAnSVGDocumentAndFixesItsType(t *testing.T) {
+	documents := map[string][]byte{
+		"plain":         []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><path d="M0 0h24v24H0z"/></svg>`),
+		"prolog":        []byte("\xef\xbb\xbf<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- icon -->\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\">\n<svg xmlns=\"http://www.w3.org/2000/svg\"><g/></svg>\n"),
+		"with a script": svgBytes, // harmless in <img>; the proxy's own headers cover opening it directly
+	}
+	for name, body := range documents {
+		srv, _, fetcher := serve(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain")
+			w.Write(body)
+		})
+		image, err := fetcher.Fetch(context.Background(), srv.URL+"/logo.svg")
+		if err != nil || image.ContentType != "image/svg+xml" || len(image.Data) != len(body) {
+			t.Errorf("%s: got %q, %d bytes, %v", name, image.ContentType, len(image.Data), err)
 		}
 	}
 }

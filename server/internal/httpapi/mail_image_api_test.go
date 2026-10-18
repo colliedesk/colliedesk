@@ -283,7 +283,7 @@ func TestMailImageProxyServesRasterImagesOnly(t *testing.T) {
 	cases := map[string]struct {
 		body   []byte
 		status int
-	}{"svg": {tinySVG, http.StatusUnsupportedMediaType}, "html": {[]byte("<html>no</html>"), http.StatusUnsupportedMediaType}, "oversize": {big, http.StatusRequestEntityTooLarge}}
+	}{"svg that is not svg": {[]byte("<svg>no namespace</svg>"), http.StatusUnsupportedMediaType}, "html": {[]byte("<html>no</html>"), http.StatusUnsupportedMediaType}, "oversize": {big, http.StatusRequestEntityTooLarge}}
 	for name, tc := range cases {
 		host := newImageHost(t, serveBytes("image/png", tc.body))
 		options := allowing(host)
@@ -297,6 +297,38 @@ func TestMailImageProxyServesRasterImagesOnly(t *testing.T) {
 		if strings.HasPrefix(response.Header().Get("Content-Type"), "image/") {
 			t.Errorf("%s: served as %s", name, response.Header().Get("Content-Type"))
 		}
+	}
+}
+
+// Someone may open a proxy address by itself. An SVG there must run nothing: the headers say so.
+func TestProxiedSVGOpenedDirectlyRunsNoScript(t *testing.T) {
+	host := newImageHost(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html") // the source's label means nothing
+		w.Write(tinySVG)
+	})
+	api, admin, secret, _ := proxyDesk(t, allowing(host))
+	paths := proxyPaths(t, api, admin, secret, `<img src="`+host.URL+`/logo.svg">`)
+	for view, name := range []string{"fetched", "served from the cache"} {
+		response := request(t, api, http.MethodGet, paths[0], nil, admin, nil)
+		if response.Code != http.StatusOK || response.Body.String() != string(tinySVG) {
+			t.Fatalf("%s: status=%d", name, response.Code)
+		}
+		header := response.Header()
+		want := map[string]string{
+			"Content-Type":            "image/svg+xml",
+			"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+			"X-Content-Type-Options":  "nosniff",
+			"Content-Disposition":     "inline; filename=image.svg",
+		}
+		for key, value := range want {
+			if header.Get(key) != value {
+				t.Errorf("%s: %s = %q, want %q", name, key, header.Get(key), value)
+			}
+		}
+		_ = view
+	}
+	if host.hits.Load() != 1 {
+		t.Fatalf("the source was called %d times", host.hits.Load())
 	}
 }
 
