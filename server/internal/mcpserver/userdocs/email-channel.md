@@ -284,13 +284,22 @@ replies it sent in those 7 days** (3 on 1,000 replies is exactly 0.3% and does n
 
 ## What you see in the inbox
 
-- Incoming messages show the sender address and are shown as plain text: no remote images load,
-  and only web addresses written in the text become links.
+- Incoming messages show the sender address. A message with an HTML version is shown formatted,
+  inline in the conversation, as tall as the mail (no scrolling inside the message), with tables, bold
+  text and images. Mail wider than the column is scaled down to fit. **Show plain text** switches to the
+  plain version; **Show formatted email** switches back. A message with no HTML is shown as plain text,
+  where only web addresses written in the text become links.
+- The formatted view is locked: no scripts run, forms do nothing, and the mail cannot send you away
+  from Colliedesk. Links open in a new tab. Quoted earlier mail under a reply is folded behind a
+  **•••** button; select it to read the quote.
+- Remote images (logos, charts, banners) are shown, but your browser never contacts the sender:
+  Colliedesk fetches each image once on its server, keeps a copy, and serves it to you. The sender sees
+  the server, not your address, and cannot tell when you opened the mail. Only PNG, JPEG, GIF and WebP
+  images up to 5 MiB are shown; an SVG or a private or internal address is not.
 - Attachments are listed under the message, including the files you sent with a reply; select a
-  file name to download it. **Show original**
-  opens the HTML version in a locked frame; inline images in it come from the stored message,
-  never from the internet. **Download original email** gives the complete message as received
-  (`.eml.gz`), so nothing is lost even if a part could not be shown.
+  file name to download it. An image that the formatted view already shows inline is not listed
+  again; it returns to the list in the plain-text view. **Download original email** gives the
+  complete message as received (`.eml.gz`), so nothing is lost even if a part could not be shown.
 - **Failed sender verification**: the trusted receiving server reported an SPF, DKIM, or DMARC
   failure. Treat the message as possibly forged.
 - **Sender not verified**: no trusted verification result was present.

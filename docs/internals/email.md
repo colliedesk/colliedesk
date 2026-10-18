@@ -170,8 +170,35 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
 - **Third-party senders in a thread.** A known Message-ID or reply token threads regardless of
   sender (CC'd colleagues). The message shows its sender; replies go only to the conversation
   contact. With an untrusted verdict the message shows **Sender not verified**.
-- **Customer email renders as plain text.** No Markdown, no remote images, links only for visible
-  http(s) URLs with `rel="noopener noreferrer nofollow"`. Agent replies and notes keep Markdown.
+- **Customer email renders as HTML when it has one**, in `web/src/features/inbox/email-frame.tsx`: a
+  `srcdoc` iframe with `sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"`, never
+  `allow-scripts`, `allow-forms` or any top navigation. `allow-same-origin` exists only so the parent can
+  measure the content (`fit-frame.ts`, ResizeObserver; the frame is as tall as the mail and scales wide
+  fixed layouts down). It is safe because nothing in the frame can run: the sandbox has no scripts and the
+  document CSP says `script-src 'none'`. A ResizeObserver in the parent is the only moving part; do not add
+  `allow-scripts` for sizing. `email-html.ts` strips `meta`, `base`, `link`, `script`, forms, frames,
+  `on*` and every URL attribute except `<a href>` (http, https, mailto, tel; opened with
+  `target=_blank rel="noopener noreferrer"`) and `<img src>` (`data:image/` or the proxy path).
+  CSP: `default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data: <app origin>`.
+  Quoted history (`blockquote`, `.gmail_quote`, `.yahoo_quoted`) under a reply folds into
+  `<details class="quoted-history">`. Plain text stays the fallback and a toggle: no Markdown, links only
+  for visible http(s) URLs; `tidyPlainText` collapses whitespace-only line runs.
+  Agent replies and notes keep Markdown.
+- **Remote images go through a signed proxy** (`GET /api/v1/mail-image?u=<url>&s=<hmac>`,
+  `server/internal/httpapi/mail-image-handler.go`, `server/internal/mailimage`). `GET .../messages`
+  rewrites every remote `<img src>` in `body_html` for a person's session and drops `srcset`; an agent
+  token gets the HTML as stored (the route is PersonOnly for tokens). The HMAC covers workspace id and
+  URL with a per-process random key, so the route is not an open relay and a link is useless in another
+  workspace; after a restart open tabs reload their messages. The fetch (`mailimage.Fetcher`) dials only
+  public addresses: `netguard.Control` runs on every connection, so DNS rebinding and each of the at most 3
+  redirects are covered (loopback, private, link-local incl. 169.254.169.254, CGNAT, multicast,
+  unspecified, fd00:ec2::254, NAT64/6to4/Teredo). It sends no cookies, credentials or Referer and a neutral
+  User-Agent, accepts only PNG/JPEG/GIF/WebP by sniffing the bytes (SVG refused), caps an image at 5 MiB and
+  10 s, and at most 8 fetches run at once (503 `Retry-After` beyond). A fetched image is written to
+  `attachments.Storage` and indexed per workspace in `mail_image_cache` (30 days, then fetched again; a
+  stale copy is served when the source is gone). The timeline never waits for an image: the text renders
+  first and each image loads by itself. The dial guard is shared with the Freshdesk importer.
+  Cached bytes are not counted against the plan storage cap and are not exported (derived data).
 
 ## Files and the raw message
 

@@ -14,7 +14,7 @@ function policy(origin: string): string {
 // Ours comes first so the mail's own styles win: a sans-serif base only fills in what the mail leaves open.
 // Wide mail is made to fit by max-width here and, when a fixed layout still overflows, by fit-frame.ts.
 const baseStyle = 'html{-webkit-text-size-adjust:100%}'
-  + 'body{margin:0;padding:0;background:#fff;color:#222;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:14px;line-height:1.5;overflow-wrap:break-word}'
+  + 'body{margin:0;padding:10px 12px;background:#fff;color:#222;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:14px;line-height:1.5;overflow-wrap:break-word}'
   + 'img{max-width:100%;height:auto}table{max-width:100%}pre{white-space:pre-wrap}'
   + 'summary{display:inline-block;cursor:pointer;list-style:none;padding:0 8px;border-radius:10px;background:#e8eaed;color:#555;font-size:12px;line-height:16px;letter-spacing:1px}'
   + 'summary::-webkit-details-marker{display:none}details.quoted-history[open]>summary{margin-bottom:6px}'
