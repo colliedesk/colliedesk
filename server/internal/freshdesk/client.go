@@ -109,19 +109,20 @@ func listAll[T any](ctx context.Context, c *client, target string, each func(T) 
 }
 
 // download opens an attachment URL. The body fails when no bytes arrive for
-// the idle timeout; the caller must close it.
-func (c *client) download(ctx context.Context, target string) (io.ReadCloser, int64, error) {
+// the idle timeout; the caller must close it. It also returns the announced
+// length (-1 when unknown) and the Content-Type header.
+func (c *client) download(ctx context.Context, target string) (io.ReadCloser, int64, string, error) {
 	parsed, err := url.Parse(target)
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
-		return nil, 0, errors.New("attachment URL is not an HTTPS URL")
+		return nil, 0, "", errors.New("attachment URL is not an HTTPS URL")
 	}
 	downloadCtx, cancel := context.WithCancel(ctx)
 	response, err := c.do(downloadCtx, target, false)
 	if err != nil {
 		cancel()
-		return nil, 0, err
+		return nil, 0, "", err
 	}
-	return newIdleBody(response.Body, cancel, c.idle), response.ContentLength, nil
+	return newIdleBody(response.Body, cancel, c.idle), response.ContentLength, response.Header.Get("Content-Type"), nil
 }
 
 func (c *client) do(ctx context.Context, target string, apiCall bool) (*http.Response, error) {

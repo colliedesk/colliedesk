@@ -39,11 +39,13 @@ func (r *Report) Markdown() string {
 	for _, row := range []struct {
 		name  string
 		count EntityCount
-	}{{"Contacts", r.Contacts}, {"Tickets", r.Tickets.EntityCount}, {"Messages", r.Messages}, {"Attachments", r.Attachments.EntityCount}, {"Time entries", r.TimeEntries}, {"Saved replies", r.SavedReplies.EntityCount}} {
+	}{{"Contacts", r.Contacts}, {"Tickets", r.Tickets.EntityCount}, {"Messages", r.Messages}, {"Attachments", r.Attachments.EntityCount}, {"Inline images", r.InlineImages.EntityCount}, {"Time entries", r.TimeEntries}, {"Saved replies", r.SavedReplies.EntityCount}} {
 		fmt.Fprintf(&b, "| %s | %d | %d | %d |\n", row.name, row.count.Source, row.count.Imported, row.count.Failed)
 	}
 	fmt.Fprintf(&b, "\nAttachment bytes: %d in Freshdesk, %d stored. SHA-256 re-verified from storage: %d.\n",
 		r.Attachments.SourceBytes, r.Attachments.ImportedBytes, r.Attachments.ChecksumVerified)
+	fmt.Fprintf(&b, "Inline image bytes: %d stored. SHA-256 re-verified from storage: %d.\n",
+		r.InlineImages.ImportedBytes, r.InlineImages.ChecksumVerified)
 	fmt.Fprintf(&b, "Companies: %d, %d kept as contact organization. Agents: %d, %d matched to Colliedesk agents by email.\n",
 		r.Companies.Source, r.Companies.Attached, r.Agents.Source, r.Agents.Matched)
 	absentLabel := "Ticket ids that do not exist in Freshdesk"

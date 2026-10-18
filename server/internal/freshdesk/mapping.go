@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -14,8 +13,6 @@ import (
 const sourceOutboundEmail = 10
 
 const emptyBody = "_(This message has no text. It was imported from Freshdesk.)_"
-
-var inlineImage = regexp.MustCompile(`(?i)<img[^>]+src=["'][^"']*freshdesk`)
 
 // mapStatus maps Freshdesk's built-in statuses; custom statuses become pending.
 func mapStatus(status int) (string, bool) {

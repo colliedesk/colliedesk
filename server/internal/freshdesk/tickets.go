@@ -68,12 +68,12 @@ func (r *run) importTicket(ctx context.Context, ref ticketRef) error {
 	refresh := r.refresher(ref)
 	failed := r.importMessage(ctx, key, conversationID, entityDescription, key, r.descriptionMessage(ticket), ticket.Attachments, refresh)
 	countFiles(&meta, ticket.Attachments)
-	r.scanInlineImages(key, ticket.Description)
+	meta.InlineImages += len(r.inlineImages(ticket.Description))
 	for _, conversation := range conversations {
 		id := strconv.FormatInt(conversation.ID, 10)
 		failed += r.importMessage(ctx, key, conversationID, entityMessage, id, r.conversationMessage(conversation), conversation.Attachments, refresh)
 		countFiles(&meta, conversation.Attachments)
-		r.scanInlineImages(key, conversation.Body)
+		meta.InlineImages += len(r.inlineImages(conversation.Body))
 	}
 	for _, timeEntry := range entries {
 		failed += r.importTimeEntry(ctx, key, conversationID, timeEntry)
@@ -156,12 +156,6 @@ func countFiles(meta *ticketMeta, files []fdAttachment) {
 	for _, file := range files {
 		meta.Attachments++
 		meta.AttachmentBytes += file.reportedSize()
-	}
-}
-
-func (r *run) scanInlineImages(ticketKey, html string) {
-	if inlineImage.MatchString(html) {
-		r.warn("inline_images_not_rehosted", "Message HTML shows images hosted by Freshdesk. They stay links and break when the Freshdesk account closes; the original HTML is kept.", ticketKey)
 	}
 }
 

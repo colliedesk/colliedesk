@@ -65,7 +65,7 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
   by id, and subject, status, priority, assignee, `origin` and `updated_at` are overwritten. Tags
   are only added. `ticketMeta` keeps source counts so a skipped ticket still counts in the report.
 - **A partial import is FAILED.** Any failed ledger row, any count where Colliedesk holds fewer
-  items than Freshdesk, a byte total that differs, or a stored file whose SHA-256 no longer matches.
+  items than Freshdesk, a byte total that differs, or a stored file (attachment or inline image) whose SHA-256 no longer matches, or an inline image that could not be brought over.
 - **Stored files are re-verified every run.** A missing or changed file turns its attachment and
   ticket back to `failed`; the next run downloads it into the same attachment row.
 - **Downloads are bounded.** `Put` takes the expected size and rejects any other length before the
@@ -83,6 +83,38 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
 - **Bodies.** `body_text` becomes the Markdown body. The original HTML is stored in
   `messages.body_html` and returned by the API; the UI shows it only in an `iframe sandbox=""` whose
   CSP is `default-src 'none'` (no scripts, no network, so no tracking pixels either).
+- **Inline images** (ledger entity `inline_image`). An `<img src>` in a message HTML that Freshdesk
+  hosts is downloaded, stored through `attachments.Storage` (SHA-256, content-addressed) as an
+  `attachments` row on the message, and the stored `body_html` gets a `data:` URI in its place.
+  Why `data:`: the locked frame is `sandbox=""` with `img-src data:` and no network, so a URL to our
+  API would not load there (no origin, no session cookie), and relaxing the CSP would let every
+  stored original load remote content. It is the email channel's representation (`email.inlineImages`,
+  `email.md`). The attachment row is the stored copy: it gives the file a SHA-256, re-verification,
+  the storage cap and undo for free, and shows in the message's file list. It is not counted in
+  `Attachments`, which compare with Freshdesk's own attachment totals.
+  - *Hosts.* Fetched: the account host, `*.freshdesk.com`, and Freshdesk's public asset bucket
+    (`s3*.amazonaws.com/cdn.freshdesk.com/...`, `cdn.freshdesk.com.s3*.amazonaws.com`). Any other
+    host is left alone and not counted. The dialer guard and redirect rules of "Egress" apply; the API
+    key goes only to the account host. The old check (any `src` containing "freshdesk") is gone.
+  - *Id.* `<entity>:<message source id>:<hash of host + path + query without signing parameters>`.
+    Pre-signed URLs change on every read, so the signature, expiry and `X-Amz-*` parameters are not
+    part of the hash. The same image twice in one message is one item.
+  - *Atomic.* The attachment row, the `body_html` rewrite and the ledger row commit in one
+    transaction, so a resumed run never double-stores and never leaves HTML and ledger disagreeing.
+    Only `<img src>` values equal to the image are rewritten; text that happens to hold the URL is not.
+  - *Limits.* 5 MiB per image (the email budget), content type must be `image/*`. Over the limit,
+    a non-image, 404, expired link or 5xx makes that image `failed`.
+  - *A failed image makes the report FAILED.* The image is lost the day the account closes; the
+    report must not say OK. The ticket stays `failed`, the next run reads it again and retries the
+    image. The HTML keeps the original link. Trade-off: an image already deleted in Freshdesk keeps
+    the status FAILED until the customer accepts it by saving the image by hand. We chose that over
+    a silent OK, matching a failed attachment.
+  - *Counts.* `ticketMeta.inline_images` is the number of distinct hosted images per ticket
+    (`Report.InlineImages.Source`). Freshdesk reports no size, so there is no source byte total;
+    `ImportedBytes` and the SHA-256 re-verification (`verifyAttachments`) cover the stored files.
+  - *Storage cap.* The sizing pass downloads each image not yet `done` once and discards it, so the
+    bytes count before any write. An image the sizing cannot read counts 0 and fails later in the real run.
+  - *Undo.* The attachment rows go with their messages; the files go with the orphan sweep.
 - **People.** Agents match Colliedesk agents by email in the same workspace; `author_name` is
   always stored. Contacts reuse a contact with the same email in the same workspace. A contact
   without email gets `freshdesk-contact-<id>@import.invalid` (RFC 2606). Companies become

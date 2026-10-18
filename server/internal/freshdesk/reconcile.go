@@ -113,6 +113,7 @@ func (r *run) countTickets(ctx context.Context, report *Report, ticketIDs, conta
 			report.Messages.Source += meta.Messages
 			report.Attachments.Source += meta.Attachments
 			report.Attachments.SourceBytes += meta.AttachmentBytes
+			report.InlineImages.Source += meta.InlineImages
 			report.TimeEntries.Source += meta.TimeEntries
 		}
 		addStatus(target, status)
@@ -139,7 +140,7 @@ func (r *run) countChildren(ctx context.Context, report *Report, ticketIDs, _ []
 			return fmt.Errorf("reconcile items: %w", err)
 		}
 		target := map[string]*EntityCount{entityDescription: &report.Messages, entityMessage: &report.Messages,
-			entityAttachment: &report.Attachments.EntityCount, entityTimeEntry: &report.TimeEntries}[entity]
+			entityAttachment: &report.Attachments.EntityCount, entityInlineImage: &report.InlineImages.EntityCount, entityTimeEntry: &report.TimeEntries}[entity]
 		for range count {
 			addStatus(target, status)
 		}
@@ -190,7 +191,7 @@ func missing(report *Report) []string {
 		name  string
 		count EntityCount
 	}{{"contacts", report.Contacts}, {"tickets", report.Tickets.EntityCount}, {"messages", report.Messages},
-		{"attachments", report.Attachments.EntityCount}, {"time entries", report.TimeEntries}, {"saved replies", report.SavedReplies.EntityCount}} {
+		{"attachments", report.Attachments.EntityCount}, {"inline images", report.InlineImages.EntityCount}, {"time entries", report.TimeEntries}, {"saved replies", report.SavedReplies.EntityCount}} {
 		if !report.DryRun && row.count.Imported < row.count.Source {
 			out = append(out, fmt.Sprintf("%s: %d of %d not imported", row.name, row.count.Source-row.count.Imported, row.count.Source))
 		}
@@ -200,6 +201,9 @@ func missing(report *Report) []string {
 	}
 	if n := len(report.Attachments.ChecksumMismatches); n > 0 {
 		out = append(out, fmt.Sprintf("attachments: %d stored files no longer match their recorded SHA-256", n))
+	}
+	if n := len(report.InlineImages.ChecksumMismatches); n > 0 {
+		out = append(out, fmt.Sprintf("inline images: %d stored files no longer match their recorded SHA-256", n))
 	}
 	return out
 }

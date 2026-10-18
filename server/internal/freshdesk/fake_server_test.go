@@ -19,7 +19,12 @@ import (
 
 const testAPIKey = "fd-test-key-DO-NOT-PRINT"
 
-var fileBodies = map[string]string{"9001": "PDF-BYTES-1", "9002": "PNG-BYTES", "9003": "log line 1"}
+var fileBodies = map[string]string{"9001": "PDF-BYTES-1", "9002": "PNG-BYTES", "9003": "log line 1", "inline-5001": inlineImageBody}
+
+const (
+	inlineImageBody  = "PNG-INLINE-1"
+	accountImageBody = "PNG-ACCOUNT"
+)
 
 // fakeFreshdesk serves JSON shaped like the public Freshdesk API v2 from
 // testdata over TLS, with page size 2, Link headers, rate-limit headers, an
@@ -54,7 +59,14 @@ type fakeFreshdesk struct {
 	accountID        int
 	fileBody         map[string]string
 	fileLength       map[string]string
-	onRequest        func(path string)
+	// fileType overrides the Content-Type of a file; inline images default to image/png.
+	fileType map[string]string
+	// fileStatus makes a file answer with the given HTTP status.
+	fileStatus map[string]int
+	// inlineImages puts the fixtures' message-HTML images in place: one on the file host (its
+	// signature changes on every read), one on the account host, three that Freshdesk does not host.
+	inlineImages bool
+	onRequest    func(path string)
 	// failPathTimes makes the next N API requests to a path answer 500.
 	failPathTimes map[string]int
 	// failPathStatus makes every API request to a path answer with the given status.
@@ -63,7 +75,7 @@ type fakeFreshdesk struct {
 
 func newFakeFreshdesk(t *testing.T) *fakeFreshdesk {
 	t.Helper()
-	fake := &fakeFreshdesk{t: t, requests: map[string]int{}, searchTicketTotal: -1, fileBody: map[string]string{}, fileLength: map[string]string{}}
+	fake := &fakeFreshdesk{t: t, requests: map[string]int{}, searchTicketTotal: -1, fileBody: map[string]string{}, fileLength: map[string]string{}, fileType: map[string]string{}, fileStatus: map[string]int{}}
 	fake.api = httptest.NewTLSServer(http.HandlerFunc(fake.serveAPI))
 	fake.files = httptest.NewTLSServer(http.HandlerFunc(fake.serveFile))
 	fake.internal = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -133,6 +145,9 @@ func (f *fakeFreshdesk) serveAPI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Ratelimit-Remaining", "399")
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v2/"), "/")
 	switch {
+	case strings.HasPrefix(r.URL.Path, "/helpdesk/attachments/"):
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte(accountImageBody))
 	case r.URL.Path == "/api/v2/account":
 		f.mu.Lock()
 		id := f.accountID
@@ -327,9 +342,24 @@ func (f *fakeFreshdesk) withFiles(items []map[string]any, version int) []map[str
 	data, _ := json.Marshal(items)
 	text := strings.ReplaceAll(string(data), "{{files}}/9001", fmt.Sprintf("%s/9001?v=%d", f.files.URL, version))
 	text = strings.ReplaceAll(text, "{{files}}", f.files.URL)
+	text = f.inlineMarkup(text, version)
 	var out []map[string]any
 	_ = json.Unmarshal([]byte(text), &out)
 	return out
+}
+
+// inlineMarkup fills the image placeholders of the fixtures (inside JSON strings) or removes them.
+func (f *fakeFreshdesk) inlineMarkup(text string, version int) string {
+	images := map[string]string{"{{inline-files}}": "", "{{inline-account}}": "", "{{inline-external}}": ""}
+	if f.inlineImages {
+		images["{{inline-files}}"] = fmt.Sprintf(`<img src=\"%s/inline-5001?Signature=abc&amp;Expires=%d\">`, f.files.URL, version)
+		images["{{inline-account}}"] = fmt.Sprintf(`<img src=\"%s/helpdesk/attachments/6001\">`, f.api.URL)
+		images["{{inline-external}}"] = `<img src=\"https://images.example.org/pixel.png\"> <img src=\"https://freshdesk.com.evil.example/a.png\"> <img src=\"https://evilfreshdesk.com/b.png\">`
+	}
+	for token, markup := range images {
+		text = strings.ReplaceAll(text, token, markup)
+	}
+	return text
 }
 
 func (f *fakeFreshdesk) page(w http.ResponseWriter, r *http.Request, items []map[string]any) {
@@ -384,6 +414,7 @@ func (f *fakeFreshdesk) serveFile(w http.ResponseWriter, r *http.Request) {
 	}
 	failing, redirect, stalling := f.failAttachment == id, f.redirectFile == id, f.stallFile == id
 	body, overridden := f.fileBody[id]
+	contentType, status := f.fileType[id], f.fileStatus[id]
 	length := f.fileLength[id]
 	f.mu.Unlock()
 	switch {
@@ -391,6 +422,8 @@ func (f *fakeFreshdesk) serveFile(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/xml")
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = w.Write([]byte("<Error><Code>AccessDenied</Code><Message>Request has expired</Message></Error>"))
+	case status != 0:
+		http.Error(w, "refused", status)
 	case failing:
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	case redirect:
@@ -401,12 +434,23 @@ func (f *fakeFreshdesk) serveFile(w http.ResponseWriter, r *http.Request) {
 		w.(http.Flusher).Flush()
 		f.stall(r)
 	case overridden:
+		if contentType != "" {
+			w.Header().Set("Content-Type", contentType)
+		} else if strings.HasPrefix(id, "inline-") {
+			w.Header().Set("Content-Type", "image/png")
+		}
 		if length != "" {
 			w.Header().Set("Content-Length", length)
 		}
 		_, _ = w.Write([]byte(body))
 	case fileBodies[id] != "":
 		w.Header().Set("Content-Type", "application/octet-stream")
+		if strings.HasPrefix(id, "inline-") {
+			w.Header().Set("Content-Type", "image/png")
+		}
+		if contentType != "" {
+			w.Header().Set("Content-Type", contentType)
+		}
 		_, _ = w.Write([]byte(fileBodies[id]))
 	default:
 		http.NotFound(w, r)

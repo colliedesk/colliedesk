@@ -29,13 +29,13 @@ func (r *run) importAttachment(ctx context.Context, ticketKey, messageID string,
 	if err := r.checkDiskSpace(file.reportedSize()); err != nil {
 		return err
 	}
-	body, length, err := r.client.download(ctx, file.AttachmentURL)
+	body, length, _, err := r.client.download(ctx, file.AttachmentURL)
 	if errors.Is(err, errURLExpired) {
 		fresh, refreshErr := refresh(ctx, file.ID)
 		if refreshErr != nil {
 			return fmt.Errorf("refresh expired attachment URL: %w", refreshErr)
 		}
-		body, length, err = r.client.download(ctx, fresh.AttachmentURL)
+		body, length, _, err = r.client.download(ctx, fresh.AttachmentURL)
 	}
 	if err != nil {
 		return fmt.Errorf("download: %w", err)

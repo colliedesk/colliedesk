@@ -102,7 +102,7 @@ func (r *run) importMessage(ctx context.Context, ticketKey, conversationID, enti
 			failed++
 		}
 	}
-	return failed
+	return failed + r.importInlineImages(ctx, ticketKey, messageID, entity, sourceID, message.html)
 }
 
 func (r *run) insertMessage(ctx context.Context, ticketKey, conversationID, entity, sourceID string, m newMessage) (string, error) {

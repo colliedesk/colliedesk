@@ -18,6 +18,7 @@ code. Run the same command again to retry: finished items are never copied twice
 | Ticket type, channel, due dates, cc and forwarded-to addresses | Shown in the conversation details |
 | Original message HTML | **Show original** on the message (shown in a locked frame that runs no scripts and loads nothing) |
 | Attachments | Files stored by Colliedesk, each with a SHA-256 checksum |
+| Images inside a message that Freshdesk hosts | Stored by Colliedesk with a SHA-256 checksum, embedded in **Show original**, and also listed as files on the message. See "Images inside messages" below |
 | Time entries | Time entries (agent, minutes, note, billable, time), shown under **Time logged** on the timeline |
 | Canned responses | [Saved replies](saved-replies.md), titled `<folder name> / <title>` so the folder is still visible. See below |
 
@@ -127,8 +128,8 @@ On Colliedesk Cloud, the first import into a workspace that is still in its tria
 to 30 days in total from when it started.
 
 On a Colliedesk Cloud workspace on a paid plan (Founding, Team or Team 25), imported attachments
-count toward the storage limit of the plan (20, 100 or 250 GiB). Before it writes anything, the import adds up the size of the attachments it would bring in
-and compares it with the room left. If they do not fit, it stops with a message that gives the bytes
+count toward the storage limit of the plan (20, 100 or 250 GiB). Before it writes anything, the import adds up the size of the attachments and the message images it would bring in
+(it reads each image once to know its size) and compares it with the room left. If they do not fit, it stops with a message that gives the bytes
 needed, the bytes free and the limit, and nothing is imported: no contact, ticket or file. Contact us for more storage (on Founding, switch to
 the Team plan under **Billing > Manage billing**) and run it again, or import a smaller slice with
 `--since`.
@@ -168,6 +169,25 @@ is refused, ticket numbers below the highest existing ticket that Freshdesk does
 printed at the end of the command output and listed in the report under **Ticket ids that could
 not be resolved**. Each may be a deleted or an archived ticket: look them up in Freshdesk.
 
+## Images inside messages
+
+Some messages show an image in their body (a pasted screenshot, a signature logo) instead of a
+file attached to the message. Freshdesk hosts those images, and they disappear with the account.
+The import downloads each image that Freshdesk hosts: from your Freshdesk address (including a
+custom support domain) and from Freshdesk's own domains. It stores the file like an attachment
+and embeds it in **Show original**, so the original message keeps showing it after you close
+Freshdesk. The Markdown body of the message is unchanged.
+
+Images from other sites, such as a newsletter banner, are not copied. They stay links, and the
+locked frame does not load them.
+
+An image counts as one item in the report (**Inline images**). If an image cannot be brought
+over, the status is `FAILED`, not `OK`. The cause can be a missing file (404), an expired link, a
+file that is not an image, or an image over 5 MB. The **Failures** table lists the image with its
+ticket id and the reason, and the message keeps its original Freshdesk link. Run the same
+command again: a temporary problem is retried. If the image no longer exists in Freshdesk, open
+the ticket there and save it yourself before you close the account.
+
 ## Undo an import
 
 An import into the wrong workspace can be removed:
@@ -181,8 +201,8 @@ An import into the wrong workspace can be removed:
    docker compose exec server /app/collie import undo --workspace <slug>
    ```
 
-Undo removes the conversations the import created, with their messages, attachments and time
-entries, the saved replies it created that nobody edited since, and the contacts and tags it created
+Undo removes the conversations the import created, with their messages, attachments, inline
+images and time entries, the saved replies it created that nobody edited since, and the contacts and tags it created
 that nothing else uses. A conversation where your
 team wrote a message after the import is kept, and so is a saved reply your team edited (the command
 lists its Freshdesk id). Contacts and tags that existed before the import
@@ -198,10 +218,11 @@ tools.
   something is missing; the **Failures** table lists each item with its Freshdesk id and ticket id.
   `UNVERIFIED` means nothing failed but completeness could not be proven (see **How the totals were
   verified**). `DRY_RUN` is a preview.
-- **Counts**: contacts, tickets, messages, attachments, time entries and saved replies in Freshdesk and in
-  Colliedesk. The saved reply total is checked against the sum Freshdesk reports for its folders.
+- **Counts**: contacts, tickets, messages, attachments, inline images, time entries and saved replies in
+  Freshdesk and in Colliedesk. The saved reply total is checked against the sum Freshdesk reports for its folders.
 - **Attachment bytes**: total size reported by Freshdesk and total size stored. Every stored file
-  is read again and its SHA-256 compared with the value recorded at download.
+  is read again and its SHA-256 compared with the value recorded at download. **Inline image
+  bytes** are checked the same way. Freshdesk reports no size for them, so only the stored total is given.
 - **Ticket ids that could not be resolved (archive unavailable)**: ticket numbers Freshdesk does
   not return while the archive is refused. Not counted as absent. Check them in Freshdesk.
 - **Deleted in Freshdesk during the import**, **In Freshdesk Trash**, **In Freshdesk Spam**:
@@ -213,8 +234,8 @@ Do not close the Freshdesk account until the last report says `OK`.
 
 ## Limits
 
-- Images placed inside a message (not attached) stay links to Freshdesk. They stop working when
-  the Freshdesk account closes. The report lists the tickets that have them.
+- Images inside a message are copied only when Freshdesk hosts them, and only up to 5 MB each.
+  Images from other sites stay links.
 - Freshdesk has no documented API for time entries of archived tickets. The report lists those
   tickets; check them in Freshdesk.
 - Contacts without an email get an address of the form `freshdesk-contact-<id>@import.invalid`.
