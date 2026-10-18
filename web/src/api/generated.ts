@@ -1525,7 +1525,7 @@ export interface components {
             conversation_id: string;
             /** Format: uuid */
             author_agent_id: string | null;
-            /** @description Display name of an author without a Colliedesk agent account (customer or imported agent) */
+            /** @description Who wrote the message: the name stored with an imported message, else the team member's display name (or email), else for incoming mail the conversation contact's name when the contact sent it; null when none applies */
             author_name: string | null;
             /** @description The agent token the message was written with; null for what a person wrote and for incoming mail. */
             agent_token: null | components["schemas"]["MessageAgentToken"];

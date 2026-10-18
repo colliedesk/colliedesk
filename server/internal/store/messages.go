@@ -12,9 +12,17 @@ import (
 )
 
 // messageSelect returns timeline rows with their email delivery (outgoing) and envelope (incoming).
-const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_id::text,m.author_name,m.kind,m.body,m.body_html,m.origin,m.created_at,m.email_meta,m.cc,
+// author_name is resolved on read: the stored name (imported messages) wins, then the authoring team
+// member's display name or email, then the conversation's contact name when the contact sent the email.
+// A copied colleague who answers the thread is not the contact, so that message keeps no name.
+const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_id::text,
+	COALESCE(m.author_name,NULLIF(aa.display_name,''),aa.email,
+		CASE WHEN m.kind='incoming' AND lower(ct.email)=lower(m.email_meta->>'from') THEN NULLIF(ct.name,'') END),
+	m.kind,m.body,m.body_html,m.origin,m.created_at,m.email_meta,m.cc,
 	o.status,o.attempts,o.last_error,o.sent_at,t.id::text,t.label,t.scope,COALESCE(NULLIF(ta.display_name,''),ta.email),m.agent_request_id::text
 	FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
+	LEFT JOIN agents aa ON aa.workspace_id=m.workspace_id AND aa.id=m.author_agent_id
+	LEFT JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
 	LEFT JOIN email_outbox o ON o.workspace_id=m.workspace_id AND o.message_id=m.id
 	LEFT JOIN sessions t ON t.workspace_id=m.workspace_id AND t.id=m.agent_token_id
 	LEFT JOIN agents ta ON ta.workspace_id=t.workspace_id AND ta.id=t.agent_id`

@@ -63,6 +63,13 @@ cannot be loaded, it says so with **Try again** instead.
 - The same change is available through the API: `PATCH /api/v1/conversations` with
   `{"ids": [...], "changes": {...}}`. See `contracts/openapi.yaml`.
 
+**Who wrote each message**
+- A reply or private note shows the name of the teammate who wrote it (their email when they have no
+  display name). A message an [agent token](sessions.md#agent-tokens) wrote or drafted names the teammate and the token instead.
+- A received email shows the contact's name, with the sender's address below it. Mail from anyone
+  else on the thread, such as a colleague the customer copied, shows that sender's address only.
+- An imported message keeps the author name it had in the old helpdesk.
+
 **Reply or take a note**
 - **Reply** sends an outgoing message on the timeline. With the [email channel](email-channel.md)
   connected, it is also emailed to the contact and shows **Queued**, **Sent** or
