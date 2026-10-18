@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -177,5 +178,100 @@ func TestComplaintsInOneWorkspaceNeverPauseAnother(t *testing.T) {
 	}
 	if pauseState(t, api, adminB).SendingPause == nil {
 		t.Fatal("B was not paused by its own complaints")
+	}
+}
+
+// verifyThroughProvider makes the workspace's support domain verified in the way the hosted cloud does.
+func verifyThroughProvider(t *testing.T, pool *pgxpool.Pool, workspaceID, providerID string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `UPDATE email_channels SET provider_domain_id=$2,domain_verified_at=now() WHERE workspace_id=$1`, workspaceID, providerID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func complainFrom(t *testing.T, api http.Handler, from, messageID, webhookID string) string {
+	t.Helper()
+	body := resendEvent("email.complained", from, []string{"z@customer.example"}, messageID, time.Now())
+	return deliverResend(t, api, webhookID, body)
+}
+
+func TestComplaintsAboutAVerifiedSupportAddressCountTowardThePause(t *testing.T) {
+	mailer := &recordingMailer{}
+	api, service, pool, _ := testAPIWithConfig(t, pauseConfig(mailer))
+	admin := createSession(t, api, service, "Pause Verified", "admin@pause-verified.example.com")
+	secret := connectEmail(t, api, admin, "support@pause-verified.example.com")
+	replies := sentReplies(t, api, pool, admin, secret, "verified", 4)
+	verifyThroughProvider(t, pool, workspaceID(t, api, admin), "dom_pause_verified")
+	from := `"Pause Verified" <support@pause-verified.example.com>`
+	stored := queryString(t, pool, `SELECT email_message_id FROM messages WHERE id=$1`, replies[0])
+
+	// The first complaint names the reply by the Message-ID we stored; the others carry an id we never saw.
+	if status := complainFrom(t, api, from, "<"+stored+">", "msg_verified_1"); status != "applied" {
+		t.Fatalf("complaint from the verified address status=%q, want applied", status)
+	}
+	if status, _ := deliveryOf(t, pool, replies[0]); status != "failed" {
+		t.Fatalf("the reply named by its Message-ID must be failed, got %q", status)
+	}
+	complainFrom(t, api, from, "<unknown-1@eu-west-1.amazonses.com>", "msg_verified_2")
+	if pauseState(t, api, admin).SendingPause != nil {
+		t.Fatal("two complaints must not pause")
+	}
+	complainFrom(t, api, from, "<unknown-2@eu-west-1.amazonses.com>", "msg_verified_3")
+	if pauseState(t, api, admin).SendingPause == nil || len(mailer.all()) != 1 {
+		t.Fatalf("three complaints about the verified address must pause and alert once: %v", mailer.all())
+	}
+	if status := complainFrom(t, api, from, "<unknown-2@eu-west-1.amazonses.com>", "msg_verified_3"); status != "duplicate" {
+		t.Fatalf("redelivery status=%q, want duplicate", status)
+	}
+}
+
+func TestAComplaintFromADomainNoOneHasProvenThroughTheProviderChangesNothing(t *testing.T) {
+	mailer := &recordingMailer{}
+	api, service, pool, _ := testAPIWithConfig(t, pauseConfig(mailer))
+	admin := createSession(t, api, service, "Pause Txt", "admin@pause-txt.example.com")
+	secret := connectEmail(t, api, admin, "support@pause-txt.example.com")
+	_ = sentReplies(t, api, pool, admin, secret, "txt", 3)
+	// Verified by the TXT record only: no provider domain, so a Resend From at that name is not attributable.
+	if _, err := pool.Exec(context.Background(), `UPDATE email_channels SET domain_verified_at=now()`); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 4 {
+		complainFrom(t, api, `"X" <support@pause-txt.example.com>`, fmt.Sprintf("<u%d@x>", i), fmt.Sprintf("msg_txt_%d", i))
+	}
+	complainFrom(t, api, `"X" <support@nobody-has-this.example.org>`, "<n@x>", "msg_nobody")
+	if pauseState(t, api, admin).SendingPause != nil {
+		t.Fatal("complaints that cannot be attributed to a provider-verified domain must not pause anyone")
+	}
+}
+
+func TestResumingStartsAFreshComplaintWindow(t *testing.T) {
+	mailer := &recordingMailer{}
+	api, service, pool, _ := testAPIWithConfig(t, pauseConfig(mailer))
+	admin := createSession(t, api, service, "Pause Fresh", "admin@pause-fresh.example.com")
+	secret := connectEmail(t, api, admin, "support@pause-fresh.example.com")
+	replies := sentReplies(t, api, pool, admin, secret, "fresh", 5)
+	for i, reply := range replies[:3] {
+		complainWithID(t, api, pool, reply, fmt.Sprintf("msg_fresh_%d", i))
+	}
+	if pauseState(t, api, admin).SendingPause == nil {
+		t.Fatal("setup: three complaints must pause")
+	}
+	if _, err := store.New(pool).ResumeEmailSending(context.Background(), workspaceID(t, api, admin)); err != nil {
+		t.Fatal(err)
+	}
+
+	complain(t, api, pool, replies[3])
+	// A redelivery of an old complaint is a duplicate and must not bring the old count back.
+	complainWithID(t, api, pool, replies[0], "msg_fresh_0")
+	if pauseState(t, api, admin).SendingPause != nil {
+		t.Fatal("complaints from before the resume must not count again")
+	}
+	if len(mailer.all()) != 1 {
+		t.Fatalf("one pause, one alert; got %d", len(mailer.all()))
+	}
+	complain(t, api, pool, replies[4])
+	complainWithID(t, api, pool, replies[2], "msg_fresh_extra_never_new")
+	if pauseState(t, api, admin).SendingPause != nil {
+		t.Fatal("two complaints after the resume are under the minimum count")
 	}
 }

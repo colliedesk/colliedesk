@@ -82,22 +82,30 @@ func (a *API) applyResendEvent(request *http.Request, webhookID string, event re
 	if data.Bounce != nil && data.Bounce.Type != "" && !strings.EqualFold(data.Bounce.Type, "Permanent") {
 		return webhookIgnored, reasonNotDeliveryFailure, nil
 	}
-	token, replyID := email.PlatformReplyAddress(senderAddress(data.From), a.config.Email.MailFromDomain)
-	if token == "" {
-		return webhookIgnored, "not sent from a reply address", nil
-	}
-	workspaceID, found, err := a.store.WorkspaceForReplyToken(request.Context(), token)
-	if err != nil || !found {
-		return webhookIgnored, "unknown reply token", err
+	sender := senderAddress(data.From)
+	token, replyID := email.PlatformReplyAddress(sender, a.config.Email.MailFromDomain)
+	var workspaceID string
+	var found bool
+	var err error
+	if token != "" {
+		if workspaceID, found, err = a.store.WorkspaceForReplyToken(request.Context(), token); err != nil || !found {
+			return webhookIgnored, "unknown reply token", err
+		}
+	} else {
+		// Mail sent as a verified support address carries no reply token; its workspace is the one that
+		// holds that domain, verified through the email provider.
+		if workspaceID, found, err = a.store.WorkspaceForVerifiedSender(request.Context(), email.Domain(sender)); err != nil || !found {
+			return webhookIgnored, "not sent from a reply address or a verified support address", err
+		}
 	}
 	result, err := a.store.MarkRelayBounce(request.Context(), workspaceID, store.RelayBounce{
 		WebhookID: webhookID, EventType: event.Type, ReplyToken: token, ReplyID: replyID,
-		MessageID: strings.Trim(strings.TrimSpace(data.MessageID), "<>"), Recipients: bareAddresses(data.To), Complaint: complaint,
+		MessageID: strings.Trim(strings.TrimSpace(data.MessageID), "<>"), Recipients: bareAddresses(data.To), Complaint: complaint, SenderDomain: token == "",
 	})
 	if err != nil {
 		return "", "", err
 	}
-	counted := result == store.RelayBounceApplied || result == store.RelayBounceCopy || result == store.RelayBounceDuplicate
+	counted := result == store.RelayBounceApplied || result == store.RelayBounceCopy || result == store.RelayBounceDuplicate || result == store.RelayBounceCounted
 	if complaint && counted {
 		// A duplicate is checked too: the first delivery may have recorded the complaint and then failed
 		// before the pause, and the pause itself happens once.
@@ -106,7 +114,7 @@ func (a *API) applyResendEvent(request *http.Request, webhookID string, event re
 		}
 	}
 	switch {
-	case result == store.RelayBounceApplied, result == store.RelayBounceCopy:
+	case result == store.RelayBounceApplied, result == store.RelayBounceCopy, result == store.RelayBounceCounted:
 		return "applied", "", nil
 	case result == store.RelayBounceDuplicate:
 		return "duplicate", "", nil

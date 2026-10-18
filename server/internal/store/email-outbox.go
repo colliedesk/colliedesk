@@ -173,6 +173,12 @@ func (s *Store) DeferDelivery(ctx context.Context, item Delivery, next time.Time
 	return s.finishDelivery(ctx, item, `next_attempt_at=$4,last_error=$5,attempts=GREATEST(attempts-1,0)`, next, reason)
 }
 
+// DeferDeliveryForPause postpones a claimed row because the workspace's sending is paused, without spending
+// the attempt. The row is marked so that lifting the pause releases it and nothing else.
+func (s *Store) DeferDeliveryForPause(ctx context.Context, item Delivery, next time.Time, reason string) error {
+	return s.finish(ctx, item, true, `next_attempt_at=$4,last_error=$5,attempts=GREATEST(attempts-1,0)`, next, reason)
+}
+
 // MarkDeliveryFailed stops automatic retries; an agent can requeue with RetryDelivery.
 func (s *Store) MarkDeliveryFailed(ctx context.Context, item Delivery, reason string) error {
 	return s.finishDelivery(ctx, item, `status='failed',last_error=$4`, reason)
@@ -181,8 +187,12 @@ func (s *Store) MarkDeliveryFailed(ctx context.Context, item Delivery, reason st
 // finishDelivery applies a result only while this worker still holds the claim, so a worker whose
 // lease expired cannot overwrite the result of the worker that reclaimed the row.
 func (s *Store) finishDelivery(ctx context.Context, item Delivery, set string, args ...any) error {
+	return s.finish(ctx, item, false, set, args...)
+}
+
+func (s *Store) finish(ctx context.Context, item Delivery, heldByPause bool, set string, args ...any) error {
 	updated, err := scoped(ctx, s, item.WorkspaceID, func(tx pgx.Tx) (int64, error) {
-		result, err := tx.Exec(ctx, `UPDATE email_outbox SET `+set+`,locked_until=NULL,claim_token=NULL,updated_at=now()
+		result, err := tx.Exec(ctx, `UPDATE email_outbox SET `+set+fmt.Sprintf(",held_by_pause=%t", heldByPause)+`,locked_until=NULL,claim_token=NULL,updated_at=now()
 			WHERE workspace_id=$1 AND id=$2 AND claim_token=$3::uuid AND status='queued'`,
 			append([]any{item.WorkspaceID, item.OutboxID, item.ClaimToken}, args...)...)
 		return result.RowsAffected(), err

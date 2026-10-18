@@ -68,3 +68,41 @@ func TestResumingSendingDeliversTheHeldReplyAtOnce(t *testing.T) {
 		t.Fatalf("held reply after resume: %+v", delivery)
 	}
 }
+
+func nextAttempt(t *testing.T, f fixture, messageID string) time.Time {
+	t.Helper()
+	var at time.Time
+	if err := f.pool.QueryRow(context.Background(), `SELECT next_attempt_at FROM email_outbox WHERE message_id=$1`, messageID).Scan(&at); err != nil {
+		t.Fatal(err)
+	}
+	return at
+}
+
+func TestResumingOnlyReleasesRepliesTheHoldDelayedNotOnesInErrorBackoff(t *testing.T) {
+	f := newFixture(t)
+	failing := startSMTPServer(t, "451 4.3.0 Try again later")
+	clock := time.Now().UTC().Add(time.Second)
+	backingOff := f.write(t, "outgoing", "Will back off.")
+	process(t, newWorker(f, failing, &clock))
+	before := nextAttempt(t, f, backingOff.ID)
+	if !before.After(clock.Add(10 * time.Second)) {
+		t.Fatalf("setup: the 451 reply should be waiting in backoff, next attempt %s", before)
+	}
+
+	held := f.write(t, "outgoing", "Held by the pause.")
+	pauseWorkspace(t, f)
+	process(t, newWorker(f, failing, &clock))
+	if nextAttempt(t, f, held.ID).Before(clock.Add(5 * time.Minute)) {
+		t.Fatal("setup: the pause should have deferred the second reply")
+	}
+
+	if _, err := f.store.ResumeEmailSending(context.Background(), f.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	if got := nextAttempt(t, f, backingOff.ID); !got.Equal(before) {
+		t.Fatalf("resume cut short a backoff the pause did not cause: %s -> %s", before, got)
+	}
+	if got := nextAttempt(t, f, held.ID); got.After(time.Now().Add(time.Second)) {
+		t.Fatalf("the reply held by the pause must be due at once, next attempt %s", got)
+	}
+}

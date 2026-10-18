@@ -271,7 +271,10 @@ replies it sent in those 7 days** (3 on 1,000 replies is exactly 0.3% and does n
 - The operator gets one email at `BILLING_ALERT_EMAIL` (needs `SMTP_HOST` and `MAIL_FROM_DOMAIN`);
   without it the server only logs a warning.
 - The operator lifts the pause after checking the complaints:
-  `collie email resume <workspace slug>`. Held replies then go out at once.
+  `collie email resume <workspace slug>`. Replies held by the pause then go out at once. Counting starts
+  again from that moment, so earlier complaints do not pause the workspace a second time.
+- Complaints count for replies sent from the platform address and for replies sent as your own verified
+  support address.
 
 ## What you see in the inbox
 

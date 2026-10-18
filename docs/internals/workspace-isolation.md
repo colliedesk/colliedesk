@@ -139,6 +139,7 @@ transaction only resolves the workspace; the work after that runs in `InWorkspac
 | `PrivilegeLinkToken` | `auth/links.go` | Pairing/invite link token hash → workspace; redemption then runs scoped |
 | `PrivilegeCloudIdentity` | `auth/cloud.go` | Lists the workspaces where a verified cloud email is an agent |
 | `PrivilegeReplyToken` | `store/email-inbound.go` | Inbound mail reply token → workspace (`MAIL_FROM_DOMAIN` routing, Resend bounce webhook) |
+| `PrivilegeVerifiedSender` | `store/email-relay-bounce.go` | Resend event From domain → the one workspace whose support domain the provider verified |
 | `PrivilegeBillingReconcile` | `store/billing-reconcile.go` | `collie billing reconcile` reads every workspace id and every stored Polar subscription in one transaction to compare them with Polar's list; every write goes through `ApplySubscription`, scoped to its workspace |
 | `PrivilegeInboundSecret` | `store/email-channels.go` | Inbound email secret key id → workspace |
 | `PrivilegeOutboxClaim` | `store/email-outbox.go` | The email worker leases due rows of all workspaces; each row is then loaded and finished scoped |

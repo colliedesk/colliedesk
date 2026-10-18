@@ -71,7 +71,9 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   failed before the pause; it cannot add a complaint, since `(workspace_id, webhook_id)` is the key. The
   worker defers a paused workspace's rows 10 minutes at a time without spending the attempt, with the
   reason in `last_error`; rows can still be queued. `collie email resume <slug>` clears the pause and
-  makes the held rows due at once. No API route clears it: an admin who could would defeat the control.
+  makes due only the rows the pause held (`email_outbox.held_by_pause`), not rows in error backoff, and
+  starts a fresh window (`workspaces.email_pause_resumed_at`): complaints and sends before the resume stop
+  counting. No API route clears it: an admin who could would defeat the control.
 - **Automatic mail says so (RFC 3834).** `Compose` with `Standalone` (operator alerts, retention notices,
   reconcile reports) writes `Auto-Submitted: auto-generated`; agent replies carry no such header because
   a person wrote them. Inbound drops any `Auto-Submitted` other than `no`, so an auto-responder's answer
@@ -115,8 +117,11 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   (`status='sent'`) does not. A `from` that `net/mail` rejects (unquoted "Acme, Inc.") is read from its
   last angle brackets. Ignored failures are logged at Warn with ids only. The SMTP `250`
   reply does not document the Resend email id and tags exist only on the HTTP API, so SMTP stays the
-  only transport. Replies sent as a verified support address are not matched: support addresses are
-  not unique across workspaces.
+  only transport. Replies sent as a verified support address carry no token. Their events map to a workspace
+  by the From domain, only when exactly one workspace holds that domain verified through the email provider
+  (a TXT-only domain never matches, since support addresses are not unique across workspaces). A bounce
+  there fails the reply only when the event's Message-ID is one we stored; a complaint is counted for the
+  pause either way, with no message on the event row.
 - **Inbound limits are a loop guard plus a ceiling.** 10 messages per sender address per 10
   minutes (the header From, which a sender controls) and 200 new conversations per workspace per
   10 minutes (holds when From rotates). A per-(workspace, sender) advisory lock serializes the

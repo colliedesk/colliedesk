@@ -149,7 +149,7 @@ func (w *Worker) deliver(ctx context.Context, item store.Delivery) error {
 		return w.store.MarkDeliveryFailed(ctx, item, "The email channel is not connected.")
 	}
 	if item.EmailPaused {
-		return w.store.DeferDelivery(ctx, item, w.options.Now().Add(pauseDeferral), domain.EmailPausedDeliveryNote)
+		return w.store.DeferDeliveryForPause(ctx, item, w.options.Now().Add(pauseDeferral), domain.EmailPausedDeliveryNote)
 	}
 	sent, err := w.store.CountSentSince(ctx, item.WorkspaceID, w.options.Now().Add(-time.Hour))
 	if err != nil {

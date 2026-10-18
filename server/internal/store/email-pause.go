@@ -23,13 +23,16 @@ type PausedWorkspace struct {
 // complaint keeps its sent_at, so it still counts as sent.
 func (s *Store) PauseEmailOnComplaints(ctx context.Context, workspaceID string, now time.Time) (*PausedWorkspace, error) {
 	paused, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (*PausedWorkspace, error) {
+		// Counting starts at the later of the window and the last resume: an operator who lifts a pause
+		// accepts the complaints that caused it.
 		since := now.Add(-domain.ComplaintPauseWindow)
 		var complaints, sent int
 		var alreadyPaused bool
-		err := tx.QueryRow(ctx, `SELECT
-				(SELECT count(*) FROM relay_webhook_events WHERE workspace_id=$1 AND event_type='email.complained' AND received_at>$2),
-				(SELECT count(*) FROM email_outbox WHERE workspace_id=$1 AND sent_at>$2),
-				(SELECT email_paused_at IS NOT NULL FROM workspaces WHERE id=$1)`, workspaceID, since).Scan(&complaints, &sent, &alreadyPaused)
+		err := tx.QueryRow(ctx, `WITH w AS (SELECT email_paused_at, GREATEST($2::timestamptz, email_pause_resumed_at) AS since FROM workspaces WHERE id=$1)
+			SELECT
+				(SELECT count(*) FROM relay_webhook_events e, w WHERE e.workspace_id=$1 AND e.event_type='email.complained' AND e.received_at>COALESCE(w.since,$2)),
+				(SELECT count(*) FROM email_outbox o, w WHERE o.workspace_id=$1 AND o.sent_at>COALESCE(w.since,$2)),
+				(SELECT email_paused_at IS NOT NULL FROM w)`, workspaceID, since).Scan(&complaints, &sent, &alreadyPaused)
 		if err != nil {
 			return nil, err
 		}
@@ -75,11 +78,12 @@ func (s *Store) GetEmailPause(ctx context.Context, workspaceID string) (*domain.
 }
 
 // ResumeEmailSending lifts the pause and returns what it was, or nil when the workspace was not paused.
-// Replies held back by the pause become due at once instead of waiting out their deferral.
+// Replies held back by the pause become due at once instead of waiting out their deferral; replies waiting
+// for another reason keep their schedule. Complaints and sends so far stop counting toward a new pause.
 func (s *Store) ResumeEmailSending(ctx context.Context, workspaceID string) (*domain.EmailPause, error) {
 	resumed, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (*domain.EmailPause, error) {
 		var pause domain.EmailPause
-		err := tx.QueryRow(ctx, `UPDATE workspaces w SET email_paused_at=NULL,email_pause_reason=NULL
+		err := tx.QueryRow(ctx, `UPDATE workspaces w SET email_paused_at=NULL,email_pause_reason=NULL,email_pause_resumed_at=now()
 			FROM (SELECT id,email_paused_at,email_pause_reason FROM workspaces WHERE id=$1 AND email_paused_at IS NOT NULL FOR UPDATE) old
 			WHERE w.id=old.id RETURNING old.email_paused_at,old.email_pause_reason`, workspaceID).Scan(&pause.PausedAt, &pause.Reason)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -88,8 +92,8 @@ func (s *Store) ResumeEmailSending(ctx context.Context, workspaceID string) (*do
 		if err != nil {
 			return nil, err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE email_outbox SET next_attempt_at=LEAST(next_attempt_at,now()),updated_at=now()
-			WHERE workspace_id=$1 AND status='queued'`, workspaceID); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE email_outbox SET next_attempt_at=LEAST(next_attempt_at,now()),held_by_pause=false,updated_at=now()
+			WHERE workspace_id=$1 AND status='queued' AND held_by_pause`, workspaceID); err != nil {
 			return nil, err
 		}
 		pause.PausedAt = pause.PausedAt.UTC()
