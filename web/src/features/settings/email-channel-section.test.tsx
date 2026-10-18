@@ -11,6 +11,7 @@ const disconnected: EmailChannelSettings = {
   sending_from: null,
   hosted_address: null,
   domain_verification: 'txt',
+  sending_pause: null,
 };
 const connected: EmailChannelSettings = {
   ...disconnected,
@@ -214,4 +215,18 @@ test('says the records are not available yet when the provider has not created t
 test('shows why the last verification did not succeed', () => {
   render(<EmailChannelSection settings={provider} timezone="UTC" canManage verifyError="Publish the DNS records listed in the email settings." />);
   expect(screen.getByRole('alert')).toHaveTextContent('Publish the DNS records listed in the email settings.');
+});
+
+test('shows that sending is paused after spam complaints, why, and that only support can lift it', () => {
+  const paused: EmailChannelSettings = { ...connected, sending_pause: { paused_at: '2026-10-18T08:30:00Z', reason: '3 spam complaints on 100 replies sent in the last 7 days (3.00%).' } };
+  render(<EmailChannelSection settings={paused} timezone="UTC" canManage />);
+  const note = screen.getByRole('alert', { name: /email sending is paused/i });
+  expect(note).toHaveTextContent('3 spam complaints on 100 replies sent in the last 7 days (3.00%).');
+  expect(note).toHaveTextContent(/replies you write stay queued/i);
+  expect(note).toHaveTextContent(/contact support/i);
+});
+
+test('shows no pause notice for a workspace that is sending', () => {
+  render(<EmailChannelSection settings={connected} timezone="UTC" canManage />);
+  expect(screen.queryByText(/email sending is paused/i)).not.toBeInTheDocument();
 });

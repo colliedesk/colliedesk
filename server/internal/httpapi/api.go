@@ -41,8 +41,8 @@ type Config struct {
 	RequestPool *pgxpool.Pool
 	// Billing turns on Polar billing for the hosted cloud; the zero value leaves it off.
 	Billing polar.Config
-	// AlertEmail is the operator address told about a paid subscription that matches no workspace
-	// (BILLING_ALERT_EMAIL). Empty, or without AlertMailer or Email.MailFromDomain, turns the alert off.
+	// AlertEmail is the operator address told about a paid subscription that matches no workspace and about
+	// a workspace whose email sending was paused for spam complaints (BILLING_ALERT_EMAIL). Empty, or without AlertMailer or Email.MailFromDomain, turns the alert off.
 	AlertEmail  string
 	AlertMailer Mailer
 	// Now is the clock for the trial, the lock and plan limits; nil uses the system clock.

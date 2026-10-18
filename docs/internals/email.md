@@ -51,6 +51,23 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   same domain cannot be re-added by a new workspace until an operator removes it in Resend. Without the
   key the TXT check above is unchanged (self-host). The client is `internal/resend`; tests run it
   against an `httptest` server shaped like the documented API.
+- **Complaint pause.** After a complaint webhook is recorded (applied, copy or duplicate), the handler
+  counts, for that workspace over 7 days, `email.complained` rows in `relay_webhook_events` and outbox rows
+  with a `sent_at` (a reply failed by a complaint keeps `sent_at`, so it still counts as sent). 3 or more
+  complaints and `complaints * 1000 > sent * 3` (strictly over 0.3%) set `workspaces.email_paused_at` and
+  `email_pause_reason`. The limits are constants in `internal/domain/email-pause.go`. The pause is on the
+  workspace, not the channel, so disconnecting and reconnecting the channel does not clear it. The
+  `UPDATE ... WHERE email_paused_at IS NULL` decides who made the pause, so only that call mails the
+  operator (`BILLING_ALERT_EMAIL`; a warn log when unset; a failed alert is logged and the pause stands).
+  A duplicate webhook is evaluated too, because the first delivery may have recorded the event and then
+  failed before the pause; it cannot add a complaint, since `(workspace_id, webhook_id)` is the key. The
+  worker defers a paused workspace's rows 10 minutes at a time without spending the attempt, with the
+  reason in `last_error`; rows can still be queued. `collie email resume <slug>` clears the pause and
+  makes the held rows due at once. No API route clears it: an admin who could would defeat the control.
+- **Automatic mail says so (RFC 3834).** `Compose` with `Standalone` (operator alerts, retention notices,
+  reconcile reports) writes `Auto-Submitted: auto-generated`; agent replies carry no such header because
+  a person wrote them. Inbound drops any `Auto-Submitted` other than `no`, so an auto-responder's answer
+  to a notice never opens a conversation.
 - **Replies that cannot be sent fail visibly at once.** With no SMTP relay, or an unverified domain
   and no platform domain, the outbox row is created `failed` with the reason. Retry returns 409
   until the cause is fixed, so a reply never sits in `queued` forever.

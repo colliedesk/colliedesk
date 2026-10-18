@@ -33,14 +33,16 @@ type emailChannelSettings struct {
 	SendingFrom *string              `json:"sending_from"`
 	// HostedAddress is where to forward mail on the hosted cloud; nil when that feature is off.
 	HostedAddress *string `json:"hosted_address"`
+	// SendingPause is set while the workspace's email sending is paused after spam complaints.
+	SendingPause *domain.EmailPause `json:"sending_pause"`
 	// DomainVerification is "provider" when the email provider lists the DNS records to publish, else "txt".
 	DomainVerification string `json:"domain_verification"`
 }
 
-func (a *API) emailSettings(workspaceSlug string, channel *domain.EmailChannel) emailChannelSettings {
+func (a *API) emailSettings(workspaceSlug string, channel *domain.EmailChannel, pause *domain.EmailPause) emailChannelSettings {
 	config := a.config.Email
 	smtp := config.SMTP
-	settings := emailChannelSettings{Channel: channel, InboundURL: a.config.Origin + inboundEmailPath, FromPolicy: config.FromPolicy, DomainVerification: "txt",
+	settings := emailChannelSettings{Channel: channel, InboundURL: a.config.Origin + inboundEmailPath, FromPolicy: config.FromPolicy, DomainVerification: "txt", SendingPause: pause,
 		SMTP: smtpStatus{Configured: smtp.Configured(), Host: smtp.Host, Port: smtp.Port, StartTLS: smtp.StartTLS, Authenticated: smtp.Username != ""}}
 	if a.resend != nil {
 		settings.DomainVerification = "provider"
@@ -62,6 +64,18 @@ func (a *API) emailSettings(workspaceSlug string, channel *domain.EmailChannel) 
 		settings.SendingFrom = &platform
 	}
 	return settings
+}
+
+// writeEmailSettings answers with the channel and the settings that come with it, including whether the
+// workspace's sending is paused.
+func (a *API) writeEmailSettings(response http.ResponseWriter, request *http.Request, channel *domain.EmailChannel) {
+	workspace := principal(request).Workspace
+	pause, err := a.store.GetEmailPause(request.Context(), workspace.ID)
+	if err != nil {
+		writeInternalError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, a.emailSettings(workspace.Slug, channel, pause))
 }
 
 // tokenDomainChecksPerHour bounds the DNS lookups agent tokens can trigger for one workspace; a person
@@ -90,7 +104,7 @@ func (a *API) verifyEmailDomain(response http.ResponseWriter, request *http.Requ
 		writeEmailStoreError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusOK, a.emailSettings(principal(request).Workspace.Slug, &channel))
+	a.writeEmailSettings(response, request, &channel)
 }
 
 // writeEmailStoreError reports a missing resource as 404 and anything else as a server failure.
@@ -108,7 +122,7 @@ func (a *API) getEmailChannel(response http.ResponseWriter, request *http.Reques
 		writeInternalError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusOK, a.emailSettings(principal(request).Workspace.Slug, channel))
+	a.writeEmailSettings(response, request, channel)
 }
 
 func (a *API) putEmailChannel(response http.ResponseWriter, request *http.Request) {
@@ -136,7 +150,7 @@ func (a *API) putEmailChannel(response http.ResponseWriter, request *http.Reques
 			channel = created
 		}
 	}
-	writeJSON(response, http.StatusOK, a.emailSettings(principal(request).Workspace.Slug, &channel))
+	a.writeEmailSettings(response, request, &channel)
 }
 
 // foreignHostedAddress reports whether the address is on the hosted mail domain but not this workspace's own

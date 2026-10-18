@@ -1657,6 +1657,12 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        EmailSendingPause: {
+            /** Format: date-time */
+            paused_at: string;
+            /** @description The complaint count and rate that caused the pause */
+            reason: string;
+        };
         EmailDNSRecord: {
             /** @description Purpose of the record as the provider names it, for example SPF or DKIM */
             record: string;
@@ -1678,6 +1684,8 @@ export interface components {
             authenticated: boolean;
         };
         EmailChannelSettings: {
+            /** @description Set when the workspace's email sending is paused after spam complaints (3 or more in 7 days and more than 0.3% of the replies sent). Replies can still be written; they stay queued with a note until an operator resumes sending with `collie email resume`. Admins cannot clear it. */
+            sending_pause: null | components["schemas"]["EmailSendingPause"];
             /**
              * @description How the support address domain is verified. `txt`: publish `channel.dns_record_name` and `channel.dns_record_value`. `provider`: publish the records in `channel.dns_records`, which give replies a DKIM signature for the domain.
              * @enum {string}

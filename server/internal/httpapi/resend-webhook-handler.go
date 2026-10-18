@@ -94,9 +94,18 @@ func (a *API) applyResendEvent(request *http.Request, webhookID string, event re
 		WebhookID: webhookID, EventType: event.Type, ReplyToken: token, ReplyID: replyID,
 		MessageID: strings.Trim(strings.TrimSpace(data.MessageID), "<>"), Recipients: bareAddresses(data.To), Complaint: complaint,
 	})
-	switch {
-	case err != nil:
+	if err != nil {
 		return "", "", err
+	}
+	counted := result == store.RelayBounceApplied || result == store.RelayBounceCopy || result == store.RelayBounceDuplicate
+	if complaint && counted {
+		// A duplicate is checked too: the first delivery may have recorded the complaint and then failed
+		// before the pause, and the pause itself happens once.
+		if err := a.pauseOnComplaints(request.Context(), workspaceID); err != nil {
+			return "", "", err
+		}
+	}
+	switch {
 	case result == store.RelayBounceApplied, result == store.RelayBounceCopy:
 		return "applied", "", nil
 	case result == store.RelayBounceDuplicate:

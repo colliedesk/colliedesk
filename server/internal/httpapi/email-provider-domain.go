@@ -59,7 +59,7 @@ func (a *API) verifyProviderDomain(response http.ResponseWriter, request *http.R
 		writeError(response, http.StatusConflict, "dns_record_not_verified", unverifiedMessage(saved.DNSRecords))
 		return
 	}
-	writeJSON(response, http.StatusOK, a.emailSettings(workspace.Slug, &saved))
+	a.writeEmailSettings(response, request, &saved)
 }
 
 // checkProviderDomain creates the domain when it does not exist yet, then reads its status, asking the

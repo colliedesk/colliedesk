@@ -255,6 +255,21 @@ names exactly one reply; a customer who answers that address still reaches the c
 - A temporary bounce or an `email.delivery_delayed` event changes nothing; the relay keeps trying.
 - Resend sends an event again until it gets an answer; a repeated event changes nothing.
 
+### Sending pauses after spam complaints
+
+When the Resend webhook above is on, Colliedesk counts spam complaints per workspace. A workspace is
+paused when it has **3 or more complaints in the last 7 days and they are more than 0.3% of the
+replies it sent in those 7 days** (3 on 1,000 replies is exactly 0.3% and does not pause; 4 does).
+
+- **Settings → Email channel** shows **Email sending is paused** with the counts. Admins cannot lift it.
+- Replies written during the pause stay **Queued** with the note "Email sending is paused after spam
+  complaints; contact support." Nothing is failed and no attempt is used up. They are sent after
+  the pause ends.
+- The operator gets one email at `BILLING_ALERT_EMAIL` (needs `SMTP_HOST` and `MAIL_FROM_DOMAIN`);
+  without it the server only logs a warning.
+- The operator lifts the pause after checking the complaints:
+  `collie email resume <workspace slug>`. Held replies then go out at once.
+
 ## What you see in the inbox
 
 - Incoming messages show the sender address and are shown as plain text: no remote images load,
@@ -341,6 +356,9 @@ send one `cc` field per address before the files. See `createMessage` in `contra
 - One sender can send 10 messages per 10 minutes, and a workspace can open 200 new conversations
   per 10 minutes. Above that the forwarder gets `429` and should retry.
 - Each workspace sends at most 300 emailed replies per hour; more wait and send later.
+- Mail Colliedesk writes by itself (operator alerts, notices, reports) carries
+  `Auto-Submitted: auto-generated` (RFC 3834). Colliedesk drops inbound mail with that header, so an
+  automatic answer to it never opens a conversation. Replies you write carry no such header.
 - Text longer than 5 MiB is cut and marked. Subjects longer than 250 characters are shortened in
   replies.
 - Replies are plain text. Markdown is sent as written.

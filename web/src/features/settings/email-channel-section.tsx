@@ -100,6 +100,10 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
               {verifyError && <p role="alert" className="error-copy">{verifyError}</p>}
               {canManage && <span className="button-row"><button type="button" onClick={() => onVerifyDomain?.()}>{messages.verifyDomain}</button></span>}
             </div>)}
+        {settings?.sending_pause && <div role="alert" aria-labelledby="email-paused-heading" className="warning-note">
+          <strong id="email-paused-heading">{messages.emailSendingPausedTitle}</strong>
+          <p>{messages.emailSendingPausedBody(settings.sending_pause.reason, formatDate(settings.sending_pause.paused_at, timezone))}</p>
+        </div>}
         {channel && (settings?.sending_from
           ? <p className="muted-copy">{messages.sendingFrom(settings.sending_from)}</p>
           : <p role="status" className="error-copy">{messages.cannotSend}</p>)}

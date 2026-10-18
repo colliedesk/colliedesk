@@ -22,11 +22,13 @@ type Delivery struct {
 	Attempts                         int
 	WorkspaceName, SupportAddress    string
 	DomainVerified                   bool
-	ContactName, ContactEmail        string
-	Subject, Body                    string
-	EmailMessageID, ReplyToken       string
-	InReplyTo                        string
-	References                       []string
+	// EmailPaused is set while the workspace's sending is paused after spam complaints.
+	EmailPaused                bool
+	ContactName, ContactEmail  string
+	Subject, Body              string
+	EmailMessageID, ReplyToken string
+	InReplyTo                  string
+	References                 []string
 	// CC is the list stored with the reply; a retry sends to the same addresses.
 	CC    []string
 	Files []DeliveryFile
@@ -84,14 +86,14 @@ func (s *Store) loadDelivery(ctx context.Context, item *Delivery) error {
 func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
 	var conversationID string
 	var createdAt time.Time
-	err := tx.QueryRow(ctx, `SELECT w.name,COALESCE(ch.support_address,''),COALESCE(ch.domain_verified_at IS NOT NULL,false),
+	err := tx.QueryRow(ctx, `SELECT w.name,COALESCE(ch.support_address,''),COALESCE(ch.domain_verified_at IS NOT NULL,false),w.email_paused_at IS NOT NULL,
 			ct.name,ct.email,c.subject,m.body,COALESCE(m.email_message_id,''),COALESCE(c.email_reply_token,''),c.id::text,m.created_at,m.cc
 		FROM messages m JOIN conversations c ON c.workspace_id=m.workspace_id AND c.id=m.conversation_id
 		JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
 		JOIN workspaces w ON w.id=m.workspace_id
 		LEFT JOIN email_channels ch ON ch.workspace_id=m.workspace_id
 		WHERE m.workspace_id=$1 AND m.id=$2`, item.WorkspaceID, item.MessageID).
-		Scan(&item.WorkspaceName, &item.SupportAddress, &item.DomainVerified, &item.ContactName, &item.ContactEmail, &item.Subject, &item.Body,
+		Scan(&item.WorkspaceName, &item.SupportAddress, &item.DomainVerified, &item.EmailPaused, &item.ContactName, &item.ContactEmail, &item.Subject, &item.Body,
 			&item.EmailMessageID, &item.ReplyToken, &conversationID, &createdAt, &item.CC)
 	if err != nil {
 		return fmt.Errorf("load delivery %s: %w", item.OutboxID, err)

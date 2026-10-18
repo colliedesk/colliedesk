@@ -2534,6 +2534,12 @@ components:
         dns_record_value: {type: string, description: Value the TXT record must hold}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+    EmailSendingPause:
+      type: object
+      required: [paused_at, reason]
+      properties:
+        paused_at: {type: string, format: date-time}
+        reason: {type: string, description: The complaint count and rate that caused the pause}
     EmailDNSRecord:
       type: object
       required: [record, type, name, value, priority, status]
@@ -2555,8 +2561,16 @@ components:
         authenticated: {type: boolean}
     EmailChannelSettings:
       type: object
-      required: [channel, inbound_url, smtp, from_policy, sending_from, hosted_address, domain_verification]
+      required: [channel, inbound_url, smtp, from_policy, sending_from, hosted_address, domain_verification, sending_pause]
       properties:
+        sending_pause:
+          description: >
+            Set when the workspace's email sending is paused after spam complaints (3 or more in 7 days and
+            more than 0.3% of the replies sent). Replies can still be written; they stay queued with a
+            note until an operator resumes sending with `collie email resume`. Admins cannot clear it.
+          oneOf:
+            - {type: 'null'}
+            - $ref: '#/components/schemas/EmailSendingPause'
         domain_verification:
           type: string
           enum: [txt, provider]

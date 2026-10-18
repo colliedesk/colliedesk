@@ -121,6 +121,7 @@ export const emailChannelSettingsSchema = z.object({
   channel: emailChannelSchema.nullable(), inbound_url: z.string().url(),
   from_policy: z.enum(['verified', 'any']), sending_from: z.string().nullable(), hosted_address: z.string().nullable(),
   domain_verification: z.enum(['txt', 'provider']),
+  sending_pause: z.object({ paused_at: z.string().datetime(), reason: z.string() }).nullable(),
   smtp: z.object({ configured: z.boolean(), host: z.string(), port: z.number().int(), starttls: z.boolean(), authenticated: z.boolean() }),
 }) satisfies z.ZodType<Generated<'EmailChannelSettings'>>;
 export const webFormSettingsSchema = z.object({
