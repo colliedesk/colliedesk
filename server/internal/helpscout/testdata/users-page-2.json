@@ -1,0 +1,8 @@
+{
+  "_embedded": {
+    "users": [
+      {"id": 7003, "firstName": "Carol", "lastName": "Chen", "email": "carol@acme.example", "role": "user", "type": "user", "createdAt": "2025-01-12T08:00:00Z", "updatedAt": "2026-01-12T08:00:00Z"}
+    ]
+  },
+  "page": {"size": 2, "totalElements": 3, "totalPages": 2, "number": 2}
+}

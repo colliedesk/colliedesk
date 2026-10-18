@@ -1,0 +1,25 @@
+{
+  "_embedded": {
+    "threads": [
+      {"id": 2002, "type": "message", "status": "active", "state": "published",
+       "body": "<p>We sent a technician.</p><p><img src=\"https://{{IMAGES}}/file/inline-1.png\" alt=\"diagram\"></p>",
+       "source": {"type": "email", "via": "user"},
+       "customer": {"id": 9101, "first": "Dana", "last": "Lee", "email": "dana@customer.example"},
+       "createdBy": {"id": 7001, "type": "user", "first": "Alice", "last": "Admin", "email": "alice@acme.example"},
+       "to": ["dana@customer.example"], "cc": ["ops@customer.example"], "bcc": [],
+       "createdAt": "2026-03-02T10:00:00Z", "_embedded": {"attachments": []}},
+      {"id": 2001, "type": "customer", "status": "active", "state": "published",
+       "body": "<p>My printer is on fire.</p>",
+       "source": {"type": "email", "via": "customer"},
+       "customer": {"id": 9101, "first": "Dana", "last": "Lee", "email": "dana@customer.example"},
+       "createdBy": {"id": 9101, "type": "customer", "first": "Dana", "last": "Lee", "email": "dana@customer.example"},
+       "to": ["support@acme.example"], "cc": [], "bcc": [],
+       "createdAt": "2026-03-02T09:15:00Z",
+       "_embedded": {"attachments": [
+         {"id": 3001, "filename": "receipt.pdf", "mimeType": "application/pdf", "size": 11, "state": "valid",
+          "_links": {"data": {"href": "https://api.helpscout.net/v2/conversations/101/attachments/3001/data"}}}
+       ]}}
+    ]
+  },
+  "page": {"size": 2, "totalElements": 4, "totalPages": 2, "number": 1}
+}

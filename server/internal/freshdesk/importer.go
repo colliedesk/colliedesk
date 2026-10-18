@@ -241,4 +241,4 @@ func numericLess(a, b string) bool {
 var ErrImportRunning = importkit.ErrImportRunning
 
 // ErrNoImport means the workspace holds no import from the requested source.
-var ErrNoImport = errors.New("no Freshdesk import found in this workspace")
+var ErrNoImport = errors.New("no Freshdesk or Help Scout import found in this workspace")

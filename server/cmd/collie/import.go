@@ -35,8 +35,11 @@ func importCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 	if len(args) > 0 && args[0] == "undo" {
 		return undoCommand(ctx, pool, args[1:], output)
 	}
+	if len(args) > 0 && args[0] == "helpscout" {
+		return importHelpScout(ctx, pool, args[1:], output)
+	}
 	if len(args) == 0 || args[0] != "freshdesk" {
-		return errors.New(importUsage + "\n" + undoUsage)
+		return errors.New(importUsage + "\n" + helpscoutUsage + "\n" + undoUsage)
 	}
 	options, reportDir, err := parseImportFlags(args[1:])
 	if err != nil {

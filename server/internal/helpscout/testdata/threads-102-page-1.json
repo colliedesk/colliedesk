@@ -1,0 +1,27 @@
+{
+  "_embedded": {
+    "threads": [
+      {"id": 2007, "type": "message", "status": "closed", "state": "draft",
+       "body": "<p>Draft that was never sent.</p>",
+       "createdBy": {"id": 7002, "type": "user", "first": "Bob", "last": "Builder", "email": "bob@acme.example"},
+       "to": ["erin@customer.example"], "cc": [], "bcc": [],
+       "createdAt": "2026-03-05T12:30:00Z", "_embedded": {"attachments": []}},
+      {"id": 2006, "type": "message", "status": "closed", "state": "published",
+       "body": "<p>Refund sent, see the screenshot.</p>",
+       "source": {"type": "email", "via": "user"},
+       "createdBy": {"id": 7002, "type": "user", "first": "Bob", "last": "Builder", "email": "bob@acme.example"},
+       "to": ["erin@customer.example"], "cc": [], "bcc": ["audit@acme.example"],
+       "createdAt": "2026-03-05T12:00:00Z",
+       "_embedded": {"attachments": [
+         {"id": 3002, "filename": "screenshot.png", "mimeType": "image/png", "width": 10, "height": 10, "size": 12, "state": "valid"}
+       ]}},
+      {"id": 2005, "type": "customer", "status": "active", "state": "published",
+       "body": "<p>Please refund order 77.</p>",
+       "source": {"type": "email", "via": "customer"},
+       "createdBy": {"id": 9102, "type": "customer", "first": "Erin", "last": "Moss", "email": ""},
+       "to": ["support@acme.example"], "cc": [], "bcc": [],
+       "createdAt": "2026-03-04T11:00:00Z", "_embedded": {"attachments": []}}
+    ]
+  },
+  "page": {"size": 50, "totalElements": 3, "totalPages": 1, "number": 1}
+}
