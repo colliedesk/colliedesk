@@ -430,6 +430,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/mail-image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Serves one remote image of an incoming email on the viewer's behalf, so the sender sees the server's address and not the reader's. The address is made by the server: the message list rewrites every remote `<img src>` of `body_html` to this route for a signed-in person, with `u` (the original URL) and `s` (an HMAC over the workspace and the URL). Only signed addresses are served. The server refuses private, loopback, link-local, CGNAT, multicast and metadata addresses (also after DNS and on every redirect, at most 3), serves only PNG, JPEG, GIF and WebP (checked from the bytes; SVG is refused), caps an image at 5 MiB, and keeps a fetched image per workspace so a second view does not call the source again. An agent token cannot use it; it reads the original HTML. */
+        get: operations["getMailImage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/contacts": {
         parameters: {
             query?: never;
@@ -1556,7 +1573,7 @@ export interface components {
             /** @enum {string} */
             kind: "incoming" | "outgoing" | "note";
             body: string;
-            /** @description Original HTML of an imported message. Untrusted content: render it only in a sandboxed frame that runs no scripts and loads nothing from the network. */
+            /** @description Original HTML of an imported or incoming email. Untrusted content: render it only in a sandboxed frame that runs no scripts. For a signed-in person, every remote `<img src>` is rewritten to `/api/v1/mail-image` (the image proxy) and `srcset` is removed, so the frame can load images from the Colliedesk origin and nowhere else. An agent token reads the HTML as stored. */
             body_html: string | null;
             /** @description Where an imported message came from; null for messages written in Colliedesk. */
             origin: null | components["schemas"]["MessageOrigin"];
@@ -2859,6 +2876,82 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getMailImage: {
+        parameters: {
+            query: {
+                /** @description Original image URL (http or https). */
+                u: string;
+                /** @description Hex HMAC signature made by the server. */
+                s: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The image */
+            200: {
+                headers: {
+                    /** @description private, max-age=2592000, immutable */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/jpeg": string;
+                    "image/gif": string;
+                    "image/webp": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The signature is wrong, or the address is private or internal. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The image is over the size limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The response is not a PNG, JPEG, GIF or WebP image. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The source could not be reached or answered with an error. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many images are being fetched; retry after the `Retry-After` seconds. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listContacts: {

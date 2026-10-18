@@ -6,33 +6,14 @@ import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { Avatar } from '../../ui/avatar';
 import { LockIcon, PaperclipIcon } from '../../ui/icons';
+import { EmailFrame } from './email-frame';
 import { PlainTextBody } from './plain-text-body';
 
-// Imported HTML is untrusted. It is shown only in a sandboxed frame (no
-// scripts, unique origin) whose policy blocks every load, form and frame, and
-// the markup is stripped of everything that can navigate or fetch: CSP alone
-// does not stop <meta http-equiv="refresh"> or a clicked link.
-const sandboxPolicy = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'; frame-src 'none'";
-const removedElements = 'meta, base, link, script, noscript, iframe, frame, frameset, object, embed, form, portal';
-const urlAttributes = ['href', 'src', 'srcset', 'action', 'formaction', 'xlink:href', 'ping', 'background', 'poster', 'cite', 'longdesc', 'target'];
-
-function sanitizeOriginal(html: string): string {
-  const parsed = new DOMParser().parseFromString(html, 'text/html');
-  parsed.querySelectorAll(removedElements).forEach((element) => element.remove());
-  parsed.querySelectorAll('*').forEach((element) => {
-    for (const attribute of Array.from(element.attributes)) {
-      const name = attribute.name.toLowerCase();
-      const inlineImage = name === 'src' && element.tagName === 'IMG' && attribute.value.trim().startsWith('data:image/');
-      if (name.startsWith('on') || (urlAttributes.includes(name) && !inlineImage)) element.removeAttribute(attribute.name);
-    }
-  });
-  const styles = Array.from(parsed.head.querySelectorAll('style')).map((style) => style.outerHTML).join('');
-  return styles + parsed.body.innerHTML;
-}
-
-export function originalDocument(html: string): string {
-  return `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${sandboxPolicy}">${sanitizeOriginal(html)}`;
-}
+// The importer stores a Freshdesk-hosted inline image as a file named inline-image-<16 hex>.<ext> and
+// also embeds it in the HTML (server/internal/freshdesk/inline-images.go). While the HTML is shown the
+// image is already on screen, so its file row would only repeat it; the file stays stored and
+// downloadable, and the row returns in the plain-text view, where nothing else shows the image.
+const inlineImageFile = /^inline-image-[0-9a-f]{16}\.(?:png|jpe?g|gif|webp)$/;
 
 interface MessageItemProps {
   item: Message;
@@ -43,10 +24,12 @@ interface MessageItemProps {
 }
 
 export function MessageItem({ item, timezone, onRetryDelivery, approvedBy }: MessageItemProps) {
-  const [showOriginal, setShowOriginal] = useState(false);
+  const [plainText, setPlainText] = useState(false);
+  const showHTML = Boolean(item.body_html) && !plainText;
   // The stored raw email is offered on its own, not mixed with the customer's files.
   const originalID = item.email?.original_attachment_id ?? null;
-  const files = item.attachments.filter((file) => file.id !== originalID);
+  const stored = item.attachments.filter((file) => file.id !== originalID);
+  const files = showHTML ? stored.filter((file) => !inlineImageFile.test(file.filename)) : stored;
   const sender = approvedBy ?? item.author_name ?? messages.someone;
   // A token or draft line already names the person; the plain name would repeat it.
   const plainAuthor = item.author_name && !item.agent_token && !item.agent_request_id;
@@ -64,17 +47,18 @@ export function MessageItem({ item, timezone, onRetryDelivery, approvedBy }: Mes
         </div>
         <time dateTime={item.created_at}>{formatDate(item.created_at, timezone)}</time>
       </header>
-      {item.email && <EmailEnvelope email={item.email} storedFiles={files.length} />}
+      {item.email && <EmailEnvelope email={item.email} storedFiles={stored.length} />}
       {item.origin && <OriginLine origin={item.origin} />}
-      <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} /> : <Markdown>{item.body}</Markdown>}</div>
+      {showHTML && item.body_html
+        ? <EmailFrame title={messages.originalMessage} html={item.body_html} />
+        : <div className="markdown-body">{item.kind === 'incoming' ? <PlainTextBody text={item.body} /> : <Markdown>{item.body}</Markdown>}</div>}
       {files.length > 0 && <AttachmentList items={files} />}
       {item.kind === 'outgoing' && item.cc.length > 0 && <div className="message-envelope"><span>{messages.ccLine(item.cc)}</span></div>}
       <DeliveryStatus item={item} onRetry={onRetryDelivery} />
       {item.body_html && (
         <div className="message-original">
-          <button type="button" className="link-button" onClick={() => setShowOriginal(!showOriginal)}>
-            {showOriginal ? messages.hideOriginal : messages.showOriginal}</button>
-          {showOriginal && <iframe title={messages.originalMessage} sandbox="" srcDoc={originalDocument(item.body_html)} />}
+          <button type="button" className="link-button" onClick={() => setPlainText(!plainText)}>
+            {plainText ? messages.showFormattedEmail : messages.showPlainText}</button>
         </div>
       )}
     </article>

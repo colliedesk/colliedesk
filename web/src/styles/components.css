@@ -100,9 +100,10 @@
 .message-attachments a { font-weight: 500; text-decoration: none; }
 .message-attachments a:hover { text-decoration: underline; }
 .attachment-size { color: var(--text-3); font-variant-numeric: tabular-nums; }
-.message-original { margin-top: var(--space-3); font-size: var(--fs-label); }
-/* Customer email keeps its own light styling; a white page stays readable in either theme. */
-.message-original iframe { display: block; width: 100%; min-height: 12rem; margin-top: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); background: #fff; color-scheme: light; }
+.message-original { margin-top: var(--space-2); font-size: var(--fs-label); }
+/* Customer email keeps its own light styling; a white page stays readable in either theme. The frame is as
+   tall as the mail (see fit-frame.ts), so the conversation scrolls once and the frame never does. */
+.email-frame { display: block; width: 100%; height: 6rem; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; color-scheme: light; }
 .time-entries { border: 1px dashed var(--line-strong); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-5); font-size: var(--fs-label); }
 .time-entries h3 { font-size: var(--fs-ui); font-weight: 600; }
 .time-entries ul { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
