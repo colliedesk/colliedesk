@@ -49,6 +49,35 @@ test('images load only from the image proxy or from the message itself', () => {
   for (const id of ['b', 'd', 'e', 'f', 'g']) expect(document.getElementById(id)?.hasAttribute('src')).toBe(false);
 });
 
+const quote = '<div class="gmail_quote"><div class="gmail_attr">On Thu, Sam wrote:</div><blockquote style="border-left:1px solid #ccc">Earlier question<blockquote>Oldest question</blockquote></blockquote></div>';
+
+test('quoted history under a reply is collapsed behind a ••• toggle that needs no script', () => {
+  const document = parsed(`<div>Friday works.</div>${quote}`);
+  const details = document.querySelectorAll('details.quoted-history');
+  expect(details).toHaveLength(1); // the nested quote does not get a toggle of its own
+  expect(details[0].hasAttribute('open')).toBe(false);
+  expect(details[0].querySelector('summary')?.textContent).toBe('•••');
+  expect(details[0].textContent).toContain('Oldest question');
+  expect(document.body.firstElementChild?.textContent).toBe('Friday works.');
+});
+
+test('a blockquote with no gmail wrapper is collapsed too, and its attribution line stays visible', () => {
+  const document = parsed('<p>Thanks, done.</p><p>On Mon, Ada wrote:</p><blockquote type="cite">Is it fixed?</blockquote>');
+  expect(document.querySelectorAll('details.quoted-history')).toHaveLength(1);
+  expect(document.body.textContent).toContain('On Mon, Ada wrote:');
+  expect(document.querySelector('details blockquote')?.textContent).toBe('Is it fixed?');
+});
+
+test('a message that is only a quote, such as a forward, is shown open with its bar', () => {
+  const document = parsed('<blockquote>Forwarded text</blockquote><p></p>');
+  expect(document.querySelector('details')).toBeNull();
+  expect(document.querySelector('blockquote')?.textContent).toBe('Forwarded text');
+});
+
+test('mail without quotes gets no toggle', () => {
+  expect(parsed('<p>Hello</p><table><tr><td>x</td></tr></table>').querySelector('details')).toBeNull();
+});
+
 test('wide mail is made to fit and the base font is sans-serif unless the mail sets its own', () => {
   const document = parsed('<style>body{font-family:Georgia,serif}</style><table width="650"><tr><td><img width="650" src="data:image/gif;base64,R0lGOD"></td></tr></table>');
   const styles = Array.from(document.querySelectorAll('style')).map((style) => style.textContent ?? '');

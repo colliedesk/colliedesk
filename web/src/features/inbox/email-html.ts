@@ -16,12 +16,38 @@ function policy(origin: string): string {
 const baseStyle = 'html{-webkit-text-size-adjust:100%}'
   + 'body{margin:0;padding:0;background:#fff;color:#222;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:14px;line-height:1.5;overflow-wrap:break-word}'
   + 'img{max-width:100%;height:auto}table{max-width:100%}pre{white-space:pre-wrap}'
+  + 'summary{display:inline-block;cursor:pointer;list-style:none;padding:0 8px;border-radius:10px;background:#e8eaed;color:#555;font-size:12px;line-height:16px;letter-spacing:1px}'
+  + 'summary::-webkit-details-marker{display:none}details.quoted-history[open]>summary{margin-bottom:6px}'
   + 'a{color:#1a5fb4}blockquote{margin:0 0 0 .4em;padding-left:1em;border-left:3px solid #d0d7de}';
 
 function keepsAttribute(element: Element, name: string, value: string): boolean {
   const tag = element.tagName;
   if (tag === 'IMG' && name === 'src') return value.trim().startsWith('data:image/') || value.startsWith(proxyPath);
   return tag === 'A' && name === 'href' && linkTargets.test(value.trim());
+}
+
+function hasTextBefore(element: Element): boolean {
+  for (let node: Element | null = element; node && node.tagName !== 'BODY'; node = node.parentElement) {
+    for (let sibling = node.previousSibling; sibling; sibling = sibling.previousSibling) {
+      if ((sibling.textContent ?? '').trim() !== '') return true;
+    }
+  }
+  return false;
+}
+
+// Quoted history under a reply folds behind a ••• toggle, as in the Freshdesk agent view. <details> needs
+// no script. A message that is only a quote (a forward) stays open.
+function collapseQuotes(parsed: Document): void {
+  parsed.querySelectorAll('div.gmail_quote, div.yahoo_quoted, blockquote').forEach((quote) => {
+    if (quote.closest('details.quoted-history') || !hasTextBefore(quote)) return;
+    const details = parsed.createElement('details');
+    details.className = 'quoted-history';
+    const summary = parsed.createElement('summary');
+    summary.textContent = '•••';
+    summary.title = 'Show quoted text';
+    quote.replaceWith(details);
+    details.append(summary, quote);
+  });
 }
 
 function sanitize(html: string): string {
@@ -37,6 +63,7 @@ function sanitize(html: string): string {
     link.setAttribute('target', '_blank');
     link.setAttribute('rel', 'noopener noreferrer');
   });
+  collapseQuotes(parsed);
   const styles = Array.from(parsed.head.querySelectorAll('style')).map((style) => style.outerHTML).join('');
   return styles + parsed.body.innerHTML;
 }
