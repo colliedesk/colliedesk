@@ -713,6 +713,59 @@ paths:
               schema: {type: string, format: binary}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/mail-image:
+    get:
+      operationId: getMailImage
+      x-permission: conversations:read
+      description: >-
+        Serves one remote image of an incoming email on the viewer's behalf, so the sender sees the
+        server's address and not the reader's. The address is made by the server: the message list
+        rewrites every remote `<img src>` of `body_html` to this route for a signed-in person, with `u`
+        (the original URL) and `s` (an HMAC over the workspace and the URL). Only signed addresses are
+        served. The server refuses private, loopback, link-local, CGNAT, multicast and metadata
+        addresses (also after DNS and on every redirect, at most 3), serves only PNG, JPEG, GIF and
+        WebP (checked from the bytes; SVG is refused), caps an image at 5 MiB, and keeps a fetched
+        image per workspace so a second view does not call the source again. An agent token cannot
+        use it; it reads the original HTML.
+      parameters:
+        - {name: u, in: query, required: true, schema: {type: string}, description: Original image URL (http or https).}
+        - {name: s, in: query, required: true, schema: {type: string}, description: Hex HMAC signature made by the server.}
+      responses:
+        '200':
+          description: The image
+          headers:
+            Cache-Control: {schema: {type: string}, description: 'private, max-age=2592000, immutable'}
+          content:
+            image/png: {schema: {type: string, format: binary}}
+            image/jpeg: {schema: {type: string, format: binary}}
+            image/gif: {schema: {type: string, format: binary}}
+            image/webp: {schema: {type: string, format: binary}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403':
+          description: The signature is wrong, or the address is private or internal.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '413':
+          description: The image is over the size limit.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '415':
+          description: The response is not a PNG, JPEG, GIF or WebP image.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '502':
+          description: The source could not be reached or answered with an error.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '503':
+          description: Too many images are being fetched; retry after the `Retry-After` seconds.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
   /api/v1/contacts:
     get:
       operationId: listContacts
@@ -2425,8 +2478,11 @@ components:
         body_html:
           type: [string, 'null']
           description: >-
-            Original HTML of an imported message. Untrusted content: render it only in a sandboxed
-            frame that runs no scripts and loads nothing from the network.
+            Original HTML of an imported or incoming email. Untrusted content: render it only in a
+            sandboxed frame that runs no scripts. For a signed-in person, every remote `<img src>` is
+            rewritten to `/api/v1/mail-image` (the image proxy) and `srcset` is removed, so the frame
+            can load images from the Colliedesk origin and nowhere else. An agent token reads the HTML
+            as stored.
         origin:
           description: Where an imported message came from; null for messages written in Colliedesk.
           oneOf:

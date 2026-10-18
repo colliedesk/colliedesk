@@ -57,7 +57,9 @@ func DiscardObject(ctx context.Context, db *database.DB, storage attachments.Sto
 		return err
 	}
 	var used bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM attachments WHERE workspace_id=$1 AND storage_key=$2)`, workspaceID, key).Scan(&used); err != nil {
+	// The proxy's image cache points at objects too; a file shared with an attachment stays while either needs it.
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM attachments WHERE workspace_id=$1 AND storage_key=$2)
+		OR EXISTS(SELECT 1 FROM mail_image_cache WHERE workspace_id=$1 AND storage_key=$2)`, workspaceID, key).Scan(&used); err != nil {
 		return fmt.Errorf("check attachment key: %w", err)
 	}
 	if !used {
