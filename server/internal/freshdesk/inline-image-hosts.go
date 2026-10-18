@@ -1,11 +1,11 @@
 package freshdesk
 
 import (
-	"html"
-	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/importkit"
 )
 
 // Hosts an image may be fetched from. Exact patterns only: a tenant portal of another Freshdesk
@@ -18,27 +18,8 @@ var (
 	s3AssetBucket = regexp.MustCompile(`^(cdn|assets)\.freshdesk\.com\.s3([.-][a-z0-9-]+)?\.amazonaws\.com$`)
 	// A redirect from a gateway goes through the tenant's own host to the tenant's attachment CDN,
 	// for example <tenant>.freshdesk.com then <tenant>.attachments8.freshdesk.com.
-	tenantHost      = regexp.MustCompile(`^[a-z0-9-]+\.(attachments[a-z0-9-]*\.)?freshdesk\.com$`)
-	imgSrc          = regexp.MustCompile(`(?is)(<img\b[^>]*?\ssrc\s*=\s*)(?:"([^"]*)"|'([^']*)')`)
-	rasterMediaType = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true}
+	tenantHost = regexp.MustCompile(`^[a-z0-9-]+\.(attachments[a-z0-9-]*\.)?freshdesk\.com$`)
 )
-
-// mapImageSources rewrites the src of every <img>. fn gets the attribute value with HTML entities
-// decoded and returns the new value, or false to leave the tag as written. The new value is escaped.
-func mapImageSources(markup string, fn func(src string) (string, bool)) string {
-	return imgSrc.ReplaceAllStringFunc(markup, func(tag string) string {
-		parts := imgSrc.FindStringSubmatch(tag)
-		src := parts[2]
-		if src == "" {
-			src = parts[3]
-		}
-		replacement, ok := fn(html.UnescapeString(src))
-		if !ok {
-			return tag
-		}
-		return parts[1] + `"` + html.EscapeString(replacement) + `"`
-	})
-}
 
 func parseImageSrc(src string) (*url.URL, bool) {
 	if strings.HasPrefix(src, "//") {
@@ -81,25 +62,13 @@ func (r *run) hostedImageURL(src string) (*url.URL, bool) {
 // domain, another tenant's portal): they stay links and the report warns about them.
 func (r *run) looksHosted(markup string) bool {
 	found := false
-	mapImageSources(markup, func(src string) (string, bool) {
+	importkit.MapImageSources(markup, func(src string) (string, bool) {
 		if _, ok := r.hostedImageURL(src); !ok && strings.Contains(strings.ToLower(src), "freshdesk") && !strings.HasPrefix(src, "data:") {
 			found = true
 		}
 		return "", false
 	})
 	return found
-}
-
-// sniffRaster returns the raster media type of the first bytes of data, or "".
-func sniffRaster(data []byte) string {
-	sniffed := http.DetectContentType(data)
-	if i := strings.IndexByte(sniffed, ';'); i >= 0 {
-		sniffed = sniffed[:i]
-	}
-	if rasterMediaType[sniffed] {
-		return sniffed
-	}
-	return ""
 }
 
 // allowedRedirectURL says whether a redirect hop of an image download may go to u: anything an

@@ -9,11 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime"
 	"net/url"
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/importkit"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 )
@@ -49,7 +49,7 @@ func imageKey(u *url.URL) string {
 func (r *run) inlineImages(markup string) []imageRef {
 	var refs []imageRef
 	seen := map[string]bool{}
-	mapImageSources(markup, func(src string) (string, bool) {
+	importkit.MapImageSources(markup, func(src string) (string, bool) {
 		if u, ok := r.hostedImageURL(src); ok {
 			if key := imageKey(u); !seen[key] {
 				seen[key] = true
@@ -64,43 +64,6 @@ func (r *run) inlineImages(markup string) []imageRef {
 // inlineImageID is the ledger id of one image of one message. The message entity is part of it
 // because a ticket id and a conversation id can be equal.
 func inlineImageID(entity, sourceID, key string) string { return entity + ":" + sourceID + ":" + key }
-
-// imageType decides the media type of a downloaded image. Only PNG, JPEG, GIF and WebP are kept:
-// the declared type must be one of them (or a generic binary type) and the bytes must agree. The
-// result comes from a fixed list, never from the response header, so nothing the source sent can
-// reach the stored HTML or the attachment row.
-func imageType(header string, data []byte) (string, error) {
-	declared, _, err := mime.ParseMediaType(header)
-	if err != nil {
-		return "", fmt.Errorf("the Content-Type %q is not valid", clip(header))
-	}
-	sniffed := sniffRaster(data)
-	switch {
-	case sniffed == "":
-		return "", fmt.Errorf("the response (%q) is not a PNG, JPEG, GIF or WebP image", clip(declared))
-	case declared == "image/jpg":
-		declared = "image/jpeg"
-	}
-	if declared != sniffed && declared != "application/octet-stream" && declared != "binary/octet-stream" {
-		return "", fmt.Errorf("the response is declared %q but holds %s data", clip(declared), sniffed)
-	}
-	return sniffed, nil
-}
-
-// clip shortens a header value from the source and drops every character that could be markup, so an
-// error that names it is safe to put in the Markdown report.
-func clip(value string) string {
-	var b strings.Builder
-	for _, c := range value {
-		if b.Len() >= 60 {
-			break
-		}
-		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.ContainsRune("/+.-_;= ", c) {
-			b.WriteRune(c)
-		}
-	}
-	return b.String()
-}
 
 // openImage starts a download that refuses to leave the allowed hosts, even through redirects.
 func (r *run) openImage(ctx context.Context, target string) (io.ReadCloser, int64, string, error) {
@@ -124,7 +87,7 @@ func (r *run) fetchImage(ctx context.Context, target string) ([]byte, string, er
 	case len(data) > maxInlineImageBytes:
 		return nil, "", fmt.Errorf("the image is over the %d byte limit for one image", maxInlineImageBytes)
 	}
-	mediaType, err := imageType(header, data)
+	mediaType, err := importkit.ImageType(header, data)
 	return data, mediaType, err
 }
 
@@ -258,7 +221,7 @@ func (r *run) commitInlineImages(ctx context.Context, ticketKey, messageID strin
 	}
 	embeds := map[string]string{}
 	for _, image := range images {
-		input := store.NewAttachment{MessageID: messageID, Filename: "inline-image-" + image.ref.key + imageExtension(image.contentType), ContentType: image.contentType, Object: image.object}
+		input := store.NewAttachment{MessageID: messageID, Filename: "inline-image-" + image.ref.key + importkit.ImageExtension(image.contentType), ContentType: image.contentType, Object: image.object}
 		targetID, err := r.saveAttachment(ctx, tx, image.entry, image.found, input)
 		if err != nil {
 			return err
@@ -289,7 +252,7 @@ func (r *run) embedImages(ctx context.Context, tx store.Querier, messageID strin
 	if current == nil {
 		return nil
 	}
-	updated := mapImageSources(*current, func(src string) (string, bool) {
+	updated := importkit.MapImageSources(*current, func(src string) (string, bool) {
 		u, ok := r.hostedImageURL(src)
 		if !ok {
 			return "", false
@@ -305,20 +268,6 @@ func (r *run) embedImages(ctx context.Context, tx store.Querier, messageID strin
 		return fmt.Errorf("write message HTML: %w", err)
 	}
 	return nil
-}
-
-func imageExtension(contentType string) string {
-	switch contentType {
-	case "image/png":
-		return ".png"
-	case "image/jpeg":
-		return ".jpg"
-	case "image/gif":
-		return ".gif"
-	case "image/webp":
-		return ".webp"
-	}
-	return ""
 }
 
 // measureImage returns the size of an image the sizing pass would store, or 0 when it cannot be

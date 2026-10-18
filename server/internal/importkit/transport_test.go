@@ -1,4 +1,4 @@
-package freshdesk
+package importkit
 
 import (
 	"net"
@@ -13,12 +13,12 @@ func TestDialGuardBlocksReservedAndTranslatedAddresses(t *testing.T) {
 		"64:ff9b::a9fe:a9fe", "64:ff9b:1::1", "2002:a9fe:a9fe::1", "2001:0:4136:e378::1", "2001:db8::1",
 	}
 	for _, address := range blocked {
-		if !blockedIP(net.ParseIP(address)) {
+		if !BlockedIP(net.ParseIP(address)) {
 			t.Errorf("%s is not blocked", address)
 		}
 	}
 	for _, address := range []string{"8.8.8.8", "52.95.110.1", "2606:4700::1111", "2a00:1450:4001::1"} {
-		if blockedIP(net.ParseIP(address)) {
+		if BlockedIP(net.ParseIP(address)) {
 			t.Errorf("public address %s is blocked", address)
 		}
 	}

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/importkit"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -237,7 +238,7 @@ func numericLess(a, b string) bool {
 }
 
 // ErrImportRunning means another import or undo holds the workspace lock.
-var ErrImportRunning = errors.New("an import or undo is already running in this workspace")
+var ErrImportRunning = importkit.ErrImportRunning
 
 // ErrNoImport means the workspace holds no import from the requested source.
 var ErrNoImport = errors.New("no Freshdesk import found in this workspace")
