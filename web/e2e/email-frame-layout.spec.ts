@@ -51,7 +51,8 @@ for (const [name, html] of Object.entries(viewportSizedMail)) {
 
 test('email frame: mail CSS cannot make the browser call the app API', async ({ page }) => {
   const calls: string[] = [];
-  page.on('request', (request) => { if (/\/api\/v1\/(export|auth\/invites|billing)\b/.test(request.url())) calls.push(request.url()); });
+  // A request the policy blocks is attempted but never answered; one that reaches the server gets a response.
+  page.on('response', (response) => { if (/\/api\/v1\/(export|auth\/invites|billing)\b/.test(response.url())) calls.push(response.url()); });
   await deskWithMail(page, 'CSS probe', '<div style="background-image:url(/api/v1/export)">a</div><div style="background:url(/api/v1/billing)">b</div>'
     + '<style>@import url(/api/v1/auth/invites); p{list-style:url(/api/v1/export?x=1);cursor:url(/api/v1/billing),auto}</style><p>text</p>');
   await page.waitForTimeout(1500);
