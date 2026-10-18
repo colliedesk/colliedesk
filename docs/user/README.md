@@ -17,5 +17,6 @@ One page per feature. Each page says what the feature does, how to use it, and i
 - [Connect an AI agent (MCP)](mcp.md)
 - [Agent requests and reply drafts](agent-requests.md)
 - [Import from Freshdesk](import-freshdesk.md)
+- [Import from Help Scout](import-helpscout.md)
 - [Export all your data](export.md)
 - [Usage report (telemetry)](telemetry.md)
