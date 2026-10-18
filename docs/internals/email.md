@@ -186,19 +186,36 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   Agent replies and notes keep Markdown.
 - **Remote images go through a signed proxy** (`GET /api/v1/mail-image?u=<url>&s=<hmac>`,
   `server/internal/httpapi/mail-image-handler.go`, `server/internal/mailimage`). `GET .../messages`
-  rewrites every remote `<img src>` in `body_html` for a person's session and drops `srcset`; an agent
-  token gets the HTML as stored (the route is PersonOnly for tokens). The HMAC covers workspace id and
-  URL with a per-process random key, so the route is not an open relay and a link is useless in another
-  workspace; after a restart open tabs reload their messages. The fetch (`mailimage.Fetcher`) dials only
-  public addresses: `netguard.Control` runs on every connection, so DNS rebinding and each of the at most 3
-  redirects are covered (loopback, private, link-local incl. 169.254.169.254, CGNAT, multicast,
-  unspecified, fd00:ec2::254, NAT64/6to4/Teredo). It sends no cookies, credentials or Referer and a neutral
-  User-Agent, accepts only PNG/JPEG/GIF/WebP by sniffing the bytes (SVG refused), caps an image at 5 MiB and
-  10 s, and at most 8 fetches run at once (503 `Retry-After` beyond). A fetched image is written to
-  `attachments.Storage` and indexed per workspace in `mail_image_cache` (30 days, then fetched again; a
-  stale copy is served when the source is gone). The timeline never waits for an image: the text renders
-  first and each image loads by itself. The dial guard is shared with the Freshdesk importer.
-  Cached bytes are not counted against the plan storage cap and are not exported (derived data).
+  rewrites every remote `<img src>` in `body_html` for a person's session (read with the HTML tokenizer,
+  not a regex; `srcset` dropped; at most 50 distinct images per message, the rest get an empty `src`). An
+  agent token gets the HTML as stored and the route is PersonOnly for tokens.
+  - **Signature:** HMAC-SHA256 over workspace id and URL. The key is 32 random bytes in `server_secrets`
+    (created once with `INSERT ... ON CONFLICT DO NOTHING`, read by every process), so replicas, a deploy
+    overlap and a restart all agree. It is not `SIGNUP_HASH_KEY`: that one has another purpose and another
+    rotation.
+  - **Fetch** (`mailimage.Fetcher`): the dialer's Control runs on every connection, so DNS rebinding and
+    each of at most 3 redirects are covered: loopback, private, link-local incl. 169.254.169.254, CGNAT,
+    multicast, unspecified, `fd00:ec2::254`, NAT64/6to4/Teredo, `::/96`, `fec0::/10`, `100::/64`; only ports
+    80 and 443. `Proxy` is nil, so `HTTP_PROXY` cannot route around the guard (a test pins it). No cookies,
+    credentials or Referer, neutral User-Agent, PNG/JPEG/GIF/WebP by sniffing (SVG refused), 5 MiB, 10 s.
+  - **Admission:** at most 8 fetches at once and 4 per workspace. A request over the limit waits up to 10 s
+    for a slot (a newsletter sends all its images together and an `<img>` never retries), then gets 503 with
+    `Retry-After`. A workspace queues alone: it takes its workspace slot before a global one.
+  - **Cache:** the image is written to `attachments.Storage` and indexed per workspace in
+    `mail_image_cache`. It is a derived cache, not data: it is not counted against the plan storage cap, not
+    exported, and evicted under pressure. A workspace may cache at most `MAIL_IMAGE_CACHE_BYTES` (default
+    1 GiB; past it an image is served without being kept). `serve` sweeps hourly: rows fetched more than 30
+    days ago go (a source that withdrew an image stops being served), then, while the whole cache is over the
+    cap, the least recently served. `last_served_at` is written at most once a day per image. A stale copy
+    is served only while the source is down and the row is inside its 30 days. Deleting a message does not
+    delete its cached images; the 30-day limit bounds how long they stay.
+  - The timeline never waits for an image: the text renders first and each image loads by itself.
+  - The dial guard (`internal/netguard`) is shared with the Freshdesk importer.
+- **An attachment is `inline` only when its bytes are embedded in `body_html`**, set by the writer that
+  embedded it (the email channel for a `cid:` image that fit the 5 MiB budget, the Freshdesk importer for a
+  rehosted image that fit), never from a file name. The formatted view hides only those rows; an
+  over-budget image or an attachment a sender named `inline-image-...` stays listed. Rows written before
+  the column existed are `false` and stay listed.
 
 ## Files and the raw message
 

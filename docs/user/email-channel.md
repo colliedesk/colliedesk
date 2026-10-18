@@ -293,12 +293,16 @@ replies it sent in those 7 days** (3 on 1,000 replies is exactly 0.3% and does n
   from Colliedesk. Links open in a new tab. Quoted earlier mail under a reply is folded behind a
   **•••** button; select it to read the quote.
 - Remote images (logos, charts, banners) are shown, but your browser never contacts the sender:
-  Colliedesk fetches each image once on its server, keeps a copy, and serves it to you. The sender sees
-  the server, not your address, and cannot tell when you opened the mail. Only PNG, JPEG, GIF and WebP
-  images up to 5 MiB are shown; an SVG or a private or internal address is not.
+  Colliedesk fetches each image on its server, keeps a copy for up to 30 days, and serves it to you. The
+  sender sees the server's address, not yours. The first time anyone opens the mail the server does fetch
+  the images, so a tracking pixel in a mail still tells its sender that the mail was opened by someone on
+  your team, as it does in Freshdesk. Only PNG, JPEG, GIF and WebP images up to 5 MiB are shown, at most 50
+  distinct images per message; an SVG, a private or internal address, or a port other than 80 or 443 is not.
+  The copies are a cache: they do not count against your storage, are not part of the export, and the
+  oldest are removed when the cache is full.
 - Attachments are listed under the message, including the files you sent with a reply; select a
-  file name to download it. An image that the formatted view already shows inline is not listed
-  again; it returns to the list in the plain-text view. **Download original email** gives the
+  file name to download it. An image that Colliedesk embedded in the formatted message is not
+  listed again; it returns to the list in the plain-text view. **Download original email** gives the
   complete message as received (`.eml.gz`), so nothing is lost even if a part could not be shown.
 - **Failed sender verification**: the trusted receiving server reported an SPF, DKIM, or DMARC
   failure. Treat the message as possibly forged.

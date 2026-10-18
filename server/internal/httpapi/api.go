@@ -39,8 +39,16 @@ type Config struct {
 	// MailImages fetches the remote images of incoming email for the image proxy; nil uses the
 	// production fetcher (public addresses only). MailImageConcurrency caps fetches running at once
 	// (default 8); more get 503 with Retry-After.
-	MailImages           *mailimage.Fetcher
-	MailImageConcurrency int
+	MailImages *mailimage.Fetcher
+	// MailImageConcurrency caps fetches running at once (default 8) and MailImageWorkspaceConcurrency the
+	// share of one workspace (default 4). A request over the cap waits up to MailImageQueueWait (default
+	// 10 s) for a slot, then gets 503 with Retry-After.
+	MailImageConcurrency          int
+	MailImageWorkspaceConcurrency int
+	MailImageQueueWait            time.Duration
+	// MailImageCacheBytes caps the image cache of one workspace (default 1 GiB, MAIL_IMAGE_CACHE_BYTES);
+	// past it an image is served without being kept. The periodic sweep applies the same cap to the whole cache.
+	MailImageCacheBytes int64
 	// UploadTimeout is the longest one multipart message upload may take to arrive (default 3 minutes).
 	UploadTimeout time.Duration
 	// RequestPool, when set, runs workspace-scoped queries as a separate request login
@@ -105,10 +113,10 @@ type API struct {
 	exports     *exportLimiter
 	exportLinks *exportLinks
 	// mailImageSigner signs the proxy addresses of remote email images; mailImageFetcher fetches them;
-	// mailImageSlots bounds the fetches running at once.
+	// mailImageLimits bounds the fetches running at once.
 	mailImageSigner  *mailimage.Signer
 	mailImageFetcher *mailimage.Fetcher
-	mailImageSlots   chan struct{}
+	mailImageLimits  *mailImageLimiter
 	// webForms limits the public web form per client address and workspace.
 	webForms       *webFormLimiter
 	webFormClients *webFormLimiter
@@ -169,16 +177,12 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		auth:           auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25()),
 		store:          store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25())}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
-	api.mailImageSigner = mailimage.NewSigner(newMailImageKey())
+	api.mailImageSigner = mailimage.NewSigner(api.mailImageKey())
 	api.mailImageFetcher = config.MailImages
 	if api.mailImageFetcher == nil {
 		api.mailImageFetcher = mailimage.NewFetcher(mailimage.Options{})
 	}
-	slots := config.MailImageConcurrency
-	if slots <= 0 {
-		slots = defaultMailImageSlots
-	}
-	api.mailImageSlots = make(chan struct{}, slots)
+	api.mailImageLimits = newMailImageLimiter(config.MailImageConcurrency, config.MailImageWorkspaceConcurrency, config.MailImageQueueWait)
 	if config.Email.ResendAPIKey != "" {
 		api.resend = &resend.Client{APIKey: config.Email.ResendAPIKey, Base: config.Email.ResendAPIBase}
 	}

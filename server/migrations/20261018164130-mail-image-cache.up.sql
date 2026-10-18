@@ -10,8 +10,14 @@ CREATE TABLE mail_image_cache (
     content_type text NOT NULL CHECK (content_type IN ('image/png', 'image/jpeg', 'image/gif', 'image/webp')),
     size bigint NOT NULL CHECK (size > 0),
     fetched_at timestamptz NOT NULL DEFAULT now(),
+    -- When a person last saw the image (kept to the day). The periodic sweep evicts the least recently
+    -- served rows first when the cache is over its byte cap.
+    last_served_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (workspace_id, url_hash)
 );
+
+-- The sweep reads the whole cache by age and by last use.
+CREATE INDEX mail_image_cache_sweep_idx ON mail_image_cache(last_served_at);
 
 -- Deleting an attachment object checks whether the cache still points at it.
 CREATE INDEX mail_image_cache_storage_key_idx ON mail_image_cache(workspace_id, storage_key);

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -59,4 +60,82 @@ func (s *Store) SaveCachedMailImage(ctx context.Context, workspaceID, urlHash, c
 		return s.DiscardObject(ctx, workspaceID, *previous)
 	}
 	return nil
+}
+
+// CachedMailImageBytes is how many bytes of images the workspace has cached.
+func (s *Store) CachedMailImageBytes(ctx context.Context, workspaceID string) (int64, error) {
+	var total int64
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT COALESCE(sum(size),0)::bigint FROM mail_image_cache WHERE workspace_id=$1`, workspaceID).Scan(&total)
+	})
+	if err != nil {
+		return 0, fmt.Errorf("measure mail image cache: %w", err)
+	}
+	return total, nil
+}
+
+// TouchCachedMailImage records that the image was just shown. It writes at most once a day per image, so
+// viewing a long thread does not turn into a write per image per view.
+func (s *Store) TouchCachedMailImage(ctx context.Context, workspaceID, urlHash string) error {
+	return s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `UPDATE mail_image_cache SET last_served_at=now() WHERE workspace_id=$1 AND url_hash=$2 AND last_served_at < now() - interval '1 day'`, workspaceID, urlHash)
+		return err
+	})
+}
+
+type evictedImage struct{ workspaceID, key string }
+
+// SweepMailImageCache keeps the image cache bounded, in every workspace: it deletes the images fetched
+// more than maxAge ago, then, while the rest is over maxBytes, the ones that were served least recently.
+// It returns how many cache rows it removed. The stored bytes go with them unless an attachment still
+// uses the same file.
+func (s *Store) SweepMailImageCache(ctx context.Context, maxAge time.Duration, maxBytes int64) (int, error) {
+	var evicted []evictedImage
+	err := s.db.Privileged(ctx, database.PrivilegeMailImageSweep, func(tx pgx.Tx) error {
+		collect := func(sql string, args ...any) error {
+			rows, err := tx.Query(ctx, sql, args...)
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var item evictedImage
+				if err := rows.Scan(&item.workspaceID, &item.key); err != nil {
+					return err
+				}
+				evicted = append(evicted, item)
+			}
+			return rows.Err()
+		}
+		if err := collect(`DELETE FROM mail_image_cache WHERE fetched_at < $1 RETURNING workspace_id::text, storage_key`, s.now().Add(-maxAge)); err != nil {
+			return fmt.Errorf("evict old mail images: %w", err)
+		}
+		// Newest-served first: what fits under the cap stays, every row past it goes.
+		if err := collect(`WITH ranked AS (
+				SELECT workspace_id, url_hash, sum(size) OVER (ORDER BY last_served_at DESC, fetched_at DESC, workspace_id, url_hash) AS running
+				FROM mail_image_cache)
+			DELETE FROM mail_image_cache c USING ranked r
+			WHERE c.workspace_id=r.workspace_id AND c.url_hash=r.url_hash AND r.running > $1
+			RETURNING c.workspace_id::text, c.storage_key`, maxBytes); err != nil {
+			return fmt.Errorf("evict mail images over the cap: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	if s.objects == nil {
+		return len(evicted), nil
+	}
+	seen := map[evictedImage]bool{}
+	for _, item := range evicted {
+		if seen[item] {
+			continue
+		}
+		seen[item] = true
+		if err := s.DiscardObject(ctx, item.workspaceID, item.key); err != nil {
+			return len(evicted), fmt.Errorf("delete evicted mail image: %w", err)
+		}
+	}
+	return len(evicted), nil
 }

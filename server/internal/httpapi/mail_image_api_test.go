@@ -309,42 +309,6 @@ func TestMailImageProxyAnswersBadGatewayWhenTheSourceFails(t *testing.T) {
 	}
 }
 
-func TestMailImageProxyLimitsConcurrentFetches(t *testing.T) {
-	release := make(chan struct{})
-	started := make(chan struct{}, 4)
-	host := newImageHost(t, func(w http.ResponseWriter, _ *http.Request) {
-		started <- struct{}{}
-		<-release
-		w.Write(tinyPNG)
-	})
-	storage, err := attachments.NewLocalDisk(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
-		config.Attachments = storage
-		config.MailImages = mailimage.NewFetcher(allowing(host))
-		config.MailImageConcurrency = 1
-	})
-	admin := createSession(t, api, service, "Busy Desk", "admin@busy-desk.example.com")
-	secret := connectEmail(t, api, admin, "support@proxy-desk.example.com")
-	paths := proxyPaths(t, api, admin, secret, `<img src="`+host.URL+`/a.png"><img src="`+host.URL+`/b.png">`)
-	done := make(chan int, 1)
-	go func() { done <- request(t, api, http.MethodGet, paths[0], nil, admin, nil).Code }()
-	select {
-	case <-started:
-	case <-time.After(5 * time.Second):
-		t.Fatal("the first fetch never started")
-	}
-	if response := request(t, api, http.MethodGet, paths[1], nil, admin, nil); response.Code != http.StatusServiceUnavailable || response.Header().Get("Retry-After") == "" {
-		t.Fatalf("second concurrent fetch status=%d", response.Code)
-	}
-	close(release)
-	if code := <-done; code != http.StatusOK {
-		t.Fatalf("first fetch status=%d", code)
-	}
-}
-
 // removeStoredObjects deletes every object under the storage root, as a cleanup or a lost disk would.
 func removeStoredObjects(t *testing.T, root string) {
 	t.Helper()

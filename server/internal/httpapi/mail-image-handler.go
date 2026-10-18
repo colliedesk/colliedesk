@@ -19,21 +19,39 @@ import (
 )
 
 const (
-	// mailImageLifetime is how long a cached image is served before the proxy asks the source again.
-	// The browser may keep it as long, since its address is signed and never changes.
-	mailImageLifetime       = 30 * 24 * time.Hour
-	defaultMailImageSlots   = 8
+	// MailImageLifetime is how long a cached image is served before the proxy asks the source again, and
+	// the longest it is kept: the sweep deletes older rows. The browser may keep it as long, since its
+	// address is signed and never changes.
+	MailImageLifetime = 30 * 24 * time.Hour
+	// DefaultMailImageCacheBytes caps the cache (one workspace's share and, in the sweep, the whole).
+	DefaultMailImageCacheBytes int64 = 1 << 30
+
+	mailImageKeyName        = "mail_image_key"
 	mailImageRetryAfterSecs = "2"
 )
 
-// newMailImageKey makes the key that signs proxy addresses. It lives in this process: a restart
-// invalidates the addresses of open tabs, which reload them with the next timeline read.
-func newMailImageKey() []byte {
-	key := make([]byte, 32)
+// mailImageKey loads the key that signs proxy addresses from the database, where the first process to
+// start stored it: every replica, deploy and restart signs and verifies with the same key. If the database
+// cannot give it, this process signs with a key of its own and says so; its images then fail on other
+// processes until the database answers at the next start.
+func (a *API) mailImageKey() []byte {
+	key, err := a.store.ServerSecret(context.Background(), mailImageKeyName)
+	if err == nil {
+		return key
+	}
+	log.Printf("mail image: signing key from the database failed, using a key private to this process: %v", err)
+	key = make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
 		panic("mail image key: " + err.Error())
 	}
 	return key
+}
+
+func (a *API) mailImageCacheBytes() int64 {
+	if a.config.MailImageCacheBytes > 0 {
+		return a.config.MailImageCacheBytes
+	}
+	return DefaultMailImageCacheBytes
 }
 
 // presentMessageHTML points the remote images of incoming mail at the image proxy, for a person's
@@ -64,21 +82,23 @@ func (a *API) mailImage(response http.ResponseWriter, request *http.Request) {
 		writeInternalError(response, err)
 		return
 	}
-	if found && a.now().Sub(cached.FetchedAt) < mailImageLifetime && a.serveCachedImage(response, request, cached) {
+	if found && a.now().Sub(cached.FetchedAt) < MailImageLifetime && a.serveCachedImage(response, request, workspaceID, urlHash, cached) {
 		return
 	}
-	select {
-	case a.mailImageSlots <- struct{}{}:
-		defer func() { <-a.mailImageSlots }()
-	default:
-		response.Header().Set("Retry-After", mailImageRetryAfterSecs)
-		writeError(response, http.StatusServiceUnavailable, "busy", "Too many images are being fetched; try again in a moment.")
+	release, ok := a.mailImageLimits.acquire(request.Context(), workspaceID)
+	if !ok {
+		if request.Context().Err() == nil {
+			response.Header().Set("Retry-After", mailImageRetryAfterSecs)
+			writeError(response, http.StatusServiceUnavailable, "busy", "Too many images are being fetched; try again in a moment.")
+		}
 		return
 	}
+	defer release()
 	image, err := a.mailImageFetcher.Fetch(request.Context(), target)
 	if err != nil {
-		// A source that went away must not hide an image the team has already seen.
-		if found && a.serveCachedImage(response, request, cached) {
+		// A source that went away must not hide an image the team has already seen (until the sweep
+		// removes it at the end of its lifetime).
+		if found && a.serveCachedImage(response, request, workspaceID, urlHash, cached) {
 			return
 		}
 		writeMailImageError(response, err)
@@ -93,7 +113,16 @@ func (a *API) mailImage(response http.ResponseWriter, request *http.Request) {
 	writeMailImage(response, image.ContentType, int64(len(image.Data)), bytes.NewReader(image.Data))
 }
 
+// cacheMailImage keeps the image unless the workspace's cache would pass its cap: then the image is
+// served this once and fetched again next time.
 func (a *API) cacheMailImage(ctx context.Context, workspaceID, urlHash string, image mailimage.Image) error {
+	used, err := a.store.CachedMailImageBytes(ctx, workspaceID)
+	if err != nil {
+		return err
+	}
+	if used+int64(len(image.Data)) > a.mailImageCacheBytes() {
+		return nil
+	}
 	object, err := a.config.Attachments.Put(ctx, workspaceID, bytes.NewReader(image.Data), int64(len(image.Data)))
 	if err != nil {
 		return err
@@ -103,7 +132,7 @@ func (a *API) cacheMailImage(ctx context.Context, workspaceID, urlHash string, i
 
 // serveCachedImage streams a cached image and reports false when its bytes are gone from storage, so
 // the caller fetches it again.
-func (a *API) serveCachedImage(response http.ResponseWriter, request *http.Request, cached store.CachedMailImage) bool {
+func (a *API) serveCachedImage(response http.ResponseWriter, request *http.Request, workspaceID, urlHash string, cached store.CachedMailImage) bool {
 	if a.config.Attachments == nil {
 		return false
 	}
@@ -112,6 +141,9 @@ func (a *API) serveCachedImage(response http.ResponseWriter, request *http.Reque
 		return false
 	}
 	defer body.Close()
+	if err := a.store.TouchCachedMailImage(request.Context(), workspaceID, urlHash); err != nil {
+		log.Printf("mail image: note use: %v", err)
+	}
 	writeMailImage(response, cached.ContentType, cached.Size, body)
 	return true
 }
@@ -124,7 +156,7 @@ func writeMailImage(response http.ResponseWriter, contentType string, size int64
 	// Nothing the image holds may run or load, even if a browser opened it as a page.
 	header.Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	// Private: the address works only with a session. Immutable: the signed address never changes meaning.
-	header.Set("Cache-Control", "private, max-age="+strconv.Itoa(int(mailImageLifetime/time.Second))+", immutable")
+	header.Set("Cache-Control", "private, max-age="+strconv.Itoa(int(MailImageLifetime/time.Second))+", immutable")
 	response.WriteHeader(http.StatusOK)
 	if _, err := io.Copy(response, body); err != nil {
 		log.Printf("mail image: stream: %v", err)
@@ -133,8 +165,8 @@ func writeMailImage(response http.ResponseWriter, contentType string, size int64
 
 func writeMailImageError(response http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, netguard.ErrBlockedAddress):
-		writeError(response, http.StatusForbidden, "address_refused", "This image is on a private or internal address.")
+	case errors.Is(err, netguard.ErrBlockedAddress), errors.Is(err, mailimage.ErrPortRefused):
+		writeError(response, http.StatusForbidden, "address_refused", "This image is on a private or internal address, or not on a web port.")
 	case errors.Is(err, mailimage.ErrNotImage):
 		writeError(response, http.StatusUnsupportedMediaType, "not_an_image", "Only PNG, JPEG, GIF and WebP images are shown.")
 	case errors.Is(err, mailimage.ErrTooLarge):

@@ -48,6 +48,13 @@ const (
 	// table and reads instance-wide counts (workspaces, active agents, replies, channels in use).
 	// Only aggregates leave the transaction, never row content.
 	PrivilegeTelemetry Privilege = "telemetry"
+	// PrivilegeServerSecret reads and first creates the secrets every server process shares (the image
+	// proxy's signing key) in server_secrets, which has no workspace and no grant to the app role.
+	PrivilegeServerSecret Privilege = "server-secret"
+	// PrivilegeMailImageSweep evicts cached email images in every workspace: those past their age, then
+	// the least recently served while the cache is over its byte cap. Only keys and sizes leave the
+	// transaction; the stored bytes go through the scoped DiscardObject.
+	PrivilegeMailImageSweep Privilege = "mail-image-sweep"
 	// PrivilegeBillingReconcile reads every workspace id and every stored Polar subscription, so the
 	// operator command can compare them with Polar's list. Writes go through the scoped path.
 	PrivilegeBillingReconcile Privilege = "billing-reconcile"
