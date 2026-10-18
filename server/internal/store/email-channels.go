@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -19,7 +20,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const channelColumns = `support_address,secret_key_id IS NOT NULL,secret_rotated_at,domain_verification_token,domain_verified_at,created_at,updated_at`
+const channelColumns = `support_address,secret_key_id IS NOT NULL,secret_rotated_at,domain_verification_token,domain_verified_at,COALESCE(provider_domain_id,''),provider_domain_records,created_at,updated_at`
 
 // DomainRecordPrefix names the TXT record that proves control of the support address domain.
 const DomainRecordPrefix = "_colliedesk."
@@ -27,9 +28,14 @@ const DomainRecordPrefix = "_colliedesk."
 func scanChannel(row pgx.Row) (domain.EmailChannel, error) {
 	var channel domain.EmailChannel
 	var token string
+	var records []byte
 	if err := row.Scan(&channel.SupportAddress, &channel.SecretSet, &channel.SecretRotatedAt, &token, &channel.DomainVerifiedAt,
-		&channel.CreatedAt, &channel.UpdatedAt); err != nil {
+		&channel.ProviderDomainID, &records, &channel.CreatedAt, &channel.UpdatedAt); err != nil {
 		return domain.EmailChannel{}, err
+	}
+	channel.DNSRecords = []domain.DNSRecord{}
+	if err := json.Unmarshal(records, &channel.DNSRecords); err != nil {
+		return domain.EmailChannel{}, fmt.Errorf("read provider domain records: %w", err)
 	}
 	channel.Domain = email.Domain(channel.SupportAddress)
 	channel.DNSRecordName = DomainRecordPrefix + channel.Domain
@@ -55,7 +61,8 @@ func (s *Store) GetEmailChannel(ctx context.Context, workspaceID string) (*domai
 }
 
 // UpsertEmailChannel connects email or changes the support address; an existing secret is kept.
-// A changed address loses its domain verification and gets a new verification token.
+// A changed address loses its domain verification and gets a new verification token. A changed domain
+// also loses the provider domain and its records; the same domain keeps them.
 func (s *Store) UpsertEmailChannel(ctx context.Context, workspaceID, supportAddress string) (domain.EmailChannel, error) {
 	token, err := email.NewToken()
 	if err != nil {
@@ -69,6 +76,10 @@ func (s *Store) UpsertEmailChannel(ctx context.Context, workspaceID, supportAddr
 					THEN email_channels.domain_verification_token ELSE EXCLUDED.domain_verification_token END,
 				domain_verified_at=CASE WHEN email_channels.support_address=EXCLUDED.support_address
 					THEN email_channels.domain_verified_at END,
+				provider_domain_id=CASE WHEN split_part(email_channels.support_address,'@',2)=split_part(EXCLUDED.support_address,'@',2)
+					THEN email_channels.provider_domain_id END,
+				provider_domain_records=CASE WHEN split_part(email_channels.support_address,'@',2)=split_part(EXCLUDED.support_address,'@',2)
+					THEN email_channels.provider_domain_records ELSE '[]'::jsonb END,
 				support_address=EXCLUDED.support_address,updated_at=now()
 			RETURNING `+channelColumns, workspaceID, supportAddress, token))
 	})
@@ -106,6 +117,35 @@ func (s *Store) VerifyEmailDomain(ctx context.Context, workspaceID string, looku
 		return domain.EmailChannel{}, fmt.Errorf("record domain verification: %w", err)
 	}
 	return verified, nil
+}
+
+// ProviderDomain is what the email provider reported for the channel's domain.
+type ProviderDomain struct {
+	ID       string
+	Records  []domain.DNSRecord
+	Verified bool
+}
+
+// SaveProviderDomain stores the provider's id and record snapshot for the channel whose support address is
+// supportAddress, and records the verification when the provider reports the domain verified. It matches
+// the address so a result for a domain the admin has since replaced is not written onto the new one.
+func (s *Store) SaveProviderDomain(ctx context.Context, workspaceID, supportAddress string, provider ProviderDomain, now time.Time) (domain.EmailChannel, error) {
+	records, err := json.Marshal(provider.Records)
+	if err != nil {
+		return domain.EmailChannel{}, fmt.Errorf("encode provider domain records: %w", err)
+	}
+	channel, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.EmailChannel, error) {
+		return scanChannel(tx.QueryRow(ctx, `UPDATE email_channels SET provider_domain_id=$3,provider_domain_records=$4,
+				domain_verified_at=CASE WHEN $5 THEN COALESCE(domain_verified_at,$6) ELSE domain_verified_at END,updated_at=$6
+			WHERE workspace_id=$1 AND support_address=$2 RETURNING `+channelColumns, workspaceID, supportAddress, provider.ID, records, provider.Verified, now))
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.EmailChannel{}, fmt.Errorf("save provider domain: email channel not found")
+	}
+	if err != nil {
+		return domain.EmailChannel{}, fmt.Errorf("save provider domain: %w", err)
+	}
+	return channel, nil
 }
 
 // DeleteEmailChannel disconnects email. Conversations, messages and delivery history stay.

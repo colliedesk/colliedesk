@@ -36,7 +36,8 @@ export function SettingsRoute() {
   const saveEmail = useMutation({ mutationFn: api.saveEmailChannel, onSuccess: () => refresh('email-channel') });
   const workspaceSlug = useMutation({ mutationFn: api.updateWorkspaceSlug, onSuccess: () => { void refresh('me'); void refresh('email-channel'); } });
   const rotateSecret = useMutation({ mutationFn: api.rotateEmailSecret, onSuccess: () => refresh('email-channel') });
-  const verifyDomain = useMutation({ mutationFn: api.verifyEmailDomain, onSuccess: () => refresh('email-channel') });
+  // A refused check still reloads: the provider's per-record status changed.
+  const verifyDomain = useMutation({ mutationFn: api.verifyEmailDomain, onSettled: () => refresh('email-channel') });
   const disconnectEmail = useMutation({ mutationFn: api.disconnectEmailChannel, onSuccess: () => { rotateSecret.reset(); void refresh('email-channel'); } });
   const webForm = useQuery({ queryKey: ['web-form'], queryFn: api.webForm });
   const saveWebForm = useMutation({ mutationFn: ({ enabled, origins }: { enabled: boolean; origins: string[] }) => api.saveWebForm(enabled, origins), onSuccess: () => refresh('web-form') });
@@ -48,7 +49,7 @@ export function SettingsRoute() {
   const isAdmin = me.data?.agent.role === 'admin';
   // Plan and billing exists only on the hosted cloud and only admins manage it.
   const showBilling = isAdmin && config.data?.billing.enabled === true;
-  const emailFailed = rotateSecret.isError || disconnectEmail.isError || verifyDomain.isError;
+  const emailFailed = rotateSecret.isError || disconnectEmail.isError || (verifyDomain.isError && !(verifyDomain.error instanceof InvalidRequestError));
   return <SettingsPage loading={me.isPending || sessions.isPending || invites.isPending} sessions={sessions.data?.items ?? []} invites={invites.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'}
     canCreateInvites={isAdmin} canManageWorkspace={isAdmin} showBilling={showBilling} exportSection={isAdmin ? <ExportAllData /> : undefined}
     workspaceTimezoneSave={saveState(workspaceTimezone)} personalTimezoneSave={saveState(agentTimezone)}
@@ -69,7 +70,7 @@ export function SettingsRoute() {
       onUndelete={async (id, updatedAt) => { await api.restoreSavedReply(id, updatedAt); await refreshSavedReplies(); }} />}
     emailSection={<EmailChannelSection settings={emailChannel.data} timezone={me.data?.timezone ?? 'UTC'} canManage={isAdmin} workspaceSlug={me.data?.workspace.slug} addressSave={saveState(saveEmail)} slugSave={saveState(workspaceSlug)}
       onSaveSlug={(slug) => workspaceSlug.mutate(slug)} createdSecret={rotateSecret.data?.inbound_secret} onSave={(address) => saveEmail.mutate(address)}
-      onRotate={() => rotateSecret.mutate()} onVerifyDomain={() => verifyDomain.mutate()} onDisconnect={() => disconnectEmail.mutate()} />}
+      onRotate={() => rotateSecret.mutate()} onVerifyDomain={() => verifyDomain.mutate()} verifyError={verifyDomain.error instanceof InvalidRequestError ? verifyDomain.error.message : undefined} onDisconnect={() => disconnectEmail.mutate()} />}
     webFormSection={<WebFormSection settings={webForm.data} canManage={isAdmin} save={saveState(saveWebForm)} onSave={(enabled, origins) => saveWebForm.mutate({ enabled, origins })} />}
     inviteError={createInvite.error instanceof PlanLimitError || createInvite.error instanceof InvalidRequestError ? createInvite.error.message : createInvite.isError ? messages.settingsActionFailed : undefined}
     createdInviteUrl={createInvite.data?.url}

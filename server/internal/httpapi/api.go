@@ -15,6 +15,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
+	"github.com/colliedesk/colliedesk/server/internal/resend"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -102,8 +103,10 @@ type API struct {
 	// domainChecks limits how often agent tokens make the server look up DNS for one workspace.
 	domainChecks *webFormLimiter
 	polar        *polar.Client
-	founding     foundingState
-	now          func() time.Time
+	// resend verifies sending domains through the provider; nil when RESEND_API_KEY is not set.
+	resend   *resend.Client
+	founding foundingState
+	now      func() time.Time
 	// mux serves every route; an approved agent request is replayed through it as the approver.
 	mux *http.ServeMux
 }
@@ -151,6 +154,9 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		auth:         auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25()),
 		store:        store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25())}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
+	if config.Email.ResendAPIKey != "" {
+		api.resend = &resend.Client{APIKey: config.Email.ResendAPIKey, Base: config.Email.ResendAPIBase}
+	}
 	if config.Random != nil {
 		api.auth = api.auth.WithRandom(config.Random)
 	}

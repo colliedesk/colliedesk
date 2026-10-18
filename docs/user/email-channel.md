@@ -54,6 +54,7 @@ run `docker compose up -d`.
 | `MAIL_FROM_DOMAIN` | empty | Domain used to send for workspaces whose domain is not verified, for example `mail.example.com`. |
 | `MAIL_FROM_INBOUND_SECRET` | empty | Secret (32+ characters) for the forwarder of `MAIL_FROM_DOMAIN` (step 5). |
 | `HOSTED_MAIL_DOMAIN` | empty | Hosted cloud only. Turns on `support@<workspace slug>.<this domain>` for every workspace. Needs `MAIL_FROM_INBOUND_SECRET`. Leave empty when you self-host. |
+| `RESEND_API_KEY` | empty | Resend API key. When set, step 3 uses the DNS records Resend lists (DKIM and SPF) instead of one TXT record. Needs a key that can add and verify domains. |
 | `EMAIL_TRUSTED_AUTHSERV_ID` | empty | Name of the receiving mail server whose SPF/DKIM/DMARC result you trust (step 4). Empty: no result is trusted. |
 
 **Self-hosted with your own relay:** set `EMAIL_FROM_POLICY=any`. You own the relay, so every
@@ -87,11 +88,24 @@ outgoing replies. Conversations and messages stay.
 2. Add that TXT record at your DNS provider.
 3. Select **Verify domain**. DNS changes can take a few minutes; try again if it fails.
 
+**When the server has a Resend key** (`RESEND_API_KEY`, the hosted cloud), Settings shows a table
+**DNS records to publish** instead of the TXT record: DKIM, SPF and an MX record for bounces, each
+with its status (Not started, Pending, Verified, Failed).
+
+1. Add every record in the table at your DNS provider.
+2. Select **Verify domain**. The domain is verified only when Resend reports it verified. Until then
+   Settings shows each record's status and the reason; DNS changes can take from a few minutes to
+   a day. Select **Verify domain** again later.
+3. If Resend cannot be reached, nothing changes. Try again in a minute.
+
+If the same domain is already registered by another workspace, Colliedesk cannot use it and says so;
+ask your operator. Replies signed with your own domain are what keep them out of spam folders.
+
 Until the domain is verified, replies are sent as **"Your workspace via Colliedesk"** from
 `reply+…@<MAIL_FROM_DOMAIN>`, with `Reply-To` set to your support address. Customer replies still
 reach you and thread. Settings shows **Replies are sent from …** with the current address.
 
-Changing the support address resets verification and creates a new TXT value.
+Changing the support address resets verification. With a TXT record it also creates a new value; with Resend the same domain keeps its records and a new domain gets its own list.
 
 ## 4. Forward mail to Colliedesk
 

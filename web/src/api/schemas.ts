@@ -109,14 +109,18 @@ export const messageSchema = z.object({
   attachments: z.array(attachmentSchema), cc: z.array(z.string()), created_at: z.string().datetime(),
   delivery: messageDeliverySchema.nullable(), email: incomingEmailSchema.nullable(),
 }) satisfies z.ZodType<Generated<'Message'>>;
+export const emailDnsRecordSchema = z.object({
+  record: z.string(), type: z.string(), name: z.string(), value: z.string(), priority: z.number().int().nullable(), status: z.string(),
+}) satisfies z.ZodType<Generated<'EmailDNSRecord'>>;
 export const emailChannelSchema = z.object({
   support_address: z.string().email(), secret_set: z.boolean(), secret_rotated_at: nullableDate,
   domain: z.string(), domain_verified_at: nullableDate, dns_record_name: z.string(), dns_record_value: z.string(),
-  created_at: z.string().datetime(), updated_at: z.string().datetime(),
+  dns_records: z.array(emailDnsRecordSchema), created_at: z.string().datetime(), updated_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'EmailChannel'>>;
 export const emailChannelSettingsSchema = z.object({
   channel: emailChannelSchema.nullable(), inbound_url: z.string().url(),
   from_policy: z.enum(['verified', 'any']), sending_from: z.string().nullable(), hosted_address: z.string().nullable(),
+  domain_verification: z.enum(['txt', 'provider']),
   smtp: z.object({ configured: z.boolean(), host: z.string(), port: z.number().int(), starttls: z.boolean(), authenticated: z.boolean() }),
 }) satisfies z.ZodType<Generated<'EmailChannelSettings'>>;
 export const webFormSettingsSchema = z.object({
@@ -172,6 +176,7 @@ export type Conversation = Generated<'Conversation'>;
 export type Invite = Generated<'Invite'>;
 export type Message = Generated<'Message'>;
 export type EmailChannelSettings = Generated<'EmailChannelSettings'>;
+export type EmailDnsRecord = Generated<'EmailDNSRecord'>;
 export type WebFormSettings = Generated<'WebFormSettings'>;
 export type Session = Generated<'Session'>;
 export type Tag = Generated<'Tag'>;

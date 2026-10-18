@@ -33,13 +33,18 @@ type emailChannelSettings struct {
 	SendingFrom *string              `json:"sending_from"`
 	// HostedAddress is where to forward mail on the hosted cloud; nil when that feature is off.
 	HostedAddress *string `json:"hosted_address"`
+	// DomainVerification is "provider" when the email provider lists the DNS records to publish, else "txt".
+	DomainVerification string `json:"domain_verification"`
 }
 
 func (a *API) emailSettings(workspaceSlug string, channel *domain.EmailChannel) emailChannelSettings {
 	config := a.config.Email
 	smtp := config.SMTP
-	settings := emailChannelSettings{Channel: channel, InboundURL: a.config.Origin + inboundEmailPath, FromPolicy: config.FromPolicy,
+	settings := emailChannelSettings{Channel: channel, InboundURL: a.config.Origin + inboundEmailPath, FromPolicy: config.FromPolicy, DomainVerification: "txt",
 		SMTP: smtpStatus{Configured: smtp.Configured(), Host: smtp.Host, Port: smtp.Port, StartTLS: smtp.StartTLS, Authenticated: smtp.Username != ""}}
+	if a.resend != nil {
+		settings.DomainVerification = "provider"
+	}
 	if settings.FromPolicy == "" {
 		settings.FromPolicy = email.FromPolicyVerified
 	}
@@ -70,6 +75,10 @@ func (a *API) verifyEmailDomain(response http.ResponseWriter, request *http.Requ
 			writeError(response, http.StatusTooManyRequests, "rate_limited", "Agent tokens may check the email domain 10 times an hour. Try again later.")
 			return
 		}
+	}
+	if a.resend != nil {
+		a.verifyProviderDomain(response, request)
+		return
 	}
 	channel, err := a.store.VerifyEmailDomain(request.Context(), principal(request).Workspace.ID, a.config.LookupTXT, time.Now().UTC())
 	if errors.Is(err, store.ErrDomainRecordMissing) {
@@ -118,6 +127,14 @@ func (a *API) putEmailChannel(response http.ResponseWriter, request *http.Reques
 	if err != nil {
 		writeEmailStoreError(response, err)
 		return
+	}
+	if a.resend != nil && channel.ProviderDomainID == "" {
+		// The address is saved either way; verification retries creating the domain.
+		if created, err := a.createProviderDomain(request.Context(), principal(request).Workspace.ID, channel); err != nil {
+			slog.Warn("create email provider domain", "workspace", principal(request).Workspace.ID, "error", err)
+		} else {
+			channel = created
+		}
 	}
 	writeJSON(response, http.StatusOK, a.emailSettings(principal(request).Workspace.Slug, &channel))
 }

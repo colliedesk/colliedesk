@@ -97,3 +97,14 @@ func TestConfigFromEnvReadsTheResendWebhookSecret(t *testing.T) {
 		t.Fatalf("secret without MAIL_FROM_DOMAIN accepted: %v", err)
 	}
 }
+
+func TestConfigFromEnvReadsTheResendAPIKey(t *testing.T) {
+	env := map[string]string{"RESEND_API_KEY": " re_test_placeholder "} // gitleaks:allow (test placeholder)
+	config, err := email.ConfigFromEnv(func(key string) string { return env[key] })
+	if err != nil || config.ResendAPIKey != "re_test_placeholder" {
+		t.Fatalf("resend api key not read: %+v %v", config, err)
+	}
+	if config, err = email.ConfigFromEnv(func(string) string { return "" }); err != nil || config.ResendAPIKey != "" {
+		t.Fatalf("domain verification must default to the TXT record: %+v %v", config, err)
+	}
+}

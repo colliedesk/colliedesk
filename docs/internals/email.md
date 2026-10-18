@@ -35,6 +35,22 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   From and envelope sender, with `Reply-To: support+r-<token>@<support domain>`; replies thread
   through Reply-To and In-Reply-To. Without `MAIL_FROM_DOMAIN` an unverified workspace cannot send.
   `any` keeps the support address always (self-host, operator owns the relay).
+- **Domain verification through Resend (`RESEND_API_KEY`).** TXT proves control of a domain but not that
+  Resend will send for it or that the customer's DMARC aligns, so on the hosted cloud the domain is
+  verified by Resend instead. Saving the support address creates the domain in the Resend account once
+  (`email_channels.provider_domain_id`; the same domain keeps it, another domain gets its own) and keeps
+  the records Resend lists with their status in `provider_domain_records`. Settings reads that snapshot,
+  never Resend. `POST .../domain-verification` reads the domain; when it is not `verified` it asks Resend
+  to re-check and reads again, because Resend marks a domain `pending` while it checks. `domain_verified_at`
+  is set only on `verified`; anything else is 409 with each record's status, and an unreachable Resend is
+  502 with nothing recorded. A failed create when the address is saved is logged and the address is
+  kept: verify retries the create. Resend refuses a domain name that is already in the account, so a
+  second workspace claiming a verified domain gets 409 `email_domain_unavailable` and never inherits the
+  first one's status; the unique index on `provider_domain_id` backs this up. Removing the channel or
+  changing the domain leaves the Resend domain in the account: deleting it is a one-way door, and the
+  same domain cannot be re-added by a new workspace until an operator removes it in Resend. Without the
+  key the TXT check above is unchanged (self-host). The client is `internal/resend`; tests run it
+  against an `httptest` server shaped like the documented API.
 - **Replies that cannot be sent fail visibly at once.** With no SMTP relay, or an unverified domain
   and no platform domain, the outbox row is created `failed` with the reason. Retry returns 409
   until the cause is fixed, so a reply never sits in `queued` forever.

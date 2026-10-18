@@ -548,7 +548,10 @@ paths:
       x-permission: access:write
       description: >
         Look up the TXT record `dns_record_name` and mark the support address domain verified when it
-        holds `dns_record_value`. Changing the support address resets verification. Agent tokens may
+        holds `dns_record_value`. When the server has an email provider account (`domain_verification` is
+        `provider`), ask the provider instead: the domain is verified only when the provider reports every
+        record `verified`, and a 409 means the records in `channel.dns_records` are not all verified yet.
+        Changing the support address resets verification. Agent tokens may
         check 10 times an hour per workspace (429 with `Retry-After`); a person is not limited.
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
@@ -559,6 +562,7 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
         '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/BadGateway'}
   /api/v1/channels/email/secret:
     post:
       operationId: rotateEmailInboundSecret
@@ -2512,10 +2516,17 @@ components:
               content_type: {type: string}
     EmailChannel:
       type: object
-      required: [support_address, secret_set, secret_rotated_at, domain, domain_verified_at, dns_record_name, dns_record_value, created_at, updated_at]
+      required: [support_address, secret_set, secret_rotated_at, domain, domain_verified_at, dns_record_name, dns_record_value, dns_records, created_at, updated_at]
       properties:
         support_address: {type: string, format: email}
         secret_set: {type: boolean}
+        dns_records:
+          type: array
+          description: >
+            Records to publish when the server verifies domains through its email provider
+            (`domain_verification` is `provider`), with the provider's last reported status for each.
+            Empty when it uses the TXT record above, or before the provider has created the domain.
+          items: {$ref: '#/components/schemas/EmailDNSRecord'}
         secret_rotated_at: {type: [string, 'null'], format: date-time}
         domain: {type: string}
         domain_verified_at: {type: [string, 'null'], format: date-time}
@@ -2523,6 +2534,16 @@ components:
         dns_record_value: {type: string, description: Value the TXT record must hold}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+    EmailDNSRecord:
+      type: object
+      required: [record, type, name, value, priority, status]
+      properties:
+        record: {type: string, description: 'Purpose of the record as the provider names it, for example SPF or DKIM'}
+        type: {type: string, description: 'DNS record type, for example TXT, CNAME or MX'}
+        name: {type: string, description: Host name to publish the record under}
+        value: {type: string}
+        priority: {type: [integer, 'null'], description: MX priority; null for other types}
+        status: {type: string, description: 'Provider status, for example not_started, pending, verified, failed'}
     SMTPStatus:
       type: object
       required: [configured, host, port, starttls, authenticated]
@@ -2534,8 +2555,15 @@ components:
         authenticated: {type: boolean}
     EmailChannelSettings:
       type: object
-      required: [channel, inbound_url, smtp, from_policy, sending_from, hosted_address]
+      required: [channel, inbound_url, smtp, from_policy, sending_from, hosted_address, domain_verification]
       properties:
+        domain_verification:
+          type: string
+          enum: [txt, provider]
+          description: >
+            How the support address domain is verified. `txt`: publish `channel.dns_record_name` and
+            `channel.dns_record_value`. `provider`: publish the records in `channel.dns_records`, which
+            give replies a DKIM signature for the domain.
         hosted_address:
           type: [string, 'null']
           description: >

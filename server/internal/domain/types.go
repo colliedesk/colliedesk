@@ -196,8 +196,23 @@ type EmailChannel struct {
 	DomainVerifiedAt *time.Time `json:"domain_verified_at"`
 	DNSRecordName    string     `json:"dns_record_name"`
 	DNSRecordValue   string     `json:"dns_record_value"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
+	// DNSRecords are the records the email provider lists for the domain; empty when verification is by TXT
+	// record or the provider has not created the domain yet.
+	DNSRecords []DNSRecord `json:"dns_records"`
+	// ProviderDomainID is the provider's id for the domain; it never leaves the server.
+	ProviderDomainID string    `json:"-"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+// DNSRecord is one record the email provider asks the workspace to publish, with its last reported status.
+type DNSRecord struct {
+	Record   string `json:"record"`
+	Type     string `json:"type"`
+	Name     string `json:"name"`
+	Value    string `json:"value"`
+	Priority *int   `json:"priority"`
+	Status   string `json:"status"`
 }
 
 // WebForm is the workspace's public website form channel. Off until an admin turns it on.
