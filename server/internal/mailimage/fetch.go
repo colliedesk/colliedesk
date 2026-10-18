@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"syscall"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/netguard"
@@ -29,6 +30,28 @@ var (
 	// ErrTooLarge means the image is over the size cap.
 	ErrTooLarge = errors.New("the image is over the size limit")
 )
+
+// ErrPortRefused means the address names a port other than 80 or 443. Images live on web ports; refusing
+// the rest keeps the proxy from probing other services of a public host.
+var ErrPortRefused = errors.New("refusing to connect to a port other than 80 or 443")
+
+// DialControl is the net.Dialer Control of the fetcher: the address guard of netguard plus the port rule.
+// allow lists "host:port" targets that bypass both (tests only).
+func DialControl(allow map[string]bool) func(network, address string, c syscall.RawConn) error {
+	guard := netguard.Control(allow)
+	return func(network, address string, c syscall.RawConn) error {
+		if err := guard(network, address, c); err != nil {
+			return err
+		}
+		if allow[address] {
+			return nil
+		}
+		if _, port, err := net.SplitHostPort(address); err != nil || (port != "80" && port != "443") {
+			return fmt.Errorf("%w: %s", ErrPortRefused, address)
+		}
+		return nil
+	}
+}
 
 // Options configure a Fetcher. The zero value is the production setting.
 type Options struct {
@@ -63,7 +86,7 @@ func NewFetcher(options Options) *Fetcher {
 	if f.timeout <= 0 {
 		f.timeout = defaultTimeout
 	}
-	dialer := &net.Dialer{Timeout: 5 * time.Second, Control: netguard.Control(options.AllowAddresses)}
+	dialer := &net.Dialer{Timeout: 5 * time.Second, Control: DialControl(options.AllowAddresses)}
 	f.client = &http.Client{
 		Transport: &http.Transport{
 			Proxy:                 nil,

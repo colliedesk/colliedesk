@@ -1,6 +1,7 @@
 package mailimage_test
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -66,6 +67,50 @@ func TestRewriteStripsSrcsetSoNothingLoadsAroundTheProxy(t *testing.T) {
 	}
 	if !strings.Contains(out, `alt="x"`) || !strings.Contains(out, "data:image/gif;base64,R0lGOD") {
 		t.Errorf("rewrite dropped more than srcset: %q", out)
+	}
+}
+
+func TestRewriteReadsTagsLikeABrowserDoes(t *testing.T) {
+	s := signer()
+	in := `<img alt="a>b" src="https://x.example/1.png"><img data-x=" src='https://evil.example/n.png'" src="https://x.example/2.png">` +
+		`<!-- <img src="https://x.example/in-comment.png"> --><style>.a::after{content:"<img src='https://x.example/css.png'>"}</style>`
+	out := s.Rewrite(workspace, in)
+	var originals []string
+	for _, src := range regexpAll(t, out, `(?i)\ssrc="(/api/v1/mail-image[^"]*)"`) {
+		originals = append(originals, proxied(t, s, htmlUnescape(src)))
+	}
+	if len(originals) != 2 || originals[0] != "https://x.example/1.png" || originals[1] != "https://x.example/2.png" {
+		t.Fatalf("proxied %v in %q", originals, out)
+	}
+	if !strings.Contains(out, `alt="a>b"`) && !strings.Contains(out, `alt="a&gt;b"`) {
+		t.Errorf("the alt text was damaged: %q", out)
+	}
+	for _, text := range []string{"https://x.example/in-comment.png", "https://x.example/css.png", "evil.example"} {
+		if strings.Contains(out, "mail-image?u="+url.QueryEscape(text)) {
+			t.Errorf("%s was proxied from the wrong place: %q", text, out)
+		}
+	}
+	if !strings.Contains(out, "data-x=") || !strings.Contains(out, "evil.example/n.png") {
+		t.Errorf("another attribute's value was rewritten or lost: %q", out)
+	}
+}
+
+func TestRewriteProxiesAtMostFiftyDistinctImagesPerMessage(t *testing.T) {
+	s := signer()
+	var in strings.Builder
+	for i := 0; i < 60; i++ {
+		fmt.Fprintf(&in, `<img src="https://x.example/%d.png">`, i%55) // 55 distinct URLs, five of them twice
+	}
+	out := s.Rewrite(workspace, in.String())
+	distinct := map[string]bool{}
+	for _, src := range regexpAll(t, out, `(?i)\ssrc="(/api/v1/mail-image[^"]*)"`) {
+		distinct[proxied(t, s, htmlUnescape(src))] = true
+	}
+	if len(distinct) != mailimage.MaxImagesPerMessage || mailimage.MaxImagesPerMessage != 50 {
+		t.Fatalf("%d distinct images proxied, want 50", len(distinct))
+	}
+	if strings.Contains(out, "x.example/54.png") {
+		t.Errorf("an image over the limit keeps its remote address: the viewer must show nothing for it")
 	}
 }
 

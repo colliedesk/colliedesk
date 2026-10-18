@@ -15,11 +15,13 @@ var ErrBlockedAddress = errors.New("refusing to connect to a private, loopback o
 // reservedNetworks are special-purpose ranges that net.IP methods do not
 // cover: CGNAT, benchmarking, IETF protocol assignments, the former class E,
 // NAT64 (which can embed any IPv4 address, including private ones), 6to4,
-// Teredo and documentation prefixes.
+// Teredo and documentation prefixes, the deprecated IPv4-compatible ::/96, site-local fec0::/10 and the
+// discard prefix 100::/64.
 var reservedNetworks = func() []*net.IPNet {
 	var networks []*net.IPNet
 	for _, cidr := range []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15", "240.0.0.0/4",
-		"64:ff9b::/96", "64:ff9b:1::/48", "2002::/16", "2001::/32", "2001:db8::/32"} {
+		"64:ff9b::/96", "64:ff9b:1::/48", "2002::/16", "2001::/32", "2001:db8::/32",
+		"::/96", "fec0::/10", "100::/64"} {
 		_, network, err := net.ParseCIDR(cidr)
 		if err != nil {
 			panic(err)

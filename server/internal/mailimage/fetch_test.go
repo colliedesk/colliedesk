@@ -176,6 +176,32 @@ func TestFetchDropsRefererOnRedirectAndRefusesOtherSchemes(t *testing.T) {
 	}
 }
 
+func TestDialControlOnlyReachesWebPorts(t *testing.T) {
+	control := mailimage.DialControl(map[string]bool{"127.0.0.1:9": true})
+	for _, address := range []string{"8.8.8.8:8080", "8.8.8.8:22", "8.8.8.8:25", "8.8.8.8:6379", "8.8.8.8:5432", "[2606:4700::1111]:8443"} {
+		if err := control("tcp", address, nil); !errors.Is(err, mailimage.ErrPortRefused) {
+			t.Errorf("%s: got %v, want ErrPortRefused", address, err)
+		}
+	}
+	for _, address := range []string{"8.8.8.8:80", "8.8.8.8:443", "[2606:4700::1111]:443", "127.0.0.1:9"} {
+		if err := control("tcp", address, nil); err != nil {
+			t.Errorf("%s: refused: %v", address, err)
+		}
+	}
+	if err := control("tcp", "10.0.0.1:443", nil); !errors.Is(err, netguard.ErrBlockedAddress) {
+		t.Errorf("a private address on a web port: got %v", err)
+	}
+}
+
+func TestFetchIgnoresTheProxyEnvironment(t *testing.T) {
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+	t.Setenv("ALL_PROXY", "http://127.0.0.1:1")
+	if mailimage.UsesEnvironmentProxy(mailimage.NewFetcher(mailimage.Options{})) {
+		t.Fatal("the fetcher would route through an environment proxy, which bypasses the dial guard")
+	}
+}
+
 func TestFetchStopsWhenTheSourceIsTooSlow(t *testing.T) {
 	srv, _, _ := serve(t, func(w http.ResponseWriter, r *http.Request) {
 		select {
