@@ -103,6 +103,30 @@ test('the frame follows its content: it measures when loaded and again when the 
   expect(observers.slice(0, -1).every((observer) => observer.disconnected)).toBe(true);
 });
 
+// A tracking pixel or a broken logo that cannot load must not show the browser's broken-image icon in the mail.
+test('an image that fails to load and was only a pixel disappears; a real image that fails keeps its alt text', async () => {
+  const { container } = render(<EmailFrame title="Original message" html="<p>Hi</p>" />);
+  const frame = container.querySelector('iframe')!;
+  await waitFor(() => expect(observers.length).toBeGreaterThan(0));
+  await waitFor(() => expect(observers.at(-1)!.targets.includes(frame.contentDocument!.body)).toBe(true));
+  const doc = frame.contentDocument!;
+  const make = (attributes: Record<string, string>) => {
+    const image = doc.createElement('img');
+    for (const [name, value] of Object.entries(attributes)) image.setAttribute(name, value);
+    doc.body.append(image);
+    return image;
+  };
+  const pixel = make({ width: '1', height: '1', alt: '' });
+  const wide = make({ width: '1', height: '40', alt: 'logo' });
+  const hidden = make({ width: '0', height: '0' });
+  const logo = make({ width: '120', height: '40', alt: 'Acme' });
+  const bare = make({ alt: 'x' });
+  for (const image of [pixel, wide, hidden, logo, bare]) image.dispatchEvent(new Event('error'));
+  expect(pixel.style.display).toBe('none');
+  expect(hidden.style.display).toBe('none');
+  for (const image of [wide, logo, bare]) expect(image.style.display, image.outerHTML).toBe('');
+});
+
 test('the frame is sandboxed without scripts and carries the locked document', () => {
   const { container } = render(<EmailFrame title="Original message" html='<p onclick="x()">Hello</p>' />);
   const frame = container.querySelector('iframe')!;

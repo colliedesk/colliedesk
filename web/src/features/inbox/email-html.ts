@@ -34,7 +34,7 @@ const overrideStyle = '<style>html,body{height:auto!important;min-height:0!impor
 // Ours comes first so the mail's own styles win: a sans-serif base only fills in what the mail leaves open.
 // Wide mail is made to fit by max-width here and, when a fixed layout still overflows, by fit-frame.ts.
 const baseStyle = 'html{-webkit-text-size-adjust:100%}'
-  + 'body{margin:0;padding:10px 12px;background:#fff;color:#222;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:14px;line-height:1.5;overflow-wrap:break-word}'
+  + 'body{margin:0;padding:10px 12px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:14px;line-height:1.5;overflow-wrap:break-word}'
   + 'img{max-width:100%;height:auto}table{max-width:100%}pre{white-space:pre-wrap}'
   + 'summary{display:inline-block;cursor:pointer;list-style:none;padding:0 8px;border-radius:10px;background:#e8eaed;color:#555;font-size:12px;line-height:16px;letter-spacing:1px}'
   + 'summary::-webkit-details-marker{display:none}details.quoted-history[open]>summary{margin-bottom:6px}'
@@ -70,6 +70,36 @@ function collapseQuotes(parsed: Document): void {
   });
 }
 
+// Of the mail's own <body>, only what paints or names it survives: its colours are part of the design (a white
+// logo on a dark body is blank without them) and its class may be what the mail's styles select. Event
+// handlers and every URL attribute went with the sanitizer pass.
+const bodyAttributes = ['style', 'bgcolor', 'text', 'class', 'id', 'dir'];
+
+function bodyTag(body: HTMLElement): string {
+  const attributes = bodyAttributes.filter((name) => body.hasAttribute(name))
+    .map((name) => ` ${name}="${(body.getAttribute(name) ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}"`);
+  return `<body${attributes.join('')}>`;
+}
+
+const ownStructure = 'br, p, table, ul, ol, li, pre, h1, h2, h3, h4, h5, h6, blockquote, hr, details';
+
+// Plain text kept inside a <div> (a chat message, a note an integration wrote) has newlines and no markup for
+// them. HTML would fold them into one paragraph, and the sender saw them as lines. They are kept when the
+// mail has no structure of its own and the newlines are inside text, not indentation between tags.
+function keepsTextBreaks(body: HTMLElement): boolean {
+  if (body.querySelector(ownStructure)) return false;
+  let hardBreak = false;
+  const walker = body.ownerDocument.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = (node as Text).data;
+    if (text.trim() === '') {
+      const indentation = text.includes('\n') && node.previousSibling?.nodeType === 1 && node.nextSibling?.nodeType === 1;
+      if (indentation) return false;
+    } else if (text.trim().includes('\n')) hardBreak = true;
+  }
+  return hardBreak;
+}
+
 function sanitize(html: string): string {
   const parsed = new DOMParser().parseFromString(html, 'text/html');
   parsed.querySelectorAll(removedElements).forEach((element) => element.remove());
@@ -87,7 +117,8 @@ function sanitize(html: string): string {
   });
   collapseQuotes(parsed);
   const styles = Array.from(parsed.head.querySelectorAll('style')).map((style) => style.outerHTML).join('');
-  return styles + parsed.body.innerHTML + overrideStyle;
+  const breaks = keepsTextBreaks(parsed.body) ? '<style>body{white-space:pre-wrap}</style>' : '';
+  return styles + bodyTag(parsed.body) + parsed.body.innerHTML + breaks + overrideStyle;
 }
 
 // emailDocument is the srcdoc of the frame. origin is the Colliedesk origin the image proxy lives on.

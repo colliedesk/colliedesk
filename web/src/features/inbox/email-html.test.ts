@@ -109,6 +109,38 @@ test('mail without quotes gets no toggle', () => {
   expect(parsed('<p>Hello</p><table><tr><td>x</td></tr></table>').querySelector('details')).toBeNull();
 });
 
+// A white logo on a dark body background shows as a blank circle when the body's own colour is lost. The mail's
+// <body> carries it (bgcolor, style, class), and only what cannot fetch or run is kept.
+test('the mail body keeps its colours and classes, and loses what could fetch or run', () => {
+  const document = parsed('<body bgcolor="#2a2a2a" text="#ffffff" class="dark" style="background:#111;min-height:100vh;color:#fff" onload="steal()" background="https://evil.example/b.png" data-x="1"><p>Hi</p></body>');
+  const body = document.body;
+  expect(body.getAttribute('bgcolor')).toBe('#2a2a2a');
+  expect(body.getAttribute('text')).toBe('#ffffff');
+  expect(body.className).toBe('dark');
+  expect(body.getAttribute('style')).toBe('background:#111;min-height:0;color:#fff');
+  for (const dropped of ['onload', 'background', 'data-x']) expect(body.hasAttribute(dropped)).toBe(false);
+  const base = document.querySelector('style')?.textContent ?? '';
+  expect(base).not.toMatch(/body\{[^}]*(?:background|[^-]color):/); // our own rule must not paint over the mail's colours
+});
+
+// Plain text kept inside a <div> (a chat or a note from an integration) has newlines and no markup for them.
+test('text with line breaks and no markup for them keeps its breaks', () => {
+  const text = '<div>Hello\n\nAttachments:\n- file: <a href="https://x.example/a.jpg">https://x.example/a.jpg</a>\n</div>';
+  expect(emailDocument(text, origin)).toContain('<style>body{white-space:pre-wrap}</style>');
+});
+
+test('mail that has its own structure, or only source formatting, is left to normal HTML whitespace', () => {
+  const structured = [
+    '<div>Hello<br>there\nagain</div>',
+    '<p>Hello</p>\n<p>there\nagain</p>',
+    '<table><tr><td>Hello\nthere</td></tr></table>',
+    '<div>\n  <div>Hello there</div>\n  <div>again</div>\n</div>',
+    '<div>A long paragraph that the sender\'s editor wrapped\n</div><div>x</div><div>\n<span>y</span>\n</div>',
+    '<div>One line, no breaks</div>',
+  ];
+  for (const html of structured) expect(emailDocument(html, origin), html).not.toContain('body{white-space:pre-wrap}');
+});
+
 test('wide mail is made to fit and the base font is sans-serif unless the mail sets its own', () => {
   const document = parsed('<style>body{font-family:Georgia,serif}</style><table width="650"><tr><td><img width="650" src="data:image/gif;base64,R0lGOD"></td></tr></table>');
   const styles = Array.from(document.querySelectorAll('style')).map((style) => style.textContent ?? '');
