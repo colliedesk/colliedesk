@@ -17,7 +17,30 @@ interface MessageItemProps {
   approvedBy?: string;
 }
 
-export function MessageItem({ item, timezone, onRetryDelivery, approvedBy }: MessageItemProps) {
+export function MessageItem(props: MessageItemProps) {
+  return props.item.origin?.kind === 'automated_response' ? <AutomatedResponse {...props} /> : <FullMessage {...props} />;
+}
+
+// An automatic reply the source flagged (a messenger or bot acknowledgement) is an event: one line with a
+// chevron, and the message behind it on demand.
+function AutomatedResponse(props: MessageItemProps) {
+  const [open, setOpen] = useState(false);
+  const { item } = props;
+  const from = item.origin?.from ?? item.author_name ?? messages.someone;
+  return (
+    <div className="message-event">
+      <button type="button" className="message-event-row" aria-expanded={open} title={open ? messages.collapseAutomatedResponse : messages.expandAutomatedResponse}
+        onClick={() => setOpen(!open)}>
+        <span className="message-event-chevron" aria-hidden="true">›</span>
+        <span>{messages.automatedResponse(from)}</span>
+        <time dateTime={item.created_at}>{formatDate(item.created_at, props.timezone)}</time>
+      </button>
+      {open && <FullMessage {...props} />}
+    </div>
+  );
+}
+
+function FullMessage({ item, timezone, onRetryDelivery, approvedBy }: MessageItemProps) {
   const [plainText, setPlainText] = useState(false);
   const showHTML = Boolean(item.body_html) && !plainText;
   // The stored raw email is offered on its own, not mixed with the customer's files.

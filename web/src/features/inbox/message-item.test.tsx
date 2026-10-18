@@ -89,3 +89,30 @@ test('the stored raw email stays out of the file list as before', () => {
   const names = Array.from(screen.getByRole('list', { name: /attachments/i }).querySelectorAll('a')).map((link) => link.textContent);
   expect(names).toEqual(['invoice.pdf']);
 });
+
+// A messenger or bot acknowledgement flagged by the source is an event, not a conversation turn: one line
+// with a chevron, open on demand.
+const automated = { ...base, body: 'We received your message and will reply soon.', body_html: '<p>We received your message</p>',
+  origin: { system: 'freshdesk', external_id: '7101', kind: 'automated_response' as const, from: 'bot@sample.example', to: ['support@acme.example'], cc: [], bcc: [] } };
+
+test('an automated response is one collapsed line that names its sender, with the message behind it', () => {
+  const { container } = render(<MessageItem item={automated} timezone="UTC" />);
+  const row = screen.getByRole('button', { name: /bot@sample.example sent an automated response/ });
+  expect(row).toHaveAttribute('aria-expanded', 'false');
+  expect(container.querySelector('iframe')).toBeNull();
+  expect(screen.queryByText(/We received your message/)).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Show plain text' })).toBeNull();
+  fireEvent.click(row);
+  expect(row).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByTitle('Original message')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Show plain text' })).toBeInTheDocument();
+  fireEvent.click(row);
+  expect(row).toHaveAttribute('aria-expanded', 'false');
+  expect(container.querySelector('iframe')).toBeNull();
+});
+
+test('an ordinary incoming message with the same body is not folded', () => {
+  render(<MessageItem item={{ ...automated, origin: { ...automated.origin, kind: 'incoming' as const } }} timezone="UTC" />);
+  expect(screen.queryByRole('button', { name: /automated response/ })).toBeNull();
+  expect(screen.getByTitle('Original message')).toBeInTheDocument();
+});

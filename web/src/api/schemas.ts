@@ -70,7 +70,7 @@ export const conversationOriginSchema = z.object({
 }) satisfies z.ZodType<Generated<'ConversationOrigin'>>;
 export const messageOriginSchema = z.object({
   system: z.string(), external_id: z.string(),
-  kind: z.enum(['description', 'reply', 'incoming', 'private_note', 'public_note', 'forward', 'forwarded_email', 'other']),
+  kind: z.enum(['description', 'reply', 'incoming', 'automated_response', 'private_note', 'public_note', 'forward', 'forwarded_email', 'other']),
   from: z.string().nullable(), to: stringList, cc: stringList, bcc: stringList,
 }) satisfies z.ZodType<Generated<'MessageOrigin'>>;
 export const timeEntrySchema = z.object({

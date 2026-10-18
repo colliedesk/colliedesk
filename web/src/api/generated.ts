@@ -437,7 +437,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Serves one remote image of an incoming email on the viewer's behalf, so the sender sees the server's address and not the reader's. The address is made by the server: the message list rewrites every remote `<img src>` of `body_html` to this route for a signed-in person, with `u` (the original URL) and `s` (an HMAC over the workspace and the URL). Only signed addresses are served. The server refuses private, loopback, link-local, CGNAT, multicast and metadata addresses (also after DNS and on every redirect, at most 3), serves only PNG, JPEG, GIF and WebP (checked from the bytes; SVG is refused), caps an image at 5 MiB, and keeps a fetched image per workspace so a second view does not call the source again. An agent token cannot use it; it reads the original HTML. */
+        /** @description Serves one remote image of an incoming email on the viewer's behalf, so the sender sees the server's address and not the reader's. The address is made by the server: the message list rewrites every remote `<img src>` of `body_html` to this route for a signed-in person, with `u` (the original URL) and `s` (an HMAC over the workspace and the URL). Only signed addresses are served. The server refuses private, loopback, link-local, CGNAT, multicast and metadata addresses (also after DNS and on every redirect, at most 3), serves only PNG, JPEG, GIF and WebP, or an SVG document (checked from the bytes; an SVG is served with a sandboxing Content-Security-Policy and only ever shown through img), caps an image at 5 MiB, and keeps a fetched image per workspace so a second view does not call the source again. An agent token cannot use it; it reads the original HTML. */
         get: operations["getMailImage"];
         put?: never;
         post?: never;
@@ -1602,10 +1602,10 @@ export interface components {
             system: string;
             external_id: string;
             /**
-             * @description How the source system classified the item. public_note was visible to the customer there; forward went to a third party, not to the customer.
+             * @description How the source system classified the item. public_note was visible to the customer there; forward went to a third party, not to the customer; automated_response is an automatic reply from the customer side (an out-of-office or a messenger acknowledgement) that the source flagged, which the timeline folds into one line.
              * @enum {string}
              */
-            kind: "description" | "reply" | "incoming" | "private_note" | "public_note" | "forward" | "forwarded_email" | "other";
+            kind: "description" | "reply" | "incoming" | "automated_response" | "private_note" | "public_note" | "forward" | "forwarded_email" | "other";
             from: string | null;
             to: string[];
             cc: string[];
@@ -2906,6 +2906,7 @@ export interface operations {
                     "image/jpeg": string;
                     "image/gif": string;
                     "image/webp": string;
+                    "image/svg+xml": string;
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -2927,7 +2928,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The response is not a PNG, JPEG, GIF or WebP image. */
+            /** @description The response is not a PNG, JPEG, GIF, WebP or SVG image. */
             415: {
                 headers: {
                     [name: string]: unknown;
