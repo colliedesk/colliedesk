@@ -49,6 +49,27 @@ test('fitFrame undoes the scale when the column grows wide enough again', () => 
   expect(frame.style.height).toBe('800px');
 });
 
+test('fitFrame measures with the frame collapsed, so 100% and 100vh blocks cannot feed back, and never shrinks the page while doing it', () => {
+  const frame = blankFrame();
+  const box = frame.parentElement!;
+  frame.style.height = '700px';
+  const doc = measured(frame, { width: 600, contentWidth: 600, contentHeight: 300 });
+  const seen: Array<{ frame: string; box: string }> = [];
+  Object.defineProperty(doc.documentElement, 'scrollHeight', { configurable: true, get() { seen.push({ frame: frame.style.height, box: box.style.minHeight }); return 300; } });
+  fitFrame(frame);
+  expect(seen.length).toBeGreaterThan(0);
+  for (const state of seen) expect(state).toEqual({ frame: '0px', box: '700px' });
+  expect(frame.style.height).toBe('300px');
+  expect(box.style.minHeight).toBe('');
+});
+
+test('fitFrame never makes a frame taller than the cap, whatever the mail asks for', () => {
+  const frame = blankFrame();
+  measured(frame, { width: 600, contentWidth: 600, contentHeight: 90_000 });
+  fitFrame(frame);
+  expect(frame.style.height).toBe('20000px');
+});
+
 let observers: Array<{ callback: () => void; targets: Element[]; disconnected: boolean }> = [];
 
 beforeEach(() => {

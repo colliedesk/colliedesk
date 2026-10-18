@@ -26,6 +26,37 @@ test('the email document cannot run scripts, submit, navigate or load from the n
   expect(policy).not.toMatch(/img-src[^;]*https?:\/\/(?!desk\.example\.com)/);
 });
 
+// The frame shares the app's origin and its cookie, so a CSP source of the whole origin would let mail CSS
+// (url() in a style) make the browser send authenticated GETs to any API route, such as /api/v1/export.
+test('the policy is exactly this: images only from data: and the image proxy path, nothing else fetchable', () => {
+  const policy = parsed('<p>x</p>').querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute('content');
+  expect(policy).toBe("default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data: https://desk.example.com/api/v1/mail-image; form-action 'none'; base-uri 'none'; frame-src 'none'");
+  expect(policy).not.toMatch(/(font|media|connect|object|child|worker|manifest)-src\s+[^;']*\S/);
+});
+
+test('mail cannot size itself by the frame viewport, which would make the frame chase its own height', () => {
+  const html = '<style>html,body{height:100%;min-height:100vh}.hero{height:100vh;min-height:50svh}.keep{max-height:100vh;width:100vw;line-height:1.2}</style>'
+    + '<div class="hero" style="min-height:100vh;height: 80.5vh;padding:5px">a</div><div style="height:120px">b</div>';
+  const text = emailDocument(html, origin);
+  expect(text).not.toMatch(/(?:^|[;{\s])(?:min-)?height\s*:\s*[\d.]+(?:vh|svh|dvh|lvh)/i);
+  expect(text).toContain('max-height:100vh'); // a ceiling cannot grow the frame
+  expect(text).toContain('height:120px');
+  expect(text).toContain('padding:5px');
+  const document = parsed(html);
+  const last = Array.from(document.querySelectorAll('style')).at(-1)!.textContent ?? '';
+  expect(last).toContain('html,body{height:auto!important;min-height:0!important}');
+  expect(document.body.lastElementChild?.tagName).toBe('STYLE'); // after the mail's own rules, so it wins
+});
+
+test('SVG animation cannot turn a link into javascript: after the sanitizer has looked', () => {
+  const document = parsed('<svg xmlns="http://www.w3.org/2000/svg"><a><set attributeName="href" to="javascript:alert(1)"/><animate attributeName="href" values="javascript:alert(2)"/>'
+    + '<animateMotion path="M0,0"/><animateTransform attributeName="transform"/><discard/><use href="https://evil.example/x.svg#a"/><foreignObject><p>x</p></foreignObject><rect width="1" height="1"/></a></svg>');
+  const names = Array.from(document.querySelectorAll('*')).map((element) => element.localName.toLowerCase());
+  for (const forbidden of ['set', 'animate', 'animatemotion', 'animatetransform', 'discard', 'use', 'foreignobject']) expect(names).not.toContain(forbidden);
+  expect(emailDocument('<svg><a><set attributeName="href" to="javascript:alert(1)"/></a></svg>', origin)).not.toContain('javascript');
+  expect(document.querySelector('svg a')?.hasAttribute('href')).toBe(false);
+});
+
 test('links open in a new tab with noopener and only for web and mail addresses', () => {
   const document = parsed('<a href="https://shop.example/order?id=7" target="_self">order</a> <a href="mailto:help@shop.example">mail</a> '
     + '<a href="javascript:alert(1)">js</a> <a href=" JaVaScRiPt:alert(2)">js2</a> <a href="data:text/html;base64,AAAA">data</a> <a href="#top">top</a> <a href="//evil.example/x">relative</a>');

@@ -27,5 +27,5 @@ export function EmailFrame({ title, html }: { title: string; html: string }) {
     observer.current.observe(frame);
   }
 
-  return <iframe className="email-frame" title={title} sandbox={sandbox} scrolling="no" srcDoc={srcDoc} onLoad={follow} />;
+  return <div className="email-frame-box"><iframe className="email-frame" title={title} sandbox={sandbox} scrolling="no" srcDoc={srcDoc} onLoad={follow} /></div>;
 }
