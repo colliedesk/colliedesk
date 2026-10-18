@@ -173,17 +173,25 @@ not be resolved**. Each may be a deleted or an archived ticket: look them up in 
 
 Some messages show an image in their body (a pasted screenshot, a signature logo) instead of a
 file attached to the message. Freshdesk hosts those images, and they disappear with the account.
-The import downloads each image that Freshdesk hosts: from your Freshdesk address (including a
-custom support domain) and from Freshdesk's own domains. It stores the file like an attachment
-and embeds it in **Show original**, so the original message keeps showing it after you close
-Freshdesk. The Markdown body of the message is unchanged.
+The import downloads each image that Freshdesk hosts: from your Freshdesk address (for example
+`yourcompany.freshdesk.com`), from Freshdesk's attachment servers and from Freshdesk's public image
+storage. It stores the file like an attachment and embeds it in **Show original**, so the original
+message keeps showing it after you close Freshdesk. The Markdown body of the message is unchanged.
+Only PNG, JPEG, GIF and WebP images are copied.
 
 Images from other sites, such as a newsletter banner, are not copied. They stay links, and the
-locked frame does not load them.
+locked frame does not load them. An image whose address names Freshdesk but sits on another host
+(for example a custom support domain) is not copied either. The report lists its ticket under the
+warning `inline_images_not_rehosted`: save those images in Freshdesk before you close the account.
+
+Each message embeds at most 5 MiB of images. A further image is still stored as a file on the
+message, but **Show original** keeps its Freshdesk link, and the report lists the ticket under the
+warning `inline_image_not_embedded`.
 
 An image counts as one item in the report (**Inline images**). If an image cannot be brought
 over, the status is `FAILED`, not `OK`. The cause can be a missing file (404), an expired link, a
-file that is not an image, or an image over 5 MB. The **Failures** table lists the image with its
+file that is not a PNG, JPEG, GIF or WebP image (an SVG is refused), a redirect to another host, or
+an image over 5 MB. The **Failures** table lists the image with its
 ticket id and the reason, and the message keeps its original Freshdesk link. Run the same
 command again: a temporary problem is retried. If the image no longer exists in Freshdesk, open
 the ticket there and save it yourself before you close the account.
@@ -234,8 +242,8 @@ Do not close the Freshdesk account until the last report says `OK`.
 
 ## Limits
 
-- Images inside a message are copied only when Freshdesk hosts them, and only up to 5 MB each.
-  Images from other sites stay links.
+- Images inside a message are copied only when Freshdesk hosts them, only as PNG, JPEG, GIF or WebP,
+  up to 5 MB each and 5 MB embedded per message. Images from other sites stay links.
 - Freshdesk has no documented API for time entries of archived tickets. The report lists those
   tickets; check them in Freshdesk.
 - Contacts without an email get an address of the form `freshdesk-contact-<id>@import.invalid`.

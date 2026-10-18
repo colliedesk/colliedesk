@@ -92,18 +92,34 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
   `email.md`). The attachment row is the stored copy: it gives the file a SHA-256, re-verification,
   the storage cap and undo for free, and shows in the message's file list. It is not counted in
   `Attachments`, which compare with Freshdesk's own attachment totals.
-  - *Hosts.* Fetched: the account host, `*.freshdesk.com`, and Freshdesk's public asset bucket
-    (`s3*.amazonaws.com/cdn.freshdesk.com/...`, `cdn.freshdesk.com.s3*.amazonaws.com`). Any other
-    host is left alone and not counted. The dialer guard and redirect rules of "Egress" apply; the API
-    key goes only to the account host. The old check (any `src` containing "freshdesk") is gone.
+  - *Hosts.* Exact patterns only (`inline-image-hosts.go`): the importing account's host
+    (case-insensitive), `attachment.freshdesk.com` and `<region>-attachment.freshdesk.com`, and
+    Freshdesk's public bucket (`s3[.-]<region>.amazonaws.com/cdn.freshdesk.com/...` or
+    `cdn.freshdesk.com.s3[.-]<region>.amazonaws.com`). A tenant portal of another Freshdesk account, a
+    bucket anyone can name, and a custom support domain are not fetched: a URL that names Freshdesk
+    but is not fetched raises `inline_images_not_rehosted` for its ticket (no silent skip). `http://`
+    links of an allowed host are upgraded to https. The same predicate runs on every redirect hop of
+    the download (a context-carried guard on the files client), so a redirect off the list fails with
+    "redirect refused". The dialer guard of "Egress" still applies; the API key goes only to the
+    account host. Unverified against a live account: whether the account host's
+    `/helpdesk/attachments/<id>` accepts the API key and which hosts it redirects to.
+  - *Type.* The stored media type never comes from the response header. The bytes are sniffed
+    (`http.DetectContentType`) and must be PNG, JPEG, GIF or WebP; the declared type must agree or be
+    `application/octet-stream`. SVG and anything else fails. The `data:` URI is built from that fixed
+    type and HTML-escaped; header text echoed in an error is reduced to a safe character set.
   - *Id.* `<entity>:<message source id>:<hash of host + path + query without signing parameters>`.
     Pre-signed URLs change on every read, so the signature, expiry and `X-Amz-*` parameters are not
     part of the hash. The same image twice in one message is one item.
-  - *Atomic.* The attachment row, the `body_html` rewrite and the ledger row commit in one
-    transaction, so a resumed run never double-stores and never leaves HTML and ledger disagreeing.
-    Only `<img src>` values equal to the image are rewritten; text that happens to hold the URL is not.
-  - *Limits.* 5 MiB per image (the email budget), content type must be `image/*`. Over the limit,
-    a non-image, 404, expired link or 5xx makes that image `failed`.
+  - *Atomic.* All images of one message are stored first, then their attachment rows, ledger rows
+    and one `body_html` rewrite commit in one transaction, so a resumed run never double-stores and
+    never leaves HTML and ledger disagreeing. Only `<img src>` values (not `data-src`) equal to an
+    image are rewritten; text that happens to hold the URL is not.
+  - *Limits.* 5 MiB per image, and 5 MiB of embedded `data:` images per message, the email channel's
+    budget (`email/files.go`); the bytes already stored for the message count, so a resumed run keeps
+    the total. An image over the message budget is still stored and `done` (the bytes are kept) but
+    its link stays in the HTML, with warning `inline_image_not_embedded` for the ticket. A too large
+    image, a non-image, 404, expired link, refused redirect or 5xx makes that image `failed`.
+    `body_html` is returned with every timeline message, so the budget also bounds that payload.
   - *A failed image makes the report FAILED.* The image is lost the day the account closes; the
     report must not say OK. The ticket stays `failed`, the next run reads it again and retries the
     image. The HTML keeps the original link. Trade-off: an image already deleted in Freshdesk keeps
@@ -112,8 +128,13 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
   - *Counts.* `ticketMeta.inline_images` is the number of distinct hosted images per ticket
     (`Report.InlineImages.Source`). Freshdesk reports no size, so there is no source byte total;
     `ImportedBytes` and the SHA-256 re-verification (`verifyAttachments`) cover the stored files.
-  - *Storage cap.* The sizing pass downloads each image not yet `done` once and discards it, so the
-    bytes count before any write. An image the sizing cannot read counts 0 and fails later in the real run.
+  - *Storage cap.* The sizing pass counts each image not yet `done` by its announced Content-Length
+    (it reads the body only when none is announced), so bytes count before any write and images are
+    not downloaded twice. An image the sizing cannot read counts 0 and fails later in the real run.
+    The cap and the workspace counter measure stored objects. The base64 copy in `body_html` (about
+    4/3 of the embedded bytes, at most 5 MiB of images per message) lives in the database like message
+    text and is not counted; counting it in the sizing only would refuse imports the counter would
+    accept.
   - *Undo.* The attachment rows go with their messages; the files go with the orphan sweep.
 - **People.** Agents match Colliedesk agents by email in the same workspace; `author_name` is
   always stored. Contacts reuse a contact with the same email in the same workspace. A contact

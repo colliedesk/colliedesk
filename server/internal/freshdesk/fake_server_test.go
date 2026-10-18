@@ -22,8 +22,9 @@ const testAPIKey = "fd-test-key-DO-NOT-PRINT"
 var fileBodies = map[string]string{"9001": "PDF-BYTES-1", "9002": "PNG-BYTES", "9003": "log line 1", "inline-5001": inlineImageBody}
 
 const (
-	inlineImageBody  = "PNG-INLINE-1"
-	accountImageBody = "PNG-ACCOUNT"
+	pngSignature     = "\x89PNG\r\n\x1a\n"
+	inlineImageBody  = pngSignature + "INLINE-1"
+	accountImageBody = pngSignature + "ACCOUNT"
 )
 
 // fakeFreshdesk serves JSON shaped like the public Freshdesk API v2 from
@@ -66,7 +67,11 @@ type fakeFreshdesk struct {
 	// inlineImages puts the fixtures' message-HTML images in place: one on the file host (its
 	// signature changes on every read), one on the account host, three that Freshdesk does not host.
 	inlineImages bool
-	onRequest    func(path string)
+	// inlineHTTP writes the account host image with an http:// URL, as old tickets do.
+	inlineHTTP bool
+	// bigInlineImages replaces the file host image with three images (inline-6001..6003) in one message.
+	bigInlineImages bool
+	onRequest       func(path string)
 	// failPathTimes makes the next N API requests to a path answer 500.
 	failPathTimes map[string]int
 	// failPathStatus makes every API request to a path answer with the given status.
@@ -353,8 +358,16 @@ func (f *fakeFreshdesk) inlineMarkup(text string, version int) string {
 	images := map[string]string{"{{inline-files}}": "", "{{inline-account}}": "", "{{inline-external}}": ""}
 	if f.inlineImages {
 		images["{{inline-files}}"] = fmt.Sprintf(`<img src=\"%s/inline-5001?Signature=abc&amp;Expires=%d\">`, f.files.URL, version)
-		images["{{inline-account}}"] = fmt.Sprintf(`<img src=\"%s/helpdesk/attachments/6001\">`, f.api.URL)
-		images["{{inline-external}}"] = `<img src=\"https://images.example.org/pixel.png\"> <img src=\"https://freshdesk.com.evil.example/a.png\"> <img src=\"https://evilfreshdesk.com/b.png\">`
+		if f.bigInlineImages {
+			images["{{inline-files}}"] = fmt.Sprintf(`<img src=\"%[1]s/inline-6001\"><img src=\"%[1]s/inline-6002\"><img src=\"%[1]s/inline-6003\">`, f.files.URL)
+		}
+		account := f.api.URL
+		if f.inlineHTTP {
+			account = strings.Replace(account, "https://", "http://", 1)
+		}
+		images["{{inline-account}}"] = fmt.Sprintf(`<img src=\"%s/helpdesk/attachments/6001\">`, account)
+		images["{{inline-external}}"] = fmt.Sprintf(`<img src=\"https://images.example.org/pixel.png\"> <img src=\"https://freshdesk.com.evil.example/a.png\"> <img src=\"https://evilfreshdesk.com/b.png\"> `+
+			`<img data-src=\"%s/helpdesk/attachments/6002\" src=\"https://images.example.org/lazy.gif\">`, f.api.URL)
 	}
 	for token, markup := range images {
 		text = strings.ReplaceAll(text, token, markup)

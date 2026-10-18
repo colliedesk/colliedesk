@@ -9,6 +9,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/jackc/pgx/v5"
 )
 
 // diskReserve is kept free on the attachments volume during an import.
@@ -62,20 +63,9 @@ func (r *run) importAttachment(ctx context.Context, ticketKey, messageID string,
 	if err := store.VerifyObjects(ctx, tx, r.opts.Storage, object.Key); err != nil {
 		return err
 	}
-	var targetID string
-	replaced := false
-	if found && entry.TargetID != nil {
-		if replaced, err = store.ReplaceAttachmentBytes(ctx, tx, r.workspaceID, *entry.TargetID, input); err != nil {
-			return err
-		}
-		targetID = *entry.TargetID
-	}
-	if !replaced {
-		item, err := store.InsertAttachment(ctx, tx, r.workspaceID, input)
-		if err != nil {
-			return err
-		}
-		targetID = item.ID
+	targetID, err := r.saveAttachment(ctx, tx, entry, found, input)
+	if err != nil {
+		return err
 	}
 	if err := r.ledger.mark(ctx, tx, ledgerMark{entity: entityAttachment, sourceID: key, parentID: ticketKey, targetID: &targetID, status: ledgerDone}); err != nil {
 		return err
@@ -99,4 +89,23 @@ func (r *run) checkDiskSpace(size int64) error {
 		return fmt.Errorf("%w: %d bytes free, %d needed plus a %d byte reserve", errDiskFull, free, size, diskReserve)
 	}
 	return nil
+}
+
+// saveAttachment writes the attachment row of a stored file: it reuses the row of a ledger entry
+// whose stored file was lost or changed, and inserts a new one otherwise.
+func (r *run) saveAttachment(ctx context.Context, tx pgx.Tx, entry ledgerEntry, found bool, input store.NewAttachment) (string, error) {
+	if found && entry.TargetID != nil {
+		replaced, err := store.ReplaceAttachmentBytes(ctx, tx, r.workspaceID, *entry.TargetID, input)
+		if err != nil {
+			return "", err
+		}
+		if replaced {
+			return *entry.TargetID, nil
+		}
+	}
+	item, err := store.InsertAttachment(ctx, tx, r.workspaceID, input)
+	if err != nil {
+		return "", err
+	}
+	return item.ID, nil
 }

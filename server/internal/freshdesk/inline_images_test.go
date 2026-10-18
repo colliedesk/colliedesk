@@ -4,19 +4,20 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
 )
 
-// Expected values are worked out by hand from the fixture bytes ("PNG-INLINE-1", "PNG-ACCOUNT"):
-// printf 'PNG-INLINE-1' | sha256sum, | base64.
+// Expected values are worked out by hand from the fixture bytes (the PNG signature followed by
+// "INLINE-1" and "ACCOUNT"): sha256sum and base64 of those bytes.
 const (
-	inlineDataURI   = "data:image/png;base64,UE5HLUlOTElORS0x"
-	accountDataURI  = "data:image/png;base64,UE5HLUFDQ09VTlQ="
-	inlineSHA256    = "ad7a68345468d1677b837f29be6ac55b1d322702e1be97371769667ac4194a80"
-	inlineImageSize = 12 + 11
+	inlineDataURI   = "data:image/png;base64,iVBORw0KGgpJTkxJTkUtMQ=="
+	accountDataURI  = "data:image/png;base64,iVBORw0KGgpBQ0NPVU5U"
+	inlineSHA256    = "eaf5fe0406c410df5c376cb666244c4c7931949f7c6e02af30d190d0664a975b"
+	inlineImageSize = 16 + 15
 )
 
 func (e *importEnv) messageHTML(t *testing.T, entity, freshdeskID string) string {
@@ -66,9 +67,6 @@ func TestInlineImagesAreRehostedAndShownInTheStoredOriginal(t *testing.T) {
 		WHERE i.workspace_id=$1 AND i.entity='inline_image' AND i.parent_source_id='1'`, env.workspaceID).Scan(&sha, &contentType)
 	if err != nil || sha != inlineSHA256 || contentType != "image/png" {
 		t.Fatalf("stored inline image sha=%s type=%s err=%v", sha, contentType, err)
-	}
-	if hasWarning(report, "inline_images_not_rehosted") {
-		t.Fatalf("a rehosted image still warns: %+v", report.Warnings)
 	}
 	if env.fake.fileAuthSeen {
 		t.Fatal("the Freshdesk API key was sent to the file host")
@@ -169,7 +167,7 @@ func TestInlineImageThatCannotBeDownloadedFailsTheImportAndKeepsTheLink(t *testi
 			if report.Status != freshdesk.StatusFailed {
 				t.Fatalf("status=%s, want FAILED: an image that was not brought over is data loss", report.Status)
 			}
-			if !hasFailure(report, "inline_image", failureID(report, "inline_image"), "1") || !hasFailure(report, "ticket", "1", "1") {
+			if id := failureID(report, "inline_image"); !regexp.MustCompile(`^conversation:7002:[0-9a-f]{16}$`).MatchString(id) || !hasFailure(report, "inline_image", id, "1") || !hasFailure(report, "ticket", "1", "1") {
 				t.Fatalf("failures = %+v", report.Failures)
 			}
 			assertCount(t, "inline images", report.InlineImages.EntityCount, 2, 1)
@@ -214,21 +212,21 @@ func TestInlineImagesCountInThePaidPlanSizingBeforeAnythingIsWritten(t *testing.
 	env.fake.inlineImages = true
 	env.setPlan(t, env.workspaceID, "founding")
 	before := env.rowCounts(t)
-	// 30 bytes of attachments + 23 bytes of inline images = 53.
-	report, err := env.runCapped(t, 52)
+	// 30 bytes of attachments + 31 bytes of inline images = 61.
+	report, err := env.runCapped(t, 60)
 	var capErr *freshdesk.StorageCapError
-	if !errors.As(err, &capErr) || report != nil || capErr.Needed != 53 {
-		t.Fatalf("report=%v err=%v, want a refusal that needs 53 bytes", report, err)
+	if !errors.As(err, &capErr) || report != nil || capErr.Needed != 61 {
+		t.Fatalf("report=%v err=%v, want a refusal that needs 61 bytes", report, err)
 	}
 	if after := env.rowCounts(t); after != before || env.fake.count("/files/9003") != 0 {
 		t.Fatalf("rows changed from %s to %s", before, after)
 	}
-	report, err = env.runCapped(t, 53)
+	report, err = env.runCapped(t, 61)
 	if err != nil || report.Status != freshdesk.StatusOK {
-		t.Fatalf("report=%+v err=%v, want OK at exactly 53", report, err)
+		t.Fatalf("report=%+v err=%v, want OK at exactly 61", report, err)
 	}
-	if got := env.storedBytes(t, env.workspaceID); got != 53 {
-		t.Fatalf("stored bytes = %d, want 53", got)
+	if got := env.storedBytes(t, env.workspaceID); got != 61 {
+		t.Fatalf("stored bytes = %d, want 61", got)
 	}
 }
 
@@ -236,7 +234,7 @@ func TestInlineImageMarkdownReportsCountsBytesAndChecksums(t *testing.T) {
 	env := newImportEnv(t)
 	env.fake.inlineImages = true
 	markdown := env.mustRun(t).Markdown()
-	for _, want := range []string{"| Inline images | 2 | 2 | 0 |", "Inline image bytes: 23 stored. SHA-256 re-verified from storage: 2."} {
+	for _, want := range []string{"| Inline images | 2 | 2 | 0 |", "Inline image bytes: 31 stored. SHA-256 re-verified from storage: 2."} {
 		if !strings.Contains(markdown, want) {
 			t.Errorf("markdown lacks %q:\n%s", want, markdown)
 		}
@@ -277,4 +275,124 @@ func failureID(report *freshdesk.Report, entity string) string {
 		}
 	}
 	return ""
+}
+
+func (e *importEnv) mustFailOneImage(t *testing.T) *freshdesk.Report {
+	t.Helper()
+	report := e.mustRun(t)
+	if report.Status != freshdesk.StatusFailed || report.InlineImages.Failed != 1 {
+		t.Fatalf("status=%s inline=%+v failures=%+v, want exactly one failed image", report.Status, report.InlineImages, report.Failures)
+	}
+	if html := e.messageHTML(t, "conversation", "7002"); strings.Contains(html, "onerror") || strings.Contains(html, "<script") || strings.Contains(html, "data:") {
+		t.Fatalf("stored HTML was changed: %q", html)
+	}
+	return report
+}
+
+func TestHostileContentTypeCannotInjectMarkupIntoTheStoredOriginal(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.inlineImages = true
+	env.fake.fileType["inline-5001"] = `image/png" onerror="alert(1)"><script>x()</script><img x="`
+	report := env.mustFailOneImage(t)
+	if strings.Contains(report.Markdown(), "<script") {
+		t.Fatal("the report echoes the hostile header unescaped")
+	}
+}
+
+func TestImageThatIsNotWhatItClaimsToBeIsRefused(t *testing.T) {
+	cases := map[string]func(*fakeFreshdesk){
+		"html body declared as png": func(f *fakeFreshdesk) { f.fileBody["inline-5001"] = "<html><script>x()</script></html>" },
+		"svg": func(f *fakeFreshdesk) {
+			f.fileBody["inline-5001"] = "<svg xmlns='http://www.w3.org/2000/svg'/>"
+			f.fileType["inline-5001"] = "image/svg+xml"
+		},
+		"png declared as gif": func(f *fakeFreshdesk) { f.fileType["inline-5001"] = "image/gif" },
+		"octet-stream, not an image": func(f *fakeFreshdesk) {
+			f.fileBody["inline-5001"] = "just text"
+			f.fileType["inline-5001"] = "application/octet-stream"
+		},
+	}
+	for name, change := range cases {
+		t.Run(name, func(t *testing.T) {
+			env := newImportEnv(t)
+			env.fake.inlineImages = true
+			change(env.fake)
+			env.mustFailOneImage(t)
+		})
+	}
+}
+
+func TestOctetStreamImageIsAcceptedWhenTheBytesAreARasterImage(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.inlineImages = true
+	env.fake.fileType["inline-5001"] = "application/octet-stream"
+	report := env.mustRun(t)
+	if report.Status != freshdesk.StatusOK || !strings.Contains(env.messageHTML(t, "conversation", "7002"), inlineDataURI) {
+		t.Fatalf("status=%s failures=%+v", report.Status, report.Failures)
+	}
+}
+
+func TestImagesOverTheMessageBudgetAreStoredButStayLinks(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.inlineImages, env.fake.bigInlineImages = true, true
+	big := pngSignature + strings.Repeat("\x00", 3<<20-len(pngSignature))
+	for _, id := range []string{"inline-6001", "inline-6002", "inline-6003"} {
+		env.fake.fileBody[id] = big
+	}
+	report := env.mustRun(t)
+	if report.Status != freshdesk.StatusOK {
+		t.Fatalf("status=%s failures=%+v", report.Status, report.Failures)
+	}
+	// 3 MiB fits the 5 MiB budget of one message; the next two do not, so only the first is embedded.
+	html := env.messageHTML(t, "conversation", "7002")
+	if got := strings.Count(html, "data:image/png;base64,"); got != 1 || strings.Count(html, "/inline-600") != 2 {
+		t.Fatalf("embedded %d images, links left %d; want 1 and 2", got, strings.Count(html, "/inline-600"))
+	}
+	if report.InlineImages.Imported != 4 || report.InlineImages.ImportedBytes != 9<<20+15 {
+		t.Fatalf("inline images = %+v: every image must still be stored", report.InlineImages)
+	}
+	if !hasWarning(report, "inline_image_not_embedded") {
+		t.Fatalf("no warning for the images left as links: %+v", report.Warnings)
+	}
+	if again := env.mustRun(t); again.Status != freshdesk.StatusOK || strings.Count(env.messageHTML(t, "conversation", "7002"), "data:image/png;base64,") != 1 {
+		t.Fatalf("rerun status=%s", again.Status)
+	}
+}
+
+func TestRedirectOutOfTheAllowedHostsIsRefused(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.inlineImages = true
+	env.fake.redirectFile = "inline-5001"
+	report := env.mustFailOneImage(t)
+	if !strings.Contains(report.Markdown(), "redirect refused") {
+		t.Fatalf("failure should name the refused redirect:\n%s", report.Markdown())
+	}
+}
+
+func TestHTTPImageOfAnAllowedHostIsUpgradedToHTTPS(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.inlineImages, env.fake.inlineHTTP = true, true
+	report := env.mustRun(t)
+	if report.Status != freshdesk.StatusOK || report.InlineImages.Imported != 2 || !strings.Contains(env.messageHTML(t, "description", "6"), accountDataURI) {
+		t.Fatalf("status=%s inline=%+v failures=%+v", report.Status, report.InlineImages, report.Failures)
+	}
+}
+
+func TestFreshdeskLookingImageThatIsNotFetchedIsWarnedAndLazySrcIsIgnored(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.inlineImages = true
+	report := env.mustRun(t)
+	var warned []string
+	for _, w := range report.Warnings {
+		if w.Code == "inline_images_not_rehosted" {
+			warned = w.FreshdeskIDs
+		}
+	}
+	if strings.Join(warned, ",") != "1" {
+		t.Fatalf("warning ids = %v, want ticket 1 (the look-alike hosts)", warned)
+	}
+	html := env.messageHTML(t, "conversation", "7001")
+	if !strings.Contains(html, `src="https://images.example.org/lazy.gif"`) || strings.Contains(html, "data:") || env.fake.count("/helpdesk/attachments/6002") != 0 {
+		t.Fatalf("data-src was treated as src: %q", html)
+	}
 }

@@ -66,7 +66,7 @@ func (c *client) wait(ctx context.Context, d time.Duration) error {
 }
 
 func (c *client) onAccountHost(target *url.URL) bool {
-	return target.Scheme == "https" && target.Host == c.base.Host
+	return target.Scheme == "https" && strings.EqualFold(target.Host, c.base.Host)
 }
 
 // getJSON decodes the response of a GET into out and returns the next page URL.
@@ -161,7 +161,7 @@ func (c *client) do(ctx context.Context, target string, apiCall bool) (*http.Res
 				return nil, fmt.Errorf("GET %s: %w", redact(target), errBlockedAddress)
 			}
 			if strings.Contains(err.Error(), "refusing redirect") {
-				return nil, fmt.Errorf("GET %s: redirect refused (not HTTPS, off the account host, or too many)", redact(target))
+				return nil, fmt.Errorf("GET %s: redirect refused (not HTTPS, a host this download may not use, or too many)", redact(target))
 			}
 			if serverRetries < maxServerRetries {
 				serverRetries++

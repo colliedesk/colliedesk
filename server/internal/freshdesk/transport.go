@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -20,6 +21,13 @@ const (
 	defaultIdleTimeout = 2 * time.Minute
 	maxRedirects       = 5
 )
+
+type redirectGuardKey struct{}
+
+// withRedirectGuard makes a download refuse any redirect to a URL the predicate does not allow.
+func withRedirectGuard(ctx context.Context, allowed func(*url.URL) bool) context.Context {
+	return context.WithValue(ctx, redirectGuardKey{}, allowed)
+}
 
 var errBlockedAddress = errors.New("refusing to connect to a private, loopback or link-local address")
 
@@ -95,13 +103,16 @@ func newHTTPClients(base *url.URL, hooks testHooks) (*http.Client, *http.Client)
 	}
 	transport := newTransport(hooks)
 	api := &http.Client{Timeout: timeout, Transport: transport, CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if req.URL.Scheme != "https" || req.URL.Host != base.Host || len(via) >= maxRedirects {
+		if req.URL.Scheme != "https" || !strings.EqualFold(req.URL.Host, base.Host) || len(via) >= maxRedirects {
 			return fmt.Errorf("refusing redirect to %s", redact(req.URL.String()))
 		}
 		return nil
 	}}
 	files := &http.Client{Transport: transport, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if req.URL.Scheme != "https" || len(via) >= maxRedirects {
+			return fmt.Errorf("refusing redirect to %s", redact(req.URL.String()))
+		}
+		if allowed, ok := req.Context().Value(redirectGuardKey{}).(func(*url.URL) bool); ok && !allowed(req.URL) {
 			return fmt.Errorf("refusing redirect to %s", redact(req.URL.String()))
 		}
 		return nil

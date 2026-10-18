@@ -10,9 +10,10 @@ import (
 
 func UseTestNetwork(o *Options, roots *x509.CertPool, addresses ...string) {
 	o.hooks.rootCAs = roots
-	o.hooks.allowDial = map[string]bool{}
+	o.hooks.allowDial, o.hooks.imageHosts = map[string]bool{}, map[string]bool{}
 	for _, address := range addresses {
 		o.hooks.allowDial[address] = true
+		o.hooks.imageHosts[address] = true
 	}
 }
 
