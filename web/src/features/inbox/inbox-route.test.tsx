@@ -13,12 +13,40 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock('../../api/client', () => ({ api }));
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn(), useParams: () => ({}) }));
+const router = vi.hoisted(() => ({ params: {} as { conversationId?: string } }));
+vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn(), useParams: () => router.params }));
 
 const conversation = (id: string, subject: string) => ({
   id, contact_id: '22222222-2222-4222-8222-222222222222', contact_name: 'Mai Linh', subject,
   status: 'open' as const, priority: 'normal' as const, assignee_id: null, tags: [], origin: null,
   created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z',
+});
+
+// A ticket opened by its address must not wait for the list or for the conversation detail before it asks for
+// its messages: those three requests are independent, and a chain of them costs a round trip each.
+test('a ticket opened by its address asks for its messages and time entries at once, before the list or the detail arrive', async () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  router.params = { conversationId: id };
+  try {
+    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.conversations.mockReset();
+    api.conversations.mockReturnValue(new Promise(() => {})); // the list never answers in this test
+    api.conversation.mockReturnValue(new Promise(() => {})); // nor does the detail
+    api.agents.mockResolvedValue({ items: [] });
+    api.tags.mockResolvedValue({ items: [] });
+    api.messages.mockReset();
+    api.messages.mockReturnValue(new Promise(() => {}));
+    api.timeEntries.mockReset();
+    api.timeEntries.mockReturnValue(new Promise(() => {}));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+    await waitFor(() => expect(api.messages).toHaveBeenCalledWith(id));
+    expect(api.timeEntries).toHaveBeenCalledWith(id);
+    expect(api.conversations).toHaveBeenCalled();
+    expect(api.conversation).toHaveBeenCalledWith(id);
+  } finally {
+    router.params = {};
+  }
 });
 
 test('inline tag creation stays bound to the conversation selected at call time', async () => {

@@ -61,7 +61,11 @@ export function InboxRoute() {
   const opened = useQuery({ queryKey: ['conversations', 'one', activeID], queryFn: () => api.conversation(activeID!),
     enabled: Boolean(activeID && !listed) });
   const selected = listed ?? (opened.data?.id === activeID ? opened.data : undefined) ?? conversations.data?.items[0];
-  const timeline = useQuery({ queryKey: ['messages', selected?.id], queryFn: () => api.messages(selected!.id), enabled: Boolean(selected),
+  // The messages and time entries need only the id. A ticket opened by its address knows it from the URL, so
+  // they go out together with the list and the detail instead of after one of them. Without an address the id
+  // is the first row of the list, which is the one thing that has to be waited for.
+  const openID = activeID ?? selected?.id;
+  const timeline = useQuery({ queryKey: ['messages', openID], queryFn: () => api.messages(openID!), enabled: Boolean(openID),
     // Poll while a reply waits in the email outbox so its delivery status updates without a reload.
     refetchInterval: (query) => (query.state.data?.items.some((item) => item.delivery?.status === 'queued') ? 5000 : false) });
   // Reply drafts AI agents left: the list marks their conversations, the open one shows them above the composer.
@@ -78,7 +82,7 @@ export function InboxRoute() {
     if (conversationId) void client.invalidateQueries({ queryKey: ['messages', conversationId] });
     return refresh();
   };
-  const timeEntries = useQuery({ queryKey: ['time-entries', selected?.id], queryFn: () => api.timeEntries(selected!.id), enabled: Boolean(selected) });
+  const timeEntries = useQuery({ queryKey: ['time-entries', openID], queryFn: () => api.timeEntries(openID!), enabled: Boolean(openID) });
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
   const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes), onSuccess: keepOpened });
