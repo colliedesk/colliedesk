@@ -88,21 +88,21 @@ outgoing replies. Conversations and messages stay.
 2. Add that TXT record at your DNS provider.
 3. Select **Verify domain**. DNS changes can take a few minutes; try again if it fails.
 
-**When the server has a Resend key** (`RESEND_API_KEY`, the hosted cloud), Settings shows a table
-**DNS records to publish** instead of the TXT record: DKIM, SPF and an MX record for bounces, each
-with its status (Not started, Pending, Verified, Failed) once you have selected **Verify domain**
-the first time.
+**When the server has a Resend key** (`RESEND_API_KEY`, the hosted cloud), verification has two steps:
 
-1. Add every record in the table at your DNS provider.
-2. Select **Verify domain**. The domain is verified only when Resend reports it verified. Until then
-   Settings shows each record's status and the reason; DNS changes can take from a few minutes to
-   a day. Select **Verify domain** again later.
-3. If Resend cannot be reached, nothing changes. Try again in a minute.
+1. Publish the TXT record shown in Settings. It proves you control the domain. Select **Verify domain**;
+   until the TXT record is found, Colliedesk asks for it and does nothing else.
+2. Colliedesk then lists a table **DNS records to publish** (DKIM, SPF and an MX record for bounces),
+   each with its status (Not started, Pending, Verified, Failed). Add every record at your DNS provider and
+   select **Verify domain** again. The domain is verified only when Resend reports it verified; DNS changes
+   can take from a few minutes to a day. The button works once every 30 seconds per workspace and is
+   disabled while a check runs.
 
-The table appears after your first **Verify domain**; until then Settings tells you to select it.
-If Resend refuses the domain name, Colliedesk shows Resend's reason. Changing the support address to
-another domain replaces the list with one for the new domain; the old one is deleted at Resend.
-Replies signed with your own domain are what keep them out of spam folders.
+If Resend refuses the domain name, Colliedesk shows Resend's reason; any other Resend problem shows as
+"could not be reached" and the operator is told. If Resend cannot be reached, nothing changes. Changing the
+support address to another domain replaces the list; the old domain is deleted at Resend in the background.
+**Only one workspace can verify a given domain name this way.** If two teams of one company need the same
+domain, the second one keeps sending from the platform address.
 
 Until the domain is verified, replies are sent as **"Your workspace via Colliedesk"** from
 `reply+…@<MAIL_FROM_DOMAIN>`, with `Reply-To` set to your support address. Customer replies still

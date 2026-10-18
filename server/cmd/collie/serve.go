@@ -22,6 +22,8 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
+	"github.com/colliedesk/colliedesk/server/internal/providerdomain"
+	"github.com/colliedesk/colliedesk/server/internal/resend"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/colliedesk/colliedesk/server/internal/telemetry"
 	"github.com/colliedesk/colliedesk/server/internal/webui"
@@ -85,6 +87,11 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		worker := emailoutbox.New(store.NewWithDB(db), email.SMTPSender{Config: emailConfig.SMTP},
 			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage})
 		go worker.Run(ctx, 5*time.Second)
+	}
+	if emailConfig.ResendAPIKey != "" {
+		// Provider domains a workspace stopped using, or left behind by being deleted, free their slots here.
+		client := &resend.Client{APIKey: emailConfig.ResendAPIKey, Base: emailConfig.ResendAPIBase}
+		go providerdomain.New(store.NewWithDB(db), client, providerdomain.Options{}).Run(ctx, time.Minute)
 	}
 	warnWithoutTrustedProxies(slog.Default(), trustedProxies)
 	// The hosted cloud is cloud sign-in with billing; a self-hosted server may use sign-in alone.

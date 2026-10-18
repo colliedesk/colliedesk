@@ -37,28 +37,45 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   `any` keeps the support address always (self-host, operator owns the relay).
 - **Domain verification through Resend (`RESEND_API_KEY`).** TXT proves control of a domain but not that
   Resend will send for it or that the customer's DMARC aligns, so on the hosted cloud the domain is
-  verified by Resend instead. The domain is created in the Resend account only by the first
-  `POST .../domain-verification`, not when the address is saved (`email_channels.provider_domain_id`; the
-  same domain keeps it). The records Resend lists are kept with their status in `provider_domain_records`;
-  settings reads that snapshot, never Resend, and shows none before the first verify. Verify reads the
-  domain; when it is not `verified` it asks Resend to re-check and reads again, because Resend marks a
-  domain `pending` while it checks. `domain_verified_at` is set only on `verified`; anything else is 409
-  with each record's status, a 4xx refusal of the name (Resend answers 422 `validation_error` for an
-  invalid one) is 409 `email_domain_unavailable`, and an unreachable Resend is 502 with nothing recorded.
-  Resend does not refuse a name that is already in the account: it creates a second domain with a new id
-  and DKIM key (same selector). Ownership is therefore proved only by DNS, since the copy verifies only
-  when its own records are published. Each workspace holds its own domain, and the unique index on
-  `provider_domain_id` backs that up.
-  **Slots are limited** (a Resend plan allows a fixed number of domains), so a domain a workspace stops
-  using is deleted: changing the support domain or disconnecting the channel writes the old id to
-  `email_provider_domain_trash` in the same transaction, and `DELETE /domains/{id}` runs right after
-  (404 counts as gone). A failed delete keeps the row and is retried on that workspace's next save,
-  verify or disconnect, so an id is never dropped silently; a workspace that is deleted outright leaves
-  its domain for an operator. Records differ by region and the client sends no `region`, so Resend's
-  default (us-east-1) applies; an account whose other domains sit elsewhere gets different SPF MX
-  values for these. Without the key the TXT check above is unchanged (self-host). The client is
-  `internal/resend`; tests run it against an `httptest` server shaped like the real API (duplicate names
-  allowed, DELETE, 422 and 404 bodies).
+  verified by Resend. Both steps are needed, in this order:
+  1. **Proof of control.** `POST .../domain-verification` first checks the `_colliedesk` TXT record
+     (the self-host mechanism). Without it the answer is 409 `dns_record_not_found` and Resend is not
+     called. Resend adds any name it is given, and its account has a fixed number of domain slots shared by
+     all workspaces, so a domain nobody proved must not cost one.
+  2. **Resend's records.** With the proof, the first check creates the domain
+     (`email_channels.provider_domain_id`), keeps the records it lists and their status in
+     `provider_domain_records`, asks Resend to re-check (a domain is `pending` while it checks) and reads it
+     again. `domain_verified_at` is set only on `verified`; anything else is 409
+     `dns_record_not_verified` with each record's status. Saving the address never calls Resend, and
+     settings read the stored snapshot, so a person never waits on Resend.
+  A per-workspace lock (`pg_advisory_xact_lock`, re-read under the lock) lets one request create the domain
+  when two arrive together. Checks that reach Resend are limited to one per workspace per 30 s
+  (`domain.ProviderCheckMinInterval`; 429 with `Retry-After`, no call), because the Resend account and its
+  request limit are shared by every tenant. A stored id that Resend no longer knows (404) is replaced by a
+  new domain in the same request.
+  **Errors.** Only Resend's 422 `validation_error` (a name it refuses) is shown to the tenant, as 409
+  `email_domain_unavailable`. Anything else (bad or restricted key, suspended key, 409 `resource_locked`, 429,
+  5xx, network) is the operator's: the tenant sees a generic 502 and the log has the status and Resend's
+  error name, never the key.
+  **Duplicates.** Resend does not refuse a name already in the account: it creates a second domain with a
+  new id and DKIM key (same selector `resend._domainkey`). Only one copy can have its records in DNS, so
+  **only one workspace can hold a given domain name verified**. Two teams of one company that both use
+  `support@` and `billing@` of the same domain cannot both verify it this way; the second stays
+  unverified and sends from the platform address. Ownership is proved by the TXT record first and then by
+  the copy's own DNS records.
+  **Slots are freed in the background.** A domain a workspace stops using (support domain changed, channel
+  disconnected, a stored id replaced, or the workspace deleted by retention) is written to
+  `email_provider_domain_trash` in the same transaction. That table has no foreign key to `workspaces`, so
+  rows survive the workspace; `workspace_id` stays as a record of who held the domain, and the table keeps
+  row-level security (tenant transactions only enqueue, the sweep reads it as a reviewed privileged path).
+  `internal/providerdomain.Sweeper` runs every minute beside the outbox worker and calls
+  `DELETE /domains/{id}`: 404 counts as gone; a failure keeps the row with `attempts`, `last_error` and a
+  backoff of 1 minute doubling to 1 hour, and logs a warning. Requests never call Resend to delete.
+  Region: the client sends none, so Resend's default (us-east-1) applies and the SPF MX value follows it; an
+  account whose other domains sit in another region gets different records for these. Without the key the
+  TXT check above is unchanged (self-host). The client is `internal/resend`; tests run it against an
+  `httptest` server shaped like the real API (duplicate names allowed, DELETE, 422/404 bodies, a different
+  DKIM key per domain).
 - **Complaint pause.** After a complaint webhook is recorded (applied, copy or duplicate), the handler
   counts, for that workspace over 7 days, `email.complained` rows in `relay_webhook_events` and outbox rows
   with a `sent_at` (a reply failed by a complaint keeps `sent_at`, so it still counts as sent). 3 or more

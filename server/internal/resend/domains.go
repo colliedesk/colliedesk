@@ -58,10 +58,11 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("resend: HTTP %d %s: %s", e.Status, e.Name, e.Message)
 }
 
-// Rejected reports an answer that refuses this domain (for example an invalid name or a plan limit; Resend does not refuse a name already in the account)
-// rather than a server or credential problem. Retrying the same request will not help.
+// Rejected reports the provider's validation refusal of the domain name (422 validation_error). Every
+// other error is about the account, such as its key, permissions, plan or rate limit, or about the
+// provider being down: retrying or showing it to a tenant does not help.
 func (e *APIError) Rejected() bool {
-	return e.Status == http.StatusBadRequest || e.Status == http.StatusForbidden || e.Status == http.StatusConflict || e.Status == http.StatusUnprocessableEntity
+	return e.Status == http.StatusUnprocessableEntity
 }
 
 // Client calls the Resend Domains API. The zero HTTP client is replaced by one with a timeout.

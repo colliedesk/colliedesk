@@ -899,3 +899,30 @@ func TestDeactivatedAdminsAreNotNoticedAndNeverCountAsReached(t *testing.T) {
 		t.Fatalf("the only deliverable mailbox belongs to a deactivated admin, yet the notice counts as sent: %+v", got)
 	}
 }
+
+func TestDeletingAWorkspaceKeepsItsProviderDomainsQueuedForDeletion(t *testing.T) {
+	e := newEnv(t)
+	a := e.workspace(t, "Alpha", "2026-11-01T00:00:00Z", "ann@alpha.example")
+	e.exec(t, `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,provider_domain_id) VALUES($1,'support@alpha.example','token','dom_alpha_current')`, a.ID)
+	e.exec(t, `INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id) VALUES($1,'dom_alpha_earlier')`, a.ID)
+
+	e.run(t, "2027-10-02T00:00:00Z")
+	if got := e.run(t, "2027-11-01T00:00:00Z"); got.Deleted != 1 || e.exists(t, a.ID) {
+		t.Fatalf("setup: workspace not deleted: %+v", got)
+	}
+	var queued []string
+	err := e.db.Privileged(context.Background(), database.PrivilegeMigrate, func(tx pgx.Tx) error {
+		rows, err := tx.Query(context.Background(), `SELECT provider_domain_id FROM email_provider_domain_trash WHERE workspace_id=$1 ORDER BY provider_domain_id`, a.ID)
+		if err != nil {
+			return err
+		}
+		queued, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(queued) != "[dom_alpha_current dom_alpha_earlier]" {
+		t.Fatalf("provider domains queued after the workspace was deleted: %v, want both", queued)
+	}
+}

@@ -142,6 +142,13 @@ func (s *Store) SaveProviderDomain(ctx context.Context, workspaceID, supportAddr
 		return domain.EmailChannel{}, fmt.Errorf("encode provider domain records: %w", err)
 	}
 	channel, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.EmailChannel, error) {
+		// An id this replaces (the stored domain vanished at the provider, say) is queued for deletion.
+		if _, err := tx.Exec(ctx, `INSERT INTO email_provider_domain_trash(workspace_id,provider_domain_id)
+			SELECT workspace_id,provider_domain_id FROM email_channels
+			WHERE workspace_id=$1 AND support_address=$2 AND provider_domain_id IS NOT NULL AND provider_domain_id<>$3
+			ON CONFLICT DO NOTHING`, workspaceID, supportAddress, provider.ID); err != nil {
+			return domain.EmailChannel{}, err
+		}
 		return scanChannel(tx.QueryRow(ctx, `UPDATE email_channels SET provider_domain_id=$3,provider_domain_records=$4,
 				domain_verified_at=CASE WHEN $5 THEN COALESCE(domain_verified_at,$6) ELSE domain_verified_at END,updated_at=$6
 			WHERE workspace_id=$1 AND support_address=$2 RETURNING `+channelColumns, workspaceID, supportAddress, provider.ID, records, provider.Verified, now))
@@ -153,34 +160,6 @@ func (s *Store) SaveProviderDomain(ctx context.Context, workspaceID, supportAddr
 		return domain.EmailChannel{}, fmt.Errorf("save provider domain: %w", err)
 	}
 	return channel, nil
-}
-
-// UnusedProviderDomains lists the provider domain ids of this workspace that still have to be deleted
-// at the provider.
-func (s *Store) UnusedProviderDomains(ctx context.Context, workspaceID string) ([]string, error) {
-	ids, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]string, error) {
-		rows, err := tx.Query(ctx, `SELECT provider_domain_id FROM email_provider_domain_trash WHERE workspace_id=$1 ORDER BY created_at,provider_domain_id`, workspaceID)
-		if err != nil {
-			return nil, err
-		}
-		return pgx.CollectRows(rows, pgx.RowTo[string])
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list unused provider domains: %w", err)
-	}
-	return ids, nil
-}
-
-// ForgetProviderDomain removes the record of a provider domain once the provider confirmed it is gone.
-func (s *Store) ForgetProviderDomain(ctx context.Context, workspaceID, providerDomainID string) error {
-	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
-		_, err := tx.Exec(ctx, `DELETE FROM email_provider_domain_trash WHERE workspace_id=$1 AND provider_domain_id=$2`, workspaceID, providerDomainID)
-		return struct{}{}, err
-	})
-	if err != nil {
-		return fmt.Errorf("forget provider domain: %w", err)
-	}
-	return nil
 }
 
 // DeleteEmailChannel disconnects email. Conversations, messages and delivery history stay. The provider

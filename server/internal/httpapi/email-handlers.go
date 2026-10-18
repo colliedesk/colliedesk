@@ -142,7 +142,6 @@ func (a *API) putEmailChannel(response http.ResponseWriter, request *http.Reques
 		writeEmailStoreError(response, err)
 		return
 	}
-	a.deleteUnusedProviderDomains(request.Context(), principal(request).Workspace.ID)
 	a.writeEmailSettings(response, request, &channel)
 }
 
@@ -171,7 +170,6 @@ func (a *API) deleteEmailChannel(response http.ResponseWriter, request *http.Req
 		writeError(response, http.StatusNotFound, "not_found", "The email channel is not connected.")
 		return
 	}
-	a.deleteUnusedProviderDomains(request.Context(), principal(request).Workspace.ID)
 	response.WriteHeader(http.StatusNoContent)
 }
 

@@ -549,8 +549,13 @@ paths:
       description: >
         Look up the TXT record `dns_record_name` and mark the support address domain verified when it
         holds `dns_record_value`. When the server has an email provider account (`domain_verification` is
-        `provider`), ask the provider instead: the domain is verified only when the provider reports every
-        record `verified`, and a 409 means the records in `channel.dns_records` are not all verified yet.
+        `provider`), that TXT record is the proof of control and is checked first (409 `dns_record_not_found`
+        without it, and the provider is not called). Then the domain is created at the provider on the first
+        check and each check asks the provider to re-check: the domain is verified only when the provider
+        reports it `verified`, and a 409 `dns_record_not_verified` means the records in
+        `channel.dns_records` are not all verified yet. Checks that reach the provider are limited to one per
+        workspace every 30 seconds (429 with `Retry-After`). 409 `email_domain_unavailable` is the provider's
+        validation refusal of the domain name; any other provider failure is 502.
         Changing the support address resets verification. Agent tokens may
         check 10 times an hour per workspace (429 with `Retry-After`); a person is not limited.
       responses:

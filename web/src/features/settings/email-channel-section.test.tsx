@@ -188,10 +188,11 @@ const provider: EmailChannelSettings = {
   },
 };
 
-test('lists the provider DNS records with their status instead of the TXT record', () => {
+test('asks for the TXT proof first and lists the provider DNS records with their status', () => {
   const onVerifyDomain = vi.fn();
   render(<EmailChannelSection settings={provider} timezone="UTC" canManage onVerifyDomain={onVerifyDomain} />);
-  expect(screen.queryByRole('textbox', { name: /txt record name/i })).not.toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: /txt record name/i })).toHaveValue('_colliedesk.example.com');
+  expect(screen.getByRole('textbox', { name: /txt record value/i })).toHaveValue('colliedesk-verification=abc123');
   const table = screen.getByRole('table', { name: /dns records to publish/i });
   const rows = within(table).getAllByRole('row');
   expect(rows).toHaveLength(3);
@@ -203,6 +204,11 @@ test('lists the provider DNS records with their status instead of the TXT record
   expect(within(rows[2]).getByText('Pending')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: /verify domain/i }));
   expect(onVerifyDomain).toHaveBeenCalled();
+});
+
+test('disables Verify domain while a check is running', () => {
+  render(<EmailChannelSection settings={provider} timezone="UTC" canManage verifyPending />);
+  expect(screen.getByRole('button', { name: /checking/i })).toBeDisabled();
 });
 
 test('says the records are not available yet when the provider has not created the domain', () => {

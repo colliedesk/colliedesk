@@ -41,6 +41,9 @@ const (
 	// PrivilegeVerifiedSender resolves the workspace whose support address domain the email provider
 	// verified, from the From domain of a delivery event. At most one workspace holds a given name.
 	PrivilegeVerifiedSender Privilege = "verified-sender"
+	// PrivilegeProviderDomainSweep lists and settles the provider domains waiting to be deleted at the
+	// email provider, for workspaces that no longer use them or no longer exist.
+	PrivilegeProviderDomainSweep Privilege = "provider-domain-sweep"
 	// PrivilegeTelemetry claims the install's daily usage report in the platform-level instance
 	// table and reads instance-wide counts (workspaces, active agents, replies, channels in use).
 	// Only aggregates leave the transaction, never row content.

@@ -20,9 +20,10 @@ interface EmailChannelSectionProps {
   onVerifyDomain?: () => void;
   // Why the last domain check did not verify; the server's own wording.
   verifyError?: string;
+  verifyPending?: boolean;
 }
 
-export function EmailChannelSection({ settings, timezone, canManage, workspaceSlug, createdSecret, addressSave, slugSave, onSave, onSaveSlug, onRotate, onDisconnect, onVerifyDomain, verifyError }: EmailChannelSectionProps) {
+export function EmailChannelSection({ settings, timezone, canManage, workspaceSlug, createdSecret, addressSave, slugSave, onSave, onSaveSlug, onRotate, onDisconnect, onVerifyDomain, verifyError, verifyPending }: EmailChannelSectionProps) {
   const channel = settings?.channel ?? null;
   const [address, setAddress] = useState(channel?.support_address ?? '');
   useEffect(() => setAddress(channel?.support_address ?? ''), [channel?.support_address]);
@@ -93,12 +94,12 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
         {channel && (channel.domain_verified_at
           ? <p className="muted-copy">{messages.domainVerified(channel.domain, formatDate(channel.domain_verified_at, timezone))}</p>
           : <div className="email-channel-dns">
-              {settings?.domain_verification === 'provider' ? <DnsRecordsTable records={channel.dns_records} />
-                : <><p className="muted-copy">{messages.domainVerificationHelp}</p>
-                    <label className="invite-link"><span className="field-label">{messages.dnsRecordName}</span><input readOnly value={channel.dns_record_name} /></label>
-                    <label className="invite-link"><span className="field-label">{messages.dnsRecordValue}</span><input readOnly value={channel.dns_record_value} /></label></>}
+              <p className="muted-copy">{settings?.domain_verification === 'provider' ? messages.providerProofHelp : messages.domainVerificationHelp}</p>
+              <label className="invite-link"><span className="field-label">{messages.dnsRecordName}</span><input readOnly value={channel.dns_record_name} /></label>
+              <label className="invite-link"><span className="field-label">{messages.dnsRecordValue}</span><input readOnly value={channel.dns_record_value} /></label>
+              {settings?.domain_verification === 'provider' && <DnsRecordsTable records={channel.dns_records} />}
               {verifyError && <p role="alert" className="error-copy">{verifyError}</p>}
-              {canManage && <span className="button-row"><button type="button" onClick={() => onVerifyDomain?.()}>{messages.verifyDomain}</button></span>}
+              {canManage && <span className="button-row"><button type="button" disabled={verifyPending} onClick={() => onVerifyDomain?.()}>{verifyPending ? messages.verifyingDomain : messages.verifyDomain}</button></span>}
             </div>)}
         {settings?.sending_pause && <div role="alert" aria-labelledby="email-paused-heading" className="warning-note">
           <strong id="email-paused-heading">{messages.emailSendingPausedTitle}</strong>
