@@ -800,7 +800,9 @@ paths:
       operationId: updateAgent
       x-permission: access:write
       description: >
-        Change an agent's role or active state; send at least one of `role` and `active`. Deactivating an
+        Change an agent's display name, role or active state; send at least one of `display_name`, `role`
+        and `active`. Renaming is not a change to the admin role, so an `admin` agent token renames anyone
+        directly; a rename sent with a role or active change follows the rules of that change. Deactivating an
         agent, in one transaction: sets `deactivated_at`, revokes the agent's sessions and unused sign-in
         links and invites, and moves the agent's open and pending conversations to `reassign_to` (to
         Unassigned when it is absent). Resolved and closed conversations keep their assignee. A
@@ -814,6 +816,7 @@ paths:
             schema:
               type: object
               properties:
+                display_name: {$ref: '#/components/schemas/DisplayNameInput'}
                 role: {$ref: '#/components/schemas/Role'}
                 active: {type: boolean}
                 reassign_to:
@@ -900,6 +903,31 @@ paths:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
           description: Updated agent timezone override
+          content: {application/json: {schema: {$ref: '#/components/schemas/Agent'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/agents/me/display-name:
+    patch:
+      operationId: updateAgentDisplayName
+      x-permission: authenticated
+      description: >
+        Set the display name of the agent signed in (or the person an agent token acts as). It is shown
+        instead of the email address in the team list, on assignments and on notes. An empty string
+        clears it, and the email address is shown again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [display_name]
+              properties:
+                display_name: {$ref: '#/components/schemas/DisplayNameInput'}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: The agent with the new display name
           content: {application/json: {schema: {$ref: '#/components/schemas/Agent'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -2028,6 +2056,12 @@ components:
         display_name: {type: string}
         role: {$ref: '#/components/schemas/Role'}
         timezone_override: {type: [string, 'null']}
+    DisplayNameInput:
+      type: string
+      maxLength: 80
+      description: >
+        Leading and trailing spaces are removed; the rest may be at most 80 characters and may not hold
+        control characters or text-direction overrides. An empty string clears the name.
     TeamMember:
       type: object
       required: [id, email, display_name, role, timezone_override, deactivated_at, last_active_at, open_conversations]

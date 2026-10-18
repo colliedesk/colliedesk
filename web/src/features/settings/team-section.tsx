@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { TeamMember } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { displayNameMaxLength } from './display-name-field';
 
 interface TeamSectionProps {
   members: TeamMember[];
@@ -10,6 +11,8 @@ interface TeamSectionProps {
   timezone: string;
   error?: string;
   onChangeRole?: (id: string, role: 'admin' | 'agent') => void;
+  // name is trimmed; an empty name clears it and the email is shown again.
+  onRename?: (id: string, name: string) => void;
   // reassignTo is the agent that takes the open and pending conversations, or null for Unassigned.
   onDeactivate?: (id: string, reassignTo: string | null) => void;
   onReactivate?: (id: string) => void;
@@ -17,17 +20,19 @@ interface TeamSectionProps {
 
 const nameOf = (member: TeamMember) => member.display_name || member.email;
 
-export function TeamSection({ members, currentAgentId, canManage, timezone, error, onChangeRole, onDeactivate, onReactivate }: TeamSectionProps) {
+export function TeamSection({ members, currentAgentId, canManage, timezone, error, onChangeRole, onRename, onDeactivate, onReactivate }: TeamSectionProps) {
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
   // roleDraft holds a chosen but not yet applied role; nothing changes until Apply is pressed.
   const [roleDraft, setRoleDraft] = useState<Record<string, 'admin' | 'agent'>>({});
-  // After the question closes, focus goes to the row (confirmed) or its Deactivate button (cancelled).
-  const [refocus, setRefocus] = useState<{ id: string; target: 'row' | 'button' } | null>(null);
+  // After a question or the rename form closes, focus goes to the row (done) or the button that opened it (cancelled).
+  const [refocus, setRefocus] = useState<{ id: string; target: 'row' | 'button' | 'rename' } | null>(null);
   const rows = useRef(new Map<string, HTMLElement>());
   const buttons = useRef(new Map<string, HTMLElement>());
+  const renameButtons = useRef(new Map<string, HTMLElement>());
   useEffect(() => {
     if (!refocus) return;
-    (refocus.target === 'row' ? rows : buttons).current.get(refocus.id)?.focus();
+    ({ row: rows, button: buttons, rename: renameButtons })[refocus.target].current.get(refocus.id)?.focus();
     setRefocus(null);
   }, [refocus]);
   // The server refuses to leave a workspace without an active admin; the button is not offered either.
@@ -58,8 +63,14 @@ export function TeamSection({ members, currentAgentId, canManage, timezone, erro
               <span>{deactivated ? messages.teamDeactivated : messages.teamActive}</span>
               <time>{member.last_active_at ? messages.teamLastActive(formatDate(member.last_active_at, timezone)) : messages.teamNeverSignedIn}</time>
             </div>
+            {canManage && renaming !== member.id &&
+              <button type="button" aria-label={messages.teamRenameName(name)} ref={(node) => { if (node) renameButtons.current.set(member.id, node); else renameButtons.current.delete(member.id); }}
+                onClick={() => { setConfirming(null); setRenaming(member.id); }}>{messages.teamRename}</button>}
+            {renaming === member.id && <RenameForm member={member}
+              onCancel={() => { setRenaming(null); setRefocus({ id: member.id, target: 'rename' }); }}
+              onSave={(next) => { setRenaming(null); setRefocus({ id: member.id, target: 'row' }); onRename?.(member.id, next); }} />}
             {canManage && !deactivated && !lastAdmin && confirming !== member.id &&
-              <button type="button" className="danger-action" aria-label={messages.teamDeactivateName(name)} ref={(node) => { if (node) buttons.current.set(member.id, node); else buttons.current.delete(member.id); }} onClick={() => setConfirming(member.id)}>{messages.teamDeactivate}</button>}
+              <button type="button" className="danger-action" aria-label={messages.teamDeactivateName(name)} ref={(node) => { if (node) buttons.current.set(member.id, node); else buttons.current.delete(member.id); }} onClick={() => { setRenaming(null); setConfirming(member.id); }}>{messages.teamDeactivate}</button>}
             {canManage && deactivated &&
               <button type="button" aria-label={messages.teamReactivateName(name)} title={messages.teamReactivateHelp} onClick={() => onReactivate?.(member.id)}>{messages.teamReactivate}</button>}
             {confirming === member.id && <DeactivateConfirm member={member} others={members.filter((other) => other.id !== member.id && other.deactivated_at === null)}
@@ -105,5 +116,20 @@ function DeactivateConfirm({ member, others, isSelf, onCancel, onConfirm }: Deac
         <button type="button" onClick={onCancel}>{messages.teamCancel}</button>
       </span>
     </div>
+  );
+}
+
+function RenameForm({ member, onCancel, onSave }: { member: TeamMember; onCancel: () => void; onSave: (name: string) => void }) {
+  const [draft, setDraft] = useState(member.display_name);
+  return (
+    <form className="form-row team-rename" onSubmit={(event) => { event.preventDefault(); onSave(draft.trim()); }}>
+      {/* The field opens because the person asked for it, so it takes focus at once. */}
+      <input aria-label={messages.teamDisplayNameOf(nameOf(member))} value={draft} maxLength={displayNameMaxLength} placeholder={member.email} autoFocus
+        onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') onCancel(); }} />
+      <span className="button-row">
+        <button type="submit">{messages.teamSaveName}</button>
+        <button type="button" onClick={onCancel}>{messages.teamCancel}</button>
+      </span>
+    </form>
   );
 }

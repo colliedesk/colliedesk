@@ -91,7 +91,8 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
   (`Approval` rows). The handlers file the rest themselves when the caller is a token
   (`fileGrantRequest`): `updateAgent` when the change asks for the admin role or the target is an
   admin now (`touchesAdmin`: promoting, demoting, deactivating, and reactivating an admin, which
-  would hand the role back), and `revokeSession` when the target is a person's sign-in (not a token)
+  would hand the role back; a `display_name` change alone is not about the role, so an admin token
+  renames an admin directly), and `revokeSession` when the target is a person's sign-in (not a token)
   of anyone other than the token's own person.
 - **Credentials never reach a token.** Creating an invite is `Approval`, so a token never gets a
   `201`; the approved call's answer is shown once to the approver and not kept (`withheldResults`),
@@ -100,9 +101,9 @@ a person's full session. It reuses the session machinery on purpose: `label`, `l
   object or has a field the route does not take, so nothing pasted beside the real fields is stored
   for days. Its summary says what changes, from what to what (`summarizeSettingsRequest`); a session
   revoke names the session only when the token's role could list it.
-- **Owner requests.** A `/me` route (`ownerRoutes`: `PATCH /agents/me/timezone`) replays as the
+- **Owner requests.** A `/me` route (`ownerRoutes`: `PATCH /agents/me/timezone`, `PATCH /agents/me/display-name`) replays as the
   approver, so only the person who owns the token may approve it (`approvable_by: owner`, 403
-  `owner_only` for anyone else); otherwise an admin approving would change the admin's own timezone.
+  `owner_only` for anyone else); otherwise an admin approving would change the admin's own timezone or name.
 - **Revoking sessions from a token** is allowed at `admin` for agent tokens and the token person's
   own sign-ins (security-positive: a leaked token can be cut off by an agent). The session list shows
   the revocation; `revokeSession` also logs the token session that did it.

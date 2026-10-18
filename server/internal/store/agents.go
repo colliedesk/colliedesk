@@ -84,15 +84,17 @@ func ValidateAssignee(ctx context.Context, tx pgx.Tx, workspaceID, agentID strin
 	return nil
 }
 
-// AgentUpdate is a change to one agent. Nil fields stay as they are. ReassignTo names the agent that
+// AgentUpdate is a change to one agent. Nil fields stay as they are; DisplayName is already trimmed
+// and checked, and an empty one clears the name. ReassignTo names the agent that
 // receives the open and pending conversations when Active is false; nil leaves them unassigned.
 type AgentUpdate struct {
-	Role       *string
-	Active     *bool
-	ReassignTo *string
+	DisplayName *string
+	Role        *string
+	Active      *bool
+	ReassignTo  *string
 }
 
-// UpdateAgent changes the role and the active state of an agent of the workspace in one transaction.
+// UpdateAgent changes the display name, the role and the active state of an agent of the workspace in one transaction.
 // Deactivating also revokes the agent's sessions and unused links and moves the open and pending
 // conversations; reactivating takes a seat again on the hosted cloud (a *domain.PlanLimitError when
 // none is free). A change that would leave no active admin returns domain.ErrLastAdmin, and a bad
@@ -153,6 +155,11 @@ func (s *Store) UpdateAgent(ctx context.Context, workspaceID, agentID string, up
 			}
 			if _, err := tx.Exec(ctx, `UPDATE agents SET deactivated_at=NULL WHERE workspace_id=$1 AND id=$2`, workspaceID, agentID); err != nil {
 				return domain.TeamMember{}, fmt.Errorf("reactivate agent: %w", err)
+			}
+		}
+		if update.DisplayName != nil {
+			if _, err := tx.Exec(ctx, `UPDATE agents SET display_name=$3 WHERE workspace_id=$1 AND id=$2`, workspaceID, agentID, *update.DisplayName); err != nil {
+				return domain.TeamMember{}, fmt.Errorf("rename agent: %w", err)
 			}
 		}
 		if newRole != role {

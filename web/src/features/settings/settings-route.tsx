@@ -24,14 +24,17 @@ export function SettingsRoute() {
   const createInvite = useMutation({ mutationFn: ({ email, role }: { email: string; role: 'admin' | 'agent' }) => api.createInvite(email, role), onSuccess: () => refresh('invites') });
   // A team change also moves seats, sessions and assignments, so every view that shows them reloads.
   const updateAgent = useMutation({
-    mutationFn: ({ id, ...change }: { id: string; role?: 'admin' | 'agent'; active?: boolean; reassign_to?: string | null }) => api.updateAgent(id, change),
-    onSuccess: () => { for (const key of ['agents', 'sessions', 'invites', 'billing', 'conversations']) void refresh(key); },
+    mutationFn: ({ id, ...change }: { id: string; display_name?: string; role?: 'admin' | 'agent'; active?: boolean; reassign_to?: string | null }) => api.updateAgent(id, change),
+    // A rename also shows in the account menu when it is your own row.
+    onSuccess: () => { for (const key of ['agents', 'sessions', 'invites', 'billing', 'conversations', 'me']) void refresh(key); },
   });
   const revokeInvite = useMutation({ mutationFn: api.revokeInvite, onSuccess: () => refresh('invites') });
   // Revoking this device's own session signs it out; reloading me shows the signed-out screen.
   const revokeSession = useMutation({ mutationFn: api.revokeSession, onSuccess: () => { void refresh('sessions'); void refresh('me'); } });
   const workspaceTimezone = useMutation({ mutationFn: api.updateWorkspaceTimezone, onSuccess: () => refresh('me') });
   const agentTimezone = useMutation({ mutationFn: api.updateAgentTimezone, onSuccess: () => refresh('me') });
+  // Your name also shows in the team list and the assignee lists.
+  const agentDisplayName = useMutation({ mutationFn: api.updateAgentDisplayName, onSuccess: () => { void refresh('me'); void refresh('agents'); } });
   const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
   const saveEmail = useMutation({ mutationFn: api.saveEmailChannel, onSuccess: () => refresh('email-channel') });
   const workspaceSlug = useMutation({ mutationFn: api.updateWorkspaceSlug, onSuccess: () => { void refresh('me'); void refresh('email-channel'); } });
@@ -52,11 +55,14 @@ export function SettingsRoute() {
   return <SettingsPage loading={me.isPending || sessions.isPending || invites.isPending} sessions={sessions.data?.items ?? []} invites={invites.data?.items ?? []} timezone={me.data?.timezone ?? 'UTC'}
     canCreateInvites={isAdmin} canManageWorkspace={isAdmin} showBilling={showBilling} exportSection={isAdmin ? <ExportAllData /> : undefined}
     workspaceTimezoneSave={saveState(workspaceTimezone)} personalTimezoneSave={saveState(agentTimezone)}
+    email={me.data?.agent.email} displayName={me.data?.agent.display_name} displayNameSave={saveState(agentDisplayName)}
+    onSetDisplayName={(name) => agentDisplayName.mutate(name)}
     workspaceTimezone={me.data?.workspace.timezone} timezoneOverride={me.data?.agent.timezone_override}
     error={revokeInvite.isError || revokeSession.isError || emailFailed ? messages.settingsActionFailed : undefined}
     teamSection={<TeamSection members={team.data?.items ?? []} currentAgentId={me.data?.agent.id} canManage={isAdmin} timezone={me.data?.timezone ?? 'UTC'}
       error={updateAgent.error instanceof PlanLimitError || updateAgent.error instanceof InvalidRequestError ? updateAgent.error.message : updateAgent.isError ? messages.settingsActionFailed : undefined}
       onChangeRole={(id, role) => updateAgent.mutate({ id, role })}
+      onRename={(id, name) => updateAgent.mutate({ id, display_name: name })}
       onDeactivate={(id, reassignTo) => updateAgent.mutate({ id, active: false, ...(reassignTo ? { reassign_to: reassignTo } : {}) })}
       onReactivate={(id) => updateAgent.mutate({ id, active: true })} />}
     savedRepliesSection={<SavedRepliesSection replies={savedReplies.data?.items ?? []}

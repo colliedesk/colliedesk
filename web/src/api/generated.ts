@@ -496,7 +496,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** @description Change an agent's role or active state; send at least one of `role` and `active`. Deactivating an agent, in one transaction: sets `deactivated_at`, revokes the agent's sessions and unused sign-in links and invites, and moves the agent's open and pending conversations to `reassign_to` (to Unassigned when it is absent). Resolved and closed conversations keep their assignee. A deactivated agent cannot sign in and holds no seat. Reactivating clears `deactivated_at`, takes a seat again and does not restore assignments; the agent signs in through a new link. Sending the state an agent already has changes nothing. */
+        /** @description Change an agent's display name, role or active state; send at least one of `display_name`, `role` and `active`. Renaming is not a change to the admin role, so an `admin` agent token renames anyone directly; a rename sent with a role or active change follows the rules of that change. Deactivating an agent, in one transaction: sets `deactivated_at`, revokes the agent's sessions and unused sign-in links and invites, and moves the agent's open and pending conversations to `reassign_to` (to Unassigned when it is absent). Resolved and closed conversations keep their assignee. A deactivated agent cannot sign in and holds no seat. Reactivating clears `deactivated_at`, takes a seat again and does not restore assignments; the agent signs in through a new link. Sending the state an agent already has changes nothing. */
         patch: operations["updateAgent"];
         trace?: never;
     };
@@ -547,6 +547,23 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateAgentTimezone"];
+        trace?: never;
+    };
+    "/api/v1/agents/me/display-name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Set the display name of the agent signed in (or the person an agent token acts as). It is shown instead of the email address in the team list, on assignments and on notes. An empty string clears it, and the email address is shown again. */
+        patch: operations["updateAgentDisplayName"];
         trace?: never;
     };
     "/api/v1/tags": {
@@ -1222,6 +1239,8 @@ export interface components {
             role: components["schemas"]["Role"];
             timezone_override: string | null;
         };
+        /** @description Leading and trailing spaces are removed; the rest may be at most 80 characters and may not hold control characters or text-direction overrides. An empty string clears the name. */
+        DisplayNameInput: string;
         TeamMember: {
             /** Format: uuid */
             id: string;
@@ -2931,6 +2950,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    display_name?: components["schemas"]["DisplayNameInput"];
                     role?: components["schemas"]["Role"];
                     active?: boolean;
                     /**
@@ -3046,6 +3066,36 @@ export interface operations {
         };
         responses: {
             /** @description Updated agent timezone override */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Agent"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateAgentDisplayName: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    display_name: components["schemas"]["DisplayNameInput"];
+                };
+            };
+        };
+        responses: {
+            /** @description The agent with the new display name */
             200: {
                 headers: {
                     [name: string]: unknown;

@@ -22,9 +22,13 @@ var uuidShape = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4
 
 var agentUpdateRoute = Route{http.MethodPatch, "/api/v1/agents/{id}", auth.PermissionAccessWrite}
 
-// touchesAdmin reports whether a team change is about the admin role: it asks for it, or the target
-// has it now. An unknown target is not (the update answers 404).
-func (a *API) touchesAdmin(request *http.Request, role *string) (bool, error) {
+// touchesAdmin reports whether a team change is about the admin role: it asks for it, or it changes
+// the role or the active state of a target that has it now. A rename alone is not, and an unknown
+// target is not (the update answers 404).
+func (a *API) touchesAdmin(request *http.Request, role *string, active *bool) (bool, error) {
+	if role == nil && active == nil {
+		return false, nil
+	}
 	if role != nil && *role == "admin" {
 		return true, nil
 	}
@@ -40,13 +44,14 @@ func (a *API) touchesAdmin(request *http.Request, role *string) (bool, error) {
 	return false, nil
 }
 
-// updateAgent changes the role or the active state of an agent. reassign_to only makes sense with
+// updateAgent changes the display name, the role or the active state of an agent. reassign_to only makes sense with
 // active=false: it names the agent that takes over the open and pending conversations.
 func (a *API) updateAgent(response http.ResponseWriter, request *http.Request) {
 	var input struct {
-		Role       *string `json:"role,omitempty"`
-		Active     *bool   `json:"active,omitempty"`
-		ReassignTo *string `json:"reassign_to,omitempty"`
+		DisplayName *string `json:"display_name,omitempty"`
+		Role        *string `json:"role,omitempty"`
+		Active      *bool   `json:"active,omitempty"`
+		ReassignTo  *string `json:"reassign_to,omitempty"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Agent changes are invalid.")
@@ -60,9 +65,17 @@ func (a *API) updateAgent(response http.ResponseWriter, request *http.Request) {
 		writeStoreError(response, domain.ErrInvalidReassignTarget)
 		return
 	}
-	if input.Role == nil && input.Active == nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send a role or an active flag.")
+	if input.DisplayName == nil && input.Role == nil && input.Active == nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send a display name, a role or an active flag.")
 		return
+	}
+	if input.DisplayName != nil {
+		name, ok := normalizeDisplayName(*input.DisplayName)
+		if !ok {
+			writeError(response, http.StatusBadRequest, "invalid_request", displayNameInvalid)
+			return
+		}
+		input.DisplayName = &name
 	}
 	if input.Role != nil && *input.Role != "admin" && *input.Role != "agent" {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Role must be admin or agent.")
@@ -75,7 +88,7 @@ func (a *API) updateAgent(response http.ResponseWriter, request *http.Request) {
 	// A change that grants, keeps or takes the admin role waits for a person whatever the token's tier:
 	// promoting, reactivating an admin (it keeps the role), demoting or deactivating an admin.
 	if who := principal(request); who.Scope != "" {
-		touchesAdmin, err := a.touchesAdmin(request, input.Role)
+		touchesAdmin, err := a.touchesAdmin(request, input.Role, input.Active)
 		if err != nil {
 			writeStoreError(response, err)
 			return
@@ -86,7 +99,7 @@ func (a *API) updateAgent(response http.ResponseWriter, request *http.Request) {
 		}
 	}
 	member, err := a.store.UpdateAgent(request.Context(), principal(request).Workspace.ID, request.PathValue("id"),
-		store.AgentUpdate{Role: input.Role, Active: input.Active, ReassignTo: input.ReassignTo})
+		store.AgentUpdate{DisplayName: input.DisplayName, Role: input.Role, Active: input.Active, ReassignTo: input.ReassignTo})
 	if err != nil {
 		writeStoreError(response, err)
 		return
