@@ -17,7 +17,9 @@ func statusError(status int, target string, download bool) error {
 	switch {
 	case status == http.StatusNotFound:
 		return fmt.Errorf("GET %s: %w", redact(target), errNotFound)
-	case download && (status == http.StatusForbidden || status == http.StatusBadRequest || status == http.StatusGone):
+	case download && status == http.StatusGone:
+		return fmt.Errorf("GET %s: HTTP 410: %w: %w", redact(target), errGone, errURLExpired)
+	case download && (status == http.StatusForbidden || status == http.StatusBadRequest):
 		return fmt.Errorf("GET %s: HTTP %d: %w", redact(target), status, errURLExpired)
 	case status == http.StatusUnauthorized:
 		return fmt.Errorf("GET %s: HTTP 401: Freshdesk rejected the API key", redact(target))

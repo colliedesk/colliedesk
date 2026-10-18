@@ -38,6 +38,7 @@ const targetExists = `CASE i.entity
 	WHEN 'description' THEN EXISTS(SELECT 1 FROM messages x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'conversation' THEN EXISTS(SELECT 1 FROM messages x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'attachment' THEN EXISTS(SELECT 1 FROM attachments x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
+	WHEN 'inline_image' THEN EXISTS(SELECT 1 FROM attachments x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'time_entry' THEN EXISTS(SELECT 1 FROM time_entries x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'contact' THEN EXISTS(SELECT 1 FROM contacts x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'tag' THEN EXISTS(SELECT 1 FROM tags x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)

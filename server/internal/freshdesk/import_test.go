@@ -42,7 +42,7 @@ func TestFullImportReconcilesEveryEntity(t *testing.T) {
 	if got := env.tableCounts(t); got != fullImportRows {
 		t.Fatalf("rows = %s", got)
 	}
-	for _, code := range []string{"inline_images_not_rehosted", "custom_status_mapped", "contact_without_email", "agent_not_matched", "company_without_contacts"} {
+	for _, code := range []string{"custom_status_mapped", "contact_without_email", "agent_not_matched", "company_without_contacts"} {
 		if !hasWarning(report, code) {
 			t.Errorf("missing warning %q in %+v", code, report.Warnings)
 		}

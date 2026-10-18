@@ -19,7 +19,9 @@ var (
 	errNotFound   = errors.New("not found in Freshdesk")
 	errForbidden  = errors.New("forbidden by Freshdesk")
 	errURLExpired = errors.New("attachment URL expired")
-	linkNext      = regexp.MustCompile(`<([^>]+)>\s*;\s*rel="?next"?`)
+	// errGone is HTTP 410: the file was removed for good. A download answered with it also matches errURLExpired.
+	errGone  = errors.New("removed from Freshdesk")
+	linkNext = regexp.MustCompile(`<([^>]+)>\s*;\s*rel="?next"?`)
 )
 
 const (
@@ -66,7 +68,7 @@ func (c *client) wait(ctx context.Context, d time.Duration) error {
 }
 
 func (c *client) onAccountHost(target *url.URL) bool {
-	return target.Scheme == "https" && target.Host == c.base.Host
+	return target.Scheme == "https" && strings.EqualFold(target.Host, c.base.Host)
 }
 
 // getJSON decodes the response of a GET into out and returns the next page URL.
@@ -109,19 +111,20 @@ func listAll[T any](ctx context.Context, c *client, target string, each func(T) 
 }
 
 // download opens an attachment URL. The body fails when no bytes arrive for
-// the idle timeout; the caller must close it.
-func (c *client) download(ctx context.Context, target string) (io.ReadCloser, int64, error) {
+// the idle timeout; the caller must close it. It also returns the announced
+// length (-1 when unknown) and the Content-Type header.
+func (c *client) download(ctx context.Context, target string) (io.ReadCloser, int64, string, error) {
 	parsed, err := url.Parse(target)
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
-		return nil, 0, errors.New("attachment URL is not an HTTPS URL")
+		return nil, 0, "", errors.New("attachment URL is not an HTTPS URL")
 	}
 	downloadCtx, cancel := context.WithCancel(ctx)
 	response, err := c.do(downloadCtx, target, false)
 	if err != nil {
 		cancel()
-		return nil, 0, err
+		return nil, 0, "", err
 	}
-	return newIdleBody(response.Body, cancel, c.idle), response.ContentLength, nil
+	return newIdleBody(response.Body, cancel, c.idle), response.ContentLength, response.Header.Get("Content-Type"), nil
 }
 
 func (c *client) do(ctx context.Context, target string, apiCall bool) (*http.Response, error) {
@@ -160,7 +163,7 @@ func (c *client) do(ctx context.Context, target string, apiCall bool) (*http.Res
 				return nil, fmt.Errorf("GET %s: %w", redact(target), errBlockedAddress)
 			}
 			if strings.Contains(err.Error(), "refusing redirect") {
-				return nil, fmt.Errorf("GET %s: redirect refused (not HTTPS, off the account host, or too many)", redact(target))
+				return nil, fmt.Errorf("GET %s: redirect refused (not HTTPS, a host this download may not use, or too many)", redact(target))
 			}
 			if serverRetries < maxServerRetries {
 				serverRetries++

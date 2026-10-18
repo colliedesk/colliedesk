@@ -118,8 +118,9 @@ func (r *run) sizeIncomingAttachments(ctx context.Context) (int64, error) {
 	return needed, err
 }
 
-// sizeRefs adds up the attachment bytes this run would download: every attachment of a listed ticket
-// it would import that the ledger does not already hold as done. It writes nothing. A ticket that
+// sizeRefs adds up the bytes this run would store: every attachment of a listed ticket it would
+// import that the ledger does not already hold as done, and every Freshdesk-hosted image in its
+// message HTML (read once, since Freshdesk reports no size for them). It writes nothing. A ticket that
 // cannot be read is skipped and listed, as the real import does: it fails that ticket and goes on.
 func (r *run) sizeRefs(ctx context.Context) (needed int64, skipped []string, err error) {
 	for _, ref := range r.refs {
@@ -131,7 +132,7 @@ func (r *run) sizeRefs(ctx context.Context) (needed int64, skipped []string, err
 		if found && entry.Status == ledgerDone && entry.SourceUpdatedAt != nil && !ref.updatedAt.After(*entry.SourceUpdatedAt) {
 			continue
 		}
-		files, readable, err := r.ticketFilesWithRetry(ctx, ref, key)
+		files, images, readable, err := r.ticketFilesWithRetry(ctx, ref, key)
 		if err != nil {
 			return 0, nil, err
 		}
@@ -148,27 +149,46 @@ func (r *run) sizeRefs(ctx context.Context) (needed int64, skipped []string, err
 				needed += file.reportedSize()
 			}
 		}
+		for _, image := range images {
+			if entry, found, err := r.ledger.get(ctx, entityInlineImage, image.id); err != nil {
+				return 0, nil, err
+			} else if found && entry.Status == ledgerDone {
+				continue
+			}
+			size, err := r.measureImage(ctx, image.ref)
+			if err != nil {
+				return 0, nil, err
+			}
+			needed += size
+		}
 	}
 	return needed, skipped, nil
 }
 
-// ticketFilesWithRetry reads a ticket and its conversations and returns their attachments. A
+// sizedImage is a Freshdesk-hosted image of a message, with its ledger id.
+type sizedImage struct {
+	id  string
+	ref imageRef
+}
+
+// ticketFilesWithRetry reads a ticket and its conversations and returns their attachments and
+// inline images. A
 // ticket or conversation list that is gone (404) or forbidden (403) cannot succeed on a retry: the
 // ticket is reported unreadable, readable false, and the real import will fail it and go on. Any other
 // failing read is tried sizingAttempts times; a ticket that still cannot be read stops the sizing with
 // a reason, because an unknown size cannot be proven to fit.
-func (r *run) ticketFilesWithRetry(ctx context.Context, ref ticketRef, key string) (files []fdAttachment, readable bool, err error) {
+func (r *run) ticketFilesWithRetry(ctx context.Context, ref ticketRef, key string) (files []fdAttachment, images []sizedImage, readable bool, err error) {
 	var last error
 	for attempt := 1; attempt <= sizingAttempts; attempt++ {
 		if attempt > 1 {
 			if err := r.client.wait(ctx, backoff(attempt-1)); err != nil {
-				return nil, false, err
+				return nil, nil, false, err
 			}
 		}
 		ticket, err := r.fetchTicket(ctx, ref)
 		if errors.Is(err, errNotFound) {
 			// Deleted at the source: the real import skips it as deleted, so it is neither sized nor unreadable.
-			return nil, true, nil
+			return nil, nil, true, nil
 		}
 		var conversations []fdConversation
 		if err == nil {
@@ -177,21 +197,31 @@ func (r *run) ticketFilesWithRetry(ctx context.Context, ref ticketRef, key strin
 		switch {
 		case err == nil:
 			files := append([]fdAttachment{}, ticket.Attachments...)
+			images := r.sizedImages(entityDescription, strconv.FormatInt(ticket.ID, 10), ticket.Description)
 			for _, conversation := range conversations {
 				files = append(files, conversation.Attachments...)
+				images = append(images, r.sizedImages(entityMessage, strconv.FormatInt(conversation.ID, 10), conversation.Body)...)
 			}
-			return files, true, nil
+			return files, images, true, nil
 		case errors.Is(err, errNotFound), errors.Is(err, errForbidden):
-			return nil, false, nil
+			return nil, nil, false, nil
 		case ctx.Err() != nil:
-			return nil, false, ctx.Err()
+			return nil, nil, false, ctx.Err()
 		}
 		last = err
 	}
-	return nil, false, fmt.Errorf("could not size the import: ticket %s could not be read after %d attempts (%w). Nothing was imported; run the same command again", key, sizingAttempts, last)
+	return nil, nil, false, fmt.Errorf("could not size the import: ticket %s could not be read after %d attempts (%w). Nothing was imported; run the same command again", key, sizingAttempts, last)
 }
 
 func (r *run) attachmentDone(ctx context.Context, file fdAttachment) (bool, error) {
 	entry, found, err := r.ledger.get(ctx, entityAttachment, strconv.FormatInt(file.ID, 10))
 	return found && entry.Status == ledgerDone, err
+}
+
+func (r *run) sizedImages(entity, sourceID, markup string) []sizedImage {
+	var images []sizedImage
+	for _, ref := range r.inlineImages(markup) {
+		images = append(images, sizedImage{id: inlineImageID(entity, sourceID, ref.key), ref: ref})
+	}
+	return images
 }

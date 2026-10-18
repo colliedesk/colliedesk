@@ -1,7 +1,7 @@
 [
   {
     "id": 7001,
-    "body": "<div>Still wrong, see screenshot</div>",
+    "body": "<div>Still wrong, see screenshot{{inline-external}}</div>",
     "body_text": "Still wrong, see screenshot",
     "incoming": true,
     "private": false,
@@ -33,7 +33,7 @@
   },
   {
     "id": 7002,
-    "body": "<div>We fixed it. <img src=\"https://acme.freshdesk.com/inline/attachment?token=abc\"></div>",
+    "body": "<div>We fixed it. {{inline-files}}</div>",
     "body_text": "We fixed it.",
     "incoming": false,
     "private": false,
