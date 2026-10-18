@@ -93,9 +93,14 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
   the storage cap and undo for free, and shows in the message's file list. It is not counted in
   `Attachments`, which compare with Freshdesk's own attachment totals.
   - *Hosts.* Exact patterns only (`inline-image-hosts.go`): the importing account's host
-    (case-insensitive), `attachment.freshdesk.com` and `<region>-attachment.freshdesk.com`, and
-    Freshdesk's public bucket (`s3[.-]<region>.amazonaws.com/cdn.freshdesk.com/...` or
-    `cdn.freshdesk.com.s3[.-]<region>.amazonaws.com`). A tenant portal of another Freshdesk account, a
+    (case-insensitive), the attachment gateways `attachment.freshdesk.com`, `euc-attachment.freshdesk.com`
+    and `indattachment.freshdesk.com`, and Freshdesk's public buckets `cdn.freshdesk.com` and
+    `assets.freshdesk.com` (path style `s3[.-]<region>.amazonaws.com/<bucket>/...` or virtual host
+    `<bucket>.s3[.-]<region>.amazonaws.com`). Seen on hclabs.freshdesk.com (18/10): the gateway
+    answers 302 to `<tenant>.freshdesk.com`, which answers 302 to `<tenant>.attachments<N>.freshdesk.com`
+    (image/png or image/jpeg); old content sits in `s3.amazonaws.com/assets.freshdesk.com/...`. Those
+    redirect hops are allowed by a second predicate (`allowedRedirectURL`: any tenant or tenant CDN host)
+    that applies to hops only, never to the address written in a message. A tenant portal of another Freshdesk account, a
     bucket anyone can name, and a custom support domain are not fetched: a URL that names Freshdesk
     but is not fetched raises `inline_images_not_rehosted` for its ticket (no silent skip). `http://`
     links of an allowed host are upgraded to https. The same predicate runs on every redirect hop of

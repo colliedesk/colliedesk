@@ -12,6 +12,9 @@ func TestOnlyFreshdeskHostedImagesAreFetched(t *testing.T) {
 		"https://acme.freshdesk.com/inline/attachment?token=abc",
 		"https://attachment.freshdesk.com/inline/attachment?token=abc",
 		"//euc-attachment.freshdesk.com/x.png",
+		"https://indattachment.freshdesk.com/inline/attachment?token=abc",
+		"https://s3.amazonaws.com/assets.freshdesk.com/images/x.png",
+		"https://assets.freshdesk.com.s3.amazonaws.com/images/x.png",
 		"http://acme.freshdesk.com/helpdesk/attachments/9",
 		"https://ACME.freshdesk.com/helpdesk/attachments/9",
 		"https://s3.amazonaws.com/cdn.freshdesk.com/data/helpdesk/attachments/production/1/original/a.png",
@@ -35,6 +38,9 @@ func TestOnlyFreshdeskHostedImagesAreFetched(t *testing.T) {
 		"https://attacker-tenant.freshdesk.com/helpdesk/attachments/1",
 		"https://support.freshdesk.com/helpdesk/attachments/1",
 		"http://images.example.org/a.png",
+		"https://hclabs.attachments-ind3.freshdesk.com/x.png",
+		"https://evilattachment.freshdesk.com/x.png",
+		"https://s3.amazonaws.com/assets.freshdesk.com.evil/x.png",
 		"https://acme.freshdesk.com.evil.example/a.png",
 		"data:image/png;base64,AAAA",
 		"cid:logo",
@@ -63,5 +69,35 @@ func TestImageKeyIgnoresSigningParametersOnly(t *testing.T) {
 	}
 	if imageKey(parse("https://s.freshdesk.com/inline/attachment?token=a")) == imageKey(parse("https://s.freshdesk.com/inline/attachment?token=b")) {
 		t.Fatal("the token identifies the image and must stay in the key")
+	}
+}
+
+// Freshdesk answers an inline image URL with redirects through the tenant's own hosts to its attachment CDN.
+func TestRedirectHopsMayUseFreshdeskTenantAndCDNHostsOnly(t *testing.T) {
+	base, _ := url.Parse("https://acme.freshdesk.com")
+	r := &run{client: &client{base: base}}
+	for _, raw := range []string{
+		"https://zalooa.freshdesk.com/inline/attachment?token=abc",
+		"https://zalooa.attachments8.freshdesk.com/inline/x.png",
+		"https://acme.attachments-ind3.freshdesk.com/inline/x.png",
+		"https://indattachment.freshdesk.com/inline/attachment",
+	} {
+		u, _ := url.Parse(raw)
+		if !r.allowedRedirectURL(u) {
+			t.Errorf("redirect to %s should be allowed", raw)
+		}
+	}
+	for _, raw := range []string{
+		"https://freshdesk.com.evil.example/x.png",
+		"https://evilfreshdesk.com/x.png",
+		"https://images.example.org/x.png",
+		"https://s3evil.s3.amazonaws.com/cdn.freshdesk.com/a.png",
+		"https://169.254.169.254/latest",
+		"https://a.b.freshdesk.com.evil.example/x",
+	} {
+		u, _ := url.Parse(raw)
+		if r.allowedRedirectURL(u) {
+			t.Errorf("redirect to %s must be refused", raw)
+		}
 	}
 }

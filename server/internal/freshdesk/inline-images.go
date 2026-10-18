@@ -104,7 +104,7 @@ func clip(value string) string {
 
 // openImage starts a download that refuses to leave the allowed hosts, even through redirects.
 func (r *run) openImage(ctx context.Context, target string) (io.ReadCloser, int64, string, error) {
-	return r.client.download(withRedirectGuard(ctx, r.allowedImageURL), target)
+	return r.client.download(withRedirectGuard(ctx, r.allowedRedirectURL), target)
 }
 
 // fetchImage downloads one image and returns its bytes and fixed media type.

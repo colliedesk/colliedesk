@@ -11,9 +11,14 @@ import (
 // Hosts an image may be fetched from. Exact patterns only: a tenant portal of another Freshdesk
 // account, or a bucket anyone can name, is not Freshdesk's own storage.
 var (
-	attachmentHost  = regexp.MustCompile(`^([a-z0-9]+-)?attachment\.freshdesk\.com$`)
-	s3PathHost      = regexp.MustCompile(`^s3([.-][a-z0-9-]+)?\.amazonaws\.com$`)
-	s3AssetBucket   = regexp.MustCompile(`^cdn\.freshdesk\.com\.s3([.-][a-z0-9-]+)?\.amazonaws\.com$`)
+	// attachmentHost: Freshdesk's inline attachment gateways per data center ("attachment", "euc-attachment", "indattachment").
+	attachmentHost = regexp.MustCompile(`^(euc-|ind)?attachment\.freshdesk\.com$`)
+	s3PathHost     = regexp.MustCompile(`^s3([.-][a-z0-9-]+)?\.amazonaws\.com$`)
+	// s3AssetBucket: Freshdesk's public buckets (uploaded content and static assets such as icons).
+	s3AssetBucket = regexp.MustCompile(`^(cdn|assets)\.freshdesk\.com\.s3([.-][a-z0-9-]+)?\.amazonaws\.com$`)
+	// A redirect from a gateway goes through the tenant's own host to the tenant's attachment CDN,
+	// for example <tenant>.freshdesk.com then <tenant>.attachments8.freshdesk.com.
+	tenantHost      = regexp.MustCompile(`^[a-z0-9-]+\.(attachments[a-z0-9-]*\.)?freshdesk\.com$`)
 	imgSrc          = regexp.MustCompile(`(?is)(<img\b[^>]*?\ssrc\s*=\s*)(?:"([^"]*)"|'([^']*)')`)
 	rasterMediaType = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true}
 )
@@ -57,7 +62,7 @@ func (r *run) allowedImageURL(u *url.URL) bool {
 	case attachmentHost.MatchString(host), s3AssetBucket.MatchString(host):
 		return true
 	}
-	return s3PathHost.MatchString(host) && strings.HasPrefix(u.Path, "/cdn.freshdesk.com/")
+	return s3PathHost.MatchString(host) && (strings.HasPrefix(u.Path, "/cdn.freshdesk.com/") || strings.HasPrefix(u.Path, "/assets.freshdesk.com/"))
 }
 
 // hostedImageURL returns the URL of an image Freshdesk hosts, upgraded to https (old tickets hold
@@ -95,4 +100,11 @@ func sniffRaster(data []byte) string {
 		return sniffed
 	}
 	return ""
+}
+
+// allowedRedirectURL says whether a redirect hop of an image download may go to u: anything an
+// image may be fetched from, and Freshdesk tenant and attachment CDN hosts. A tenant host is accepted
+// only as a hop, never as the address written in a message, so another tenant's portal is not a source.
+func (r *run) allowedRedirectURL(u *url.URL) bool {
+	return r.allowedImageURL(u) || tenantHost.MatchString(strings.ToLower(u.Hostname()))
 }
