@@ -10,7 +10,7 @@ const api = vi.hoisted(() => ({
   emailChannel: vi.fn(async () => ({ channel: null })), contacts: vi.fn(), agentRequests: vi.fn(async () => ({ items: [] })),
 }));
 vi.mock('../../api/client', () => ({ api }));
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn(), useParams: () => ({}) }));
+vi.mock('@tanstack/react-router', async () => (await import('./test-router')).routerModule);
 // The window's chunk cannot be loaded: offline, or an old tab after a deploy.
 vi.mock('./new-conversation-dialog', () => { throw new Error('Failed to fetch dynamically imported module'); });
 

@@ -10,7 +10,7 @@ afterEach(() => fetchMock.mockReset());
 
 const conversationBody = {
   id: '33333333-3333-4333-8333-333333333333', contact_id: '44444444-4444-4444-8444-444444444444', contact_name: 'Pat', subject: 'Hello',
-  status: 'open', priority: 'normal', assignee_id: null, tags: [], origin: null, created_at: '2026-10-19T00:00:00Z', updated_at: '2026-10-19T00:00:00Z',
+  status: 'open', priority: 'normal', assignee_id: null, tags: [], channel: 'agent', origin: null, created_at: '2026-10-19T00:00:00Z', updated_at: '2026-10-19T00:00:00Z',
 };
 
 test('a new conversation with a first reply sends it with the conversation, as files when there are some', async () => {

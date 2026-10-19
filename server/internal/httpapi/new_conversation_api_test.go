@@ -235,6 +235,43 @@ func TestNewConversationWithFilesCanAddTheCustomer(t *testing.T) {
 		JOIN messages m ON m.conversation_id=c.id JOIN attachments a ON a.message_id=m.id WHERE k.email='quinn.new@prospect.example'`); got != "Quinn New:quote.txt" {
 		t.Fatalf("stored=%q", got)
 	}
+	if channel := queryString(t, f.pool, `SELECT c.channel FROM conversations c JOIN contacts k ON k.id=c.contact_id WHERE k.email='quinn.new@prospect.example'`); channel != "agent" {
+		t.Fatalf("channel=%q, want agent", channel)
+	}
+}
+
+func TestANewConversationTheTeamStartsIsOnTheAgentChannel(t *testing.T) {
+	api, service, _ := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Channel Start", "admin@channel-start.example.com")
+	connectEmail(t, api, admin, "support@channel-start.example.com")
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Pat", "email": "pat@channel-start.example"})
+	response := request(t, api, http.MethodPost, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Hello", "body": "First words."}, admin, nil)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	var started struct {
+		ID      string `json:"id"`
+		Channel string `json:"channel"`
+	}
+	decode(t, response, &started)
+	if started.Channel != "agent" {
+		t.Fatalf("channel=%q, want agent", started.Channel)
+	}
+	for filter, want := range map[string]int{"agent": 1, "email": 0} {
+		listed := request(t, api, http.MethodGet, "/api/v1/conversations?channel="+filter, nil, admin, nil)
+		if listed.Code != http.StatusOK {
+			t.Fatalf("channel=%s status=%d body=%s", filter, listed.Code, listed.Body.String())
+		}
+		var page struct {
+			Items []struct {
+				ID string `json:"id"`
+			} `json:"items"`
+		}
+		decode(t, listed, &page)
+		if len(page.Items) != want || (want == 1 && page.Items[0].ID != started.ID) {
+			t.Fatalf("channel=%s listed %+v, want %d", filter, page.Items, want)
+		}
+	}
 }
 
 func TestTrialRefusesNewOutboundConversationsUntilTheDomainIsVerified(t *testing.T) {
