@@ -14,7 +14,7 @@ import (
 //
 // It is deliberately not a regular expression: quotes, escapes ("\\41 ", "\\ ") and comments decide where
 // a url() token starts and ends.
-func rewriteCSS(css string, image func(address string) string) string {
+func rewriteCSS(css string, rewrite func(raw string) (replacement string, remote bool)) string {
 	var out strings.Builder
 	out.Grow(len(css))
 	paren, setDepth := 0, 0 // setDepth: the paren depth of an open image-set(, or 0
@@ -32,34 +32,54 @@ func rewriteCSS(css string, image func(address string) string) string {
 		case c == '"' || c == '\'':
 			end := stringEnd(css, i)
 			if setDepth > 0 && paren >= setDepth {
-				if replacement, ok := remoteInString(css, i, end, image); ok {
-					out.WriteString(`"` + replacement + `"`)
+				if replacement, ok := rewrite(unescapeCSS(stringInner(css, i, end))); ok {
+					out.WriteByte('"')
+					out.WriteString(replacement)
+					out.WriteByte('"')
 					i = end
 					continue
 				}
 			}
 			out.WriteString(css[i:end])
 			i = end
-		case c == '@' && hasPrefixFold(css[i:], "@import") && !isIdent(byteAt(css, i+7)):
-			i = skipStatement(css, i)
-		case (c == 'u' || c == 'U') && hasPrefixFold(css[i:], "url(") && !isIdent(byteBefore(css, i)):
-			if raw, end, ok := parseURLToken(css, i+4); ok {
-				if replacement, remote := remoteAddress(raw, image); remote {
-					out.WriteString(`url("` + replacement + `")`)
-				} else {
-					out.WriteString(css[i:end])
-				}
-				i = end
+		case c == '@':
+			if name, end := readIdent(css, i+1); strings.EqualFold(name, "import") {
+				// Replaced by a space, so the text around it cannot join into something new (a "</style>").
+				out.WriteByte(' ')
+				i = skipStatement(css, end)
 				continue
 			}
 			out.WriteByte(c)
 			i++
-		case isImageSet(css, i):
-			name := strings.IndexByte(css[i:], '(')
-			out.WriteString(css[i : i+name+1])
-			paren++
-			setDepth = paren
-			i += name + 1
+		case startsIdent(css, i) && !isIdent(byteBefore(css, i)):
+			name, end := readIdent(css, i)
+			if end < len(css) && css[end] == '(' {
+				switch strings.ToLower(name) {
+				case "url":
+					if raw, stop, ok := parseURLToken(css, end+1); ok {
+						if replacement, remote := rewrite(raw); remote {
+							out.WriteString(`url("`)
+							out.WriteString(replacement)
+							out.WriteString(`")`)
+						} else {
+							out.WriteString(css[i:stop])
+						}
+						i = stop
+						continue
+					}
+				case "image-set", "-webkit-image-set":
+					out.WriteString(css[i : end+1])
+					paren++
+					setDepth = paren
+					i = end + 1
+					continue
+				}
+			}
+			out.WriteString(css[i:end])
+			i = end
+		case c == '\\' && i+1 < len(css):
+			out.WriteString(css[i : i+2]) // an escaped character is never a quote or a comment
+			i += 2
 		case c == '(':
 			paren++
 			out.WriteByte(c)
@@ -81,29 +101,41 @@ func rewriteCSS(css string, image func(address string) string) string {
 	return out.String()
 }
 
-func remoteAddress(raw string, image func(string) string) (string, bool) {
-	u, ok := ParseSrc(raw)
-	if !ok {
-		return "", false
-	}
-	return image(u.String()), true
-}
-
-func remoteInString(css string, start, end int, image func(string) string) (string, bool) {
+// stringInner is the text of the string that spans css[start:end], without its quotes.
+func stringInner(css string, start, end int) string {
 	inner := css[start+1 : end]
-	if strings.HasSuffix(inner, css[start:start+1]) && len(inner) > 0 {
+	if len(inner) > 0 && inner[len(inner)-1] == css[start] {
 		inner = inner[:len(inner)-1]
 	}
-	return remoteAddress(unescapeCSS(inner), image)
+	return inner
 }
 
-func isImageSet(css string, i int) bool {
-	for _, name := range []string{"image-set(", "-webkit-image-set("} {
-		if hasPrefixFold(css[i:], name) && !isIdent(byteBefore(css, i)) {
-			return true
+// startsIdent reports whether an identifier (a function or at-rule name) can begin at i: a letter, "_", "-",
+// a non-ASCII byte, or an escape.
+func startsIdent(css string, i int) bool {
+	c := css[i]
+	return c == '_' || c == '-' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= 0x80 ||
+		(c == '\\' && i+1 < len(css) && css[i+1] != '\n')
+}
+
+// readIdent reads the identifier at i, decoding escapes ("\75 rl" is "url"), and returns it with the index
+// after it.
+func readIdent(css string, i int) (string, int) {
+	var name strings.Builder
+	for i < len(css) {
+		switch c := css[i]; {
+		case isIdent(c):
+			name.WriteByte(c)
+			i++
+		case c == '\\' && i+1 < len(css) && css[i+1] != '\n':
+			decoded, next := decodeEscape(css, i+1)
+			name.WriteString(decoded)
+			i = next
+		default:
+			return name.String(), i
 		}
 	}
-	return false
+	return name.String(), i
 }
 
 // stringEnd returns the index just after the string that opens at start (or the end of the text).
@@ -204,43 +236,37 @@ func unescapeCSS(s string) string {
 			i++
 			continue
 		}
-		i++
-		if s[i] == '\n' {
-			i++
+		if s[i+1] == '\n' {
+			i += 2 // a line continuation
 			continue
 		}
-		digits := 0
-		for digits < 6 && i+digits < len(s) && isHex(s[i+digits]) {
-			digits++
-		}
-		if digits == 0 {
-			r, size := utf8.DecodeRuneInString(s[i:])
-			b.WriteRune(r)
-			i += size
-			continue
-		}
-		code, _ := strconv.ParseUint(s[i:i+digits], 16, 32)
-		i += digits
-		if i < len(s) && isSpace(s[i]) {
-			i++
-		}
-		if code == 0 || code > utf8.MaxRune {
-			code = utf8.RuneError
-		}
-		b.WriteRune(rune(code))
+		decoded, next := decodeEscape(s, i+1)
+		b.WriteString(decoded)
+		i = next
 	}
 	return b.String()
 }
 
-func hasPrefixFold(s, prefix string) bool {
-	return len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix)
-}
-
-func byteAt(s string, i int) byte {
-	if i < len(s) {
-		return s[i]
+// decodeEscape decodes the escape whose backslash is just before s[i]: up to six hex digits and one
+// optional space, or any other single character. It returns the text and the index after the escape.
+func decodeEscape(s string, i int) (string, int) {
+	digits := 0
+	for digits < 6 && i+digits < len(s) && isHex(s[i+digits]) {
+		digits++
 	}
-	return 0
+	if digits == 0 {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		return string(r), i + size
+	}
+	code, err := strconv.ParseInt(s[i:i+digits], 16, 32)
+	i += digits
+	if i < len(s) && isSpace(s[i]) {
+		i++
+	}
+	if err != nil || code <= 0 || code > utf8.MaxRune {
+		return string(utf8.RuneError), i
+	}
+	return string(rune(code)), i
 }
 
 func byteBefore(s string, i int) byte {

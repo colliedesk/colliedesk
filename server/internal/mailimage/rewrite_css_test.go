@@ -96,3 +96,39 @@ func TestRewriteCountsCSSImagesInTheFiftyPerMessageLimit(t *testing.T) {
 		t.Errorf("an image past the limit keeps its remote address: %q", out)
 	}
 }
+
+// CSS lets any character of a name be written as an escape (CSS Syntax 4.3.7), so a function or at-rule can be
+// spelled in ways a plain text match misses. The browser decodes them; so must the rewriter.
+func TestRewriteReadsEscapedFunctionAndAtRuleNames(t *testing.T) {
+	cases := map[string]string{
+		`<div style="background:\75 rl(https://a.example/1.png)">x</div>`:                          "https://a.example/1.png",
+		`<div style="background:u\72l(https://a.example/2.png)">x</div>`:                           "https://a.example/2.png",
+		`<div style="background:\55 RL(https://a.example/3.png)">x</div>`:                          "https://a.example/3.png",
+		`<div style='background-image:\69 mage-set("https://a.example/4.png" 1x)'>x</div>`:         "https://a.example/4.png",
+		`<div style='background-image:-webkit-\69 mage-set("https://a.example/5.png" 1x)'>x</div>`: "https://a.example/5.png",
+		`<style>.a\"b{background:url(https://a.example/6.png)}</style>`:                            "https://a.example/6.png",
+		`<style>.a\/*b{background:url(https://a.example/7.png)}</style>`:                           "https://a.example/7.png",
+	}
+	for html, want := range cases {
+		out := signer().Rewrite(workspace, html)
+		if got := proxiedURLs(t, out); len(got) != 1 || got[0] != want {
+			t.Errorf("%s\n proxied %v, want %q\n out %q", html, got, want, out)
+		}
+	}
+	out := signer().Rewrite(workspace, `<style>@\69mport url(https://evil.example/a.css);@\49 MPORT "https://evil.example/b.css";.k{color:red}</style>`)
+	if strings.Contains(out, "evil.example") || !strings.Contains(out, ".k{color:red}") {
+		t.Errorf("an escaped @import survived or the rules were lost: %q", out)
+	}
+}
+
+// Dropping an @import must not bring the characters around it together into something new: here "<" and
+// "/style>" would meet and end the style element early.
+func TestRewriteLeavesASpaceWhereAnImportWasDropped(t *testing.T) {
+	out := signer().Rewrite(workspace, `<style>.a{color:red}<@import url(https://evil.example/a.css);/style><p>after</p></style>`)
+	if strings.Count(out, "</style>") != 1 {
+		t.Errorf("dropping the import created a closing tag: %q", out)
+	}
+	if !strings.Contains(out, "< /style>") {
+		t.Errorf("the dropped statement left no separator: %q", out)
+	}
+}

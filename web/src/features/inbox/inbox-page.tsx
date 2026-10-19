@@ -49,6 +49,8 @@ interface InboxPageProps {
   loading?: boolean;
   refreshing?: boolean;
   timelineLoading?: boolean;
+  conversationFailed?: boolean;
+  onRetryConversation?: () => void;
   failed?: boolean;
   onRetry?: () => void;
   canManage?: boolean;
@@ -63,7 +65,7 @@ interface InboxPageProps {
   onDiscardDraft?: (draft: AgentRequest) => Promise<unknown>;
 }
 
-export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, onSendDraft, onDiscardDraft }: InboxPageProps) {
+export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, onSendDraft, onDiscardDraft }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Filters are an uncontrolled form; clearing remounts it so every field returns to its default.
@@ -147,7 +149,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
           checkedIds={checked} onToggle={toggle} onToggleAll={toggleAll} selectAllRef={selectAll} draftIds={draftConversationIds} />
       </section>
       <div className="conversation-center panel">
-        <TimelinePanel conversation={selected} items={timeline} timeEntries={timeEntries} loading={timelineLoading} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
+        <TimelinePanel conversation={selected} items={timeline} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
           detailsOpen={detailsOpen} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}</p>}
         {deliveryNotice && <p role="alert" className="composer-notice">{deliveryNotice}</p>}

@@ -55,13 +55,27 @@ func (s *Signer) Path(workspaceID, rawURL string) string {
 // around the proxy. @import is dropped from CSS.
 func (s *Signer) Rewrite(workspaceID, markup string) string {
 	seen := map[string]bool{}
-	// image gives the proxy path of one address, or "" when the message is past its limit.
-	image := func(address string) string {
-		if !seen[address] && len(seen) >= MaxImagesPerMessage {
-			return ""
+	type resolved struct {
+		path   string
+		remote bool
+	}
+	// memo: the same address written many times in one message is parsed and signed once.
+	memo := map[string]resolved{}
+	resolve := func(raw string) (string, bool) {
+		if r, ok := memo[raw]; ok {
+			return r.path, r.remote
 		}
-		seen[address] = true
-		return s.Path(workspaceID, address)
+		r := resolved{}
+		if u, ok := ParseSrc(raw); ok {
+			address := u.String()
+			r.remote = true
+			if seen[address] || len(seen) < MaxImagesPerMessage {
+				seen[address] = true
+				r.path = s.Path(workspaceID, address)
+			}
+		}
+		memo[raw] = r
+		return r.path, r.remote
 	}
 	return mapMarkup(markup, func(tag *html.Token) bool {
 		changed := false
@@ -78,19 +92,19 @@ func (s *Signer) Rewrite(workspaceID, markup string) string {
 				if attribute.Key != "src" {
 					continue
 				}
-				if u, ok := ParseSrc(attribute.Val); ok {
-					tag.Attr[i].Val = image(u.String())
+				if path, remote := resolve(attribute.Val); remote {
+					tag.Attr[i].Val = path
 				}
 				break
 			}
 		}
 		for i, attribute := range tag.Attr {
 			if attribute.Key == "style" {
-				if rewritten := rewriteCSS(attribute.Val, image); rewritten != attribute.Val {
+				if rewritten := rewriteCSS(attribute.Val, resolve); rewritten != attribute.Val {
 					tag.Attr[i].Val, changed = rewritten, true
 				}
 			}
 		}
 		return changed
-	}, func(css string) string { return rewriteCSS(css, image) })
+	}, func(css string) string { return rewriteCSS(css, resolve) })
 }

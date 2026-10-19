@@ -166,6 +166,36 @@ test('a ticket opened by an address that is in the list renders from its row whi
   }
 });
 
+// When the ticket an address names cannot be loaded, the pane says so and offers to try again.
+test('a ticket whose detail fails to load says so and Retry asks for it again', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
+  router.params = { conversationId: bravo.id };
+  try {
+    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.conversations.mockReset();
+    api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+    api.conversation.mockReset();
+    api.conversation.mockRejectedValueOnce(new Error('server error')).mockResolvedValue(bravo);
+    api.agents.mockResolvedValue({ items: [] });
+    api.tags.mockResolvedValue({ items: [] });
+    api.messages.mockReset();
+    api.messages.mockResolvedValue({ items: [] });
+    api.timeEntries.mockResolvedValue({ items: [] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/could not be loaded/i);
+    expect(screen.queryByRole('heading', { name: 'Alpha conversation' })).toBeNull();
+    fireEvent.click(within(alert).getByRole('button', { name: /retry/i }));
+    expect(await screen.findByRole('heading', { name: 'Bravo conversation' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(api.conversation).toHaveBeenCalledTimes(2);
+  } finally {
+    router.params = {};
+  }
+});
+
 test('inline tag creation stays bound to the conversation selected at call time', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');

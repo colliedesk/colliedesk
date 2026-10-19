@@ -117,9 +117,50 @@ const svgNamespace = "http://www.w3.org/2000/svg"
 // document past these, so a hostile body of a million nested elements costs a few hundred of them, not the
 // memory and time of parsing all.
 const (
-	maxSVGDepth    = 64
-	maxSVGElements = 10_000
+	maxSVGDepth      = 64
+	maxSVGElements   = 10_000
+	maxSVGAttributes = 256
+	// maxSVGBytes bounds the document before it is parsed: real logos are a few KB, and a hostile one of
+	// several MB is refused without costing a parse.
+	maxSVGBytes = 1 << 20
 )
+
+// tooManyAttributes reports whether any one tag of the markup has more than maxSVGAttributes attributes or
+// namespace declarations (counted as "=" signs outside quotes). It runs before the XML decoder, which would
+// build every one of them in memory before the element could be refused.
+func tooManyAttributes(data []byte) bool {
+	inTag, equals := false, 0
+	var quote byte
+	for i := 0; i < len(data); i++ {
+		c := data[i]
+		switch {
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case !inTag:
+			switch {
+			case c == '<' && bytes.HasPrefix(data[i:], []byte("<!--")):
+				end := bytes.Index(data[i+4:], []byte("-->"))
+				if end < 0 {
+					return false
+				}
+				i += 4 + end + 2
+			case c == '<':
+				inTag, equals = true, 0
+			}
+		case c == '"' || c == '\'':
+			quote = c
+		case c == '=':
+			if equals++; equals > maxSVGAttributes {
+				return true
+			}
+		case c == '>':
+			inTag = false
+		}
+	}
+	return false
+}
 
 // SniffImage returns the media type of an image the proxy may serve: a raster (see SniffRaster) or an SVG
 // document, or "". An SVG is accepted only when the whole body parses as XML whose root element is svg in the
@@ -136,6 +177,9 @@ func SniffImage(data []byte) string {
 }
 
 func isSVG(data []byte) bool {
+	if len(data) > maxSVGBytes || tooManyAttributes(data) {
+		return false
+	}
 	decoder := xml.NewDecoder(bytes.NewReader(bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))))
 	decoder.Strict = true
 	root, depth, elements := false, 0, 0
