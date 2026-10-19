@@ -20,6 +20,7 @@ export const publicConfigSchema = z.object({
   billing: z.object({ enabled: z.boolean() }),
   signup: z.object({ enabled: z.boolean() }),
   limits: z.object({ outgoing_attachments_bytes: z.number().int(), outgoing_attachments_files: z.number().int() }),
+  product_analytics: z.object({ enabled: z.boolean(), key: z.string().nullable(), host: z.string().nullable() }),
 }) satisfies z.ZodType<Generated<'PublicConfig'>>;
 export const checkoutPlanSchema = z.enum(['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding']);
 export const planSchema = z.enum(['trial', 'team', 'team25', 'founding', 'none']);

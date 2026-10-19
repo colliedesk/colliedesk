@@ -83,12 +83,21 @@ type Config struct {
 	SignupDisabled bool
 	// Random is the entropy for generated workspace slug suffixes; nil uses crypto/rand.
 	Random io.Reader
-	// Funnel receives the cloud's trial_started and subscription_activated events; nil records
-	// nothing.
+	// Funnel receives the cloud's trial, activation (email channel, reply, teammate) and payment
+	// events; nil records nothing.
 	Funnel FunnelRecorder
+	// ProductAnalytics is the PostHog project the hosted cloud's web app reports to; nil (every
+	// self-hosted server, and the cloud with telemetry off) keeps the web app from loading it.
+	ProductAnalytics *ProductAnalytics
 }
 
-// FunnelRecorder takes one sign-up or payment event of a workspace. Record must not block the
+// ProductAnalytics names the PostHog project key and host the web app sends usage events to.
+type ProductAnalytics struct {
+	Key  string
+	Host string
+}
+
+// FunnelRecorder takes one sign-up, activation or payment event of a workspace. Record must not block the
 // request; telemetry.Funnel sends in the background.
 type FunnelRecorder interface {
 	Record(event, workspaceID string, properties map[string]any)

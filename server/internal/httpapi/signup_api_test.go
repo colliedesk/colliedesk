@@ -345,7 +345,7 @@ func TestSlugRenameRefusesBrandsOnTheCloudOnly(t *testing.T) {
 func TestConfigAdvertisesSignupOnlyWhereItExists(t *testing.T) {
 	hosted := newSignupFixture(t, nil)
 	got := request(t, hosted.api, http.MethodGet, "/api/v1/config", nil, "", nil)
-	want := "{\"billing\":{\"enabled\":true},\"cloud_sign_in\":{\"enabled\":true,\"publishable_key\":\"pk_test_example\"},\"limits\":{\"outgoing_attachments_bytes\":10485760,\"outgoing_attachments_files\":10},\"signup\":{\"enabled\":true},\"version\":\"dev\"}\n"
+	want := "{\"billing\":{\"enabled\":true},\"cloud_sign_in\":{\"enabled\":true,\"publishable_key\":\"pk_test_example\"},\"limits\":{\"outgoing_attachments_bytes\":10485760,\"outgoing_attachments_files\":10},\"product_analytics\":{\"enabled\":false,\"host\":null,\"key\":null},\"signup\":{\"enabled\":true},\"version\":\"dev\"}\n"
 	if got.Code != http.StatusOK || got.Body.String() != want {
 		t.Fatalf("hosted config status=%d body=%s, want %s", got.Code, got.Body.String(), want)
 	}
@@ -368,7 +368,7 @@ func TestSignupTurnedOffAtStartIsRefusedClearly(t *testing.T) {
 func TestConfigHidesSignupWhileItIsTurnedOff(t *testing.T) {
 	f := newSignupFixture(t, func(config *httpapi.Config) { config.SignupDisabled = true })
 	got := request(t, f.api, http.MethodGet, "/api/v1/config", nil, "", nil)
-	want := "{\"billing\":{\"enabled\":true},\"cloud_sign_in\":{\"enabled\":true,\"publishable_key\":\"pk_test_example\"},\"limits\":{\"outgoing_attachments_bytes\":10485760,\"outgoing_attachments_files\":10},\"signup\":{\"enabled\":false},\"version\":\"dev\"}\n"
+	want := "{\"billing\":{\"enabled\":true},\"cloud_sign_in\":{\"enabled\":true,\"publishable_key\":\"pk_test_example\"},\"limits\":{\"outgoing_attachments_bytes\":10485760,\"outgoing_attachments_files\":10},\"product_analytics\":{\"enabled\":false,\"host\":null,\"key\":null},\"signup\":{\"enabled\":false},\"version\":\"dev\"}\n"
 	if got.Code != http.StatusOK || got.Body.String() != want {
 		t.Fatalf("config status=%d body=%s, want %s", got.Code, got.Body.String(), want)
 	}

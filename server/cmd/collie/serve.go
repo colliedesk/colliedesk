@@ -113,6 +113,10 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		}
 	}
 	apiConfig := httpapi.Config{Origin: origin, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", Funnel: telemetry.NewFunnel(telemetryConfig, nil)}
+	// Only the hosted cloud's web app reports usage, and DISABLE_TELEMETRY / DO_NOT_TRACK turn it off.
+	if hostedCloud && telemetryConfig.Enabled() {
+		apiConfig.ProductAnalytics = &httpapi.ProductAnalytics{Key: telemetryConfig.ProjectKey, Host: telemetryConfig.Endpoint}
+	}
 	if emailConfig.SMTP.Configured() {
 		apiConfig.AlertEmail = strings.TrimSpace(os.Getenv("BILLING_ALERT_EMAIL"))
 		apiConfig.AlertMailer = email.SMTPSender{Config: emailConfig.SMTP}

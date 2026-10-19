@@ -18,6 +18,7 @@ import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
 import { InboxIcon, RequestsIcon, SettingsIcon } from './ui/icons';
 import { LogoMark } from './ui/logo';
+import { useProductAnalytics } from './lib/product-analytics';
 
 function AppLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
@@ -33,6 +34,8 @@ function AppLayout() {
   useEffect(() => { if (locked) clearCheckoutIntent(); }, [locked]);
   // New, newly assigned and changed conversations are picked up on every signed-in page, not only in the inbox.
   useInboxActivity(!onSignIn && Boolean(me.data) && !signedOut && !locked, me.data?.agent?.id);
+  // Hosted cloud only: the server's config enables it; a self-hosted app never loads the library.
+  useProductAnalytics(config.data?.product_analytics, me.data);
   // Agent requests waiting for a person, for the rail badge; a locked workspace has none to decide.
   const waiting = usePendingRequests(!onSignIn && Boolean(me.data) && !signedOut && !locked).data?.items.length ?? 0;
   // On an instance with cloud sign-in the way back in is the sign-in page, not a new pairing link.

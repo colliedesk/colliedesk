@@ -24,9 +24,20 @@ func (a *API) getConfig(response http.ResponseWriter, _ *http.Request) {
 		"cloud_sign_in": map[string]any{"enabled": enabled, "publishable_key": publishableKey},
 		"billing":       map[string]any{"enabled": a.polar != nil},
 		// Same condition as signUpCloud: 404 unless both are configured, 503 while its settings are missing.
-		"signup": map[string]any{"enabled": enabled && a.polar != nil && !a.config.SignupDisabled},
-		"limits": map[string]any{"outgoing_attachments_bytes": attachments.MaxOutgoingBytes, "outgoing_attachments_files": attachments.MaxOutgoingFiles},
+		"signup":            map[string]any{"enabled": enabled && a.polar != nil && !a.config.SignupDisabled},
+		"limits":            map[string]any{"outgoing_attachments_bytes": attachments.MaxOutgoingBytes, "outgoing_attachments_files": attachments.MaxOutgoingFiles},
+		"product_analytics": a.productAnalyticsConfig(),
 	})
+}
+
+// productAnalyticsConfig tells the web app whether, and where, to report usage. Only the hosted cloud
+// configures it; everywhere else the web app never loads the analytics library.
+func (a *API) productAnalyticsConfig() map[string]any {
+	analytics := a.config.ProductAnalytics
+	if analytics == nil {
+		return map[string]any{"enabled": false, "key": nil, "host": nil}
+	}
+	return map[string]any{"enabled": true, "key": analytics.Key, "host": analytics.Host}
 }
 
 func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.Request) {

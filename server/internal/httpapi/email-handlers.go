@@ -142,6 +142,7 @@ func (a *API) putEmailChannel(response http.ResponseWriter, request *http.Reques
 		writeEmailStoreError(response, err)
 		return
 	}
+	a.recordFunnel("email_channel_saved", principal(request).Workspace.ID, nil)
 	a.writeEmailSettings(response, request, &channel)
 }
 

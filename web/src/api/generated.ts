@@ -1122,6 +1122,14 @@ export interface components {
             expires_at: string;
         };
         PublicConfig: {
+            /** @description Where the web app reports which screens and buttons agents use. Only the hosted cloud enables it (and `DISABLE_TELEMETRY` or `DO_NOT_TRACK` turn it off there); a self-hosted server answers `enabled: false` and its web app never loads the analytics library. */
+            product_analytics: {
+                enabled: boolean;
+                /** @description Public PostHog project key; it can add events but not read them. */
+                key: string | null;
+                /** @description PostHog ingestion host. */
+                host: string | null;
+            };
             /** @description The running build: a release tag such as `v0.0.1`, `edge-<commit>` for a main build, or `dev`. */
             version?: string;
             limits: {

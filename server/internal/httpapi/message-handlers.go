@@ -77,6 +77,7 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		writeStoreError(response, err)
 		return
 	}
+	a.recordReply(identity, input.Kind)
 	writeJSON(response, http.StatusCreated, item)
 }
 
