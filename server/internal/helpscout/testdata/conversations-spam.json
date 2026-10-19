@@ -1,0 +1,12 @@
+{
+  "_embedded": {
+    "conversations": [
+      {"id": 104, "number": 1004, "threads": 1, "type": "email", "status": "spam", "state": "published",
+       "subject": "Cheap watches", "mailboxId": 501,
+       "createdBy": {"id": 9199, "type": "customer", "email": "spam@spam.example"},
+       "primaryCustomer": {"id": 9199, "type": "customer", "first": "", "last": "", "email": "spam@spam.example"},
+       "createdAt": "2026-03-07T01:00:00Z", "userUpdatedAt": "2026-03-07T01:00:00Z", "tags": []}
+    ]
+  },
+  "page": {"size": 25, "totalElements": 1, "totalPages": 1, "number": 1}
+}

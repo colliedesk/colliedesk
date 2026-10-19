@@ -1,0 +1,13 @@
+{
+  "_embedded": {
+    "conversations": [
+      {"id": 103, "number": 1003, "threads": 2, "type": "phone", "folderId": 1, "status": "pending", "state": "published",
+       "subject": "Question about invoices", "preview": "Called about invoices", "mailboxId": 501,
+       "createdBy": {"id": 7003, "type": "user", "email": "carol@acme.example"},
+       "primaryCustomer": {"id": 9101, "type": "customer", "first": "Dana", "last": "Lee", "email": "dana@customer.example"},
+       "createdAt": "2026-03-06T14:30:00Z", "closedAt": null, "userUpdatedAt": "2026-03-06T15:00:00Z",
+       "source": {"type": "phone", "via": "user"}, "tags": [], "cc": [], "bcc": []}
+    ]
+  },
+  "page": {"size": 2, "totalElements": 3, "totalPages": 2, "number": 2}
+}

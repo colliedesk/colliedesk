@@ -114,7 +114,7 @@ func TestImportUndoReportsWhenThereIsNothingToUndo(t *testing.T) {
 	}
 	var output bytes.Buffer
 	err := run(context.Background(), []string{"import", "undo", "--workspace", "undo-desk", "--dry-run"}, &output, databaseURL, "https://desk.example.com")
-	if err == nil || !strings.Contains(err.Error(), "no Freshdesk import found") {
+	if err == nil || !strings.Contains(err.Error(), "no Freshdesk or Help Scout import found") {
 		t.Fatalf("undo without an import: %v", err)
 	}
 	if err := run(context.Background(), []string{"import", "undo"}, &output, databaseURL, "https://desk.example.com"); err == nil {

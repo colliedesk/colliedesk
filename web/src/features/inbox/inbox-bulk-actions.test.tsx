@@ -29,15 +29,51 @@ test('shows no action bar until a row is selected', () => {
   expect(within(bar()).getByText('1 selected')).toBeInTheDocument();
 });
 
-test('the action bar offers status, assign, add tag, remove tag and clear, and no delete', () => {
+test('the action bar offers resolve, status, assign, tags and clear as named icon controls, and no delete', () => {
   renderInbox();
   pick(/alpha request/i);
   pick(/beta request/i);
   const toolbar = within(bar());
   expect(toolbar.getByText('2 selected')).toBeInTheDocument();
-  for (const label of ['Set status', 'Assign to', 'Add tag', 'Remove tag']) expect(toolbar.getByText(label)).toBeInTheDocument();
-  expect(toolbar.getByRole('button', { name: 'Clear selection' })).toBeInTheDocument();
+  for (const label of ['Resolve', 'Clear selection']) expect(toolbar.getByRole('button', { name: label })).toHaveAttribute('data-tip', label);
+  for (const label of ['Set status', 'Assign to', 'Tags']) expect(toolbar.getByLabelText(label, { selector: 'summary' })).toHaveAttribute('data-tip', label);
+  expect(toolbar.queryByText('Add tag')).not.toBeInTheDocument();
+  expect(toolbar.queryByText('Remove tag')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument();
+});
+
+test('resolve changes the selection in one press', async () => {
+  const onBulkUpdate = renderInbox();
+  pick(/alpha request/i);
+  pick(/gamma request/i);
+  fireEvent.click(within(bar()).getByRole('button', { name: 'Resolve' }));
+  expect(onBulkUpdate).toHaveBeenCalledWith([alpha.id, gamma.id], { status: 'resolved' });
+  expect(await screen.findByText('Updated 2 conversations')).toBeInTheDocument();
+});
+
+test('the filters stay in view while rows are selected', () => {
+  renderInbox();
+  pick(/alpha request/i);
+  expect(screen.getByRole('searchbox', { name: 'Search conversations' })).toBeVisible();
+});
+
+test('Escape in the action bar clears the selection and returns focus to select all', () => {
+  renderInbox();
+  pick(/alpha request/i);
+  fireEvent.keyDown(within(bar()).getByRole('button', { name: 'Resolve' }), { key: 'Escape' });
+  expect(screen.queryByRole('group', { name: /bulk actions/i })).not.toBeInTheDocument();
+  expect(screen.getByRole('checkbox', { name: 'Select all on this page' })).toHaveFocus();
+});
+
+test('Escape inside an open menu closes only the menu', () => {
+  renderInbox();
+  pick(/alpha request/i);
+  const status = within(bar()).getByLabelText('Set status', { selector: 'summary' });
+  const menu = status.closest('details')!;
+  menu.open = true;
+  fireEvent.keyDown(within(menu).getByRole('button', { name: 'Pending' }), { key: 'Escape' });
+  expect(menu.open).toBe(false);
+  expect(within(bar()).getByText('1 selected')).toBeInTheDocument();
 });
 
 test('select all on this page selects every row, and clear selection removes the bar', () => {
@@ -82,14 +118,25 @@ test('assign to me, to a teammate and to nobody', async () => {
   await waitFor(() => expect(onBulkUpdate).toHaveBeenLastCalledWith([alpha.id], { assignee_id: null }));
 });
 
-test('add tag and remove tag send their own change', async () => {
-  const onBulkUpdate = renderInbox();
+test('the tags menu shows which selected rows carry a tag and toggles it for all of them', async () => {
+  const vip = { id: '44444444-4444-4444-8444-444444444444', name: 'VIP', color: '#64748b' };
+  const spam = { id: '12121212-1212-4121-8121-121212121212', name: 'Spam', color: '#64748b' };
+  const onBulkUpdate = vi.fn().mockResolvedValue({ updated: 2 });
+  const tagged = { ...alpha, tags: [billing, vip] };
+  const half = { ...beta, tags: [billing] };
+  render(<InboxPage conversations={[tagged, half, gamma]} tags={[billing, vip, spam]} onBulkUpdate={onBulkUpdate} />);
   pick(/alpha request/i);
-  fireEvent.click(within(within(bar()).getByRole('group', { name: 'Add tag' })).getByRole('button', { name: 'Billing' }));
-  await waitFor(() => expect(onBulkUpdate).toHaveBeenLastCalledWith([alpha.id], { add_tag_ids: [billing.id] }));
+  pick(/beta request/i);
+  const tagsMenu = () => within(within(bar()).getByRole('group', { name: 'Tags' }));
+  expect(tagsMenu().getByRole('button', { name: 'Billing' })).toHaveAttribute('aria-pressed', 'true');
+  expect(tagsMenu().getByRole('button', { name: 'VIP' })).toHaveAttribute('aria-pressed', 'mixed');
+  expect(tagsMenu().getByRole('button', { name: 'Spam' })).toHaveAttribute('aria-pressed', 'false');
+  fireEvent.click(tagsMenu().getByRole('button', { name: 'Billing' }));
+  await waitFor(() => expect(onBulkUpdate).toHaveBeenLastCalledWith([alpha.id, beta.id], { remove_tag_ids: [billing.id] }));
   pick(/alpha request/i);
-  fireEvent.click(within(within(bar()).getByRole('group', { name: 'Remove tag' })).getByRole('button', { name: 'Billing' }));
-  await waitFor(() => expect(onBulkUpdate).toHaveBeenLastCalledWith([alpha.id], { remove_tag_ids: [billing.id] }));
+  pick(/beta request/i);
+  fireEvent.click(tagsMenu().getByRole('button', { name: 'VIP' }));
+  await waitFor(() => expect(onBulkUpdate).toHaveBeenLastCalledWith([alpha.id, beta.id], { add_tag_ids: [vip.id] }));
 });
 
 test('a refused update shows an alert next to the bar and keeps the selection', async () => {
@@ -173,7 +220,7 @@ test('after a refused change focus is on the menu that was used', async () => {
   pick(/alpha request/i);
   fireEvent.click(within(within(bar()).getByRole('group', { name: 'Set status' })).getByRole('button', { name: 'Pending' }));
   await screen.findByRole('alert');
-  expect(within(bar()).getByText('Set status', { selector: 'summary' })).toHaveFocus();
+  expect(within(bar()).getByLabelText('Set status', { selector: 'summary' })).toHaveFocus();
 });
 
 test('the assign menu lists only active agents', () => {

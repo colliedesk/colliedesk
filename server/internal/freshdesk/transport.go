@@ -2,10 +2,8 @@ package freshdesk
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,11 +11,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/colliedesk/colliedesk/server/internal/netguard"
+	"github.com/colliedesk/colliedesk/server/internal/importkit"
 )
 
 const (
-	defaultAPITimeout  = 60 * time.Second
+	defaultAPITimeout  = importkit.ResponseHeaderTimeout
 	defaultIdleTimeout = 2 * time.Minute
 	maxRedirects       = 5
 )
@@ -29,20 +27,8 @@ func withRedirectGuard(ctx context.Context, allowed func(*url.URL) bool) context
 	return context.WithValue(ctx, redirectGuardKey{}, allowed)
 }
 
-// newTransport dials only public addresses, so a URL or redirect from the
-// source system can never reach the host's own network or metadata service.
 func newTransport(hooks testHooks) *http.Transport {
-	dialer := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second, Control: netguard.Control(hooks.allowDial)}
-	return &http.Transport{
-		Proxy:                 nil,
-		DialContext:           dialer.DialContext,
-		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: hooks.rootCAs},
-		TLSHandshakeTimeout:   15 * time.Second,
-		ResponseHeaderTimeout: defaultAPITimeout,
-		IdleConnTimeout:       90 * time.Second,
-		MaxIdleConnsPerHost:   8,
-		ForceAttemptHTTP2:     true,
-	}
+	return importkit.NewTransport(hooks.rootCAs, hooks.allowDial)
 }
 
 // newHTTPClients returns the API client (short timeout, no redirect off the
