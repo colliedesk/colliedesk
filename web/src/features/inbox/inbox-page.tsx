@@ -131,13 +131,10 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
     <main className="inbox-shell" data-details-open={detailsOpen}>
       <section className="list-pane panel" ref={listPane} tabIndex={-1} aria-label={messages.conversationList}>
         <header>
-          {/* The filters stay mounted while the bar replaces them, so their state survives. */}
-          <div className="list-title" data-collapsed={checkedIds.length > 0 || undefined}><h1>{messages.inbox}</h1><span>{conversations.length}</span></div>
-          <div className="list-head" hidden={checkedIds.length > 0}>
+          <div className="list-title"><h1>{messages.inbox}</h1><span>{conversations.length}</span></div>
+          <div className="list-head">
             <InboxFilters key={filterGeneration} tags={tags} onChange={onFilters} focusSearch={filterGeneration > 0} />
           </div>
-          {checkedIds.length > 0 && <BulkActionBar count={checkedIds.length} agents={agents} tags={tags} currentAgentId={currentAgentId}
-            busy={bulkBusy} onApply={(changes) => void applyBulk(changes)} onClear={() => { changeSelection(new Set()); setRefocus((count) => count + 1); }} />}
           {bulkFailed && <p role="alert" className="error-copy bulk-message">{messages.bulkUpdateFailed}</p>}
           {/* A live region without role="status": it is mounted before the first result so screen readers
               announce it, while an idle inbox still exposes no status. */}
@@ -146,7 +143,9 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
         <ConversationList items={conversations} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
           page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} nothingOpen={nothingOpen} loading={loading} refreshing={refreshing}
           failed={failed} onRetry={onRetry} onClearFilters={clearFilters} canManage={canManage} onOpenSettings={onOpenSettings}
-          checkedIds={checked} onToggle={toggle} onToggleAll={toggleAll} selectAllRef={selectAll} draftIds={draftConversationIds} />
+          checkedIds={checked} onToggle={toggle} onToggleAll={toggleAll} selectAllRef={selectAll}
+          toolbar={checkedIds.length > 0 && <BulkActionBar selected={conversations.filter((item) => checked.has(item.id))} agents={agents} tags={tags} currentAgentId={currentAgentId}
+            busy={bulkBusy} onApply={(changes) => void applyBulk(changes)} onClear={() => { changeSelection(new Set()); setRefocus((count) => count + 1); }} />} draftIds={draftConversationIds} />
       </section>
       <div className="conversation-center panel">
         <TimelinePanel conversation={selected} items={timeline} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}

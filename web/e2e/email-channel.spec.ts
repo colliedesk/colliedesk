@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test } from '@playwright/test';
-import { databaseURL, servers } from './support/cli';
+import { databaseURL, goEnv, servers } from './support/cli';
 
 const baseURL = servers.main;
 
@@ -13,7 +13,7 @@ test('connects email, receives a customer email and shows why the reply is not e
     cwd: '../server', encoding: 'utf8',
     env: {
       ...process.env, APP_ORIGIN: baseURL, DATABASE_URL: databaseURL,
-      GOPATH: '/tmp/colliedesk-gopath', GOMODCACHE: '/tmp/colliedesk-gopath/pkg/mod', GOCACHE: '/tmp/colliedesk-go-cache',
+      ...goEnv,
     },
   }).trim();
   await page.goto(pairingURL);

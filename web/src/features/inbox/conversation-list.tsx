@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef } from 'react';
-import type { Ref } from 'react';
+import type { ReactNode, Ref } from 'react';
 import type { Conversation } from '../../api/schemas';
 import { dayGroup, formatDate, formatShortDate } from '../../lib/format-date';
 import { useNow } from '../../lib/use-now';
@@ -31,6 +31,8 @@ interface ConversationListProps {
   onToggle?: (id: string) => void;
   onToggleAll?: (checked: boolean) => void;
   selectAllRef?: Ref<HTMLInputElement>;
+  // toolbar takes the place of the select all caption while rows are ticked.
+  toolbar?: ReactNode;
   // draftIds are the conversations with a reply draft an AI agent left for a person to send.
   draftIds?: ReadonlySet<string>;
 }
@@ -38,7 +40,7 @@ interface ConversationListProps {
 const visibleTags = 2;
 
 export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
-  failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef, draftIds }: ConversationListProps) {
+  failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds }: ConversationListProps) {
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
   const now = useNow(timezone);
   const settled = !loading && !failed;
@@ -75,10 +77,13 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
         <button type="button" onClick={() => onRetry?.()}>{messages.tryAgain}</button></div>}
       {items.length === 0 && !brandNew && settled && <div className="empty-copy"><p>{nothingOpen ? messages.noOpenConversations : messages.noConversations}</p>
         {filtered && onClearFilters && <button type="button" onClick={onClearFilters}>{messages.clearFilters}</button>}</div>}
-      {items.length > 0 && <label className="select-all">
-        <input type="checkbox" ref={setSelectAll} checked={allChecked} onChange={(event) => onToggleAll?.(event.target.checked)} />
-        <span>{messages.selectAllOnPage}</span>
-      </label>}
+      {items.length > 0 && <div className="select-all" data-active={toolbar ? true : undefined}>
+        <label>
+          <input type="checkbox" ref={setSelectAll} checked={allChecked} onChange={(event) => onToggleAll?.(event.target.checked)} />
+          <span className={toolbar ? 'sr-only' : undefined}>{messages.selectAllOnPage}</span>
+        </label>
+        {toolbar}
+      </div>}
       {items.map((item, index) => {
         const group = dayGroup(item.updated_at, timezone, now);
         const startsGroup = index === 0 || group !== dayGroup(items[index - 1].updated_at, timezone, now);

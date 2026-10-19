@@ -13,6 +13,8 @@ WORKDIR /src/server
 COPY server/go.mod server/go.sum ./
 RUN go mod download
 COPY server ./
+# Compile every dependency while the web stage builds; the final build reuses these packages.
+RUN CGO_ENABLED=0 go build -trimpath $(go list -e -deps -f '{{if and .Module (not .Module.Main)}}{{.ImportPath}}{{end}}' ./cmd/collie)
 COPY --from=web /src/server/internal/webui/static/build ./internal/webui/static/build
 ARG VERSION=dev
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-X main.version=${VERSION}" -o /out/collie ./cmd/collie

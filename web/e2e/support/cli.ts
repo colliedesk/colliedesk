@@ -14,8 +14,11 @@ export const servers = {
 export const databaseURL = process.env.TEST_DATABASE_URL
   ?? 'postgres://colliedesk:colliedesk@127.0.0.1:55441/colliedesk_test?sslmode=disable';
 
+// Scratch Go paths by default; CI exports the caches setup-go restored so the servers reuse them.
 export const goEnv = {
-  GOPATH: '/tmp/colliedesk-gopath', GOMODCACHE: '/tmp/colliedesk-gopath/pkg/mod', GOCACHE: '/tmp/colliedesk-go-cache',
+  GOPATH: process.env.GOPATH ?? '/tmp/colliedesk-gopath',
+  GOMODCACHE: process.env.GOMODCACHE ?? '/tmp/colliedesk-gopath/pkg/mod',
+  GOCACHE: process.env.GOCACHE ?? '/tmp/colliedesk-go-cache',
 };
 
 export const attachmentsDir = join(scratchDir, 'attachments');
