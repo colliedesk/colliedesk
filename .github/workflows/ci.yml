@@ -117,7 +117,7 @@ jobs:
         run: corepack pnpm exec playwright install chromium
       - name: Run end-to-end workflows
         working-directory: web
-        run: corepack pnpm exec vite build && corepack pnpm e2e --grep-invert @onboarding
+        run: corepack pnpm exec vite build && corepack pnpm e2e --grep-invert @onboarding --fully-parallel --workers=3
   # The customer onboarding journeys listed in AGENTS.md. A separate job so they run in parallel
   # with the other end-to-end tests; every test runs in exactly one of the two jobs.
   onboarding:
