@@ -17,29 +17,43 @@ type Identity = {
 type Client = Pick<PostHog, 'init' | 'identify' | 'register'>;
 export type PostHogLoader = () => Promise<Client>;
 
-const loadPostHog: PostHogLoader = async () => (await import('posthog-js')).default;
+// The no-external build never loads a script from PostHog's CDN into a page that shows customers'
+// conversations. Its extensions (error capture, replay) are left out, which keeps the chunk small.
+const loadPostHog: PostHogLoader = async () => (await import('posthog-js/no-external')).default;
 
-const URL_PROPERTIES = ['$current_url', '$referrer', '$initial_current_url', '$initial_referrer'];
+const URL_PROPERTIES = ['$current_url', '$referrer', '$initial_current_url', '$initial_referrer',
+  '$session_entry_url', '$session_entry_referrer'];
 
-// scrubEvent removes what could carry a customer's words: a search query, a fragment, a page title.
-export function scrubEvent(event: CaptureResult | null): CaptureResult | null {
-  if (!event) return event;
-  const properties = { ...event.properties };
+// cleanURLs drops the query and fragment of every URL property; an unparsable one is dropped whole.
+function cleanURLs(properties: Record<string, unknown>): Record<string, unknown> {
+  const cleaned = { ...properties };
   for (const key of URL_PROPERTIES) {
-    const value = properties[key];
+    const value = cleaned[key];
     if (typeof value !== 'string') continue;
     try {
       const url = new URL(value);
       url.search = '';
       url.hash = '';
-      properties[key] = url.toString();
+      cleaned[key] = url.toString();
     } catch {
-      delete properties[key];
+      delete cleaned[key];
     }
+  }
+  return cleaned;
+}
+
+// scrubEvent removes what could carry a customer's words: a search query, a fragment, a page title,
+// on the event and on the person properties PostHog keeps ($set, $set_once).
+export function scrubEvent(event: CaptureResult | null): CaptureResult | null {
+  if (!event) return event;
+  const properties = cleanURLs(event.properties ?? {});
+  for (const key of ['$set', '$set_once']) {
+    const nested = properties[key];
+    if (nested && typeof nested === 'object') properties[key] = cleanURLs(nested as Record<string, unknown>);
   }
   delete properties.title;
   delete properties.$title;
-  return { ...event, properties };
+  return { ...event, properties } as CaptureResult;
 }
 
 function options(host: string): Partial<PostHogConfig> {
@@ -54,7 +68,12 @@ function options(host: string): Partial<PostHogConfig> {
     mask_all_text: true,
     mask_all_element_attributes: true,
     capture_pageview: 'history_change',
-    capture_exceptions: true,
+    // Fixed here so a switch flipped in PostHog's project settings cannot widen what is sent.
+    disable_capture_url_hashes: true,
+    capture_heatmaps: false,
+    capture_dead_clicks: false,
+    capture_performance: false,
+    disable_external_dependency_loading: true,
     before_send: scrubEvent,
   };
 }

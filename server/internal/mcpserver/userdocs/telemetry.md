@@ -67,19 +67,19 @@ The workspace id is a random UUID. The events never carry the email address of t
 signed up, the workspace name or its address. They are sent in the background; a failure is logged
 as `funnel event not sent` and changes nothing in the workspace.
 
-## Colliedesk Cloud only: how the web app is used
+## How the web app is used
 
-On Colliedesk Cloud the web app also reports which screens agents open and which buttons they
-click, so the team can see what is used and what is confusing. `GET /api/v1/config` turns this on
-(`product_analytics.enabled`); a self-hosted server always answers `false` and its web app never
-loads the analytics library. `DISABLE_TELEMETRY` and `DO_NOT_TRACK` turn it off on the cloud too.
+The web app also reports which screens agents open and which buttons they click, so the team can
+see what is used and what is confusing. It is on by default, on Colliedesk Cloud and self-hosted
+alike, and the same switch as the usage report turns it off: set `DISABLE_TELEMETRY=true` (or
+`DO_NOT_TRACK=1`) and `GET /api/v1/config` answers `product_analytics.enabled: false`, so the web app
+never loads the analytics library. Every event carries `realm` (`cloud` or `self-hosted`).
 
 - The agent is named by their random agent id, with their role (`admin` or `agent`); the workspace
   id and plan come along. Never an email address or a name.
 - Every element's text and attributes are masked, so no conversation, message, contact or form
   content is sent. URLs are sent without their query string or fragment, and page titles are dropped.
 - Nothing is stored in the browser for it (no cookie, no local storage), and no session is recorded.
-- JavaScript errors in the app are reported with their message and the page address.
 
 ## Where it goes
 

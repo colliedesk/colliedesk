@@ -80,7 +80,6 @@ never loads the analytics library. Every event carries `realm` (`cloud` or `self
 - Every element's text and attributes are masked, so no conversation, message, contact or form
   content is sent. URLs are sent without their query string or fragment, and page titles are dropped.
 - Nothing is stored in the browser for it (no cookie, no local storage), and no session is recorded.
-- JavaScript errors in the app are reported with their message and the page address.
 
 ## Where it goes
 

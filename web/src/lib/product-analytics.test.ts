@@ -35,6 +35,12 @@ describe('startProductAnalytics', () => {
       disable_session_recording: true,
       mask_all_text: true,
       mask_all_element_attributes: true,
+      // A switch flipped in PostHog's settings must not widen what the app sends.
+      disable_capture_url_hashes: true,
+      capture_heatmaps: false,
+      capture_dead_clicks: false,
+      capture_performance: false,
+      disable_external_dependency_loading: true,
     });
     expect(posthog.identify).toHaveBeenCalledWith('0b8f7a52-1d2c-4a8e-9b1a-5f2c1e7d9a10', { role: 'admin' });
     expect(posthog.register).toHaveBeenCalledWith({ realm: 'self-hosted', workspace_id: '5c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f', plan: 'trial' });
@@ -65,5 +71,24 @@ describe('scrubEvent', () => {
       },
     });
     expect(event?.properties).toEqual({ $current_url: 'https://app.colliedesk.com/', $referrer: 'https://app.colliedesk.com/settings', $pathname: '/' });
+  });
+
+  it('cleans the URLs PostHog keeps on the person and the session too', () => {
+    const event = scrubEvent({
+      uuid: '01a1524f-3bd0-7b2b-b2fd-edb4cf9852dd',
+      event: '$identify',
+      properties: {
+        $session_entry_url: 'https://app.colliedesk.com/?q=ada%40customer.example.com',
+        $session_entry_referrer: 'https://colliedesk.com/pricing?utm_source=hn#plans',
+        $set_once: { $initial_current_url: 'https://app.colliedesk.com/?q=ada%40customer.example.com', $initial_referrer: 'https://x.example/?ref=1' },
+        $set: { $current_url: 'https://app.colliedesk.com/#c1', role: 'admin' },
+      },
+    });
+    expect(event?.properties).toEqual({
+      $session_entry_url: 'https://app.colliedesk.com/',
+      $session_entry_referrer: 'https://colliedesk.com/pricing',
+      $set_once: { $initial_current_url: 'https://app.colliedesk.com/', $initial_referrer: 'https://x.example/' },
+      $set: { $current_url: 'https://app.colliedesk.com/', role: 'admin' },
+    });
   });
 });
