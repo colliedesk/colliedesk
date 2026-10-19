@@ -1,7 +1,9 @@
 package httpapi_test
 
 import (
+	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sync"
 	"testing"
@@ -92,5 +94,58 @@ func TestSubscriptionWithoutWorkspaceRecordsNothing(t *testing.T) {
 
 	if events := funnel.recorded(); len(events) != 0 {
 		t.Fatalf("events=%+v, want none for a payment that matches no workspace", events)
+	}
+}
+
+// websiteCookie is the cookie colliedesk.com's PostHog sets on .colliedesk.com once a visitor
+// accepts cookies; the app's requests carry it. Its value is URL-encoded JSON.
+const websiteCookie = "ph_phc_zDJPtLCpaVyUQg2BbFoLMrzmfQBsfLg6vEJfsTtjyQ3N_posthog"
+
+func (f signupFixture) signUpWithCookies(t *testing.T, email, name string, cookies ...*http.Cookie) {
+	t.Helper()
+	req := newRequest(t, http.MethodPost, "/api/v1/auth/cloud/signup", map[string]any{"workspace_name": name}, f.token(t, map[string]any{"email": email}), nil)
+	req.Header.Set("Origin", testOrigin)
+	req.RemoteAddr = defaultPeer
+	for _, cookie := range cookies {
+		req.AddCookie(cookie)
+	}
+	wantResponse(t, serve(f.api, req), http.StatusCreated, "")
+}
+
+func TestCloudSignupLinksTrialToTheWebsiteVisitorWhoAcceptedCookies(t *testing.T) {
+	funnel := &recordingFunnel{}
+	f := newSignupFixture(t, func(config *httpapi.Config) { config.Funnel = funnel })
+
+	value := url.QueryEscape(`{"distinct_id":"01a1524f-3bd0-7b2b-b2fd-edb4cf9852dc","$sesid":[1760846400000,"01a1524f-3bd0-7b2b-b2fd-edb4cf9852dd",1760846400000],"$epp":true}`)
+	f.signUpWithCookies(t, "owner@visitor-acme.example.com", "Visitor Acme", &http.Cookie{Name: websiteCookie, Value: value})
+
+	events := funnel.recorded()
+	if len(events) != 1 || events[0].Properties["website_visitor_id"] != "01a1524f-3bd0-7b2b-b2fd-edb4cf9852dc" {
+		t.Fatalf("events=%+v, want trial_started with website_visitor_id from the website cookie", events)
+	}
+	if len(events[0].Properties) != 1 {
+		t.Fatalf("properties=%v, want only website_visitor_id", events[0].Properties)
+	}
+}
+
+func TestCloudSignupIgnoresAWebsiteCookieWithoutAVisitorID(t *testing.T) {
+	cases := map[string]*http.Cookie{
+		"cookieless sentinel": {Name: websiteCookie, Value: url.QueryEscape(`{"distinct_id":"$posthog_cookieless"}`)},
+		"not json":            {Name: websiteCookie, Value: "not-json"},
+		"an email as id":      {Name: websiteCookie, Value: url.QueryEscape(`{"distinct_id":"ada@example.com"}`)},
+		"another project":     {Name: "ph_phc_other_posthog", Value: url.QueryEscape(`{"distinct_id":"01a1524f-3bd0-7b2b-b2fd-edb4cf9852dc"}`)},
+	}
+	index := 0
+	for name, cookie := range cases {
+		t.Run(name, func(t *testing.T) {
+			index++
+			funnel := &recordingFunnel{}
+			f := newSignupFixture(t, func(config *httpapi.Config) { config.Funnel = funnel })
+			f.signUpWithCookies(t, fmt.Sprintf("owner%d@cookie-acme.example.com", index), fmt.Sprintf("Cookie Acme %d", index), cookie)
+			events := funnel.recorded()
+			if len(events) != 1 || len(events[0].Properties) != 0 {
+				t.Fatalf("events=%+v, want trial_started without properties", events)
+			}
+		})
 	}
 }

@@ -57,7 +57,7 @@ them; `DISABLE_TELEMETRY` and `DO_NOT_TRACK` turn them off too.
 
 | Event | When | Fields |
 |---|---|---|
-| `trial_started` | A cloud sign-up creates a workspace and signs its admin in | `distinct_id` = the workspace id, `realm`, `version` |
+| `trial_started` | A cloud sign-up creates a workspace and signs its admin in | `distinct_id` = the workspace id, `realm`, `version`, and `website_visitor_id` when the browser has the colliedesk.com analytics cookie (set only after the person accepted cookies on the website): the random id PostHog gave that visit, so the team can see which page led to the trial |
 | `subscription_activated` | A workspace becomes a paying customer for the first time (its first `subscription.active` from Polar). A redelivered webhook, a past_due subscription paid again and a later plan change are not counted again | `distinct_id` = the workspace id, `plan` (`team`, `team25` or `founding`), `realm`, `version` |
 
 The workspace id is a random UUID. The events never carry the email address of the person who
