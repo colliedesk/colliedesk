@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 // ProxyPath is the API route that serves a remote image of a message on the viewer's behalf.
@@ -46,36 +47,50 @@ func (s *Signer) Path(workspaceID, rawURL string) string {
 	return ProxyPath + "?u=" + url.QueryEscape(rawURL) + "&s=" + s.Sign(workspaceID, rawURL)
 }
 
-// Rewrite points every remote (http, https or protocol-relative) <img src> at the proxy, up to
-// MaxImagesPerMessage distinct addresses; a further one gets an empty src. data:, cid:, relative and
-// every other source stay as written. srcset is removed from every <img>: the viewer shows the src, and a
-// candidate list would load around the proxy.
+// Rewrite points every remote image of the message at the proxy, up to MaxImagesPerMessage distinct
+// addresses in all (a further one gets an empty address and loads nothing): the http, https or
+// protocol-relative <img src>, and every url() in a style attribute or <style> block (background,
+// list-style-image, border-image, content, image-set). data:, cid:, relative and every other source stay as
+// written. srcset is removed from every <img>: the viewer shows the src, and a candidate list would load
+// around the proxy. @import is dropped from CSS.
 func (s *Signer) Rewrite(workspaceID, markup string) string {
 	seen := map[string]bool{}
-	return mapImgTags(markup, func(tag *html.Token) {
-		kept := tag.Attr[:0]
-		for _, attribute := range tag.Attr {
-			if attribute.Key != "srcset" {
-				kept = append(kept, attribute)
+	// image gives the proxy path of one address, or "" when the message is past its limit.
+	image := func(address string) string {
+		if !seen[address] && len(seen) >= MaxImagesPerMessage {
+			return ""
+		}
+		seen[address] = true
+		return s.Path(workspaceID, address)
+	}
+	return mapMarkup(markup, func(tag *html.Token) bool {
+		changed := false
+		if tag.DataAtom == atom.Img {
+			changed = true
+			kept := tag.Attr[:0]
+			for _, attribute := range tag.Attr {
+				if attribute.Key != "srcset" {
+					kept = append(kept, attribute)
+				}
+			}
+			tag.Attr = kept
+			for i, attribute := range tag.Attr {
+				if attribute.Key != "src" {
+					continue
+				}
+				if u, ok := ParseSrc(attribute.Val); ok {
+					tag.Attr[i].Val = image(u.String())
+				}
+				break
 			}
 		}
-		tag.Attr = kept
 		for i, attribute := range tag.Attr {
-			if attribute.Key != "src" {
-				continue
+			if attribute.Key == "style" {
+				if rewritten := rewriteCSS(attribute.Val, image); rewritten != attribute.Val {
+					tag.Attr[i].Val, changed = rewritten, true
+				}
 			}
-			u, ok := ParseSrc(attribute.Val)
-			if !ok {
-				return
-			}
-			address := u.String()
-			if !seen[address] && len(seen) >= MaxImagesPerMessage {
-				tag.Attr[i].Val = ""
-				return
-			}
-			seen[address] = true
-			tag.Attr[i].Val = s.Path(workspaceID, address)
-			return
 		}
-	})
+		return changed
+	}, func(css string) string { return rewriteCSS(css, image) })
 }

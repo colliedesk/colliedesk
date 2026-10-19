@@ -45,6 +45,41 @@ func mapImgTags(markup string, fn func(tag *html.Token)) string {
 	}
 }
 
+// mapMarkup is mapImgTags for the whole message: tagFn may change any start tag (it reports whether it did,
+// and only a changed tag is written back from its attributes), and styleFn rewrites the text of every <style>
+// block. Everything else is copied as it was. When the tokenizer fails the markup is returned unchanged.
+func mapMarkup(markup string, tagFn func(tag *html.Token) bool, styleFn func(css string) string) string {
+	tokenizer := html.NewTokenizer(strings.NewReader(markup))
+	var out strings.Builder
+	out.Grow(len(markup))
+	inStyle := false
+	for {
+		kind := tokenizer.Next()
+		if kind == html.ErrorToken {
+			if !errors.Is(tokenizer.Err(), io.EOF) {
+				return markup
+			}
+			return out.String()
+		}
+		raw := tokenizer.Raw()
+		switch {
+		case kind == html.TextToken && inStyle:
+			out.WriteString(styleFn(string(raw)))
+			continue
+		case kind == html.EndTagToken:
+			inStyle = false
+		case kind == html.StartTagToken || kind == html.SelfClosingTagToken:
+			tag := tokenizer.Token()
+			inStyle = kind == html.StartTagToken && tag.DataAtom == atom.Style
+			if tagFn(&tag) {
+				out.WriteString(tag.String())
+				continue
+			}
+		}
+		out.Write(raw)
+	}
+}
+
 // MapSources rewrites the src of every <img>. fn gets the attribute value (HTML entities decoded) and
 // returns the new value, or false to leave the tag as written. The new value is escaped.
 func MapSources(markup string, fn func(src string) (string, bool)) string {

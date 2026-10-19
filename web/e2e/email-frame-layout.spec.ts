@@ -94,3 +94,17 @@ test('email frame: text with line breaks shows as lines', async ({ page }) => {
   });
   expect(lines).toBeGreaterThanOrEqual(4);
 });
+
+// A brand logo is often a CSS background, not an <img>. It goes through the proxy like any other image, and the
+// browser never tries to reach the sender itself (not even to be blocked).
+test('email frame: CSS background images are fetched through the proxy, never directly from the sender', async ({ page }) => {
+  const requests: string[] = [];
+  page.on('request', (request) => requests.push(request.url()));
+  await deskWithMail(page, 'CSS logo', '<style>@import url(https://css-host.invalid/x.css);.hero{background-image:url("https://cdn.invalid/hero.png")}</style>'
+    + '<table><tr><td class="hero" style="background:url(https://logo-host.invalid/logo.png) no-repeat" width="80" height="40">x</td></tr></table><p>text</p>');
+  await page.waitForTimeout(2000);
+  const direct = requests.filter((url) => new URL(url).hostname.endsWith('.invalid'));
+  expect(direct, 'the browser tried to reach the sender').toEqual([]);
+  const proxied = requests.filter((url) => new URL(url).pathname === '/api/v1/mail-image');
+  expect(proxied.length).toBeGreaterThanOrEqual(2);
+});
