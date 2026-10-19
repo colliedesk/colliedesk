@@ -63,6 +63,30 @@ them; `DISABLE_TELEMETRY` and `DO_NOT_TRACK` turn them off too.
 | `teammate_invited` | An admin invites a teammate | `distinct_id` = the workspace id, `realm`, `version` (never the invited address) |
 | `subscription_activated` | A workspace becomes a paying customer for the first time (its first `subscription.active` from Polar). A redelivered webhook, a past_due subscription paid again and a later plan change are not counted again | `distinct_id` = the workspace id, `plan` (`team`, `team25` or `founding`), `realm`, `version` |
 
+Once a day, with the instance heartbeat, Colliedesk Cloud also sends one `workspace_snapshot` event
+per workspace, so the team can see how each customer is doing. Only counts and plan names:
+`distinct_id` = the workspace id, `realm`, `version`, and these fields (never a name, address,
+email or any text):
+
+| Field | Example | Meaning |
+|---|---|---|
+| `plan` | `trial` | `trial`, `team`, `team25`, `founding` or `none` (trial over, no paid plan), the same plan the billing page shows |
+| `trial_days_left` | `6` | Days left of the trial, rounded up; empty unless `plan` is `trial` |
+| `days_since_created` | `10` | Whole days since the workspace was created |
+| `agents_total` | `2` | Agents that are not deactivated |
+| `agents_active_7d`, `agents_active_30d` | `2`, `2` | Agents who signed in (used a session) in the last 7 or 30 days. Agent tokens do not count: a token working is not a person signing in. This differs from the `agents_active_30d` of the instance heartbeat above, which counts every session, tokens included, across all workspaces |
+| `replies_7d`, `replies_30d` | `1`, `2` | Replies sent from Colliedesk in the last 7 or 30 days (notes and imported replies not counted) |
+| `ai_agent_replies_7d` | `1` | Of the replies in the last 7 days, those written with an agent token |
+| `conversations_open` | `1` | Conversations with status `open` |
+| `conversations_created_7d` | `1` | Conversations created in the last 7 days |
+| `email_channel` | `false` | Whether the workspace has an email channel |
+| `web_form` | `true` | Whether the workspace has the web form on |
+| `tokens_active` | `1` | Agent tokens that are not revoked or expired |
+| `freshdesk_import` | `true` | Whether the workspace has records of a Freshdesk import |
+
+Each batch sent is logged as `workspace snapshots sent`. A failed send is logged as `usage report
+not sent` and never stops the server; the day's report is not retried.
+
 The workspace id is a random UUID. The events never carry the email address of the person who
 signed up, the workspace name or its address. They are sent in the background; a failure is logged
 as `funnel event not sent` and changes nothing in the workspace.
@@ -96,5 +120,5 @@ report" in the subject. The id is in the `install_id` of the `usage report sent`
 docker compose logs server | grep 'usage report sent'
 ```
 
-The code is in `server/internal/telemetry/`. The counts come from one SQL query in `usage.go`;
+The code is in `server/internal/telemetry/`. The counts come from SQL in `usage.go` and, for the workspace snapshots, `snapshot.go`;
 read it to check this page.

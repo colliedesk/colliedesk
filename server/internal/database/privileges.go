@@ -45,8 +45,9 @@ const (
 	// email provider, for workspaces that no longer use them or no longer exist, and releases provider domains that stayed unverified for a week.
 	PrivilegeProviderDomainSweep Privilege = "provider-domain-sweep"
 	// PrivilegeTelemetry claims the install's daily usage report in the platform-level instance
-	// table and reads instance-wide counts (workspaces, active agents, replies, channels in use).
-	// Only aggregates leave the transaction, never row content.
+	// table and reads instance-wide counts (workspaces, active agents, replies, channels in use) and,
+	// on Colliedesk Cloud, the same counts per workspace id. Only aggregates leave the transaction,
+	// never row content.
 	PrivilegeTelemetry Privilege = "telemetry"
 	// PrivilegeServerSecret reads and first creates the secrets every server process shares (the image
 	// proxy's signing key) in server_secrets, which has no workspace and no grant to the app role.
