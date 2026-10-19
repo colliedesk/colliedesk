@@ -40,7 +40,7 @@ test('selects conversations with the keyboard and resolves them in one action', 
   await page.keyboard.press('Space');
   const bar = page.getByRole('group', { name: 'Bulk actions' });
   await expect(bar.getByText('2 selected')).toBeVisible();
-  await bar.getByText('Set status', { exact: true }).focus();
+  await bar.getByLabel('Set status', { exact: true }).and(page.locator('summary')).focus();
   await page.keyboard.press('Enter');
   await page.keyboard.press('Tab'); // Open
   await page.keyboard.press('Tab'); // Pending
