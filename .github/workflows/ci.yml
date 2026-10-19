@@ -128,9 +128,9 @@ jobs:
           # Import journeys take about as long as all other onboarding journeys.
           # Complementary lookaheads cover every @onboarding test exactly once.
           - journey: import
-            pattern: '(?=.*@onboarding)(?=.*freshdesk import:)'
+            pattern: '^(?=.*@onboarding)(?=.*freshdesk import:)'
           - journey: other
-            pattern: '(?=.*@onboarding)(?!.*freshdesk import:)'
+            pattern: '^(?=.*@onboarding)(?!.*freshdesk import:)'
     runs-on: ubuntu-latest
     timeout-minutes: 2
     services:

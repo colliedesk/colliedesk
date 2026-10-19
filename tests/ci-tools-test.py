@@ -53,6 +53,21 @@ class Shards(unittest.TestCase):
         self.assertIsNone(re.search(result.stdout.strip(), 'TestOnly'))
 
 
+class Onboarding(unittest.TestCase):
+    def test_title_filters_partition_every_onboarding_journey(self):
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
+        patterns = re.findall(r"pattern: '([^']+)'", workflow)
+        self.assertEqual(len(patterns), 2)
+        for title, expected in [
+            ('e2e/import.spec.ts freshdesk import: reconcile counts @onboarding', [True, False]),
+            ('e2e/signup.spec.ts cloud signup @onboarding', [False, True]),
+            ('future journey @onboarding', [False, True]),
+            ('freshdesk import: future journey @onboarding', [True, False]),
+            ('ordinary browser test', [False, False]),
+        ]:
+            self.assertEqual([bool(re.search(p, title)) for p in patterns], expected, title)
+
+
 class Budget(unittest.TestCase):
     def test_queue_time_counts_toward_the_120_second_limit(self):
         for now, expected in [('2026-10-19T13:01:59Z', 0), ('2026-10-19T13:02:00Z', 0),
