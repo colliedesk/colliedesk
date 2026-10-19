@@ -35,7 +35,7 @@ forgets it.
   *Submit* on GitHub yourself, or you do not.
 - **Your own support desk (self-hosted):** the server operator can send reports from every other
   workspace to one workspace on the same server, as conversations tagged `problem-report`; see
-  [problem reports](../self-host/configuration.md#problem-reports).
+  [problem reports](../self-host/environment-variables.md#problem-reports).
 
 An agent may send 5 reports an hour. The 6th is refused until an hour has passed.
 

@@ -26,7 +26,7 @@ every agent.
 
 Create a token with `POST /api/v1/auth/tokens` and a body such as
 `{"label": "Claude Code", "scope": "draft"}`. On your own server you can also use the
-[command line](../self-host/configuration.md#agent-tokens-from-the-command-line). Settings has no
+[command line](../self-host/troubleshooting.md#create-an-agent-token-from-the-command-line). Settings has no
 button for it yet. The token is shown once and cannot be recovered. If you lose
 it, create a new token and revoke the old one. The agent sends it as `Authorization: Bearer <token>`.
 

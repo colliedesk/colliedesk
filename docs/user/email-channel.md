@@ -6,7 +6,7 @@ the customer by email. Private notes are never emailed.
 
 On Colliedesk Cloud every workspace has a ready-made address; you only forward your mailbox to it.
 On your own server, the person who runs it first connects a mail forwarder and an SMTP relay: see
-[email on your server](../self-host/email.md).
+[configuring email](../self-host/email.md).
 
 ## Colliedesk Cloud: forward to your address
 
@@ -75,7 +75,7 @@ address until you verify it again.
 3. Select **Verify domain**. DNS changes can take a few minutes; try again if it fails.
 
 A server whose operator owns the relay may skip verification and send every reply as the support
-address (see [email on your server](../self-host/email.md#1-configure-the-server)).
+address (see [configuring email](../self-host/email.md#1-configure-the-server)).
 
 Changing the support address resets verification. With a TXT record it also creates a new value; with Resend the same domain keeps its records and a new domain gets its own list.
 

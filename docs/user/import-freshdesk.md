@@ -68,7 +68,7 @@ responses; if Freshdesk refuses them, the report says so and the status is `UNVE
 ## Before you start
 
 1. Create the Colliedesk workspace (on your own server, see
-   [install](../self-host/install.md)).
+   [self-host](../self-host/README.md)).
 2. Invite your team first. Replies by an agent link to that agent only when a Colliedesk agent
    with the same email exists.
 3. Get a Freshdesk API key from an **admin** account with access to all tickets. The import reads

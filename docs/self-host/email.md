@@ -1,4 +1,4 @@
-# Email on your server
+# Configuring email
 
 This page sets up the [email channel](../user/email-channel.md) on a server you run. On Colliedesk
 Cloud none of it is needed: every workspace already has a forwarding address.

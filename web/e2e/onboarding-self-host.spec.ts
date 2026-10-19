@@ -4,7 +4,7 @@ import { colliedesk, databaseURL, mustColliedesk, psql, startServer, stopServer,
 import { ports } from './support/checkout';
 import { appNavigationWith, expectReadablePage, redeemLink } from './support/browser';
 
-// Journey 1: a self-hoster follows docs/self-host/install.md "From a clone" on an empty database.
+// Journey 1: a self-hoster follows docs/self-host/README.md "From a clone" on an empty database.
 const port = ports.fresh;
 const origin = `http://localhost:${port}`;
 const database = `colliedesk_onboard_fresh_${process.pid}`;

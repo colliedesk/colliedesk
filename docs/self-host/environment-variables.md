@@ -1,4 +1,4 @@
-# Configuration
+# Environment variables
 
 The server reads its settings from environment variables. With the installer, add a variable to
 `.env` next to `compose.yaml`, then run `docker compose up -d`. From a clone, set it in the `server`
@@ -9,32 +9,14 @@ service of `compose.yaml`.
 | Variable | Default | Meaning |
 |---|---|---|
 | `APP_ORIGIN` | `http://localhost:8080` | Public address of the server, with scheme. Sign-in links and email use it. |
-| `DATABASE_URL` | set by the installer | PostgreSQL connection that owns the data and runs migrations. See [back up and database](database.md). |
-| `DATABASE_REQUEST_URL` | set by the installer | PostgreSQL connection that serves requests. See [back up and database](database.md#database-requirements-and-hardening). |
+| `DATABASE_URL` | set by the installer | PostgreSQL connection that owns the data and runs migrations. See [backups and database](database.md). |
+| `DATABASE_REQUEST_URL` | set by the installer | PostgreSQL connection that serves requests. See [backups and database](database.md#database-requirements-and-hardening). |
 | `ATTACHMENTS_DIR` | `/data/attachments` in the compose files | Where attachment files are stored. Keep it on a volume. |
-| `TRUSTED_PROXIES` | loopback and the Docker bridge range | Proxies whose `X-Forwarded-For` the server trusts. See [reverse proxy](#reverse-proxy). |
+| `TRUSTED_PROXIES` | loopback and the Docker bridge range | Proxies whose `X-Forwarded-For` the server trusts. See [running behind a proxy](running-behind-proxy.md). |
 | `DISABLE_TELEMETRY`, `DO_NOT_TRACK` | empty | Turn off the usage report and product analytics. See [usage report](#usage-report). |
+| `COLLIE_DESK_IMAGE` | set by the installer | Image the installer's `compose.yaml` runs. See [upgrading](README.md#upgrading). |
 | `PROBLEM_REPORT_WORKSPACE` | empty | Send problem reports to a workspace on this server. See [problem reports](#problem-reports). |
-| `SMTP_*`, `EMAIL_FROM_POLICY`, `MAIL_FROM_*`, `EMAIL_TRUSTED_AUTHSERV_ID` | | Outgoing and incoming email. See [email on your server](email.md). |
-
-## Reverse proxy
-
-Behind a reverse proxy, Colliedesk must know the proxy to read the visitor's address from
-`X-Forwarded-For`. Rate limits, for example those of the [web form](../user/web-form.md), count per
-visitor address.
-
-The server trusts **no** proxy unless `TRUSTED_PROXIES` names one, whether the variable is unset or
-empty. The shipped `compose.yaml` and installer file set it to loopback and the Docker bridge range
-(`127.0.0.0/8,::1/128,172.16.0.0/12`) when you do not, which fits a proxy on the same host. For
-another setup, set it to your proxy's addresses or ranges, comma separated, for example
-`TRUSTED_PROXIES=10.0.0.5,10.1.0.0/16`. With no trusted proxy the server logs a warning at startup,
-and behind a proxy every visitor counts as the proxy and shares one limit.
-
-**Warning:** do not publish the server port on `0.0.0.0` (or any public address) without a proxy
-in front while the compose default is active. A client inside a trusted range, or one that
-reaches the server directly through Docker's bridge, could then send a fake `X-Forwarded-For` and
-pick its own address for the limits. The shipped files publish on `127.0.0.1` only. If you
-expose the port directly, set `TRUSTED_PROXIES=` (empty).
+| `SMTP_*`, `EMAIL_FROM_POLICY`, `MAIL_FROM_*`, `EMAIL_TRUSTED_AUTHSERV_ID` | | Outgoing and incoming email. See [configuring email](email.md). |
 
 ## Usage report
 
@@ -70,13 +52,3 @@ set `PROBLEM_REPORT_WORKSPACE` to the address (slug) of a workspace on the same 
 Reports from every other workspace on that server then arrive there as conversations tagged
 `problem-report`. The installer's `compose.yaml` does not pass this variable: add it to the
 `environment` of the `server` service.
-
-## Agent tokens from the command line
-
-Besides the API described in [sessions and devices](../user/sessions.md#agent-tokens), you can
-create an agent token on the server:
-
-```sh
-docker compose exec server /app/collie token create \
-  --workspace <slug> --email you@example.com --scope draft --label "Claude Code"
-```

@@ -65,7 +65,7 @@ Answers:
   spam never blocks incoming mail. The per-address counts live in the server process: a restart
   clears them.
 - The limits count per visitor address. On your own server behind a reverse proxy, the server must
-  trust that proxy to read the address; see [reverse proxy](../self-host/configuration.md#reverse-proxy).
+  trust that proxy to read the address; see [running behind a proxy](../self-host/running-behind-proxy.md).
 - Extra fields in the JSON body, such as `name`, are ignored.
 - Answers to a request that is refused before the form is found (too many requests from one
   address) carry no CORS permission on purpose (the origin list is not known yet and the server never echoes

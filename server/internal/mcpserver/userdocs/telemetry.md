@@ -11,7 +11,7 @@ The report is on by default. You can turn it off at any time.
 ## Turn it off
 
 The person who runs the server turns it off with `DISABLE_TELEMETRY=true` (or `DO_NOT_TRACK=1`) in
-the server environment; see [usage report settings](../self-host/configuration.md#usage-report).
+the server environment; see [usage report settings](../self-host/environment-variables.md#usage-report).
 Development builds never send the report.
 
 ## What is sent
@@ -130,7 +130,7 @@ after deriving a country. The project key in the code can add events but cannot 
 Anyone can send events with a public key, so we treat the reports as estimates.
 
 To have the reports of your install deleted, send its id to support@colliedesk.com with "Usage
-report" in the subject. [Usage report settings](../self-host/configuration.md#usage-report) shows
+report" in the subject. [Usage report settings](../self-host/environment-variables.md#usage-report) shows
 where to find the id.
 
 The code is in `server/internal/telemetry/`. The counts come from SQL in `usage.go` and, for the workspace snapshots, `snapshot.go`;

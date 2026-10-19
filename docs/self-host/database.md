@@ -1,4 +1,4 @@
-# Back up and database
+# Backups and database
 
 Colliedesk keeps its data in PostgreSQL and in a directory of attachment files. This page covers
 backups, database requirements and the database users.

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds the repository's own compose.yaml ("From a clone" in docs/self-host/install.md), starts it and
+# Builds the repository's own compose.yaml ("From a clone" in docs/self-host/README.md), starts it and
 # proves the server answers. Needs Docker with Compose v2 and curl:
 #   sh tests/compose-smoke.sh
 set -eu
