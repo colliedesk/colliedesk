@@ -22,10 +22,10 @@ h1, h2, h3 { text-wrap: balance; }
 p { text-wrap: pretty; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-/* Focus: an amber ring with a 2 px gap, so it never touches a primary button (amber on blue is 1.36:1). */
+/* Focus: an amber ring with a 2 px gap, so it never touches a primary button. */
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
-input, select, textarea {
+input:where(:not([type="checkbox"]):not([type="radio"])), select, textarea {
   min-height: var(--control, 32px); border: 1px solid var(--line-strong); border-radius: var(--radius);
   background: var(--surface-1); padding: 0 var(--space-3); transition: border-color var(--dur-fast) var(--ease);
 }
@@ -33,13 +33,24 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 textarea { padding: var(--space-2) var(--space-3); }
 select {
   appearance: none; padding-right: var(--space-8); cursor: pointer;
-  background: var(--surface-1) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%236b778b' stroke-width='2' stroke-linecap='round' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;
+  /* The two halves of the chevron use the same neutral token in either theme. */
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-3) 50%), linear-gradient(135deg, var(--text-3) 50%, transparent 50%);
+  background-position: right 16px center, right 10px center;
+  background-size: 6px 6px; background-repeat: no-repeat;
 }
+select[multiple], select[size]:not([size="1"]) { background-image: none; padding-right: var(--space-3); }
 option { background: var(--surface-1); color: var(--text-1); }
-input:hover, select:hover, textarea:hover { border-color: var(--text-3); }
+input:hover:not(:disabled), select:hover:not(:disabled), textarea:hover:not(:disabled) { border-color: var(--text-3); }
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-color: var(--line-strong); }
 input[readonly] { background: var(--surface-0); color: var(--text-2); font-family: var(--font-mono); font-size: var(--fs-label); }
-input:disabled, select:disabled, textarea:disabled { background: var(--surface-0); cursor: not-allowed; }
+input:disabled, select:disabled, textarea:disabled { background-color: var(--surface-0); color: var(--text-3); cursor: not-allowed; }
+/* Keep the browser's check, mixed mark and radio dot, including forced-colour rendering. */
+input:where([type="checkbox"], [type="radio"]) {
+  width: var(--space-4); height: var(--space-4); min-height: 0; margin: 0; padding: 0;
+  flex: none; accent-color: var(--accent); cursor: pointer;
+}
+input:where([type="checkbox"], [type="radio"]):disabled { cursor: not-allowed; }
+@media (forced-colors: active) { select { appearance: auto; background-image: none; } }
 
 /* Buttons: Plex Sans, sentence case. Three shapes: primary, secondary (the default), danger.
    Mono is kept for code, IDs, timestamps and keycaps only. */
@@ -81,8 +92,7 @@ html[data-tips-off] [data-tip]::after { opacity: 0; }
 
 .field { display: grid; align-content: start; gap: var(--space-1); }
 .field-inline { display: flex; align-items: center; gap: var(--space-2); width: fit-content; cursor: pointer; }
-.field-inline input { width: 16px; height: 16px; min-height: 0; margin: 0; flex: none; accent-color: var(--accent); cursor: pointer; }
-.field-inline:has(input:disabled) { cursor: not-allowed; opacity: 0.6; }
+.field-inline:has(input:disabled) { cursor: not-allowed; color: var(--text-3); }
 .input-with-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .input-with-actions input { flex: 1 1 14rem; min-width: 0; }
 .field > span:first-child, legend, .field-label { color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
