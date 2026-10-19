@@ -108,3 +108,11 @@ test('email frame: CSS background images are fetched through the proxy, never di
   const proxied = requests.filter((url) => new URL(url).pathname === '/api/v1/mail-image');
   expect(proxied.length).toBeGreaterThanOrEqual(2);
 });
+
+// On a phone the three navigation links show whole words: a label cut in the middle ("Settir") reads as broken.
+test('narrow screen: the navigation labels are not cut off', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await deskWithMail(page, 'Narrow nav', '<p>Hello</p>');
+  const rail = await page.locator('.rail-links').evaluate((element) => ({ scroll: element.scrollWidth, client: element.clientWidth }));
+  expect(rail.scroll).toBeLessThanOrEqual(rail.client);
+});

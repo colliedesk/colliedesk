@@ -180,6 +180,10 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
   `on*` and every URL attribute except `<a href>` (http, https, mailto, tel; opened with
   `target=_blank rel="noopener noreferrer"`) and `<img src>` (`data:image/` or the proxy path).
   CSP: `default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data: <app origin>`.
+  Remote `url(...)` in CSS goes through the same proxy: a style attribute or `<style>` block is walked with a small
+  CSS tokenizer (`mailimage/css.go`; comments, strings, escapes, `url()` and `image-set()` strings), every remote
+  address becomes a signed proxy path and counts toward the 50 per message, and every `@import` is dropped. A mail
+  brand logo is often a CSS background, and the browser must not even attempt a request to the sender.
   The mail's own `<body>` keeps `style`, `bgcolor`, `text`, `class`, `id` and `dir` (a white logo on a dark body is blank without them), and our base rules paint no body colour so they cannot cover the mail's. Text with newlines and no markup for them (a chat note in a `<div>`) gets `white-space: pre-wrap` only when the mail has no `br`, `p`, table, list or other structure and no indentation between tags. `height`/`min-height` in viewport units become `auto`/`0`, and `html,body{height:auto!important}` comes last. An image that fails to load and was declared at most 2 px square (or 0) is hidden, so a blocked tracking pixel shows no broken-image icon.
   Quoted history (`blockquote`, `.gmail_quote`, `.yahoo_quoted`) under a reply folds into
   `<details class="quoted-history">`. Plain text stays the fallback and a toggle: no Markdown, links only

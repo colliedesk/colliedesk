@@ -135,6 +135,14 @@
   .rail-link[data-tip]::after { display: none; }
   .rail-link { width: auto; height: var(--touch); grid-auto-flow: column; gap: var(--space-2); padding: 0 var(--space-3); }
   .rail-label { display: inline; font-size: var(--fs-small); font-weight: 500; }
+}
+@media (max-width: 30rem) {
+  /* Tighter, so Inbox, Requests and Settings show whole next to the brand and the account button. */
+  .app-rail { padding-inline: var(--space-2); }
+  .rail-brand { margin-right: 0; }
+  .rail-link { gap: var(--space-1); padding: 0 var(--space-2); }
+}
+@media (max-width: 44rem) {
   .app-main, .app-content { overflow: visible; }
   .account-menu { margin: 0 0 0 auto; }
   .rail-avatar { width: var(--touch); height: var(--touch); }

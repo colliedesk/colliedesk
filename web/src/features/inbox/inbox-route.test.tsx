@@ -118,6 +118,54 @@ test('a ticket whose detail fails to load never gets a usable composer, and noth
   }
 });
 
+// A ticket the person opens from the list has its row already. Its header and composer come from that row at
+// once; the detail request is not made, and a slow one would not matter. This is what keeps a warm open fast.
+test('opening a listed ticket renders its header and asks for its messages without any detail request', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha, bravo], page: 1, page_size: 50 });
+  api.conversation.mockReset();
+  api.conversation.mockReturnValue(new Promise(() => {}));
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockReset();
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await screen.findByRole('button', { name: /bravo conversation/i });
+  fireEvent.click(screen.getByRole('button', { name: /bravo conversation/i }));
+  expect(await screen.findByRole('heading', { name: 'Bravo conversation' })).toBeInTheDocument();
+  await waitFor(() => expect(api.messages).toHaveBeenCalledWith(bravo.id));
+  expect(api.conversation).not.toHaveBeenCalled();
+});
+
+test('a ticket opened by an address that is in the list renders from its row while the detail is still pending', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
+  router.params = { conversationId: bravo.id };
+  try {
+    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.conversations.mockReset();
+    api.conversations.mockResolvedValue({ items: [alpha, bravo], page: 1, page_size: 50 });
+    api.conversation.mockReset();
+    api.conversation.mockReturnValue(new Promise(() => {})); // never answers
+    api.agents.mockResolvedValue({ items: [] });
+    api.tags.mockResolvedValue({ items: [] });
+    api.messages.mockReset();
+    api.messages.mockResolvedValue({ items: [] });
+    api.timeEntries.mockResolvedValue({ items: [] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+    expect(await screen.findByRole('heading', { name: 'Bravo conversation' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByLabelText('Message body').some((box) => !(box as HTMLTextAreaElement).disabled)).toBe(true));
+  } finally {
+    router.params = {};
+  }
+});
+
 test('inline tag creation stays bound to the conversation selected at call time', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');
