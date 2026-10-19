@@ -327,6 +327,11 @@ export const messages = {
   trialDaysLeft: (days: number) => `Trial: ${days} ${days === 1 ? 'day' : 'days'} left`,
   trialExtendedNote: 'Your trial was extended after your Freshdesk import.',
   choosePlan: 'Choose a plan',
+  surveyQuestion: 'What is still missing for you to leave Freshdesk for good?',
+  surveySend: 'Send',
+  surveyNotNow: 'Not now',
+  surveyThanks: 'Thank you. Your answer helps us decide what to build next.',
+  surveyFailed: 'Your answer could not be sent. Try again.',
   storageWarning: (percent: number, used: string, limit: string) =>
     `Storage is ${percent}% full (${used} of ${limit}). New attachments are refused at the limit. Choose a plan to remove it.`,
   lockedTitleTrial: 'Your free trial has ended',

@@ -14,7 +14,7 @@ type Identity = {
   workspace: { id: string };
   plan: { plan: string } | null;
 };
-type Client = Pick<PostHog, 'init' | 'identify' | 'register'>;
+type Client = Pick<PostHog, 'init' | 'identify' | 'register' | 'capture' | 'reset'>;
 export type PostHogLoader = () => Promise<Client>;
 
 // The no-external build never loads a script from PostHog's CDN into a page that shows customers'
@@ -78,7 +78,59 @@ function options(host: string): Partial<PostHogConfig> {
   };
 }
 
+// The events the web app reports. A property is a boolean, a number or a member of a small union:
+// never a contact, a message, an id or anything a person typed. The one exception is the answer to
+// the trial survey, which the admin sends by pressing Send.
+export type ConversationStatus = 'open' | 'pending' | 'resolved' | 'closed';
+export type SettingsSection = 'profile' | 'preferences' | 'general' | 'team' | 'invites' | 'sessions' | 'email_channel'
+  | 'web_form' | 'saved_replies' | 'export' | 'billing';
+export type SurveyId = 'switch_blocker_v1';
+export interface EventProperties {
+  conversation_opened: { source: 'list' | 'link' };
+  inbox_filtered: { filter: 'status' | 'assignee' | 'tag' };
+  inbox_searched: { has_results: boolean };
+  saved_reply_inserted: undefined;
+  conversation_status_changed: { to: ConversationStatus };
+  conversation_assigned: { to_self: boolean };
+  bulk_action_applied: { action: 'status' | 'assign' | 'add_tag' | 'remove_tag'; count: number };
+  agent_request_decided: { decision: 'approved' | 'rejected' };
+  settings_section_opened: { section: SettingsSection };
+  workspace_export_requested: undefined;
+  survey_answered: { survey: SurveyId; answer: string };
+  survey_dismissed: { survey: SurveyId };
+}
+export type EventName = keyof EventProperties;
+type PropertiesArg<E extends EventName> = EventProperties[E] extends undefined ? [properties?: undefined] : [properties: EventProperties[E]];
+
 let client: Promise<Client> | null = null;
+// started is set once PostHog is initialised; until then track() drops events instead of queueing them.
+let started: Client | null = null;
+let realm: string | null = null;
+
+// track reports a named event. It does nothing until PostHog started (analytics off, still loading,
+// or blocked), and a failure of the library never reaches the app. It answers whether the event was
+// handed to PostHog, which only the survey needs: it must not say "thank you" for an answer that was dropped.
+export function track<E extends EventName>(event: E, ...[properties]: PropertiesArg<E>): boolean {
+  if (!started) return false;
+  try {
+    started.capture(event, properties);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// resetProductAnalytics forgets the signed-out agent so later events do not carry their id.
+// reset() also clears registered properties, so the realm is put back.
+export function resetProductAnalytics(): void {
+  if (!started) return;
+  try {
+    started.reset();
+    started.register({ realm });
+  } catch {
+    // Analytics never affects the app.
+  }
+}
 
 // startProductAnalytics loads and starts PostHog once, then names the signed-in agent.
 export async function startProductAnalytics(settings: ProductAnalyticsSettings | undefined, me: Identity | undefined,
@@ -87,6 +139,10 @@ export async function startProductAnalytics(settings: ProductAnalyticsSettings |
   const { key, host } = settings;
   client ??= loader().then((posthog) => {
     posthog.init(key, options(host));
+    // Only the realm, so a pageview before sign-in says which deployment it came from and nothing more.
+    realm = settings.realm;
+    posthog.register({ realm });
+    started = posthog;
     return posthog;
   });
   const posthog = await client;
@@ -112,4 +168,6 @@ export function useProductAnalytics(settings: ProductAnalyticsSettings | undefin
 
 export function resetProductAnalyticsForTest() {
   client = null;
+  started = null;
+  realm = null;
 }
