@@ -72,6 +72,11 @@ export const messages = {
   bulkUpdated: (count: number) => `Updated ${count} conversation${count === 1 ? '' : 's'}`,
   bulkUpdateFailed: 'The conversations could not be updated. Nothing was changed; try again.',
   clearFilters: 'Clear filters',
+  showContactConversations: (name: string) => `All conversations of ${name}`,
+  // The Filter, Sort and Views buttons load with the first screen; the rest of the filter and saved view
+  // wording loads with their menus (src/features/inbox/filter-messages.ts).
+  inboxSort: 'Sort',
+  savedViewsTitle: 'Views',
   previousPage: 'Previous page',
   nextPage: 'Next page',
   selectConversation: 'Select a conversation to read its timeline.',
@@ -504,4 +509,7 @@ export const messages = {
   reportThanks: (reference: string) => `Thank you. Your reference is ${reference}. Quote it if you write to support.`,
   reportNotConfigured: 'This server has no support desk for reports. Nothing was sent to HC Labs. You can open a public GitHub issue with your description and these details filled in. Read it before you submit; it has no email addresses.',
   reportGithubIssue: 'Open a GitHub issue',
+  // A part of a page loaded from its own chunk (ui/lazy-part.tsx) that could not be loaded.
+  partNotLoaded: 'This part of the page could not be loaded.',
+  reloadPage: 'Reload the page',
 } as const;

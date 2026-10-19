@@ -5,7 +5,7 @@ import { ConversationList } from './conversation-list';
 
 const row = (updated_at: string): Conversation => ({
   id: '11111111-1111-4111-8111-111111111111', contact_id: '22222222-2222-4222-8222-222222222222', contact_name: 'Mai Linh', subject: 'Example request',
-  status: 'open', priority: 'normal', assignee_id: null, tags: [], origin: null, created_at: updated_at, updated_at,
+  status: 'open', priority: 'normal', assignee_id: null, tags: [], channel: 'email', origin: null, created_at: updated_at, updated_at,
 });
 
 beforeEach(() => vi.useFakeTimers());

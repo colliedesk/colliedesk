@@ -1,14 +1,16 @@
 import { z } from 'zod';
 import type { components, operations } from './generated';
 
-type Generated<Name extends keyof components['schemas']> = components['schemas'][Name];
-type JsonResponse<Operation extends keyof operations, Status extends keyof operations[Operation]['responses']> =
+export type Generated<Name extends keyof components['schemas']> = components['schemas'][Name];
+export type JsonResponse<Operation extends keyof operations, Status extends keyof operations[Operation]['responses']> =
   operations[Operation]['responses'][Status] extends { content: { 'application/json': infer Body } } ? Body : never;
 
 const nullableDate = z.string().datetime().nullable();
 export const roleSchema = z.enum(['admin', 'agent']);
 export const statusSchema = z.enum(['open', 'pending', 'resolved', 'closed']);
 export const prioritySchema = z.enum(['low', 'normal', 'high', 'urgent']);
+export const channelSchema = z.enum(['email', 'web_form', 'imported', 'agent', 'problem_report']);
+export const conversationSortSchema = z.enum(['updated_desc', 'updated_asc', 'created_desc', 'created_asc', 'priority', 'waiting_longest']);
 
 export const workspaceSchema = z.object({
   id: z.string().uuid(), slug: z.string(), name: z.string(), timezone: z.string(),
@@ -82,7 +84,7 @@ export const timeEntrySchema = z.object({
 export const conversationSchema = z.object({
   id: z.string().uuid(), contact_id: z.string().uuid(), contact_name: z.string(), subject: z.string(),
   status: statusSchema, priority: prioritySchema, assignee_id: z.string().uuid().nullable(),
-  tags: z.array(tagSchema), origin: conversationOriginSchema.nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
+  tags: z.array(tagSchema), channel: channelSchema, origin: conversationOriginSchema.nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'Conversation'>>;
 export const contactDetailSchema = contactSchema.extend({ conversations: z.array(conversationSchema) }) satisfies z.ZodType<Generated<'ContactDetail'>>;
 export const deliveryStatusSchema = z.enum(['queued', 'sent', 'failed']);
@@ -184,6 +186,8 @@ export type WebFormSettings = Generated<'WebFormSettings'>;
 export type Session = Generated<'Session'>;
 export type Tag = Generated<'Tag'>;
 export type SavedReply = Generated<'SavedReply'>;
+export type SavedView = Generated<'SavedView'>;
+export type ConversationFilters = Generated<'ConversationFilters'>;
 export type SavedReplyChange = Generated<'SavedReplyChange'>;
 export type TrashedSavedReply = Generated<'TrashedSavedReply'>;
 export type SavedReplyVersion = Generated<'SavedReplyVersion'>;

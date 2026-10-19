@@ -52,7 +52,7 @@ with `billing` and leave a note with a summary."
 | Tool | What it does | Tier |
 |---|---|---|
 | `colliedesk_whoami` | Shows the workspace, the team member, the token tier and the tools you can use | any |
-| `colliedesk_inbox_search` | Lists conversations by status, assignee, tag or text, newest first, in pages | `read` |
+| `colliedesk_inbox_search` | Lists conversations in pages by any [inbox filter](inbox.md#filter-and-sort) or a saved view, in any of the inbox orders | `read` |
 | `colliedesk_inbox_activity` | Lists what changed since the last call: new conversations, conversations assigned to you, conversations that changed | `read` |
 | `colliedesk_conversation_get` | Reads one conversation with its messages, attachment ids and customer | `read` |
 | `colliedesk_time_entries_list` | Lists the time logged on a conversation, with the total | `read` |
@@ -79,6 +79,11 @@ with `billing` and leave a note with a summary."
 | `colliedesk_saved_reply_version_restore` | Makes an earlier version current again, as a new version | `send` |
 | `colliedesk_saved_replies_trash` | Lists the saved replies in the trash a page at a time, with when each is deleted for good | `read` |
 | `colliedesk_saved_reply_undelete` | Takes a saved reply out of the trash | `send` |
+| `colliedesk_saved_views_list` | Lists the [saved inbox views](inbox.md#saved-views) the token's person can use, or the ones in the trash | `read` |
+| `colliedesk_saved_view_create` | Saves inbox filters as a personal or shared view | `draft` |
+| `colliedesk_saved_view_update` | Changes the name, the filters or who sees a view | `draft` |
+| `colliedesk_saved_view_delete` | Moves a view to the trash for 30 days; changes no conversation | `draft` |
+| `colliedesk_saved_view_restore` | Takes a view out of the trash | `draft` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any |
 | `colliedesk_docs_search` | Searches these user guides | any |
 | `colliedesk_reply_draft` | Leaves a reply draft that a person edits, sends or discards; never emails by itself | `read` |

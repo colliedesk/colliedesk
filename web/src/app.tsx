@@ -20,6 +20,7 @@ import { messages } from './messages';
 import { InboxIcon, RequestsIcon, SettingsIcon } from './ui/icons';
 import { LogoMark } from './ui/logo';
 import { resetProductAnalytics, useProductAnalytics } from './lib/product-analytics';
+import { inboxQueryFromSearch } from './lib/inbox-query';
 
 function AppLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
@@ -71,8 +72,9 @@ function settingsRouterLink(item: NavItem) {
 }
 
 const rootRoute = createRootRoute({ component: AppLayout });
-const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: InboxRoute });
-const conversationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/conversations/$conversationId', component: InboxRoute });
+// The inbox filters are in the address, so a link opens the same list (src/lib/inbox-query.ts).
+const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', validateSearch: inboxQueryFromSearch, component: InboxRoute });
+const conversationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/conversations/$conversationId', validateSearch: inboxQueryFromSearch, component: InboxRoute });
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsRoute });
 const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: RequestsRoute });
 const billingRoute = createRoute({

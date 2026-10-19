@@ -52,6 +52,19 @@ type SavedReply struct {
 	DeletedByAgentID *string    `json:"deleted_by_agent_id"`
 }
 
+// SavedView is a named set of inbox filters, personal (owner_agent_id set) or shared, also in the trash.
+type SavedView struct {
+	ID               string          `json:"id"`
+	Name             string          `json:"name"`
+	Scope            string          `json:"scope"`
+	OwnerAgentID     *string         `json:"owner_agent_id"`
+	Filters          json.RawMessage `json:"filters"`
+	CreatedByAgentID *string         `json:"created_by_agent_id"`
+	CreatedAt        time.Time       `json:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at"`
+	DeletedAt        *time.Time      `json:"deleted_at"`
+}
+
 // SavedReplyVersion is one version of a saved reply: what it said after a change, who made the change,
 // through which agent token, and the agent request a person approved for it.
 type SavedReplyVersion struct {
@@ -140,6 +153,7 @@ type ConversationHead struct {
 	Status     string                     `json:"status"`
 	Priority   string                     `json:"priority"`
 	AssigneeID *string                    `json:"assignee_id"`
+	Channel    string                     `json:"channel"`
 	Origin     *domain.ConversationOrigin `json:"origin"`
 	TagIDs     []string                   `json:"tag_ids"`
 	CreatedAt  time.Time                  `json:"created_at"`
@@ -154,7 +168,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// Tag*, SavedReply*, SavedReplyVersion*, AgentRequest*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -163,6 +177,7 @@ type Sink interface {
 	Tag(Tag) error
 	SavedReply(SavedReply) error
 	SavedReplyVersion(SavedReplyVersion) error
+	SavedView(SavedView) error
 	AgentRequest(AgentRequest) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error

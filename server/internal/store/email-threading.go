@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"strings"
 	"time"
 
@@ -98,8 +99,8 @@ func createEmailConversation(ctx context.Context, tx pgx.Tx, workspaceID string,
 		subject = "(no subject)"
 	}
 	var conversationID string
-	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at) VALUES($1,$2,$3,$4,$4) RETURNING id::text`,
-		workspaceID, contactID, subject, now).Scan(&conversationID); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel) VALUES($1,$2,$3,$4,$4,$5) RETURNING id::text`,
+		workspaceID, contactID, subject, now, domain.ChannelEmail).Scan(&conversationID); err != nil {
 		return "", fmt.Errorf("create conversation: %w", err)
 	}
 	return conversationID, nil

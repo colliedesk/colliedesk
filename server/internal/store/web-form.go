@@ -146,8 +146,8 @@ func (s *Store) SubmitWebForm(ctx context.Context, workspaceID string, in WebFor
 	if in.Source != "" {
 		subject += ": " + in.Source
 	}
-	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at) VALUES($1,$2,$3,$4,$4) RETURNING id::text`,
-		workspaceID, contactID, subject, now).Scan(&conversationID); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel) VALUES($1,$2,$3,$4,$4,$5) RETURNING id::text`,
+		workspaceID, contactID, subject, now, domain.ChannelWebForm).Scan(&conversationID); err != nil {
 		return fmt.Errorf("create conversation: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO conversation_tags(workspace_id,conversation_id,tag_id) VALUES($1,$2,$3)`, workspaceID, conversationID, tagID); err != nil {

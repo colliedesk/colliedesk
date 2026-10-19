@@ -48,6 +48,7 @@ type restConversation struct {
 	Priority   string    `json:"priority"`
 	AssigneeID *string   `json:"assignee_id"`
 	Tags       []restTag `json:"tags"`
+	Channel    string    `json:"channel"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }

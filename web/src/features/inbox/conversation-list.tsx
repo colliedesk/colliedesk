@@ -33,12 +33,14 @@ interface ConversationListProps {
   selectAllRef?: Ref<HTMLInputElement>;
   // draftIds are the conversations with a reply draft an AI agent left for a person to send.
   draftIds?: ReadonlySet<string>;
+  // grouped splits the rows under Today and Earlier; only the latest-activity order keeps the groups contiguous.
+  grouped?: boolean;
 }
 
 const visibleTags = 2;
 
 export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
-  failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef, draftIds }: ConversationListProps) {
+  failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef, draftIds, grouped = true }: ConversationListProps) {
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
   const now = useNow(timezone);
   const settled = !loading && !failed;
@@ -81,7 +83,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
       </label>}
       {items.map((item, index) => {
         const group = dayGroup(item.updated_at, timezone, now);
-        const startsGroup = index === 0 || group !== dayGroup(items[index - 1].updated_at, timezone, now);
+        const startsGroup = grouped && (index === 0 || group !== dayGroup(items[index - 1].updated_at, timezone, now));
         const full = formatDate(item.updated_at, timezone, now);
         return (
           <Fragment key={item.id}>

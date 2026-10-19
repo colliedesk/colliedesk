@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from '@tanstack/react-router';
+import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { api } from '../../api/client';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
-import { defaultInboxFilters } from './inbox-filters';
+import { apiQuery, inboxQueryFromSearch, isDefaultQuery } from '../../lib/inbox-query';
+import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
+import type { InboxFilterKind } from '../../lib/product-analytics';
 import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
 import { retryRefusalText } from './refusal-text';
+import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
 import { usePendingRequests } from '../requests/use-pending-requests';
 
 // errorMessage reads the message of an API error body, when the answer is one.
@@ -27,25 +30,42 @@ function bulkActionOf(changes: BulkConversationChanges): 'status' | 'assign' | '
   return undefined;
 }
 
+// The views menu loads on its own chunk, so the first screen does not wait for it; until then its button
+// shows, disabled. It asks for its data only when it opens.
+const viewsPart = lazyPart(() => import('./saved-views-menu'));
+
+function SavedViewsPart(props: { query: InboxQuery; timezone: string; onApply: (query: InboxQuery) => void }) {
+  const part = viewsPart.use();
+  if (part.status === 'ready') return <part.module.SavedViewsMenu {...props} />;
+  return part.status === 'error' ? <PartUnavailable /> : <span className="filter-menu views-menu"><button type="button" disabled>{messages.savedViewsTitle}</button></span>;
+}
+
 // How long a search term stays unchanged before it counts as a finished search, so typing "refund" is one search.
 const searchSettleMs = 800;
+
+// The kind of filter a key belongs to, for analytics: tag_match counts as tag, both ends of a range as one.
+// Search is reported on its own.
+const kindOf = (key: InboxQueryKey) => ({ tag_match: 'tag', has_pending_draft: 'draft', delivery_failed: 'delivery' } as Record<string, string>)[key]
+  ?? key.replace(/_(after|before)$/, '');
+// Typing changes these on every key, so they replace the address instead of adding to the history.
+const typedKeys: InboxQueryKey[] = ['search', 'organization'];
 
 export function InboxRoute() {
   const client = useQueryClient();
   const navigate = useNavigate();
   const params = useParams({ strict: false }) as { conversationId?: string };
-  const [filters, setFilters] = useState<Record<string, string>>({ ...defaultInboxFilters });
-  const [page, setPage] = useState(1);
+  const search = useSearch({ strict: false });
+  const filters = useMemo(() => inboxQueryFromSearch(search), [search]);
+  const filterKey = apiQuery(filters, 1);
+  // A page belongs to the filters it was turned for; new filters start on page 1.
+  const [paging, setPaging] = useState({ key: filterKey, page: 1 });
+  const page = paging.key === filterKey ? paging.page : 1;
+  const setPage = (next: number) => setPaging({ key: filterKey, page: next });
   const [selectedId, setSelectedId] = useState<string>();
-  const query = useMemo(() => {
-    const values = new URLSearchParams(Object.entries(filters).filter(([, value]) => value));
-    values.set('page', String(page));
-    values.set('page_size', '50');
-    return values.toString();
-  }, [filters, page]);
+  const query = useMemo(() => apiQuery(filters, page), [filters, page]);
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   // Always refetch when the inbox opens: mail may have arrived while the agent was in Settings.
-  const conversations = useQuery({ queryKey: ['conversations', query], queryFn: () => api.conversations(query), refetchOnMount: 'always',
+  const conversations = useQuery({ queryKey: ['conversations', query], queryFn: ({ signal }) => api.conversations(query, signal), refetchOnMount: 'always',
     // A new search or filter keeps the old rows on screen until its response arrives.
     placeholderData: keepPreviousData });
   // A search is reported once its term settled and its answer arrived: whether it found anything, never the term.
@@ -66,10 +86,9 @@ export function InboxRoute() {
     reportedOpen.current = id;
     track('conversation_opened', { source: 'link' });
   }, [params.conversationId, selectedId]);
-  const narrowed = Boolean(filters.search || filters.assignee || filters.tag);
-  const filtered = narrowed || !['', defaultInboxFilters.status].includes(filters.status ?? '');
+  const filtered = !isDefaultQuery(filters);
   // An empty Open view is either a new workspace or one that is caught up; one row of All tells which.
-  const checkAny = !narrowed && filters.status === defaultInboxFilters.status && page === 1 && conversations.data?.items.length === 0;
+  const checkAny = !filtered && page === 1 && conversations.data?.items.length === 0;
   const anyConversation = useQuery({ queryKey: ['conversations', 'any'], queryFn: () => api.conversations('page=1&page_size=1'), enabled: checkAny });
   // A failed check is not proof of an empty workspace, so it never shows the new-workspace steps.
   const nothingOpen = checkAny && (anyConversation.isError || (anyConversation.data?.items.length ?? 0) > 0);
@@ -146,19 +165,27 @@ export function InboxRoute() {
     onSuccess: (retried) => client.invalidateQueries({ queryKey: ['messages', retried.conversation_id] }) });
   // A refusal belongs to the conversation it happened in; opening another one hides it.
   const retryError = retryDelivery.isError && retryDelivery.variables?.conversationId === selected?.id ? retryDelivery.error : undefined;
+  const applyQuery = (next: InboxQuery) => {
+    // Typing a search widens the status to All by itself; that is not a choice of the person.
+    const typing = (next.search ?? '') !== (filters.search ?? '');
+    const changed = new Set<InboxFilterKind>();
+    for (const key of new Set([...Object.keys(next), ...Object.keys(filters)]) as Set<InboxQueryKey>) {
+      if (key === 'search' || (key === 'status' && typing)) continue;
+      if ((next[key] ?? '') !== (filters[key] ?? '')) changed.add(kindOf(key) as InboxFilterKind);
+    }
+    for (const filter of changed) track('inbox_filtered', { filter });
+    const replace = typedKeys.some((key) => (next[key] ?? '') !== (filters[key] ?? ''));
+    void navigate({ to: params.conversationId ? '/conversations/$conversationId' : '/', params: params.conversationId ? { conversationId: params.conversationId } : {}, search: next, replace });
+  };
   return <InboxPage hosted={config?.billing.enabled ?? false} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
     agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone}
     page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} onPage={setPage}
-    onSelect={(id) => { reportedOpen.current = id; track('conversation_opened', { source: 'list' }); setSelectedId(id); navigate({ to: '/conversations/$conversationId', params: { conversationId: id } }); }}
-    onFilters={(values) => {
-      // Typing a search widens the status to All by itself; that is not a choice of the person.
-      const typing = (values.search ?? '') !== (filters.search ?? '');
-      for (const filter of ['status', 'assignee', 'tag'] as const) {
-        if (filter === 'status' && typing) continue;
-        if ((values[filter] ?? '') !== (filters[filter] ?? '')) track('inbox_filtered', { filter });
-      }
-      setFilters(values); setPage(1);
-    }} onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
+    // Opening a conversation keeps the filters in the address, so Back returns to the same list.
+    onSelect={(id) => { reportedOpen.current = id; track('conversation_opened', { source: 'list' }); setSelectedId(id); navigate({ to: '/conversations/$conversationId', params: { conversationId: id }, search: filters }); }}
+    query={filters}
+    viewsMenu={<SavedViewsPart query={filters} timezone={me.data?.timezone ?? 'UTC'} onApply={applyQuery} />}
+    onQuery={applyQuery}
+    onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body, files, cc) => message.mutateAsync({ kind, body, files, cc })}

@@ -42,11 +42,14 @@ func (a *API) listConversations(response http.ResponseWriter, request *http.Requ
 	if pageSize > 100 {
 		pageSize = 100
 	}
+	filter, err := conversationFilterFromQuery(query)
+	if message, invalid := isFilterError(err); invalid {
+		writeError(response, http.StatusBadRequest, "invalid_request", message)
+		return
+	}
 	identity := principal(request)
-	items, err := a.store.ListConversations(request.Context(), identity.Workspace.ID, store.ConversationFilter{
-		Status: query.Get("status"), Assignee: query.Get("assignee"), TagID: query.Get("tag"),
-		Search: query.Get("search"), AgentID: identity.Agent.ID, Page: page, PageSize: pageSize,
-	})
+	filter.AgentID, filter.Page, filter.PageSize = identity.Agent.ID, page, pageSize
+	items, err := a.store.ListConversations(request.Context(), identity.Workspace.ID, filter)
 	if err != nil {
 		writeStoreError(response, err)
 		return

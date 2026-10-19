@@ -209,6 +209,7 @@ func (s idleSink) Contact(export.Contact) error                     { return nil
 func (s idleSink) Tag(export.Tag) error                             { return nil }
 func (s idleSink) SavedReply(export.SavedReply) error               { return nil }
 func (s idleSink) SavedReplyVersion(export.SavedReplyVersion) error { return nil }
+func (s idleSink) SavedView(export.SavedView) error                 { return nil }
 func (s idleSink) AgentRequest(export.AgentRequest) error           { return nil }
 func (s idleSink) BeginConversation(export.ConversationHead) error  { return nil }
 func (s idleSink) Message(export.Message) error                     { return nil }

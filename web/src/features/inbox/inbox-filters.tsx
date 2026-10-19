@@ -1,79 +1,97 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { messages } from '../../messages';
-import type { Tag } from '../../api/schemas';
-import { FilterIcon, SearchIcon } from '../../ui/icons';
+import type { Tag, TeamMember } from '../../api/schemas';
+import { SearchIcon } from '../../ui/icons';
+import { allStatuses, defaultStatus } from '../../lib/inbox-query';
+import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
+import { DraftInput } from './draft-input';
+import type { FilterPartProps } from './filter-panel';
+import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
 
 interface InboxFiltersProps {
+  query: InboxQuery;
+  onChange?: (query: InboxQuery) => void;
   tags: Tag[];
-  onChange?: (filters: Record<string, string>) => void;
+  agents?: TeamMember[];
+  // Dates are picked as calendar days in this timezone and sent as UTC instants.
+  timezone?: string;
+  // Names of the contacts in the list, so a customer filter reads as a name.
+  contactNames?: ReadonlyMap<string, string>;
   focusSearch?: boolean;
+  // Bumped to move focus to the search box, for example after the list's Clear filters.
+  focusSignal?: number;
+  // The saved views menu, which sits in the same bar.
+  views?: ReactNode;
 }
 
-// The inbox starts on what still needs an answer; a Freshdesk import brings years of closed tickets.
-export const defaultInboxFilters: Record<string, string> = { status: 'open' };
+// The Filter menu, the Sort menu and the chips load on their own chunk (filter-panel.tsx), asked for as
+// soon as the inbox renders, so the first bundle does not carry them. Until they arrive, the search box
+// and the status tabs work, and inert controls of the same size hold their places.
+export const filterPart = lazyPart(() => import('./filter-panel'));
+// A search is sent once the person pauses this long, so a word is one request, not one per key.
+export const typingDelayMs = 100;
 
-const statusTabs = [['', messages.allConversations], ...Object.entries(messages.statuses)] as const;
+function FilterBarPart(props: FilterPartProps) {
+  const part = filterPart.use();
+  if (part.status === 'ready') return <part.module.FilterBar {...props} />;
+  return part.status === 'error' ? <PartUnavailable />
+    : <><button type="button" className="filter-menu-pending" disabled>{messages.filter}</button><select className="sort-field" disabled aria-label={messages.inboxSort} /></>;
+}
+
+function FilterChipsPart(props: FilterPartProps) {
+  const part = filterPart.use();
+  // Until the chips arrive, an empty row of their height holds their place, so the list does not jump.
+  if (part.status === 'ready') return <part.module.FilterChips {...props} />;
+  return part.status === 'error' ? null : <div className="filter-chips filter-chips-pending" aria-hidden="true" />;
+}
+
+const statusTabs = [[allStatuses, messages.allConversations], ...Object.entries(messages.statuses)] as const;
+// Keys with controls of their own; any other filter shows as a chip.
+const ownControls = ['status', 'sort', 'search'];
 
 // Search and the Filter menu sit above the status tabs, in the same order on screen and for Tab.
-// Status is the view an agent switches most, so it is a row of tabs; assignee and tag are rarer and
-// share one Filter menu that shows how many are on.
-export function InboxFilters({ tags, onChange, focusSearch = false }: InboxFiltersProps) {
-  const [active, setActive] = useState(0);
-  const menu = useRef<HTMLDetailsElement>(null);
-  const pickedStatus = useRef(false);
-  const update = (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const form = event.currentTarget.form;
-    if (!form) return;
-    if (event.currentTarget.name === 'status') pickedStatus.current = true;
+// Status is the view an agent switches most, so it is a row of tabs; everything else shares one
+// Filter menu that counts what is on, and each active filter shows as a chip that removes it.
+export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'UTC', contactNames, focusSearch = false, focusSignal = 0, views }: InboxFiltersProps) {
+  const search = useRef<HTMLInputElement>(null);
+  const set = (key: InboxQueryKey, value: string | boolean | undefined) => {
+    const next: InboxQuery = { ...query };
+    if (value === undefined || value === '') delete next[key];
+    else (next as Record<string, string | boolean>)[key] = value;
+    if (!next.tag) delete next.tag_match;
+    onChange?.(next);
+  };
+  const onSearch = (value: string) => {
+    const next: InboxQuery = { ...query, search: value };
+    if (!value) delete next.search;
     // Search looks through every status unless the agent chose one: an imported ticket is usually closed.
-    if (event.currentTarget.name === 'search' && event.currentTarget.value && !pickedStatus.current) {
-      const all = form.querySelector<HTMLInputElement>('input[name="status"][value=""]');
-      if (all) all.checked = true;
-    }
-    const values = Object.fromEntries(new FormData(form).entries()) as Record<string, string>;
-    setActive([values.assignee, values.tag].filter(Boolean).length);
-    onChange?.(values);
+    if (value && query.status === undefined) next.status = allStatuses;
+    onChange?.(next);
   };
   useEffect(() => {
-    const close = (event: PointerEvent) => { if (menu.current?.open && !menu.current.contains(event.target as Node)) menu.current.open = false; };
-    document.addEventListener('pointerdown', close);
-    return () => document.removeEventListener('pointerdown', close);
-  }, []);
-  // Keyboard users leave the menu with Tab; it closes like it does on an outside click.
-  const closeOnFocusOut = (event: React.FocusEvent<HTMLDetailsElement>) => {
-    if (menu.current?.open && !menu.current.contains(event.relatedTarget as Node | null)) menu.current.open = false;
-  };
-  const closeOnEscape = (event: React.KeyboardEvent<HTMLDetailsElement>) => {
-    if (event.key !== 'Escape' || !menu.current?.open) return;
-    menu.current.open = false;
-    menu.current.querySelector('summary')?.focus();
-  };
+    if (focusSignal > 0) search.current?.focus();
+  }, [focusSignal]);
+  const part = { query, set, onChange, tags, agents, timezone, contactNames };
+  const status = query.status ?? defaultStatus;
   return (
-    <form className="inbox-filters" aria-label={messages.inbox} onSubmit={(event) => event.preventDefault()}>
+    // A search region, not a form: the saved views menu inside it has forms of its own, and a form inside a
+    // form makes the browser submit the outer one as a page load.
+    <div className="inbox-filters" role="search" aria-label={messages.inbox}>
       <div className="filter-bar">
         <label className="search-field"><SearchIcon />
-          <input name="search" type="search" aria-label={messages.searchConversations} placeholder={messages.searchConversations} autoFocus={focusSearch} onChange={update} /></label>
-        <details className="filter-menu" ref={menu} onKeyDown={closeOnEscape} onBlur={closeOnFocusOut}>
-          <summary><FilterIcon /><span>{messages.filter}</span>
-            {active > 0 && <span className="filter-count" aria-label={messages.filtersActive(active)}>{active}</span>}</summary>
-          <div className="filter-popover">
-            <label className="field"><span>{messages.assignee}</span><select name="assignee" aria-label={messages.assignee} onChange={update}>
-              <option value="">{messages.allAssignees}</option>
-              <option value="me">{messages.assignedToMe}</option>
-              <option value="unassigned">{messages.unassigned}</option>
-            </select></label>
-            <label className="field"><span>{messages.tag}</span><select name="tag" aria-label={messages.tag} onChange={update}>
-              <option value="">{messages.allTags}</option>
-              {tags.map((tag) => <option key={tag.id} value={tag.id}>{tag.name}</option>)}
-            </select></label>
-          </div>
-        </details>
+          {/* Clear filters starts the box afresh, a search still waiting to be sent included. */}
+          <DraftInput key={focusSignal} inputRef={search} name="search" type="search" aria-label={messages.searchConversations} placeholder={messages.searchConversations} maxLength={200} autoFocus={focusSearch}
+            value={query.search ?? ''} delay={typingDelayMs} onCommit={onSearch} /></label>
+        <FilterBarPart {...part} />
+        {views}
       </div>
       <div className="status-tabs" role="radiogroup" aria-label={messages.status}>
         {statusTabs.map(([value, label]) => (
-          <label key={value}><input type="radio" name="status" value={value} defaultChecked={value === defaultInboxFilters.status} onChange={update} /><span>{label}</span></label>
+          <label key={value}><input type="radio" name="status" value={value} checked={status === value} onChange={() => set('status', value === defaultStatus && query.status === undefined ? undefined : value)} /><span>{label}</span></label>
         ))}
       </div>
-    </form>
+      {Object.keys(query).some((key) => !ownControls.includes(key)) && <FilterChipsPart {...part} />}
+    </div>
   );
 }

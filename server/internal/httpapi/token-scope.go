@@ -54,7 +54,10 @@ var (
 // settings a person can see without secrets: the session and invite lists (never a token or a link),
 // the email channel (never the inbound secret or the SMTP password) and the web form.
 // draft: changes that never reach a customer (status, priority, assignee, tags on one conversation or
-// many at once, creating a tag, private notes, the token owner's own timezone and display name). send: everything else
+// many at once, creating a tag, private notes, the token owner's own timezone and display name, and
+// saved inbox views: a view changes no conversation, only which filters a sidebar link opens, and a
+// deleted one waits 30 days in the trash, so even a shared view is draft, unlike renaming or deleting
+// a tag, which rewrites every conversation that carries it). send: everything else
 // an agent may do, such as replying, creating contacts and conversations, and writing the saved replies
 // the team sends (every change is a version that can be restored, and a delete stays in the trash for
 // 30 days). Posting a message is gated by the handler: a note needs draft, an outgoing reply needs send.
@@ -82,6 +85,12 @@ var tokenTiers = map[string]TokenAccess{
 	"DELETE /api/v1/saved-replies/{id}":                          tier(auth.ScopeSend),
 	"POST /api/v1/saved-replies/{id}/restore":                    tier(auth.ScopeSend),
 	"POST /api/v1/saved-replies/{id}/versions/{version}/restore": tier(auth.ScopeSend),
+	"GET /api/v1/saved-views":                                    tier(auth.ScopeRead),
+	"GET /api/v1/saved-views/trash":                              tier(auth.ScopeRead),
+	"POST /api/v1/saved-views":                                   tier(auth.ScopeDraft),
+	"PATCH /api/v1/saved-views/{id}":                             tier(auth.ScopeDraft),
+	"DELETE /api/v1/saved-views/{id}":                            tier(auth.ScopeDraft),
+	"POST /api/v1/saved-views/{id}/restore":                      tier(auth.ScopeDraft),
 	"POST /api/v1/conversations":                                 tier(auth.ScopeSend),
 	"GET /api/v1/conversations/{id}":                             tier(auth.ScopeRead),
 	"PATCH /api/v1/conversations/{id}":                           tier(auth.ScopeDraft),

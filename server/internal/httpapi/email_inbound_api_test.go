@@ -27,7 +27,7 @@ func TestInboundNewThreadCreatesConversationAndContact(t *testing.T) {
 	}
 
 	conversations := conversationList(t, api, admin)
-	if len(conversations) != 1 || conversations[0].Subject != "Printer is on fire" || conversations[0].Status != "open" {
+	if len(conversations) != 1 || conversations[0].Subject != "Printer is on fire" || conversations[0].Status != "open" || conversations[0].Channel != "email" {
 		t.Fatalf("conversation not created: %+v", conversations)
 	}
 	contacts := request(t, api, http.MethodGet, "/api/v1/contacts?search=casey", nil, admin, nil)
