@@ -10,7 +10,7 @@ import (
 )
 
 // lockedAllowed are the only routes a locked workspace (trial over, nothing paid) can use: sign in
-// and out, pay, take its data out, and cut its mail channel. Every other authenticated route,
+// and out, pay, take its data out, cut its mail channel, and tell us about a problem. Every other authenticated route,
 // reads included, answers 402 workspace_locked, so a route added later is locked by default. The
 // keys are "METHOD pattern" exactly as listed in Routes().
 var lockedAllowed = map[string]bool{
@@ -26,6 +26,8 @@ var lockedAllowed = map[string]bool{
 	"POST /api/v1/export/link":           true,
 	"DELETE /api/v1/channels/email":      true,
 	"POST /api/v1/channels/email/secret": true,
+	// A customer locked out after the trial may be the one who most needs to report a problem.
+	"POST /api/v1/support/problem-reports": true,
 }
 
 // LockedAllowlist lists the allowlist as "METHOD pattern" strings, sorted.

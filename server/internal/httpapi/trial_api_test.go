@@ -99,6 +99,7 @@ func TestLockedAllowlistIsExactlyTheOpenRoutes(t *testing.T) {
 		"POST /api/v1/billing/portal",
 		"POST /api/v1/channels/email/secret",
 		"POST /api/v1/export/link",
+		"POST /api/v1/support/problem-reports",
 	}
 	got := httpapi.LockedAllowlist()
 	sort.Strings(got)
