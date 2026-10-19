@@ -86,7 +86,9 @@ func (s *Store) TouchCachedMailImage(ctx context.Context, workspaceID, urlHash s
 type evictedImage struct{ workspaceID, key string }
 
 // SweepMailImageCache keeps the image cache bounded, in every workspace: it deletes the images fetched
-// more than maxAge ago, then, while the rest is over maxBytes, the ones that were served least recently.
+// more than maxAge ago, then, while a workspace's rest is over maxBytes (the same cap that stops it caching
+// more), that workspace's images that were served least recently. A workspace over its share loses its own
+// images and never another's. The total is therefore at most the number of workspaces times maxBytes.
 // It returns how many cache rows it removed. The stored bytes go with them unless an attachment still
 // uses the same file.
 func (s *Store) SweepMailImageCache(ctx context.Context, maxAge time.Duration, maxBytes int64) (int, error) {
@@ -110,9 +112,9 @@ func (s *Store) SweepMailImageCache(ctx context.Context, maxAge time.Duration, m
 		if err := collect(`DELETE FROM mail_image_cache WHERE fetched_at < $1 RETURNING workspace_id::text, storage_key`, s.now().Add(-maxAge)); err != nil {
 			return fmt.Errorf("evict old mail images: %w", err)
 		}
-		// Newest-served first: what fits under the cap stays, every row past it goes.
+		// Newest-served first within each workspace: what fits under its cap stays, every row past it goes.
 		if err := collect(`WITH ranked AS (
-				SELECT workspace_id, url_hash, sum(size) OVER (ORDER BY last_served_at DESC, fetched_at DESC, workspace_id, url_hash) AS running
+				SELECT workspace_id, url_hash, sum(size) OVER (PARTITION BY workspace_id ORDER BY last_served_at DESC, fetched_at DESC, url_hash) AS running
 				FROM mail_image_cache)
 			DELETE FROM mail_image_cache c USING ranked r
 			WHERE c.workspace_id=r.workspace_id AND c.url_hash=r.url_hash AND r.running > $1

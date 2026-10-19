@@ -78,6 +78,14 @@ const SVGType = "image/svg+xml"
 
 const svgNamespace = "http://www.w3.org/2000/svg"
 
+// Real logos and icon sheets are a few levels deep and a few hundred elements. The walk stops at the first
+// document past these, so a hostile body of a million nested elements costs a few hundred of them, not the
+// memory and time of parsing all.
+const (
+	maxSVGDepth    = 64
+	maxSVGElements = 10_000
+)
+
 // SniffImage returns the media type of an image the proxy may serve: a raster (see SniffRaster) or an SVG
 // document, or "". An SVG is accepted only when the whole body parses as XML whose root element is svg in the
 // SVG namespace; a script inside it is harmless in an <img>, which the proxy's headers and the email frame
@@ -95,7 +103,7 @@ func SniffImage(data []byte) string {
 func isSVG(data []byte) bool {
 	decoder := xml.NewDecoder(bytes.NewReader(bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))))
 	decoder.Strict = true
-	root, depth := false, 0
+	root, depth, elements := false, 0, 0
 	for {
 		token, err := decoder.Token()
 		if errors.Is(err, io.EOF) {
@@ -112,7 +120,12 @@ func isSVG(data []byte) bool {
 				}
 				root = true
 			}
-			depth++
+			if depth++; depth > maxSVGDepth {
+				return false
+			}
+			if elements++; elements > maxSVGElements {
+				return false
+			}
 		case xml.EndElement:
 			depth--
 		case xml.CharData:

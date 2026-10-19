@@ -2,10 +2,13 @@ package httpapi_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,6 +17,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 	"github.com/colliedesk/colliedesk/server/internal/store"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -181,7 +185,7 @@ func TestTwoServerProcessesOnOneDatabaseAcceptEachOthersImageLinks(t *testing.T)
 	}
 }
 
-func TestMailImageSigningKeyIsStoredOnceAndOnlyTheOwnerReadsIt(t *testing.T) {
+func TestMailImageSigningKeyIsOneRowOf32BytesCreatedOnceForAllProcesses(t *testing.T) {
 	pool := testPool(t)
 	_, _, _, _ = testAPIOnPool(t, pool, nil)
 	_, _, _, _ = testAPIOnPool(t, pool, nil)
@@ -192,6 +196,44 @@ func TestMailImageSigningKeyIsStoredOnceAndOnlyTheOwnerReadsIt(t *testing.T) {
 	if rows != 1 || length != 32 {
 		t.Fatalf("%d key rows of %d bytes, want one of 32", rows, length)
 	}
+}
+
+// The request connection runs as the app role; it must not be able to read the key, whatever a query asks.
+func TestAppRoleCannotReadTheServerSecrets(t *testing.T) {
+	pool := testPool(t)
+	_, _, _, _ = testAPIOnPool(t, pool, nil)
+	ctx := context.Background()
+	var role string
+	if err := pool.QueryRow(ctx, `SELECT roles[1]::text FROM pg_policies WHERE schemaname=current_schema() AND tablename='workspaces' AND policyname='workspace_isolation'`).Scan(&role); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if _, err := tx.Exec(ctx, `SELECT set_config('role',$1,true)`, role); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	err = tx.QueryRow(ctx, `SELECT count(*) FROM server_secrets`).Scan(&count)
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "42501" {
+		t.Fatalf("as the app role, reading server_secrets gave %v (count %d), want permission denied (42501)", err, count)
+	}
+}
+
+// With no key in the database, a process that signed with a key of its own would answer 403 to images signed
+// by its replicas without a sign. It stops at start instead.
+func TestServerRefusesToStartWhenItCannotReadTheImageSigningKey(t *testing.T) {
+	pool := testPool(t) // a schema that was never migrated: no server_secrets table
+	defer func() {
+		recovered := recover()
+		if recovered == nil || !strings.Contains(fmt.Sprint(recovered), "image signing key") {
+			t.Fatalf("recovered %v, want a panic that names the image signing key", recovered)
+		}
+	}()
+	httpapi.New(pool, httpapi.Config{Origin: testOrigin})
 }
 
 // cacheRows lists the stored object key of every cached image, by original URL hash order of insertion.
@@ -338,4 +380,84 @@ func TestServingACachedImageNotesTheUseAtMostOncePerDay(t *testing.T) {
 		t.Fatalf("a view two hours after the last one rewrote last_served_at (now %v old)", age())
 	}
 	_ = httptest.NewRecorder
+}
+
+// The sweep's cap is per workspace, like the cap on writing: a workspace over its share loses its own oldest
+// images and no one else's.
+func TestCacheSweepNeverEvictsOneWorkspaceBecauseAnotherIsOverItsCap(t *testing.T) {
+	host := newImageHost(t, func(w http.ResponseWriter, r *http.Request) {
+		size := map[string]int{"/big1.png": 1000, "/big2.png": 1100, "/small.png": 300}[r.URL.Path]
+		w.Write(pngOf(size, byte(size)))
+	})
+	desk := newLimitDesk(t, allowing(host), nil)
+	adminA, secretA := desk.workspace(t, "Big Desk", "big-desk.example.com")
+	adminB, secretB := desk.workspace(t, "Small Desk", "small-desk.example.com")
+	for _, item := range []struct{ admin, secret, markup string }{
+		{adminA, secretA, `<img src="` + host.URL + `/big1.png"><img src="` + host.URL + `/big2.png">`},
+		{adminB, secretB, `<img src="` + host.URL + `/small.png">`},
+	} {
+		for _, path := range proxyPaths(t, desk.api, item.admin, item.secret, item.markup) {
+			if request(t, desk.api, http.MethodGet, path, nil, item.admin, nil).Code != http.StatusOK {
+				t.Fatal("fetch failed")
+			}
+		}
+	}
+	// The small workspace's image is the least recently served of all three.
+	if _, err := desk.pool.Exec(context.Background(), `UPDATE mail_image_cache SET last_served_at=now()-interval '3 days' WHERE size=300`); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := store.New(desk.pool).WithObjects(desk.storage).SweepMailImageCache(context.Background(), 30*24*time.Hour, 1500)
+	if err != nil || removed != 1 {
+		t.Fatalf("removed %d, %v; want 1 (only the big workspace's own oldest image)", removed, err)
+	}
+	var small, big int
+	if err := desk.pool.QueryRow(context.Background(), `SELECT count(*) FILTER (WHERE size=300), count(*) FILTER (WHERE size<>300) FROM mail_image_cache`).Scan(&small, &big); err != nil {
+		t.Fatal(err)
+	}
+	if small != 1 || big != 1 {
+		t.Fatalf("small workspace kept %d images, big workspace kept %d; want 1 and 1", small, big)
+	}
+}
+
+// stallingWriter is a client that has stopped reading: its Write waits until released.
+type stallingWriter struct {
+	header  http.Header
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (w *stallingWriter) Header() http.Header { return w.header }
+func (w *stallingWriter) WriteHeader(int)     {}
+func (w *stallingWriter) Write(p []byte) (int, error) {
+	w.once.Do(func() { close(w.started) })
+	<-w.release
+	return len(p), nil
+}
+
+// The bytes are in memory when the response starts, so a client that reads slowly must not keep a fetch slot.
+func TestASlowReadingClientDoesNotHoldAFetchSlot(t *testing.T) {
+	host := newImageHost(t, serveBytes("image/png", tinyPNG))
+	desk := newLimitDesk(t, allowing(host), func(config *httpapi.Config) {
+		config.MailImageConcurrency = 1
+		config.MailImageQueueWait = time.Second
+	})
+	admin, secret := desk.workspace(t, "Slow Desk", "slow-desk.example.com")
+	paths := proxyPaths(t, desk.api, admin, secret, `<img src="`+host.URL+`/a.png"><img src="`+host.URL+`/b.png">`)
+	stalled := &stallingWriter{header: http.Header{}, started: make(chan struct{}), release: make(chan struct{})}
+	finished := make(chan struct{})
+	go func() {
+		desk.api.ServeHTTP(stalled, newRequest(t, http.MethodGet, paths[0], nil, admin, nil))
+		close(finished)
+	}()
+	select {
+	case <-stalled.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the first response never started")
+	}
+	if response := request(t, desk.api, http.MethodGet, paths[1], nil, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("a second image got %d while a client was slow to read the first", response.Code)
+	}
+	close(stalled.release)
+	<-finished
 }

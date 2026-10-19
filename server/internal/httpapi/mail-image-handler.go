@@ -3,14 +3,15 @@ package httpapi
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
@@ -31,18 +32,15 @@ const (
 )
 
 // mailImageKey loads the key that signs proxy addresses from the database, where the first process to
-// start stored it: every replica, deploy and restart signs and verifies with the same key. If the database
-// cannot give it, this process signs with a key of its own and says so; its images then fail on other
-// processes until the database answers at the next start.
+// start stored it: every replica, deploy and restart signs and verifies with the same key. When the database
+// cannot give it the server stops here, with the reason: a process that signed with a key of its own would
+// answer 403 to images signed by its replicas and show nothing wrong.
 func (a *API) mailImageKey() []byte {
-	key, err := a.store.ServerSecret(context.Background(), mailImageKeyName)
-	if err == nil {
-		return key
-	}
-	log.Printf("mail image: signing key from the database failed, using a key private to this process: %v", err)
-	key = make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		panic("mail image key: " + err.Error())
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	key, err := a.store.ServerSecret(ctx, mailImageKeyName)
+	if err != nil {
+		panic(fmt.Sprintf("cannot read the image signing key from the database (run `collie migrate` first?): %v", err))
 	}
 	return key
 }
@@ -93,7 +91,11 @@ func (a *API) mailImage(response http.ResponseWriter, request *http.Request) {
 		}
 		return
 	}
-	defer release()
+	// The slot bounds fetching and caching, not the client: once the bytes are in memory it is given back, so a
+	// client that reads slowly cannot hold it.
+	var once sync.Once
+	giveBack := func() { once.Do(release) }
+	defer giveBack()
 	image, err := a.mailImageFetcher.Fetch(request.Context(), target)
 	if err != nil {
 		// A source that went away must not hide an image the team has already seen (until the sweep
@@ -110,6 +112,7 @@ func (a *API) mailImage(response http.ResponseWriter, request *http.Request) {
 			log.Printf("mail image: cache: %v", err)
 		}
 	}
+	giveBack()
 	writeMailImage(response, image.ContentType, int64(len(image.Data)), bytes.NewReader(image.Data))
 }
 
