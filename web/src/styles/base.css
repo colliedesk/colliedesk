@@ -33,10 +33,8 @@ input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 textarea { padding: var(--space-2) var(--space-3); }
 select {
   appearance: none; padding-right: var(--space-8); cursor: pointer;
-  /* The two halves of the chevron use the same neutral token in either theme. */
-  background-image: linear-gradient(45deg, transparent 50%, var(--text-3) 50%), linear-gradient(135deg, var(--text-3) 50%, transparent 50%);
-  background-position: right 16px center, right 10px center;
-  background-size: 6px 6px; background-repeat: no-repeat;
+  /* The chevron is a theme token whose stroke is --text-3, so it follows the theme. */
+  background-image: var(--select-chevron); background-position: right 10px center; background-repeat: no-repeat;
 }
 select[multiple], select[size]:not([size="1"]) { background-image: none; padding-right: var(--space-3); }
 option { background: var(--surface-1); color: var(--text-1); }

@@ -61,6 +61,7 @@
   --text-1: #171717;
   --text-2: #4d4d4d;
   --text-3: #636363;                 /* meta, timestamps, labels */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23636363' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");   /* stroke = --text-3 */
   --text-inverse: #ffffff;
 
   /* Brand: ink. The primary action, links and selection are ink and neutral grey; colour is kept for status, focus and notes. */
@@ -121,6 +122,7 @@
   --text-1: #fafafa;                 /* primary */
   --text-2: #d4d4d4;                 /* secondary, body on the site */
   --text-3: #a3a3a3;                 /* meta, timestamps, labels */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23a3a3a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");   /* stroke = --text-3 */
   --text-inverse: #0a0a0a;           /* on --surface-inverse */
 
   /* Brand: ink, inverted */
