@@ -403,8 +403,8 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - if: steps.head.outputs.current == 'true'
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # imagetools works on the registry alone, so the runner's bundled buildx needs no builder
+      # container (setup-buildx cost 7 of this job's 14 seconds).
       - if: steps.head.outputs.current == 'true'
         name: Point edge at the tested digest
         run: docker buildx imagetools create -t ghcr.io/colliedesk/colliedesk:edge "ghcr.io/colliedesk/colliedesk:sha-$GITHUB_SHA"
