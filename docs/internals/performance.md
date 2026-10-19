@@ -65,3 +65,13 @@ Warm open (a click on a list row, synthetic data, 5 tickets including a 285 KB H
 `corepack pnpm bundle:check` reads the production Vite output. The largest JavaScript asset must be at most 200 KiB gzip. The largest CSS asset must be at most 30 KiB gzip. `make test` and the web CI job build the bundle before running this gate.
 
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
+
+## CI phase budget
+
+CI has a 120-second wall-clock budget from the workflow trigger, including queue, setup, all tests, security checks and smoke tests. The `ci-ok` job waits for CodeQL and every other check, then `.github/scripts/ci-budget.py` rejects an over-budget phase. Jobs also have native two-minute deadlines. A provider-green result alone is not acceptance evidence; inspect the completed run timestamps, including job cleanup.
+
+The Go matrix partitions the inventory printed by `go test -list . ./...` into nine disjoint name sets: eight regular shards and one for the large latency fixtures. Tests, examples and fuzz seed cases all run once; selecting a parent runs its subtests. `.github/scripts/go-test-shard.py` fails on an empty inventory and anchors each selected name. `tests/ci-tools-test.py` verifies coverage, determinism and the elapsed-time boundary. PostgreSQL services use disposable tmpfs data directories; the production database configuration is unchanged.
+
+The email-layout fixtures reload after the inbound API creates their synthetic email. This avoids waiting for the inbox's 20-second activity poll; all layout stability and security assertions remain. The web job owns API drift checks, TypeScript checks and the production bundle gate. Browser jobs build the same Vite assets without repeating those checks. Onboarding uses two Playwright shards with separate databases and servers; the journeys remain sequential inside each shard.
+
+Image builds use a fresh builder without a remote layer cache: the measured cache restore/export cost exceeded the rebuild savings. Keep image boot, real installer and compose smoke checks before publishing.

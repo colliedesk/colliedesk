@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     services:
@@ -74,7 +74,7 @@ jobs:
           if [ -n "$(gofmt -l .)" ]; then gofmt -l .; echo 'gofmt: format the files above' >&2; exit 1; fi
           go vet ./...
           go test -list . ./... > "$RUNNER_TEMP/go-test-list.txt"
-          pattern=$(python3 ../.github/scripts/go-test-shard.py "$SHARD" 8 < "$RUNNER_TEMP/go-test-list.txt")
+          pattern=$(python3 ../.github/scripts/go-test-shard.py "$SHARD" 9 < "$RUNNER_TEMP/go-test-list.txt")
           go test -count=1 -run "$pattern" ./...
   web:
     runs-on: ubuntu-latest
@@ -93,7 +93,7 @@ jobs:
         run: corepack pnpm install --frozen-lockfile
       - name: Typecheck, test, and build
         working-directory: web
-        run: corepack pnpm typecheck && corepack pnpm test && corepack pnpm build && corepack pnpm bundle:check
+        run: corepack pnpm typecheck && corepack pnpm test && corepack pnpm exec vite build && corepack pnpm bundle:check
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -138,6 +138,10 @@ jobs:
   # The customer onboarding journeys listed in AGENTS.md. A separate job so they run in parallel
   # with the other end-to-end tests; every test runs in exactly one of the two jobs.
   onboarding:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     services:
@@ -182,7 +186,7 @@ jobs:
         run: corepack pnpm exec playwright install chromium
       - name: Run onboarding journeys
         working-directory: web
-        run: corepack pnpm exec vite build && corepack pnpm e2e --grep @onboarding
+        run: corepack pnpm exec vite build && corepack pnpm e2e --grep @onboarding --shard=${{ matrix.shard }}/2
   # Builds the server image once, boots it, then runs install.sh exactly as a self-hoster does.
   # On main the tested image is pushed as sha-<commit>; publish-edge only retags that digest.
   image:

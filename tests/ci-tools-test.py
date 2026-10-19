@@ -33,6 +33,15 @@ class Shards(unittest.TestCase):
         self.assertEqual(first.stdout, second.stdout)
         self.assertEqual(first.returncode, 0, first.stderr)
 
+    def test_large_latency_fixtures_have_a_separate_runner(self):
+        listing = self.listing + 'TestInboxListLatencyBudget\nTestPendingAgentRequestsLatencyBudget\n'
+        patterns = [run('go-test-shard.py', str(i), '3', stdin=listing).stdout.strip()
+                    for i in range(1, 4)]
+        for name in ['TestInboxListLatencyBudget', 'TestPendingAgentRequestsLatencyBudget']:
+            self.assertFalse(any(re.search(p, name) for p in patterns[:-1]))
+            self.assertRegex(name, patterns[-1])
+        self.assertNotRegex('TestAlpha', patterns[-1])
+
     def test_empty_inventory_and_invalid_shards_fail_closed(self):
         for args, listing in [(('0', '3'), self.listing), (('4', '3'), self.listing),
                               (('1', '0'), self.listing), (('1', '3'), '? pkg [no test files]')]:
