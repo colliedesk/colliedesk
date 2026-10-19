@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { InvalidRequestError } from '../../api/client';
 import type { AgentRequest } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
+import { track } from '../../lib/product-analytics';
 import { messages } from '../../messages';
 import { replyCall } from './request-call';
 import { isSavedReplyRequest, SavedReplyProposal } from './saved-reply-proposal';
@@ -83,12 +84,12 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
       {current.status === 'pending' && <div className="request-actions">
         {canApprove
           ? <button type="button" className="primary-action" disabled={busy || current.requested_by.token_revoked}
-              onClick={() => void run(async () => setOutcome(await onApprove(item.id)))}>{messages.approve}</button>
+              onClick={() => void run(async () => { setOutcome(await onApprove(item.id)); track('agent_request_decided', { decision: 'approved' }); })}>{messages.approve}</button>
           : <span className="muted-copy">{item.approvable_by === 'owner' ? messages.onlyOwnerApproves : messages.onlyAdminApproves}</span>}
         <label className="request-reason"><span>{messages.rejectReason}</span>
           <input value={reason} maxLength={1000} onChange={(event) => setReason(event.target.value)} /></label>
         <button type="button" className="danger-action" disabled={busy}
-          onClick={() => void run(() => onReject(item.id, reason.trim() || undefined))}>{messages.reject}</button>
+          onClick={() => void run(async () => { await onReject(item.id, reason.trim() || undefined); track('agent_request_decided', { decision: 'rejected' }); })}>{messages.reject}</button>
       </div>}
     </article>
   );

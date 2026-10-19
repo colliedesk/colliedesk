@@ -1,5 +1,7 @@
 import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
+import { track } from '../../lib/product-analytics';
+import type { SettingsSection } from '../../lib/product-analytics';
 import { messages } from '../../messages';
 
 export type SettingsPath = '/settings' | '/settings/billing';
@@ -11,6 +13,13 @@ export function hrefFor(item: NavItem, page: SettingsPath): string {
   if (!item.hash) return item.to;
   return `${item.to === page ? '' : item.to}#${item.hash}`;
 }
+
+const sectionByHash: Record<string, SettingsSection> = {
+  'profile-heading': 'profile', 'preferences-heading': 'preferences', 'general-heading': 'general', 'team-heading': 'team',
+  'invites-heading': 'invites', 'sessions-heading': 'sessions', 'email-channel-heading': 'email_channel', 'web-form-heading': 'web_form',
+  'saved-replies-heading': 'saved_replies', 'export-heading': 'export',
+};
+const sectionOf = (item: NavItem): SettingsSection | undefined => (item.hash ? sectionByHash[item.hash] : item.to === '/settings/billing' ? 'billing' : undefined);
 
 type RenderLink = (item: NavItem, page: SettingsPath) => ReactNode;
 const plainLink: RenderLink = (item, page) =>
@@ -45,7 +54,7 @@ export function SettingsNav({ shown, page }: { shown: Shown; page: SettingsPath 
   return (
     <nav className="settings-nav" aria-label={messages.settingsSections}>
       {settingsNavGroups(shown, page).map((group) => <div key={group.label}><p className="settings-group-label">{group.label}</p>
-        <ul>{group.items.map((item) => <li key={item.label}>{renderLink(item, page)}</li>)}</ul>
+        <ul>{group.items.map((item) => <li key={item.label} onClick={() => { const section = sectionOf(item); if (section) track('settings_section_opened', { section }); }}>{renderLink(item, page)}</li>)}</ul>
       </div>)}
     </nav>
   );

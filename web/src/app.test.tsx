@@ -5,6 +5,10 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { routeTree } from './app';
 import { readCheckoutIntent, rememberCheckoutIntent } from './features/settings/checkout-intent';
 import { createQueryClient } from './query-client';
+import { resetProductAnalytics } from './lib/product-analytics';
+
+// Only PostHog's own wrapper calls are observed; the rest of the module is the real one.
+vi.mock('./lib/product-analytics', async (original) => ({ ...(await original<typeof import('./lib/product-analytics')>()), resetProductAnalytics: vi.fn() }));
 
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
@@ -180,4 +184,21 @@ test('billing lives in Settings: the rail keeps Settings current, the settings n
   expect(within(sections).getByRole('link', { name: 'Team' })).toHaveAttribute('href', '/settings#team-heading');
   expect(screen.getByRole('region', { name: /plan notices/i })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Choose a plan' })).not.toBeInTheDocument();
+});
+
+test('signing out forgets the agent for analytics only after the server ended the session', async () => {
+  let loggedOut = false;
+  fetchMock.mockImplementation((url: string) => {
+    const path = url.split('?')[0];
+    if (path === '/api/v1/auth/logout') { loggedOut = true; return Promise.resolve(new Response(null, { status: 204 })); }
+    if (path === '/api/v1/auth/me') return Promise.resolve(loggedOut ? json(401, { error: { code: 'unauthorized', message: 'no' } }) : json(200, meBody('agent', null)));
+    if (path === '/api/v1/config') return Promise.resolve(json(200, config));
+    return Promise.resolve(json(200, { items: [], page: 1, page_size: 50 }));
+  });
+  open('/settings');
+  vi.mocked(resetProductAnalytics).mockClear();
+  fireEvent.click(await screen.findByRole('button', { name: /account|sam@example.com/i }));
+  expect(resetProductAnalytics).not.toHaveBeenCalled();
+  fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+  await waitFor(() => expect(resetProductAnalytics).toHaveBeenCalledTimes(1));
 });

@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { ExportRefusedError } from '../../api/workspace-export';
+import { track } from '../../lib/product-analytics';
 import { formatWait } from '../../lib/format-wait';
 import { messages } from '../../messages';
 
@@ -45,7 +46,7 @@ export function ExportAllData() {
   }, []);
   const start = useMutation({
     mutationFn: api.requestExportLink,
-    onSuccess: (url) => window.location.assign(url),
+    onSuccess: (url) => { track('workspace_export_requested'); window.location.assign(url); },
   });
   return (
     <div className="export-action">

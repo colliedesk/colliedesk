@@ -106,6 +106,33 @@ never loads the analytics library. Every event carries `realm` (`cloud` or `self
   content is sent. URLs are sent without their query string or fragment, and page titles are dropped.
 - Nothing is stored in the browser for it (no cookie, no local storage), and no session is recorded.
 
+Besides page views, the web app sends these named events. Their properties are only yes/no values,
+counts and a fixed set of labels; never a search term, a contact, a message, or an id of either.
+Each is sent only after the action succeeded.
+
+| Event | Properties |
+|---|---|
+| `conversation_opened` | `source`: `list` or `link` |
+| `inbox_filtered` | `filter`: `status`, `assignee` or `tag` |
+| `inbox_searched` | `has_results` (the search words are never sent) |
+| `saved_reply_inserted` | none |
+| `conversation_status_changed` | `to`: the new status |
+| `conversation_assigned` | `to_self` |
+| `bulk_action_applied` | `action`: `status`, `assign`, `add_tag` or `remove_tag`; `count` |
+| `agent_request_decided` | `decision`: `approved` or `rejected` |
+| `settings_section_opened` | `section`: the settings section |
+| `workspace_export_requested` | none |
+
+When you sign out, the web app forgets the agent id, so later events no longer carry it.
+
+### Trial question (Colliedesk Cloud only)
+
+In the last 7 days of a free trial, an admin sees one question: "What is still missing for you to
+leave Freshdesk for good?" It appears once; "Not now" or "Send" closes it for good in that browser.
+The text of the answer is sent only when the admin presses **Send**, as the event
+`survey_answered`. This is the one event that carries text a person typed. "Not now" sends
+`survey_dismissed` with no text. Self-hosted installs never show the question.
+
 ## Where it goes
 
 The report goes to PostHog (`us.i.posthog.com`), the product analytics service the Colliedesk team

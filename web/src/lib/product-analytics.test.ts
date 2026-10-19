@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { resetProductAnalyticsForTest, scrubEvent, startProductAnalytics } from './product-analytics';
+import { resetProductAnalytics, resetProductAnalyticsForTest, scrubEvent, startProductAnalytics, track } from './product-analytics';
 
 // The loader stands in for posthog-js, the external analytics service.
 function fakePostHog() {
-  return { init: vi.fn(), identify: vi.fn(), register: vi.fn() };
+  return { init: vi.fn(), identify: vi.fn(), register: vi.fn(), capture: vi.fn(), reset: vi.fn() };
 }
 
 const me = {
@@ -55,6 +55,58 @@ describe('startProductAnalytics', () => {
     await startProductAnalytics(settings, me, loader);
     expect(loader).toHaveBeenCalledTimes(1);
     expect(posthog.init).toHaveBeenCalledTimes(1);
+  });
+});
+
+const cloud = { enabled: true, key: 'phc_cloudkey', host: 'https://us.i.posthog.com', realm: 'cloud' };
+
+describe('realm', () => {
+  it('is registered at start, before anyone signs in, so signed-out pageviews carry it', async () => {
+    const posthog = fakePostHog();
+    await startProductAnalytics(cloud, undefined, async () => posthog);
+    expect(posthog.register).toHaveBeenCalledTimes(1);
+    expect(posthog.register).toHaveBeenCalledWith({ realm: 'cloud' });
+    expect(posthog.identify).not.toHaveBeenCalled();
+  });
+});
+
+describe('track', () => {
+  it('does nothing before PostHog started, and does not queue the event for later', async () => {
+    const posthog = fakePostHog();
+    expect(track('saved_reply_inserted')).toBe(false);
+    await startProductAnalytics(cloud, me, async () => posthog);
+    expect(posthog.capture).not.toHaveBeenCalled();
+  });
+
+  it('forwards the event name and its properties once PostHog started', async () => {
+    const posthog = fakePostHog();
+    await startProductAnalytics(cloud, me, async () => posthog);
+    expect(track('bulk_action_applied', { action: 'status', count: 3 })).toBe(true);
+    track('saved_reply_inserted');
+    expect(posthog.capture).toHaveBeenNthCalledWith(1, 'bulk_action_applied', { action: 'status', count: 3 });
+    expect(posthog.capture).toHaveBeenNthCalledWith(2, 'saved_reply_inserted', undefined);
+  });
+
+  it('never throws into the app when the library fails', async () => {
+    const posthog = fakePostHog();
+    posthog.capture.mockImplementation(() => { throw new Error('boom'); });
+    await startProductAnalytics(cloud, me, async () => posthog);
+    expect(track('saved_reply_inserted')).toBe(false);
+  });
+});
+
+describe('resetProductAnalytics', () => {
+  it('forgets the signed-out agent but keeps the realm on later events', async () => {
+    const posthog = fakePostHog();
+    await startProductAnalytics(cloud, me, async () => posthog);
+    resetProductAnalytics();
+    expect(posthog.reset).toHaveBeenCalledTimes(1);
+    expect(posthog.register).toHaveBeenLastCalledWith({ realm: 'cloud' });
+    expect(posthog.reset.mock.invocationCallOrder[0]).toBeLessThan(posthog.register.mock.invocationCallOrder.at(-1)!);
+  });
+
+  it('does nothing when analytics never started', () => {
+    expect(() => resetProductAnalytics()).not.toThrow();
   });
 });
 
