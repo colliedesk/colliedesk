@@ -26,7 +26,7 @@ const loadPostHog: PostHogLoader = async () => (await import('posthog-js/no-exte
 const URL_PROPERTIES = ['$current_url', '$referrer', '$initial_current_url', '$initial_referrer',
   '$session_entry_url', '$session_entry_referrer'];
 
-// cleanURLs drops the query and fragment of every URL property; an unparsable one is dropped whole.
+// cleanURLs drops the query and fragment of every URL property; a non-URL value is dropped if it has either.
 function cleanURLs(properties: Record<string, unknown>): Record<string, unknown> {
   const cleaned = { ...properties };
   for (const key of URL_PROPERTIES) {
@@ -38,7 +38,8 @@ function cleanURLs(properties: Record<string, unknown>): Record<string, unknown>
       url.hash = '';
       cleaned[key] = url.toString();
     } catch {
-      delete cleaned[key];
+      // Not a URL: PostHog's own markers such as "$direct" stay; anything that could carry a query goes.
+      if (/[?#]/.test(value)) delete cleaned[key];
     }
   }
   return cleaned;
@@ -49,13 +50,20 @@ function cleanURLs(properties: Record<string, unknown>): Record<string, unknown>
 export function scrubEvent(event: CaptureResult | null): CaptureResult | null {
   if (!event) return event;
   const properties = cleanURLs(event.properties ?? {});
-  for (const key of ['$set', '$set_once']) {
-    const nested = properties[key];
-    if (nested && typeof nested === 'object') properties[key] = cleanURLs(nested as Record<string, unknown>);
-  }
+  cleanPersonProperties(properties);
   delete properties.title;
   delete properties.$title;
-  return { ...event, properties } as CaptureResult;
+  // posthog-js sends $set and $set_once beside the properties too, and the person keeps them for good.
+  const scrubbed: Record<string, unknown> = { ...event, properties };
+  cleanPersonProperties(scrubbed);
+  return scrubbed as unknown as CaptureResult;
+}
+
+function cleanPersonProperties(holder: Record<string, unknown>) {
+  for (const key of ['$set', '$set_once']) {
+    const nested = holder[key];
+    if (nested && typeof nested === 'object') holder[key] = cleanURLs(nested as Record<string, unknown>);
+  }
 }
 
 function options(host: string): Partial<PostHogConfig> {

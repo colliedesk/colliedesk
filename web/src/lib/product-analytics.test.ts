@@ -134,6 +134,23 @@ describe('scrubEvent', () => {
     expect(event?.properties).toEqual({ $current_url: 'https://app.colliedesk.com/', $referrer: 'https://app.colliedesk.com/settings', $pathname: '/' });
   });
 
+  // posthog-js puts $set and $set_once on the event itself, next to properties: a sign-in link's
+  // one-time token reached the person this way before the fix.
+  it('cleans the person URLs posthog-js sends beside the properties, such as a sign-in token', () => {
+    const event = scrubEvent({
+      uuid: '01a1524f-3bd0-7b2b-b2fd-edb4cf9852de',
+      event: '$identify',
+      properties: { $current_url: 'https://app.colliedesk.com/' },
+      $set: { role: 'admin', $current_url: 'https://app.colliedesk.com/sign-in?token=abc123#x' },
+      $set_once: { $initial_current_url: 'https://app.colliedesk.com/sign-in?token=abc123', $initial_referrer: '$direct' },
+    } as never);
+    expect(JSON.stringify(event)).not.toContain('abc123');
+    expect((event as unknown as { $set_once: Record<string, unknown> }).$set_once).toEqual({
+      $initial_current_url: 'https://app.colliedesk.com/sign-in', $initial_referrer: '$direct',
+    });
+    expect((event as unknown as { $set: Record<string, unknown> }).$set).toEqual({ role: 'admin', $current_url: 'https://app.colliedesk.com/sign-in' });
+  });
+
   it('cleans the URLs PostHog keeps on the person and the session too', () => {
     const event = scrubEvent({
       uuid: '01a1524f-3bd0-7b2b-b2fd-edb4cf9852dd',
