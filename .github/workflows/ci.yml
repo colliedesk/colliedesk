@@ -45,25 +45,8 @@ jobs:
         with:
           go-version: '1.27.x'
           cache: false
-      - name: CI shard and elapsed-time contracts
-        run: python3 tests/ci-tools-test.py
-      - name: Product name spelled Colliedesk
-        run: sh tests/brand-name-test.sh
-      - name: No webhook secret literals (GitHub secret scanning)
-        run: sh tests/webhook-secret-literal-test.sh
-      - name: Release tags stay alpha (v0.0.N)
-        run: sh tests/release-tag-test.sh
-      - name: Release button picks the Cloud commit and the next tag
-        run: sh tests/release-next-test.sh
-      - name: Roadmap gate rules (stubbed issue lookup)
-        run: python3 -I tests/roadmap-check-test.py
-      - name: Mail pipe wrapper exit codes
-        run: sh tests/mail-pipe-test.sh
-      - name: MTA recipient policy answers
-        run: python3 -I tests/rcpt-policy-test.py
-      - name: Installer argument and failure handling (stubbed Docker)
-        run: sh tests/install-test.sh
       - name: Validate migrations
+        if: matrix.shard == 9
         working-directory: server
         run: go run ./cmd/migration-check --repo=..
       - name: Format, vet and test
@@ -72,7 +55,7 @@ jobs:
           SHARD: ${{ matrix.shard }}
         run: |
           if [ -n "$(gofmt -l .)" ]; then gofmt -l .; echo 'gofmt: format the files above' >&2; exit 1; fi
-          go vet ./...
+          if [ "$SHARD" = 9 ]; then go vet ./...; fi
           go test -list . ./... > "$RUNNER_TEMP/go-test-list.txt"
           pattern=$(python3 ../.github/scripts/go-test-shard.py "$SHARD" 9 < "$RUNNER_TEMP/go-test-list.txt")
           go test -count=1 -run "$pattern" ./...
@@ -279,6 +262,30 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: CI shard and elapsed-time contracts
+        run: python3 tests/ci-tools-test.py
+      - name: Product name spelled Colliedesk
+        run: sh tests/brand-name-test.sh
+      - name: No webhook secret literals (GitHub secret scanning)
+        run: sh tests/webhook-secret-literal-test.sh
+      - name: Release tags stay alpha (v0.0.N)
+        run: sh tests/release-tag-test.sh
+      - name: Release button picks the Cloud commit and the next tag
+        run: sh tests/release-next-test.sh
+      - name: Roadmap gate rules (stubbed issue lookup)
+        run: python3 -I tests/roadmap-check-test.py
+      - name: Mail pipe wrapper exit codes
+        run: sh tests/mail-pipe-test.sh
+      - name: MTA recipient policy answers
+        run: python3 -I tests/rcpt-policy-test.py
+      - name: Installer argument and failure handling (stubbed Docker)
+        run: sh tests/install-test.sh
+      - name: ci-ok waits for every job
+        run: sh tests/ci-ok-needs-test.sh && sh tests/after-ci-ok-runs-test.sh
+      - name: Actions and base images are pinned
+        run: sh tests/pinned-dependencies-test.sh
+      - name: Pinned action archives are fetchable
+        run: sh tests/pinned-actions-fetchable-test.test.sh && sh tests/pinned-actions-fetchable-test.sh
       - name: ROADMAP.md matches the issue tracker
         env:
           GH_TOKEN: ${{ github.token }}
@@ -308,12 +315,6 @@ jobs:
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: ci-ok waits for every job
-        run: sh tests/ci-ok-needs-test.sh && sh tests/after-ci-ok-runs-test.sh
-      - name: Actions and base images are pinned
-        run: sh tests/pinned-dependencies-test.sh
-      - name: Pinned action archives are fetchable
-        run: sh tests/pinned-actions-fetchable-test.test.sh && sh tests/pinned-actions-fetchable-test.sh
       - name: Every job passed or was skipped
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
