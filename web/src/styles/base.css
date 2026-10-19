@@ -13,6 +13,10 @@ button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: 0.5; }
 a { color: var(--accent-text); }
 a:hover { color: var(--accent-hover); }
+/* Links are ink: a link inside running text is underlined so it never relies on colour. Classed links
+   (rail, buttons, rows) style themselves. */
+a:not([class]) { text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+a:not([class]):hover { text-decoration-color: currentColor; }
 h1, h2, h3, p { margin: 0; }
 h1, h2, h3 { text-wrap: balance; }
 p { text-wrap: pretty; }

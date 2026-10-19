@@ -15,7 +15,7 @@ export function storedTheme(storage: Pick<Storage, 'getItem'> | undefined = defa
 
 // The page background of each theme (`--surface-0`), for the browser chrome. index.html carries the
 // same dark value in its boot script; a test keeps all three equal to tokens.css.
-export const themeColors: Record<Theme, string> = { light: '#f5f7fa', dark: '#0b0f15' };
+export const themeColors: Record<Theme, string> = { light: '#fafafa', dark: '#0a0a0a' };
 
 export function applyTheme(theme: Theme, root: HTMLElement = document.documentElement) {
   root.dataset.theme = theme;

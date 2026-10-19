@@ -37,7 +37,7 @@ test('blocked storage still applies the theme for this page', () => {
 });
 
 test('the browser chrome colour follows the theme, and matches the page background token', () => {
-  document.head.insertAdjacentHTML('beforeend', '<meta name="theme-color" content="#f5f7fa">');
+  document.head.insertAdjacentHTML('beforeend', '<meta name="theme-color" content="#fafafa">');
   const meta = () => document.querySelector('meta[name="theme-color"]')!.getAttribute('content');
   const tokens = readFileSync('src/styles/tokens.css', 'utf8');
   const surface0 = (block: string) => new RegExp(`${block}[^{]*\\{[^}]*--surface-0:\\s*(#[0-9a-f]{6})`, 'i').exec(tokens)?.[1];
