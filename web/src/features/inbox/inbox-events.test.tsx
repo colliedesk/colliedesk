@@ -11,7 +11,7 @@ const api = vi.hoisted(() => ({
   emailChannel: vi.fn(async () => ({ channel: null, inbound_url: '', smtp: { configured: false }, from_policy: 'verified', sending_from: null })),
 }));
 const analytics = vi.hoisted(() => ({ track: vi.fn(() => true) }));
-vi.mock('../../api/client', () => ({ api }));
+vi.mock('../../api/client', () => ({ api, InvalidRequestError: class extends Error {} }));
 vi.mock('../../lib/product-analytics', () => ({ track: analytics.track }));
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn(), useParams: () => ({}) }));
 

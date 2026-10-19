@@ -32,6 +32,16 @@ type Delivery struct {
 	// CC is the list stored with the reply; a retry sends to the same addresses.
 	CC    []string
 	Files []DeliveryFile
+	// Transport is what the reply was accepted for: "smtp", or "gmail" through Mailbox.
+	Transport string
+	// Mailbox is the workspace's connected Gmail account now; nil when none is connected.
+	Mailbox *DeliveryMailbox
+}
+
+// DeliveryMailbox is the connected Gmail account a reply leaves through, with its sealed grant.
+type DeliveryMailbox struct {
+	Address, Status, ErrorCode string
+	Grant                      SealedGrant
 }
 
 // DeliveryFile is a file attached to the reply, kept in attachment storage under StorageKey.
@@ -50,13 +60,13 @@ func (s *Store) ClaimDueDeliveries(ctx context.Context, now time.Time, limit int
 				SELECT id FROM email_outbox WHERE status='queued' AND next_attempt_at<=$1 AND (locked_until IS NULL OR locked_until<=$1)
 				ORDER BY next_attempt_at LIMIT $2 FOR UPDATE SKIP LOCKED)
 			UPDATE email_outbox o SET locked_until=$3,attempts=o.attempts+1,claim_token=gen_random_uuid(),updated_at=$1 FROM due WHERE o.id=due.id
-			RETURNING o.id::text,o.workspace_id::text,o.message_id::text,o.claim_token::text,o.attempts`, now, limit, now.Add(lease))
+			RETURNING o.id::text,o.workspace_id::text,o.message_id::text,o.claim_token::text,o.attempts,o.transport`, now, limit, now.Add(lease))
 		if err != nil {
 			return fmt.Errorf("claim deliveries: %w", err)
 		}
 		claimed, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (Delivery, error) {
 			var item Delivery
-			err := row.Scan(&item.OutboxID, &item.WorkspaceID, &item.MessageID, &item.ClaimToken, &item.Attempts)
+			err := row.Scan(&item.OutboxID, &item.WorkspaceID, &item.MessageID, &item.ClaimToken, &item.Attempts, &item.Transport)
 			return item, err
 		})
 		if err != nil {
@@ -118,6 +128,15 @@ func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("iterate thread references: %w", err)
+	}
+	var mailbox DeliveryMailbox
+	err = tx.QueryRow(ctx, `SELECT address,status,COALESCE(error_code,''),token_key_id,refresh_token_sealed FROM mailbox_connections WHERE workspace_id=$1`, item.WorkspaceID).
+		Scan(&mailbox.Address, &mailbox.Status, &mailbox.ErrorCode, &mailbox.Grant.KeyID, &mailbox.Grant.Sealed)
+	switch {
+	case err == nil:
+		item.Mailbox = &mailbox
+	case !errors.Is(err, pgx.ErrNoRows):
+		return fmt.Errorf("load mailbox connection: %w", err)
 	}
 	// Reply to the customer's latest message; without one, continue our own thread.
 	item.InReplyTo = lastIncoming

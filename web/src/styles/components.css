@@ -258,6 +258,14 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .confirm-panel { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--danger); border-radius: var(--radius); }
 .invite-link small { color: var(--text-3); font-size: var(--fs-label); }
 .email-channel-dns { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-0); padding: var(--space-4); }
+.gmail-connection { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-0); padding: var(--space-4); }
+.email-channel-dns-folded { display: grid; gap: var(--space-3); }
+.email-channel-dns-folded summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-small); }
+.email-channel-dns-folded summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-sm); }
+.message-envelope .delivery-reason { color: var(--text-2); }
+.gmail-connection-placeholder { min-height: 180px; }
+.gmail-connection h3 { margin: 0; font-size: var(--fs-ui); font-weight: 600; }
+.gmail-connection .warning-note .button-row { margin-top: var(--space-2); }
 .data-list { border-top: 1px solid var(--line); }
 .data-list article { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); border-bottom: 1px solid var(--line); padding: var(--space-3) 0; }
 .data-list article:last-child { border-bottom: 0; padding-bottom: 0; }

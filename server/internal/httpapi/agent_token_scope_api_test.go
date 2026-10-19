@@ -62,6 +62,8 @@ var routeTiers = map[string]string{
 	"DELETE /api/v1/channels/email":                              "approval",
 	"POST /api/v1/channels/email/domain-verification":            "admin",
 	"POST /api/v1/channels/email/secret":                         "approval",
+	"POST /api/v1/channels/email/gmail":                          "approval",
+	"DELETE /api/v1/channels/email/gmail":                        "approval",
 	"GET /api/v1/billing":                                        "admin",
 	"POST /api/v1/billing/checkout":                              "approval",
 	"POST /api/v1/billing/portal":                                "approval",

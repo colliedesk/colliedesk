@@ -53,6 +53,14 @@ type restEmailSettings struct {
 	} `json:"smtp"`
 	SendingFrom   *string `json:"sending_from"`
 	HostedAddress *string `json:"hosted_address"`
+	Gmail         struct {
+		Available  bool `json:"available"`
+		Connection *struct {
+			Address string  `json:"address"`
+			Status  string  `json:"status"`
+			Error   *string `json:"error"`
+		} `json:"connection"`
+	} `json:"gmail"`
 }
 
 func workspaceSettingsGet(c *call, _ map[string]any) (any, error) {
@@ -262,6 +270,11 @@ func webFormUpdate(c *call, arguments map[string]any) (any, error) {
 func emailChannelView(settings restEmailSettings) map[string]any {
 	view := map[string]any{"connected": settings.Channel != nil, "inbound_url": settings.InboundURL, "hosted_address": settings.HostedAddress,
 		"smtp_configured": settings.SMTP.Configured, "sending_from": settings.SendingFrom}
+	gmail := map[string]any{"available": settings.Gmail.Available, "connected": false}
+	if connection := settings.Gmail.Connection; connection != nil {
+		gmail["connected"], gmail["address"], gmail["status"], gmail["error"] = true, connection.Address, connection.Status, connection.Error
+	}
+	view["gmail"] = gmail
 	if channel := settings.Channel; channel != nil {
 		view["support_address"], view["inbound_secret_set"], view["domain"] = channel.SupportAddress, channel.SecretSet, channel.Domain
 		view["domain_verified"], view["dns_record_name"], view["dns_record_value"] = channel.DomainVerifiedAt != nil, channel.DNSRecordName, channel.DNSRecordValue

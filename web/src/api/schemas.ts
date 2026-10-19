@@ -119,8 +119,19 @@ export const emailChannelSchema = z.object({
   domain: z.string(), domain_verified_at: nullableDate, dns_record_name: z.string(), dns_record_value: z.string(),
   dns_records: z.array(emailDnsRecordSchema), dns_records_expired_at: nullableDate, created_at: z.string().datetime(), updated_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'EmailChannel'>>;
+export const mailboxConnectionSchema = z.object({
+  provider: z.enum(['google']), address: z.string().email(), status: z.enum(['connected', 'failed']),
+  error_code: z.enum(['revoked', 'permission']).nullable(), error: z.string().nullable(),
+  failed_at: nullableDate, connected_at: z.string().datetime(),
+}) satisfies z.ZodType<Generated<'MailboxConnection'>>;
+export const gmailSettingsSchema = z.object({
+  available: z.boolean(),
+  missing_settings: z.array(z.enum(['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'MAILBOX_TOKEN_KEYS'])),
+  redirect_uri: z.string().url(), connection: mailboxConnectionSchema.nullable(),
+}) satisfies z.ZodType<Generated<'GmailSettings'>>;
+export const consentLinkSchema = z.object({ url: z.string().url() }) satisfies z.ZodType<JsonResponse<'connectGmail', 200>>;
 export const emailChannelSettingsSchema = z.object({
-  channel: emailChannelSchema.nullable(), inbound_url: z.string().url(),
+  channel: emailChannelSchema.nullable(), inbound_url: z.string().url(), gmail: gmailSettingsSchema,
   from_policy: z.enum(['verified', 'any']), sending_from: z.string().nullable(), hosted_address: z.string().nullable(),
   domain_verification: z.enum(['txt', 'provider']),
   sending_pause: z.object({ paused_at: z.string().datetime(), reason: z.string() }).nullable(),
@@ -180,6 +191,7 @@ export type Invite = Generated<'Invite'>;
 export type Message = Generated<'Message'>;
 export type EmailChannelSettings = Generated<'EmailChannelSettings'>;
 export type EmailDnsRecord = Generated<'EmailDNSRecord'>;
+export type GmailSettings = Generated<'GmailSettings'>;
 export type WebFormSettings = Generated<'WebFormSettings'>;
 export type Session = Generated<'Session'>;
 export type Tag = Generated<'Tag'>;

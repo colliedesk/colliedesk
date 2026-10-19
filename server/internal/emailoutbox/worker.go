@@ -1,4 +1,5 @@
-// Package emailoutbox sends queued replies through SMTP with retries and backoff.
+// Package emailoutbox sends queued replies through SMTP, or through the workspace's connected Gmail
+// account, with retries and backoff.
 package emailoutbox
 
 import (
@@ -17,6 +18,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -53,6 +55,8 @@ type Options struct {
 	Storage attachments.Storage
 	// HourlyLimit caps replies sent per workspace per hour; zero uses the default.
 	HourlyLimit int
+	// Google sends the replies of workspaces that connected Gmail; nil fails them with the reason.
+	Google *google.Config
 }
 
 // Worker drains the email outbox.
@@ -62,7 +66,7 @@ type Worker struct {
 	options Options
 }
 
-// New builds a worker over the store and sender.
+// New builds a worker over the store and sender. A nil sender (no SMTP relay) still sends through Gmail.
 func New(st *store.Store, sender Sender, options Options) *Worker {
 	if options.Now == nil {
 		options.Now = func() time.Time { return time.Now().UTC() }
@@ -159,6 +163,12 @@ func (w *Worker) deliver(ctx context.Context, item store.Delivery) error {
 		return w.store.DeferDelivery(ctx, item, w.options.Now().Add(limitDeferral),
 			fmt.Sprintf("Waiting: this workspace reached its hourly limit of %d emailed replies.", w.options.HourlyLimit))
 	}
+	if item.Transport == transportGmail {
+		return w.deliverGmail(ctx, item)
+	}
+	if w.sender == nil {
+		return w.store.MarkDeliveryFailed(ctx, item, "Outgoing email is not configured on this server. Ask the administrator to set SMTP_HOST.")
+	}
 	from, envelope, ok := w.identity(item)
 	if !ok {
 		return w.store.MarkDeliveryFailed(ctx, item, "Verify the support address domain in Settings before replies can be emailed.")
@@ -171,12 +181,7 @@ func (w *Worker) deliver(ctx context.Context, item store.Delivery) error {
 		return w.store.MarkDeliveryRetry(ctx, item, w.options.Now().Add(Backoff(item.Attempts)), truncate(err.Error()))
 	}
 	copies, unusable := usableCopies(item.CC)
-	message, err := email.Compose(email.Outgoing{Files: files,
-		FromName: from.Name, FromAddress: from.Address, ReplyTo: email.PlusAddress(item.SupportAddress, item.ReplyToken),
-		ReplyToName: item.WorkspaceName,
-		ToName:      item.ContactName, ToAddress: item.ContactEmail, Cc: copies, Subject: item.Subject, Body: item.Body,
-		MessageID: item.EmailMessageID, InReplyTo: item.InReplyTo, References: item.References, Date: w.options.Now(),
-	})
+	message, err := w.compose(item, from, copies, files)
 	if err != nil {
 		return w.store.MarkDeliveryFailed(ctx, item, truncate(err.Error()))
 	}
@@ -190,6 +195,18 @@ func (w *Worker) deliver(ctx context.Context, item store.Delivery) error {
 	default:
 		return w.store.MarkDeliveryRetry(ctx, item, w.options.Now().Add(Backoff(item.Attempts)), truncate(sendErr.Error()))
 	}
+}
+
+// compose renders the reply from the given identity. Reply-To stays the support address with the
+// conversation token on every transport, so the customer's answer threads even when a relay or Gmail
+// rewrites our Message-ID.
+func (w *Worker) compose(item store.Delivery, from mail.Address, copies []string, files []email.File) ([]byte, error) {
+	return email.Compose(email.Outgoing{Files: files,
+		FromName: from.Name, FromAddress: from.Address, ReplyTo: email.PlusAddress(item.SupportAddress, item.ReplyToken),
+		ReplyToName: item.WorkspaceName,
+		ToName:      item.ContactName, ToAddress: item.ContactEmail, Cc: copies, Subject: item.Subject, Body: item.Body,
+		MessageID: item.EmailMessageID, InReplyTo: item.InReplyTo, References: item.References, Date: w.options.Now(),
+	})
 }
 
 // usableCopies splits a stored Cc list into the addresses a message can carry and the rest, which are

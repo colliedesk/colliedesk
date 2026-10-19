@@ -37,13 +37,19 @@ type emailChannelSettings struct {
 	SendingPause *domain.EmailPause `json:"sending_pause"`
 	// DomainVerification is "provider" when the email provider lists the DNS records to publish, else "txt".
 	DomainVerification string `json:"domain_verification"`
+	// Gmail says whether Gmail can be connected and which account is.
+	Gmail gmailSettings `json:"gmail"`
 }
 
-func (a *API) emailSettings(workspaceSlug string, channel *domain.EmailChannel, pause *domain.EmailPause) emailChannelSettings {
+func (a *API) emailSettings(workspaceSlug string, channel *domain.EmailChannel, pause *domain.EmailPause, mailbox *domain.MailboxConnection) emailChannelSettings {
 	config := a.config.Email
 	smtp := config.SMTP
 	settings := emailChannelSettings{Channel: channel, InboundURL: a.config.Origin + inboundEmailPath, FromPolicy: config.FromPolicy, DomainVerification: "txt", SendingPause: pause,
-		SMTP: smtpStatus{Configured: smtp.Configured(), Host: smtp.Host, Port: smtp.Port, StartTLS: smtp.StartTLS, Authenticated: smtp.Username != ""}}
+		SMTP: smtpStatus{Configured: smtp.Configured(), Host: smtp.Host, Port: smtp.Port, StartTLS: smtp.StartTLS, Authenticated: smtp.Username != ""}, Gmail: a.gmailSettings(mailbox)}
+	if channel == nil {
+		// The connection belongs to the channel; without one there is nothing connected.
+		settings.Gmail.Connection = nil
+	}
 	if a.resend != nil {
 		settings.DomainVerification = "provider"
 	}
@@ -52,6 +58,13 @@ func (a *API) emailSettings(workspaceSlug string, channel *domain.EmailChannel, 
 	}
 	if address := email.HostedAddress(workspaceSlug, config.HostedMailDomain); address != "" {
 		settings.HostedAddress = &address
+	}
+	if channel != nil && mailbox != nil {
+		// Gmail sends by itself, and a broken connection never hands replies to SMTP.
+		if mailbox.Status == domain.MailboxConnected && a.config.Google.Enabled() {
+			settings.SendingFrom = &mailbox.Address
+		}
+		return settings
 	}
 	if channel == nil || !smtp.Configured() {
 		return settings
@@ -75,7 +88,12 @@ func (a *API) writeEmailSettings(response http.ResponseWriter, request *http.Req
 		writeInternalError(response, err)
 		return
 	}
-	writeJSON(response, http.StatusOK, a.emailSettings(workspace.Slug, channel, pause))
+	mailbox, err := a.store.GetMailboxConnection(request.Context(), workspace.ID)
+	if err != nil {
+		writeInternalError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, a.emailSettings(workspace.Slug, channel, pause, mailbox))
 }
 
 // tokenDomainChecksPerHour bounds the DNS lookups agent tokens can trigger for one workspace; a person
@@ -162,7 +180,15 @@ func plainAddress(value string) bool {
 }
 
 func (a *API) deleteEmailChannel(response http.ResponseWriter, request *http.Request) {
-	deleted, err := a.store.DeleteEmailChannel(request.Context(), principal(request).Workspace.ID)
+	workspaceID := principal(request).Workspace.ID
+	// Removing the channel removes its Gmail connection with it; the grant is read first so it can be
+	// revoked at Google afterwards.
+	grant, err := a.store.MailboxGrant(request.Context(), workspaceID)
+	if err != nil {
+		writeInternalError(response, err)
+		return
+	}
+	deleted, err := a.store.DeleteEmailChannel(request.Context(), workspaceID)
 	if err != nil {
 		writeInternalError(response, err)
 		return
@@ -171,6 +197,7 @@ func (a *API) deleteEmailChannel(response http.ResponseWriter, request *http.Req
 		writeError(response, http.StatusNotFound, "not_found", "The email channel is not connected.")
 		return
 	}
+	a.revokeSealed(grant, workspaceID)
 	response.WriteHeader(http.StatusNoContent)
 }
 

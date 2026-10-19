@@ -9,6 +9,7 @@ import { defaultInboxFilters } from './inbox-filters';
 import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
+import { outboundNotice } from './outbound-notice';
 import { retryRefusalText } from './refusal-text';
 import { usePendingRequests } from '../requests/use-pending-requests';
 
@@ -115,9 +116,13 @@ export function InboxRoute() {
   // Shared with the app shell, so the limits cost no extra request.
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
   const limits = config?.limits;
-  const outbound = emailChannel.data;
-  const outboundNotice = outbound?.channel && outbound.sending_from === null
-    ? (outbound.smtp.configured ? messages.outboundNeedsVerification : messages.outboundNotConfigured) : undefined;
+  const outbound = outboundNotice(emailChannel.data, me.data?.agent?.role === 'admin');
+  // A reply that just failed may mean Gmail stopped sending; the channel is read again so the notice above
+  // the composer follows without a reload.
+  const failedDeliveries = timeline.data?.items.filter((item) => item.delivery?.status === 'failed').map((item) => item.id).join(',') ?? '';
+  useEffect(() => {
+    if (failedDeliveries) void client.invalidateQueries({ queryKey: ['email-channel'] });
+  }, [client, failedDeliveries]);
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
   const agentId = me.data?.agent?.id;
@@ -167,7 +172,7 @@ export function InboxRoute() {
     // A new tab, so the draft and the files in this reply box stay where they are.
     onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
-    outboundNotice={outboundNotice} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
+    outboundNotice={outbound} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError} onRetry={() => void conversations.refetch()}

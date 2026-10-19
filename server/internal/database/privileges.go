@@ -59,4 +59,8 @@ const (
 	// PrivilegeBillingReconcile reads every workspace id and every stored Polar subscription, so the
 	// operator command can compare them with Polar's list. Writes go through the scoped path.
 	PrivilegeBillingReconcile Privilege = "billing-reconcile"
+	// PrivilegeMailboxGrantShared answers whether any other workspace still holds a Gmail connection for an
+	// address, after a workspace dropped its own. Google revokes an account's whole grant to the project, so
+	// the grant is revoked only when no workspace holds it. Only a yes or no leaves the transaction.
+	PrivilegeMailboxGrantShared Privilege = "mailbox-grant-shared"
 )

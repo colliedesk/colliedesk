@@ -15,7 +15,8 @@ edits it if needed, and sends it or throws it away.
   token, creating an invite, making a teammate an admin or changing an admin (demoting,
   deactivating, reactivating), signing out another person's device, exporting all workspace data
   (or a download link for it), starting a plan checkout or opening the billing portal, disconnecting
-  the email channel, rotating the inbound email secret, and changing the workspace address.
+  the email channel, rotating the inbound email secret, connecting or disconnecting Gmail (the
+  approver gets Google's consent page), and changing the workspace address.
 
 A settings change shows what changes, from what to what, for example "Change the workspace
 timezone: UTC → Asia/Tokyo" or "Change ada@example.com: role agent → admin". A settings call with a

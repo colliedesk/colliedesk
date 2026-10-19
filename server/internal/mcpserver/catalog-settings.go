@@ -27,7 +27,10 @@ const (
 	emailChannelSchema = `{"type":"object","required":["connected"],"properties":{"connected":{"type":"boolean"},"support_address":{"type":"string"},` +
 		`"inbound_secret_set":{"type":"boolean","description":"The secret itself is never shown to an agent."},"inbound_url":{"type":"string"},"hosted_address":{"type":["string","null"]},` +
 		`"domain":{"type":"string"},"domain_verified":{"type":"boolean"},"dns_record_name":{"type":"string"},"dns_record_value":{"type":"string"},` +
-		`"smtp_configured":{"type":"boolean"},"sending_from":{"type":["string","null"]}}}`
+		`"smtp_configured":{"type":"boolean"},"sending_from":{"type":["string","null"]},` +
+		`"gmail":{"type":"object","description":"Gmail connected for sending: replies go out from address through Gmail. status failed means replies fail until a person reconnects (colliedesk_gmail_connect_request).",` +
+		`"required":["available","connected"],"properties":{"available":{"type":"boolean","description":"Whether this server can connect Gmail."},"connected":{"type":"boolean"},` +
+		`"address":{"type":"string"},"status":{"type":"string","enum":["connected","failed"]},"error":{"type":["string","null"]}}}}}`
 )
 
 func workspaceSettingsGetSpec() Spec {
