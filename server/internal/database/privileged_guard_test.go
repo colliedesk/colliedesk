@@ -48,6 +48,7 @@ var poolFiles = []string{
 	"cmd/collie/commands.go",
 	"cmd/collie/email.go",
 	"cmd/collie/import.go",
+	"cmd/collie/import_helpscout.go",
 	"cmd/collie/plan.go",
 	"cmd/collie/retention.go",
 	"cmd/collie/serve.go",
@@ -58,6 +59,7 @@ var poolFiles = []string{
 	"internal/database/scope.go",
 	"internal/freshdesk/importer.go",
 	"internal/freshdesk/undo.go",
+	"internal/helpscout/importer.go",
 	"internal/httpapi/api.go",
 	"internal/store/store.go",
 }

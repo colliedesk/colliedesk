@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/importkit"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -15,39 +15,13 @@ import (
 // adds a few more tries, with the same backoff, for a ticket that keeps failing.
 const sizingAttempts = 3
 
-// StorageCapError means a workspace cannot take this import: its attachments would pass the plan's
-// storage cap, which counts imported files. Nothing was written.
-type StorageCapError struct {
-	Plan                string
-	Needed, Used, Limit int64
-}
-
-func (e *StorageCapError) Error() string {
-	remedy := "Contact us for more storage"
-	if e.Plan == domain.PlanFounding {
-		remedy = "Upgrade to the Team plan (Billing > Manage billing) for a higher cap"
-	}
-	name := domain.PlanName(e.Plan)
-	return fmt.Sprintf("this import needs %s of attachments, but only %s is free under the %s attachment cap of the %s plan. "+
-		"Nothing was imported. %s, or import a smaller slice with --since.",
-		domain.FormatBytes(e.Needed), domain.FormatBytes(max(e.Limit-e.Used, 0)), domain.FormatBytes(e.Limit), name, remedy)
-}
-
-func (r *run) storeWithPlanLimits() *store.Store {
-	return store.NewWithDB(r.db).WithPlanLimits(true).WithPaidStorageBytes(r.opts.PaidStorageBytes)
-}
+// StorageCapError means a workspace cannot take this import; see importkit.StorageCapError.
+type StorageCapError = importkit.StorageCapError
 
 // cappedRoom returns the storage room of the workspace, or ok false when no cap that counts imported
 // files applies to this run (self-hosted, trial).
-func (r *run) cappedRoom(ctx context.Context) (room store.StorageRoom, ok bool, err error) {
-	if !r.opts.Cloud {
-		return store.StorageRoom{}, false, nil
-	}
-	room, err = r.storeWithPlanLimits().GetStorageRoom(ctx, r.workspaceID)
-	if err != nil {
-		return store.StorageRoom{}, false, err
-	}
-	return room, room.Capped && domain.StorageCountsImports(room.Plan), nil
+func (r *run) cappedRoom(ctx context.Context) (store.StorageRoom, bool, error) {
+	return importkit.CappedRoom(ctx, r.db, r.workspaceID, r.opts.Cloud, r.opts.PaidStorageBytes)
 }
 
 // guardStorage runs before the first write. On a paid plan imported files count toward

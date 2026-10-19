@@ -160,7 +160,7 @@ export const messages = {
     description: 'Ticket opened in', reply: 'Reply sent from', incoming: 'Received in', automated_response: 'Automated response received in', private_note: 'Private note from',
     public_note: 'Public note (customer could see it) from', forward: 'Forwarded from', forwarded_email: 'Forwarded email received in', other: 'Imported from',
   },
-  systemNames: { freshdesk: 'Freshdesk' } as Record<string, string>,
+  systemNames: { freshdesk: 'Freshdesk', helpscout: 'Help Scout' } as Record<string, string>,
   recipients: { to: 'To', cc: 'Cc', bcc: 'Bcc' },
   automatedResponse: (from: string) => `${from} sent an automated response`,
   expandAutomatedResponse: 'Show the automated response',
