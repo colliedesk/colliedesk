@@ -101,7 +101,7 @@ test('email frame: CSS background images are fetched through the proxy, never di
   const requests: string[] = [];
   page.on('request', (request) => requests.push(request.url()));
   await deskWithMail(page, 'CSS logo', '<style>@import url(https://css-host.invalid/x.css);.hero{background-image:url("https://cdn.invalid/hero.png")}</style>'
-    + '<table><tr><td class="hero" style="background:url(https://logo-host.invalid/logo.png) no-repeat" width="80" height="40">x</td></tr></table><p>text</p>');
+    + '<div class="hero" style="width:80px;height:40px">a</div><table><tr><td style="background:url(https://logo-host.invalid/logo.png) no-repeat" width="80" height="40">x</td></tr></table><p>text</p>');
   await page.waitForTimeout(2000);
   const direct = requests.filter((url) => new URL(url).hostname.endsWith('.invalid'));
   expect(direct, 'the browser tried to reach the sender').toEqual([]);
