@@ -36,17 +36,6 @@ export function InboxRoute() {
   const conversations = useQuery({ queryKey: ['conversations', query], queryFn: () => api.conversations(query), refetchOnMount: 'always',
     // A new search or filter keeps the old rows on screen until its response arrives.
     placeholderData: keepPreviousData });
-  const agents = useQuery({ queryKey: ['agents'], queryFn: api.agents });
-  const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags });
-  // Fetched once and shared with Settings, so the picker opens from memory.
-  const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
-  const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
-  // Shared with the app shell, so the limits cost no extra request.
-  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
-  const limits = config?.limits;
-  const outbound = emailChannel.data;
-  const outboundNotice = outbound?.channel && outbound.sending_from === null
-    ? (outbound.smtp.configured ? messages.outboundNeedsVerification : messages.outboundNotConfigured) : undefined;
   const narrowed = Boolean(filters.search || filters.assignee || filters.tag);
   const filtered = narrowed || !['', defaultInboxFilters.status].includes(filters.status ?? '');
   // An empty Open view is either a new workspace or one that is caught up; one row of All tells which.
@@ -83,6 +72,19 @@ export function InboxRoute() {
     return refresh();
   };
   const timeEntries = useQuery({ queryKey: ['time-entries', openID], queryFn: () => api.timeEntries(openID!), enabled: Boolean(openID) });
+  // The side lists come after everything the open ticket needs: a browser allows six HTTP/1.1 connections per
+  // host, and a request that waits for one is a request the person waits for.
+  const agents = useQuery({ queryKey: ['agents'], queryFn: api.agents });
+  const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags });
+  // Fetched once and shared with Settings, so the picker opens from memory.
+  const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
+  const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
+  // Shared with the app shell, so the limits cost no extra request.
+  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
+  const limits = config?.limits;
+  const outbound = emailChannel.data;
+  const outboundNotice = outbound?.channel && outbound.sending_from === null
+    ? (outbound.smtp.configured ? messages.outboundNeedsVerification : messages.outboundNotConfigured) : undefined;
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
   const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes), onSuccess: keepOpened });

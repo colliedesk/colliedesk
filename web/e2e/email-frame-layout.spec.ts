@@ -71,3 +71,26 @@ test('email frame: a fixed 650 px mail is scaled into the column, not clipped or
   expect(state.scroll).toBeLessThanOrEqual(state.client + 1);
   expect(state.cut).toBe(false);
 });
+
+// A white logo on a dark body is blank when the mail's own body colour is lost.
+test('email frame: the mail body keeps its own background colour', async ({ page }) => {
+  await deskWithMail(page, 'Dark body', '<body bgcolor="#202124" style="color:#ffffff"><p>White text</p></body>');
+  const colours = await page.locator('iframe.email-frame').evaluate((frame) => {
+    const doc = (frame as HTMLIFrameElement).contentDocument!;
+    const style = doc.defaultView!.getComputedStyle(doc.body);
+    return { background: style.backgroundColor, color: style.color };
+  });
+  expect(colours).toEqual({ background: 'rgb(32, 33, 36)', color: 'rgb(255, 255, 255)' });
+});
+
+// Plain text inside a div (a chat note) has newlines and no markup for them; the sender saw lines.
+test('email frame: text with line breaks shows as lines', async ({ page }) => {
+  await deskWithMail(page, 'Chat note', '<div>First line\n\nAttachments:\n- file: <a href="https://sample.example/a.jpg">https://sample.example/a.jpg</a></div>');
+  const lines = await page.locator('iframe.email-frame').evaluate((frame) => {
+    const doc = (frame as HTMLIFrameElement).contentDocument!;
+    const range = doc.createRange();
+    range.selectNodeContents(doc.querySelector('div')!);
+    return new Set(Array.from(range.getClientRects()).map((rect) => Math.round(rect.top))).size;
+  });
+  expect(lines).toBeGreaterThanOrEqual(4);
+});

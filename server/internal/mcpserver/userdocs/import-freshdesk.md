@@ -15,6 +15,7 @@ code. Run the same command again to retry: finished items are never copied twice
 | Agents | Matched by email to your Colliedesk agents; otherwise the author name is kept |
 | Tickets, including archived tickets | Conversations with the original subject, status, priority, assignee, tags and timestamps |
 | Ticket description, replies, incoming replies, private and public notes, forwards | Timeline messages with the original author, time, from/to/cc/bcc and Freshdesk kind. A forward to a third party and a public note become notes, never replies to the customer |
+| Automatic replies Freshdesk flagged (an out-of-office, a messenger or bot acknowledgement) | Shown as one line, "<sender> sent an automated response", with a chevron that opens the message |
 | Ticket type, channel, due dates, cc and forwarded-to addresses | Shown in the conversation details |
 | Original message HTML | Shown formatted on the message in a locked frame that runs no scripts; **Show plain text** switches to the text. Remote images load through the Colliedesk image proxy |
 | Attachments | Files stored by Colliedesk, each with a SHA-256 checksum |

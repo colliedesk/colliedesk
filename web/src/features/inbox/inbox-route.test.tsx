@@ -44,6 +44,14 @@ test('a ticket opened by its address asks for its messages and time entries at o
     expect(api.timeEntries).toHaveBeenCalledWith(id);
     expect(api.conversations).toHaveBeenCalled();
     expect(api.conversation).toHaveBeenCalledWith(id);
+    // What the open ticket needs goes out before the side lists (agents, tags, saved replies, channel): a
+    // browser allows only six HTTP/1.1 connections per host, and the later requests wait for a free one.
+    const first = (mock: { mock: { invocationCallOrder: number[] } }) => mock.mock.invocationCallOrder[0];
+    for (const critical of [api.conversations, api.conversation, api.messages, api.timeEntries]) {
+      for (const side of [api.agents, api.tags, api.savedReplies, api.emailChannel]) {
+        expect(first(critical), 'a side list was requested before the open ticket').toBeLessThan(first(side));
+      }
+    }
   } finally {
     router.params = {};
   }
