@@ -91,6 +91,14 @@ test('a refused bulk change reports nothing', async () => {
   expect(analytics.track).not.toHaveBeenCalledWith('bulk_action_applied', expect.anything());
 });
 
+test('a filter from the Filter menu reports its kind, never its value', async () => {
+  await open();
+  fireEvent.click(await screen.findByText('Filter', { selector: 'summary span' }));
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'Urgent' }));
+  expect(analytics.track).toHaveBeenCalledWith('inbox_filtered', { filter: 'priority' });
+  expect(JSON.stringify(analytics.track.mock.calls)).not.toContain('urgent');
+});
+
 test('a status tab reports inbox_filtered with the filter kind', async () => {
   await open();
   fireEvent.click(screen.getByRole('radio', { name: 'Resolved' }));
