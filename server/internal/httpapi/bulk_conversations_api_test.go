@@ -216,7 +216,8 @@ func TestBulkUpdateWithAnIDOutsideTheWorkspaceChangesNothing(t *testing.T) {
 			f.assertUnchanged(t, before)
 		})
 	}
-	if bodies["other workspace"] != bodies["missing"] {
+	// Every response carries its own request id; the rest of the body must be byte for byte the same.
+	if withoutRequestID(bodies["other workspace"]) != withoutRequestID(bodies["missing"]) {
 		t.Errorf("404 tells a foreign id from a missing one: %q vs %q", bodies["other workspace"], bodies["missing"])
 	}
 }

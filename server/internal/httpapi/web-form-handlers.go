@@ -211,8 +211,8 @@ func (a *API) submitWebForm(response http.ResponseWriter, request *http.Request)
 	}
 	submission, fields := validateWebForm(input.Email, input.Message, input.Source)
 	if len(fields) > 0 {
-		writeJSON(response, http.StatusUnprocessableEntity, map[string]any{"error": map[string]any{
-			"code": "validation_failed", "message": "Check the highlighted fields.", "fields": fields}})
+		writeJSON(response, http.StatusUnprocessableEntity, map[string]any{"error": errorBody(response, map[string]any{
+			"code": "validation_failed", "message": "Check the highlighted fields.", "fields": fields})})
 		return
 	}
 	err = a.store.SubmitWebForm(request.Context(), workspaceID, submission)

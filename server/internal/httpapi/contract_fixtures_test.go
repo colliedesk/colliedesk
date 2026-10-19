@@ -52,7 +52,9 @@ func newContractFixture(t *testing.T) contractFixture {
 		config.Billing = fakePolar.config()
 		hostedConfig(config)
 		config.Email.ResendWebhookSecret = resendWebhookSecret
+		config.ProblemReportWorkspace = "contract-support"
 	})
+	createSession(t, api, service, "Contract Support", "support@contract-support.example.com")
 	adminToken := createSession(t, api, service, "Contract All", "admin@contract-all.example.com")
 	contactID := create(t, api, adminToken, "/api/v1/contacts", map[string]any{
 		"name": "Contract Contact", "email": "contact@contract-all.example.com",

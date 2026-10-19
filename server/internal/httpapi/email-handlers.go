@@ -205,6 +205,6 @@ func (a *API) retryMessageDelivery(response http.ResponseWriter, request *http.R
 
 // writeInternalError hides the cause from the client and keeps it in the server log.
 func writeInternalError(response http.ResponseWriter, err error) {
-	slog.Error("request failed", "error", err)
+	slog.Error("request failed", "error", err, "request_id", response.Header().Get(requestIDHeader))
 	writeError(response, http.StatusInternalServerError, "internal_error", "The request could not be completed. Try again.")
 }

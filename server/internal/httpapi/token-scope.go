@@ -103,6 +103,7 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/agent-requests":                                 tier(auth.ScopeRead),
 	"GET /api/v1/agent-requests/{id}":                            tier(auth.ScopeRead),
 	"POST /api/v1/agent-requests/{id}/cancel":                    tier(auth.ScopeRead),
+	"POST " + problemReportPath:                                  tier(auth.ScopeRead),
 
 	"POST /api/v1/agent-requests/{id}/approve": personOnly("an agent approving its own request would make approval meaningless"),
 	"GET " + mailimage.ProxyPath:               personOnly("a signed address for the screen: an agent token reads the original HTML and fetches its own images"),

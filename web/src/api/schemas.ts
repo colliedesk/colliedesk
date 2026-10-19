@@ -16,6 +16,7 @@ export const workspaceSchema = z.object({
 export const workspaceChoiceSchema = z.object({ slug: z.string(), name: z.string() }) satisfies z.ZodType<Generated<'WorkspaceChoice'>>;
 export const cloudWorkspaceChoicesSchema = z.object({ workspaces: z.array(workspaceChoiceSchema).min(2) }) satisfies z.ZodType<Generated<'CloudWorkspaceChoices'>>;
 export const publicConfigSchema = z.object({
+  version: z.string().optional(),
   cloud_sign_in: z.object({ enabled: z.boolean(), publishable_key: z.string().nullable() }),
   billing: z.object({ enabled: z.boolean() }),
   signup: z.object({ enabled: z.boolean() }),

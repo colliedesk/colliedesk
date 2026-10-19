@@ -1020,6 +1020,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/support/problem-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Send a problem report ("Report a problem" in the web app) to the support desk of this server. Where the server sets `PROBLEM_REPORT_WORKSPACE` (Colliedesk Cloud) the report becomes a conversation in that workspace, tagged `problem-report`, from the reporter's verified email, with the description, the diagnostics, facts the server knows (agent, role, workspace, plan, version, realm, the request id of this call) and the screenshots as attachments. No text from the reporter's workspace is read or sent. Every other server answers 404 `not_configured`, so the web app offers a GitHub issue instead. Any agent token tier may report. One agent may send 5 reports an hour. Send JSON, or `multipart/form-data` with `description`, `diagnostics` (a JSON string) and up to 3 `screenshots` files (PNG, JPEG or WebP, 5 MiB in total). */
+        post: operations["createProblemReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1778,10 +1795,44 @@ export interface components {
             /** @description Path a website posts to; the host is this instance */
             submit_path: string;
         };
+        ProblemReportInput: {
+            description: string;
+            diagnostics?: components["schemas"]["ProblemReportDiagnostics"];
+        };
+        /** @description What the web app gathered in the browser. Ids, routes, status codes and error messages only; a query string is dropped from every path and long text is cut. Nothing a customer wrote. */
+        ProblemReportDiagnostics: {
+            app_version?: string;
+            user_agent?: string;
+            viewport?: {
+                width: number;
+                height: number;
+            };
+            /** @description Address path without query or fragment */
+            page_path?: string;
+            client_errors?: {
+                message: string;
+                source: string;
+                /** Format: date-time */
+                at: string;
+            }[];
+            failed_api_calls?: {
+                method: string;
+                /** @description Route template or path without query */
+                route: string;
+                status: number;
+                /** @description The X-Request-Id of the failed response */
+                request_id?: string;
+                /** Format: date-time */
+                at: string;
+            }[];
+            product_events?: string[];
+        };
         Error: {
             error: {
                 code: string;
                 message: string;
+                /** @description The X-Request-Id of this response; quote it when you report a failure. */
+                request_id?: string;
                 /** @description Present on validation errors (422), one message per bad field name */
                 fields?: {
                     [key: string]: string;
@@ -4169,6 +4220,72 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    createProblemReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProblemReportInput"];
+                "multipart/form-data": {
+                    description: string;
+                    /** @description JSON text of a ProblemReportDiagnostics object */
+                    diagnostics?: string;
+                    screenshots?: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description The report reached the support desk */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description The request id of this call; quote it when you write to support */
+                        reference: string;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
+            /** @description This server has no support desk for problem reports (error code `not_configured`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid input; `error.fields` names each bad field (`description`, `diagnostics`, `screenshots`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description This agent sent 5 reports in the last hour; retry after the `Retry-After` seconds */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
         };
     };
 }

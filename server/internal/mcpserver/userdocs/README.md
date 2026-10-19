@@ -18,4 +18,5 @@ One page per feature. Each page says what the feature does, how to use it, and i
 - [Agent requests and reply drafts](agent-requests.md)
 - [Import from Freshdesk](import-freshdesk.md)
 - [Export all your data](export.md)
+- [Report a problem](problem-reports.md)
 - [Usage report (telemetry)](telemetry.md)
