@@ -268,6 +268,12 @@ func (s *Store) MergeContacts(ctx context.Context, workspaceID, keptID, duplicat
 		if mergedIn {
 			return domain.ContactMerge{}, &domain.ContactMergeError{Reason: "Other contacts are merged into " + duplicate.Email + ". Undo those merges first, or merge them into this contact one by one."}
 		}
+		// Rows are locked in (workspace_id, id) order, the order the last_public trigger on messages locks them
+		// in, so a merge and a statement writing messages of several of these conversations never deadlock.
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM conversations WHERE workspace_id=$1 AND contact_id=$2 ORDER BY workspace_id,id FOR NO KEY UPDATE`,
+			workspaceID, duplicateID); err != nil {
+			return domain.ContactMerge{}, fmt.Errorf("lock conversations: %w", err)
+		}
 		rows, err := tx.Query(ctx, `UPDATE conversations SET contact_id=$3 WHERE workspace_id=$1 AND contact_id=$2 RETURNING id::text`, workspaceID, duplicateID, keptID)
 		if err != nil {
 			return domain.ContactMerge{}, fmt.Errorf("move conversations: %w", err)
@@ -307,6 +313,11 @@ func (s *Store) UndoContactMerge(ctx context.Context, workspaceID, keptID, merge
 		}
 		if _, err := lockContacts(ctx, tx, workspaceID, keptID, duplicateID); err != nil {
 			return domain.ContactMerge{}, err
+		}
+		// Locked in the trigger's order first, as in MergeContacts.
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM conversations WHERE workspace_id=$1 AND contact_id=$2 AND id=ANY($3::uuid[]) ORDER BY workspace_id,id FOR NO KEY UPDATE`,
+			workspaceID, keptID, moved); err != nil {
+			return domain.ContactMerge{}, fmt.Errorf("lock conversations: %w", err)
 		}
 		if _, err := tx.Exec(ctx, `UPDATE conversations SET contact_id=$3 WHERE workspace_id=$1 AND contact_id=$2 AND id=ANY($4::uuid[])`,
 			workspaceID, keptID, duplicateID, moved); err != nil {
