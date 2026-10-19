@@ -16,3 +16,4 @@ server/data/
 # Go build outputs
 /collie
 server/cmd/collie/collie
+__pycache__/
