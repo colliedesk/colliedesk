@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -30,9 +31,9 @@ func (r *run) writeConversation(ctx context.Context, ref hsConversation, contact
 			r.workspaceID, *existing, subjectOrDefault(ref.Subject), status, assignee, ref.updatedAt(), origin, keepAssignee).Scan(&id)
 	}
 	if existing == nil || errors.Is(err, pgx.ErrNoRows) {
-		err = tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,status,priority,assignee_id,created_at,updated_at,origin)
-			SELECT $1,c.id,$3,$4,'normal',$5,$6,$7,$8 FROM contacts c WHERE c.workspace_id=$1 AND c.id=$2 RETURNING id::text`,
-			r.workspaceID, contactID, subjectOrDefault(ref.Subject), status, assignee, ref.CreatedAt.UTC(), ref.updatedAt(), origin).Scan(&id)
+		err = tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,status,priority,assignee_id,created_at,updated_at,origin,channel)
+			SELECT $1,c.id,$3,$4,'normal',$5,$6,$7,$8,$9 FROM contacts c WHERE c.workspace_id=$1 AND c.id=$2 RETURNING id::text`,
+			r.workspaceID, contactID, subjectOrDefault(ref.Subject), status, assignee, ref.CreatedAt.UTC(), ref.updatedAt(), origin, domain.ChannelImported).Scan(&id)
 		if err == nil {
 			err = r.ledger.mark(ctx, tx, ledgerMark{entity: entityTicket, sourceID: key, targetID: &id, status: ledgerFailed,
 				errText: "incomplete: the import stopped before this conversation finished", meta: &meta})

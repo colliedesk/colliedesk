@@ -40,6 +40,12 @@ func TestUndoRemovesExactlyTheHelpScoutImport(t *testing.T) {
 	if got := env.tableCounts(t); got != "contacts=1 conversations=1 messages=3 attachments=0 tags=1 conversation_tags=0" {
 		t.Fatalf("after undo: %s", got)
 	}
+	var channel, lastKind string
+	if err := env.pool.QueryRow(ctx, `SELECT channel,last_public_kind FROM conversations WHERE workspace_id=$1`, env.workspaceID).Scan(&channel, &lastKind); err != nil ||
+		channel != "imported" || lastKind != "incoming" {
+		t.Fatalf("kept conversation channel=%q last_public_kind=%q (%v), want imported/incoming", channel, lastKind, err)
+	}
+	env.assertLastPublic(t)
 }
 
 func TestImportRefusesWhileAnotherImportHoldsTheWorkspace(t *testing.T) {

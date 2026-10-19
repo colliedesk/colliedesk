@@ -143,3 +143,16 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	})
 	return pool
 }
+
+// assertLastPublic checks every conversation's last_public_* against its newest message that is not a note.
+func (e *importEnv) assertLastPublic(t *testing.T) {
+	t.Helper()
+	var wrong int
+	err := e.pool.QueryRow(context.Background(), `SELECT count(*) FROM conversations c LEFT JOIN LATERAL (
+			SELECT m.kind, m.created_at FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind<>'note'
+			ORDER BY m.created_at DESC, m.id DESC LIMIT 1) l ON true
+		WHERE c.workspace_id=$1 AND (c.last_public_kind IS DISTINCT FROM l.kind OR c.last_public_at IS DISTINCT FROM l.created_at)`, e.workspaceID).Scan(&wrong)
+	if err != nil || wrong != 0 {
+		t.Fatalf("conversations whose last_public differs from their messages = %d (%v), want 0", wrong, err)
+	}
+}

@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/helpscout"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
 // The expected values below are counted by hand from testdata: 3 conversations in two pages (101,
@@ -92,6 +94,35 @@ func TestImportedConversationKeepsStatusAssigneeTimesAndCustomer(t *testing.T) {
 		if got != expected {
 			t.Errorf("conversation %s = %+v, want %+v", id, got, expected)
 		}
+	}
+}
+
+// The inbox filters read the channel and the newest public message from the conversation row, so an
+// import has to leave both as they would be for a conversation that arrived here.
+func TestImportedConversationsAreOnTheImportedChannelAndKnowWhoWroteLast(t *testing.T) {
+	env := newImportEnv(t)
+	env.mustRun(t)
+	ctx := context.Background()
+	var notImported int
+	if err := env.pool.QueryRow(ctx, `SELECT count(*) FROM conversations WHERE workspace_id=$1 AND channel<>'imported'`, env.workspaceID).Scan(&notImported); err != nil || notImported != 0 {
+		t.Fatalf("imported conversations with another channel = %d (%v), want 0", notImported, err)
+	}
+	env.assertLastPublic(t)
+	for name, filter := range map[string]store.ConversationFilter{
+		"channel imported": {Channels: []string{domain.ChannelImported}, Page: 1, PageSize: 50},
+		"source imported":  {Source: "imported", Page: 1, PageSize: 50},
+	} {
+		page, err := store.New(env.pool).ListConversations(ctx, env.workspaceID, filter)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(page.Items) != 3 {
+			t.Errorf("%s lists %d conversations, want the 3 imported", name, len(page.Items))
+		}
+	}
+	page, err := store.New(env.pool).ListConversations(ctx, env.workspaceID, store.ConversationFilter{Channels: []string{domain.ChannelAgent}, Page: 1, PageSize: 50})
+	if err != nil || len(page.Items) != 0 {
+		t.Fatalf("channel agent lists %d imported conversations (%v), want 0", len(page.Items), err)
 	}
 }
 
