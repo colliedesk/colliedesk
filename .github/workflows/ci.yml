@@ -295,8 +295,15 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # compose.yaml as a contributor or "From a clone" self-hoster runs it. It shares this runner so
+      # a pull request stays under the account's concurrent job limit, and runs in the background
+      # while the quick gates below run; the last step waits for it.
+      - name: Start the stack from compose.yaml in the background
+        run: sh .github/scripts/ci-background.sh start compose-smoke sh tests/compose-smoke.sh
       - name: CI shard and elapsed-time contracts
         run: python3 tests/ci-tools-test.py
+      - name: Background checks pass on their output and exit status
+        run: sh tests/ci-background-test.sh
       - name: Background test services wait for readiness
         run: sh tests/ci-services-test.sh
       - name: Product name spelled Colliedesk
@@ -336,10 +343,8 @@ jobs:
             echo "closes: ${ROADMAP_CLOSING:-none}"
           fi
           python3 -I .github/scripts/roadmap-check.py ROADMAP.md
-      # compose.yaml as a contributor or "From a clone" self-hoster runs it. Shares this runner
-      # with the gates above so a pull request stays under the account's concurrent job limit.
-      - name: Start the stack from compose.yaml and reach the server
-        run: sh tests/compose-smoke.sh
+      - name: The stack from compose.yaml reached the server
+        run: sh .github/scripts/ci-background.sh wait compose-smoke
 
   codeql:
     permissions:
