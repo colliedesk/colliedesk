@@ -15,8 +15,9 @@ import (
 
 const day = 24 * time.Hour
 
-// snapshot is the health of one workspace at one moment: counts and enums, never a name, an
-// address or anything a person wrote. docs/user/telemetry.md lists every field.
+// snapshot is the health of one Colliedesk Cloud workspace at one moment: counts and enums plus the
+// workspace's name and slug, so the team knows which customer it is. Never an address or anything
+// a person wrote in a conversation. docs/user/telemetry.md lists every field.
 type snapshot struct {
 	workspaceID string
 	properties  map[string]any
@@ -26,17 +27,17 @@ type snapshot struct {
 // Each metric family is one grouped query over all workspaces; only the counts leave it.
 func readSnapshots(ctx context.Context, tx pgx.Tx, now time.Time) ([]snapshot, error) {
 	type workspace struct {
-		id               string
+		id, name, slug   string
 		created, trialTo time.Time
 	}
 	var workspaces []workspace
-	rows, err := tx.Query(ctx, `SELECT id::text,created_at,trial_ends_at FROM workspaces`)
+	rows, err := tx.Query(ctx, `SELECT id::text,name,slug,created_at,trial_ends_at FROM workspaces`)
 	if err != nil {
 		return nil, fmt.Errorf("read workspaces: %w", err)
 	}
 	for rows.Next() {
 		var w workspace
-		if err := rows.Scan(&w.id, &w.created, &w.trialTo); err != nil {
+		if err := rows.Scan(&w.id, &w.name, &w.slug, &w.created, &w.trialTo); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("read workspaces: %w", err)
 		}
@@ -124,6 +125,8 @@ func readSnapshots(ctx context.Context, tx pgx.Tx, now time.Time) ([]snapshot, e
 			"web_form":                 webForms[w.id],
 			"tokens_active":            tokens.at(w.id, 1)[0],
 			"freshdesk_import":         imports[w.id],
+			"workspace_name":           w.name,
+			"workspace_slug":           w.slug,
 		}})
 	}
 	slices.SortFunc(snapshots, func(a, b snapshot) int { return strings.Compare(a.workspaceID, b.workspaceID) })

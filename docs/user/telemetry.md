@@ -64,12 +64,13 @@ them; `DISABLE_TELEMETRY` and `DO_NOT_TRACK` turn them off too.
 | `subscription_activated` | A workspace becomes a paying customer for the first time (its first `subscription.active` from Polar). A redelivered webhook, a past_due subscription paid again and a later plan change are not counted again | `distinct_id` = the workspace id, `plan` (`team`, `team25` or `founding`), `realm`, `version` |
 
 Once a day, with the instance heartbeat, Colliedesk Cloud also sends one `workspace_snapshot` event
-per workspace, so the team can see how each customer is doing. Only counts and plan names:
-`distinct_id` = the workspace id, `realm`, `version`, and these fields (never a name, address,
-email or any text):
+per workspace, so the team can see how each customer is doing: `distinct_id` = the workspace id,
+`realm`, `version`, the workspace's name and slug, and these counts (never an email address or
+anything written in a conversation):
 
 | Field | Example | Meaning |
 |---|---|---|
+| `workspace_name`, `workspace_slug` | `Acme Support`, `acme-support` | The workspace's name and address slug, so the team knows which customer it is |
 | `plan` | `trial` | `trial`, `team`, `team25`, `founding` or `none` (trial over, no paid plan), the same plan the billing page shows |
 | `trial_days_left` | `6` | Days left of the trial, rounded up; empty unless `plan` is `trial` |
 | `days_since_created` | `10` | Whole days since the workspace was created |

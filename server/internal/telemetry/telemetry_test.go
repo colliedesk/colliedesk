@@ -541,6 +541,7 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 			"replies_7d": float64(1), "replies_30d": float64(2), "ai_agent_replies_7d": float64(1),
 			"conversations_open": float64(1), "conversations_created_7d": float64(1),
 			"email_channel": false, "web_form": true, "tokens_active": float64(1), "freshdesk_import": true,
+			"workspace_name": "Acme Support", "workspace_slug": "acme-support",
 		},
 		beta: {
 			"plan": "team", "trial_days_left": nil, "days_since_created": float64(45),
@@ -548,6 +549,7 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 			"replies_7d": float64(0), "replies_30d": float64(0), "ai_agent_replies_7d": float64(0),
 			"conversations_open": float64(0), "conversations_created_7d": float64(0),
 			"email_channel": true, "web_form": false, "tokens_active": float64(0), "freshdesk_import": false,
+			"workspace_name": "Beta Help", "workspace_slug": "beta-help",
 		},
 	}
 	for id, fields := range want {
@@ -564,15 +566,17 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 			t.Errorf("workspace %s realm/version/$process_person_profile = %#v/%#v/%#v", id, event.Properties["realm"], event.Properties["version"], event.Properties["$process_person_profile"])
 		}
 		// The fields are exactly the ones docs/user/telemetry.md lists; a new one needs the docs first.
-		const listed = "$process_person_profile,agents_active_30d,agents_active_7d,agents_total,ai_agent_replies_7d,conversations_created_7d,conversations_open,days_since_created,email_channel,freshdesk_import,plan,realm,replies_30d,replies_7d,tokens_active,trial_days_left,version,web_form"
+		const listed = "$process_person_profile,agents_active_30d,agents_active_7d,agents_total,ai_agent_replies_7d,conversations_created_7d,conversations_open,days_since_created,email_channel,freshdesk_import,plan,realm,replies_30d,replies_7d,tokens_active,trial_days_left,version,web_form,workspace_name,workspace_slug"
 		if got := keys(event.Properties); got != listed {
 			t.Errorf("workspace %s property keys = %s, want %s", id, got, listed)
 		}
 	}
 
+	// The workspace name and slug are sent (they say which customer it is); addresses, what anyone
+	// wrote and billing ids never are.
 	raw := string(recorded.bodyAt(t, "POST /batch/"))
 	for _, secret := range []string{"owner-a@example.com", "owner-b@example.com", "helper-a@example.com", "idle-b@example.com", "buyer@example.org",
-		"Where is my order", "Refund please", "Internal note", "Acme Support", "Beta Help", "support@beta.example", "sub_beta", "cus_beta", "acme-support"} {
+		"Where is my order", "Refund please", "Internal note", "support@beta.example", "sub_beta", "cus_beta"} {
 		if strings.Contains(raw, secret) {
 			t.Errorf("snapshot contains %q: %s", secret, raw)
 		}
