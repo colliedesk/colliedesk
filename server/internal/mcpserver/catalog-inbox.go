@@ -1,16 +1,13 @@
 package mcpserver
 
-import (
-	"encoding/json"
-	"strconv"
-)
+import "strconv"
 
 const savedViewIDPropertyForSearch = `"saved_view_id":{"type":"string",` + uuid + `,"description":"Apply this saved view's filters (colliedesk_saved_views_list)."},`
 
-// oneOrMany is the schema of a filter that takes one value or a list of up to max values.
+// oneOrMany is the schema of a filter that takes one value or a list of up to max values. description
+// is a JSON string literal, written like every other description in the catalog.
 func oneOrMany(item string, max int, description string) string {
-	quoted, _ := json.Marshal(description)
-	return `{"description":` + string(quoted) + `,"anyOf":[` + item + `,{"type":"array","minItems":1,"maxItems":` + strconv.Itoa(max) + `,"items":` + item + `}]}`
+	return `{"description":` + description + `,"anyOf":[` + item + `,{"type":"array","minItems":1,"maxItems":` + strconv.Itoa(max) + `,"items":` + item + `}]}`
 }
 
 func inboxSearchSpec() Spec {
@@ -27,11 +24,11 @@ func inboxSearchSpec() Spec {
 		REST: []string{"GET /api/v1/conversations", "GET /api/v1/agents", "GET /api/v1/contacts", "GET /api/v1/tags", "GET /api/v1/auth/me", "GET /api/v1/saved-views"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{` +
 			savedViewIDPropertyForSearch +
-			`"status":` + oneOrMany(`{"type":"string","enum":["open","pending","resolved","closed"]}`, 4, "Only conversations in this status, or in any of these. Leave out for every status.") + `,` +
-			`"priority":` + oneOrMany(`{"type":"string","enum":["low","normal","high","urgent"]}`, 4, "Only this priority, or any of these.") + `,` +
+			`"status":` + oneOrMany(`{"type":"string","enum":["open","pending","resolved","closed"]}`, 4, `"Only conversations in this status, or in any of these. Leave out for every status."`) + `,` +
+			`"priority":` + oneOrMany(`{"type":"string","enum":["low","normal","high","urgent"]}`, 4, `"Only this priority, or any of these."`) + `,` +
 			`"assignee":` + oneOrMany(`{"type":"string","pattern":"^(me|unassigned|anyone|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$","description":"me, unassigned, anyone or a team member id (colliedesk_agents_list)"}`, 50,
-			"me: assigned to the person this token acts as. unassigned: nobody. anyone: assigned to somebody. An id: that team member. A list matches any.") + `,` +
-			`"tag":` + oneOrMany(`{"type":"string","maxLength":100}`, 50, "Name of an existing tag (see colliedesk_tags_list): its exact spelling, or any case when no other tag has the same letters. A list matches any of them unless tag_match is all.") + `,` +
+			`"me: assigned to the person this token acts as. unassigned: nobody. anyone: assigned to somebody. An id: that team member. A list matches any."`) + `,` +
+			`"tag":` + oneOrMany(`{"type":"string","maxLength":100}`, 50, `"Name of an existing tag (see colliedesk_tags_list): its exact spelling, or any case when no other tag has the same letters. A list matches any of them unless tag_match is all."`) + `,` +
 			`"tag_match":{"type":"string","enum":["any","all"],"default":"any"},` +
 			`"contact_id":{"type":"string",` + uuid + `,"description":"Only conversations of this contact (colliedesk_contacts_find)."},` +
 			`"organization":{"type":"string","maxLength":200,"description":"Only conversations of contacts of this organization, ignoring case."},` +
@@ -39,7 +36,7 @@ func inboxSearchSpec() Spec {
 			`"has_pending_draft":{"type":"boolean","description":"true: an AI agent's reply draft waits for a person's approval. false: none waits."},` +
 			`"delivery_failed":{"type":"boolean","description":"true: a reply could not be delivered by email and was not retried since."},` +
 			`"source":{"type":"string","enum":["imported","native"],"description":"imported from another helpdesk, or created in Colliedesk."},` +
-			`"channel":` + oneOrMany(`{"type":"string","enum":["email","web_form","imported","agent","problem_report"]}`, 5, "How it started.") + `,` +
+			`"channel":` + oneOrMany(`{"type":"string","enum":["email","web_form","imported","agent","problem_report"]}`, 5, `"How it started."`) + `,` +
 			`"created_after":{"type":"string","format":"date-time","maxLength":40,"description":"RFC 3339 with an offset; included."},` +
 			`"created_before":{"type":"string","format":"date-time","maxLength":40,"description":"Excluded."},` +
 			`"updated_after":{"type":"string","format":"date-time","maxLength":40},"updated_before":{"type":"string","format":"date-time","maxLength":40},` +
