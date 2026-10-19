@@ -14,7 +14,7 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock('../../api/client', () => ({ api }));
-vi.mock('../contacts/contact-api', () => ({ contactApi: { startConversation: api.createConversation }, existingContact: () => undefined }));
+vi.mock('../contacts/contact-api', () => ({ contactApi: { startConversation: api.createConversation, searchContacts: api.contacts }, existingContact: () => undefined }));
 const router = vi.hoisted(() => ({ params: {} as { conversationId?: string } }));
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn(), useParams: () => router.params }));
 

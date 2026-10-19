@@ -9,7 +9,7 @@ import { NewConversationDialog } from './new-conversation-dialog';
 import type { NewConversationBlock } from './new-conversation-dialog';
 
 const api = vi.hoisted(() => ({ contacts: vi.fn() }));
-vi.mock('../../api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../api/client')>()), api }));
+vi.mock('../contacts/contact-api', async (importOriginal) => ({ ...(await importOriginal<typeof import('../contacts/contact-api')>()), contactApi: { searchContacts: api.contacts } }));
 
 const wrap = (node: ReactNode) => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{node}</QueryClientProvider>);
 
@@ -61,7 +61,7 @@ test('a customer found by search, then the subject, the message and the copies s
 test('a new customer goes with the conversation; a refusal keeps every field, and the address of a customer offers that customer', async () => {
   const onStart = vi.fn()
     .mockRejectedValueOnce(new OutboundRefusedError('trial_outbound_restricted', 'server text'))
-    .mockRejectedValueOnce(new ConflictError('Pat Prospect (pat@prospect.example) is already a customer.', 'contact_exists', { contact: pat }))
+    .mockRejectedValueOnce(new ConflictError('Pat Prospect (pat@prospect.example) is already a customer.', { code: 'contact_exists', contact: pat }))
     .mockResolvedValueOnce(undefined);
   wrap(<Opener onStart={onStart} />);
   fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));

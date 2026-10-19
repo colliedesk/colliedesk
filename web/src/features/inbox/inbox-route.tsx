@@ -6,8 +6,8 @@ import { api } from '../../api/client';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
-import { contactPart } from '../contacts/contact-part';
-import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
+import { contactPart, ContactsPart } from '../contacts/contact-part';
+import { PartUnavailable } from '../../ui/lazy-part';
 import { defaultInboxFilters } from './inbox-filters';
 import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
@@ -30,16 +30,6 @@ function bulkActionOf(changes: BulkConversationChanges): 'status' | 'assign' | '
   return undefined;
 }
 
-// The window to start a conversation, from its own chunk; preloaded when the inbox is idle.
-const startPart = lazyPart(() => import('./new-conversation-dialog'));
-
-// StartConversation shows the window once its chunk is there, or says it could not be loaded.
-function StartConversation(props: { onClose: () => void; onStarted: (conversationId: string) => void }) {
-  const part = startPart.use();
-  if (part.status === 'loading') return null;
-  if (part.status === 'error') return <StartUnavailable onClose={props.onClose} />;
-  return <part.module.StartConversationWindow {...props} />;
-}
 
 // StartUnavailable stands in for the window when its chunk cannot load: it takes the focus, and Escape or
 // Close give it back to the New conversation button, so a broken network never strands the page.
@@ -61,16 +51,11 @@ function StartUnavailable({ onClose }: { onClose: () => void }) {
     <div className="dialog" role="alertdialog" aria-modal="true" aria-label={messages.newConversation} aria-describedby="start-unavailable" tabIndex={-1} ref={root}
       onKeyDown={keys}>
       <div id="start-unavailable"><PartUnavailable /></div>
-      <div className="button-row"><button type="button" onClick={close}>{messages.close}</button></div>
+      <div className="button-row"><button type="button" onClick={close}>{messages.reportClose}</button></div>
     </div>
   </div>;
 }
 
-// Runs once the inbox is idle, so opening a customer or a new conversation waits for no download.
-function whenIdle(load: () => void) {
-  if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(load);
-  else setTimeout(load, 1000);
-}
 
 // How long a search term stays unchanged before it counts as a finished search, so typing "refund" is one search.
 const searchSettleMs = 800;
@@ -90,7 +75,8 @@ export function InboxRoute() {
   }, [filters, page]);
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   // Opening a customer or a new conversation then waits for no download; a failure shows where it is used.
-  useEffect(() => whenIdle(() => { contactPart.preload(); startPart.preload(); }), []);
+  // Once the inbox is idle, so opening a customer or a new conversation waits for no download.
+  useEffect(() => { (window.requestIdleCallback ?? ((load: () => void) => setTimeout(load, 1000)))(contactPart.preload); }, []);
   // Always refetch when the inbox opens: mail may have arrived while the agent was in Settings.
   const conversations = useQuery({ queryKey: ['conversations', query], queryFn: () => api.conversations(query), refetchOnMount: 'always',
     // A new search or filter keeps the old rows on screen until its response arrives.
@@ -165,10 +151,8 @@ export function InboxRoute() {
   const outbound = emailChannel.data;
   const outboundNotice = outbound?.channel && outbound.sending_from === null
     ? (outbound.smtp.configured ? messages.outboundNeedsVerification : messages.outboundNotConfigured) : undefined;
-  // Customers matching the search, so a search for a name also reaches the customer's page.
-  const contactMatches = useQuery({ queryKey: ['contacts', 'search', searchTerm.trim(), 'inbox'], queryFn: ({ signal }) => api.contacts(searchTerm.trim(), 5, signal),
-    enabled: searchTerm.trim() !== '' });
   const [starting, setStarting] = useState(false);
+  const openContact = (contactId: string) => void navigate({ to: '/contacts/$contactId', params: { contactId } });
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
   const agentId = me.data?.agent?.id;
@@ -235,9 +219,10 @@ export function InboxRoute() {
       setDraftNotice(outcome.request.status === 'failed' ? messages.draftRefused(errorMessage(outcome.result)) : undefined);
     }}
     onDiscardDraft={async (draft) => { await api.rejectAgentRequest(draft.id); track('agent_request_decided', { decision: 'rejected' }); await afterDraft(draft.conversation_id); }}
-    contactMatches={searchTerm.trim() ? contactMatches.data?.items : undefined}
-    onOpenContact={(contactId) => void navigate({ to: '/contacts/$contactId', params: { contactId } })}
+    contactMatches={searchTerm.trim() && <ContactsPart render={(chunk) => <chunk.ContactMatches search={searchTerm} onOpenContact={openContact} />} />}
+    onOpenContact={openContact}
     onNewConversation={() => setStarting(true)} />
-    {starting && <StartConversation onClose={() => setStarting(false)} onStarted={setSelectedId} />}
+    {starting && <ContactsPart failed={<StartUnavailable onClose={() => setStarting(false)} />}
+      render={(chunk) => <chunk.StartConversationWindow onClose={() => setStarting(false)} onStarted={setSelectedId} />} />}
   </>;
 }

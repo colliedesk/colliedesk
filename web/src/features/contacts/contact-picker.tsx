@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { api } from '../../api/client';
+import { contactApi } from './contact-api';
 import type { Contact } from '../../api/schemas';
 import { messages } from '../../messages';
 import { contactMessages } from './contact-messages';
@@ -33,7 +33,7 @@ export function ContactPicker({ label, onPick, excludeId, autoFocus, disabled, e
     const timer = setTimeout(() => setTerm(text.trim()), searchSettleMs);
     return () => clearTimeout(timer);
   }, [text]);
-  const found = useQuery({ queryKey: ['contacts', 'search', term], queryFn: ({ signal }) => api.contacts(term, pickerLimit + 1, signal),
+  const found = useQuery({ queryKey: ['contacts', 'search', term], queryFn: ({ signal }) => contactApi.searchContacts(term, pickerLimit + 1, signal),
     enabled: term !== '', placeholderData: keepPreviousData });
   const items = (found.data?.items ?? []).filter((contact) => contact.id !== excludeId).slice(0, pickerLimit);
   const settled = term !== '' && found.isSuccess && !found.isPlaceholderData;

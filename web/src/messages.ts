@@ -3,9 +3,7 @@ export const messages = {
   inbox: 'Inbox',
   // Contacts and starting a conversation: the strings the inbox shows; the rest is in contact-messages.ts.
   openContact: (name: string) => `Open ${name}'s page`,
-  contactMatches: 'Customers',
   newConversation: 'New conversation',
-  close: 'Close',
   notificationsLabel: 'Desktop notifications for new, assigned and customer-replied conversations',
   notificationsBlocked: 'Blocked by this browser. Allow notifications for this site in its site settings, then reload.',
   notificationNew: 'New conversation',
@@ -432,7 +430,8 @@ export const messages = {
   theme: 'Theme',
   themes: { light: 'Light', dark: 'Dark' },
   replyNotSent: 'The reply could not be sent. Your text is still here; try again.',
-  trialReplyOtherAddress: (address: string) => `During the trial, a reply goes only to an address that wrote to you first. This customer wrote from another address, merged into this contact, and the reply would go to ${address}. Verify your sending domain in Settings or choose a plan to reply. Your text is still here.`,
+  // Follows the server's explanation of a refusal that says it all, such as a reply to a merged address.
+  textStillHere: 'Your text is still here.',
   trialReplyRestricted: 'During the trial, email goes only to customers who wrote to you first. Verify your sending domain in Settings or choose a plan to start new conversations. Your text is still here.',
   trialReplyLimit: (wait: string) => `The trial emails up to 200 people in 24 hours, counting everyone copied. Try again in about ${wait}, or choose a plan to remove the limit. Your text is still here.`,
   retryNotSent: 'The delivery could not be retried. Try again.',

@@ -1,6 +1,7 @@
 // Strings of the customer page, the contact picker, merging and the window that starts a conversation.
 // They are only needed once one of those opens, so they live in its chunk and not in the inbox bundle.
 export const contactMessages = {
+  contactMatches: 'Customers',
   contactOf: (name: string) => `Customer: ${name}`,
   contactNotLoaded: 'This customer could not be loaded.',
   contactEmail: 'Email',

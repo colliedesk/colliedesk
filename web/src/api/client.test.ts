@@ -178,11 +178,6 @@ test('the cloud exchange names this device by its user agent, like a pairing lin
   expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ label: navigator.userAgent, workspace_slug: 'acme' });
 });
 
-test('a contact search can be limited', async () => {
-  fetchMock.mockResolvedValue(reply(200, { items: [], has_more: false }));
-  await api.contacts('ada lo', 8);
-  expect((fetchMock.mock.calls[0] as [string])[0]).toBe('/api/v1/contacts?search=ada+lo&limit=8');
-});
 
 test('a trial refusal for a merged address carries the address the reply would go to', async () => {
   fetchMock.mockResolvedValue(reply(403, { error: { code: 'trial_outbound_restricted', message: 'Not allowed.', reason: 'contact_address_differs', reply_to: 'dana@work.example' } }));

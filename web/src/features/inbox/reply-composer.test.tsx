@@ -77,7 +77,9 @@ test('a refused reply keeps the typed text and says how to continue', async () =
 });
 
 test('a reply refused because the customer wrote from a merged address says where it would go, not "new conversations"', async () => {
-  const onSubmit = vi.fn().mockRejectedValue(new OutboundRefusedError('trial_outbound_restricted', 'server text', undefined, [], 'dana@work.example'));
+  const onSubmit = vi.fn().mockRejectedValue(new OutboundRefusedError('trial_outbound_restricted',
+    'During the trial, a reply goes only to an address that wrote to you first. This customer wrote from another address, merged into this contact, and the reply would go to dana@work.example. Verify your sending domain in Settings or upgrade to reply.',
+    undefined, [], 'dana@work.example'));
   render(<ReplyComposer onSubmit={onSubmit} />);
   const body = screen.getByLabelText('Message body');
   fireEvent.change(body, { target: { value: 'Hello there' } });

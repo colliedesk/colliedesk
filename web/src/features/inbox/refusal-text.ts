@@ -10,7 +10,8 @@ export function replyRefusalText(error: unknown): string {
   if (error instanceof OutboundRefusedError) {
     if (error.code === 'trial_outbound_limit') return messages.trialReplyLimit(formatWait(error.retryAfterSeconds ?? defaultWaitSeconds));
     if (error.refusedCc.length > 0) return messages.trialCcRestricted(error.refusedCc);
-    return error.replyTo ? messages.trialReplyOtherAddress(error.replyTo) : messages.trialReplyRestricted;
+    // A customer who wrote from a merged address: the server's words name the address the reply would go to.
+    return error.replyTo && error.message ? `${error.message} ${messages.textStillHere}` : messages.trialReplyRestricted;
   }
   if (error instanceof AttachmentsTooLargeError || error instanceof AttachmentStorageError) return error.message;
   return messages.replyNotSent;

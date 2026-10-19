@@ -49,16 +49,14 @@ export class InvalidRequestError extends Error {
 
 // ConflictError is the same refusal for a resource whose state does not allow the action (HTTP 409),
 // for example removing the last admin.
-// code and detail (the whole error object) let a caller read a conflict of its own, such as
+// detail (the whole error object, with its code) lets a caller read a conflict of its own, such as
 // contact_exists with the contact to use.
 export class ConflictError extends InvalidRequestError {
-  readonly code?: string;
-  readonly detail?: Record<string, unknown>;
+  readonly detail?: { code?: unknown; [field: string]: unknown };
 
-  constructor(message: string, code?: string, detail?: Record<string, unknown>) {
+  constructor(message: string, detail?: { code?: unknown; [field: string]: unknown }) {
     super(message);
     this.name = 'ConflictError';
-    this.code = code;
     this.detail = detail;
   }
 }
@@ -76,7 +74,7 @@ async function invalidRequest(response: Response): Promise<Error> {
     const body = await response.json() as { error?: { code?: unknown; message?: unknown } };
     if (typeof body.error?.message === 'string' && body.error.message) {
       if (response.status === 409 && body.error.code === 'changed_elsewhere') return new ChangedElsewhereError(body.error.message);
-      return response.status === 409 ? new ConflictError(body.error.message, typeof body.error.code === 'string' ? body.error.code : undefined, body.error)
+      return response.status === 409 ? new ConflictError(body.error.message, body.error)
         : new InvalidRequestError(body.error.message);
     }
   } catch {
@@ -254,10 +252,7 @@ export const api = {
   createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = [], cc: string[] = []) =>
     request(`/api/v1/conversations/${id}/messages`, messageSchema, { method: 'POST',
       body: files.length > 0 ? messageForm(kind, body, files, cc) : json<'createMessage'>(cc.length > 0 ? { kind, body, cc } : { kind, body }) }),
-  // A limit keeps a search as you type small; without it every match comes back.
-  // signal cancels a search the person typed past.
-  contacts: (search = '', limit?: number, signal?: AbortSignal) =>
-    request(`/api/v1/contacts?${new URLSearchParams({ search, ...(limit ? { limit: String(limit) } : {}) })}`, contactListSchema, signal ? { signal } : undefined),
+  contacts: (search = '') => request(`/api/v1/contacts?search=${encodeURIComponent(search)}`, contactListSchema),
   createContact: (name: string, email: string) => request('/api/v1/contacts', contactSchema, { method: 'POST', body: json<'createContact'>({ name, email }) }),
   agents: () => request('/api/v1/agents', agentListSchema),
   tags: () => request('/api/v1/tags', tagListSchema),

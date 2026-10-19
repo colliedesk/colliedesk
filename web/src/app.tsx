@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { Link, Outlet, createRootRoute, redirect, createRoute, createRouter, useRouterState } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
-import { contactPart } from './features/contacts/contact-part';
+import { ContactsPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
 import { RequestsRoute } from './features/requests/requests-route';
@@ -75,13 +75,9 @@ function settingsRouterLink(item: NavItem) {
 const rootRoute = createRootRoute({ component: AppLayout });
 const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: InboxRoute });
 const conversationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/conversations/$conversationId', component: InboxRoute });
-// The customer page is its own chunk (contact-part.ts), so the inbox bundle does not carry it.
-function ContactPage() {
-  const part = contactPart.use();
-  if (part.status === 'ready') return <part.module.ContactRoute />;
-  return <main className="settings-page" aria-busy={part.status === 'loading'}>{part.status === 'error' && <PartUnavailable />}</main>;
-}
-const contactRoute = createRoute({ getParentRoute: () => rootRoute, path: '/contacts/$contactId', component: ContactPage });
+// The customer page is its own chunk (contact-part.tsx), so the inbox bundle does not carry it.
+const contactRoute = createRoute({ getParentRoute: () => rootRoute, path: '/contacts/$contactId',
+  component: () => <ContactsPart render={(chunk) => <chunk.ContactRoute />} failed={<main className="settings-page"><PartUnavailable /></main>} /> });
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsRoute });
 const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: RequestsRoute });
 const billingRoute = createRoute({
