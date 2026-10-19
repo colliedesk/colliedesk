@@ -33,7 +33,8 @@ jobs:
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -h 127.0.0.1 -U colliedesk -d colliedesk_test"
-          --health-interval 3s
+          --tmpfs /var/lib/postgresql/data:rw,size=2g
+          --health-interval 1s
           --health-timeout 3s
           --health-retries 15
     env:
@@ -106,7 +107,8 @@ jobs:
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -h 127.0.0.1 -U colliedesk -d colliedesk_test"
-          --health-interval 3s
+          --tmpfs /var/lib/postgresql/data:rw,size=2g
+          --health-interval 1s
           --health-timeout 3s
           --health-retries 15
     env:
@@ -131,7 +133,8 @@ jobs:
         working-directory: web
         run: corepack pnpm exec playwright install chromium
       - name: Run end-to-end workflows
-        run: make e2e E2E_ARGS='--grep-invert @onboarding'
+        working-directory: web
+        run: corepack pnpm exec vite build && corepack pnpm e2e --grep-invert @onboarding
   # The customer onboarding journeys listed in AGENTS.md. A separate job so they run in parallel
   # with the other end-to-end tests; every test runs in exactly one of the two jobs.
   onboarding:
@@ -147,7 +150,8 @@ jobs:
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -h 127.0.0.1 -U colliedesk -d colliedesk_test"
-          --health-interval 3s
+          --tmpfs /var/lib/postgresql/data:rw,size=2g
+          --health-interval 1s
           --health-timeout 3s
           --health-retries 15
       mailpit:
@@ -177,7 +181,8 @@ jobs:
         working-directory: web
         run: corepack pnpm exec playwright install chromium
       - name: Run onboarding journeys
-        run: make e2e E2E_ARGS='--grep @onboarding'
+        working-directory: web
+        run: corepack pnpm exec vite build && corepack pnpm e2e --grep @onboarding
   # Builds the server image once, boots it, then runs install.sh exactly as a self-hoster does.
   # On main the tested image is pushed as sha-<commit>; publish-edge only retags that digest.
   image:
@@ -286,9 +291,15 @@ jobs:
           fi
           python3 -I .github/scripts/roadmap-check.py ROADMAP.md
 
+  codeql:
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/codeql.yml
+
   ci-ok:
     if: ${{ !cancelled() }}
-    needs: [go, web, e2e, onboarding, image, compose-smoke, osv-scan, roadmap]
+    needs: [go, web, e2e, onboarding, image, compose-smoke, osv-scan, roadmap, codeql]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
