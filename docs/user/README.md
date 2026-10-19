@@ -1,8 +1,11 @@
 # Colliedesk user guides
 
-One page per feature. Each page says what the feature does, how to use it, and its limits.
+One page per feature. Each page says what the feature does, how to use it, and its limits. They
+are the same on Colliedesk Cloud and on your own server.
 
-- [Install and create a workspace](install.md)
+Running Colliedesk on your own server? Install, email delivery, configuration and backups are in
+[self-host](../self-host/README.md).
+
 - [Sign in without passwords](sign-in.md)
 - [Invite your team](invites.md)
 - [Manage your team](team.md)

@@ -2,7 +2,7 @@
 
 Colliedesk is alpha: releases are `0.0.x`, and any release may change the interface or the
 database schema. Every release ships the migrations to upgrade from the previous one. Back up
-before upgrading ([data to back up](docs/user/install.md#data-to-back-up)).
+before upgrading ([data to back up](docs/self-host/database.md#data-to-back-up)).
 
 From 0.0.2, the notes of each release are on the
 [releases page](https://github.com/colliedesk/colliedesk/releases), generated from the merged pull

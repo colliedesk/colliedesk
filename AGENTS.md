@@ -51,7 +51,7 @@ web app. HC Labs sells the hosted cloud and migrations; self-hosting is free.
   MCP with the right token tier (item 6 above; the gate test names what to edit).
 - **Reverse states:** every way in has a way out and a way to see it.
 - **Contracts:** anything crossing the wire is typed in `contracts/openapi.yaml`.
-- **Docs:** a user-visible change updates its page in `docs/user/`. Internal docs record decisions
+- **Docs:** a user-visible change updates its page in `docs/user/` (server operation: `docs/self-host/`). Internal docs record decisions
   and traps only (`docs/internals/`).
 
 ## Verifying
