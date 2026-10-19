@@ -6,7 +6,7 @@ import { requestExportLink } from './workspace-export';
 import { recordFailedCall } from '../lib/diagnostics';
 import type { operations } from './generated';
 import {
-  agentListSchema, agentSchema, contactDetailSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
+  agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, emailChannelSettingsSchema, inboundSecretSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, messageListSchema, messageSchema, timeEntryListSchema,
   agentRequestListSchema, agentRequestSchema, approvedAgentRequestSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, publicConfigSchema, redeemedSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
@@ -49,10 +49,17 @@ export class InvalidRequestError extends Error {
 
 // ConflictError is the same refusal for a resource whose state does not allow the action (HTTP 409),
 // for example removing the last admin.
+// code and detail (the whole error object) let a caller read a conflict of its own, such as
+// contact_exists with the contact to use.
 export class ConflictError extends InvalidRequestError {
-  constructor(message: string) {
+  readonly code?: string;
+  readonly detail?: Record<string, unknown>;
+
+  constructor(message: string, code?: string, detail?: Record<string, unknown>) {
     super(message);
     this.name = 'ConflictError';
+    this.code = code;
+    this.detail = detail;
   }
 }
 
@@ -69,7 +76,8 @@ async function invalidRequest(response: Response): Promise<Error> {
     const body = await response.json() as { error?: { code?: unknown; message?: unknown } };
     if (typeof body.error?.message === 'string' && body.error.message) {
       if (response.status === 409 && body.error.code === 'changed_elsewhere') return new ChangedElsewhereError(body.error.message);
-      return response.status === 409 ? new ConflictError(body.error.message) : new InvalidRequestError(body.error.message);
+      return response.status === 409 ? new ConflictError(body.error.message, typeof body.error.code === 'string' ? body.error.code : undefined, body.error)
+        : new InvalidRequestError(body.error.message);
     }
   } catch {
     // An unreadable body is an ordinary failure.
@@ -96,12 +104,13 @@ async function planLimitFailure(response: Response): Promise<PlanLimitError> {
 
 async function outboundRefusal(response: Response): Promise<Error> {
   try {
-    const body = await response.json() as { error?: { code?: unknown; message?: unknown; retry_after_seconds?: unknown; refused_cc?: unknown } };
-    const { code, message, retry_after_seconds: retry, refused_cc: refused } = body.error ?? {};
+    const body = await response.json() as { error?: { code?: unknown; message?: unknown; retry_after_seconds?: unknown; refused_cc?: unknown; reply_to?: unknown } };
+    const { code, message, retry_after_seconds: retry, refused_cc: refused, reply_to: replyTo } = body.error ?? {};
     if (code === 'storage_limit_reached' && typeof message === 'string' && message) return new AttachmentStorageError(message);
     if (code === 'trial_outbound_restricted' || code === 'trial_outbound_limit') {
       const refusedCc = Array.isArray(refused) ? refused.filter((item): item is string => typeof item === 'string') : [];
-      return new OutboundRefusedError(code, typeof message === 'string' ? message : '', typeof retry === 'number' ? retry : undefined, refusedCc);
+      return new OutboundRefusedError(code, typeof message === 'string' ? message : '', typeof retry === 'number' ? retry : undefined, refusedCc,
+        typeof replyTo === 'string' && replyTo ? replyTo : undefined);
     }
   } catch {
     // An unreadable body is an ordinary failure.
@@ -124,7 +133,8 @@ function noteFailure(path: string, init: RequestInit | undefined, response: Resp
   recordFailedCall(init?.method ?? 'GET', path, response.status, response.headers.get('X-Request-Id') ?? '');
 }
 
-async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
+// request is exported for the API calls that live in a feature's own chunk (features/contacts/contact-api.ts).
+export async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
   // A FormData body sets its own multipart Content-Type, with the boundary.
   const headers = init?.body instanceof FormData ? init.headers : { 'Content-Type': 'application/json', ...init?.headers };
   const response = await fetch(path, { credentials: 'same-origin', ...init, headers });
@@ -149,7 +159,7 @@ export type RequestBody<Operation extends keyof operations> =
 export type UpdateConversationRequest = RequestBody<'updateConversation'>;
 export type BulkConversationChanges = RequestBody<'bulkUpdateConversations'>['changes'];
 
-const json = <Operation extends keyof operations>(value: RequestBody<Operation>): string => JSON.stringify(value);
+export const json = <Operation extends keyof operations>(value: RequestBody<Operation>): string => JSON.stringify(value);
 
 // The JSON body of an operation whose body is optional.
 type OptionalBody<Operation extends keyof operations> =
@@ -244,8 +254,10 @@ export const api = {
   createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = [], cc: string[] = []) =>
     request(`/api/v1/conversations/${id}/messages`, messageSchema, { method: 'POST',
       body: files.length > 0 ? messageForm(kind, body, files, cc) : json<'createMessage'>(cc.length > 0 ? { kind, body, cc } : { kind, body }) }),
-  contacts: (search = '') => request(`/api/v1/contacts?search=${encodeURIComponent(search)}`, contactListSchema),
-  contact: (id: string) => request(`/api/v1/contacts/${id}`, contactDetailSchema),
+  // A limit keeps a search as you type small; without it every match comes back.
+  // signal cancels a search the person typed past.
+  contacts: (search = '', limit?: number, signal?: AbortSignal) =>
+    request(`/api/v1/contacts?${new URLSearchParams({ search, ...(limit ? { limit: String(limit) } : {}) })}`, contactListSchema, signal ? { signal } : undefined),
   createContact: (name: string, email: string) => request('/api/v1/contacts', contactSchema, { method: 'POST', body: json<'createContact'>({ name, email }) }),
   agents: () => request('/api/v1/agents', agentListSchema),
   tags: () => request('/api/v1/tags', tagListSchema),

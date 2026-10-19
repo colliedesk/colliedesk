@@ -29,10 +29,10 @@ const (
 
 // Record files in archive order. A record of an earlier file after a later one is a programming
 // error, because a ZIP entry is written in one piece.
-var recordFiles = []string{"agents.ndjson", "contacts.ndjson", "tags.ndjson", "saved-replies.ndjson", "saved-reply-versions.ndjson", "agent-requests.ndjson", "conversations.ndjson"}
+var recordFiles = []string{"agents.ndjson", "contacts.ndjson", "contact-merges.ndjson", "tags.ndjson", "saved-replies.ndjson", "saved-reply-versions.ndjson", "agent-requests.ndjson", "conversations.ndjson"}
 
 var countKeys = map[string]string{
-	"agents.ndjson": "agents", "contacts.ndjson": "contacts", "tags.ndjson": "tags", "saved-replies.ndjson": "saved_replies", "saved-reply-versions.ndjson": "saved_reply_versions", "agent-requests.ndjson": "agent_requests", "conversations.ndjson": "conversations",
+	"agents.ndjson": "agents", "contacts.ndjson": "contacts", "contact-merges.ndjson": "contact_merges", "tags.ndjson": "tags", "saved-replies.ndjson": "saved_replies", "saved-reply-versions.ndjson": "saved_reply_versions", "agent-requests.ndjson": "agent_requests", "conversations.ndjson": "conversations",
 }
 
 // Opener reads stored attachment bytes; attachments.Storage satisfies it.
@@ -88,6 +88,9 @@ func (w *Writer) Workspace(workspace domain.Workspace) error {
 func (w *Writer) Agent(record Agent) error     { return w.record("agents.ndjson", record) }
 func (w *Writer) Contact(record Contact) error { return w.record("contacts.ndjson", record) }
 func (w *Writer) Tag(record Tag) error         { return w.record("tags.ndjson", record) }
+func (w *Writer) ContactMerge(record ContactMerge) error {
+	return w.record("contact-merges.ndjson", record)
+}
 func (w *Writer) SavedReply(record SavedReply) error {
 	return w.record("saved-replies.ndjson", record)
 }

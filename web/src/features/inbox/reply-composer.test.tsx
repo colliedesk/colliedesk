@@ -76,6 +76,18 @@ test('a refused reply keeps the typed text and says how to continue', async () =
   expect(body).toHaveValue('Hello there');
 });
 
+test('a reply refused because the customer wrote from a merged address says where it would go, not "new conversations"', async () => {
+  const onSubmit = vi.fn().mockRejectedValue(new OutboundRefusedError('trial_outbound_restricted', 'server text', undefined, [], 'dana@work.example'));
+  render(<ReplyComposer onSubmit={onSubmit} />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Hello there' } });
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent(/wrote from another address.*would go to dana@work\.example/);
+  expect(alert).not.toHaveTextContent(/new conversations/);
+  expect(body).toHaveValue('Hello there');
+});
+
 test('a refused Cc names exactly the addresses the trial would not copy', async () => {
   const onSubmit = vi.fn().mockRejectedValue(new OutboundRefusedError('trial_outbound_restricted', 'server text', undefined, ['one@elsewhere.example', 'two@elsewhere.example']));
   render(<ReplyComposer onSubmit={onSubmit} />);

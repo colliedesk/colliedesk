@@ -9,7 +9,8 @@ const defaultWaitSeconds = 3600;
 export function replyRefusalText(error: unknown): string {
   if (error instanceof OutboundRefusedError) {
     if (error.code === 'trial_outbound_limit') return messages.trialReplyLimit(formatWait(error.retryAfterSeconds ?? defaultWaitSeconds));
-    return error.refusedCc.length > 0 ? messages.trialCcRestricted(error.refusedCc) : messages.trialReplyRestricted;
+    if (error.refusedCc.length > 0) return messages.trialCcRestricted(error.refusedCc);
+    return error.replyTo ? messages.trialReplyOtherAddress(error.replyTo) : messages.trialReplyRestricted;
   }
   if (error instanceof AttachmentsTooLargeError || error instanceof AttachmentStorageError) return error.message;
   return messages.replyNotSent;

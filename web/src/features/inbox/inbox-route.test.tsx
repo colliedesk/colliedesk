@@ -8,11 +8,13 @@ const api = vi.hoisted(() => ({
   me: vi.fn(), conversations: vi.fn(), conversation: vi.fn(), agents: vi.fn(), tags: vi.fn(), messages: vi.fn(), timeEntries: vi.fn(),
   updateConversation: vi.fn(), bulkUpdateConversations: vi.fn(), createMessage: vi.fn(), createTag: vi.fn(), config: vi.fn(),
   addConversationTag: vi.fn(), removeConversationTag: vi.fn(), retryDelivery: vi.fn(),
+  contacts: vi.fn(), createContact: vi.fn(), createConversation: vi.fn(),
   savedReplies: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })), contact: vi.fn(),
   emailChannel: vi.fn(async () => ({ channel: null, inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null })),
 }));
 
 vi.mock('../../api/client', () => ({ api }));
+vi.mock('../contacts/contact-api', () => ({ contactApi: { startConversation: api.createConversation }, existingContact: () => undefined }));
 const router = vi.hoisted(() => ({ params: {} as { conversationId?: string } }));
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn(), useParams: () => router.params }));
 
@@ -543,4 +545,68 @@ test('Manage saved replies opens Settings in a new tab, so a draft is not lost',
   fireEvent.click(await screen.findByRole('button', { name: 'Manage saved replies' }));
   expect(open).toHaveBeenCalledExactlyOnceWith('/settings', '_blank', 'noopener');
   open.mockRestore();
+});
+
+test('on the trial with an unverified domain, New conversation says it cannot send yet; once verified it starts the conversation', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const pat = { id: '77777777-7777-4777-8777-777777777777', name: 'Pat', email: 'pat@prospect.example', organization: null, merged_into_id: null,
+    created_at: '2026-01-02T00:00:00Z', updated_at: '2026-01-02T00:00:00Z' };
+  api.me.mockResolvedValue({ timezone: 'UTC', plan: { plan: 'trial', trial_ends_at: '2026-11-01T00:00:00Z', locked: false, trial_extended: false } });
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  const channel = { support_address: 'support@desk.example', domain_verified_at: null };
+  api.emailChannel.mockResolvedValue({ channel, inbound_url: 'https://desk.example.com/x', smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false },
+    from_policy: 'verified', sending_from: 'support@desk.example' } as never);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  api.emailChannel.mockClear();
+  const { unmount } = render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await screen.findAllByText('Alpha conversation');
+  await waitFor(() => expect(api.emailChannel).toHaveBeenCalled());
+  fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Start a conversation' });
+  await waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent(/trial/));
+  unmount();
+
+  api.emailChannel.mockResolvedValue({ channel: { ...channel, domain_verified_at: '2026-10-01T00:00:00Z' }, inbound_url: 'https://desk.example.com/x',
+    smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: 'support@desk.example' } as never);
+  api.contacts.mockResolvedValue({ items: [pat] });
+  api.createConversation.mockResolvedValue({ ...alpha, id: '88888888-8888-4888-8888-888888888888', subject: 'Hello', contact_id: pat.id, contact_name: 'Pat' });
+  api.emailChannel.mockClear();
+  const second = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={second}><InboxRoute /></QueryClientProvider>);
+  await screen.findAllByText('Alpha conversation');
+  await waitFor(() => expect(api.emailChannel).toHaveBeenCalled());
+  fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
+  const ready = await screen.findByRole('dialog', { name: 'Start a conversation' });
+  expect(within(ready).queryByRole('status')).not.toBeInTheDocument();
+  fireEvent.change(within(ready).getByLabelText('Find a customer by name or email'), { target: { value: 'pat' } });
+  fireEvent.click(await within(ready).findByRole('button', { name: /pat@prospect.example/ }));
+  fireEvent.change(within(ready).getByLabelText('Subject'), { target: { value: 'Hello' } });
+  fireEvent.change(within(ready).getByLabelText('Message'), { target: { value: 'First words' } });
+  fireEvent.click(within(ready).getByRole('button', { name: 'Send' }));
+  await waitFor(() => expect(api.createConversation).toHaveBeenCalledWith(pat.id, 'Hello', { body: 'First words', files: [], cc: [] }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+});
+
+test('New conversation takes no input until the plan and the email channel are known', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.me.mockReturnValue(new Promise(() => {})); // whether the workspace is on the trial is not known yet
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  api.emailChannel.mockResolvedValue({ channel: { support_address: 'support@desk.example', domain_verified_at: null }, inbound_url: 'https://desk.example.com/x',
+    smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: 'support@desk.example' } as never);
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+  await screen.findAllByText('Alpha conversation');
+  fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Start a conversation' });
+  // Typing now could be lost: the trial may refuse the email once the plan is known.
+  expect(within(dialog).getByLabelText('Subject')).toBeDisabled();
+  expect(within(dialog).getByLabelText('Message')).toBeDisabled();
+  expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled();
 });

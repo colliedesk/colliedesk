@@ -6,6 +6,17 @@ Colliedesk targets a usable screen within 200 ms from a user action. The target 
 
 `TestInboxListLatencyBudget` runs against real PostgreSQL. It creates two isolated workspaces with 5,000 conversations each. Every conversation has messages and tags. The test calls the authenticated inbox endpoint 50 times with a status filter and 50 times with a search query, using the maximum page size. Each path must stay at or below 100 ms p95.
 
+## Contact page budget
+
+`TestContactPageLatencyBudget` reuses the inbox fixture (one contact owns all 5,000 conversations of
+its workspace, with messages and tags) and adds 10,000 filler contacts per workspace. Three calls must
+each stay at or below 100 ms p95: `GET /api/v1/contacts/{id}` (contact, count, merges),
+`GET /api/v1/conversations?contact={id}&page_size=50` (the history) and a contact search with
+`limit=8` (the picker and the inbox's customer matches). Measured on the dev host: 4 ms, 9 ms, 10 ms.
+The history uses `conversations(workspace_id, contact_id, updated_at DESC, id DESC)`. The contact detail
+no longer embeds every conversation: the unpaged list cost one query per conversation and would not
+meet the budget for a customer with years of imported tickets. Do not widen the 100 ms.
+
 ## Inbox activity budget
 
 `TestInboxActivityLatencyBudget` holds the query behind `GET /api/v1/inbox/activity` to 20 ms p95. Every open tab polls it every 20 seconds. The fixture is a workspace with 5,000 conversations, one every 20 seconds (about a day), a tenth assigned to the caller by a teammate, two messages on each (every third ends with a customer message), and a second workspace of the same size. The cursor is 30 minutes back; the server treats any cursor older than 10 minutes as 10 minutes old, so the window is 12 minutes with the lookback and the result is a few dozen rows, never the 50-row cap. The test does 10 warm-up calls, then 200 timed calls.

@@ -237,7 +237,13 @@ type TrialOutboundError struct {
 	RetryAfter time.Duration
 	// RefusedCC names the Cc addresses the trial does not allow, when they are the reason.
 	RefusedCC []string
+	// ReplyTo is set when the customer wrote first, but from an address other than the contact's (a
+	// contact merged into this one): it is the address the reply would go to, which never wrote.
+	ReplyTo string
 }
+
+// ReasonContactAddressDiffers is the reason of a refusal whose customer wrote from another address.
+const ReasonContactAddressDiffers = "contact_address_differs"
 
 // Limited reports whether the daily cap, not the first-contact rule, refused the reply.
 func (e *TrialOutboundError) Limited() bool { return e.RetryAfter > 0 }
@@ -249,6 +255,10 @@ func (e *TrialOutboundError) Error() string {
 	if len(e.RefusedCC) > 0 {
 		return "During the trial, a reply can copy only people the customer wrote from or copied. Not allowed: " + strings.Join(e.RefusedCC, ", ") +
 			". Remove them, or verify your sending domain in Settings or upgrade."
+	}
+	if e.ReplyTo != "" {
+		return "During the trial, a reply goes only to an address that wrote to you first. This customer wrote from another address, merged into this contact, and the reply would go to " +
+			e.ReplyTo + ". Verify your sending domain in Settings or upgrade to reply."
 	}
 	return "During the trial, email goes only to customers who wrote to you first. Verify your sending domain in Settings or upgrade to start new conversations."
 }

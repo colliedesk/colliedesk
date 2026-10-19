@@ -15,8 +15,8 @@ info:
     `cdk_agent_` and acts as the agent who created it, limited to a tier: `read` (conversations,
     messages, contacts, tags, the team list, and the session, invite and channel settings without
     links or secrets), `draft` (also changes that never reach a customer: status, priority, assignee,
-    tags, new tags, private notes, the owner's own timezone), `send` (also outgoing replies, creating
-    contacts and conversations, saved replies) or `admin` (also workspace settings, the team, revoking
+    tags, new tags, private notes, the owner's own timezone), `send` (also outgoing replies, creating,
+    renaming and merging contacts, creating conversations, saved replies) or `admin` (also workspace settings, the team, revoking
     invites, channels and sessions, with the creator's admin role while they keep it). A call above the tier,
     and every call to a route that needs approval for every tier (new tokens, invites, granting,
     keeping or taking the admin role, signing out another person, export, billing checkout and portal, disconnecting email, a new inbound secret, the
@@ -288,6 +288,12 @@ paths:
         - {name: assignee, in: query, schema: {type: string, enum: [me, unassigned, anyone]}}
         - {name: tag, in: query, schema: {type: string, format: uuid}}
         - {name: search, in: query, schema: {type: string}}
+        - name: contact
+          in: query
+          description: >-
+            Only the conversations of this contact (any status unless `status` is given), for the contact's
+            history. An id of another workspace's contact returns no rows; a value that is not a UUID answers 400.
+          schema: {type: string, format: uuid}
         - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
         - {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
       responses:
@@ -296,26 +302,82 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ConversationPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
     post:
       operationId: createConversation
       x-permission: conversations:write
+      description: >
+        Open a conversation with a contact. With only `contact_id` and `subject` it is empty and nothing is
+        sent. With `body` it starts with an outgoing reply that is emailed to the contact (and `cc`), in the
+        same transaction: when the reply is refused (trial rules, Cc rules, attachment limits, no email
+        channel) nothing is stored, not even the conversation. The email carries the subject as written
+        (no "Re:") and a Message-ID and reply address that thread the customer's answer back into this
+        conversation.
+
+
+        Send `multipart/form-data` to attach files: fields `contact_id`, `subject`, `body`, one `cc` field
+        per address, then repeated `files` parts, with the limits of `POST /conversations/{id}/messages`.
+        `cc` follows the rules of a reply. On the trial a new conversation reaches a customer who never
+        wrote in, so it is refused with 403 `trial_outbound_restricted` until the sending domain is
+        verified or a plan is chosen. A workspace without an email channel answers 409
+        `email_channel_missing`. A contact merged into another answers 409 `contact_merged`. A customer
+        added with the conversation (`contact`) is written in the same transaction; an address that is
+        already a customer answers 409 `contact_exists` with the `contact` to use.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [contact_id, subject]
+              required: [subject]
+              description: Exactly one of `contact_id` and `contact`.
               properties:
                 contact_id: {type: string, format: uuid}
+                contact:
+                  type: object
+                  description: >-
+                    A customer added with the conversation, in the same transaction (only with `body`). An address
+                    that is already a customer answers 409 `contact_exists` with that `contact`, and nothing is stored.
+                  required: [name, email]
+                  properties:
+                    name: {type: string, minLength: 1, maxLength: 200}
+                    email: {type: string, format: email}
                 subject: {type: string, minLength: 1}
+                body: {type: string, minLength: 1, description: 'Markdown source of the first reply; without it the conversation starts empty'}
+                cc: {$ref: '#/components/schemas/CopiedAddresses'}
+          multipart/form-data:
+            schema:
+              type: object
+              required: [subject, body]
+              description: Exactly one of `contact_id` and the pair `contact_name`, `contact_email` (a customer added with it).
+              properties:
+                contact_id: {type: string, format: uuid}
+                contact_name: {type: string, minLength: 1, maxLength: 200}
+                contact_email: {type: string, format: email}
+                subject: {type: string, minLength: 1}
+                body: {type: string, minLength: 1, description: Markdown source}
+                cc: {$ref: '#/components/schemas/CopiedAddresses'}
+                files:
+                  type: array
+                  maxItems: 10
+                  items: {type: string, format: binary}
+            encoding:
+              files: {contentType: application/octet-stream}
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '201': {$ref: '#/components/responses/Conversation'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/AttachmentsTooLarge'}
+        '429': {$ref: '#/components/responses/TrialOutboundLimit'}
+        '507':
+          description: The attachments volume is low on disk space; nothing was sent or stored
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     patch:
       operationId: bulkUpdateConversations
       x-permission: conversations:write
@@ -777,14 +839,20 @@ paths:
       operationId: listContacts
       x-permission: contacts:read
       parameters:
-        - {name: search, in: query, schema: {type: string}}
+        - name: search
+          in: query
+          description: >-
+            Keep contacts whose name or email contains this text. A contact merged into another is left
+            out; when it matches, the contact it was merged into is returned instead (its conversations
+            are there).
+          schema: {type: string}
         - name: ids
           in: query
           description: >-
             Comma-separated contact ids (UUIDs), at most 100. Only these contacts of the workspace are
             returned, in name order; an unknown id, or an id of another workspace, is skipped. More than
             100 ids, an empty entry or a value that is not a UUID answers 400 and names the problem.
-            Combines with search.
+            Combines with search. Merged contacts are returned when named by id.
           schema: {type: string}
         - name: limit
           in: query
@@ -831,11 +899,17 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '409':
+          description: The address is already a customer (`contact_exists`); `contact` in the error is the contact to use, the one it was merged into when it was merged
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/contacts/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
       operationId: getContact
       x-permission: contacts:read
+      description: >-
+        The contact, how many conversations it has, the contacts merged into it, and the contact it was
+        merged into. Read its conversations a page at a time with `GET /conversations?contact={id}`.
       responses:
         '200':
           description: Contact with conversation history
@@ -844,6 +918,92 @@ paths:
               schema: {$ref: '#/components/schemas/ContactDetail'}
         '404': {$ref: '#/components/responses/NotFound'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+    patch:
+      operationId: updateContact
+      x-permission: contacts:write
+      description: >-
+        Rename the contact. The name is what the team sees and the display name of the `To` line of
+        later emails; the email address does not change. Rename it again to undo.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string, minLength: 1, maxLength: 200}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: Renamed contact
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Contact'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/contacts/{id}/merges:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: mergeContact
+      x-permission: contacts:write
+      summary: Merge a duplicate contact into this one
+      description: >-
+        Moves every conversation of the duplicate (`contact_id`) to this contact and marks the duplicate
+        as merged into it. Nothing is deleted: the duplicate keeps its name and email, mail from its
+        address joins this contact from now on, and replies on the moved conversations go to this
+        contact's email. Undo it with `DELETE /contacts/{id}/merges/{mergeId}`. The duplicate must not be
+        this contact, merged already, or have contacts merged into it; this contact must not be merged.
+        409 `contact_merged` says which.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contact_id]
+              properties:
+                contact_id: {type: string, format: uuid, description: The duplicate to merge into this contact}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '201':
+          description: The merge, with the conversations it moved
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ContactMerge'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/contacts/{id}/merges/{mergeId}:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - name: mergeId
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    delete:
+      operationId: unmergeContact
+      x-permission: contacts:write
+      summary: Undo a merge
+      description: >-
+        Moves back to the duplicate every conversation the merge moved that is still on this contact, and
+        makes the duplicate a contact of its own again. Conversations that arrived after the merge stay
+        here. A merge already undone answers 409.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: The undone merge
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ContactMerge'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/agents:
     get:
       operationId: listAgents
@@ -1941,7 +2101,9 @@ components:
         `POST /conversations/{id}/messages` a trial workspace gets error code
         `trial_outbound_restricted` for a reply to a conversation the customer did not start
         (unless it verified its sending domain), or for a `cc` address the customer never wrote
-        from or copied (then `refused_cc` lists them); nothing was stored.
+        from or copied (then `refused_cc` lists them), or when the customer wrote from another address
+        than the contact's after a merge (then `reason` is `contact_address_differs` and `reply_to` names
+        the contact's address); nothing was stored.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error404:
       description: Resource not found in this workspace
@@ -2257,8 +2419,8 @@ components:
         Tier of an agent token. `read`: read what an agent may read, including the session and invite
         lists and the channel settings without links or secrets. `draft`: also change status, priority,
         assignee and tags of a conversation, create tags, add private notes and set the owner's own
-        timezone. `send`: also send and retry replies, rename and delete tags, create contacts and
-        conversations, and write saved replies. `admin`: also workspace settings, the team, revoking
+        timezone. `send`: also send and retry replies, rename and delete tags, create, rename and merge
+        contacts, create conversations, and write saved replies. `admin`: also workspace settings, the team, revoking
         invites, the web form and email channel, and sessions; it acts with the creator's role, so only
         an admin can create it and it loses admin rights when its creator is demoted.
     AgentToken:
@@ -2301,21 +2463,45 @@ components:
         revoked_at: {type: [string, 'null'], format: date-time}
     Contact:
       type: object
-      required: [id, name, email, organization, created_at, updated_at]
+      required: [id, name, email, organization, merged_into_id, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         name: {type: string}
         email: {type: string, format: email}
         organization: {type: [string, 'null'], description: 'Company or organization name, for example imported from a Freshdesk company'}
+        merged_into_id: {type: [string, 'null'], format: uuid, description: 'The contact this one was merged into; null for a contact of its own'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
     ContactDetail:
       allOf:
         - {$ref: '#/components/schemas/Contact'}
         - type: object
-          required: [conversations]
+          required: [conversation_count, merged_into, merges]
           properties:
-            conversations: {type: array, items: {$ref: '#/components/schemas/Conversation'}}
+            conversation_count: {type: integer, minimum: 0, description: 'Conversations of the contact, any status, imported ones included'}
+            merged_into:
+              description: The contact this one was merged into, or null. Its conversations and new mail are there.
+              oneOf:
+                - {type: 'null'}
+                - {$ref: '#/components/schemas/Contact'}
+            merges:
+              type: array
+              description: Contacts merged into this one and not undone, newest first
+              items: {$ref: '#/components/schemas/ContactMerge'}
+    ContactMerge:
+      type: object
+      required: [id, contact_id, merged_contact, conversation_ids, merged_by_agent_id, merged_at, undone_at]
+      properties:
+        id: {type: string, format: uuid}
+        contact_id: {type: string, format: uuid, description: The contact that was kept}
+        merged_contact: {$ref: '#/components/schemas/Contact'}
+        conversation_ids:
+          type: array
+          description: The conversations the merge moved; undoing it moves back those still on the kept contact
+          items: {type: string, format: uuid}
+        merged_by_agent_id: {type: [string, 'null'], format: uuid}
+        merged_at: {type: string, format: date-time}
+        undone_at: {type: [string, 'null'], format: date-time}
     Tag:
       type: object
       required: [id, name, color]
@@ -2867,3 +3053,13 @@ components:
               type: array
               items: {type: string}
               description: 'Only on trial_outbound_restricted caused by Cc: exactly the addresses the trial refused to copy.'
+            reason:
+              type: string
+              enum: [contact_address_differs]
+              description: >-
+                Only on trial_outbound_restricted when the customer wrote first, but from another address than
+                the contact's (a contact merged into this one): the reply would go to `reply_to`, which never wrote.
+            reply_to: {type: string, description: 'Only with reason contact_address_differs: the address the reply would go to.'}
+            contact:
+              description: 'Only on contact_exists: the contact to use instead of adding one.'
+              allOf: [{$ref: '#/components/schemas/Contact'}]

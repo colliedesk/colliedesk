@@ -87,11 +87,9 @@ func createEmailConversation(ctx context.Context, tx pgx.Tx, workspaceID string,
 	if name == "" {
 		name = in.FromAddress[:strings.LastIndex(in.FromAddress, "@")]
 	}
-	var contactID string
-	err := tx.QueryRow(ctx, `INSERT INTO contacts(workspace_id,name,email) VALUES($1,$2,$3)
-		ON CONFLICT(workspace_id,email) DO UPDATE SET email=contacts.email RETURNING id::text`, workspaceID, name, in.FromAddress).Scan(&contactID)
+	contactID, err := contactForEmail(ctx, tx, workspaceID, name, in.FromAddress)
 	if err != nil {
-		return "", fmt.Errorf("find or create contact: %w", err)
+		return "", err
 	}
 	subject := in.Subject
 	if subject == "" {

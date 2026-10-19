@@ -1,6 +1,7 @@
 import type { RefObject } from 'react';
 import type { Conversation, Message, TimeEntry } from '../../api/schemas';
 import { messages } from '../../messages';
+import { RouterLink } from '../../ui/router-link';
 import { MessageItem } from './message-item';
 import { PriorityLabel, StatusLabel } from './conversation-labels';
 import { TimeEntriesSection } from './time-entries-section';
@@ -20,15 +21,19 @@ interface TimelinePanelProps {
   detailsToggleRef?: RefObject<HTMLButtonElement | null>;
   // Team member names by id, to name the person who approved a reply an AI agent drafted.
   agentNames?: ReadonlyMap<string, string>;
+  // Opens the customer's page: every conversation they had, newest first.
+  onOpenContact?: (contactId: string) => void;
 }
 
-export function TimelinePanel({ conversation, items, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, onToggleDetails, detailsToggleRef, agentNames }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, items, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, onToggleDetails, detailsToggleRef, agentNames, onOpenContact }: TimelinePanelProps) {
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
       <header className="timeline-header">
         <div>
           <h2>{conversation?.subject ?? messages.selectConversation}</h2>
-          {conversation && <div className="timeline-meta"><StatusLabel status={conversation.status} /><PriorityLabel priority={conversation.priority} /></div>}
+          {conversation && <div className="timeline-meta"><StatusLabel status={conversation.status} /><PriorityLabel priority={conversation.priority} />
+            <RouterLink className="timeline-contact" href={`/contacts/${conversation.contact_id}`} label={messages.openContact(conversation.contact_name)}
+              onFollow={onOpenContact && (() => onOpenContact(conversation.contact_id))}>{conversation.contact_name}</RouterLink></div>}
         </div>
         {conversation && onToggleDetails && <button type="button" className="details-toggle" ref={detailsToggleRef}
           aria-expanded={detailsOpen} aria-controls="conversation-details" onClick={onToggleDetails}>{messages.showDetails}</button>}

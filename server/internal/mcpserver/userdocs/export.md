@@ -49,7 +49,8 @@ not match its recorded checksum, it aborts the download. You then get a broken Z
 |---|---|
 | `manifest.json` | Format, version, export time (UTC), workspace, record counts, and every attachment file with its size and SHA-256 |
 | `agents.ndjson` | One agent per line: `id`, `email`, `display_name`, `role`, `timezone_override`, `created_at`, `deactivated_at` (`null` for an active agent) |
-| `contacts.ndjson` | One contact per line: `id`, `name`, `email`, `organization`, `created_at`, `updated_at` |
+| `contacts.ndjson` | One contact per line: `id`, `name`, `email`, `organization`, `merged_into_id` (the contact it was [merged](contacts.md#merge-two-contacts-of-the-same-person) into, or null), `created_at`, `updated_at` |
+| `contact-merges.ndjson` | Every merge of two contacts, undone or not, oldest first: `id`, `contact_id` (kept), `merged_contact_id`, `conversation_ids` (the conversations it moved), `merged_by_agent_id`, `token_id`, `created_at`, `undone_at`, `undone_by_agent_id` |
 | `tags.ndjson` | One tag per line: `id`, `name`, `color`, `created_at` |
 | `saved-replies.ndjson` | One saved reply per line, including the ones in the trash: `id`, `title`, `body`, `created_by_agent_id` (an agent id or `null`), `created_at`, `updated_at`, `deleted_at` (when it went to the trash, or `null`), `deleted_by_agent_id`. The body keeps the variables `{{customer.name}}` and `{{agent.name}}` unfilled |
 | `saved-reply-versions.ndjson` | Every [version](saved-replies.md#history-and-restore) of every saved reply, one per line, ordered by reply and version: `saved_reply_id`, `version`, `kind` (`baseline`, `create`, `edit`, `delete`, `restore` or `undelete`; `baseline` is the text a reply had when history started), `restored_from_version`, `title`, `body` (the reply after the change), `changed_by_agent_id`, `token_id`, `token_label` (the agent token that made or asked for it), `agent_request_id` (the approved agent request that made it), `created_at` |

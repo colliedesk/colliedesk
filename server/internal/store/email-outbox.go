@@ -29,6 +29,9 @@ type Delivery struct {
 	EmailMessageID, ReplyToken string
 	InReplyTo                  string
 	References                 []string
+	// Opening is the first email of a conversation the team started: nothing came before it, so it is a
+	// new thread and not a reply.
+	Opening bool
 	// CC is the list stored with the reply; a retry sends to the same addresses.
 	CC    []string
 	Files []DeliveryFile
@@ -118,6 +121,12 @@ func loadDelivery(ctx context.Context, tx pgx.Tx, item *Delivery) error {
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("iterate thread references: %w", err)
+	}
+	if len(item.References) == 0 {
+		if err := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND kind='incoming')`,
+			item.WorkspaceID, conversationID).Scan(&item.Opening); err != nil {
+			return fmt.Errorf("check thread start: %w", err)
+		}
 	}
 	// Reply to the customer's latest message; without one, continue our own thread.
 	item.InReplyTo = lastIncoming

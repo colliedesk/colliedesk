@@ -144,7 +144,20 @@ func (s *Store) CreateMessageWithCC(ctx context.Context, workspaceID, conversati
 		return domain.Message{}, fmt.Errorf("begin message creation: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
-	if cc, err = withoutContact(ctx, tx, workspaceID, conversationID, cc); err != nil {
+	message, err := s.createMessage(ctx, tx, workspaceID, conversationID, actor, kind, body, cc, files)
+	if err != nil {
+		return domain.Message{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Message{}, fmt.Errorf("commit message creation: %w", err)
+	}
+	return message, nil
+}
+
+// createMessage writes a message, its files and its outbox row inside tx; see CreateMessageWithCC.
+func (s *Store) createMessage(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, actor Actor, kind, body string, cc []string, files []NewAttachment) (domain.Message, error) {
+	cc, err := withoutContact(ctx, tx, workspaceID, conversationID, cc)
+	if err != nil {
 		return domain.Message{}, err
 	}
 	var messageID string
@@ -165,14 +178,7 @@ func (s *Store) CreateMessageWithCC(ctx context.Context, workspaceID, conversati
 			return domain.Message{}, err
 		}
 	}
-	message, err := getMessage(ctx, tx, workspaceID, messageID)
-	if err != nil {
-		return domain.Message{}, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return domain.Message{}, fmt.Errorf("commit message creation: %w", err)
-	}
-	return message, nil
+	return getMessage(ctx, tx, workspaceID, messageID)
 }
 
 func (s *Store) insertMessageFiles(ctx context.Context, tx pgx.Tx, workspaceID, messageID string, files []NewAttachment) error {
