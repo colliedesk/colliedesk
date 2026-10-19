@@ -1,13 +1,14 @@
 import { useEffect } from 'react';
 import type { CaptureResult, PostHog, PostHogConfig } from 'posthog-js';
 
-// Product analytics for the hosted cloud only. The server's public config says whether to report
-// (a self-hosted server never enables it), and only then is posthog-js loaded, as its own chunk.
+// Product analytics. The server's public config says whether to report (DISABLE_TELEMETRY or
+// DO_NOT_TRACK turn it off, on the cloud and self-hosted alike), and only then is posthog-js
+// loaded, as its own chunk.
 // PostHog keeps nothing in the browser, records no session, and sees no text: every element's
 // text and attributes are masked, and search terms, fragments and titles are dropped from URLs.
 // Agents are named by their random id; no email address or name leaves the app.
 
-export type ProductAnalyticsSettings = { enabled: boolean; key: string | null; host: string | null };
+export type ProductAnalyticsSettings = { enabled: boolean; key: string | null; host: string | null; realm: string | null };
 type Identity = {
   agent: { id: string; role: string };
   workspace: { id: string };
@@ -72,7 +73,7 @@ export async function startProductAnalytics(settings: ProductAnalyticsSettings |
   const posthog = await client;
   if (me) {
     posthog.identify(me.agent.id, { role: me.agent.role });
-    posthog.register({ workspace_id: me.workspace.id, plan: me.plan?.plan ?? null });
+    posthog.register({ realm: settings.realm, workspace_id: me.workspace.id, plan: me.plan?.plan ?? null });
   }
   return posthog;
 }

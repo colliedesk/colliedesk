@@ -47,12 +47,13 @@ func TestWorkspaceActivationEventsAreRecorded(t *testing.T) {
 	}
 }
 
-func TestConfigOffersProductAnalyticsOnlyWhereConfigured(t *testing.T) {
+func TestConfigOffersProductAnalyticsUnlessTelemetryIsOff(t *testing.T) {
 	type config struct {
 		ProductAnalytics struct {
 			Enabled bool    `json:"enabled"`
 			Key     *string `json:"key"`
 			Host    *string `json:"host"`
+			Realm   *string `json:"realm"`
 		} `json:"product_analytics"`
 	}
 	read := func(api http.Handler) config {
@@ -65,18 +66,26 @@ func TestConfigOffersProductAnalyticsOnlyWhereConfigured(t *testing.T) {
 		return got
 	}
 
-	t.Run("self-hosted", func(t *testing.T) {
+	t.Run("telemetry off", func(t *testing.T) {
 		api, _ := testAPI(t)
-		if got := read(api); got.ProductAnalytics.Enabled || got.ProductAnalytics.Key != nil || got.ProductAnalytics.Host != nil {
+		if got := read(api); got.ProductAnalytics.Enabled || got.ProductAnalytics.Key != nil || got.ProductAnalytics.Host != nil || got.ProductAnalytics.Realm != nil {
 			t.Fatalf("product_analytics=%+v, want disabled with no key", got.ProductAnalytics)
+		}
+	})
+	t.Run("self-hosted", func(t *testing.T) {
+		api, _, _, _ := testAPIWithConfig(t, func(c *httpapi.Config) {
+			c.ProductAnalytics = &httpapi.ProductAnalytics{Key: "phc_cloudkey", Host: "https://us.i.posthog.com", Realm: "self-hosted"}
+		})
+		if got := read(api); !got.ProductAnalytics.Enabled || got.ProductAnalytics.Realm == nil || *got.ProductAnalytics.Realm != "self-hosted" {
+			t.Fatalf("product_analytics=%+v, want enabled for realm self-hosted", got.ProductAnalytics)
 		}
 	})
 	t.Run("cloud", func(t *testing.T) {
 		api, _, _, _ := testAPIWithConfig(t, func(c *httpapi.Config) {
-			c.ProductAnalytics = &httpapi.ProductAnalytics{Key: "phc_cloudkey", Host: "https://us.i.posthog.com"}
+			c.ProductAnalytics = &httpapi.ProductAnalytics{Key: "phc_cloudkey", Host: "https://us.i.posthog.com", Realm: "cloud"}
 		})
 		got := read(api)
-		if !got.ProductAnalytics.Enabled || got.ProductAnalytics.Key == nil || *got.ProductAnalytics.Key != "phc_cloudkey" || got.ProductAnalytics.Host == nil || *got.ProductAnalytics.Host != "https://us.i.posthog.com" {
+		if !got.ProductAnalytics.Enabled || got.ProductAnalytics.Key == nil || *got.ProductAnalytics.Key != "phc_cloudkey" || got.ProductAnalytics.Host == nil || *got.ProductAnalytics.Host != "https://us.i.posthog.com" || got.ProductAnalytics.Realm == nil || *got.ProductAnalytics.Realm != "cloud" {
 			t.Fatalf("product_analytics=%+v, want enabled with the key and host", got.ProductAnalytics)
 		}
 	})

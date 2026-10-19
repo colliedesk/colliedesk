@@ -1122,9 +1122,14 @@ export interface components {
             expires_at: string;
         };
         PublicConfig: {
-            /** @description Where the web app reports which screens and buttons agents use. Only the hosted cloud enables it (and `DISABLE_TELEMETRY` or `DO_NOT_TRACK` turn it off there); a self-hosted server answers `enabled: false` and its web app never loads the analytics library. */
+            /** @description Where the web app reports which screens and buttons agents use. On by default on the cloud and self-hosted; `DISABLE_TELEMETRY` or `DO_NOT_TRACK` (and a development build) answer `enabled: false`, and then the web app never loads the analytics library. */
             product_analytics: {
                 enabled: boolean;
+                /**
+                 * @description Carried on every event so cloud and self-hosted use are told apart.
+                 * @enum {string|null}
+                 */
+                realm: "cloud" | "self-hosted" | null;
                 /** @description Public PostHog project key; it can add events but not read them. */
                 key: string | null;
                 /** @description PostHog ingestion host. */

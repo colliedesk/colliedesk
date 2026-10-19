@@ -30,14 +30,14 @@ func (a *API) getConfig(response http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-// productAnalyticsConfig tells the web app whether, and where, to report usage. Only the hosted cloud
-// configures it; everywhere else the web app never loads the analytics library.
+// productAnalyticsConfig tells the web app whether, and where, to report usage. With telemetry
+// turned off the web app never loads the analytics library.
 func (a *API) productAnalyticsConfig() map[string]any {
 	analytics := a.config.ProductAnalytics
 	if analytics == nil {
-		return map[string]any{"enabled": false, "key": nil, "host": nil}
+		return map[string]any{"enabled": false, "key": nil, "host": nil, "realm": nil}
 	}
-	return map[string]any{"enabled": true, "key": analytics.Key, "host": analytics.Host}
+	return map[string]any{"enabled": true, "key": analytics.Key, "host": analytics.Host, "realm": analytics.Realm}
 }
 
 func (a *API) exchangeCloudSession(response http.ResponseWriter, request *http.Request) {

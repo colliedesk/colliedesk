@@ -34,7 +34,7 @@ function AppLayout() {
   useEffect(() => { if (locked) clearCheckoutIntent(); }, [locked]);
   // New, newly assigned and changed conversations are picked up on every signed-in page, not only in the inbox.
   useInboxActivity(!onSignIn && Boolean(me.data) && !signedOut && !locked, me.data?.agent?.id);
-  // Hosted cloud only: the server's config enables it; a self-hosted app never loads the library.
+  // The server's config enables it unless telemetry is off; otherwise the library is never loaded.
   useProductAnalytics(config.data?.product_analytics, me.data);
   // Agent requests waiting for a person, for the rail badge; a locked workspace has none to decide.
   const waiting = usePendingRequests(!onSignIn && Boolean(me.data) && !signedOut && !locked).data?.items.length ?? 0;

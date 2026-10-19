@@ -86,15 +86,17 @@ type Config struct {
 	// Funnel receives the cloud's trial, activation (email channel, reply, teammate) and payment
 	// events; nil records nothing.
 	Funnel FunnelRecorder
-	// ProductAnalytics is the PostHog project the hosted cloud's web app reports to; nil (every
-	// self-hosted server, and the cloud with telemetry off) keeps the web app from loading it.
+	// ProductAnalytics is the PostHog project the web app reports to; nil (telemetry turned off
+	// with DISABLE_TELEMETRY or DO_NOT_TRACK, or a development build) keeps it from loading.
 	ProductAnalytics *ProductAnalytics
 }
 
-// ProductAnalytics names the PostHog project key and host the web app sends usage events to.
+// ProductAnalytics names the PostHog project key and host the web app sends usage events to, and
+// the realm ("cloud" or "self-hosted") its events carry.
 type ProductAnalytics struct {
-	Key  string
-	Host string
+	Key   string
+	Host  string
+	Realm string
 }
 
 // FunnelRecorder takes one sign-up, activation or payment event of a workspace. Record must not block the

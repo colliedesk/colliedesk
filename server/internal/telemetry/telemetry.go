@@ -55,7 +55,7 @@ func (r *Reporter) Run(ctx context.Context, logger *slog.Logger) {
 		logger.Info("usage report is off", "reason", reason)
 		return
 	}
-	logger.Info("usage report is on: once a day this install sends counts and its public host name (no names, emails or ticket content) to PostHog; set DISABLE_TELEMETRY=true to turn it off",
+	logger.Info("usage report is on: once a day this install sends counts and its public host name, and the web app reports which screens and buttons agents use (no names, emails or ticket content), to PostHog; set DISABLE_TELEMETRY=true to turn it off",
 		"fields", "https://github.com/colliedesk/colliedesk/blob/main/docs/user/telemetry.md")
 	wait := startDelay
 	for {

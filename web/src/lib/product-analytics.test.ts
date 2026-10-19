@@ -17,14 +17,14 @@ afterEach(() => resetProductAnalyticsForTest());
 describe('startProductAnalytics', () => {
   it('never loads the analytics library when the server does not enable it', async () => {
     const loader = vi.fn();
-    expect(await startProductAnalytics({ enabled: false, key: null, host: null }, me, loader)).toBeNull();
+    expect(await startProductAnalytics({ enabled: false, key: null, host: null, realm: null }, me, loader)).toBeNull();
     expect(await startProductAnalytics(undefined, me, loader)).toBeNull();
     expect(loader).not.toHaveBeenCalled();
   });
 
   it('starts PostHog without storage, replay or visible text, and names the agent by id only', async () => {
     const posthog = fakePostHog();
-    await startProductAnalytics({ enabled: true, key: 'phc_cloudkey', host: 'https://us.i.posthog.com' }, me, async () => posthog);
+    await startProductAnalytics({ enabled: true, key: 'phc_cloudkey', host: 'https://us.i.posthog.com', realm: 'self-hosted' }, me, async () => posthog);
 
     expect(posthog.init).toHaveBeenCalledTimes(1);
     const [key, options] = posthog.init.mock.calls[0];
@@ -37,14 +37,14 @@ describe('startProductAnalytics', () => {
       mask_all_element_attributes: true,
     });
     expect(posthog.identify).toHaveBeenCalledWith('0b8f7a52-1d2c-4a8e-9b1a-5f2c1e7d9a10', { role: 'admin' });
-    expect(posthog.register).toHaveBeenCalledWith({ workspace_id: '5c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f', plan: 'trial' });
+    expect(posthog.register).toHaveBeenCalledWith({ realm: 'self-hosted', workspace_id: '5c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f', plan: 'trial' });
     expect(JSON.stringify([posthog.identify.mock.calls, posthog.register.mock.calls])).not.toMatch(/ada@|Acme Support|Ada/);
   });
 
   it('loads PostHog once however often the shell renders', async () => {
     const posthog = fakePostHog();
     const loader = vi.fn(async () => posthog);
-    const settings = { enabled: true, key: 'phc_cloudkey', host: 'https://us.i.posthog.com' };
+    const settings = { enabled: true, key: 'phc_cloudkey', host: 'https://us.i.posthog.com', realm: 'cloud' };
     await startProductAnalytics(settings, me, loader);
     await startProductAnalytics(settings, me, loader);
     expect(loader).toHaveBeenCalledTimes(1);
