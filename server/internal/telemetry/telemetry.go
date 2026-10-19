@@ -8,11 +8,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"runtime"
+	"slices"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
@@ -24,6 +27,8 @@ const (
 	// reported; the claim in the database makes it one report a day however often servers start.
 	checkEvery  = time.Hour
 	sendTimeout = 30 * time.Second
+	// snapshotBatchSize keeps one batch request small however many workspaces the cloud has.
+	snapshotBatchSize = 200
 )
 
 // Reporter collects the counts and sends them.
@@ -79,7 +84,7 @@ func (r *Reporter) SendOnce(ctx context.Context) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, sendTimeout)
 	defer cancel()
-	u, claimed, err := claimUsage(ctx, r.db)
+	u, claimed, err := claimUsage(ctx, r.db, r.config.Realm == "cloud")
 	if err != nil {
 		return fmt.Errorf("collect usage: %w", err)
 	}
@@ -102,7 +107,10 @@ func (r *Reporter) SendOnce(ctx context.Context) error {
 		// website and the cloud app, so the report must not create a person profile.
 		"$process_person_profile": false,
 	}
-	if err := capture(ctx, r.client, r.config, "instance heartbeat", u.installID, properties); err != nil {
+	// A failed heartbeat must not cost the workspaces their snapshots, nor the reverse.
+	heartbeatErr := capture(ctx, r.client, r.config, "instance heartbeat", u.installID, properties)
+	snapshotErr := r.sendSnapshots(ctx, u.snapshots)
+	if err := errors.Join(heartbeatErr, snapshotErr); err != nil {
 		return err
 	}
 	r.logger.Info("usage report sent", "install_id", u.installID, "version", r.config.Version, "realm", r.config.Realm,
@@ -111,19 +119,45 @@ func (r *Reporter) SendOnce(ctx context.Context) error {
 	return nil
 }
 
+// sendSnapshots posts the workspace snapshots of Colliedesk Cloud to PostHog's batch endpoint, one
+// request per snapshotBatchSize workspaces. It sends nothing when there are none.
+func (r *Reporter) sendSnapshots(ctx context.Context, snapshots []snapshot) error {
+	var failures []error
+	for chunk := range slices.Chunk(snapshots, snapshotBatchSize) {
+		now := time.Now().UTC().Format(time.RFC3339)
+		events := make([]map[string]any, 0, len(chunk))
+		for _, s := range chunk {
+			properties := map[string]any{"realm": r.config.Realm, "version": r.config.Version, "$process_person_profile": false}
+			maps.Copy(properties, s.properties)
+			events = append(events, map[string]any{"event": "workspace_snapshot", "distinct_id": s.workspaceID, "timestamp": now, "properties": properties})
+		}
+		if err := post(ctx, r.client, r.config.Endpoint+"/batch/", map[string]any{"api_key": r.config.ProjectKey, "batch": events}); err != nil {
+			failures = append(failures, fmt.Errorf("send workspace snapshots: %w", err))
+			continue
+		}
+		r.logger.Info("workspace snapshots sent", "workspaces", len(chunk), "version", r.config.Version)
+	}
+	return errors.Join(failures...)
+}
+
 // capture posts one event to PostHog's capture endpoint and fails unless PostHog accepts it.
 func capture(ctx context.Context, client *http.Client, config Config, event, distinctID string, properties map[string]any) error {
-	body, err := json.Marshal(map[string]any{
+	return post(ctx, client, config.Endpoint+"/i/v0/e/", map[string]any{
 		"api_key":     config.ProjectKey,
 		"event":       event,
 		"distinct_id": distinctID,
 		"timestamp":   time.Now().UTC().Format(time.RFC3339),
 		"properties":  properties,
 	})
+}
+
+// post sends a JSON body to PostHog and fails unless PostHog accepts it.
+func post(ctx context.Context, client *http.Client, url string, payload map[string]any) error {
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, config.Endpoint+"/i/v0/e/", bytes.NewReader(body))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

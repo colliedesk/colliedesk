@@ -6,12 +6,13 @@ import type { CaptureResult, PostHog, PostHogConfig } from 'posthog-js';
 // loaded, as its own chunk.
 // PostHog keeps nothing in the browser, records no session, and sees no text: every element's
 // text and attributes are masked, and search terms, fragments and titles are dropped from URLs.
-// Agents are named by their random id; no email address or name leaves the app.
+// On Colliedesk Cloud an agent is named by email and display name and the workspace by name and slug,
+// so the team knows which customer is which. A self-hosted install sends the random ids only.
 
 export type ProductAnalyticsSettings = { enabled: boolean; key: string | null; host: string | null; realm: string | null };
 type Identity = {
-  agent: { id: string; role: string };
-  workspace: { id: string };
+  agent: { id: string; role: string; email: string; display_name: string };
+  workspace: { id: string; name: string; slug: string };
   plan: { plan: string } | null;
 };
 type Client = Pick<PostHog, 'init' | 'identify' | 'register' | 'capture' | 'reset'>;
@@ -146,7 +147,13 @@ export async function startProductAnalytics(settings: ProductAnalyticsSettings |
     return posthog;
   });
   const posthog = await client;
-  if (me) {
+  if (me && settings.realm === 'cloud') {
+    // Our own customers: who they are is what the team needs to help them.
+    posthog.identify(me.agent.id, { role: me.agent.role, email: me.agent.email, name: me.agent.display_name || undefined });
+    posthog.register({ realm: settings.realm, workspace_id: me.workspace.id, workspace_name: me.workspace.name,
+      workspace_slug: me.workspace.slug, plan: me.plan?.plan ?? null });
+  } else if (me) {
+    // A self-hosted install's agents are someone else's staff: only random ids leave it.
     posthog.identify(me.agent.id, { role: me.agent.role });
     posthog.register({ realm: settings.realm, workspace_id: me.workspace.id, plan: me.plan?.plan ?? null });
   }

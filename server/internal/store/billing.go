@@ -98,6 +98,27 @@ func LoadSubscriptions(ctx context.Context, tx pgx.Tx, workspaceID string) ([]do
 	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Subscription, error) { return scanSubscription(row) })
 }
 
+// LoadAllSubscriptions reads the subscriptions of every workspace inside tx, in the shape of
+// LoadSubscriptions, keyed by workspace id. It needs a privileged transaction: it crosses workspaces.
+func LoadAllSubscriptions(ctx context.Context, tx pgx.Tx) (map[string][]domain.Subscription, error) {
+	rows, err := tx.Query(ctx, `SELECT workspace_id::text,`+subscriptionColumns+` FROM workspace_billing
+		UNION ALL SELECT workspace_id::text,`+compSubscriptionColumns+` FROM workspace_comp_plans WHERE revoked_at IS NULL`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	all := map[string][]domain.Subscription{}
+	for rows.Next() {
+		var workspaceID string
+		var s domain.Subscription
+		if err := rows.Scan(&workspaceID, &s.Plan, &s.SubscriptionID, &s.CustomerID, &s.Status, &s.CurrentPeriodEnd, &s.CancelAtPeriodEnd, &s.EndedAt, &s.ModifiedAt); err != nil {
+			return nil, err
+		}
+		all[workspaceID] = append(all[workspaceID], s)
+	}
+	return all, rows.Err()
+}
+
 // GetBilling returns the workspace's plan, state and current usage at now.
 func (s *Store) GetBilling(ctx context.Context, workspaceID string, now time.Time) (domain.Billing, error) {
 	billing, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Billing, error) {
