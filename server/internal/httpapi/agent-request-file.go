@@ -88,6 +88,12 @@ func (a *API) fileAgentRequest(response http.ResponseWriter, request *http.Reque
 		}
 		savedReply = &snapshot
 	}
+	if summary == "" && route.Method == http.MethodPost && route.Pattern == "/api/v1/conversations" {
+		var ok bool
+		if summary, ok = a.summarizeConversationStart(response, request, who, body); !ok {
+			return
+		}
+	}
 	if summary == "" && (savedReply != nil || route.Pattern == "/api/v1/saved-replies") {
 		summary = summarizeSavedReplyRequest(route, body, savedReply, request.PathValue("version"))
 	}
@@ -138,6 +144,9 @@ var requestTitles = map[string]string{
 	"POST /api/v1/conversations/{id}/messages":                   "Add a private note",
 	"POST /api/v1/conversations/{id}/messages/{messageId}/retry": "Send a failed reply again",
 	"POST /api/v1/contacts":                                      "Add a customer",
+	"PATCH /api/v1/contacts/{id}":                                "Rename a customer",
+	"POST /api/v1/contacts/{id}/merges":                          "Merge two customers",
+	"DELETE /api/v1/contacts/{id}/merges/{mergeId}":              "Undo a merge of customers",
 	"POST /api/v1/tags":                                          "Create a tag",
 	"PATCH /api/v1/tags/{id}":                                    "Rename a tag",
 	"DELETE /api/v1/tags/{id}":                                   "Delete a tag",
@@ -172,6 +181,48 @@ const summaryDetail = 300
 
 // summarizeRequest is the one line a person reads before deciding: what the call does and what it
 // sets. It holds only what the token sent, never text a customer wrote.
+// summarizeConversationStart names, for a new conversation that starts by emailing the customer, the
+// address and the text before a person approves it, as a reply draft does. A token below send may copy
+// nobody: no one is on a conversation that does not exist yet. It answers and reports false when the call
+// is refused; without a body it returns "" for the ordinary summary.
+func (a *API) summarizeConversationStart(response http.ResponseWriter, request *http.Request, who auth.Principal, body json.RawMessage) (string, bool) {
+	var call struct {
+		ContactID string            `json:"contact_id"`
+		Contact   *store.NewContact `json:"contact"`
+		Subject   string            `json:"subject"`
+		Body      *string           `json:"body"`
+		CC        []string          `json:"cc"`
+	}
+	if json.Unmarshal(body, &call) != nil || call.Body == nil {
+		return "", true
+	}
+	to := ""
+	switch {
+	case call.Contact != nil && call.ContactID == "":
+		if problem := newContactProblem(call.Contact, true); problem != "" {
+			writeError(response, http.StatusBadRequest, "invalid_request", problem)
+			return "", false
+		}
+		to = call.Contact.Name + " <" + strings.ToLower(call.Contact.Email) + ">, a new customer"
+	case call.Contact == nil && contactIDPattern.MatchString(strings.ToLower(call.ContactID)):
+		contact, err := a.store.GetContact(request.Context(), who.Workspace.ID, call.ContactID)
+		if err != nil {
+			writeStoreError(response, err)
+			return "", false
+		}
+		to = contact.Email
+	default:
+		writeError(response, http.StatusBadRequest, "invalid_request", "A subject and either contact_id or a new contact are required.")
+		return "", false
+	}
+	if len(call.CC) > 0 && !auth.ScopeAllows(who.Scope, auth.ScopeSend) {
+		writeError(response, http.StatusBadRequest, "invalid_request", "A token below send cannot copy anyone on a new conversation; a person can add copies on a later reply.")
+		return "", false
+	}
+	return "Start a conversation by email (to " + to + "): " + strings.Join(strings.Fields(call.Subject), " ") + ": " +
+		strings.Join(strings.Fields(*call.Body), " "), true
+}
+
 func summarizeRequest(route Route, kind string, body json.RawMessage) string {
 	title, ok := requestTitles[route.Method+" "+route.Pattern]
 	if !ok {

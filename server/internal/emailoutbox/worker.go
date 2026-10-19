@@ -175,7 +175,7 @@ func (w *Worker) deliver(ctx context.Context, item store.Delivery) error {
 		FromName: from.Name, FromAddress: from.Address, ReplyTo: email.PlusAddress(item.SupportAddress, item.ReplyToken),
 		ReplyToName: item.WorkspaceName,
 		ToName:      item.ContactName, ToAddress: item.ContactEmail, Cc: copies, Subject: item.Subject, Body: item.Body,
-		MessageID: item.EmailMessageID, InReplyTo: item.InReplyTo, References: item.References, Date: w.options.Now(),
+		MessageID: item.EmailMessageID, InReplyTo: item.InReplyTo, References: item.References, Date: w.options.Now(), Opening: item.Opening,
 	})
 	if err != nil {
 		return w.store.MarkDeliveryFailed(ctx, item, truncate(err.Error()))

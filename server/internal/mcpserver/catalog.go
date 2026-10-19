@@ -29,7 +29,8 @@ func Catalog() []Spec {
 	return []Spec{
 		whoamiSpec(), inboxSearchSpec(), inboxActivitySpec(), conversationGetSpec(), timeEntriesListSpec(), attachmentGetSpec(),
 		conversationUpdateSpec(), conversationsBulkUpdateSpec(), noteAddSpec(), replySendSpec(), replyRetrySpec(), conversationCreateSpec(),
-		contactsFindSpec(), contactGetSpec(), contactCreateSpec(), tagsListSpec(), tagRenameSpec(), tagDeleteSpec(), agentsListSpec(),
+		conversationStartSpec(),
+		contactsFindSpec(), contactGetSpec(), contactCreateSpec(), contactUpdateSpec(), contactMergeSpec(), contactUnmergeSpec(), tagsListSpec(), tagRenameSpec(), tagDeleteSpec(), agentsListSpec(),
 		savedRepliesListSpec(), savedReplyGetSpec(), savedReplyCreateSpec(), savedReplyUpdateSpec(), savedReplyDeleteSpec(),
 		savedReplyHistorySpec(), savedReplyVersionRestoreSpec(), savedRepliesTrashSpec(), savedReplyUndeleteSpec(),
 		tokenRevokeSpec(), docsSearchSpec(),

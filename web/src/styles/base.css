@@ -22,6 +22,22 @@ h1, h2, h3 { text-wrap: balance; }
 p { text-wrap: pretty; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
+/* Scrollbars: a thin thumb in the theme's control grey on every scrolling area, never the system bar.
+   Chrome 121+ ignores ::-webkit-scrollbar once scrollbar-width or scrollbar-color is set, so Firefox gets
+   those only where ::-webkit-scrollbar is not supported. The tokens switch with the theme. */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line-control); border: 2px solid transparent; border-radius: 999px; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: var(--line-strong); }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-button { display: none; }
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: var(--line-control) transparent; }
+}
+/* A row that scrolls sideways (tabs, chips) hides its bar and fades at the edges instead. */
+.scroll-x-fade { overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(to right, transparent, #000 var(--space-4), #000 calc(100% - var(--space-4)), transparent); }
+.scroll-x-fade::-webkit-scrollbar { display: none; }
+
 /* Focus: an amber ring with a 2 px gap, so it never touches a primary button. */
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 

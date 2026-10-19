@@ -133,10 +133,9 @@ func (s *Store) SubmitWebForm(ctx context.Context, workspaceID string, in WebFor
 		return ErrRateLimited
 	}
 	var contactID, tagID, conversationID string
-	if err := tx.QueryRow(ctx, `INSERT INTO contacts(workspace_id,name,email) VALUES($1,$2,$3)
-		ON CONFLICT(workspace_id,email) DO UPDATE SET email=contacts.email RETURNING id::text`,
-		workspaceID, in.Email[:strings.LastIndex(in.Email, "@")], in.Email).Scan(&contactID); err != nil {
-		return fmt.Errorf("find or create contact: %w", err)
+	contactID, err = contactForEmail(ctx, tx, workspaceID, in.Email[:strings.LastIndex(in.Email, "@")], in.Email)
+	if err != nil {
+		return err
 	}
 	if err := tx.QueryRow(ctx, `INSERT INTO tags(workspace_id,name) VALUES($1,$2)
 		ON CONFLICT(workspace_id,name) DO UPDATE SET name=tags.name RETURNING id::text`, workspaceID, WebFormTag).Scan(&tagID); err != nil {

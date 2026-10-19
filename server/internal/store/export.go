@@ -70,6 +70,9 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string, sink ex
 	if err := exportContacts(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
+	if err := exportContactMerges(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
 	if err := exportTags(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
@@ -114,7 +117,7 @@ func exportAgents(ctx context.Context, tx pgx.Tx, workspaceID string, sink expor
 }
 
 func exportContacts(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,name,email,organization,created_at,updated_at
+	rows, err := tx.Query(ctx, `SELECT id::text,name,email,organization,merged_into_id::text,created_at,updated_at
 		FROM contacts WHERE workspace_id=$1 ORDER BY id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export contacts: %w", err)
@@ -122,7 +125,7 @@ func exportContacts(ctx context.Context, tx pgx.Tx, workspaceID string, sink exp
 	defer rows.Close()
 	for rows.Next() {
 		var record export.Contact
-		if err := rows.Scan(&record.ID, &record.Name, &record.Email, &record.Organization, &record.CreatedAt, &record.UpdatedAt); err != nil {
+		if err := rows.Scan(&record.ID, &record.Name, &record.Email, &record.Organization, &record.MergedIntoID, &record.CreatedAt, &record.UpdatedAt); err != nil {
 			return fmt.Errorf("export contacts: %w", err)
 		}
 		record.CreatedAt, record.UpdatedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt)
@@ -131,6 +134,27 @@ func exportContacts(ctx context.Context, tx pgx.Tx, workspaceID string, sink exp
 		}
 	}
 	return rowsError("export contacts", rows)
+}
+
+func exportContactMerges(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	rows, err := tx.Query(ctx, `SELECT id::text,contact_id::text,merged_contact_id::text,conversation_ids::text[],merged_by_agent_id::text,
+		token_id::text,created_at,undone_at,undone_by_agent_id::text FROM contact_merges WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export contact merges: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var record export.ContactMerge
+		if err := rows.Scan(&record.ID, &record.ContactID, &record.MergedContactID, &record.ConversationIDs, &record.MergedByAgentID,
+			&record.TokenID, &record.CreatedAt, &record.UndoneAt, &record.UndoneByAgentID); err != nil {
+			return fmt.Errorf("export contact merges: %w", err)
+		}
+		record.CreatedAt, record.UndoneAt = domain.UTC(record.CreatedAt), domain.UTCOptional(record.UndoneAt)
+		if err := sink.ContactMerge(record); err != nil {
+			return err
+		}
+	}
+	return rowsError("export contact merges", rows)
 }
 
 func exportTags(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {

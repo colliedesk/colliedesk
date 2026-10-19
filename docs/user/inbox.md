@@ -18,6 +18,10 @@ cannot be loaded, it says so with **Try again** instead.
   status tab first, so imported closed tickets are found; the view stays on **All** after you clear
   the search. Characters such as `%` and `_` are matched
   literally.
+- A search for a name or an email address also lists the matching customers under **Customers**,
+  above the conversations. Select one to open the customer's page with every conversation they had;
+  see [Customers](contacts.md).
+- The customer's name under the subject of an open conversation opens the same page.
 - A conversation you opened stays on screen after you resolve or close it, although it leaves the
   Open list.
 - When nothing matches, **Clear filters** below the message resets search, assignee and tag, and
@@ -85,6 +89,26 @@ cannot be loaded, it says so with **Try again** instead.
   message. A reply emails its files to the contact; a private note and its files never leave your team.
 - Attachments appear under their message with name and size. Select a file name to download it.
   Files always download; they are never opened inside Colliedesk.
+
+**Start a new conversation**
+- Select **New conversation** next to the inbox title.
+- **To**: find the customer by name or email, or select **Add a new customer** and enter a name and an
+  email address. The new customer is saved together with the conversation: if the email is refused,
+  neither is stored. An address that is already a customer says so under the email field, with
+  **Use <name>** to pick that customer instead (for a merged address, the customer it was merged into).
+- While something is missing, a line next to **Send** says what (a customer, a subject, a message).
+- Write a **Subject** and the **Message** (Markdown). **Cc** and **Add attachment** work as in a reply,
+  with the same limits.
+- **Send** opens the conversation and emails the message from the [email channel](email-channel.md),
+  with the subject as you wrote it. The customer's answer joins the same conversation. You land on the
+  new conversation, where the message shows **Queued**, **Sent** or **Delivery failed** like any reply.
+- If the email is refused, nothing is stored and your text stays in the window with the reason.
+- The workspace needs a connected email channel; without one the window says so and cannot send.
+- On the hosted cloud trial, email goes only to customers who wrote to you first, so a new conversation
+  cannot be sent until you verify your sending domain or choose a plan. The window says so before you
+  type, links to Settings and the plans, and takes no input. See [Plan and billing](billing.md).
+- AI agents start one with the MCP tool `colliedesk_conversation_start`, or the API
+  `POST /api/v1/conversations` with `body` (and `contact: {name, email}` to add the customer with it).
 
 **Change the conversation** (details pane)
 - **Status**: every status can be changed back, for example Resolved → Open to reopen.

@@ -14,25 +14,27 @@ import (
 )
 
 type contractFixture struct {
-	api                          http.Handler
-	adminToken, agentToken       string
-	agentID                      string
-	contactID, conversationID    string
-	inviteID, sessionID          string
-	updateTagID, deleteTagID     string
-	updateReplyID, deleteReplyID string
-	updateReplySeen              string
-	trashReplyID, restoreReplyID string
-	restoreReplySeen             string
-	deleteReplySeen              string
-	trashReplySeen               string
-	attachmentID                 string
-	mailImagePath                string
-	redeemToken, logoutToken     string
-	inboundSecret                string
-	failedReplyID                string
-	deleteChannelToken           string
-	portalToken, webhookBody     string
+	api                       http.Handler
+	adminToken, agentToken    string
+	agentID                   string
+	contactID, conversationID string
+	// mergeDuplicateID is merged by the contract case; undoMergeID is a merge the undo case reverts.
+	mergeDuplicateID, undoMergeID string
+	inviteID, sessionID           string
+	updateTagID, deleteTagID      string
+	updateReplyID, deleteReplyID  string
+	updateReplySeen               string
+	trashReplyID, restoreReplyID  string
+	restoreReplySeen              string
+	deleteReplySeen               string
+	trashReplySeen                string
+	attachmentID                  string
+	mailImagePath                 string
+	redeemToken, logoutToken      string
+	inboundSecret                 string
+	failedReplyID                 string
+	deleteChannelToken            string
+	portalToken, webhookBody      string
 	// requestToken filed three pending agent requests, one for each decision.
 	requestToken                                       string
 	approveRequestID, rejectRequestID, cancelRequestID string
@@ -62,6 +64,9 @@ func newContractFixture(t *testing.T) contractFixture {
 	conversationID := create(t, api, adminToken, "/api/v1/conversations", map[string]any{
 		"contact_id": contactID, "subject": "Contract conversation",
 	})
+	mergeDuplicateID := create(t, api, adminToken, "/api/v1/contacts", map[string]any{"name": "Merge duplicate", "email": "merge@contract-all.example.com"})
+	undoDuplicateID := create(t, api, adminToken, "/api/v1/contacts", map[string]any{"name": "Undo duplicate", "email": "undo@contract-all.example.com"})
+	undoMergeID := create(t, api, adminToken, "/api/v1/contacts/"+contactID+"/merges", map[string]any{"contact_id": undoDuplicateID})
 	noteID := create(t, api, adminToken, "/api/v1/conversations/"+conversationID+"/messages", map[string]any{
 		"kind": "note", "body": "Contract note",
 	})
@@ -151,7 +156,7 @@ func newContractFixture(t *testing.T) contractFixture {
 	}
 	approveRequestID, rejectRequestID, cancelRequestID := fileRequest(), fileRequest(), fileRequest()
 	return contractFixture{requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
-		contactID: contactID, conversationID: conversationID, inviteID: inviteID, sessionID: sessionID,
+		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
 		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token}
 }
 
@@ -211,7 +216,7 @@ func withFailedEmailReply(t *testing.T, api http.Handler, pool *pgxpool.Pool, ad
 	secret := connectEmail(t, api, admin, "support@contract-all.example.com")
 	// The workspace is on a trial, which replies only to customers who wrote first.
 	if _, err := pool.Exec(context.Background(), `INSERT INTO messages(workspace_id,conversation_id,kind,body,email_meta)
-		SELECT workspace_id,id,'incoming','Customer question','{"from":"c@customer.example","authentication":"pass","via":"platform"}' FROM conversations WHERE id=$1`, conversationID); err != nil {
+		SELECT workspace_id,id,'incoming','Customer question','{"from":"contact@contract-all.example.com","authentication":"pass","via":"platform"}' FROM conversations WHERE id=$1`, conversationID); err != nil {
 		t.Fatal(err)
 	}
 	replyID := create(t, api, admin, "/api/v1/conversations/"+conversationID+"/messages", map[string]any{"kind": "outgoing", "body": "Contract reply"})

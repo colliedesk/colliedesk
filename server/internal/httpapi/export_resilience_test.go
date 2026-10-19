@@ -206,6 +206,7 @@ type idleSink struct {
 func (s idleSink) Workspace(domain.Workspace) error                 { return nil }
 func (s idleSink) Agent(export.Agent) error                         { time.Sleep(s.sleep); return nil }
 func (s idleSink) Contact(export.Contact) error                     { return nil }
+func (s idleSink) ContactMerge(export.ContactMerge) error           { return nil }
 func (s idleSink) Tag(export.Tag) error                             { return nil }
 func (s idleSink) SavedReply(export.SavedReply) error               { return nil }
 func (s idleSink) SavedReplyVersion(export.SavedReplyVersion) error { return nil }

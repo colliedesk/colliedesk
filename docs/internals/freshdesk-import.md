@@ -60,6 +60,10 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
   import or undo on a dedicated connection. A second import (any source) or an undo fails fast with
   `ErrImportRunning`. Per-workspace, not per-source: imports share content-addressed files, so an
   undo deleting unreferenced files must not overlap another import.
+- **Merged contacts survive undo.** A contact the import created is deleted by undo only while it has
+  no conversations and is not merged into another contact. A merged one has no conversations of its own,
+  but deleting it would drop the merge record and let mail from its address recreate the duplicate.
+  The import maps a Freshdesk contact whose address is merged to the kept contact.
 - **Re-run rule.** A ticket is skipped when its ledger row is `done` and the listed `updated_at` is
   not newer. A newer ticket is processed again: new children are added, existing ones are skipped
   by id, and subject, status, priority, assignee, `origin` and `updated_at` are overwritten. Tags

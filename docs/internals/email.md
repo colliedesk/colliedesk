@@ -6,6 +6,19 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
 
 ## Decisions
 
+- **A conversation the team starts opens a thread.** `POST /conversations` with `body` writes the
+  conversation and its first reply in one transaction through the same `enqueueReply` as any reply, so
+  Message-ID, reply token, trial rules and Cc rules are the same, and a refusal stores nothing. The
+  outbox marks a delivery `Opening` when no earlier message of the conversation has a Message-ID and none
+  is incoming; that email keeps the subject as written (no `Re: `), has no In-Reply-To or References and
+  is not `Auto-Submitted`. Without an email channel the call answers 409 `email_channel_missing` instead of
+  storing a reply nobody will receive.
+- **Merged contacts route mail to the kept contact.** Every find-or-create of a contact by address
+  (inbound mail, web form, problem reports, Freshdesk import) answers with `merged_into_id` when it is set,
+  so a merge does not come back with the next email. The first-contact rule of the trial compares the
+  inbound sender with the conversation contact's address, so merging a contact who wrote into one who
+  never did is not a way to mail a cold address.
+
 - **Forwarder-agnostic inbound.** One endpoint takes a raw RFC 5322 message. No vendor SDK and
   no provider-specific JSON.
 - **The secret picks the workspace, never the message.** The inbound secret is

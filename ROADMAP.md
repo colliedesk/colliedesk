@@ -30,8 +30,6 @@ database schema.
 
 Beta starts when HC Labs announces it. Before that:
 
-- Contact history: every conversation of a customer in one place, and starting a new conversation
-  from the inbox ([#92](https://github.com/colliedesk/colliedesk/issues/92)).
 - Connect a Gmail / Google Workspace or Microsoft 365 mailbox with one click (OAuth); replies
   leave from your own address. Forwarding keeps working ([#95](https://github.com/colliedesk/colliedesk/issues/95)).
 - An upgrade guide, and upgrades tested from the previous release on real data ([#91](https://github.com/colliedesk/colliedesk/issues/91)).

@@ -43,9 +43,35 @@ type messageFields struct {
 	kind, body string
 	// cc holds the cc fields as sent, one address each.
 	cc []string
+	// opening is set for the first reply of a new conversation, which also names the contact and the
+	// subject; it is always an outgoing reply.
+	opening            bool
+	contactID, subject string
+	// contactName and contactEmail add a customer with the conversation, instead of contactID.
+	contactName, contactEmail string
+}
+
+// newContact is the customer the fields add, or nil when they name a contact of the workspace.
+func (f messageFields) newContact() *store.NewContact {
+	if f.contactName == "" && f.contactEmail == "" {
+		return nil
+	}
+	return &store.NewContact{Name: f.contactName, Email: f.contactEmail}
 }
 
 func (f messageFields) validate() error {
+	if f.opening {
+		added := f.newContact()
+		if (f.contactID == "") == (added == nil) || strings.TrimSpace(f.subject) == "" || strings.TrimSpace(f.body) == "" {
+			return &uploadError{http.StatusBadRequest, "invalid_request", "Contact, subject and body are required."}
+		}
+		if added != nil {
+			if problem := newContactProblem(added, true); problem != "" {
+				return &uploadError{http.StatusBadRequest, "invalid_request", problem}
+			}
+		}
+		return nil
+	}
 	if (f.kind != "outgoing" && f.kind != "note") || strings.TrimSpace(f.body) == "" {
 		return &uploadError{http.StatusBadRequest, "invalid_request", "A reply or note body is required."}
 	}
@@ -84,7 +110,7 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 	}
 	var stored []store.NewAttachment
 	defer func() { a.discardUnreferenced(context.WithoutCancel(request.Context()), workspaceID, stored) }()
-	fields, files, err := a.readMessageParts(request.Context(), reader, workspaceID, conversationID, &stored)
+	fields, files, err := a.readMessageParts(request.Context(), reader, workspaceID, conversationID, messageFields{}, &stored)
 	if err != nil {
 		a.writeUploadError(response, err)
 		return
@@ -117,6 +143,65 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 	writeJSON(response, http.StatusCreated, item)
 }
 
+// noConversationYet stands for the conversation a new conversation's files belong to before it exists.
+// Checked against it, the trial refuses early what StartConversation would refuse: a reply to a
+// customer who never wrote.
+const noConversationYet = "00000000-0000-0000-0000-000000000000"
+
+// startConversationWithFiles handles POST /conversations as multipart/form-data: fields contact_id,
+// subject, body and cc, then repeated files. The files stream to storage first; the conversation, its
+// first reply and the attachment rows are then written in one transaction, and whatever fails leaves
+// nothing behind. The route needs the send tier, so a token that gets here may send.
+func (a *API) startConversationWithFiles(response http.ResponseWriter, request *http.Request) {
+	identity := principal(request)
+	workspaceID := identity.Workspace.ID
+	timeout := a.config.UploadTimeout
+	if timeout <= 0 {
+		timeout = defaultUploadTimeout
+	}
+	_ = http.NewResponseController(response).SetReadDeadline(time.Now().Add(timeout)) //nolint:errcheck // unsupported writers have no deadline to set
+	request.Body = http.MaxBytesReader(response, request.Body, attachments.MaxOutgoingBytes+multipartOverhead)
+	reader, err := request.MultipartReader()
+	if err != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Contact, subject and body are required.")
+		return
+	}
+	var stored []store.NewAttachment
+	defer func() { a.discardUnreferenced(context.WithoutCancel(request.Context()), workspaceID, stored) }()
+	fields, files, err := a.readMessageParts(request.Context(), reader, workspaceID, noConversationYet, messageFields{opening: true, kind: "outgoing"}, &stored)
+	if err != nil {
+		a.writeUploadError(response, err)
+		return
+	}
+	if err := fields.validate(); err != nil {
+		a.writeUploadError(response, err)
+		return
+	}
+	actor, _ := messageActor(request.Context(), identity, "outgoing")
+	cc, refusal := a.cleanCC(request.Context(), workspaceID, "outgoing", fields.cc)
+	if refusal != nil {
+		a.writeUploadError(response, refusal)
+		return
+	}
+	added := fields.newContact()
+	if added != nil {
+		newContactProblem(added, true) // trims what validate checked
+	}
+	item, err := a.store.StartConversation(request.Context(), workspaceID, store.NewConversation{ContactID: fields.contactID, NewContact: added, Subject: fields.subject},
+		actor, fields.body, cc, files...)
+	if errors.Is(err, store.ErrObjectMissing) {
+		writeError(response, http.StatusInternalServerError, "internal_error", "A file was lost while the conversation was saved. Nothing was sent; try again.")
+		return
+	}
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	a.recordReply(identity, "outgoing")
+	stored = nil // referenced now: keep the bytes
+	writeJSON(response, http.StatusCreated, item)
+}
+
 type uploadError struct {
 	status        int
 	code, message string
@@ -145,8 +230,8 @@ func (a *API) writeUploadError(response http.ResponseWriter, err error) {
 
 // readMessageParts reads the fields and streams every file to storage, recording each stored object
 // in stored as soon as it exists so the caller can clean up after any later failure.
-func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, workspaceID, conversationID string, stored *[]store.NewAttachment) (messageFields, []store.NewAttachment, error) {
-	var fields messageFields
+// fields carries what is known before the parts are read (opening for a new conversation).
+func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, workspaceID, conversationID string, fields messageFields, stored *[]store.NewAttachment) (messageFields, []store.NewAttachment, error) {
 	remaining := int64(attachments.MaxOutgoingBytes)
 	admitted := false
 	for {
@@ -158,7 +243,8 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 			return fields, nil, invalidUpload(err)
 		}
 		switch name := part.FormName(); {
-		case name == "kind" || name == "body" || name == "cc":
+		case name == "kind" && !fields.opening, name == "body", name == "cc",
+			fields.opening && (name == "contact_id" || name == "subject" || name == "contact_name" || name == "contact_email"):
 			text, err := readField(part)
 			if err != nil {
 				return fields, nil, err
@@ -166,6 +252,14 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 			switch name {
 			case "kind":
 				fields.kind = text
+			case "contact_id":
+				fields.contactID = text
+			case "subject":
+				fields.subject = text
+			case "contact_name":
+				fields.contactName = text
+			case "contact_email":
+				fields.contactEmail = text
 			case "body":
 				fields.body = text
 			default:
@@ -177,7 +271,9 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 		case name == "files" && part.FileName() != "":
 			// Fields come first, so a refusal that does not depend on the bytes is given before reading any.
 			if !admitted {
-				if err := fields.validate(); err != nil {
+				if err := fields.validate(); err != nil && fields.opening {
+					return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "Send contact_id, subject and body before the files."}
+				} else if err != nil {
 					return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "Send kind and body before the files."}
 				}
 				cc, refusal := a.cleanCC(ctx, workspaceID, fields.kind, fields.cc)
@@ -201,6 +297,9 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 			}
 			*stored = append(*stored, store.NewAttachment{Filename: cleanFilename(part.FileName()), ContentType: cleanContentType(part.Header.Get("Content-Type")), Object: object})
 		default:
+			if fields.opening {
+				return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "Send contact_id (or contact_name and contact_email), subject, body, cc and files only; every file needs a filename."}
+			}
 			return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "Send kind, body, cc and files only; every file needs a filename."}
 		}
 	}

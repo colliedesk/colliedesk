@@ -33,10 +33,8 @@ func (s *Store) CreateProblemReport(ctx context.Context, workspaceID string, in 
 	defer tx.Rollback(ctx) //nolint:errcheck
 	now := s.now()
 	var contactID, tagID, conversationID, messageID string
-	if err := tx.QueryRow(ctx, `INSERT INTO contacts(workspace_id,name,email) VALUES($1,$2,$3)
-		ON CONFLICT(workspace_id,email) DO UPDATE SET email=contacts.email RETURNING id::text`,
-		workspaceID, in.ReporterName, in.ReporterEmail).Scan(&contactID); err != nil {
-		return "", fmt.Errorf("find or create reporter contact: %w", err)
+	if contactID, err = contactForEmail(ctx, tx, workspaceID, in.ReporterName, in.ReporterEmail); err != nil {
+		return "", err
 	}
 	if err := tx.QueryRow(ctx, `INSERT INTO tags(workspace_id,name) VALUES($1,$2)
 		ON CONFLICT(workspace_id,name) DO UPDATE SET name=tags.name RETURNING id::text`, workspaceID, ProblemReportTag).Scan(&tagID); err != nil {

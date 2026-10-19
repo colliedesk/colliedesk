@@ -199,6 +199,11 @@ export interface paths {
         };
         get: operations["listConversations"];
         put?: never;
+        /**
+         * @description Open a conversation with a contact. With only `contact_id` and `subject` it is empty and nothing is sent. With `body` it starts with an outgoing reply that is emailed to the contact (and `cc`), in the same transaction: when the reply is refused (trial rules, Cc rules, attachment limits, no email channel) nothing is stored, not even the conversation. The email carries the subject as written (no "Re:") and a Message-ID and reply address that thread the customer's answer back into this conversation.
+         *
+         *     Send `multipart/form-data` to attach files: fields `contact_id`, `subject`, `body`, one `cc` field per address, then repeated `files` parts, with the limits of `POST /conversations/{id}/messages`. `cc` follows the rules of a reply. On the trial a new conversation reaches a customer who never wrote in, so it is refused with 403 `trial_outbound_restricted` until the sending domain is verified or a plan is chosen. A workspace without an email channel answers 409 `email_channel_missing`. A contact merged into another answers 409 `contact_merged`. A customer added with the conversation (`contact`) is written in the same transaction; an address that is already a customer answers 409 `contact_exists` with the `contact` to use.
+         */
         post: operations["createConversation"];
         delete?: never;
         options?: never;
@@ -472,10 +477,57 @@ export interface paths {
             };
             cookie?: never;
         };
+        /** @description The contact, how many conversations it has, the contacts merged into it, and the contact it was merged into. Read its conversations a page at a time with `GET /conversations?contact={id}`. */
         get: operations["getContact"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Rename the contact. The name is what the team sees and the display name of the `To` line of later emails; the email address does not change. Rename it again to undo. */
+        patch: operations["updateContact"];
+        trace?: never;
+    };
+    "/api/v1/contacts/{id}/merges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge a duplicate contact into this one
+         * @description Moves every conversation of the duplicate (`contact_id`) to this contact and marks the duplicate as merged into it. Nothing is deleted: the duplicate keeps its name and email, mail from its address joins this contact from now on, and replies on the moved conversations go to this contact's email. Undo it with `DELETE /contacts/{id}/merges/{mergeId}`. The duplicate must not be this contact, merged already, or have contacts merged into it; this contact must not be merged. 409 `contact_merged` says which.
+         */
+        post: operations["mergeContact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contacts/{id}/merges/{mergeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                mergeId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Undo a merge
+         * @description Moves back to the duplicate every conversation the merge moved that is still on this contact, and makes the duplicate a contact of its own again. Conversations that arrived after the merge stay here. A merge already undone answers 409.
+         */
+        delete: operations["unmergeContact"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1332,7 +1384,7 @@ export interface components {
             };
         };
         /**
-         * @description Tier of an agent token. `read`: read what an agent may read, including the session and invite lists and the channel settings without links or secrets. `draft`: also change status, priority, assignee and tags of a conversation, create tags, add private notes and set the owner's own timezone. `send`: also send and retry replies, rename and delete tags, create contacts and conversations, and write saved replies. `admin`: also workspace settings, the team, revoking invites, the web form and email channel, and sessions; it acts with the creator's role, so only an admin can create it and it loses admin rights when its creator is demoted.
+         * @description Tier of an agent token. `read`: read what an agent may read, including the session and invite lists and the channel settings without links or secrets. `draft`: also change status, priority, assignee and tags of a conversation, create tags, add private notes and set the owner's own timezone. `send`: also send and retry replies, rename and delete tags, create, rename and merge contacts, create conversations, and write saved replies. `admin`: also workspace settings, the team, revoking invites, the web form and email channel, and sessions; it acts with the creator's role, so only an admin can create it and it loses admin rights when its creator is demoted.
          * @enum {string}
          */
         TokenScope: "read" | "draft" | "send" | "admin";
@@ -1387,13 +1439,41 @@ export interface components {
             email: string;
             /** @description Company or organization name, for example imported from a Freshdesk company */
             organization: string | null;
+            /**
+             * Format: uuid
+             * @description The contact this one was merged into; null for a contact of its own
+             */
+            merged_into_id: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
         };
         ContactDetail: components["schemas"]["Contact"] & {
-            conversations: components["schemas"]["Conversation"][];
+            /** @description Conversations of the contact, any status, imported ones included */
+            conversation_count: number;
+            /** @description The contact this one was merged into, or null. Its conversations and new mail are there. */
+            merged_into: null | components["schemas"]["Contact"];
+            /** @description Contacts merged into this one and not undone, newest first */
+            merges: components["schemas"]["ContactMerge"][];
+        };
+        ContactMerge: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description The contact that was kept
+             */
+            contact_id: string;
+            merged_contact: components["schemas"]["Contact"];
+            /** @description The conversations the merge moved; undoing it moves back those still on the kept contact */
+            conversation_ids: string[];
+            /** Format: uuid */
+            merged_by_agent_id: string | null;
+            /** Format: date-time */
+            merged_at: string;
+            /** Format: date-time */
+            undone_at: string | null;
         };
         Tag: {
             /** Format: uuid */
@@ -1841,6 +1921,15 @@ export interface components {
                 retry_after_seconds?: number;
                 /** @description Only on trial_outbound_restricted caused by Cc: exactly the addresses the trial refused to copy. */
                 refused_cc?: string[];
+                /**
+                 * @description Only on trial_outbound_restricted when the customer wrote first, but from another address than the contact's (a contact merged into this one): the reply would go to `reply_to`, which never wrote.
+                 * @enum {string}
+                 */
+                reason?: "contact_address_differs";
+                /** @description Only with reason contact_address_differs: the address the reply would go to. */
+                reply_to?: string;
+                /** @description Only on contact_exists: the contact to use instead of adding one. */
+                contact?: components["schemas"]["Contact"];
             };
         };
     };
@@ -2046,7 +2135,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Permission or CSRF check failed. An agent token on a route closed to every token gets error code `scope_insufficient`, and `person_only` on a decision only a person makes (approving or rejecting an agent request); a token below a route's tier gets 202 instead (an agent request). A call with files that would need approval gets `files_need_approval`. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them); nothing was stored. */
+        /** @description Permission or CSRF check failed. An agent token on a route closed to every token gets error code `scope_insufficient`, and `person_only` on a decision only a person makes (approving or rejecting an agent request); a token below a route's tier gets 202 instead (an agent request). A call with files that would need approval gets `files_need_approval`. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them), or when the customer wrote from another address than the contact's after a merge (then `reason` is `contact_address_differs` and `reply_to` names the contact's address); nothing was stored. */
         Error403: {
             headers: {
                 [name: string]: unknown;
@@ -2426,6 +2515,8 @@ export interface operations {
                 assignee?: "me" | "unassigned" | "anyone";
                 tag?: string;
                 search?: string;
+                /** @description Only the conversations of this contact (any status unless `status` is given), for the contact's history. An id of another workspace's contact returns no rows; a value that is not a UUID answers 400. */
+                contact?: string;
                 page?: number;
                 page_size?: number;
             };
@@ -2444,6 +2535,7 @@ export interface operations {
                     "application/json": components["schemas"]["ConversationPage"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };
@@ -2458,8 +2550,29 @@ export interface operations {
             content: {
                 "application/json": {
                     /** Format: uuid */
-                    contact_id: string;
+                    contact_id?: string;
+                    /** @description A customer added with the conversation, in the same transaction (only with `body`). An address that is already a customer answers 409 `contact_exists` with that `contact`, and nothing is stored. */
+                    contact?: {
+                        name: string;
+                        /** Format: email */
+                        email: string;
+                    };
                     subject: string;
+                    /** @description Markdown source of the first reply; without it the conversation starts empty */
+                    body?: string;
+                    cc?: components["schemas"]["CopiedAddresses"];
+                };
+                "multipart/form-data": {
+                    /** Format: uuid */
+                    contact_id?: string;
+                    contact_name?: string;
+                    /** Format: email */
+                    contact_email?: string;
+                    subject: string;
+                    /** @description Markdown source */
+                    body: string;
+                    cc?: components["schemas"]["CopiedAddresses"];
+                    files?: string[];
                 };
             };
         };
@@ -2468,7 +2581,21 @@ export interface operations {
             202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["AttachmentsTooLarge"];
+            429: components["responses"]["TrialOutboundLimit"];
+            /** @description The attachments volume is low on disk space; nothing was sent or stored */
+            507: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     bulkUpdateConversations: {
@@ -3024,8 +3151,9 @@ export interface operations {
     listContacts: {
         parameters: {
             query?: {
+                /** @description Keep contacts whose name or email contains this text. A contact merged into another is left out; when it matches, the contact it was merged into is returned instead (its conversations are there). */
                 search?: string;
-                /** @description Comma-separated contact ids (UUIDs), at most 100. Only these contacts of the workspace are returned, in name order; an unknown id, or an id of another workspace, is skipped. More than 100 ids, an empty entry or a value that is not a UUID answers 400 and names the problem. Combines with search. */
+                /** @description Comma-separated contact ids (UUIDs), at most 100. Only these contacts of the workspace are returned, in name order; an unknown id, or an id of another workspace, is skipped. More than 100 ids, an empty entry or a value that is not a UUID answers 400 and names the problem. Combines with search. Merged contacts are returned when named by id. */
                 ids?: string;
                 /** @description Return at most this many contacts (1 to 200), the first in name order. Without it every matching contact is returned. With it, `has_more` says whether more matched. Any other value answers 400. */
                 limit?: number;
@@ -3083,6 +3211,15 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            /** @description The address is already a customer (`contact_exists`); `contact` in the error is the contact to use, the one it was merged into when it was merged */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getContact: {
@@ -3107,6 +3244,105 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    updateContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Renamed contact */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contact"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    mergeContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: uuid
+                     * @description The duplicate to merge into this contact
+                     */
+                    contact_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The merge, with the conversations it moved */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactMerge"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    unmergeContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                mergeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The undone merge */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactMerge"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     listAgents: {

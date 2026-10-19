@@ -63,9 +63,13 @@ with `billing` and leave a note with a summary."
 | `colliedesk_reply_send` | Sends a reply to the customer by email. Cannot be undone | `send` |
 | `colliedesk_reply_retry` | Sends again a reply whose delivery failed. Cannot be undone | `send` |
 | `colliedesk_conversation_create` | Opens a conversation with a customer; sends nothing | `send` |
+| `colliedesk_conversation_start` | Opens a conversation and emails its first message to the customer in one step, for a customer found or one added with it (`new_contact`); nothing is stored if the email is refused. Cannot be undone | `send` |
 | `colliedesk_contacts_find` | Finds customers by part of a name or email; `truncated` says when more matched than were returned | `read` |
-| `colliedesk_contact_get` | Reads one customer with their conversations | `read` |
+| `colliedesk_contact_get` | Reads one customer with their conversations (any status, in pages of `limit`), the customer they were merged into and the merges into them | `read` |
 | `colliedesk_contact_create` | Adds a customer | `send` |
+| `colliedesk_contact_update` | Renames a customer | `send` |
+| `colliedesk_contact_merge` | Merges a duplicate customer into the one to keep; undone with `colliedesk_contact_unmerge` | `send` |
+| `colliedesk_contact_unmerge` | Undoes a merge: the conversations it moved go back | `send` |
 | `colliedesk_tags_list` | Lists tags | `read` |
 | `colliedesk_tag_rename` | Renames a tag everywhere | `send` |
 | `colliedesk_tag_delete` | Deletes a tag and takes it off every conversation. Cannot be undone | `send` |

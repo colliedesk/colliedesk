@@ -55,7 +55,7 @@ var (
 // the email channel (never the inbound secret or the SMTP password) and the web form.
 // draft: changes that never reach a customer (status, priority, assignee, tags on one conversation or
 // many at once, creating a tag, private notes, the token owner's own timezone and display name). send: everything else
-// an agent may do, such as replying, creating contacts and conversations, and writing the saved replies
+// an agent may do, such as replying, creating, renaming and merging contacts (a merge is undone the same way), creating conversations, and writing the saved replies
 // the team sends (every change is a version that can be restored, and a delete stays in the trash for
 // 30 days). Posting a message is gated by the handler: a note needs draft, an outgoing reply needs send.
 // admin: workspace settings, the team, revoking invites, channels and sessions. An admin token acts
@@ -95,6 +95,9 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/contacts":                                       tier(auth.ScopeRead),
 	"POST /api/v1/contacts":                                      tier(auth.ScopeSend),
 	"GET /api/v1/contacts/{id}":                                  tier(auth.ScopeRead),
+	"PATCH /api/v1/contacts/{id}":                                tier(auth.ScopeSend),
+	"POST /api/v1/contacts/{id}/merges":                          tier(auth.ScopeSend),
+	"DELETE /api/v1/contacts/{id}/merges/{mergeId}":              tier(auth.ScopeSend),
 	"GET /api/v1/agents":                                         tier(auth.ScopeRead),
 	"GET /api/v1/tags":                                           tier(auth.ScopeRead),
 	"POST /api/v1/tags":                                          tier(auth.ScopeDraft),

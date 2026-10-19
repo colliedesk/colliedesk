@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
@@ -14,9 +15,11 @@ type ConversationFilter struct {
 	Assignee string
 	TagID    string
 	Search   string
-	AgentID  string
-	Page     int
-	PageSize int
+	// ContactID, when set, keeps the conversations of one contact (its history).
+	ContactID string
+	AgentID   string
+	Page      int
+	PageSize  int
 }
 
 type ConversationPage struct {
@@ -27,6 +30,9 @@ type ConversationPage struct {
 
 func (s *Store) CreateConversation(ctx context.Context, workspaceID, contactID, subject string) (domain.Conversation, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Conversation, error) {
+		if err := checkContactNotMerged(ctx, tx, workspaceID, contactID); err != nil {
+			return domain.Conversation{}, err
+		}
 		var id string
 		err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject)
 			SELECT $1,c.id,$3 FROM contacts c WHERE c.workspace_id=$1 AND c.id=$2 RETURNING id::text`, workspaceID, contactID, subject).Scan(&id)
@@ -35,6 +41,69 @@ func (s *Store) CreateConversation(ctx context.Context, workspaceID, contactID, 
 		}
 		return getConversation(ctx, tx, workspaceID, id)
 	})
+}
+
+// NewConversation is a conversation the team starts, with a contact of the workspace (ContactID) or a
+// customer added with it (NewContact), in the same transaction.
+type NewConversation struct {
+	ContactID  string
+	NewContact *NewContact
+	Subject    string
+}
+
+// NewContact is a customer added while starting a conversation.
+type NewContact struct {
+	Name, Email string
+}
+
+// StartConversation opens a conversation with its first reply in one transaction, so a reply the email
+// rules refuse (trial, Cc, storage) leaves no empty conversation behind. The reply is emailed through the
+// outbox like any other; a workspace without an email channel is refused, because the reply would be
+// stored and never sent.
+func (s *Store) StartConversation(ctx context.Context, workspaceID string, in NewConversation, actor Actor, body string, cc []string, files ...NewAttachment) (domain.Conversation, error) {
+	if len(cc) == 0 {
+		cc = nil
+	}
+	tx, err := s.db.BeginWorkspace(ctx, workspaceID)
+	if err != nil {
+		return domain.Conversation{}, fmt.Errorf("begin conversation: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	contactID := in.ContactID
+	if in.NewContact != nil {
+		added, err := insertContact(ctx, tx, workspaceID, in.NewContact.Name, in.NewContact.Email)
+		if err != nil {
+			return domain.Conversation{}, err
+		}
+		contactID = added.ID
+	} else if err := checkContactNotMerged(ctx, tx, workspaceID, contactID); err != nil {
+		return domain.Conversation{}, err
+	}
+	var channel bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM email_channels WHERE workspace_id=$1)`, workspaceID).Scan(&channel); err != nil {
+		return domain.Conversation{}, fmt.Errorf("load email channel: %w", err)
+	}
+	if !channel {
+		return domain.Conversation{}, domain.ErrEmailChannelMissing
+	}
+	var id string
+	err = tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject)
+		SELECT $1,c.id,$3 FROM contacts c WHERE c.workspace_id=$1 AND c.id=$2 RETURNING id::text`,
+		workspaceID, contactID, in.Subject).Scan(&id)
+	if err != nil {
+		return domain.Conversation{}, fmt.Errorf("create conversation: %w", err)
+	}
+	if _, err := s.createMessage(ctx, tx, workspaceID, id, actor, "outgoing", body, cc, files); err != nil {
+		return domain.Conversation{}, err
+	}
+	conversation, err := getConversation(ctx, tx, workspaceID, id)
+	if err != nil {
+		return domain.Conversation{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return domain.Conversation{}, fmt.Errorf("commit conversation: %w", err)
+	}
+	return conversation, nil
 }
 
 func (s *Store) GetConversation(ctx context.Context, workspaceID, id string) (domain.Conversation, error) {
@@ -67,13 +136,8 @@ func (s *Store) ListConversations(ctx context.Context, workspaceID string, filte
 }
 
 func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filter ConversationFilter) (ConversationPage, error) {
-	idRows, err := tx.Query(ctx, `SELECT c.id::text FROM conversations c
-		LEFT JOIN messages m ON m.workspace_id=c.workspace_id AND m.conversation_id=c.id
-		WHERE c.workspace_id=$1 AND ($2='' OR c.status=$2)
-		AND ($3='' OR ($3='unassigned' AND c.assignee_id IS NULL) OR ($3='me' AND c.assignee_id=$6) OR ($3='anyone' AND c.assignee_id IS NOT NULL))
-		AND ($4='' OR EXISTS(SELECT 1 FROM conversation_tags ct WHERE ct.workspace_id=c.workspace_id AND ct.conversation_id=c.id AND ct.tag_id=$4::uuid))
-		AND ($5='' OR c.subject ILIKE '%'||$5||'%' ESCAPE '\' OR m.body ILIKE '%'||$5||'%' ESCAPE '\')
-		GROUP BY c.id ORDER BY c.updated_at DESC,c.id DESC LIMIT $7 OFFSET $8`, workspaceID, filter.Status, filter.Assignee, filter.TagID, escapeLikePattern(filter.Search), filter.AgentID, filter.PageSize, (filter.Page-1)*filter.PageSize)
+	query, args := conversationIDQuery(workspaceID, filter)
+	idRows, err := tx.Query(ctx, query, args...)
 	if err != nil {
 		return ConversationPage{}, fmt.Errorf("list conversation ids: %w", err)
 	}
@@ -128,6 +192,44 @@ func listConversations(ctx context.Context, tx pgx.Tx, workspaceID string, filte
 		return ConversationPage{}, fmt.Errorf("iterate conversations: %w", err)
 	}
 	return ConversationPage{Items: items, Page: filter.Page, Size: filter.PageSize}, nil
+}
+
+// conversationIDQuery selects one page of conversation ids, newest activity first, with only the
+// conditions the filter sets, so each list uses its index (the contact's history reads
+// conversations(workspace_id, contact_id, updated_at)). Messages are read only for a search, and then
+// through EXISTS: joining them made every list cost as much as all the workspace's messages.
+func conversationIDQuery(workspaceID string, filter ConversationFilter) (string, []any) {
+	args := []any{workspaceID}
+	arg := func(value any) string {
+		args = append(args, value)
+		return fmt.Sprintf("$%d", len(args))
+	}
+	where := []string{"c.workspace_id=$1"}
+	if filter.Status != "" {
+		where = append(where, "c.status="+arg(filter.Status))
+	}
+	switch filter.Assignee {
+	case "unassigned":
+		where = append(where, "c.assignee_id IS NULL")
+	case "me":
+		where = append(where, "c.assignee_id=NULLIF("+arg(filter.AgentID)+",'')::uuid")
+	case "anyone":
+		where = append(where, "c.assignee_id IS NOT NULL")
+	}
+	if filter.TagID != "" {
+		where = append(where, "EXISTS(SELECT 1 FROM conversation_tags ct WHERE ct.workspace_id=c.workspace_id AND ct.conversation_id=c.id AND ct.tag_id="+arg(filter.TagID)+"::uuid)")
+	}
+	if filter.ContactID != "" {
+		where = append(where, "c.contact_id="+arg(filter.ContactID)+"::uuid")
+	}
+	if filter.Search != "" {
+		pattern := arg(escapeLikePattern(filter.Search))
+		where = append(where, "(c.subject ILIKE '%'||"+pattern+"||'%' ESCAPE '\\' OR EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id "+
+			"AND m.conversation_id=c.id AND m.body ILIKE '%'||"+pattern+"||'%' ESCAPE '\\'))")
+	}
+	limit, offset := arg(filter.PageSize), arg((filter.Page-1)*filter.PageSize)
+	return "SELECT c.id::text FROM conversations c WHERE " + strings.Join(where, " AND ") +
+		" ORDER BY c.updated_at DESC,c.id DESC LIMIT " + limit + " OFFSET " + offset, args
 }
 
 func conversationTags(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) ([]domain.Tag, error) {
