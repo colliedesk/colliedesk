@@ -1,9 +1,13 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
+import { track } from '../../lib/product-analytics';
 import { InvalidRequestError } from '../../api/client';
 import { agentRequest } from './request.test.fixture';
 import { RequestCard } from './request-card';
 import { canApproveRequest } from './request-call';
+
+vi.mock('../../lib/product-analytics', () => ({ track: vi.fn(() => true) }));
+const analytics = { track: vi.mocked(track) };
 
 const actions = () => ({ onApprove: vi.fn().mockResolvedValue({ request: agentRequest({ status: 'approved' }), result: null }), onReject: vi.fn().mockResolvedValue(undefined) });
 
@@ -127,4 +131,19 @@ test('a request that changes the token owner\'s own settings is approved only by
   expect(canApproveRequest(agentRequest({ approvable_by: 'agent' }), { id: owner, role: 'agent' })).toBe(true);
   render(<RequestCard item={item} canApprove={false} timezone="UTC" {...actions()} />);
   expect(screen.getByText('Only the person who owns this token can approve it: it changes their own settings.')).toBeInTheDocument();
+});
+
+test('a decision reports approved or rejected only after the server accepted it', async () => {
+  const handlers = actions();
+  const { rerender } = render(<RequestCard item={agentRequest()} timezone="UTC" {...handlers} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+  await waitFor(() => expect(analytics.track).toHaveBeenCalledWith('agent_request_decided', { decision: 'approved' }));
+  analytics.track.mockClear();
+  handlers.onReject.mockRejectedValueOnce(new InvalidRequestError('refused'));
+  rerender(<RequestCard key="again" item={agentRequest()} timezone="UTC" {...handlers} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+  await screen.findByRole('alert');
+  expect(analytics.track).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+  await waitFor(() => expect(analytics.track).toHaveBeenCalledWith('agent_request_decided', { decision: 'rejected' }));
 });

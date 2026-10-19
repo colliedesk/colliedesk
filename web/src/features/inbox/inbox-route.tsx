@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { api } from '../../api/client';
@@ -6,6 +6,7 @@ import type { BulkConversationChanges, UpdateConversationRequest } from '../../a
 import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
 import { defaultInboxFilters } from './inbox-filters';
+import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
 import { retryRefusalText } from './refusal-text';
@@ -17,6 +18,17 @@ function errorMessage(result: unknown): string | undefined {
   const { error } = result as { error?: { message?: unknown } };
   return typeof error?.message === 'string' ? error.message : undefined;
 }
+
+function bulkActionOf(changes: BulkConversationChanges): 'status' | 'assign' | 'add_tag' | 'remove_tag' | undefined {
+  if (changes.status) return 'status';
+  if ('assignee_id' in changes) return 'assign';
+  if (changes.add_tag_ids) return 'add_tag';
+  if (changes.remove_tag_ids) return 'remove_tag';
+  return undefined;
+}
+
+// How long a search term stays unchanged before it counts as a finished search, so typing "refund" is one search.
+const searchSettleMs = 800;
 
 export function InboxRoute() {
   const client = useQueryClient();
@@ -36,6 +48,24 @@ export function InboxRoute() {
   const conversations = useQuery({ queryKey: ['conversations', query], queryFn: () => api.conversations(query), refetchOnMount: 'always',
     // A new search or filter keeps the old rows on screen until its response arrives.
     placeholderData: keepPreviousData });
+  // A search is reported once its term settled and its answer arrived: whether it found anything, never the term.
+  const searchTerm = filters.search ?? '';
+  const searchSettled = searchTerm !== '' && conversations.isSuccess && !conversations.isPlaceholderData;
+  const hasResults = (conversations.data?.items.length ?? 0) > 0;
+  const reportedSearch = useRef('');
+  useEffect(() => {
+    if (!searchSettled || reportedSearch.current === searchTerm) return;
+    const timer = setTimeout(() => { reportedSearch.current = searchTerm; track('inbox_searched', { has_results: hasResults }); }, searchSettleMs);
+    return () => clearTimeout(timer);
+  }, [searchSettled, searchTerm, hasResults]);
+  // A conversation reached by its address counts once; one picked from the list was counted when picked.
+  const reportedOpen = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const id = params.conversationId;
+    if (!id || selectedId === id || reportedOpen.current === id) return;
+    reportedOpen.current = id;
+    track('conversation_opened', { source: 'link' });
+  }, [params.conversationId, selectedId]);
   const narrowed = Boolean(filters.search || filters.assignee || filters.tag);
   const filtered = narrowed || !['', defaultInboxFilters.status].includes(filters.status ?? '');
   // An empty Open view is either a new workspace or one that is caught up; one row of All tells which.
@@ -90,8 +120,18 @@ export function InboxRoute() {
     ? (outbound.smtp.configured ? messages.outboundNeedsVerification : messages.outboundNotConfigured) : undefined;
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
-  const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes), onSuccess: keepOpened });
+  const agentId = me.data?.agent?.id;
+  const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes),
+    onSuccess: (changed, { changes }) => {
+      if (changes.status) track('conversation_status_changed', { to: changes.status });
+      if (changes.assignee_id) track('conversation_assigned', { to_self: changes.assignee_id === agentId });
+      return keepOpened(changed);
+    } });
   const bulkUpdate = useMutation({ mutationFn: ({ ids, changes }: { ids: string[]; changes: BulkConversationChanges }) => api.bulkUpdateConversations(ids, changes),
+    onSuccess: (_result, { ids, changes }) => {
+      const action = bulkActionOf(changes);
+      if (action) track('bulk_action_applied', { action, count: ids.length });
+    },
     // A refusal usually means a row is gone or changed under the agent; reload so the list shows it.
     onSettled: refresh });
   const addTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.addConversationTag(conversationId, tagId), onSuccess: keepOpened });
@@ -109,8 +149,16 @@ export function InboxRoute() {
   return <InboxPage hosted={config?.billing.enabled ?? false} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
     agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone}
     page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} onPage={setPage}
-    onSelect={(id) => { setSelectedId(id); navigate({ to: '/conversations/$conversationId', params: { conversationId: id } }); }}
-    onFilters={(values) => { setFilters(values); setPage(1); }} onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
+    onSelect={(id) => { reportedOpen.current = id; track('conversation_opened', { source: 'list' }); setSelectedId(id); navigate({ to: '/conversations/$conversationId', params: { conversationId: id } }); }}
+    onFilters={(values) => {
+      // Typing a search widens the status to All by itself; that is not a choice of the person.
+      const typing = (values.search ?? '') !== (filters.search ?? '');
+      for (const filter of ['status', 'assignee', 'tag'] as const) {
+        if (filter === 'status' && typing) continue;
+        if ((values[filter] ?? '') !== (filters[filter] ?? '')) track('inbox_filtered', { filter });
+      }
+      setFilters(values); setPage(1);
+    }} onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body, files, cc) => message.mutateAsync({ kind, body, files, cc })}
@@ -130,9 +178,10 @@ export function InboxRoute() {
     replyDrafts={selectedDrafts} draftConversationIds={draftConversationIds}
     onSendDraft={async (draft, edit) => {
       const outcome = await api.approveAgentRequest(draft.id, edit);
+      track('agent_request_decided', { decision: 'approved' });
       await afterDraft(draft.conversation_id);
       // Approved but refused by the reply route (for example the trial's limits): say why, the draft is spent.
       setDraftNotice(outcome.request.status === 'failed' ? messages.draftRefused(errorMessage(outcome.result)) : undefined);
     }}
-    onDiscardDraft={async (draft) => { await api.rejectAgentRequest(draft.id); await afterDraft(draft.conversation_id); }} />;
+    onDiscardDraft={async (draft) => { await api.rejectAgentRequest(draft.id); track('agent_request_decided', { decision: 'rejected' }); await afterDraft(draft.conversation_id); }} />;
 }
