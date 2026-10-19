@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/telemetry"
 )
 
 const (
@@ -80,7 +81,11 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 	// Counted only once the person has a session, so a failed sign-in is not a started trial.
-	a.recordFunnel("trial_started", workspace.ID, nil)
+	var properties map[string]any
+	if visitor := telemetry.WebsiteVisitorID(request); visitor != "" {
+		properties = map[string]any{"website_visitor_id": visitor}
+	}
+	a.recordFunnel("trial_started", workspace.ID, properties)
 	setSessionCookie(response, result.Token)
 	result.Token = ""
 	writeJSON(response, http.StatusCreated, result)
