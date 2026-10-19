@@ -2,12 +2,14 @@ package httpapi_test
 
 import (
 	"context"
+	"html"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -25,6 +27,7 @@ type contractFixture struct {
 	deleteReplySeen              string
 	trashReplySeen               string
 	attachmentID                 string
+	mailImagePath                string
 	redeemToken, logoutToken     string
 	inboundSecret                string
 	failedReplyID                string
@@ -42,8 +45,10 @@ func newContractFixture(t *testing.T) contractFixture {
 		t.Fatal(err)
 	}
 	fakePolar := newFakePolarAPI(t)
+	imageHost := newImageHost(t, serveBytes("image/png", tinyPNG))
 	api, service, pool, dns := testAPIWithConfig(t, func(config *httpapi.Config) {
 		config.Attachments = storage
+		config.MailImages = mailimage.NewFetcher(allowing(imageHost))
 		config.Billing = fakePolar.config()
 		hostedConfig(config)
 		config.Email.ResendWebhookSecret = resendWebhookSecret
@@ -112,6 +117,7 @@ func newContractFixture(t *testing.T) contractFixture {
 	decode(t, logoutRedeem, &logout)
 
 	api, inboundSecret, failedReplyID := withFailedEmailReply(t, api, pool, adminToken, conversationID)
+	mailImagePath := seedMailImage(t, api, pool, adminToken, conversationID, imageHost.URL+"/contract.png")
 	record := domainState(t, api, adminToken).Channel
 	dns.set(record.DNSRecordName, record.DNSRecordValue)
 	deleteChannelToken := createSession(t, api, service, "Contract Disconnect", "admin@contract-disconnect.example.com")
@@ -144,7 +150,25 @@ func newContractFixture(t *testing.T) contractFixture {
 	approveRequestID, rejectRequestID, cancelRequestID := fileRequest(), fileRequest(), fileRequest()
 	return contractFixture{requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, inviteID: inviteID, sessionID: sessionID,
-		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, attachmentID: attachmentID, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token}
+		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token}
+}
+
+// seedMailImage gives the conversation's incoming message HTML with one remote image and returns the
+// proxy path the timeline offers for it.
+func seedMailImage(t *testing.T, api http.Handler, pool *pgxpool.Pool, admin, conversationID, imageURL string) string {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `UPDATE messages SET body_html=$2 WHERE conversation_id=$1 AND kind='incoming'`, conversationID, `<p>Hi <img src="`+imageURL+`"></p>`); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range storedMessages(t, api, admin, conversationID) {
+		if item.BodyHTML != nil {
+			if match := proxySrc.FindStringSubmatch(*item.BodyHTML); match != nil {
+				return html.UnescapeString(match[1])
+			}
+		}
+	}
+	t.Fatal("the timeline offers no proxy path")
+	return ""
 }
 
 func createContractInvite(t *testing.T, api http.Handler, token, email, role string) (string, string) {

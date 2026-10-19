@@ -99,6 +99,11 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	telemetryConfig := telemetry.ConfigFromEnv(os.Getenv, origin, hostedCloud, version)
 	go telemetry.New(db, telemetryConfig, nil).Run(ctx, slog.Default())
 	go sweepDaily(ctx, store.NewWithDB(db))
+	mailImageCacheBytes, err := mailImageCacheBytesFromEnv(os.Getenv)
+	if err != nil {
+		return err
+	}
+	go sweepMailImageCache(ctx, store.NewWithDB(db).WithObjects(storage), mailImageCacheBytes)
 	if billing.Enabled() {
 		retentionService, err := newRetentionService(db, origin, billing, retentionSettingsForServe(os.Getenv, slog.Default()))
 		if err != nil {
@@ -107,7 +112,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			go sweepRetention(ctx, retentionService)
 		}
 	}
-	apiConfig := httpapi.Config{Origin: origin, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", Funnel: telemetry.NewFunnel(telemetryConfig, nil)}
+	apiConfig := httpapi.Config{Origin: origin, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", Funnel: telemetry.NewFunnel(telemetryConfig, nil)}
 	if emailConfig.SMTP.Configured() {
 		apiConfig.AlertEmail = strings.TrimSpace(os.Getenv("BILLING_ALERT_EMAIL"))
 		apiConfig.AlertMailer = email.SMTPSender{Config: emailConfig.SMTP}

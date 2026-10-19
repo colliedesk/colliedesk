@@ -1,0 +1,156 @@
+import { act, render, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { EmailFrame } from './email-frame';
+import { fitFrame } from './fit-frame';
+
+// jsdom does no layout, so a frame's measurements are what the test says they are.
+function measured(frame: HTMLIFrameElement, size: { width: number; contentWidth: number; contentHeight: number }) {
+  const doc = frame.contentDocument!;
+  Object.defineProperty(frame, 'clientWidth', { configurable: true, value: size.width });
+  for (const element of [doc.documentElement, doc.body]) {
+    Object.defineProperty(element, 'scrollWidth', { configurable: true, value: size.contentWidth });
+    Object.defineProperty(element, 'scrollHeight', { configurable: true, value: size.contentHeight });
+  }
+  return doc;
+}
+
+function blankFrame(): HTMLIFrameElement {
+  const frame = document.createElement('iframe');
+  document.body.appendChild(frame);
+  return frame;
+}
+
+afterEach(() => document.body.replaceChildren());
+
+test('fitFrame gives the frame the full height of its content, so it never scrolls inside', () => {
+  const frame = blankFrame();
+  measured(frame, { width: 600, contentWidth: 600, contentHeight: 1234 });
+  fitFrame(frame);
+  expect(frame.style.height).toBe('1234px');
+  expect(frame.contentDocument!.body.style.transform).toBe('');
+});
+
+test('fitFrame scales content that is wider than the column instead of clipping it', () => {
+  const frame = blankFrame();
+  const doc = measured(frame, { width: 500, contentWidth: 1000, contentHeight: 800 });
+  fitFrame(frame);
+  expect(doc.body.style.transform).toBe('scale(0.5)');
+  expect(doc.body.style.width).toBe('1000px');
+  expect(frame.style.height).toBe('400px');
+});
+
+test('fitFrame undoes the scale when the column grows wide enough again', () => {
+  const frame = blankFrame();
+  const doc = measured(frame, { width: 500, contentWidth: 1000, contentHeight: 800 });
+  fitFrame(frame);
+  measured(frame, { width: 1100, contentWidth: 1000, contentHeight: 800 });
+  fitFrame(frame);
+  expect(doc.body.style.transform).toBe('');
+  expect(frame.style.height).toBe('800px');
+});
+
+test('fitFrame measures with the frame collapsed, so 100% and 100vh blocks cannot feed back, and never shrinks the page while doing it', () => {
+  const frame = blankFrame();
+  const box = frame.parentElement!;
+  frame.style.height = '700px';
+  const doc = measured(frame, { width: 600, contentWidth: 600, contentHeight: 300 });
+  const seen: Array<{ frame: string; box: string }> = [];
+  Object.defineProperty(doc.documentElement, 'scrollHeight', { configurable: true, get() { seen.push({ frame: frame.style.height, box: box.style.minHeight }); return 300; } });
+  fitFrame(frame);
+  expect(seen.length).toBeGreaterThan(0);
+  for (const state of seen) expect(state).toEqual({ frame: '0px', box: '700px' });
+  expect(frame.style.height).toBe('300px');
+  expect(box.style.minHeight).toBe('');
+});
+
+// The mail's own <body style="width:600px"> is kept; scaling borrows the properties and gives them back.
+test('fitFrame gives back the width, transform and origin the mail set on its body', () => {
+  const frame = blankFrame();
+  const doc = measured(frame, { width: 500, contentWidth: 1000, contentHeight: 800 });
+  doc.body.style.width = '600px';
+  doc.body.style.transform = 'translateX(0px)';
+  doc.body.style.transformOrigin = '50% 50%';
+  fitFrame(frame);
+  expect(doc.body.style.transform).toBe('scale(0.5)');
+  measured(frame, { width: 1100, contentWidth: 1000, contentHeight: 800 });
+  fitFrame(frame);
+  expect(doc.body.style.width).toBe('600px');
+  expect(doc.body.style.transform).toBe('translateX(0px)');
+  expect(doc.body.style.transformOrigin).toBe('50% 50%');
+});
+
+test('fitFrame never makes a frame taller than the cap, whatever the mail asks for', () => {
+  const frame = blankFrame();
+  measured(frame, { width: 600, contentWidth: 600, contentHeight: 90_000 });
+  fitFrame(frame);
+  expect(frame.style.height).toBe('20000px');
+});
+
+let observers: Array<{ callback: () => void; targets: Element[]; disconnected: boolean }> = [];
+
+beforeEach(() => {
+  observers = [];
+  vi.stubGlobal('ResizeObserver', class {
+    entry = { callback: () => {}, targets: [] as Element[], disconnected: false };
+    constructor(callback: () => void) { this.entry.callback = callback; observers.push(this.entry); }
+    observe(target: Element) { this.entry.targets.push(target); }
+    unobserve() {}
+    disconnect() { this.entry.disconnected = true; }
+  });
+});
+afterEach(() => vi.unstubAllGlobals());
+
+test('the frame follows its content: it measures when loaded and again when the content or the column resizes', async () => {
+  const { container, unmount } = render(<EmailFrame title="Original message" html="<p>Hello</p>" />);
+  const frame = container.querySelector('iframe')!;
+  // jsdom loads the frame twice (blank, then the srcdoc); the frame follows the document it shows last.
+  const current = () => observers.at(-1)!;
+  await waitFor(() => expect(current()?.targets.includes(frame.contentDocument!.body)).toBe(true));
+  expect(current().targets).toContain(frame);
+  measured(frame, { width: 600, contentWidth: 600, contentHeight: 300 });
+  act(() => current().callback());
+  expect(frame.style.height).toBe('300px');
+  measured(frame, { width: 600, contentWidth: 600, contentHeight: 900 }); // an image finished loading
+  act(() => current().callback());
+  expect(frame.style.height).toBe('900px');
+  const last = current();
+  unmount();
+  expect(last.disconnected).toBe(true);
+  expect(observers.slice(0, -1).every((observer) => observer.disconnected)).toBe(true);
+});
+
+// A tracking pixel or a broken logo that cannot load must not show the browser's broken-image icon in the mail.
+test('an image that fails to load and was only a pixel disappears; a real image that fails keeps its alt text', async () => {
+  const { container } = render(<EmailFrame title="Original message" html="<p>Hi</p>" />);
+  const frame = container.querySelector('iframe')!;
+  await waitFor(() => expect(observers.length).toBeGreaterThan(0));
+  await waitFor(() => expect(observers.at(-1)!.targets.includes(frame.contentDocument!.body)).toBe(true));
+  const doc = frame.contentDocument!;
+  const make = (attributes: Record<string, string>) => {
+    const image = doc.createElement('img');
+    for (const [name, value] of Object.entries(attributes)) image.setAttribute(name, value);
+    doc.body.append(image);
+    return image;
+  };
+  const pixel = make({ width: '1', height: '1', alt: '' });
+  const wide = make({ width: '1', height: '40', alt: 'logo' });
+  const hidden = make({ width: '0', height: '0' });
+  const logo = make({ width: '120', height: '40', alt: 'Acme' });
+  const bare = make({ alt: 'x' });
+  for (const image of [pixel, wide, hidden, logo, bare]) image.dispatchEvent(new Event('error'));
+  expect(pixel.style.display).toBe('none');
+  expect(hidden.style.display).toBe('none');
+  for (const image of [wide, logo, bare]) expect(image.style.display, image.outerHTML).toBe('');
+});
+
+test('the frame is sandboxed without scripts and carries the locked document', () => {
+  const { container } = render(<EmailFrame title="Original message" html='<p onclick="x()">Hello</p>' />);
+  const frame = container.querySelector('iframe')!;
+  const sandbox = (frame.getAttribute('sandbox') ?? '').split(/\s+/).sort();
+  expect(sandbox).toEqual(['allow-popups', 'allow-popups-to-escape-sandbox', 'allow-same-origin']);
+  const srcdoc = frame.getAttribute('srcdoc') ?? '';
+  expect(srcdoc).toContain("script-src 'none'");
+  expect(srcdoc).toContain(`img-src data: ${window.location.origin}`);
+  expect(srcdoc).not.toContain('onclick');
+  expect(frame).toHaveAttribute('scrolling', 'no');
+});

@@ -15,10 +15,11 @@ code. Run the same command again to retry: finished items are never copied twice
 | Agents | Matched by email to your Colliedesk agents; otherwise the author name is kept |
 | Tickets, including archived tickets | Conversations with the original subject, status, priority, assignee, tags and timestamps |
 | Ticket description, replies, incoming replies, private and public notes, forwards | Timeline messages with the original author, time, from/to/cc/bcc and Freshdesk kind. A forward to a third party and a public note become notes, never replies to the customer |
+| Automatic replies Freshdesk flagged (an out-of-office, a messenger or bot acknowledgement) | Shown as one line, "<sender> sent an automated response", with a chevron that opens the message. Tickets imported before this was added keep those replies as ordinary messages; import them again to fold them |
 | Ticket type, channel, due dates, cc and forwarded-to addresses | Shown in the conversation details |
-| Original message HTML | **Show original** on the message (shown in a locked frame that runs no scripts and loads nothing) |
+| Original message HTML | Shown formatted on the message in a locked frame that runs no scripts; **Show plain text** switches to the text. Remote images load through the Colliedesk image proxy |
 | Attachments | Files stored by Colliedesk, each with a SHA-256 checksum |
-| Images inside a message that Freshdesk hosts | Stored by Colliedesk with a SHA-256 checksum, embedded in **Show original**, and also listed as files on the message. See "Images inside messages" below |
+| Images inside a message that Freshdesk hosts | Stored by Colliedesk with a SHA-256 checksum, embedded in the formatted message, and also listed as files in the plain-text view. See "Images inside messages" below |
 | Time entries | Time entries (agent, minutes, note, billable, time), shown under **Time logged** on the timeline |
 | Canned responses | [Saved replies](saved-replies.md), titled `<folder name> / <title>` so the folder is still visible. See below |
 
@@ -175,7 +176,7 @@ Some messages show an image in their body (a pasted screenshot, a signature logo
 file attached to the message. Freshdesk hosts those images, and they disappear with the account.
 The import downloads each image that Freshdesk hosts: from your Freshdesk address (for example
 `yourcompany.freshdesk.com`), from Freshdesk's attachment servers and from Freshdesk's public image
-storage. It stores the file like an attachment and embeds it in **Show original**, so the original
+storage. It stores the file like an attachment and embeds it in the formatted message, so the original
 message keeps showing it after you close Freshdesk. The Markdown body of the message is unchanged.
 Only PNG, JPEG, GIF and WebP images are copied.
 
@@ -185,7 +186,7 @@ locked frame does not load them. An image whose address names Freshdesk but sits
 warning `inline_images_not_rehosted`: save those images in Freshdesk before you close the account.
 
 Each message embeds at most 5 MiB of images. A further image is still stored as a file on the
-message, but **Show original** keeps its Freshdesk link, and the report lists the ticket under the
+message, but the formatted message keeps its Freshdesk link, and the report lists the ticket under the
 warning `inline_image_not_embedded`.
 
 An image counts as one item in the report (**Inline images**). Two things can stop an image:

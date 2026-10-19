@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 )
@@ -49,7 +50,7 @@ func imageKey(u *url.URL) string {
 func (r *run) inlineImages(markup string) []imageRef {
 	var refs []imageRef
 	seen := map[string]bool{}
-	mapImageSources(markup, func(src string) (string, bool) {
+	mailimage.MapSources(markup, func(src string) (string, bool) {
 		if u, ok := r.hostedImageURL(src); ok {
 			if key := imageKey(u); !seen[key] {
 				seen[key] = true
@@ -74,7 +75,7 @@ func imageType(header string, data []byte) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("the Content-Type %q is not valid", clip(header))
 	}
-	sniffed := sniffRaster(data)
+	sniffed := mailimage.SniffRaster(data)
 	switch {
 	case sniffed == "":
 		return "", fmt.Errorf("the response (%q) is not a PNG, JPEG, GIF or WebP image", clip(declared))
@@ -258,7 +259,7 @@ func (r *run) commitInlineImages(ctx context.Context, ticketKey, messageID strin
 	}
 	embeds := map[string]string{}
 	for _, image := range images {
-		input := store.NewAttachment{MessageID: messageID, Filename: "inline-image-" + image.ref.key + imageExtension(image.contentType), ContentType: image.contentType, Object: image.object}
+		input := store.NewAttachment{MessageID: messageID, Filename: "inline-image-" + image.ref.key + imageExtension(image.contentType), ContentType: image.contentType, Object: image.object, Inline: image.dataURI != ""}
 		targetID, err := r.saveAttachment(ctx, tx, image.entry, image.found, input)
 		if err != nil {
 			return err
@@ -289,7 +290,7 @@ func (r *run) embedImages(ctx context.Context, tx store.Querier, messageID strin
 	if current == nil {
 		return nil
 	}
-	updated := mapImageSources(*current, func(src string) (string, bool) {
+	updated := mailimage.MapSources(*current, func(src string) (string, bool) {
 		u, ok := r.hostedImageURL(src)
 		if !ok {
 			return "", false

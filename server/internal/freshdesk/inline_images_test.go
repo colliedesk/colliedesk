@@ -31,6 +31,17 @@ func (e *importEnv) messageHTML(t *testing.T, entity, freshdeskID string) string
 	return html
 }
 
+// inlineFlags counts the files of a message that the importer marked as embedded in its HTML, and the others.
+func (e *importEnv) inlineFlags(t *testing.T, entity, freshdeskID string) (embedded, listed int) {
+	t.Helper()
+	err := e.pool.QueryRow(context.Background(), `SELECT count(*) FILTER (WHERE inline), count(*) FILTER (WHERE NOT inline) FROM attachments WHERE workspace_id=$1 AND message_id=$2`,
+		e.workspaceID, e.target(t, entity, freshdeskID)).Scan(&embedded, &listed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return embedded, listed
+}
+
 func (e *importEnv) inlineLedger(t *testing.T, status string) int {
 	t.Helper()
 	var n int
@@ -61,6 +72,9 @@ func TestInlineImagesAreRehostedAndShownInTheStoredOriginal(t *testing.T) {
 	description := env.messageHTML(t, "description", "6")
 	if !strings.Contains(description, `<img src="`+accountDataURI+`">`) {
 		t.Fatalf("description HTML = %q", description)
+	}
+	if embedded, listed := env.inlineFlags(t, "conversation", "7002"); embedded != 1 || listed != 0 {
+		t.Fatalf("the embedded reply image is marked inline %d times and listed %d times, want 1 and 0", embedded, listed)
 	}
 	var sha, contentType string
 	err := env.pool.QueryRow(context.Background(), `SELECT a.sha256,a.content_type FROM attachments a JOIN import_items i ON i.target_id=a.id
@@ -346,6 +360,10 @@ func TestImagesOverTheMessageBudgetAreStoredButStayLinks(t *testing.T) {
 	html := env.messageHTML(t, "conversation", "7002")
 	if got := strings.Count(html, "data:image/png;base64,"); got != 1 || strings.Count(html, "/inline-600") != 2 {
 		t.Fatalf("embedded %d images, links left %d; want 1 and 2", got, strings.Count(html, "/inline-600"))
+	}
+	// Only the image whose bytes went into the HTML is marked inline; the two left as links stay listed as files.
+	if embedded, listed := env.inlineFlags(t, "conversation", "7002"); embedded != 1 || listed != 2 {
+		t.Fatalf("marked inline %d, listed %d; want 1 and 2", embedded, listed)
 	}
 	if report.InlineImages.Imported != 4 || report.InlineImages.ImportedBytes != 9<<20+15 {
 		t.Fatalf("inline images = %+v: every image must still be stored", report.InlineImages)

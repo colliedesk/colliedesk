@@ -70,7 +70,7 @@ export const conversationOriginSchema = z.object({
 }) satisfies z.ZodType<Generated<'ConversationOrigin'>>;
 export const messageOriginSchema = z.object({
   system: z.string(), external_id: z.string(),
-  kind: z.enum(['description', 'reply', 'incoming', 'private_note', 'public_note', 'forward', 'forwarded_email', 'other']),
+  kind: z.enum(['description', 'reply', 'incoming', 'automated_response', 'private_note', 'public_note', 'forward', 'forwarded_email', 'other']),
   from: z.string().nullable(), to: stringList, cc: stringList, bcc: stringList,
 }) satisfies z.ZodType<Generated<'MessageOrigin'>>;
 export const timeEntrySchema = z.object({
@@ -96,7 +96,7 @@ export const incomingEmailSchema = z.object({
 }) satisfies z.ZodType<Generated<'IncomingEmail'>>;
 export const attachmentSchema = z.object({
   id: z.string().uuid(), message_id: z.string().uuid(), filename: z.string(), content_type: z.string(),
-  size: z.number().int().nonnegative(), sha256: z.string().regex(/^[0-9a-f]{64}$/), created_at: z.string().datetime(),
+  size: z.number().int().nonnegative(), sha256: z.string().regex(/^[0-9a-f]{64}$/), inline: z.boolean(), created_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'Attachment'>>;
 export const messageAgentTokenSchema = z.object({
   id: z.string().uuid(), label: z.string(), scope: z.enum(['read', 'draft', 'send', 'admin']), agent_name: z.string(),

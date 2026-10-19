@@ -102,7 +102,7 @@ test('shows the author name and attachment download links on a timeline message'
       filename: 'server.log',
       content_type: 'text/plain',
       size: 2048,
-      sha256: 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9',
+      sha256: 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9', inline: false,
       created_at: '2026-10-14T00:00:00Z',
     }],
     cc: [],
@@ -141,17 +141,20 @@ test('labels imported messages with their source kind and recipients', () => {
   expect(screen.getByText('Cc: boss@acme.example')).toBeInTheDocument();
 });
 
-test('shows the original HTML only inside a sandboxed frame that loads nothing', () => {
+test('shows imported HTML by default, only inside a sandboxed frame that runs nothing and loads nothing directly', () => {
   const { container } = render(<InboxPage selected={conversation} conversations={[conversation]} timeline={[imported]} />);
-  expect(container.querySelector('iframe')).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: /show original/i }));
   const frame = screen.getByTitle('Original message');
   expect(frame.tagName).toBe('IFRAME');
-  expect(frame).toHaveAttribute('sandbox', '');
+  expect(frame.getAttribute('sandbox')).not.toContain('allow-scripts');
   const document = frame.getAttribute('srcdoc') ?? '';
   expect(document).toContain("default-src 'none'");
+  expect(document).toContain("script-src 'none'");
   expect(document).toContain('<b>logs</b>');
+  expect(document).not.toContain('tracker.example');
   expect(container.querySelector('[onclick]')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /show plain text/i }));
+  expect(container.querySelector('iframe')).toBeNull();
+  expect(screen.getByText('Forwarding the logs')).toBeInTheDocument();
 });
 
 test('lists time entries with the total time logged', () => {

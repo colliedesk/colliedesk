@@ -170,8 +170,57 @@ Decisions and traps only. Code: `server/internal/email` (parse, compose, SMTP, c
 - **Third-party senders in a thread.** A known Message-ID or reply token threads regardless of
   sender (CC'd colleagues). The message shows its sender; replies go only to the conversation
   contact. With an untrusted verdict the message shows **Sender not verified**.
-- **Customer email renders as plain text.** No Markdown, no remote images, links only for visible
-  http(s) URLs with `rel="noopener noreferrer nofollow"`. Agent replies and notes keep Markdown.
+- **Customer email renders as HTML when it has one**, in `web/src/features/inbox/email-frame.tsx`: a
+  `srcdoc` iframe with `sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"`, never
+  `allow-scripts`, `allow-forms` or any top navigation. `allow-same-origin` exists only so the parent can
+  measure the content (`fit-frame.ts`, ResizeObserver; the frame is as tall as the mail and scales wide
+  fixed layouts down). It is safe because nothing in the frame can run: the sandbox has no scripts and the
+  document CSP says `script-src 'none'`. A ResizeObserver in the parent is the only moving part; do not add
+  `allow-scripts` for sizing. `email-html.ts` strips `meta`, `base`, `link`, `script`, forms, frames,
+  `on*` and every URL attribute except `<a href>` (http, https, mailto, tel; opened with
+  `target=_blank rel="noopener noreferrer"`) and `<img src>` (`data:image/` or the proxy path).
+  CSP: `default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data: <app origin>`.
+  Remote `url(...)` in CSS goes through the same proxy: a style attribute or `<style>` block is walked with a small
+  CSS tokenizer (`mailimage/css.go`; comments, strings, escapes, `url()` and `image-set()` strings), every remote
+  address becomes a signed proxy path and counts toward the 50 per message, and every `@import` is dropped (replaced by a space). Function and at-rule names are read with CSS escapes decoded (`\75 rl(`). The same address written many times is parsed and signed once. A mail
+  brand logo is often a CSS background, and the browser must not even attempt a request to the sender.
+  The mail's own `<body>` keeps `style`, `bgcolor`, `text`, `class`, `id` and `dir` (a white logo on a dark body is blank without them), and our base rules paint no body colour so they cannot cover the mail's. Text with newlines and no markup for them (a chat note in a `<div>`) gets `white-space: pre-wrap` only when the mail has no `br`, `p`, table, list or other structure and no indentation between tags. `height`/`min-height` in viewport units become `auto`/`0`, and `html,body{height:auto!important}` comes last. An image that fails to load and was declared at most 2 px square (or 0) is hidden, so a blocked tracking pixel shows no broken-image icon.
+  Quoted history (`blockquote`, `.gmail_quote`, `.yahoo_quoted`) under a reply folds into
+  `<details class="quoted-history">`. Plain text stays the fallback and a toggle: no Markdown, links only
+  for visible http(s) URLs; `tidyPlainText` collapses whitespace-only line runs.
+  Agent replies and notes keep Markdown.
+- **Remote images go through a signed proxy** (`GET /api/v1/mail-image?u=<url>&s=<hmac>`,
+  `server/internal/httpapi/mail-image-handler.go`, `server/internal/mailimage`). `GET .../messages`
+  rewrites every remote `<img src>` in `body_html` for a person's session (read with the HTML tokenizer,
+  not a regex; `srcset` dropped; at most 50 distinct images per message, the rest get an empty `src`). An
+  agent token gets the HTML as stored and the route is PersonOnly for tokens.
+  - **Signature:** HMAC-SHA256 over workspace id and URL. The key is 32 random bytes in `server_secrets`
+    (created once with `INSERT ... ON CONFLICT DO NOTHING`, read by every process), so replicas, a deploy
+    overlap and a restart all agree. It is not `SIGNUP_HASH_KEY`: that one has another purpose and another
+    rotation.
+  - **Fetch** (`mailimage.Fetcher`): the dialer's Control runs on every connection, so DNS rebinding and
+    each of at most 3 redirects are covered: loopback, private, link-local incl. 169.254.169.254, CGNAT,
+    multicast, unspecified, `fd00:ec2::254`, NAT64/6to4/Teredo, `::/96`, `fec0::/10`, `100::/64`; only ports
+    80 and 443. `Proxy` is nil, so `HTTP_PROXY` cannot route around the guard (a test pins it). No cookies,
+    credentials or Referer, neutral User-Agent, PNG/JPEG/GIF/WebP by sniffing, or an SVG when the whole body parses as XML with an `svg` root in the SVG namespace, is at most 1 MiB, nests at most 64 deep, has at most 10000 elements and at most 256 attributes on any element (checked before the XML decoder runs); 5 MiB for rasters, 10 s. An SVG is served with `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`, `nosniff` and `Content-Disposition: inline; filename=image.svg`, so opening the proxy address directly runs nothing, and it is only ever shown through `<img>` (never `object`, `embed` or `iframe`). The Freshdesk importer still stores raster images only.
+  - **Admission:** at most 8 fetches at once and 4 per workspace. A request over the limit waits up to 10 s
+    for a slot (a newsletter sends all its images together and an `<img>` never retries), then gets 503 with
+    `Retry-After`. A workspace queues alone: it takes its workspace slot before a global one.
+  - **Cache:** the image is written to `attachments.Storage` and indexed per workspace in
+    `mail_image_cache`. It is a derived cache, not data: it is not counted against the plan storage cap, not
+    exported, and evicted under pressure. A workspace may cache at most `MAIL_IMAGE_CACHE_BYTES` (default
+    1 GiB; past it an image is served without being kept). `serve` sweeps hourly: rows fetched more than 30
+    days ago go (a source that withdrew an image stops being served), then, while the whole cache is over the
+    cap, the least recently served. `last_served_at` is written at most once a day per image. A stale copy
+    is served only while the source is down and the row is inside its 30 days. Deleting a message does not
+    delete its cached images; the 30-day limit bounds how long they stay.
+  - The timeline never waits for an image: the text renders first and each image loads by itself.
+  - The dial guard (`internal/netguard`) is shared with the Freshdesk importer.
+- **An attachment is `inline` only when its bytes are embedded in `body_html`**, set by the writer that
+  embedded it (the email channel for a `cid:` image that fit the 5 MiB budget, the Freshdesk importer for a
+  rehosted image that fit), never from a file name. The formatted view hides only those rows; an
+  over-budget image or an attachment a sender named `inline-image-...` stays listed. Rows written before
+  the column existed are `false` and stay listed.
 
 ## Files and the raw message
 

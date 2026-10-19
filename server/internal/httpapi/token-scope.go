@@ -6,6 +6,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 )
 
 // gatedByHandler marks a route whose tier depends on the request body. Any token passes the route
@@ -104,6 +105,7 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/agent-requests/{id}/cancel":                    tier(auth.ScopeRead),
 
 	"POST /api/v1/agent-requests/{id}/approve": personOnly("an agent approving its own request would make approval meaningless"),
+	"GET " + mailimage.ProxyPath:               personOnly("a signed address for the screen: an agent token reads the original HTML and fetches its own images"),
 	"POST /api/v1/agent-requests/{id}/reject":  personOnly("deciding an agent's request is a person's call"),
 
 	"GET /api/v1/auth/sessions":                       tier(auth.ScopeRead),

@@ -106,6 +106,8 @@ func (r *run) conversationMessage(c fdConversation) newMessage {
 		kind, originKind = "note", "forward"
 	case c.Source == conversationNote:
 		kind, originKind = "note", "public_note"
+	case c.Incoming && c.AutoResponse:
+		kind, originKind = "incoming", "automated_response"
 	case c.Incoming:
 		kind, originKind = "incoming", "incoming"
 	}

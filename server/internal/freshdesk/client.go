@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/netguard"
 )
 
 var (
@@ -159,8 +161,8 @@ func (c *client) do(ctx context.Context, target string, apiCall bool) (*http.Res
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			if errors.Is(err, errBlockedAddress) {
-				return nil, fmt.Errorf("GET %s: %w", redact(target), errBlockedAddress)
+			if errors.Is(err, netguard.ErrBlockedAddress) {
+				return nil, fmt.Errorf("GET %s: %w", redact(target), netguard.ErrBlockedAddress)
 			}
 			if strings.Contains(err.Error(), "refusing redirect") {
 				return nil, fmt.Errorf("GET %s: redirect refused (not HTTPS, a host this download may not use, or too many)", redact(target))

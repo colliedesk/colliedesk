@@ -69,19 +69,21 @@ type fdTicket struct {
 }
 
 type fdConversation struct {
-	ID          int64          `json:"id"`
-	Body        string         `json:"body"`
-	BodyText    string         `json:"body_text"`
-	Incoming    bool           `json:"incoming"`
-	Private     bool           `json:"private"`
-	UserID      int64          `json:"user_id"`
-	Source      int            `json:"source"`
-	FromEmail   *string        `json:"from_email"`
-	ToEmails    []string       `json:"to_emails"`
-	CcEmails    []string       `json:"cc_emails"`
-	BccEmails   []string       `json:"bcc_emails"`
-	Attachments []fdAttachment `json:"attachments"`
-	CreatedAt   time.Time      `json:"created_at"`
+	ID       int64  `json:"id"`
+	Body     string `json:"body"`
+	BodyText string `json:"body_text"`
+	Incoming bool   `json:"incoming"`
+	Private  bool   `json:"private"`
+	UserID   int64  `json:"user_id"`
+	Source   int    `json:"source"`
+	// AutoResponse is Freshdesk's own flag for an automatic reply (out-of-office, a messenger or bot acknowledgement).
+	AutoResponse bool           `json:"auto_response"`
+	FromEmail    *string        `json:"from_email"`
+	ToEmails     []string       `json:"to_emails"`
+	CcEmails     []string       `json:"cc_emails"`
+	BccEmails    []string       `json:"bcc_emails"`
+	Attachments  []fdAttachment `json:"attachments"`
+	CreatedAt    time.Time      `json:"created_at"`
 }
 
 type fdTimeEntry struct {

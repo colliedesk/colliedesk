@@ -143,13 +143,15 @@ type Message struct {
 }
 
 type Attachment struct {
-	ID          string    `json:"id"`
-	MessageID   string    `json:"message_id"`
-	Filename    string    `json:"filename"`
-	ContentType string    `json:"content_type"`
-	Size        int64     `json:"size"`
-	SHA256      string    `json:"sha256"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          string `json:"id"`
+	MessageID   string `json:"message_id"`
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	Size        int64  `json:"size"`
+	SHA256      string `json:"sha256"`
+	// Inline is true when the bytes are embedded in the message's HTML, which already shows the image.
+	Inline    bool      `json:"inline"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // MessageDelivery is the email delivery state of an outgoing reply.

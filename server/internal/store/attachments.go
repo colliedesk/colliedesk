@@ -22,9 +22,11 @@ type NewAttachment struct {
 	Filename    string
 	ContentType string
 	Object      attachments.Object
+	// Inline marks a file whose bytes were embedded in the message's HTML.
+	Inline bool
 }
 
-const attachmentColumns = `id::text,message_id::text,filename,content_type,size,sha256,created_at`
+const attachmentColumns = `id::text,message_id::text,filename,content_type,size,sha256,inline,created_at`
 
 // InsertAttachment records an attachment on a message of the same workspace.
 func InsertAttachment(ctx context.Context, q Querier, workspaceID string, input NewAttachment) (domain.Attachment, error) {
@@ -34,11 +36,11 @@ func InsertAttachment(ctx context.Context, q Querier, workspaceID string, input 
 	}
 	var item domain.Attachment
 	// clock_timestamp, not the transaction's now(): files added in one transaction keep their order.
-	err := q.QueryRow(ctx, `INSERT INTO attachments(workspace_id,message_id,filename,content_type,size,sha256,storage_key,created_at)
-		SELECT $1,m.id,$3,$4,$5,$6,$7,clock_timestamp() FROM messages m WHERE m.workspace_id=$1 AND m.id=$2
+	err := q.QueryRow(ctx, `INSERT INTO attachments(workspace_id,message_id,filename,content_type,size,sha256,storage_key,inline,created_at)
+		SELECT $1,m.id,$3,$4,$5,$6,$7,$8,clock_timestamp() FROM messages m WHERE m.workspace_id=$1 AND m.id=$2
 		RETURNING `+attachmentColumns, workspaceID, input.MessageID, input.Filename, contentType,
-		input.Object.Size, input.Object.SHA256, input.Object.Key).
-		Scan(&item.ID, &item.MessageID, &item.Filename, &item.ContentType, &item.Size, &item.SHA256, &item.CreatedAt)
+		input.Object.Size, input.Object.SHA256, input.Object.Key, input.Inline).
+		Scan(&item.ID, &item.MessageID, &item.Filename, &item.ContentType, &item.Size, &item.SHA256, &item.Inline, &item.CreatedAt)
 	if err != nil {
 		return domain.Attachment{}, fmt.Errorf("create attachment: %w", err)
 	}
@@ -58,7 +60,7 @@ func (s *Store) GetAttachment(ctx context.Context, workspaceID, id string) (doma
 	var key string
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `SELECT `+attachmentColumns+`,storage_key FROM attachments WHERE workspace_id=$1 AND id=$2`, workspaceID, id).
-			Scan(&item.ID, &item.MessageID, &item.Filename, &item.ContentType, &item.Size, &item.SHA256, &item.CreatedAt, &key)
+			Scan(&item.ID, &item.MessageID, &item.Filename, &item.ContentType, &item.Size, &item.SHA256, &item.Inline, &item.CreatedAt, &key)
 	})
 	if err != nil {
 		return domain.Attachment{}, "", fmt.Errorf("get attachment: %w", err)
@@ -73,14 +75,14 @@ type rowsQuerier interface {
 }
 
 func attachConversationFiles(ctx context.Context, q rowsQuerier, workspaceID, conversationID string, messages []domain.Message) error {
-	return attachFiles(ctx, q, messages, `SELECT a.id::text,a.message_id::text,a.filename,a.content_type,a.size,a.sha256,a.created_at
+	return attachFiles(ctx, q, messages, `SELECT a.id::text,a.message_id::text,a.filename,a.content_type,a.size,a.sha256,a.inline,a.created_at
 		FROM attachments a JOIN messages m ON m.workspace_id=a.workspace_id AND m.id=a.message_id
 		WHERE a.workspace_id=$1 AND m.conversation_id=$2 ORDER BY a.created_at,a.id`, workspaceID, conversationID)
 }
 
 func attachMessageFiles(ctx context.Context, q rowsQuerier, workspaceID string, message *domain.Message) error {
 	messages := []domain.Message{*message}
-	if err := attachFiles(ctx, q, messages, `SELECT id::text,message_id::text,filename,content_type,size,sha256,created_at
+	if err := attachFiles(ctx, q, messages, `SELECT id::text,message_id::text,filename,content_type,size,sha256,inline,created_at
 		FROM attachments WHERE workspace_id=$1 AND message_id=$2 ORDER BY created_at,id`, workspaceID, message.ID); err != nil {
 		return err
 	}
@@ -100,7 +102,7 @@ func attachFiles(ctx context.Context, q rowsQuerier, messages []domain.Message, 
 	}
 	for rows.Next() {
 		var item domain.Attachment
-		if err := rows.Scan(&item.ID, &item.MessageID, &item.Filename, &item.ContentType, &item.Size, &item.SHA256, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.MessageID, &item.Filename, &item.ContentType, &item.Size, &item.SHA256, &item.Inline, &item.CreatedAt); err != nil {
 			return fmt.Errorf("scan attachment: %w", err)
 		}
 		item.CreatedAt = domain.UTC(item.CreatedAt)
@@ -119,9 +121,9 @@ func attachFiles(ctx context.Context, q rowsQuerier, messages []domain.Message, 
 // attachment no longer exists on that message.
 func ReplaceAttachmentBytes(ctx context.Context, q Querier, workspaceID, id string, input NewAttachment) (bool, error) {
 	var replaced string
-	err := q.QueryRow(ctx, `UPDATE attachments SET filename=$4,content_type=$5,size=$6,sha256=$7,storage_key=$8
+	err := q.QueryRow(ctx, `UPDATE attachments SET filename=$4,content_type=$5,size=$6,sha256=$7,storage_key=$8,inline=$9
 		WHERE workspace_id=$1 AND id=$2 AND message_id=$3 RETURNING id::text`, workspaceID, id, input.MessageID,
-		input.Filename, input.ContentType, input.Object.Size, input.Object.SHA256, input.Object.Key).Scan(&replaced)
+		input.Filename, input.ContentType, input.Object.Size, input.Object.SHA256, input.Object.Key, input.Inline).Scan(&replaced)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}

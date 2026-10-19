@@ -36,17 +36,6 @@ export function InboxRoute() {
   const conversations = useQuery({ queryKey: ['conversations', query], queryFn: () => api.conversations(query), refetchOnMount: 'always',
     // A new search or filter keeps the old rows on screen until its response arrives.
     placeholderData: keepPreviousData });
-  const agents = useQuery({ queryKey: ['agents'], queryFn: api.agents });
-  const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags });
-  // Fetched once and shared with Settings, so the picker opens from memory.
-  const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
-  const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
-  // Shared with the app shell, so the limits cost no extra request.
-  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
-  const limits = config?.limits;
-  const outbound = emailChannel.data;
-  const outboundNotice = outbound?.channel && outbound.sending_from === null
-    ? (outbound.smtp.configured ? messages.outboundNeedsVerification : messages.outboundNotConfigured) : undefined;
   const narrowed = Boolean(filters.search || filters.assignee || filters.tag);
   const filtered = narrowed || !['', defaultInboxFilters.status].includes(filters.status ?? '');
   // An empty Open view is either a new workspace or one that is caught up; one row of All tells which.
@@ -60,8 +49,15 @@ export function InboxRoute() {
   // fetched alongside the list for a deep link, and seeded from every change so the panes never swap.
   const opened = useQuery({ queryKey: ['conversations', 'one', activeID], queryFn: () => api.conversation(activeID!),
     enabled: Boolean(activeID && !listed) });
-  const selected = listed ?? (opened.data?.id === activeID ? opened.data : undefined) ?? conversations.data?.items[0];
-  const timeline = useQuery({ queryKey: ['messages', selected?.id], queryFn: () => api.messages(selected!.id), enabled: Boolean(selected),
+  // Header, composer and timeline all belong to one ticket. With an address in the URL that is the ticket the
+  // address names, once its row or its detail has loaded; until then nothing is shown for it, never the first
+  // row of the list, whose composer would send a reply to the wrong customer.
+  const selected = listed ?? (opened.data?.id === activeID ? opened.data : undefined) ?? (activeID ? undefined : conversations.data?.items[0]);
+  // The messages and time entries need only the id. A ticket opened by its address knows it from the URL, so
+  // they go out together with the list and the detail instead of after one of them. Without an address the id
+  // is the first row of the list, which is the one thing that has to be waited for.
+  const openID = activeID ?? selected?.id;
+  const timeline = useQuery({ queryKey: ['messages', openID], queryFn: () => api.messages(openID!), enabled: Boolean(openID),
     // Poll while a reply waits in the email outbox so its delivery status updates without a reload.
     refetchInterval: (query) => (query.state.data?.items.some((item) => item.delivery?.status === 'queued') ? 5000 : false) });
   // Reply drafts AI agents left: the list marks their conversations, the open one shows them above the composer.
@@ -78,7 +74,20 @@ export function InboxRoute() {
     if (conversationId) void client.invalidateQueries({ queryKey: ['messages', conversationId] });
     return refresh();
   };
-  const timeEntries = useQuery({ queryKey: ['time-entries', selected?.id], queryFn: () => api.timeEntries(selected!.id), enabled: Boolean(selected) });
+  const timeEntries = useQuery({ queryKey: ['time-entries', openID], queryFn: () => api.timeEntries(openID!), enabled: Boolean(openID) });
+  // The side lists come after everything the open ticket needs: a browser allows six HTTP/1.1 connections per
+  // host, and a request that waits for one is a request the person waits for.
+  const agents = useQuery({ queryKey: ['agents'], queryFn: api.agents });
+  const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags });
+  // Fetched once and shared with Settings, so the picker opens from memory.
+  const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
+  const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
+  // Shared with the app shell, so the limits cost no extra request.
+  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
+  const limits = config?.limits;
+  const outbound = emailChannel.data;
+  const outboundNotice = outbound?.channel && outbound.sending_from === null
+    ? (outbound.smtp.configured ? messages.outboundNeedsVerification : messages.outboundNotConfigured) : undefined;
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
   const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes), onSuccess: keepOpened });
@@ -97,7 +106,7 @@ export function InboxRoute() {
     onSuccess: (retried) => client.invalidateQueries({ queryKey: ['messages', retried.conversation_id] }) });
   // A refusal belongs to the conversation it happened in; opening another one hides it.
   const retryError = retryDelivery.isError && retryDelivery.variables?.conversationId === selected?.id ? retryDelivery.error : undefined;
-  return <InboxPage hosted={config?.billing.enabled ?? false} conversations={conversations.data?.items} selected={selected} timeline={timeline.data?.items} timeEntries={timeEntries.data?.items}
+  return <InboxPage hosted={config?.billing.enabled ?? false} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
     agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone}
     page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} onPage={setPage}
     onSelect={(id) => { setSelectedId(id); navigate({ to: '/conversations/$conversationId', params: { conversationId: id } }); }}
@@ -112,6 +121,7 @@ export function InboxRoute() {
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
     outboundNotice={outboundNotice} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}
+    conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError} onRetry={() => void conversations.refetch()}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
     canManage={me.data?.agent?.role === 'admin'} onOpenSettings={() => void navigate({ to: '/settings' })}

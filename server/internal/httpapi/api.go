@@ -15,6 +15,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -35,6 +36,19 @@ type Config struct {
 	CloudAuth   cloudauth.Config
 	Email       email.Config
 	Attachments attachments.Storage
+	// MailImages fetches the remote images of incoming email for the image proxy; nil uses the
+	// production fetcher (public addresses only). MailImageConcurrency caps fetches running at once
+	// (default 8); more get 503 with Retry-After.
+	MailImages *mailimage.Fetcher
+	// MailImageConcurrency caps fetches running at once (default 8) and MailImageWorkspaceConcurrency the
+	// share of one workspace (default 4). A request over the cap waits up to MailImageQueueWait (default
+	// 10 s) for a slot, then gets 503 with Retry-After.
+	MailImageConcurrency          int
+	MailImageWorkspaceConcurrency int
+	MailImageQueueWait            time.Duration
+	// MailImageCacheBytes caps the image cache of one workspace (default 1 GiB, MAIL_IMAGE_CACHE_BYTES);
+	// past it an image is served without being kept. The periodic sweep applies the same cap to the whole cache.
+	MailImageCacheBytes int64
 	// UploadTimeout is the longest one multipart message upload may take to arrive (default 3 minutes).
 	UploadTimeout time.Duration
 	// RequestPool, when set, runs workspace-scoped queries as a separate request login
@@ -98,6 +112,11 @@ type API struct {
 	// exports admits workspace exports; see exportLimiter.
 	exports     *exportLimiter
 	exportLinks *exportLinks
+	// mailImageSigner signs the proxy addresses of remote email images; mailImageFetcher fetches them;
+	// mailImageLimits bounds the fetches running at once.
+	mailImageSigner  *mailimage.Signer
+	mailImageFetcher *mailimage.Fetcher
+	mailImageLimits  *mailImageLimiter
 	// webForms limits the public web form per client address and workspace.
 	webForms       *webFormLimiter
 	webFormClients *webFormLimiter
@@ -158,6 +177,12 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		auth:           auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25()),
 		store:          store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25())}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
+	api.mailImageSigner = mailimage.NewSigner(api.mailImageKey())
+	api.mailImageFetcher = config.MailImages
+	if api.mailImageFetcher == nil {
+		api.mailImageFetcher = mailimage.NewFetcher(mailimage.Options{})
+	}
+	api.mailImageLimits = newMailImageLimiter(config.MailImageConcurrency, config.MailImageWorkspaceConcurrency, config.MailImageQueueWait)
 	if config.Email.ResendAPIKey != "" {
 		api.resend = &resend.Client{APIKey: config.Email.ResendAPIKey, Base: config.Email.ResendAPIBase}
 	}
@@ -212,6 +237,7 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/conversations/{id}/time-entries", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/inbox/activity", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/attachments/{id}", auth.PermissionConversationsRead},
+		{http.MethodGet, mailimage.ProxyPath, auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/contacts", auth.PermissionContactsRead},
 		{http.MethodPost, "/api/v1/contacts", auth.PermissionContactsWrite},
 		{http.MethodGet, "/api/v1/contacts/{id}", auth.PermissionContactsRead},
