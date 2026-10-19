@@ -48,3 +48,12 @@ test('a 409 contact_exists carries the customer to use', async () => {
   fetchMock.mockResolvedValue(reply(409, { error: { code: 'contact_merged', message: 'Merged.' } }));
   expect(existingContact(await contactApi.startConversation('x', 'Hi', { body: 'Hi', files: [], cc: [] }).catch((caught: unknown) => caught))).toBeUndefined();
 });
+
+test('a contact search as you type is limited and can be cancelled', async () => {
+  fetchMock.mockResolvedValue(reply(200, { items: [], has_more: false }));
+  const signal = new AbortController().signal;
+  await contactApi.searchContacts('ada lo', 8, signal);
+  const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(url).toBe('/api/v1/contacts?search=ada+lo&limit=8');
+  expect(init.signal).toBe(signal);
+});

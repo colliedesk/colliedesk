@@ -21,12 +21,10 @@ test('the open conversation names its customer and opens their page', () => {
   expect(onOpenContact).toHaveBeenCalledWith(mai.id);
 });
 
-test('customers a search finds are listed above the conversations, each opening their page', () => {
-  const onOpenContact = vi.fn();
-  render(<InboxPage conversations={[conversation]} contactMatches={[mai]} onOpenContact={onOpenContact} />);
-  const found = screen.getByRole('navigation', { name: 'Customers' });
-  fireEvent.click(within(found).getByRole('link', { name: /mai@customer.example/ }));
-  expect(onOpenContact).toHaveBeenCalledWith(mai.id);
+test('the customers a search finds go under the filters, above the conversations', () => {
+  render(<InboxPage conversations={[conversation]} contactMatches={<nav aria-label="Customers">found</nav>} />);
+  const list = screen.getByRole('region', { name: /conversation list/i });
+  expect(within(list).getByRole('navigation', { name: 'Customers' })).toBeInTheDocument();
 });
 
 test('the inbox offers to start a new conversation', () => {

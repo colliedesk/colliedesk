@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { AgentRequest, Contact, Conversation, Message, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
-import { RouterLink } from '../../ui/router-link';
+import type { AgentRequest, Conversation, Message, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import { BulkActionBar } from './bulk-action-bar';
 import { ConversationList } from './conversation-list';
@@ -71,13 +70,13 @@ interface InboxPageProps {
   draftConversationIds?: ReadonlySet<string>;
   onSendDraft?: (draft: AgentRequest, edit?: DraftEdit) => Promise<unknown>;
   onDiscardDraft?: (draft: AgentRequest) => Promise<unknown>;
-  // Customers whose name or email matches the search, each opening their page.
-  contactMatches?: Contact[];
+  // Customers whose name or email matches the search, shown under the filters (contact-matches.tsx).
+  contactMatches?: ReactNode;
   onOpenContact?: (contactId: string) => void;
   onNewConversation?: () => void;
 }
 
-export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, onSendDraft, onDiscardDraft, contactMatches = [], onOpenContact, onNewConversation }: InboxPageProps) {
+export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Clearing from the empty list returns to the Open view and puts focus back on the search box.
@@ -157,13 +156,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
           {/* A live region without role="status": it is mounted before the first result so screen readers
               announce it, while an idle inbox still exposes no status. */}
           <p aria-live="polite" className="bulk-message">{bulkNotice}</p>
-          {contactMatches.length > 0 && <nav className="contact-matches" aria-label={messages.contactMatches}>
-            <h2>{messages.contactMatches}</h2>
-            <ul>{contactMatches.map((contact) => <li key={contact.id}>
-              <RouterLink href={`/contacts/${contact.id}`} onFollow={onOpenContact && (() => onOpenContact(contact.id))}>
-                <span className="contact-picker-name">{contact.name}</span> <span className="contact-picker-email">{contact.email}</span></RouterLink>
-            </li>)}</ul>
-          </nav>}
+          {contactMatches}
         </header>
         <ConversationList items={conversations} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
           page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} nothingOpen={nothingOpen} loading={loading} refreshing={refreshing}

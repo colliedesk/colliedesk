@@ -1,7 +1,6 @@
 import type { RefObject } from 'react';
 import type { Conversation, Message, TimeEntry } from '../../api/schemas';
 import { messages } from '../../messages';
-import { RouterLink } from '../../ui/router-link';
 import { MessageItem } from './message-item';
 import { PriorityLabel, StatusLabel } from './conversation-labels';
 import { TimeEntriesSection } from './time-entries-section';
@@ -32,8 +31,10 @@ export function TimelinePanel({ conversation, items, timeEntries = [], loading =
         <div>
           <h2>{conversation?.subject ?? messages.selectConversation}</h2>
           {conversation && <div className="timeline-meta"><StatusLabel status={conversation.status} /><PriorityLabel priority={conversation.priority} />
-            <RouterLink className="timeline-contact" href={`/contacts/${conversation.contact_id}`} label={messages.openContact(conversation.contact_name)}
-              onFollow={onOpenContact && (() => onOpenContact(conversation.contact_id))}>{conversation.contact_name}</RouterLink></div>}
+            {/* A plain click opens the page in the app; a new tab or a copied address still works. */}
+            <a className="timeline-contact" href={`/contacts/${conversation.contact_id}`} aria-label={messages.openContact(conversation.contact_name)}
+              onClick={(event) => { if (onOpenContact && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); onOpenContact(conversation.contact_id); } }}>
+              {conversation.contact_name}</a></div>}
         </div>
         {conversation && onToggleDetails && <button type="button" className="details-toggle" ref={detailsToggleRef}
           aria-expanded={detailsOpen} aria-controls="conversation-details" onClick={onToggleDetails}>{messages.showDetails}</button>}

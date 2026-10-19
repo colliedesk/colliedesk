@@ -6,7 +6,7 @@ import type { ContactDetail, Conversation } from '../../api/schemas';
 import { ContactPage } from './contact-page';
 
 const api = vi.hoisted(() => ({ contacts: vi.fn() }));
-vi.mock('../../api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('../../api/client')>()), api }));
+vi.mock('./contact-api', async (importOriginal) => ({ ...(await importOriginal<typeof import('./contact-api')>()), contactApi: { searchContacts: api.contacts } }));
 
 const wrap = (node: ReactNode) => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{node}</QueryClientProvider>);
 

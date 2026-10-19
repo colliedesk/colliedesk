@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ConflictError, json, request } from '../../api/client';
-import { contactSchema, conversationSchema } from '../../api/schemas';
+import { contactListSchema, contactSchema, conversationSchema } from '../../api/schemas';
 import type { Contact } from '../../api/schemas';
 import type { components } from '../../api/generated';
 
@@ -42,6 +42,9 @@ function conversationForm(contact: ConversationContact, subject: string, reply: 
 }
 
 export const contactApi = {
+  // A short list for a search as you type; signal cancels a search the person typed past.
+  searchContacts: (search: string, limit: number, signal?: AbortSignal) =>
+    request(`/api/v1/contacts?${new URLSearchParams({ search, limit: String(limit) })}`, contactListSchema, { signal }),
   contact: (id: string) => request(`/api/v1/contacts/${id}`, contactDetailSchema),
   // Starts the conversation by emailing the contact; a refused email stores nothing, not even a new customer.
   startConversation: (contact: ConversationContact, subject: string, reply: FirstReply) => {
@@ -59,7 +62,7 @@ export const contactApi = {
 // existingContact reads the 409 `contact_exists` answer: the address is already a customer, and this is
 // the one to use instead (the contact it was merged into, when it was merged).
 export function existingContact(error: unknown): Contact | undefined {
-  if (!(error instanceof ConflictError) || error.code !== 'contact_exists') return undefined;
+  if (!(error instanceof ConflictError) || error.detail?.code !== 'contact_exists') return undefined;
   const parsed = contactSchema.safeParse(error.detail?.contact);
   return parsed.success ? parsed.data : undefined;
 }

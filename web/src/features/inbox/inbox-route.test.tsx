@@ -15,7 +15,7 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock('../../api/client', () => ({ api, InvalidRequestError: class extends Error {} }));
-vi.mock('../contacts/contact-api', () => ({ contactApi: { startConversation: api.createConversation }, existingContact: () => undefined }));
+vi.mock('../contacts/contact-api', () => ({ contactApi: { startConversation: api.createConversation, searchContacts: api.contacts }, existingContact: () => undefined }));
 const views = vi.hoisted(() => ({
   list: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })), trash: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })),
   create: vi.fn(), update: vi.fn(), remove: vi.fn(), restore: vi.fn(),
