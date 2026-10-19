@@ -36,6 +36,18 @@ func (f *recordingFunnel) recorded() []funnelEvent {
 	return append([]funnelEvent(nil), f.events...)
 }
 
+// named keeps the recorded events called name, so a test about payments ignores the activation
+// events its fixture caused while setting up the workspace.
+func (f *recordingFunnel) named(name string) []funnelEvent {
+	var events []funnelEvent
+	for _, event := range f.recorded() {
+		if event.Event == name {
+			events = append(events, event)
+		}
+	}
+	return events
+}
+
 var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 func TestCloudSignupRecordsTrialStartedOnce(t *testing.T) {
@@ -75,7 +87,7 @@ func TestSubscriptionActiveWebhookRecordsActivationOnce(t *testing.T) {
 	recovered.Product = productFounding
 	f.mustDeliver(t, "msg_funnel_founding_recovered", recovered.event("subscription.active"))
 
-	events := funnel.recorded()
+	events := funnel.named("subscription_activated")
 	if len(events) != 1 {
 		t.Fatalf("events=%+v, want exactly one subscription_activated", events)
 	}
@@ -92,7 +104,7 @@ func TestSubscriptionWithoutWorkspaceRecordsNothing(t *testing.T) {
 	orphan := activeTeam("", "sub_funnel_orphan", time.Now())
 	f.mustDeliver(t, "msg_funnel_orphan", orphan.event("subscription.active"))
 
-	if events := funnel.recorded(); len(events) != 0 {
+	if events := funnel.named("subscription_activated"); len(events) != 0 {
 		t.Fatalf("events=%+v, want none for a payment that matches no workspace", events)
 	}
 }

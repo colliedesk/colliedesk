@@ -49,20 +49,37 @@ still send one report a day together. Each report sent is also written to the se
 | `web_form` | `false` | Whether any workspace has the web form on |
 | `freshdesk_import` | `true` | Whether the install has records of a Freshdesk import |
 
-## Colliedesk Cloud only: trial and payment events
+## Colliedesk Cloud only: trial, activation and payment events
 
-Colliedesk Cloud (`realm` `cloud`) also sends two events, so the team can see how many trials
-start and how many become paid. A self-hosted server has no trials or billing and never sends
+Colliedesk Cloud (`realm` `cloud`) also sends these events, so the team can see how many trials
+start, how far a new workspace gets, and how many become paid. A self-hosted server has no trials or billing and never sends
 them; `DISABLE_TELEMETRY` and `DO_NOT_TRACK` turn them off too.
 
 | Event | When | Fields |
 |---|---|---|
 | `trial_started` | A cloud sign-up creates a workspace and signs its admin in | `distinct_id` = the workspace id, `realm`, `version`, and `website_visitor_id` when the browser has the colliedesk.com analytics cookie (set only after the person accepted cookies on the website): the random id PostHog gave that visit, so the team can see which page led to the trial |
+| `email_channel_saved` | An admin saves the workspace's support address | `distinct_id` = the workspace id, `realm`, `version` (never the address) |
+| `reply_sent` | A reply to a customer is sent from Colliedesk; a note is not a reply | `distinct_id` = the workspace id, `by` (`person`, or `ai_agent` for an agent token), `realm`, `version` (never the text or the recipient) |
+| `teammate_invited` | An admin invites a teammate | `distinct_id` = the workspace id, `realm`, `version` (never the invited address) |
 | `subscription_activated` | A workspace becomes a paying customer for the first time (its first `subscription.active` from Polar). A redelivered webhook, a past_due subscription paid again and a later plan change are not counted again | `distinct_id` = the workspace id, `plan` (`team`, `team25` or `founding`), `realm`, `version` |
 
 The workspace id is a random UUID. The events never carry the email address of the person who
 signed up, the workspace name or its address. They are sent in the background; a failure is logged
 as `funnel event not sent` and changes nothing in the workspace.
+
+## How the web app is used
+
+The web app also reports which screens agents open and which buttons they click, so the team can
+see what is used and what is confusing. It is on by default, on Colliedesk Cloud and self-hosted
+alike, and the same switch as the usage report turns it off: set `DISABLE_TELEMETRY=true` (or
+`DO_NOT_TRACK=1`) and `GET /api/v1/config` answers `product_analytics.enabled: false`, so the web app
+never loads the analytics library. Every event carries `realm` (`cloud` or `self-hosted`).
+
+- The agent is named by their random agent id, with their role (`admin` or `agent`); the workspace
+  id and plan come along. Never an email address or a name.
+- Every element's text and attributes are masked, so no conversation, message, contact or form
+  content is sent. URLs are sent without their query string or fragment, and page titles are dropped.
+- Nothing is stored in the browser for it (no cookie, no local storage), and no session is recorded.
 
 ## Where it goes
 

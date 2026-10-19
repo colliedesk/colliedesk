@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -123,7 +124,19 @@ func (a *API) planOfProduct(productID string) string {
 	return a.config.Billing.Products.PlanOf(productID)
 }
 
-// recordFunnel passes a sign-up or payment event to the configured funnel, if any.
+// recordReply counts a reply sent to a customer, by a person or an AI agent's token; a note is not a reply.
+func (a *API) recordReply(identity auth.Principal, kind string) {
+	if kind != "outgoing" {
+		return
+	}
+	by := "person"
+	if identity.Scope != "" {
+		by = "ai_agent"
+	}
+	a.recordFunnel("reply_sent", identity.Workspace.ID, map[string]any{"by": by})
+}
+
+// recordFunnel passes a sign-up, activation or payment event to the configured funnel, if any.
 func (a *API) recordFunnel(event, workspaceID string, properties map[string]any) {
 	if a.config.Funnel != nil {
 		a.config.Funnel.Record(event, workspaceID, properties)
