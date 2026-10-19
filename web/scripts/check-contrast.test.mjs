@@ -13,7 +13,23 @@ test('contrast matches the WCAG reference values', () => {
 test('light is the default block and dark is opt-in', () => {
   expect(css).toMatch(/:root, :root\[data-theme="light"\] \{\s*color-scheme: light;/);
   expect(themeTokens(css, 'light')['--on-accent']).toBe('#ffffff');
-  expect(themeTokens(css, 'dark')['--surface-0']).toBe('#0b0f15');
+  expect(themeTokens(css, 'dark')['--surface-0']).toBe('#0a0a0a');
+});
+
+// Brand "ink and paper" (docs/internals/design.md): surfaces, lines, text and the primary action are
+// neutral grey or ink, with no hue. Colour is kept for status, focus and private notes.
+const NEUTRAL = ['--surface-0', '--surface-1', '--surface-2', '--surface-3', '--surface-inverse', '--line', '--line-strong',
+  '--line-control', '--text-1', '--text-2', '--text-3', '--text-inverse', '--accent', '--accent-hover', '--accent-text',
+  '--accent-soft', '--on-accent', '--logo-tile', '--brand-panel', '--on-brand-panel', '--on-brand-panel-2'];
+test('greys, text and the primary action carry no hue in either theme', () => {
+  for (const theme of ['light', 'dark']) {
+    const tokens = themeTokens(css, theme);
+    const tinted = NEUTRAL.filter((name) => {
+      const [r, g, b] = tokens[name].slice(1).match(/../g);
+      return !(r === g && g === b);
+    });
+    expect(tinted.map((name) => `${theme} ${name} ${tokens[name]}`)).toEqual([]);
+  }
 });
 
 test('every token pair in both themes meets its WCAG minimum', () => {

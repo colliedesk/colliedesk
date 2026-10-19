@@ -32,11 +32,11 @@ test('nothing stored leaves the page light', () => {
 test('a stored dark choice also paints the browser chrome dark', () => {
   const meta = document.createElement('meta');
   meta.name = 'theme-color';
-  meta.content = '#f5f7fa';
+  meta.content = '#fafafa';
   document.head.append(meta);
   localStorage.setItem(themeStorageKey, 'dark');
   run();
-  expect(meta.content).toBe('#0b0f15');
+  expect(meta.content).toBe('#0a0a0a');
   meta.remove();
 });
 

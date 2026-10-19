@@ -49,7 +49,7 @@
 .list-pane { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }
 .list-pane > header { display: grid; gap: var(--space-3); padding: var(--space-4) var(--space-4) 0; border-bottom: 1px solid var(--line); }
 .list-title { display: flex; align-items: baseline; gap: var(--space-2); }
-.list-title h1 { font-size: 16px; font-weight: 600; }
+.list-title h1 { font: 400 24px/1.1 var(--font-display); letter-spacing: -0.01em; }
 .list-title span { color: var(--text-3); font-size: var(--fs-small); font-variant-numeric: tabular-nums; }
 .conversation-center { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; overflow: hidden; }
 .details-panel { min-width: 0; min-height: 0; overflow-y: auto; }
@@ -68,7 +68,7 @@
 .settings-sections > .settings-group-label { padding: var(--space-6) 0 var(--space-2); }
 .settings-sections > .settings-group-label:first-child, .settings-sections > .error-copy + .settings-group-label { padding-top: 0; }
 .settings-card h2 { scroll-margin-top: var(--space-6); }
-.settings-page > header h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.settings-page > header h1 { font: 400 32px/1.1 var(--font-display); letter-spacing: -0.01em; }
 .settings-page > header p { margin-top: var(--space-1); color: var(--text-2); }
 .settings-page > .error-copy { margin-bottom: var(--space-4); }
 .settings-card { display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr); gap: var(--space-4) var(--space-10); border-top: 1px solid var(--line); padding: var(--space-6) 0; }
@@ -88,13 +88,13 @@
 .signin-brand-lockup .logo-mark { width: 64px; height: 64px; }
 .wordmark { font-weight: 400; color: var(--on-brand-panel-2); }
 .wordmark b { font-weight: 700; color: var(--on-brand-panel); }
-.signin-tagline { max-width: 26rem; font-size: 22px; font-weight: 500; line-height: 1.35; letter-spacing: -0.01em; }
+.signin-tagline { max-width: 26rem; font: 400 36px/1.12 var(--font-display); letter-spacing: -0.01em; }
 .signin-footnote { margin-top: auto; color: var(--on-brand-panel-2); font-size: var(--fs-small); }
 .signin-brand .signin-footnote { margin-top: var(--space-8); }
 .signin-split .redeem-panel { align-self: center; justify-self: center; border: 0; box-shadow: none; }
 .signin-split .redeem-panel .brand-lockup { display: none; }
 .redeem-panel { width: min(100%, 26rem); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-8); }
-.redeem-panel h1 { margin: var(--space-5) 0 var(--space-2); font-size: 26px; font-weight: 600; line-height: 1.2; letter-spacing: -0.015em; }
+.redeem-panel h1 { margin: var(--space-5) 0 var(--space-2); font: 400 34px/1.1 var(--font-display); letter-spacing: -0.01em; }
 .signin-split .redeem-panel h1 { margin-top: 0; }
 .redeem-panel > p { color: var(--text-2); }
 .redeem-panel > .primary-action { width: 100%; margin-top: var(--space-6); --control: 44px; font-size: var(--fs-ui); }
