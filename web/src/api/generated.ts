@@ -197,6 +197,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description Every filter narrows the list. A filter that takes several values (comma-separated) matches any of them, except `tag` with `tag_match=all`. A value the server does not know answers 400 instead of an empty page. Times are RFC 3339 and compared as instants: `*_after` includes the instant, `*_before` excludes it. Rows with the same sort key are ordered by id, so pages never repeat or skip a row while nothing changes. */
         get: operations["listConversations"];
         put?: never;
         /**
@@ -667,6 +668,80 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateTag"];
+        trace?: never;
+    };
+    "/api/v1/saved-views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The inbox views the caller can use: the views shared with the whole workspace, then the caller's own personal views, each group ordered by name ignoring case. A deleted view is not listed here (see `GET /api/v1/saved-views/trash`). */
+        get: operations["listSavedViews"];
+        put?: never;
+        /** @description Saves a set of inbox filters under a name. A personal view is seen only by the person who saved it; a shared view by everyone in the workspace, and anyone may change or delete it. Names are unique ignoring case among the caller's personal views and among the shared views (409). Each person keeps at most 50 personal views and a workspace at most 50 shared ones (409). */
+        post: operations["createSavedView"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/saved-views/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Views deleted in the last 30 days that the caller could see, newest deletion first. Each can be restored with `POST /api/v1/saved-views/{id}/restore` until `purges_at`; after that it is gone. */
+        get: operations["listDeletedSavedViews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/saved-views/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Moves the view to the trash for 30 days; `POST /api/v1/saved-views/{id}/restore` brings it back. No conversation changes. Deleting a view already in the trash answers it unchanged. */
+        delete: operations["deleteSavedView"];
+        options?: never;
+        head?: never;
+        /** @description Renames a view, replaces its filters or changes who sees it. Send the `updated_at` you last read: if someone saved the view since, nothing changes and the answer is 409 `changed_elsewhere`. Only the owner of a personal view may change it or share it; making a shared view personal gives it to the caller. Another person's personal view answers 404, like a view that does not exist. */
+        patch: operations["updateSavedView"];
+        trace?: never;
+    };
+    "/api/v1/saved-views/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Brings a deleted view back; a view that is not in the trash is answered unchanged. Answers 409 when a live view of the same group now has its name, or the group is full; rename or delete that one first. */
+        post: operations["restoreSavedView"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/saved-replies": {
@@ -1321,6 +1396,85 @@ export interface components {
         ConversationStatus: "open" | "pending" | "resolved" | "closed";
         /** @enum {string} */
         Priority: "low" | "normal" | "high" | "urgent";
+        /**
+         * @description How the conversation started. email: a customer's mail. web_form: the public web form. imported: brought over from another helpdesk (its original channel is in origin.source). agent: a team member started it in Colliedesk; an older image that does not know this field also writes agent. problem_report: an agent's Report a problem.
+         * @enum {string}
+         */
+        ConversationChannel: "email" | "web_form" | "imported" | "agent" | "problem_report";
+        /**
+         * @default updated_desc
+         * @enum {string}
+         */
+        ConversationSort: "updated_desc" | "updated_asc" | "created_desc" | "created_asc" | "priority" | "waiting_longest";
+        /** @description The filters of `GET /api/v1/conversations` as one object; a list holds the values the query string separates with commas. An empty object is every conversation, most recently updated first. */
+        ConversationFilters: {
+            status?: components["schemas"]["ConversationStatus"][];
+            priority?: components["schemas"]["Priority"][];
+            assignee?: string[];
+            tag?: string[];
+            /** @enum {string} */
+            tag_match?: "any" | "all";
+            /** Format: uuid */
+            contact?: string;
+            organization?: string;
+            /** @enum {string} */
+            awaiting?: "team" | "customer";
+            has_pending_draft?: boolean;
+            delivery_failed?: boolean;
+            /** @enum {string} */
+            source?: "imported" | "native";
+            channel?: components["schemas"]["ConversationChannel"][];
+            /** Format: date-time */
+            created_after?: string;
+            /** Format: date-time */
+            created_before?: string;
+            /** Format: date-time */
+            updated_after?: string;
+            /** Format: date-time */
+            updated_before?: string;
+            sort?: components["schemas"]["ConversationSort"];
+            search?: string;
+        };
+        /** @enum {string} */
+        SavedViewScope: "personal" | "shared";
+        SavedViewInput: {
+            name: string;
+            scope: components["schemas"]["SavedViewScope"];
+            filters: components["schemas"]["ConversationFilters"];
+        };
+        SavedViewChange: {
+            /**
+             * Format: date-time
+             * @description The updated_at of the view as the caller last read it. If someone saved it since, nothing changes (409 changed_elsewhere).
+             */
+            updated_at: string;
+            name?: string;
+            scope?: components["schemas"]["SavedViewScope"];
+            filters?: components["schemas"]["ConversationFilters"];
+        };
+        SavedView: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            scope: components["schemas"]["SavedViewScope"];
+            filters: components["schemas"]["ConversationFilters"];
+            /**
+             * Format: uuid
+             * @description The person a personal view belongs to; null for a shared view.
+             */
+            owner_agent_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            deleted_at: string | null;
+            /**
+             * Format: date-time
+             * @description When a deleted view is removed for good.
+             */
+            purges_at: string | null;
+        };
         Workspace: {
             /** Format: uuid */
             id: string;
@@ -1588,6 +1742,7 @@ export interface components {
             /** Format: uuid */
             assignee_id: string | null;
             tags: components["schemas"]["Tag"][];
+            channel: components["schemas"]["ConversationChannel"];
             /** @description Where an imported conversation came from; null for conversations created in Colliedesk. */
             origin: null | components["schemas"]["ConversationOrigin"];
             /** Format: date-time */
@@ -2511,12 +2666,38 @@ export interface operations {
     listConversations: {
         parameters: {
             query?: {
-                status?: components["schemas"]["ConversationStatus"];
-                assignee?: "me" | "unassigned" | "anyone";
+                /** @description One status or several, comma-separated: open,pending. */
+                status?: string;
+                /** @description One priority or several, comma-separated: high,urgent. */
+                priority?: string;
+                /** @description Comma-separated. me (the caller), unassigned, anyone (assigned to somebody) or the id of a team member of this workspace. */
+                assignee?: string;
+                /** @description One tag id or several, comma-separated. */
                 tag?: string;
-                search?: string;
+                /** @description any (default): a conversation with one of the tags. all: with every tag. */
+                tag_match?: "any" | "all";
                 /** @description Only the conversations of this contact (any status unless `status` is given), for the contact's history. An id of another workspace's contact returns no rows; a value that is not a UUID answers 400. */
                 contact?: string;
+                /** @description Only conversations of contacts whose organization has this name, ignoring case. */
+                organization?: string;
+                /** @description team: the newest message that is not a note came from the customer, so the team owes an answer. customer: the newest such message is a reply of the team. A conversation without such a message matches neither. */
+                awaiting?: "team" | "customer";
+                /** @description true: an AI agent left a reply draft that waits for a person. false: none waits. */
+                has_pending_draft?: boolean;
+                /** @description true: a reply of the conversation could not be delivered by email and was not retried since. false: none. */
+                delivery_failed?: boolean;
+                /** @description imported (from another helpdesk) or native (created in Colliedesk). */
+                source?: "imported" | "native";
+                /** @description One channel or several, comma-separated (see `ConversationChannel`). */
+                channel?: string;
+                created_after?: string;
+                created_before?: string;
+                updated_after?: string;
+                updated_before?: string;
+                /** @description updated_desc (default), updated_asc, created_desc, created_asc, priority (urgent first, then the most recently updated), waiting_longest (conversations awaiting the team, the oldest customer message first, then every other conversation by last update). */
+                sort?: components["schemas"]["ConversationSort"];
+                /** @description Words to find in the subject, in any message text, or in the name or email of the contact. */
+                search?: string;
                 page?: number;
                 page_size?: number;
             };
@@ -3650,6 +3831,166 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listSavedViews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved views */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["SavedView"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createSavedView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedViewInput"];
+            };
+        };
+        responses: {
+            /** @description Saved view */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listDeletedSavedViews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted saved views */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["SavedView"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    deleteSavedView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The deleted view, with deleted_at and purges_at set */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateSavedView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedViewChange"];
+            };
+        };
+        responses: {
+            /** @description Changed view */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    restoreSavedView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Restored view */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     listSavedReplies: {

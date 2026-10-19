@@ -28,6 +28,9 @@ type contractFixture struct {
 	restoreReplySeen              string
 	deleteReplySeen               string
 	trashReplySeen                string
+	updateViewID, deleteViewID    string
+	updateViewSeen                string
+	trashViewID                   string
 	attachmentID                  string
 	mailImagePath                 string
 	redeemToken, logoutToken      string
@@ -88,6 +91,13 @@ func newContractFixture(t *testing.T) contractFixture {
 		t.Fatalf("edit contract reply status=%d body=%s", response.Code, response.Body.String())
 	}
 	restoreReplySeen := seenAt(t, api, adminToken, restoreReplyID)
+	updateViewID := create(t, api, adminToken, "/api/v1/saved-views", map[string]any{"name": "Update contract view", "scope": "shared", "filters": map[string]any{"status": []string{"open"}}})
+	updateViewSeen := viewSeen(t, api, adminToken, updateViewID)
+	deleteViewID := create(t, api, adminToken, "/api/v1/saved-views", map[string]any{"name": "Delete contract view", "scope": "personal", "filters": map[string]any{}})
+	trashViewID := create(t, api, adminToken, "/api/v1/saved-views", map[string]any{"name": "Trashed contract view", "scope": "shared", "filters": map[string]any{"has_pending_draft": true}})
+	if response := request(t, api, http.MethodDelete, "/api/v1/saved-views/"+trashViewID, nil, adminToken, nil); response.Code != http.StatusOK {
+		t.Fatalf("trash contract view status=%d body=%s", response.Code, response.Body.String())
+	}
 
 	inviteID, agentURL := createContractInvite(t, api, adminToken, "agent@contract-all.example.com", "agent")
 	agentRedeem := request(t, api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{"token": linkToken(t, agentURL)}, "", nil)
@@ -157,7 +167,7 @@ func newContractFixture(t *testing.T) contractFixture {
 	approveRequestID, rejectRequestID, cancelRequestID := fileRequest(), fileRequest(), fileRequest()
 	return contractFixture{requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
-		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token}
+		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token}
 }
 
 // seedMailImage gives the conversation's incoming message HTML with one remote image and returns the

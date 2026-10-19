@@ -77,6 +77,11 @@ export const messages = {
   bulkUpdated: (count: number) => `Updated ${count} conversation${count === 1 ? '' : 's'}`,
   bulkUpdateFailed: 'The conversations could not be updated. Nothing was changed; try again.',
   clearFilters: 'Clear filters',
+  showContactConversations: (name: string) => `All conversations of ${name}`,
+  // The Filter, Sort and Views buttons load with the first screen; the rest of the filter and saved view
+  // wording loads with their menus (src/features/inbox/filter-messages.ts).
+  inboxSort: 'Sort',
+  savedViewsTitle: 'Views',
   previousPage: 'Previous page',
   nextPage: 'Next page',
   selectConversation: 'Select a conversation to read its timeline.',

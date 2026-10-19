@@ -40,8 +40,8 @@ func (s *Store) CreateProblemReport(ctx context.Context, workspaceID string, in 
 		ON CONFLICT(workspace_id,name) DO UPDATE SET name=tags.name RETURNING id::text`, workspaceID, ProblemReportTag).Scan(&tagID); err != nil {
 		return "", fmt.Errorf("find or create tag: %w", err)
 	}
-	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at) VALUES($1,$2,$3,$4,$4) RETURNING id::text`,
-		workspaceID, contactID, in.Subject, now).Scan(&conversationID); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel) VALUES($1,$2,$3,$4,$4,$5) RETURNING id::text`,
+		workspaceID, contactID, in.Subject, now, domain.ChannelProblemReport).Scan(&conversationID); err != nil {
 		return "", fmt.Errorf("create conversation: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO conversation_tags(workspace_id,conversation_id,tag_id) VALUES($1,$2,$3)`, workspaceID, conversationID, tagID); err != nil {

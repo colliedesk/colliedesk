@@ -109,16 +109,29 @@ type Conversation struct {
 	ID        string `json:"id"`
 	ContactID string `json:"contact_id"`
 	// ContactName saves the reply box a second request for the customer's name.
-	ContactName string              `json:"contact_name"`
-	Subject     string              `json:"subject"`
-	Status      string              `json:"status"`
-	Priority    string              `json:"priority"`
-	AssigneeID  *string             `json:"assignee_id"`
-	Tags        []Tag               `json:"tags"`
-	Origin      *ConversationOrigin `json:"origin"`
-	CreatedAt   time.Time           `json:"created_at"`
-	UpdatedAt   time.Time           `json:"updated_at"`
+	ContactName string  `json:"contact_name"`
+	Subject     string  `json:"subject"`
+	Status      string  `json:"status"`
+	Priority    string  `json:"priority"`
+	AssigneeID  *string `json:"assignee_id"`
+	Tags        []Tag   `json:"tags"`
+	// Channel is how the conversation started: one of the Channel* values.
+	Channel   string              `json:"channel"`
+	Origin    *ConversationOrigin `json:"origin"`
+	CreatedAt time.Time           `json:"created_at"`
+	UpdatedAt time.Time           `json:"updated_at"`
 }
+
+// How a conversation started (conversations.channel).
+const (
+	ChannelEmail   = "email"
+	ChannelWebForm = "web_form"
+	// ChannelImported marks a conversation brought over from another helpdesk; Origin.Source keeps its own channel.
+	ChannelImported = "imported"
+	// ChannelAgent marks a conversation a team member started. An older image that does not know the column also writes it.
+	ChannelAgent         = "agent"
+	ChannelProblemReport = "problem_report"
+)
 
 // ConversationOrigin records where an imported conversation came from.
 type ConversationOrigin struct {

@@ -22,6 +22,7 @@ import { InboxIcon, RequestsIcon, SettingsIcon } from './ui/icons';
 import { PartUnavailable } from './ui/lazy-part';
 import { LogoMark } from './ui/logo';
 import { resetProductAnalytics, useProductAnalytics } from './lib/product-analytics';
+import { inboxQueryFromSearch } from './lib/inbox-query';
 
 function AppLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
@@ -73,8 +74,9 @@ function settingsRouterLink(item: NavItem) {
 }
 
 const rootRoute = createRootRoute({ component: AppLayout });
-const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: InboxRoute });
-const conversationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/conversations/$conversationId', component: InboxRoute });
+// The inbox filters are in the address, so a link opens the same list (src/lib/inbox-query.ts).
+const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', validateSearch: inboxQueryFromSearch, component: InboxRoute });
+const conversationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/conversations/$conversationId', validateSearch: inboxQueryFromSearch, component: InboxRoute });
 // The customer page is its own chunk (contact-part.ts), so the inbox bundle does not carry it.
 function ContactPage() {
   const part = contactPart.use();

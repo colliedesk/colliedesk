@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { AgentRequest, Contact, Conversation, Message, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
 import { RouterLink } from '../../ui/router-link';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import { BulkActionBar } from './bulk-action-bar';
 import { ConversationList } from './conversation-list';
 import { DetailsPanel } from './details-panel';
-import { InboxFilters, defaultInboxFilters } from './inbox-filters';
+import { InboxFilters } from './inbox-filters';
+
+import type { InboxQuery } from '../../lib/inbox-query';
 import type { AttachmentLimits } from './attachment-picker';
 import { ReplyComposer } from './reply-composer';
 import { ReplyDraftCard } from './reply-draft-card';
@@ -25,7 +28,11 @@ interface InboxPageProps {
   tags?: Tag[];
   timezone?: string;
   onSelect?: (id: string) => void;
-  onFilters?: (filters: Record<string, string>) => void;
+  // The filters of the list, as the address carries them, and a change to them.
+  query?: InboxQuery;
+  onQuery?: (query: InboxQuery) => void;
+  // The saved views menu, which sits in the filter bar (the route loads it lazily with its data).
+  viewsMenu?: ReactNode;
   onMessage?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[]) => void | Promise<unknown>;
   attachmentLimits?: AttachmentLimits;
   savedReplies?: SavedReply[];
@@ -70,12 +77,13 @@ interface InboxPageProps {
   onNewConversation?: () => void;
 }
 
-export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, onSendDraft, onDiscardDraft, contactMatches = [], onOpenContact, onNewConversation }: InboxPageProps) {
+export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, onSendDraft, onDiscardDraft, contactMatches = [], onOpenContact, onNewConversation }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
-  // Filters are an uncontrolled form; clearing remounts it so every field returns to its default.
-  const [filterGeneration, setFilterGeneration] = useState(0);
-  const clearFilters = () => { setFilterGeneration((current) => current + 1); onFilters?.({ ...defaultInboxFilters }); };
+  // Clearing from the empty list returns to the Open view and puts focus back on the search box.
+  const [focusSignal, setFocusSignal] = useState(0);
+  const clearFilters = () => { setFocusSignal((current) => current + 1); onQuery?.({}); };
+  const contactNames = useMemo(() => new Map(conversations.map((item) => [item.contact_id, item.contact_name])), [conversations]);
   const detailsToggle = useRef<HTMLButtonElement>(null);
   const listPane = useRef<HTMLElement>(null);
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
@@ -140,7 +148,8 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
           <div className="list-title" data-collapsed={checkedIds.length > 0 || undefined}><h1>{messages.inbox}</h1><span>{conversations.length}</span>
             {onNewConversation && <button type="button" className="new-conversation-button" data-opens="new-conversation" onClick={onNewConversation}>{messages.newConversation}</button>}</div>
           <div className="list-head" hidden={checkedIds.length > 0}>
-            <InboxFilters key={filterGeneration} tags={tags} onChange={onFilters} focusSearch={filterGeneration > 0} />
+            <InboxFilters query={query} onChange={onQuery} tags={tags} agents={agents} timezone={timezone} contactNames={contactNames} focusSignal={focusSignal}
+              views={viewsMenu} />
           </div>
           {checkedIds.length > 0 && <BulkActionBar count={checkedIds.length} agents={agents} tags={tags} currentAgentId={currentAgentId}
             busy={bulkBusy} onApply={(changes) => void applyBulk(changes)} onClear={() => { changeSelection(new Set()); setRefocus((count) => count + 1); }} />}
@@ -159,7 +168,8 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
         <ConversationList items={conversations} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
           page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} nothingOpen={nothingOpen} loading={loading} refreshing={refreshing}
           failed={failed} onRetry={onRetry} onClearFilters={clearFilters} canManage={canManage} onOpenSettings={onOpenSettings}
-          checkedIds={checked} onToggle={toggle} onToggleAll={toggleAll} selectAllRef={selectAll} draftIds={draftConversationIds} />
+          checkedIds={checked} onToggle={toggle} onToggleAll={toggleAll} selectAllRef={selectAll} draftIds={draftConversationIds}
+          grouped={(query.sort ?? 'updated_desc') === 'updated_desc'} />
       </section>
       <div className="conversation-center panel">
         <TimelinePanel conversation={selected} items={timeline} onOpenContact={onOpenContact} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
@@ -173,7 +183,8 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
           savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState} />
       </div>
       <DetailsPanel conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate}
-        onAddTag={onAddTag} onRemoveTag={onRemoveTag} onCreateTag={onCreateTag} onClose={detailsOpen ? closeDetails : undefined} />
+        onAddTag={onAddTag} onRemoveTag={onRemoveTag} onCreateTag={onCreateTag} onClose={detailsOpen ? closeDetails : undefined}
+        onShowContactConversations={onQuery ? (contact) => onQuery({ contact, status: 'all' }) : undefined} />
     </main>
   );
 }

@@ -79,6 +79,7 @@ type supportConversation struct {
 	ID        string `json:"id"`
 	ContactID string `json:"contact_id"`
 	Subject   string `json:"subject"`
+	Channel   string `json:"channel"`
 	Tags      []struct {
 		Name string `json:"name"`
 	} `json:"tags"`
@@ -151,8 +152,8 @@ func TestProblemReportOpensOneConversationInTheSupportDeskWithEverythingToCheckI
 	if created.Reference == "" || created.Reference != requestID {
 		t.Errorf("reference %q, want the report's request id %q", created.Reference, requestID)
 	}
-	if conversation.Subject != "Problem report: Acme Desk" {
-		t.Errorf("subject %q", conversation.Subject)
+	if conversation.Subject != "Problem report: Acme Desk" || conversation.Channel != "problem_report" {
+		t.Errorf("subject %q channel %q", conversation.Subject, conversation.Channel)
 	}
 	if len(conversation.Tags) != 1 || conversation.Tags[0].Name != "problem-report" {
 		t.Errorf("tags %+v, want problem-report", conversation.Tags)

@@ -101,23 +101,14 @@ func (a *API) listConversations(response http.ResponseWriter, request *http.Requ
 	if pageSize > 100 {
 		pageSize = 100
 	}
-	// A value the list does not know is refused, never ignored: an ignored filter would list everything.
-	switch query.Get("assignee") {
-	case "", "me", "unassigned", "anyone":
-	default:
-		writeError(response, http.StatusBadRequest, "invalid_request", "assignee must be me, unassigned or anyone.")
-		return
-	}
-	contact := strings.ToLower(query.Get("contact"))
-	if contact != "" && !contactIDPattern.MatchString(contact) {
-		writeError(response, http.StatusBadRequest, "invalid_request", "contact must be a contact id (UUID).")
+	filter, err := conversationFilterFromQuery(query)
+	if message, invalid := isFilterError(err); invalid {
+		writeError(response, http.StatusBadRequest, "invalid_request", message)
 		return
 	}
 	identity := principal(request)
-	items, err := a.store.ListConversations(request.Context(), identity.Workspace.ID, store.ConversationFilter{
-		Status: query.Get("status"), Assignee: query.Get("assignee"), TagID: query.Get("tag"),
-		Search: query.Get("search"), ContactID: contact, AgentID: identity.Agent.ID, Page: page, PageSize: pageSize,
-	})
+	filter.AgentID, filter.Page, filter.PageSize = identity.Agent.ID, page, pageSize
+	items, err := a.store.ListConversations(request.Context(), identity.Workspace.ID, filter)
 	if err != nil {
 		writeStoreError(response, err)
 		return

@@ -42,6 +42,10 @@ func TestFullImportReconcilesEveryEntity(t *testing.T) {
 	if got := env.tableCounts(t); got != fullImportRows {
 		t.Fatalf("rows = %s", got)
 	}
+	var notImported int
+	if err := env.pool.QueryRow(context.Background(), `SELECT count(*) FROM conversations WHERE workspace_id=$1 AND channel<>'imported'`, env.workspaceID).Scan(&notImported); err != nil || notImported != 0 {
+		t.Fatalf("imported conversations with another channel = %d (%v), want 0", notImported, err)
+	}
 	for _, code := range []string{"custom_status_mapped", "contact_without_email", "agent_not_matched", "company_without_contacts"} {
 		if !hasWarning(report, code) {
 			t.Errorf("missing warning %q in %+v", code, report.Warnings)

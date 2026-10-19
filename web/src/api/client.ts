@@ -133,7 +133,7 @@ function noteFailure(path: string, init: RequestInit | undefined, response: Resp
   recordFailedCall(init?.method ?? 'GET', path, response.status, response.headers.get('X-Request-Id') ?? '');
 }
 
-// request is exported for the API calls that live in a feature's own chunk (features/contacts/contact-api.ts).
+// request is exported for the API calls that live in a lazy part of the app (features/contacts/contact-api.ts, saved-views.ts).
 export async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
   // A FormData body sets its own multipart Content-Type, with the boundary.
   const headers = init?.body instanceof FormData ? init.headers : { 'Content-Type': 'application/json', ...init?.headers };
@@ -241,7 +241,8 @@ export const api = {
   invites: () => request('/api/v1/auth/invites', inviteListSchema),
   createInvite: (email: string, role_ceiling: RequestBody<'createInvite'>['role_ceiling']) => request('/api/v1/auth/invites', inviteCreatedSchema, { method: 'POST', body: json<'createInvite'>({ email, role_ceiling }) }),
   revokeInvite: (id: string) => requestNoContent(`/api/v1/auth/invites/${id}`, { method: 'DELETE' }),
-  conversations: (query: string) => request(`/api/v1/conversations?${query}`, conversationPageSchema),
+  // signal lets a newer search cancel the request of the one it replaced.
+  conversations: (query: string, signal?: AbortSignal) => request(`/api/v1/conversations?${query}`, conversationPageSchema, { signal }),
   inboxActivity: (since?: string) => request(`/api/v1/inbox/activity${since ? `?since=${encodeURIComponent(since)}` : ''}`, inboxActivitySchema),
   createConversation: (contact_id: string, subject: string) => request('/api/v1/conversations', conversationSchema, { method: 'POST', body: json<'createConversation'>({ contact_id, subject }) }),
   conversation: (id: string) => request(`/api/v1/conversations/${id}`, conversationSchema),
