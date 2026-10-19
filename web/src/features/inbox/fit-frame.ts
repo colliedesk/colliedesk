@@ -21,10 +21,18 @@ export function fitFrame(frame: HTMLIFrameElement): void {
   }
 }
 
+// What the mail's own <body style> said, remembered before the first scale so it can be put back.
+const mailStyles = new WeakMap<HTMLElement, { width: string; transform: string; transformOrigin: string }>();
+
 function measure(frame: HTMLIFrameElement, body: HTMLElement, root: HTMLElement): void {
-  body.style.transform = '';
-  body.style.transformOrigin = '';
-  body.style.width = '';
+  let original = mailStyles.get(body);
+  if (!original) {
+    original = { width: body.style.width, transform: body.style.transform, transformOrigin: body.style.transformOrigin };
+    mailStyles.set(body, original);
+  }
+  body.style.width = original.width;
+  body.style.transform = original.transform;
+  body.style.transformOrigin = original.transformOrigin;
   const available = frame.clientWidth;
   const contentWidth = Math.max(root.scrollWidth, body.scrollWidth);
   if (available > 0 && contentWidth > available + 1) {

@@ -57,6 +57,67 @@ test('a ticket opened by its address asks for its messages and time entries at o
   }
 });
 
+// A ticket opened by its address that is not in the list shows nothing of another ticket: not its header, not its
+// composer. A reply typed under the wrong header would go to the wrong customer.
+test('a ticket opened by address that is not in the list never shows another ticket\'s header, and its composer stays disabled, while its detail is missing', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
+  router.params = { conversationId: bravo.id };
+  try {
+    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.conversations.mockReset();
+    api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+    let resolveDetail!: (value: typeof bravo) => void;
+    api.conversation.mockReset();
+    api.conversation.mockReturnValue(new Promise((resolve) => { resolveDetail = resolve; }));
+    api.agents.mockResolvedValue({ items: [] });
+    api.tags.mockResolvedValue({ items: [] });
+    api.messages.mockReset();
+    api.messages.mockResolvedValue({ items: [] });
+    api.timeEntries.mockResolvedValue({ items: [] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+    await waitFor(() => expect(api.messages).toHaveBeenCalledWith(bravo.id));
+    await screen.findByRole('button', { name: /alpha conversation/i }); // the list has arrived, the detail has not
+    expect(screen.queryByRole('heading', { name: 'Alpha conversation' })).toBeNull();
+    for (const box of screen.getAllByLabelText('Message body')) expect(box).toBeDisabled(); // nothing can be sent yet
+    expect(api.messages).not.toHaveBeenCalledWith(alpha.id);
+    resolveDetail(bravo);
+    expect(await screen.findByRole('heading', { name: 'Bravo conversation' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByLabelText('Message body').some((box) => !(box as HTMLTextAreaElement).disabled)).toBe(true));
+  } finally {
+    router.params = {};
+  }
+});
+
+test('a ticket whose detail fails to load never gets a usable composer, and nothing is sent to the first listed ticket', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
+  router.params = { conversationId: bravo.id };
+  try {
+    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.conversations.mockReset();
+    api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+    api.conversation.mockReset();
+    api.conversation.mockRejectedValue(new Error('server error'));
+    api.agents.mockResolvedValue({ items: [] });
+    api.tags.mockResolvedValue({ items: [] });
+    api.messages.mockReset();
+    api.messages.mockResolvedValue({ items: [] });
+    api.timeEntries.mockResolvedValue({ items: [] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+    await screen.findByRole('button', { name: /alpha conversation/i });
+    await waitFor(() => expect(api.conversation).toHaveBeenCalledWith(bravo.id));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByRole('heading', { name: 'Alpha conversation' })).toBeNull();
+    for (const box of screen.getAllByLabelText('Message body')) expect(box).toBeDisabled();
+    expect(api.createMessage).not.toHaveBeenCalled();
+  } finally {
+    router.params = {};
+  }
+});
+
 test('inline tag creation stays bound to the conversation selected at call time', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const beta = conversation('33333333-3333-4333-8333-333333333333', 'Beta conversation');

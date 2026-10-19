@@ -73,7 +73,7 @@ test('links open in a new tab with noopener and only for web and mail addresses'
 
 test('images load only from the image proxy or from the message itself', () => {
   const proxied = '/api/v1/mail-image?u=https%3A%2F%2Fcdn.example%2Flogo.png&s=abc';
-  const document = parsed(`<img id="a" src="${proxied.replace('&', '&amp;')}"><img id="b" src="https://cdn.example/logo.png"><img id="c" src="data:image/gif;base64,R0lGOD">`
+  const document = parsed(`<img id="a" src="${proxied.replaceAll('&', '&amp;')}"><img id="b" src="https://cdn.example/logo.png"><img id="c" src="data:image/gif;base64,R0lGOD">`
     + '<img id="d" src="/api/v1/attachments/1"><img id="e" src="/api/v1/mail-imageX?u=1"><img id="f" src="cid:logo"><img id="g" src="//cdn.example/x.png">');
   expect(document.getElementById('a')?.getAttribute('src')).toBe(proxied);
   expect(document.getElementById('c')?.getAttribute('src')).toBe('data:image/gif;base64,R0lGOD');
@@ -126,7 +126,14 @@ test('the mail body keeps its colours and classes, and loses what could fetch or
 // Plain text kept inside a <div> (a chat or a note from an integration) has newlines and no markup for them.
 test('text with line breaks and no markup for them keeps its breaks', () => {
   const text = '<div>Hello\n\nAttachments:\n- file: <a href="https://x.example/a.jpg">https://x.example/a.jpg</a>\n</div>';
-  expect(emailDocument(text, origin)).toContain('<style>body{white-space:pre-wrap}</style>');
+  expect(emailDocument(text, origin)).toContain('<style>body{white-space:pre-line}</style>');
+});
+
+// pre-line keeps the newlines and folds the sender's indentation, so source formatting is not shown as spaces.
+test('kept line breaks fold indentation', () => {
+  const text = emailDocument('<div>\n    Hello there,\n    your order shipped.</div>', origin);
+  expect(text).toContain('<style>body{white-space:pre-line}</style>');
+  expect(text).not.toContain('pre-wrap}</style>');
 });
 
 test('mail that has its own structure, or only source formatting, is left to normal HTML whitespace', () => {
@@ -137,8 +144,11 @@ test('mail that has its own structure, or only source formatting, is left to nor
     '<div>\n  <div>Hello there</div>\n  <div>again</div>\n</div>',
     '<div>A long paragraph that the sender\'s editor wrapped\n</div><div>x</div><div>\n<span>y</span>\n</div>',
     '<div>One line, no breaks</div>',
+    // Hard-wrapped by the sender's generator: its newlines are not the author's lines.
+    '<div>Dear customer, thank you for your order and for the patience you showed while we\nshipped it today by courier, the tracking number follows in a moment.</div>',
+    '<span>Dear customer, thank you for your order and for the patience you showed while we\nshipped it today.</span>',
   ];
-  for (const html of structured) expect(emailDocument(html, origin), html).not.toContain('body{white-space:pre-wrap}');
+  for (const html of structured) expect(emailDocument(html, origin), html).not.toContain('body{white-space:pre-line}');
 });
 
 test('wide mail is made to fit and the base font is sans-serif unless the mail sets its own', () => {

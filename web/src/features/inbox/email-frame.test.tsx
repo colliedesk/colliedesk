@@ -63,6 +63,22 @@ test('fitFrame measures with the frame collapsed, so 100% and 100vh blocks canno
   expect(box.style.minHeight).toBe('');
 });
 
+// The mail's own <body style="width:600px"> is kept; scaling borrows the properties and gives them back.
+test('fitFrame gives back the width, transform and origin the mail set on its body', () => {
+  const frame = blankFrame();
+  const doc = measured(frame, { width: 500, contentWidth: 1000, contentHeight: 800 });
+  doc.body.style.width = '600px';
+  doc.body.style.transform = 'translateX(0px)';
+  doc.body.style.transformOrigin = '50% 50%';
+  fitFrame(frame);
+  expect(doc.body.style.transform).toBe('scale(0.5)');
+  measured(frame, { width: 1100, contentWidth: 1000, contentHeight: 800 });
+  fitFrame(frame);
+  expect(doc.body.style.width).toBe('600px');
+  expect(doc.body.style.transform).toBe('translateX(0px)');
+  expect(doc.body.style.transformOrigin).toBe('50% 50%');
+});
+
 test('fitFrame never makes a frame taller than the cap, whatever the mail asks for', () => {
   const frame = blankFrame();
   measured(frame, { width: 600, contentWidth: 600, contentHeight: 90_000 });

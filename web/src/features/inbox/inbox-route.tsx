@@ -49,7 +49,10 @@ export function InboxRoute() {
   // fetched alongside the list for a deep link, and seeded from every change so the panes never swap.
   const opened = useQuery({ queryKey: ['conversations', 'one', activeID], queryFn: () => api.conversation(activeID!),
     enabled: Boolean(activeID && !listed) });
-  const selected = listed ?? (opened.data?.id === activeID ? opened.data : undefined) ?? conversations.data?.items[0];
+  // Header, composer and timeline all belong to one ticket. With an address in the URL that is the ticket the
+  // address names, once its row or its detail has loaded; until then nothing is shown for it, never the first
+  // row of the list, whose composer would send a reply to the wrong customer.
+  const selected = listed ?? (opened.data?.id === activeID ? opened.data : undefined) ?? (activeID ? undefined : conversations.data?.items[0]);
   // The messages and time entries need only the id. A ticket opened by its address knows it from the URL, so
   // they go out together with the list and the detail instead of after one of them. Without an address the id
   // is the first row of the list, which is the one thing that has to be waited for.
@@ -103,7 +106,7 @@ export function InboxRoute() {
     onSuccess: (retried) => client.invalidateQueries({ queryKey: ['messages', retried.conversation_id] }) });
   // A refusal belongs to the conversation it happened in; opening another one hides it.
   const retryError = retryDelivery.isError && retryDelivery.variables?.conversationId === selected?.id ? retryDelivery.error : undefined;
-  return <InboxPage hosted={config?.billing.enabled ?? false} conversations={conversations.data?.items} selected={selected} timeline={timeline.data?.items} timeEntries={timeEntries.data?.items}
+  return <InboxPage hosted={config?.billing.enabled ?? false} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
     agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone}
     page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} onPage={setPage}
     onSelect={(id) => { setSelectedId(id); navigate({ to: '/conversations/$conversationId', params: { conversationId: id } }); }}

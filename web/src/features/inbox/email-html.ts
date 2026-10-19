@@ -81,11 +81,13 @@ function bodyTag(body: HTMLElement): string {
   return `<body${attributes.join('')}>`;
 }
 
+const wrappedLine = 60;
 const ownStructure = 'br, p, table, ul, ol, li, pre, h1, h2, h3, h4, h5, h6, blockquote, hr, details';
 
 // Plain text kept inside a <div> (a chat message, a note an integration wrote) has newlines and no markup for
-// them. HTML would fold them into one paragraph, and the sender saw them as lines. They are kept when the
-// mail has no structure of its own and the newlines are inside text, not indentation between tags.
+// them. HTML would fold them into one paragraph, and the sender saw them as lines. They are kept (pre-line: newlines stay,
+// indentation folds) when the mail has no structure of its own, the newlines are inside text and not
+// indentation between tags, and no line is long enough to be a wrapped paragraph.
 function keepsTextBreaks(body: HTMLElement): boolean {
   if (body.querySelector(ownStructure)) return false;
   let hardBreak = false;
@@ -95,7 +97,11 @@ function keepsTextBreaks(body: HTMLElement): boolean {
     if (text.trim() === '') {
       const indentation = text.includes('\n') && node.previousSibling?.nodeType === 1 && node.nextSibling?.nodeType === 1;
       if (indentation) return false;
-    } else if (text.trim().includes('\n')) hardBreak = true;
+    } else if (text.trim().includes('\n')) {
+      hardBreak = true;
+      // A line of prose (a URL aside) that long was wrapped by the sender's generator, not typed as a line.
+      if (text.split('\n').some((line) => line.replace(/https?:\/\/\S+/g, '').trim().length >= wrappedLine)) return false;
+    }
   }
   return hardBreak;
 }
@@ -117,7 +123,7 @@ function sanitize(html: string): string {
   });
   collapseQuotes(parsed);
   const styles = Array.from(parsed.head.querySelectorAll('style')).map((style) => style.outerHTML).join('');
-  const breaks = keepsTextBreaks(parsed.body) ? '<style>body{white-space:pre-wrap}</style>' : '';
+  const breaks = keepsTextBreaks(parsed.body) ? '<style>body{white-space:pre-line}</style>' : '';
   return styles + bodyTag(parsed.body) + parsed.body.innerHTML + breaks + overrideStyle;
 }
 
