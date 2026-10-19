@@ -37,12 +37,16 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
 - List header: status tabs (All, Open, Pending, Resolved, Closed), then search beside one
   **Filter** menu for assignee and tag with a count of active filters.
 - Bulk actions: a checkbox at the left of each row and a **Select all on this page** row. Once a row
-  is ticked, the action bar (`role="group"`, named "Bulk actions") replaces the title and filters; the filters stay
-  mounted (hidden) so their state survives. Each choice is a button in a `<details>` menu, never a
-  `<select>`: a select fires on every arrow key in some browsers and one stray key would rewrite
-  fifty conversations. Success clears the selection and writes `role="status"`; failure writes
-  `role="alert"` and keeps the selection. Focus follows the change: after success or Clear it goes to
-  **Select all on this page** (the list pane when no rows remain); after a failure it stays on the menu used.
+  is ticked, that row becomes the action bar (`role="group"`, named "Bulk actions"), as in Gmail and
+  Gorgias: count on the left, then icon controls with a tooltip and an accessible name: **Resolve**
+  (the most common bulk change, one press), **Set status**, **Assign to**, **Tags**, **Clear selection**.
+  The title and filters stay visible. **Tags** is one menu, as in Linear: a check mark when every selected
+  row has the tag, a dash when some do (`aria-pressed` true/mixed); a checked tag comes off, any other goes
+  on. Each choice is a button in a `<details>` menu, never a `<select>`: a select fires on every arrow key
+  in some browsers and one stray key would rewrite fifty conversations. Escape closes an open menu, a
+  second Escape clears the selection. Success clears the selection and writes `role="status"`; failure
+  writes `role="alert"` and keeps the selection. Focus follows the change: after success or Clear it goes
+  to **Select all on this page** (the list pane when no rows remain); after a failure it stays on the menu used.
 - Rows: bold subject and time, then one meta line (status dot and word, priority, `#tags`).
 - Thread: incoming messages on `--surface-2`, our replies on white with a 1px ring (`--surface-1`,
   `--shadow-1`), private notes amber.
@@ -120,6 +124,12 @@ focus `#f0b44c`. Every text pair is at least 4.5:1; focus rings and input border
 - Focus is an amber outline, 2 px wide with a 2 px gap (`:focus-visible`). The gap is required:
   amber on `--accent` is low contrast in both themes, so the ring never touches a primary button. In the scrolling
   list the ring is inset (`outline-offset: -2px`) so the next row does not clip it.
+- Form controls share the neutral surface and ink tokens. Every select draws the same chevron from
+  `--select-chevron`, a per-theme token whose stroke equals `--text-3` (checked by
+  `web/scripts/form-controls.test.mjs`); it stays visible when disabled. Checkboxes and radios share
+  one rule in `base.css`: native controls with `accent-color: var(--accent)`, so checked and
+  indeterminate states are ink in both themes; their labels keep readable text when disabled.
+  Forced-colour mode keeps native checkbox and radio rendering and restores the native select arrow.
 - Settings saves show feedback inline, never a toast: the button is disabled and reads "Saving…" while the request runs (a second submit is refused), then a "Saved" line (`role="status"`) or the error (`role="alert"`) appears beside that form. "Saved" clears when the form is edited. `features/settings/save-feedback.tsx` holds the pattern.
 - Status is a dot plus its word. Only High and Urgent priorities get colour, with an arrow icon.
 - Private notes are amber (`--note-*`), on the timeline and in the composer while writing one.

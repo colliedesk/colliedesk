@@ -1,9 +1,7 @@
 name: CodeQL
 
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_call:
   schedule:
     - cron: '17 3 * * 1'
 
@@ -13,6 +11,7 @@ permissions:
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     permissions:
       contents: read
       security-events: write
