@@ -1,11 +1,12 @@
 import { useEffect, useRef } from 'react';
-import type { Tag, TeamMember } from '../../api/schemas';
+import type { Conversation, Tag, TeamMember } from '../../api/schemas';
 import { messages } from '../../messages';
 import { FilterIcon, XIcon } from '../../ui/icons';
 import { zonedDay, zonedDayStart } from '../../lib/zoned-day';
 import { listOf, withoutValue } from '../../lib/inbox-query-edit';
 import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
 import { DraftInput } from './draft-input';
+import { trackFilterChanges } from './filter-analytics';
 import { filterMessages as text } from './filter-messages';
 
 // The Filter menu, the Sort menu and the chips of the active filters. They load on their own chunk, right
@@ -13,13 +14,11 @@ import { filterMessages as text } from './filter-messages';
 
 export interface FilterPartProps {
   query: InboxQuery;
-  // set changes one filter; onChange replaces them all.
-  set: (key: InboxQueryKey, value: string | boolean | undefined) => void;
   onChange?: (query: InboxQuery) => void;
   tags: Tag[];
   agents: TeamMember[];
   timezone: string;
-  contactNames?: ReadonlyMap<string, string>;
+  conversations?: Conversation[];
 }
 
 const priorities = ['urgent', 'high', 'normal', 'low'] as const;
@@ -46,8 +45,22 @@ const menuKeys: InboxQueryKey[] = ['priority', 'assignee', 'tag', 'contact', 'or
   'source', 'channel', 'created_after', 'updated_after'];
 const has = (query: InboxQuery, key: InboxQueryKey) => query[key] !== undefined && query[key] !== '';
 
+// changeOf replaces the filters (reporting what kind changed) and sets one of them.
+function changeOf({ query, onChange }: FilterPartProps) {
+  const change = (next: InboxQuery) => { trackFilterChanges(query, next); onChange?.(next); };
+  const set = (key: InboxQueryKey, value: string | boolean | undefined) => {
+    const next: InboxQuery = { ...query };
+    if (value === undefined || value === '') delete next[key];
+    else (next as Record<string, string | boolean>)[key] = value;
+    if (!next.tag) delete next.tag_match;
+    change(next);
+  };
+  return { change, set };
+}
+
 export function FilterBar(props: FilterPartProps) {
-  const { query, set } = props;
+  const { query } = props;
+  const { set } = changeOf(props);
   const menu = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     const close = (event: PointerEvent) => { if (menu.current?.open && !menu.current.contains(event.target as Node)) menu.current.open = false; };
@@ -79,7 +92,9 @@ export function FilterBar(props: FilterPartProps) {
   );
 }
 
-function FilterPanel({ query, set, tags, agents, timezone }: FilterPartProps) {
+function FilterPanel(props: FilterPartProps) {
+  const { query, tags, agents, timezone } = props;
+  const { set } = changeOf(props);
   const toggle = (key: 'priority' | 'assignee' | 'tag' | 'channel', value: string, on: boolean) => {
     const values = listOf(query, key).filter((item) => item !== value);
     if (on) values.push(value);
@@ -139,7 +154,9 @@ interface Chip {
   label: string;
 }
 
-export function FilterChips({ query, onChange, tags, agents, timezone, contactNames }: FilterPartProps) {
+export function FilterChips(props: FilterPartProps) {
+  const { query, tags, agents, timezone, conversations } = props;
+  const { change: onChange } = changeOf(props);
   const agentName = (id: string) => {
     const agent = agents.find((item) => item.id === id);
     return agent ? agent.display_name || agent.email : text.unknownAgent;
@@ -151,7 +168,7 @@ export function FilterChips({ query, onChange, tags, agents, timezone, contactNa
     ...listOf(query, 'priority').map((value) => ({ key: 'priority' as const, value, label: `${text.priority}: ${messages.priorities[value as keyof typeof messages.priorities] ?? value}` })),
     ...listOf(query, 'assignee').map((value) => ({ key: 'assignee' as const, value, label: `${text.assignee}: ${assigneeLabel(value)}` })),
     ...listOf(query, 'tag').map((value) => ({ key: 'tag' as const, value, label: `${text.tags}: ${tagName(value)}` })),
-    ...(query.contact ? [{ key: 'contact' as const, label: `${text.contact}: ${contactNames?.get(query.contact) ?? text.selectedContact}` }] : []),
+    ...(query.contact ? [{ key: 'contact' as const, label: `${text.contact}: ${conversations?.find((item) => item.contact_id === query.contact)?.contact_name ?? text.selectedContact}` }] : []),
     ...(query.awaiting === 'team' || query.awaiting === 'customer' ? [{ key: 'awaiting' as const, label: `${text.awaiting}: ${text.awaitingOptions[query.awaiting]}` }] : []),
     ...(query.has_pending_draft !== undefined ? [{ key: 'has_pending_draft' as const, label: query.has_pending_draft ? text.hasPendingDraft : text.noPendingDraft }] : []),
     ...(query.delivery_failed !== undefined ? [{ key: 'delivery_failed' as const, label: query.delivery_failed ? text.deliveryFailed : text.noDeliveryFailed }] : []),

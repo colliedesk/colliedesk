@@ -10,7 +10,6 @@ import { contactPart, ContactsPart } from '../contacts/contact-part';
 import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
 import { apiQuery, inboxQueryFromSearch, isDefaultQuery } from '../../lib/inbox-query';
 import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
-import type { InboxFilterKind } from '../../lib/product-analytics';
 import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
@@ -73,10 +72,6 @@ function SavedViewsPart(props: { query: InboxQuery; timezone: string; onApply: (
 // How long a search term stays unchanged before it counts as a finished search, so typing "refund" is one search.
 const searchSettleMs = 800;
 
-// The kind of filter a key belongs to, for analytics: tag_match counts as tag, both ends of a range as one.
-// Search is reported on its own.
-const kindOf = (key: InboxQueryKey) => ({ tag_match: 'tag', has_pending_draft: 'draft', delivery_failed: 'delivery' } as Record<string, string>)[key]
-  ?? key.replace(/_(after|before)$/, '');
 // Typing changes these on every key, so they replace the address instead of adding to the history.
 const typedKeys: InboxQueryKey[] = ['search', 'organization'];
 
@@ -207,12 +202,8 @@ export function InboxRoute() {
   const applyQuery = (next: InboxQuery) => {
     // Typing a search widens the status to All by itself; that is not a choice of the person.
     const typing = (next.search ?? '') !== (filters.search ?? '');
-    const changed = new Set<InboxFilterKind>();
-    for (const key of new Set([...Object.keys(next), ...Object.keys(filters)]) as Set<InboxQueryKey>) {
-      if (key === 'search' || (key === 'status' && typing)) continue;
-      if ((next[key] ?? '') !== (filters[key] ?? '')) changed.add(kindOf(key) as InboxFilterKind);
-    }
-    for (const filter of changed) track('inbox_filtered', { filter });
+    // The menus that change the other filters report them (filter-analytics.ts).
+    if (!typing && (next.status ?? '') !== (filters.status ?? '')) track('inbox_filtered', { filter: 'status' });
     const replace = typedKeys.some((key) => (next[key] ?? '') !== (filters[key] ?? ''));
     void navigate({ to: params.conversationId ? '/conversations/$conversationId' : '/', params: params.conversationId ? { conversationId: params.conversationId } : {}, search: next, replace });
   };

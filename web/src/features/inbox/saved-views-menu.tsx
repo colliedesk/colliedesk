@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { savedViewsApi } from '../../api/saved-views';
+import { trackFilterChanges } from './filter-analytics';
 import { InvalidRequestError } from '../../api/client';
 import type { ConversationFilters, SavedView } from '../../api/schemas';
 import { formatDay } from '../../lib/format-date';
@@ -110,7 +111,8 @@ export function SavedViewsMenu({ query, timezone, onApply }: Pick<SavedViewsMenu
     onSettled: changed });
   const remove = useMutation({ mutationFn: (view: SavedView) => savedViewsApi.remove(view.id), onSettled: changed });
   const restore = useMutation({ mutationFn: (view: SavedView) => savedViewsApi.restore(view.id), onSettled: changed });
-  return <SavedViewsMenuView views={views.data?.items ?? []} trash={trash.data?.items} query={query} timezone={timezone} onApply={onApply}
+  return <SavedViewsMenuView views={views.data?.items ?? []} trash={trash.data?.items} query={query} timezone={timezone}
+    onApply={(next) => { trackFilterChanges(query, next); onApply?.(next); }}
     onOpen={() => setOpened(true)} onOpenTrash={() => setTrashOpened(true)}
     onCreate={(view) => create.mutateAsync(view)} onUpdate={(view, change) => update.mutateAsync({ view, change })}
     onDelete={(view) => remove.mutateAsync(view)} onRestore={(view) => restore.mutateAsync(view)} />;

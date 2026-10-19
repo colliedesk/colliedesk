@@ -82,7 +82,6 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
   // Clearing from the empty list returns to the Open view and puts focus back on the search box.
   const [focusSignal, setFocusSignal] = useState(0);
   const clearFilters = () => { setFocusSignal((current) => current + 1); onQuery?.({}); };
-  const contactNames = useMemo(() => new Map(conversations.map((item) => [item.contact_id, item.contact_name])), [conversations]);
   const detailsToggle = useRef<HTMLButtonElement>(null);
   const listPane = useRef<HTMLElement>(null);
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
@@ -147,7 +146,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
           <div className="list-title" data-collapsed={checkedIds.length > 0 || undefined}><h1>{messages.inbox}</h1><span>{conversations.length}</span>
             {onNewConversation && <button type="button" className="new-conversation-button" data-opens="new-conversation" onClick={onNewConversation}>{messages.newConversation}</button>}</div>
           <div className="list-head" hidden={checkedIds.length > 0}>
-            <InboxFilters query={query} onChange={onQuery} tags={tags} agents={agents} timezone={timezone} contactNames={contactNames} focusSignal={focusSignal}
+            <InboxFilters query={query} onChange={onQuery} tags={tags} agents={agents} timezone={timezone} conversations={conversations} focusSignal={focusSignal}
               views={viewsMenu} />
           </div>
           {checkedIds.length > 0 && <BulkActionBar count={checkedIds.length} agents={agents} tags={tags} currentAgentId={currentAgentId}

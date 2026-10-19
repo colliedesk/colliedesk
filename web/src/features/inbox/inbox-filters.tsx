@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { messages } from '../../messages';
-import type { Tag, TeamMember } from '../../api/schemas';
+import type { Conversation, Tag, TeamMember } from '../../api/schemas';
 import { SearchIcon } from '../../ui/icons';
 import { allStatuses, defaultStatus } from '../../lib/inbox-query';
-import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
+import type { InboxQuery } from '../../lib/inbox-query';
 import { DraftInput } from './draft-input';
 import type { FilterPartProps } from './filter-panel';
 import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
@@ -16,8 +16,8 @@ interface InboxFiltersProps {
   agents?: TeamMember[];
   // Dates are picked as calendar days in this timezone and sent as UTC instants.
   timezone?: string;
-  // Names of the contacts in the list, so a customer filter reads as a name.
-  contactNames?: ReadonlyMap<string, string>;
+  // The rows on screen, so a customer filter reads as the customer's name.
+  conversations?: Conversation[];
   focusSearch?: boolean;
   // Bumped to move focus to the search box, for example after the list's Clear filters.
   focusSignal?: number;
@@ -53,13 +53,12 @@ const ownControls = ['status', 'sort', 'search'];
 // Search and the Filter menu sit above the status tabs, in the same order on screen and for Tab.
 // Status is the view an agent switches most, so it is a row of tabs; everything else shares one
 // Filter menu that counts what is on, and each active filter shows as a chip that removes it.
-export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'UTC', contactNames, focusSearch = false, focusSignal = 0, views }: InboxFiltersProps) {
+export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'UTC', conversations, focusSearch = false, focusSignal = 0, views }: InboxFiltersProps) {
   const search = useRef<HTMLInputElement>(null);
-  const set = (key: InboxQueryKey, value: string | boolean | undefined) => {
-    const next: InboxQuery = { ...query };
-    if (value === undefined || value === '') delete next[key];
-    else (next as Record<string, string | boolean>)[key] = value;
-    if (!next.tag) delete next.tag_match;
+  const setStatus = (value: string) => {
+    const next: InboxQuery = { ...query, status: value };
+    // Open with no status picked stays the default address.
+    if (value === defaultStatus && query.status === undefined) delete next.status;
     onChange?.(next);
   };
   const onSearch = (value: string) => {
@@ -72,7 +71,7 @@ export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'U
   useEffect(() => {
     if (focusSignal > 0) search.current?.focus();
   }, [focusSignal]);
-  const part = { query, set, onChange, tags, agents, timezone, contactNames };
+  const part = { query, onChange, tags, agents, timezone, conversations };
   const status = query.status ?? defaultStatus;
   return (
     // A search region, not a form: the saved views menu inside it has forms of its own, and a form inside a
@@ -88,7 +87,7 @@ export function InboxFilters({ query, onChange, tags, agents = [], timezone = 'U
       </div>
       <div className="status-tabs" role="radiogroup" aria-label={messages.status}>
         {statusTabs.map(([value, label]) => (
-          <label key={value}><input type="radio" name="status" value={value} checked={status === value} onChange={() => set('status', value === defaultStatus && query.status === undefined ? undefined : value)} /><span>{label}</span></label>
+          <label key={value}><input type="radio" name="status" value={value} checked={status === value} onChange={() => setStatus(value)} /><span>{label}</span></label>
         ))}
       </div>
       {Object.keys(query).some((key) => !ownControls.includes(key)) && <FilterChipsPart {...part} />}
