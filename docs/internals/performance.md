@@ -77,3 +77,5 @@ The email-layout fixtures reload after the inbound API creates their synthetic e
 Independent guards run before the final gate; full vet and migration validation run once on the latency runner.
 
 Image builds use a fresh builder without a remote layer cache: the measured cache restore/export cost exceeded the rebuild savings. Keep image boot, real installer and compose smoke checks before publishing.
+
+Measured on 2026-10-19: the original PR CI took 370 seconds. Removing idle polling reduced the browser step from 248 to 56 seconds before parallel workers; removing the remote image cache reduced its build from 103 to 54 seconds. The final partition's [full run](https://github.com/colliedesk/colliedesk/actions/runs/39260278182) passed every test and security job, but the phase gate rejected its 199 seconds: 84 seconds waiting for the previous run, then 115 seconds through the final job. These numbers do **not** establish budget compliance. Go CodeQL was the longest execution job at 107 seconds. The workflow has no Go, pnpm or Docker GHA cache to warm; acceptance requires the completed phase clock, never execution time with the queue subtracted.
