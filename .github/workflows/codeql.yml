@@ -39,6 +39,12 @@ jobs:
       - if: matrix.build-mode == 'manual'
         working-directory: server
         run: go build ./...
+      - if: matrix.build-mode == 'manual'
+        name: TEMP extraction coverage
+        run: |
+          echo "trap files: $(find "$RUNNER_TEMP/codeql_databases/go/trap" -type f | wc -l)"
+          echo "trap source paths: $(find "$RUNNER_TEMP/codeql_databases/go/trap" -type f -path '*colliedesk*' | wc -l)"
+          find "$RUNNER_TEMP/codeql_databases/go/trap" -type f | sed 's#.*/trap/go/##' | sort | sha256sum
       - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           category: /language:${{ matrix.language }}
