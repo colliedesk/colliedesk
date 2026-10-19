@@ -26,6 +26,8 @@ var lockedAllowed = map[string]bool{
 	"POST /api/v1/export/link":           true,
 	"DELETE /api/v1/channels/email":      true,
 	"POST /api/v1/channels/email/secret": true,
+	// A locked workspace can still take back Colliedesk's access to its Gmail account.
+	"DELETE " + gmailPath: true,
 	// A customer locked out after the trial may be the one who most needs to report a problem.
 	"POST /api/v1/support/problem-reports": true,
 }

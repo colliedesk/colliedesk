@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from '@tanstack/react-router';
+import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { api } from '../../api/client';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
-import { defaultInboxFilters } from './inbox-filters';
+import { contactPart, ContactsPart } from '../contacts/contact-part';
+import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
+import { apiQuery, inboxQueryFromSearch, isDefaultQuery } from '../../lib/inbox-query';
+import type { InboxQuery, InboxQueryKey } from '../../lib/inbox-query';
 import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
+import { outboundNotice } from './outbound-notice';
 import { retryRefusalText } from './refusal-text';
 import { usePendingRequests } from '../requests/use-pending-requests';
 
@@ -27,25 +32,68 @@ function bulkActionOf(changes: BulkConversationChanges): 'status' | 'assign' | '
   return undefined;
 }
 
+
+// StartUnavailable stands in for the window when its chunk cannot load: it takes the focus, and Escape or
+// Close give it back to the New conversation button, so a broken network never strands the page.
+function StartUnavailable({ onClose }: { onClose: () => void }) {
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => root.current?.focus(), []);
+  const close = () => { onClose(); document.querySelector<HTMLElement>('[data-opens="new-conversation"]')?.focus(); };
+  const keys = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') close();
+    if (event.key !== 'Tab') return;
+    // Two buttons only, so Tab and Shift+Tab both just swap between them (not the full dialogKeys trap).
+    const buttons = root.current?.querySelectorAll('button') ?? [];
+    event.preventDefault();
+    (buttons[document.activeElement === buttons[0] ? 1 : 0] as HTMLElement | undefined)?.focus();
+  };
+  // Like the window it replaces, a click on the backdrop does not close it; it does not take the focus
+  // either, so Escape still reaches this window.
+  return <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) event.preventDefault(); }}>
+    <div className="dialog" role="alertdialog" aria-modal="true" aria-label={messages.newConversation} aria-describedby="start-unavailable" tabIndex={-1} ref={root}
+      onKeyDown={keys}>
+      <div id="start-unavailable"><PartUnavailable /></div>
+      <div className="button-row"><button type="button" onClick={close}>{messages.reportClose}</button></div>
+    </div>
+  </div>;
+}
+
+
+// The views menu loads on its own chunk, so the first screen does not wait for it; until then its button
+// shows, disabled. It asks for its data only when it opens.
+const viewsPart = lazyPart(() => import('./saved-views-menu'));
+
+function SavedViewsPart(props: { query: InboxQuery; timezone: string; onApply: (query: InboxQuery) => void }) {
+  const part = viewsPart.use();
+  if (part.status === 'ready') return <part.module.SavedViewsMenu {...props} />;
+  return part.status === 'error' ? <PartUnavailable /> : <span className="filter-menu views-menu"><button type="button" disabled>{messages.savedViewsTitle}</button></span>;
+}
+
 // How long a search term stays unchanged before it counts as a finished search, so typing "refund" is one search.
 const searchSettleMs = 800;
+
+// Typing changes these on every key, so they replace the address instead of adding to the history.
+const typedKeys: InboxQueryKey[] = ['search', 'organization'];
 
 export function InboxRoute() {
   const client = useQueryClient();
   const navigate = useNavigate();
   const params = useParams({ strict: false }) as { conversationId?: string };
-  const [filters, setFilters] = useState<Record<string, string>>({ ...defaultInboxFilters });
-  const [page, setPage] = useState(1);
+  const search = useSearch({ strict: false });
+  const filters = useMemo(() => inboxQueryFromSearch(search), [search]);
+  const filterKey = apiQuery(filters, 1);
+  // A page belongs to the filters it was turned for; new filters start on page 1.
+  const [paging, setPaging] = useState({ key: filterKey, page: 1 });
+  const page = paging.key === filterKey ? paging.page : 1;
+  const setPage = (next: number) => setPaging({ key: filterKey, page: next });
   const [selectedId, setSelectedId] = useState<string>();
-  const query = useMemo(() => {
-    const values = new URLSearchParams(Object.entries(filters).filter(([, value]) => value));
-    values.set('page', String(page));
-    values.set('page_size', '50');
-    return values.toString();
-  }, [filters, page]);
+  const query = useMemo(() => apiQuery(filters, page), [filters, page]);
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
+  // Opening a customer or a new conversation then waits for no download; a failure shows where it is used.
+  // Once the inbox is idle, so opening a customer or a new conversation waits for no download.
+  useEffect(() => { (window.requestIdleCallback ?? ((load: () => void) => setTimeout(load, 1000)))(contactPart.preload); }, []);
   // Always refetch when the inbox opens: mail may have arrived while the agent was in Settings.
-  const conversations = useQuery({ queryKey: ['conversations', query], queryFn: () => api.conversations(query), refetchOnMount: 'always',
+  const conversations = useQuery({ queryKey: ['conversations', query], queryFn: ({ signal }) => api.conversations(query, signal), refetchOnMount: 'always',
     // A new search or filter keeps the old rows on screen until its response arrives.
     placeholderData: keepPreviousData });
   // A search is reported once its term settled and its answer arrived: whether it found anything, never the term.
@@ -66,10 +114,9 @@ export function InboxRoute() {
     reportedOpen.current = id;
     track('conversation_opened', { source: 'link' });
   }, [params.conversationId, selectedId]);
-  const narrowed = Boolean(filters.search || filters.assignee || filters.tag);
-  const filtered = narrowed || !['', defaultInboxFilters.status].includes(filters.status ?? '');
+  const filtered = !isDefaultQuery(filters);
   // An empty Open view is either a new workspace or one that is caught up; one row of All tells which.
-  const checkAny = !narrowed && filters.status === defaultInboxFilters.status && page === 1 && conversations.data?.items.length === 0;
+  const checkAny = !filtered && page === 1 && conversations.data?.items.length === 0;
   const anyConversation = useQuery({ queryKey: ['conversations', 'any'], queryFn: () => api.conversations('page=1&page_size=1'), enabled: checkAny });
   // A failed check is not proof of an empty workspace, so it never shows the new-workspace steps.
   const nothingOpen = checkAny && (anyConversation.isError || (anyConversation.data?.items.length ?? 0) > 0);
@@ -115,9 +162,15 @@ export function InboxRoute() {
   // Shared with the app shell, so the limits cost no extra request.
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
   const limits = config?.limits;
-  const outbound = emailChannel.data;
-  const outboundNotice = outbound?.channel && outbound.sending_from === null
-    ? (outbound.smtp.configured ? messages.outboundNeedsVerification : messages.outboundNotConfigured) : undefined;
+  const outbound = outboundNotice(emailChannel.data, me.data?.agent?.role === 'admin');
+  // A reply that just failed may mean Gmail stopped sending; the channel is read again so the notice above
+  // the composer follows without a reload.
+  const failedDeliveries = timeline.data?.items.filter((item) => item.delivery?.status === 'failed').map((item) => item.id).join(',') ?? '';
+  useEffect(() => {
+    if (failedDeliveries) void client.invalidateQueries({ queryKey: ['email-channel'] });
+  }, [client, failedDeliveries]);
+  const [starting, setStarting] = useState(false);
+  const openContact = (contactId: string) => void navigate({ to: '/contacts/$contactId', params: { contactId } });
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
   const agentId = me.data?.agent?.id;
@@ -146,19 +199,23 @@ export function InboxRoute() {
     onSuccess: (retried) => client.invalidateQueries({ queryKey: ['messages', retried.conversation_id] }) });
   // A refusal belongs to the conversation it happened in; opening another one hides it.
   const retryError = retryDelivery.isError && retryDelivery.variables?.conversationId === selected?.id ? retryDelivery.error : undefined;
-  return <InboxPage hosted={config?.billing.enabled ?? false} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
+  const applyQuery = (next: InboxQuery) => {
+    // Typing a search widens the status to All by itself; that is not a choice of the person.
+    const typing = (next.search ?? '') !== (filters.search ?? '');
+    // The menus that change the other filters report them (filter-analytics.ts).
+    if (!typing && (next.status ?? '') !== (filters.status ?? '')) track('inbox_filtered', { filter: 'status' });
+    const replace = typedKeys.some((key) => (next[key] ?? '') !== (filters[key] ?? ''));
+    void navigate({ to: params.conversationId ? '/conversations/$conversationId' : '/', params: params.conversationId ? { conversationId: params.conversationId } : {}, search: next, replace });
+  };
+  return <><InboxPage hosted={config?.billing.enabled ?? false} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
     agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone}
     page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} onPage={setPage}
-    onSelect={(id) => { reportedOpen.current = id; track('conversation_opened', { source: 'list' }); setSelectedId(id); navigate({ to: '/conversations/$conversationId', params: { conversationId: id } }); }}
-    onFilters={(values) => {
-      // Typing a search widens the status to All by itself; that is not a choice of the person.
-      const typing = (values.search ?? '') !== (filters.search ?? '');
-      for (const filter of ['status', 'assignee', 'tag'] as const) {
-        if (filter === 'status' && typing) continue;
-        if ((values[filter] ?? '') !== (filters[filter] ?? '')) track('inbox_filtered', { filter });
-      }
-      setFilters(values); setPage(1);
-    }} onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
+    // Opening a conversation keeps the filters in the address, so Back returns to the same list.
+    onSelect={(id) => { reportedOpen.current = id; track('conversation_opened', { source: 'list' }); setSelectedId(id); navigate({ to: '/conversations/$conversationId', params: { conversationId: id }, search: filters }); }}
+    query={filters}
+    viewsMenu={<SavedViewsPart query={filters} timezone={me.data?.timezone ?? 'UTC'} onApply={applyQuery} />}
+    onQuery={applyQuery}
+    onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body, files, cc) => message.mutateAsync({ kind, body, files, cc })}
@@ -167,7 +224,7 @@ export function InboxRoute() {
     // A new tab, so the draft and the files in this reply box stay where they are.
     onManageSavedReplies={() => { window.open('/settings', '_blank', 'noopener'); }}
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
-    outboundNotice={outboundNotice} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
+    outboundNotice={outbound} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}
     conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError} onRetry={() => void conversations.refetch()}
@@ -183,5 +240,11 @@ export function InboxRoute() {
       // Approved but refused by the reply route (for example the trial's limits): say why, the draft is spent.
       setDraftNotice(outcome.request.status === 'failed' ? messages.draftRefused(errorMessage(outcome.result)) : undefined);
     }}
-    onDiscardDraft={async (draft) => { await api.rejectAgentRequest(draft.id); track('agent_request_decided', { decision: 'rejected' }); await afterDraft(draft.conversation_id); }} />;
+    onDiscardDraft={async (draft) => { await api.rejectAgentRequest(draft.id); track('agent_request_decided', { decision: 'rejected' }); await afterDraft(draft.conversation_id); }}
+    contactMatches={searchTerm.trim() && <ContactsPart render={(chunk) => <chunk.ContactMatches search={searchTerm} onOpenContact={openContact} />} />}
+    onOpenContact={openContact}
+    onNewConversation={() => setStarting(true)} />
+    {starting && <ContactsPart failed={<StartUnavailable onClose={() => setStarting(false)} />}
+      render={(chunk) => <chunk.StartConversationWindow onClose={() => setStarting(false)} onStarted={setSelectedId} />} />}
+  </>;
 }

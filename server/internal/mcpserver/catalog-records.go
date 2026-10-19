@@ -80,16 +80,18 @@ func contactGetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_contact_get",
 		Title: "Read a customer",
-		Description: `Read one customer (contact) and their conversations, most recently active first. ` +
-			`Returns up to limit conversations and conversations_total. Find the id with colliedesk_contacts_find or in colliedesk_conversation_get (contact_id, detail full).` +
+		Description: `Read one customer (contact) and their conversations (any status, imported ones included), most recently active first. ` +
+			`Returns up to limit conversations and conversations_total. Find the id with colliedesk_contacts_find or in colliedesk_conversation_get (contact_id, detail full). ` +
+			`merged_into_id names the customer this one was merged into (its conversations are there); merges lists the duplicates merged into this one, each undone with colliedesk_contact_unmerge.` +
 			"\n\n" + untrustedNotice + "\n\nTier: read.",
 		Tier: "read", ReadOnly: true,
-		REST: []string{"GET /api/v1/contacts/{id}", "GET /api/v1/agents", "GET /api/v1/auth/me"},
+		REST: []string{"GET /api/v1/contacts/{id}", "GET /api/v1/conversations", "GET /api/v1/agents", "GET /api/v1/auth/me"},
 		Input: `{"type":"object","additionalProperties":false,"required":["contact_id"],"properties":{` +
 			`"contact_id":{"type":"string",` + uuid + `},"limit":{"type":"integer","minimum":1,"maximum":100,"default":20,"description":"Conversations to return."}}}`,
-		Output: `{"type":"object","required":["contact","conversations","conversations_total","timezone"],"properties":{` +
+		Output: `{"type":"object","required":["contact","conversations","conversations_total","merged_into_id","merges","timezone"],"properties":{` +
 			`"contact":` + contactRowSchema + `,"conversations":{"type":"array","items":` + conversationRowSchema + `},` +
-			`"conversations_total":{"type":"integer"},"timezone":{"type":"string"}}}`,
+			`"conversations_total":{"type":"integer"},"merged_into_id":{"type":["string","null"]},` +
+			`"merges":{"type":"array","items":` + contactMergeSchema + `},"timezone":{"type":"string"}}}`,
 		run: contactGet,
 	}
 }

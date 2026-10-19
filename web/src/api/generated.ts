@@ -197,8 +197,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description Every filter narrows the list. A filter that takes several values (comma-separated) matches any of them, except `tag` with `tag_match=all`. A value the server does not know answers 400 instead of an empty page. Times are RFC 3339 and compared as instants: `*_after` includes the instant, `*_before` excludes it. Rows with the same sort key are ordered by id, so pages never repeat or skip a row while nothing changes. */
         get: operations["listConversations"];
         put?: never;
+        /**
+         * @description Open a conversation with a contact. With only `contact_id` and `subject` it is empty and nothing is sent. With `body` it starts with an outgoing reply that is emailed to the contact (and `cc`), in the same transaction: when the reply is refused (trial rules, Cc rules, attachment limits, no email channel) nothing is stored, not even the conversation. The email carries the subject as written (no "Re:") and a Message-ID and reply address that thread the customer's answer back into this conversation.
+         *
+         *     Send `multipart/form-data` to attach files: fields `contact_id`, `subject`, `body`, one `cc` field per address, then repeated `files` parts, with the limits of `POST /conversations/{id}/messages`. `cc` follows the rules of a reply. On the trial a new conversation reaches a customer who never wrote in, so it is refused with 403 `trial_outbound_restricted` until the sending domain is verified or a plan is chosen. A workspace without an email channel answers 409 `email_channel_missing`. A contact merged into another answers 409 `contact_merged`. A customer added with the conversation (`contact`) is written in the same transaction; an address that is already a customer answers 409 `contact_exists` with the `contact` to use.
+         */
         post: operations["createConversation"];
         delete?: never;
         options?: never;
@@ -341,6 +347,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/channels/email/gmail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Start connecting the workspace's Gmail account, so replies are sent through the Gmail API from that address and kept in its Sent folder. Incoming mail still arrives by forwarding. Answers Google's consent address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Google then sends that browser to `GET /api/v1/channels/email/gmail/callback`, which finishes only for the same signed-in person. Google is asked for `gmail.send` and `openid email` (the address that connected) and nothing that reads mail. Connecting again replaces the earlier account and revokes its grant. 409 `email_channel_missing` without an email channel; 409 `gmail_not_configured` when the server lacks its Google settings (`gmail.missing_settings` in the channel settings names them). An agent token gets an agent request; the person who approves receives the consent address. */
+        post: operations["connectGmail"];
+        /** @description Disconnect Gmail: the grant is removed here and revoked at Google. Replies are then sent the way the workspace sent before connecting (SMTP); a reply still queued for Gmail fails with the reason and can be retried. A locked workspace may disconnect. */
+        delete: operations["disconnectGmail"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/channels/email/gmail/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Google's redirect after the consent screen
+         * @description Opened by the browser Google redirects, never by an API client. It needs the session cookie of the admin who started the connection (a bearer token is not accepted) and the unused `state` of that start; the state is looked up in that person's workspace only. Every outcome is a 303 to `/settings`: `?gmail=connected`, or `?gmail_error=<reason>` with `signed_out` (no session cookie), `forbidden` (not an admin, or the workspace is locked), `expired` (state unknown, used, from another workspace or older than 10 minutes), `wrong_person` (someone else started it), `denied` (consent cancelled at Google), `send_not_granted` (the "send email" permission was unticked), `no_refresh_token`, `no_address` (Google named no verified address), `email_channel_missing` and `google_unavailable`. Google's own error text is never echoed.
+         */
+        get: operations["finishGmailConnect"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/channels/email/inbound": {
         parameters: {
             query?: never;
@@ -472,10 +516,57 @@ export interface paths {
             };
             cookie?: never;
         };
+        /** @description The contact, how many conversations it has, the contacts merged into it, and the contact it was merged into. Read its conversations a page at a time with `GET /conversations?contact={id}`. */
         get: operations["getContact"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Rename the contact. The name is what the team sees and the display name of the `To` line of later emails; the email address does not change. Rename it again to undo. */
+        patch: operations["updateContact"];
+        trace?: never;
+    };
+    "/api/v1/contacts/{id}/merges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge a duplicate contact into this one
+         * @description Moves every conversation of the duplicate (`contact_id`) to this contact and marks the duplicate as merged into it. Nothing is deleted: the duplicate keeps its name and email, mail from its address joins this contact from now on, and replies on the moved conversations go to this contact's email. Undo it with `DELETE /contacts/{id}/merges/{mergeId}`. The duplicate must not be this contact, merged already, or have contacts merged into it; this contact must not be merged. 409 `contact_merged` says which.
+         */
+        post: operations["mergeContact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/contacts/{id}/merges/{mergeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                mergeId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Undo a merge
+         * @description Moves back to the duplicate every conversation the merge moved that is still on this contact, and makes the duplicate a contact of its own again. Conversations that arrived after the merge stay here. A merge already undone answers 409.
+         */
+        delete: operations["unmergeContact"];
         options?: never;
         head?: never;
         patch?: never;
@@ -615,6 +706,80 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateTag"];
+        trace?: never;
+    };
+    "/api/v1/saved-views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The inbox views the caller can use: the views shared with the whole workspace, then the caller's own personal views, each group ordered by name ignoring case. A deleted view is not listed here (see `GET /api/v1/saved-views/trash`). */
+        get: operations["listSavedViews"];
+        put?: never;
+        /** @description Saves a set of inbox filters under a name. A personal view is seen only by the person who saved it; a shared view by everyone in the workspace, and anyone may change or delete it. Names are unique ignoring case among the caller's personal views and among the shared views (409). Each person keeps at most 50 personal views and a workspace at most 50 shared ones (409). */
+        post: operations["createSavedView"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/saved-views/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Views deleted in the last 30 days that the caller could see, newest deletion first. Each can be restored with `POST /api/v1/saved-views/{id}/restore` until `purges_at`; after that it is gone. */
+        get: operations["listDeletedSavedViews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/saved-views/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Moves the view to the trash for 30 days; `POST /api/v1/saved-views/{id}/restore` brings it back. No conversation changes. Deleting a view already in the trash answers it unchanged. */
+        delete: operations["deleteSavedView"];
+        options?: never;
+        head?: never;
+        /** @description Renames a view, replaces its filters or changes who sees it. Send the `updated_at` you last read: if someone saved the view since, nothing changes and the answer is 409 `changed_elsewhere`. Only the owner of a personal view may change it or share it; making a shared view personal gives it to the caller. Another person's personal view answers 404, like a view that does not exist. */
+        patch: operations["updateSavedView"];
+        trace?: never;
+    };
+    "/api/v1/saved-views/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Brings a deleted view back; a view that is not in the trash is answered unchanged. Answers 409 when a live view of the same group now has its name, or the group is full; rename or delete that one first. */
+        post: operations["restoreSavedView"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/saved-replies": {
@@ -1269,6 +1434,85 @@ export interface components {
         ConversationStatus: "open" | "pending" | "resolved" | "closed";
         /** @enum {string} */
         Priority: "low" | "normal" | "high" | "urgent";
+        /**
+         * @description How the conversation started. email: a customer's mail. web_form: the public web form. imported: brought over from another helpdesk (its original channel is in origin.source). agent: a team member started it in Colliedesk; an older image that does not know this field also writes agent. problem_report: an agent's Report a problem.
+         * @enum {string}
+         */
+        ConversationChannel: "email" | "web_form" | "imported" | "agent" | "problem_report";
+        /**
+         * @default updated_desc
+         * @enum {string}
+         */
+        ConversationSort: "updated_desc" | "updated_asc" | "created_desc" | "created_asc" | "priority" | "waiting_longest";
+        /** @description The filters of `GET /api/v1/conversations` as one object; a list holds the values the query string separates with commas. An empty object is every conversation, most recently updated first. */
+        ConversationFilters: {
+            status?: components["schemas"]["ConversationStatus"][];
+            priority?: components["schemas"]["Priority"][];
+            assignee?: string[];
+            tag?: string[];
+            /** @enum {string} */
+            tag_match?: "any" | "all";
+            /** Format: uuid */
+            contact?: string;
+            organization?: string;
+            /** @enum {string} */
+            awaiting?: "team" | "customer";
+            has_pending_draft?: boolean;
+            delivery_failed?: boolean;
+            /** @enum {string} */
+            source?: "imported" | "native";
+            channel?: components["schemas"]["ConversationChannel"][];
+            /** Format: date-time */
+            created_after?: string;
+            /** Format: date-time */
+            created_before?: string;
+            /** Format: date-time */
+            updated_after?: string;
+            /** Format: date-time */
+            updated_before?: string;
+            sort?: components["schemas"]["ConversationSort"];
+            search?: string;
+        };
+        /** @enum {string} */
+        SavedViewScope: "personal" | "shared";
+        SavedViewInput: {
+            name: string;
+            scope: components["schemas"]["SavedViewScope"];
+            filters: components["schemas"]["ConversationFilters"];
+        };
+        SavedViewChange: {
+            /**
+             * Format: date-time
+             * @description The updated_at of the view as the caller last read it. If someone saved it since, nothing changes (409 changed_elsewhere).
+             */
+            updated_at: string;
+            name?: string;
+            scope?: components["schemas"]["SavedViewScope"];
+            filters?: components["schemas"]["ConversationFilters"];
+        };
+        SavedView: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            scope: components["schemas"]["SavedViewScope"];
+            filters: components["schemas"]["ConversationFilters"];
+            /**
+             * Format: uuid
+             * @description The person a personal view belongs to; null for a shared view.
+             */
+            owner_agent_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            deleted_at: string | null;
+            /**
+             * Format: date-time
+             * @description When a deleted view is removed for good.
+             */
+            purges_at: string | null;
+        };
         Workspace: {
             /** Format: uuid */
             id: string;
@@ -1332,7 +1576,7 @@ export interface components {
             };
         };
         /**
-         * @description Tier of an agent token. `read`: read what an agent may read, including the session and invite lists and the channel settings without links or secrets. `draft`: also change status, priority, assignee and tags of a conversation, create tags, add private notes and set the owner's own timezone. `send`: also send and retry replies, rename and delete tags, create contacts and conversations, and write saved replies. `admin`: also workspace settings, the team, revoking invites, the web form and email channel, and sessions; it acts with the creator's role, so only an admin can create it and it loses admin rights when its creator is demoted.
+         * @description Tier of an agent token. `read`: read what an agent may read, including the session and invite lists and the channel settings without links or secrets. `draft`: also change status, priority, assignee and tags of a conversation, create tags, add private notes and set the owner's own timezone. `send`: also send and retry replies, rename and delete tags, create, rename and merge contacts, create conversations, and write saved replies. `admin`: also workspace settings, the team, revoking invites, the web form and email channel, and sessions; it acts with the creator's role, so only an admin can create it and it loses admin rights when its creator is demoted.
          * @enum {string}
          */
         TokenScope: "read" | "draft" | "send" | "admin";
@@ -1387,13 +1631,41 @@ export interface components {
             email: string;
             /** @description Company or organization name, for example imported from a Freshdesk company */
             organization: string | null;
+            /**
+             * Format: uuid
+             * @description The contact this one was merged into; null for a contact of its own
+             */
+            merged_into_id: string | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
         };
         ContactDetail: components["schemas"]["Contact"] & {
-            conversations: components["schemas"]["Conversation"][];
+            /** @description Conversations of the contact, any status, imported ones included */
+            conversation_count: number;
+            /** @description The contact this one was merged into, or null. Its conversations and new mail are there. */
+            merged_into: null | components["schemas"]["Contact"];
+            /** @description Contacts merged into this one and not undone, newest first */
+            merges: components["schemas"]["ContactMerge"][];
+        };
+        ContactMerge: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description The contact that was kept
+             */
+            contact_id: string;
+            merged_contact: components["schemas"]["Contact"];
+            /** @description The conversations the merge moved; undoing it moves back those still on the kept contact */
+            conversation_ids: string[];
+            /** Format: uuid */
+            merged_by_agent_id: string | null;
+            /** Format: date-time */
+            merged_at: string;
+            /** Format: date-time */
+            undone_at: string | null;
         };
         Tag: {
             /** Format: uuid */
@@ -1508,6 +1780,7 @@ export interface components {
             /** Format: uuid */
             assignee_id: string | null;
             tags: components["schemas"]["Tag"][];
+            channel: components["schemas"]["ConversationChannel"];
             /** @description Where an imported conversation came from; null for conversations created in Colliedesk. */
             origin: null | components["schemas"]["ConversationOrigin"];
             /** Format: date-time */
@@ -1757,6 +2030,7 @@ export interface components {
             authenticated: boolean;
         };
         EmailChannelSettings: {
+            gmail: components["schemas"]["GmailSettings"];
             /** @description Set when the workspace's email sending is paused after spam complaints (3 or more in 7 days and more than 0.3% of the replies sent). Replies can still be written; they stay queued with a note until an operator resumes sending with `collie email resume`. Admins cannot clear it. */
             sending_pause: null | components["schemas"]["EmailSendingPause"];
             /**
@@ -1771,12 +2045,48 @@ export interface components {
              * @enum {string}
              */
             from_policy: "verified" | "any";
-            /** @description The From address replies use now; null when replies cannot be emailed. */
+            /** @description The From address replies use now; null when replies cannot be emailed. With Gmail connected it is the Gmail address, and null while that connection has failed (replies never fall back to SMTP then). */
             sending_from: string | null;
             channel: null | components["schemas"]["EmailChannel"];
             /** Format: uri */
             inbound_url: string;
             smtp: components["schemas"]["SMTPStatus"];
+        };
+        GmailSettings: {
+            /** @description Whether this server can connect Gmail (its operator set the Google OAuth client and token keys). */
+            available: boolean;
+            /** @description The server settings still needed before Gmail can be connected; empty when available. */
+            missing_settings: ("GOOGLE_OAUTH_CLIENT_ID" | "GOOGLE_OAUTH_CLIENT_SECRET" | "MAILBOX_TOKEN_KEYS")[];
+            /**
+             * Format: uri
+             * @description The redirect URI to register on the OAuth client in Google Cloud console.
+             */
+            redirect_uri: string;
+            connection: null | components["schemas"]["MailboxConnection"];
+        };
+        MailboxConnection: {
+            /** @enum {string} */
+            provider: "google";
+            /**
+             * Format: email
+             * @description The Google account replies are sent from.
+             */
+            address: string;
+            /**
+             * @description `failed` when Google stopped honouring the grant: replies fail with `error` until an admin reconnects.
+             * @enum {string}
+             */
+            status: "connected" | "failed";
+            /**
+             * @description revoked: Google refuses the grant. permission: Gmail refuses to send for it.
+             * @enum {string|null}
+             */
+            error_code: "revoked" | "permission" | null;
+            error: string | null;
+            /** Format: date-time */
+            failed_at: string | null;
+            /** Format: date-time */
+            connected_at: string;
         };
         InboundEmailResult: {
             /** @enum {string} */
@@ -1841,6 +2151,15 @@ export interface components {
                 retry_after_seconds?: number;
                 /** @description Only on trial_outbound_restricted caused by Cc: exactly the addresses the trial refused to copy. */
                 refused_cc?: string[];
+                /**
+                 * @description Only on trial_outbound_restricted when the customer wrote first, but from another address than the contact's (a contact merged into this one): the reply would go to `reply_to`, which never wrote.
+                 * @enum {string}
+                 */
+                reason?: "contact_address_differs";
+                /** @description Only with reason contact_address_differs: the address the reply would go to. */
+                reply_to?: string;
+                /** @description Only on contact_exists: the contact to use instead of adding one. */
+                contact?: components["schemas"]["Contact"];
             };
         };
     };
@@ -1908,6 +2227,18 @@ export interface components {
         };
         /** @description A single-use URL on the billing provider */
         BillingLink: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": {
+                    /** Format: uri */
+                    url: string;
+                };
+            };
+        };
+        /** @description The provider's consent address for the person who started the connection, valid 10 minutes */
+        ConsentLink: {
             headers: {
                 [name: string]: unknown;
             };
@@ -2046,7 +2377,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Permission or CSRF check failed. An agent token on a route closed to every token gets error code `scope_insufficient`, and `person_only` on a decision only a person makes (approving or rejecting an agent request); a token below a route's tier gets 202 instead (an agent request). A call with files that would need approval gets `files_need_approval`. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them); nothing was stored. */
+        /** @description Permission or CSRF check failed. An agent token on a route closed to every token gets error code `scope_insufficient`, and `person_only` on a decision only a person makes (approving or rejecting an agent request); a token below a route's tier gets 202 instead (an agent request). A call with files that would need approval gets `files_need_approval`. On `POST /conversations/{id}/messages` a trial workspace gets error code `trial_outbound_restricted` for a reply to a conversation the customer did not start (unless it verified its sending domain), or for a `cc` address the customer never wrote from or copied (then `refused_cc` lists them), or when the customer wrote from another address than the contact's after a merge (then `reason` is `contact_address_differs` and `reply_to` names the contact's address); nothing was stored. */
         Error403: {
             headers: {
                 [name: string]: unknown;
@@ -2422,9 +2753,37 @@ export interface operations {
     listConversations: {
         parameters: {
             query?: {
-                status?: components["schemas"]["ConversationStatus"];
-                assignee?: "me" | "unassigned" | "anyone";
+                /** @description One status or several, comma-separated: open,pending. */
+                status?: string;
+                /** @description One priority or several, comma-separated: high,urgent. */
+                priority?: string;
+                /** @description Comma-separated. me (the caller), unassigned, anyone (assigned to somebody) or the id of a team member of this workspace. */
+                assignee?: string;
+                /** @description One tag id or several, comma-separated. */
                 tag?: string;
+                /** @description any (default): a conversation with one of the tags. all: with every tag. */
+                tag_match?: "any" | "all";
+                /** @description Only the conversations of this contact (any status unless `status` is given), for the contact's history. An id of another workspace's contact returns no rows; a value that is not a UUID answers 400. */
+                contact?: string;
+                /** @description Only conversations of contacts whose organization has this name, ignoring case. */
+                organization?: string;
+                /** @description team: the newest message that is not a note came from the customer, so the team owes an answer. customer: the newest such message is a reply of the team. A conversation without such a message matches neither. */
+                awaiting?: "team" | "customer";
+                /** @description true: an AI agent left a reply draft that waits for a person. false: none waits. */
+                has_pending_draft?: boolean;
+                /** @description true: a reply of the conversation could not be delivered by email and was not retried since. false: none. */
+                delivery_failed?: boolean;
+                /** @description imported (from another helpdesk) or native (created in Colliedesk). */
+                source?: "imported" | "native";
+                /** @description One channel or several, comma-separated (see `ConversationChannel`). */
+                channel?: string;
+                created_after?: string;
+                created_before?: string;
+                updated_after?: string;
+                updated_before?: string;
+                /** @description updated_desc (default), updated_asc, created_desc, created_asc, priority (urgent first, then the most recently updated), waiting_longest (conversations awaiting the team, the oldest customer message first, then every other conversation by last update). */
+                sort?: components["schemas"]["ConversationSort"];
+                /** @description Words to find in the subject, in any message text, or in the name or email of the contact. */
                 search?: string;
                 page?: number;
                 page_size?: number;
@@ -2444,6 +2803,7 @@ export interface operations {
                     "application/json": components["schemas"]["ConversationPage"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };
@@ -2458,8 +2818,29 @@ export interface operations {
             content: {
                 "application/json": {
                     /** Format: uuid */
-                    contact_id: string;
+                    contact_id?: string;
+                    /** @description A customer added with the conversation, in the same transaction (only with `body`). An address that is already a customer answers 409 `contact_exists` with that `contact`, and nothing is stored. */
+                    contact?: {
+                        name: string;
+                        /** Format: email */
+                        email: string;
+                    };
                     subject: string;
+                    /** @description Markdown source of the first reply; without it the conversation starts empty */
+                    body?: string;
+                    cc?: components["schemas"]["CopiedAddresses"];
+                };
+                "multipart/form-data": {
+                    /** Format: uuid */
+                    contact_id?: string;
+                    contact_name?: string;
+                    /** Format: email */
+                    contact_email?: string;
+                    subject: string;
+                    /** @description Markdown source */
+                    body: string;
+                    cc?: components["schemas"]["CopiedAddresses"];
+                    files?: string[];
                 };
             };
         };
@@ -2468,7 +2849,21 @@ export interface operations {
             202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["AttachmentsTooLarge"];
+            429: components["responses"]["TrialOutboundLimit"];
+            /** @description The attachments volume is low on disk space; nothing was sent or stored */
+            507: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     bulkUpdateConversations: {
@@ -2807,6 +3202,70 @@ export interface operations {
             500: components["responses"]["InternalError"];
         };
     };
+    connectGmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ConsentLink"];
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    disconnectGmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["AgentRequestAccepted"];
+            /** @description Gmail disconnected */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    finishGmailConnect: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Back to the settings page, which explains the outcome. */
+            303: {
+                headers: {
+                    /** @description The path /settings?gmail=connected or /settings?gmail_error=<reason>. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     receiveInboundEmail: {
         parameters: {
             query?: never;
@@ -3024,8 +3483,9 @@ export interface operations {
     listContacts: {
         parameters: {
             query?: {
+                /** @description Keep contacts whose name or email contains this text. A contact merged into another is left out; when it matches, the contact it was merged into is returned instead (its conversations are there). */
                 search?: string;
-                /** @description Comma-separated contact ids (UUIDs), at most 100. Only these contacts of the workspace are returned, in name order; an unknown id, or an id of another workspace, is skipped. More than 100 ids, an empty entry or a value that is not a UUID answers 400 and names the problem. Combines with search. */
+                /** @description Comma-separated contact ids (UUIDs), at most 100. Only these contacts of the workspace are returned, in name order; an unknown id, or an id of another workspace, is skipped. More than 100 ids, an empty entry or a value that is not a UUID answers 400 and names the problem. Combines with search. Merged contacts are returned when named by id. */
                 ids?: string;
                 /** @description Return at most this many contacts (1 to 200), the first in name order. Without it every matching contact is returned. With it, `has_more` says whether more matched. Any other value answers 400. */
                 limit?: number;
@@ -3083,6 +3543,15 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            /** @description The address is already a customer (`contact_exists`); `contact` in the error is the contact to use, the one it was merged into when it was merged */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getContact: {
@@ -3107,6 +3576,105 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    updateContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Renamed contact */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contact"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    mergeContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * Format: uuid
+                     * @description The duplicate to merge into this contact
+                     */
+                    contact_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The merge, with the conversations it moved */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactMerge"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    unmergeContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                mergeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The undone merge */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactMerge"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     listAgents: {
@@ -3414,6 +3982,166 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listSavedViews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saved views */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["SavedView"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createSavedView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedViewInput"];
+            };
+        };
+        responses: {
+            /** @description Saved view */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listDeletedSavedViews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted saved views */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["SavedView"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    deleteSavedView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The deleted view, with deleted_at and purges_at set */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateSavedView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavedViewChange"];
+            };
+        };
+        responses: {
+            /** @description Changed view */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    restoreSavedView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Restored view */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedView"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
         };
     };
     listSavedReplies: {

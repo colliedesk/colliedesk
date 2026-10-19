@@ -15,6 +15,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
@@ -32,9 +33,12 @@ type Mailer interface {
 type Config struct {
 	Origin string
 	// Version is the build stamped into the binary, reported by GET /api/v1/config; empty reports "dev".
-	Version     string
-	CloudAuth   cloudauth.Config
-	Email       email.Config
+	Version   string
+	CloudAuth cloudauth.Config
+	Email     email.Config
+	// Google is the operator's OAuth client for connecting Gmail; with a setting missing, Gmail cannot be
+	// connected and the settings name what is missing.
+	Google      google.Config
 	Attachments attachments.Storage
 	// MailImages fetches the remote images of incoming email for the image proxy; nil uses the
 	// production fetcher (public addresses only). MailImageConcurrency caps fetches running at once
@@ -174,6 +178,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		config.LookupTXT = net.DefaultResolver.LookupTXT
 	}
 	outbound := store.OutboundPolicy{
+		GmailEnabled:          config.Google.Enabled(),
 		Enabled:               config.Email.SMTP.Configured(),
 		RequireVerifiedDomain: config.Email.FromPolicy != email.FromPolicyAny,
 		FallbackDomain:        config.Email.MailFromDomain,
@@ -259,6 +264,9 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/contacts", auth.PermissionContactsRead},
 		{http.MethodPost, "/api/v1/contacts", auth.PermissionContactsWrite},
 		{http.MethodGet, "/api/v1/contacts/{id}", auth.PermissionContactsRead},
+		{http.MethodPatch, "/api/v1/contacts/{id}", auth.PermissionContactsWrite},
+		{http.MethodPost, "/api/v1/contacts/{id}/merges", auth.PermissionContactsWrite},
+		{http.MethodDelete, "/api/v1/contacts/{id}/merges/{mergeId}", auth.PermissionContactsWrite},
 		{http.MethodGet, "/api/v1/agents", auth.PermissionAccessRead},
 		{http.MethodPatch, "/api/v1/workspace/timezone", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/workspace/slug", auth.PermissionAccessWrite},
@@ -277,6 +285,12 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/saved-replies/{id}/restore", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/saved-replies/{id}/versions", auth.PermissionConversationsRead},
 		{http.MethodPost, "/api/v1/saved-replies/{id}/versions/{version}/restore", auth.PermissionConversationsWrite},
+		{http.MethodGet, "/api/v1/saved-views", auth.PermissionConversationsRead},
+		{http.MethodPost, "/api/v1/saved-views", auth.PermissionConversationsWrite},
+		{http.MethodGet, "/api/v1/saved-views/trash", auth.PermissionConversationsRead},
+		{http.MethodPatch, "/api/v1/saved-views/{id}", auth.PermissionConversationsWrite},
+		{http.MethodDelete, "/api/v1/saved-views/{id}", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/saved-views/{id}/restore", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/conversations/{id}/messages/{messageId}/retry", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/channels/email", auth.PermissionAccessRead},
 		{http.MethodPut, "/api/v1/channels/email", auth.PermissionAccessWrite},
@@ -285,6 +299,9 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/channels/email/inbound", auth.PermissionChannelInbound},
 		{http.MethodPost, "/api/v1/channels/email/inbound/recipient", auth.PermissionChannelInbound},
 		{http.MethodPost, "/api/v1/channels/email/secret", auth.PermissionAccessWrite},
+		{http.MethodPost, gmailPath, auth.PermissionAccessWrite},
+		{http.MethodDelete, gmailPath, auth.PermissionAccessWrite},
+		{http.MethodGet, gmailCallbackPath, auth.PermissionPublic},
 		{http.MethodGet, "/api/v1/billing", auth.PermissionBillingManage},
 		{http.MethodPost, "/api/v1/billing/checkout", auth.PermissionBillingManage},
 		{http.MethodPost, "/api/v1/billing/portal", auth.PermissionBillingManage},

@@ -12,6 +12,12 @@ requests. This file keeps the first release.
 
 API changes in the email view (the full notes will be on the releases page):
 
+- `GET /contacts/{id}` no longer embeds `conversations` (an unpaged list). It returns
+  `conversation_count`, `merged_into` and `merges`; read the history with `GET /conversations?contact={id}`.
+  `Contact` has a new field, `merged_into_id`. Contact searches leave merged contacts out.
+- `POST /conversations` takes an optional `body` (and `cc`, or `multipart/form-data` with files) to start
+  the conversation by emailing the contact.
+
 - `MessageOrigin.kind` in message responses has a new value, `automated_response`: an automatic reply that
   Freshdesk flagged. A client that rejects unknown enum values must accept it. Tickets imported before this
   change keep `incoming`; import them again to get the new value.

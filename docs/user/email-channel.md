@@ -36,6 +36,70 @@ address stops receiving mail at once, so change the forwarding in your mailbox a
 A name is 1 to 63 lowercase letters, digits or hyphens; names such as `app`, `www` and `mail` are
 reserved. Do not set the Support address to a `colliedesk.com` address of another workspace.
 
+## Send replies from Gmail
+
+If your support address is a Gmail or Google Workspace mailbox, an admin can connect it. Replies are
+then sent through Gmail from that address, and a copy of each reply stays in the mailbox's **Sent**
+folder. Incoming mail still arrives by forwarding, as set up above. Colliedesk asks Google only for
+permission to send email and to see the account's address; it cannot read the mailbox.
+
+1. Connect the email channel first (a saved Support address).
+2. Open **Settings → Email channel → Send from Gmail** and select **Connect Gmail**.
+3. Google asks you to choose the account and allow **Send email on your behalf**. Leave that box
+   ticked. Google then brings you back to Settings, which says whether Gmail is connected and, if not,
+   why.
+4. **Send from Gmail** now shows the account. Replies, including copies (Cc), attached files and
+   **Retry delivery**, go out through it with the same threading headers, so customer answers join
+   the same conversation.
+
+Connect the account of your support address. If you connect another one (for example
+`acme.help@gmail.com` while customers write to `support@example.com`), customers see that account as
+the sender, and their answers still go to the support address. Settings says so.
+
+**When Gmail stops working.** If the access is removed in the Google account, the password changes,
+or Google refuses to send, **Send from Gmail** turns into an alert with the reason. Replies are then
+marked **Delivery failed** with the same reason. They are never sent another way without you knowing.
+Select **Reconnect Gmail**, then **Retry delivery** on the failed replies.
+
+**Disconnect Gmail** asks first, then removes Colliedesk's access at Google. Replies go out the way
+they did before Gmail was connected (the server's SMTP relay). A reply that was still waiting for Gmail
+fails with a note and can be retried. **Use another Gmail account** replaces the connected account.
+Disconnecting the whole email channel also disconnects Gmail.
+
+Agents (AI) cannot connect or disconnect Gmail themselves: `colliedesk_gmail_connect_request` and
+`colliedesk_gmail_disconnect_request` file a request, and the admin who approves it gets Google's
+page. See [Agent requests](agent-requests.md).
+
+### Self-hosted: turn on Gmail sending
+
+Gmail sending uses your own Google OAuth client. Without these settings **Send from Gmail** names
+what is missing and Colliedesk keeps sending through SMTP.
+
+1. In [Google Cloud console](https://console.cloud.google.com/), create a project, enable the
+   **Gmail API**, and set up the consent screen (Google Auth Platform). Add the scopes `openid`,
+   `.../auth/userinfo.email` and `.../auth/gmail.send`. `gmail.send` is a sensitive scope: an
+   **External** app needs Google's verification before people outside your test users can connect;
+   an **Internal** app (Google Workspace) does not.
+2. Create a client of type **Web application**. Add the **Redirect URI** that **Send from Gmail**
+   shows, which is your `APP_ORIGIN` followed by `/api/v1/channels/email/gmail/callback`, for example
+   `https://desk.example.com/api/v1/channels/email/gmail/callback`.
+3. Set these variables on the server and restart it:
+
+| Variable | Meaning |
+|---|---|
+| `GOOGLE_OAUTH_CLIENT_ID` | Client ID of the Web application client. |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | Its client secret. |
+| `MAILBOX_TOKEN_KEYS` | Key that encrypts the stored Google access: `k1:` followed by 32 random bytes in base64, for example `k1:$(openssl rand -base64 32)`. Keep it secret and keep a copy: without it the server cannot read the connections and every admin must connect Gmail again. |
+
+To change the key, put the new one first and keep the old one after a comma
+(`k2:<new>,k1:<old>`): new connections use the first key, old ones keep working, and each is moved to
+the new key the next time it sends a reply. Remove the old key only after every workspace that connected
+Gmail has sent a reply since, or connected again. If the keys are wrong, replies wait and retry with a note
+naming `MAILBOX_TOKEN_KEYS`; the connection is kept, so fixing the keys is enough.
+
+A server with Gmail and no SMTP relay works for workspaces that connected Gmail; for the others,
+replies are marked **Delivery failed** until a relay is set.
+
 The sections below describe self-hosting.
 
 ## 1. Configure the server

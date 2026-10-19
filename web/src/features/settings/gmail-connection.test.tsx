@@ -1,0 +1,130 @@
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, expect, test, vi } from 'vitest';
+import type { GmailSettings } from '../../api/schemas';
+import { GmailConnection } from './gmail-connection';
+import { gmailReturn } from './gmail-return';
+
+const available: GmailSettings = {
+  available: true, missing_settings: [], redirect_uri: 'https://desk.example.com/api/v1/channels/email/gmail/callback', connection: null,
+};
+const connected: GmailSettings = {
+  ...available,
+  connection: { provider: 'google', address: 'support@example.com', status: 'connected', error_code: null, error: null, failed_at: null, connected_at: '2026-10-19T08:00:00Z' },
+};
+const failed: GmailSettings = {
+  ...available,
+  connection: {
+    ...connected.connection!, status: 'failed', error_code: 'revoked', failed_at: '2026-10-19T09:00:00Z',
+    error: 'Google no longer accepts the Gmail connection (access was removed or expired). Reconnect Gmail in Settings, then retry the reply.',
+  },
+};
+
+afterEach(() => window.history.replaceState(null, '', '/'));
+
+test('an admin connects Gmail from the email channel', () => {
+  const onConnect = vi.fn();
+  render(<GmailConnection gmail={available} supportAddress="support@example.com" timezone="UTC" canManage onConnect={onConnect} />);
+  expect(screen.getByRole('heading', { name: 'Send from Gmail' })).toBeInTheDocument();
+  expect(screen.getByText(/cannot read the mailbox/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Connect Gmail' }));
+  expect(onConnect).toHaveBeenCalled();
+});
+
+test('while Google opens the button says so and cannot be pressed twice', () => {
+  render(<GmailConnection gmail={available} supportAddress="support@example.com" timezone="UTC" canManage connectPending />);
+  expect(screen.getByRole('button', { name: 'Opening Google…' })).toBeDisabled();
+});
+
+test('a connected account shows the address and disconnects only after confirming', () => {
+  const onDisconnect = vi.fn();
+  render(<GmailConnection gmail={connected} supportAddress="support@example.com" timezone="UTC" canManage onDisconnect={onDisconnect} />);
+  expect(screen.getByText(/Replies are sent through Gmail from support@example.com/)).toBeInTheDocument();
+  expect(screen.queryByText(/Customers see/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Disconnect Gmail' }));
+  expect(onDisconnect).not.toHaveBeenCalled();
+  const question = screen.getByRole('group', { name: 'Disconnect Gmail?' });
+  expect(within(question).getByRole('button', { name: 'Cancel' })).toHaveFocus();
+  fireEvent.click(within(question).getByRole('button', { name: 'Yes, disconnect Gmail' }));
+  expect(onDisconnect).toHaveBeenCalled();
+});
+
+test('a Gmail address other than the support address says where answers go', () => {
+  const other = { ...connected, connection: { ...connected.connection!, address: 'acme.help@gmail.com' } };
+  render(<GmailConnection gmail={other} supportAddress="support@example.com" timezone="UTC" canManage />);
+  expect(screen.getByText('Customers see acme.help@gmail.com as the sender. Their answers still go to support@example.com, so keep forwarding it here.')).toBeInTheDocument();
+});
+
+test('a failed connection is an alert with the reason and a reconnect, never silent', () => {
+  const onConnect = vi.fn();
+  render(<GmailConnection gmail={failed} supportAddress="support@example.com" timezone="UTC" canManage onConnect={onConnect} />);
+  const alert = screen.getByRole('alert');
+  expect(alert).toHaveTextContent('Gmail stopped sending');
+  expect(alert).toHaveTextContent('Google no longer accepts the connection');
+  expect(alert).toHaveTextContent('not sent any other way');
+  fireEvent.click(within(alert).getByRole('button', { name: 'Reconnect Gmail' }));
+  expect(onConnect).toHaveBeenCalled();
+});
+
+test('agents see the state but no buttons', () => {
+  render(<GmailConnection gmail={failed} supportAddress="support@example.com" timezone="UTC" canManage={false} />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Gmail stopped sending');
+  expect(screen.queryByRole('button')).not.toBeInTheDocument();
+});
+
+test('a server without Google settings names them and the redirect URI to register', () => {
+  const missing: GmailSettings = { ...available, available: false, missing_settings: ['GOOGLE_OAUTH_CLIENT_ID', 'MAILBOX_TOKEN_KEYS'] };
+  render(<GmailConnection gmail={missing} supportAddress="support@example.com" timezone="UTC" canManage />);
+  expect(screen.getByText(/GOOGLE_OAUTH_CLIENT_ID, MAILBOX_TOKEN_KEYS/)).toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'Redirect URI to register in Google Cloud' })).toHaveValue(available.redirect_uri);
+  expect(screen.queryByRole('button', { name: 'Connect Gmail' })).not.toBeInTheDocument();
+});
+
+test('a connection the server can no longer use says why instead of claiming replies go through Gmail', () => {
+  render(<GmailConnection gmail={{ ...connected, available: false, missing_settings: ['MAILBOX_TOKEN_KEYS'] }} supportAddress="support@example.com" timezone="UTC" canManage />);
+  expect(screen.getByText(/not set up on this server.*MAILBOX_TOKEN_KEYS/)).toBeInTheDocument();
+  expect(screen.queryByText(/Replies are sent through Gmail/)).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Disconnect Gmail' })).toBeInTheDocument();
+});
+
+test('the outcome Google sent back is read once from the address and explained, never echoed', () => {
+  window.history.replaceState(null, '', '/settings?gmail_error=send_not_granted');
+  const refused = gmailReturn();
+  expect(refused).toEqual({ kind: 'error', reason: 'send_not_granted' });
+  expect(window.location.search).toBe('');
+  window.history.replaceState(null, '', '/settings?gmail=connected');
+  expect(gmailReturn()).toEqual({ kind: 'connected' });
+  expect(gmailReturn()).toBeUndefined();
+  const { rerender } = render(<GmailConnection gmail={available} supportAddress="support@example.com" timezone="UTC" canManage returned={refused} />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Send email on your behalf');
+  rerender(<GmailConnection gmail={available} supportAddress="support@example.com" timezone="UTC" canManage returned={{ kind: 'error', reason: '<script>' }} />);
+  expect(screen.getByRole('alert')).toHaveTextContent('Gmail could not be connected. Try again.');
+});
+
+test('a teammate who is not an admin is told who can connect Gmail', () => {
+  render(<GmailConnection gmail={available} supportAddress="support@example.com" timezone="UTC" canManage={false} />);
+  expect(screen.getByText('Only an admin can connect Gmail.')).toBeInTheDocument();
+});
+
+test('on the Settings page the failure does not send you to Settings, and the long invitation is gone once connected', () => {
+  const { rerender } = render(<GmailConnection gmail={failed} supportAddress="support@example.com" timezone="UTC" canManage />);
+  expect(screen.getByRole('alert')).not.toHaveTextContent('in Settings');
+  expect(screen.getByRole('alert')).toHaveTextContent(/access was removed or expired/);
+  rerender(<GmailConnection gmail={connected} supportAddress="support@example.com" timezone="UTC" canManage />);
+  expect(screen.queryByText(/Connect the Gmail account of your support address/)).not.toBeInTheDocument();
+  expect(screen.getByText(/Colliedesk can only send; it cannot read the mailbox/)).toBeInTheDocument();
+});
+
+test('Escape closes the disconnect question like Cancel', () => {
+  const onDisconnect = vi.fn();
+  render(<GmailConnection gmail={connected} supportAddress="support@example.com" timezone="UTC" canManage onDisconnect={onDisconnect} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Disconnect Gmail' }));
+  fireEvent.keyDown(screen.getByRole('group', { name: 'Disconnect Gmail?' }), { key: 'Escape' });
+  expect(screen.queryByRole('group', { name: 'Disconnect Gmail?' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Disconnect Gmail' })).toHaveFocus();
+  expect(onDisconnect).not.toHaveBeenCalled();
+});
+
+test('the outcome is shown in the block', () => {
+  render(<GmailConnection gmail={connected} supportAddress="support@example.com" timezone="UTC" canManage returned={{ kind: 'connected' }} />);
+  expect(screen.getByRole('status')).toHaveTextContent('Gmail is connected.');
+});

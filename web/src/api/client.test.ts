@@ -177,3 +177,11 @@ test('the cloud exchange names this device by its user agent, like a pairing lin
   await api.exchangeCloudSession('t', 'acme').catch(() => {});
   expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ label: navigator.userAgent, workspace_slug: 'acme' });
 });
+
+
+test('a trial refusal for a merged address carries the address the reply would go to', async () => {
+  fetchMock.mockResolvedValue(reply(403, { error: { code: 'trial_outbound_restricted', message: 'Not allowed.', reason: 'contact_address_differs', reply_to: 'dana@work.example' } }));
+  const error = await api.createMessage('33333333-3333-4333-8333-333333333333', 'outgoing', 'Hi').catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(OutboundRefusedError);
+  expect((error as OutboundRefusedError).replyTo).toBe('dana@work.example');
+});

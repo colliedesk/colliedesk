@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -92,8 +93,14 @@ const recipientsInWindow = `SELECT COALESCE(sum(recipients),0) FROM email_outbox
 // A "none" verdict passes for MVP because many small senders publish no DMARC; the daily cap bounds
 // that. The real hardening, when needed, is requiring an aligned dmarc=pass, which needs the parser
 // to record the DMARC result separately (today a bare spf=pass or dkim=pass of any domain is "pass").
-const customerWroteFirst = `SELECT EXISTS(SELECT 1 FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND kind='incoming'
-	AND (origin IS NOT NULL OR (email_meta->>'via'='platform' AND COALESCE(email_meta->>'authentication','none') <> 'fail')))`
+// The mail must come from the address the reply goes to: merging contacts moves a conversation to
+// another contact, and a customer who wrote from one address is no proof the other one wants mail.
+const customerWroteFirst = `SELECT EXISTS(SELECT 1 FROM messages m
+	JOIN conversations c ON c.workspace_id=m.workspace_id AND c.id=m.conversation_id
+	JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id
+	WHERE m.workspace_id=$1 AND m.conversation_id=$2 AND m.kind='incoming'
+	AND (m.origin IS NOT NULL OR (m.email_meta->>'via'='platform' AND COALESCE(m.email_meta->>'authentication','none') <> 'fail'
+		AND lower(m.email_meta->>'from')=lower(k.email))))`
 
 // onTrial reports whether the trial outbound rules apply to the workspace now: plan limits are on
 // and the plan in effect is the trial. Paid, locked and self-hosted workspaces are untouched.
@@ -122,10 +129,34 @@ func (s *Store) checkTrialOutbound(ctx context.Context, tx pgx.Tx, workspaceID, 
 			return fmt.Errorf("check first contact: %w", err)
 		}
 		if !wrote {
-			return &domain.TrialOutboundError{}
+			return trialFirstContactRefusal(ctx, tx, workspaceID, conversationID)
 		}
 	}
 	return s.checkTrialCap(ctx, tx, workspaceID, now, recipients)
+}
+
+// customerWroteFromAnotherAddress is true for a conversation holding trusted customer mail from an
+// address that is not the contact's: a contact merged into this one wrote it.
+const customerWroteFromAnotherAddress = `SELECT k.email, EXISTS(SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id
+	AND m.kind='incoming' AND m.email_meta->>'via'='platform' AND COALESCE(m.email_meta->>'authentication','none') <> 'fail')
+	FROM conversations c JOIN contacts k ON k.workspace_id=c.workspace_id AND k.id=c.contact_id WHERE c.workspace_id=$1 AND c.id=$2`
+
+// trialFirstContactRefusal says why the first-contact rule refused a reply: nobody wrote, or the customer
+// wrote from another address than the one the reply goes to.
+func trialFirstContactRefusal(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) error {
+	var contactEmail string
+	var wroteElsewhere bool
+	err := tx.QueryRow(ctx, customerWroteFromAnotherAddress, workspaceID, conversationID).Scan(&contactEmail, &wroteElsewhere)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return &domain.TrialOutboundError{}
+	}
+	if err != nil {
+		return fmt.Errorf("check first contact address: %w", err)
+	}
+	if wroteElsewhere {
+		return &domain.TrialOutboundError{ReplyTo: contactEmail}
+	}
+	return &domain.TrialOutboundError{}
 }
 
 // checkTrialCap refuses with a *domain.TrialOutboundError carrying RetryAfter when sending to

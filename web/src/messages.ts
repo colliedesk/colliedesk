@@ -1,6 +1,9 @@
 export const messages = {
   brand: 'Colliedesk',
   inbox: 'Inbox',
+  // Contacts and starting a conversation: the strings the inbox shows; the rest is in contact-messages.ts.
+  openContact: (name: string) => `Open ${name}'s page`,
+  newConversation: 'New conversation',
   notificationsLabel: 'Desktop notifications for new, assigned and customer-replied conversations',
   notificationsBlocked: 'Blocked by this browser. Allow notifications for this site in its site settings, then reload.',
   notificationNew: 'New conversation',
@@ -71,6 +74,11 @@ export const messages = {
   bulkUpdated: (count: number) => `Updated ${count} conversation${count === 1 ? '' : 's'}`,
   bulkUpdateFailed: 'The conversations could not be updated. Nothing was changed; try again.',
   clearFilters: 'Clear filters',
+  showContactConversations: (name: string) => `All conversations of ${name}`,
+  // The Filter, Sort and Views buttons load with the first screen; the rest of the filter and saved view
+  // wording loads with their menus (src/features/inbox/filter-messages.ts).
+  inboxSort: 'Sort',
+  savedViewsTitle: 'Views',
   previousPage: 'Previous page',
   nextPage: 'Next page',
   selectConversation: 'Select a conversation to read its timeline.',
@@ -254,7 +262,7 @@ export const messages = {
   saved: 'Saved',
   settingsActionFailed: 'The settings action failed. Try again.',
   emailChannel: 'Email channel',
-  emailChannelDescription: 'Forward your support address to the inbound URL. Replies go out through the server SMTP relay.',
+  emailChannelDescription: 'Forward your support address to the inbound URL. Replies go out through the server SMTP relay, or through Gmail once it is connected below.',
   supportAddress: 'Support address',
   saveSupportAddress: 'Save support address',
   forwardingAddress: 'Forwarding address',
@@ -320,8 +328,14 @@ export const messages = {
   domainVerified: (domain: string, when: string) => `${domain} verified ${when}.`,
   sendingFrom: (address: string) => `Replies are sent from ${address}.`,
   cannotSend: 'Replies cannot be emailed yet: configure SMTP on the server or verify the domain.',
+  domainVerificationNotNeeded: 'Domain verification (not needed while replies go through Gmail)',
   outboundNotConfigured: 'Outgoing email is not configured on this server. Replies stay on the timeline and are not emailed.',
   outboundNeedsVerification: 'Replies are not emailed until an admin verifies the support address domain in Settings.',
+  outboundGmailNotSetUp: 'Replies are not emailed: Gmail sending is not set up on this server any more. Ask the administrator, or disconnect Gmail in Settings to send through SMTP.',
+  outboundGmailFailed: (canManage: boolean) => canManage
+    ? 'Replies are not emailed: Gmail stopped sending. Reconnect it in Settings, then retry the failed replies.'
+    : 'Replies are not emailed: Gmail stopped sending. Ask an admin to reconnect Gmail, then retry the failed replies.',
+  openSettings: 'Open Settings',
   planNotices: 'Plan notices',
   trialDaysLeft: (days: number) => `Trial: ${days} ${days === 1 ? 'day' : 'days'} left`,
   trialExtendedNote: 'Your trial was extended after your Freshdesk import.',
@@ -426,6 +440,8 @@ export const messages = {
   theme: 'Theme',
   themes: { light: 'Light', dark: 'Dark' },
   replyNotSent: 'The reply could not be sent. Your text is still here; try again.',
+  // Follows the server's explanation of a refusal that says it all, such as a reply to a merged address.
+  textStillHere: 'Your text is still here.',
   trialReplyRestricted: 'During the trial, email goes only to customers who wrote to you first. Verify your sending domain in Settings or choose a plan to start new conversations. Your text is still here.',
   trialReplyLimit: (wait: string) => `The trial emails up to 200 people in 24 hours, counting everyone copied. Try again in about ${wait}, or choose a plan to remove the limit. Your text is still here.`,
   retryNotSent: 'The delivery could not be retried. Try again.',
@@ -503,4 +519,7 @@ export const messages = {
   reportThanks: (reference: string) => `Thank you. Your reference is ${reference}. Quote it if you write to support.`,
   reportNotConfigured: 'This server has no support desk for reports. Nothing was sent to HC Labs. You can open a public GitHub issue with your description and these details filled in. Read it before you submit; it has no email addresses.',
   reportGithubIssue: 'Open a GitHub issue',
+  // A part of a page loaded from its own chunk (ui/lazy-part.tsx) that could not be loaded.
+  partNotLoaded: 'This part of the page could not be loaded.',
+  reloadPage: 'Reload the page',
 } as const;

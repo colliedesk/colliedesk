@@ -8,5 +8,8 @@ Tags group conversations, for example `billing` or `bug`.
   changes the other tags on the conversation.
 - **Filter** the inbox by tag with the **Tag** filter.
 
-Renaming and deleting tags is available through the API (`PATCH` and `DELETE /api/v1/tags/{id}`).
-Deleting a tag removes it from every conversation in the workspace.
+Renaming and deleting tags is available through the API:
+
+- **Rename** a tag with `PATCH /api/v1/tags/{id}`; every conversation that carries it shows the new name.
+- **Delete** a tag with `DELETE /api/v1/tags/{id}`. Deleting a tag removes it from every conversation
+  in the workspace.

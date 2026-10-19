@@ -49,10 +49,12 @@ not match its recorded checksum, it aborts the download. You then get a broken Z
 |---|---|
 | `manifest.json` | Format, version, export time (UTC), workspace, record counts, and every attachment file with its size and SHA-256 |
 | `agents.ndjson` | One agent per line: `id`, `email`, `display_name`, `role`, `timezone_override`, `created_at`, `deactivated_at` (`null` for an active agent) |
-| `contacts.ndjson` | One contact per line: `id`, `name`, `email`, `organization`, `created_at`, `updated_at` |
+| `contacts.ndjson` | One contact per line: `id`, `name`, `email`, `organization`, `merged_into_id` (the contact it was [merged](contacts.md#merge-two-contacts-of-the-same-person) into, or null), `created_at`, `updated_at` |
+| `contact-merges.ndjson` | Every merge of two contacts, undone or not, oldest first: `id`, `contact_id` (kept), `merged_contact_id`, `conversation_ids` (the conversations it moved), `merged_by_agent_id`, `token_id`, `created_at`, `undone_at`, `undone_by_agent_id` |
 | `tags.ndjson` | One tag per line: `id`, `name`, `color`, `created_at` |
 | `saved-replies.ndjson` | One saved reply per line, including the ones in the trash: `id`, `title`, `body`, `created_by_agent_id` (an agent id or `null`), `created_at`, `updated_at`, `deleted_at` (when it went to the trash, or `null`), `deleted_by_agent_id`. The body keeps the variables `{{customer.name}}` and `{{agent.name}}` unfilled |
 | `saved-reply-versions.ndjson` | Every [version](saved-replies.md#history-and-restore) of every saved reply, one per line, ordered by reply and version: `saved_reply_id`, `version`, `kind` (`baseline`, `create`, `edit`, `delete`, `restore` or `undelete`; `baseline` is the text a reply had when history started), `restored_from_version`, `title`, `body` (the reply after the change), `changed_by_agent_id`, `token_id`, `token_label` (the agent token that made or asked for it), `agent_request_id` (the approved agent request that made it), `created_at` |
+| `saved-views.ndjson` | One [saved inbox view](inbox.md#saved-views) per line, every person's and the ones in the trash: `id`, `name`, `scope` (`personal` or `shared`), `owner_agent_id` (the person a personal view belongs to, `null` when shared), `filters` (the filters of `GET /api/v1/conversations` as an object), `created_by_agent_id`, `created_at`, `updated_at`, `deleted_at` |
 | `agent-requests.ndjson` | One [agent request](agent-requests.md) per line: `id`, `kind`, `status`, `method`, `route`, `path`, `body` (the call as the token sent it), `edited_body` (a reply draft as a person edited it, or `null`), `summary`, `conversation_id`, `token_id`, `token_label`, `token_scope`, `requested_by_agent_id`, `decided_by_agent_id`, `decided_at`, `reason`, `result_status`, `result_note`, `created_at`, `expires_at`, `saved_reply_id` and `saved_reply_before` (for a request on a saved reply: the reply as the token saw it, and the version a restore applies). The answer of an approved call is not exported. `body`, `edited_body` and `saved_reply_before` are `null` 90 days after the decision |
 | `conversations.ndjson` | One conversation per line, with its messages and time entries |
 | `attachments/<attachment id>/<file name>` | The original bytes of each attachment |
@@ -60,7 +62,8 @@ not match its recorded checksum, it aborts the download. You then get a broken Z
 NDJSON means one JSON object per line. Read it line by line. All times are UTC (RFC 3339).
 
 A conversation line has `id`, `contact_id`, `subject`, `status`, `priority`, `assignee_id`
-(an agent id or `null`), `origin` (where an imported ticket came from, or `null`), `tag_ids`,
+(an agent id or `null`), `channel` (how it started: `email`, `web_form`, `imported`, `agent` or
+`problem_report`; see [Filter and sort](inbox.md#filter-and-sort)), `origin` (where an imported ticket came from, or `null`), `tag_ids`,
 `created_at`, `updated_at`, `messages` and `time_entries`.
 
 Each message has `id`, `conversation_id`, `author_agent_id`, `author_name` (as stored: the author

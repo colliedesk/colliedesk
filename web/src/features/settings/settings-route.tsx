@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, InvalidRequestError, PlanLimitError } from '../../api/client';
 import { ExportAllData } from './export-all-data';
-import { EmailChannelSection } from './email-channel-section';
+import { EmailChannelSection, gmailPart } from './email-channel-section';
+import { gmailReturn } from './gmail-return';
 import { SavedRepliesSection } from './saved-replies-section';
 import { TeamSection } from './team-section';
 import { WebFormSection } from './web-form-section';
@@ -42,6 +44,14 @@ export function SettingsRoute() {
   // A refused check still reloads: the provider's per-record status changed.
   const verifyDomain = useMutation({ mutationFn: api.verifyEmailDomain, onSettled: () => refresh('email-channel') });
   const disconnectEmail = useMutation({ mutationFn: api.disconnectEmailChannel, onSuccess: () => { rotateSecret.reset(); void refresh('email-channel'); } });
+  // Connecting Gmail leaves for Google's consent page; Google sends the browser back with the outcome.
+  const [gmailReturned] = useState(gmailReturn);
+  // The "Send from Gmail" block is its own chunk; it loads alongside the settings requests, not after them.
+  useEffect(gmailPart.preload, []);
+  const connectGmail = useMutation({ mutationFn: api.connectGmail, onSuccess: ({ url }) => window.location.assign(url) });
+  const disconnectGmail = useMutation({ mutationFn: api.disconnectGmail, onSettled: () => refresh('email-channel') });
+  const gmailFailure = connectGmail.error ?? disconnectGmail.error;
+  const gmailError = gmailFailure ? (gmailFailure instanceof InvalidRequestError ? gmailFailure.message : messages.settingsActionFailed) : undefined;
   const webForm = useQuery({ queryKey: ['web-form'], queryFn: api.webForm });
   const saveWebForm = useMutation({ mutationFn: ({ enabled, origins }: { enabled: boolean; origins: string[] }) => api.saveWebForm(enabled, origins), onSuccess: () => refresh('web-form') });
   const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
@@ -76,7 +86,9 @@ export function SettingsRoute() {
       onUndelete={async (id, updatedAt) => { await api.restoreSavedReply(id, updatedAt); await refreshSavedReplies(); }} />}
     emailSection={<EmailChannelSection settings={emailChannel.data} timezone={me.data?.timezone ?? 'UTC'} canManage={isAdmin} workspaceSlug={me.data?.workspace.slug} addressSave={saveState(saveEmail)} slugSave={saveState(workspaceSlug)}
       onSaveSlug={(slug) => workspaceSlug.mutate(slug)} createdSecret={rotateSecret.data?.inbound_secret} onSave={(address) => saveEmail.mutate(address)}
-      onRotate={() => rotateSecret.mutate()} onVerifyDomain={() => verifyDomain.mutate()} verifyPending={verifyDomain.isPending} verifyError={verifyDomain.error instanceof InvalidRequestError ? verifyDomain.error.message : undefined} onDisconnect={() => disconnectEmail.mutate()} />}
+      onRotate={() => rotateSecret.mutate()} onVerifyDomain={() => verifyDomain.mutate()} verifyPending={verifyDomain.isPending} verifyError={verifyDomain.error instanceof InvalidRequestError ? verifyDomain.error.message : undefined} onDisconnect={() => disconnectEmail.mutate()}
+      onConnectGmail={() => connectGmail.mutate()} onDisconnectGmail={() => disconnectGmail.mutate()}
+      gmailPending={connectGmail.isPending || connectGmail.isSuccess} gmailError={gmailError} gmailReturned={gmailReturned} />}
     webFormSection={<WebFormSection settings={webForm.data} canManage={isAdmin} save={saveState(saveWebForm)} onSave={(enabled, origins) => saveWebForm.mutate({ enabled, origins })} />}
     inviteError={createInvite.error instanceof PlanLimitError || createInvite.error instanceof InvalidRequestError ? createInvite.error.message : createInvite.isError ? messages.settingsActionFailed : undefined}
     createdInviteUrl={createInvite.data?.url}

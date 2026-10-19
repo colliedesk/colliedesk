@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { InboxRoute } from './inbox-route';
+import { testRouter } from './test-router';
 
 // The two boundaries: the API and the analytics service.
 const api = vi.hoisted(() => ({
@@ -11,9 +12,14 @@ const api = vi.hoisted(() => ({
   emailChannel: vi.fn(async () => ({ channel: null, inbound_url: '', smtp: { configured: false }, from_policy: 'verified', sending_from: null })),
 }));
 const analytics = vi.hoisted(() => ({ track: vi.fn(() => true) }));
-vi.mock('../../api/client', () => ({ api }));
+vi.mock('../../api/client', () => ({ api, InvalidRequestError: class extends Error {} }));
+const views = vi.hoisted(() => ({
+  list: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })), trash: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })),
+  create: vi.fn(), update: vi.fn(), remove: vi.fn(), restore: vi.fn(),
+}));
+vi.mock('../../api/saved-views', () => ({ savedViewsApi: views }));
 vi.mock('../../lib/product-analytics', () => ({ track: analytics.track }));
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn(), useParams: () => ({}) }));
+vi.mock('@tanstack/react-router', async () => (await import('./test-router')).routerModule);
 
 const meId = '66666666-6666-4666-8666-666666666666';
 const conversation = (id: string, subject: string) => ({
@@ -25,6 +31,7 @@ const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conver
 const gamma = conversation('55555555-5555-4555-8555-555555555555', 'Gamma conversation');
 
 beforeEach(() => {
+  testRouter.reset();
   vi.clearAllMocks();
   api.me.mockResolvedValue({ timezone: 'UTC', agent: { id: meId, email: 'a@example.com', display_name: 'Ada', role: 'agent' } });
   api.conversations.mockResolvedValue({ items: [alpha, gamma], page: 1, page_size: 50 });
@@ -82,6 +89,14 @@ test('a refused bulk change reports nothing', async () => {
   await waitFor(() => expect(api.bulkUpdateConversations).toHaveBeenCalled());
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(analytics.track).not.toHaveBeenCalledWith('bulk_action_applied', expect.anything());
+});
+
+test('a filter from the Filter menu reports its kind, never its value', async () => {
+  await open();
+  fireEvent.click(await screen.findByText('Filter', { selector: 'summary span' }));
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'Urgent' }));
+  expect(analytics.track).toHaveBeenCalledWith('inbox_filtered', { filter: 'priority' });
+  expect(JSON.stringify(analytics.track.mock.calls)).not.toContain('urgent');
 });
 
 test('a status tab reports inbox_filtered with the filter kind', async () => {

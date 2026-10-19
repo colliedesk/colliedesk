@@ -1,24 +1,32 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { InboxRoute } from './inbox-route';
+import { testRouter } from './test-router';
 
 const api = vi.hoisted(() => ({
   me: vi.fn(), conversations: vi.fn(), conversation: vi.fn(), agents: vi.fn(), tags: vi.fn(), messages: vi.fn(), timeEntries: vi.fn(),
   updateConversation: vi.fn(), bulkUpdateConversations: vi.fn(), createMessage: vi.fn(), createTag: vi.fn(), config: vi.fn(),
   addConversationTag: vi.fn(), removeConversationTag: vi.fn(), retryDelivery: vi.fn(),
+  contacts: vi.fn(), createContact: vi.fn(), createConversation: vi.fn(),
   savedReplies: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })), contact: vi.fn(),
   emailChannel: vi.fn(async () => ({ channel: null, inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null })),
 }));
 
-vi.mock('../../api/client', () => ({ api }));
-const router = vi.hoisted(() => ({ params: {} as { conversationId?: string } }));
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn(), useParams: () => router.params }));
+vi.mock('../../api/client', () => ({ api, InvalidRequestError: class extends Error {} }));
+vi.mock('../contacts/contact-api', () => ({ contactApi: { startConversation: api.createConversation, searchContacts: api.contacts }, existingContact: () => undefined }));
+const views = vi.hoisted(() => ({
+  list: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })), trash: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })),
+  create: vi.fn(), update: vi.fn(), remove: vi.fn(), restore: vi.fn(),
+}));
+vi.mock('../../api/saved-views', () => ({ savedViewsApi: views }));
+vi.mock('@tanstack/react-router', async () => (await import('./test-router')).routerModule);
+beforeEach(() => testRouter.reset());
 
 const conversation = (id: string, subject: string) => ({
   id, contact_id: '22222222-2222-4222-8222-222222222222', contact_name: 'Mai Linh', subject,
-  status: 'open' as const, priority: 'normal' as const, assignee_id: null, tags: [], origin: null,
+  status: 'open' as const, priority: 'normal' as const, assignee_id: null, tags: [], channel: 'email' as const, origin: null,
   created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z',
 });
 
@@ -26,7 +34,7 @@ const conversation = (id: string, subject: string) => ({
 // its messages: those three requests are independent, and a chain of them costs a round trip each.
 test('a ticket opened by its address asks for its messages and time entries at once, before the list or the detail arrive', async () => {
   const id = '11111111-1111-4111-8111-111111111111';
-  router.params = { conversationId: id };
+  testRouter.params = { conversationId: id };
   try {
     api.me.mockResolvedValue({ timezone: 'UTC' });
     api.conversations.mockReset();
@@ -48,12 +56,14 @@ test('a ticket opened by its address asks for its messages and time entries at o
     // browser allows only six HTTP/1.1 connections per host, and the later requests wait for a free one.
     const first = (mock: { mock: { invocationCallOrder: number[] } }) => mock.mock.invocationCallOrder[0];
     for (const critical of [api.conversations, api.conversation, api.messages, api.timeEntries]) {
-      for (const side of [api.agents, api.tags, api.savedReplies, api.emailChannel]) {
+      for (const side of [api.agents, api.tags, api.savedReplies, api.emailChannel, views.list, views.trash]) {
+        // The saved views load with their lazy menu, possibly after this test ends; when they did load, it was later.
+        if (side.mock.calls.length === 0 && (side === views.list || side === views.trash)) continue;
         expect(first(critical), 'a side list was requested before the open ticket').toBeLessThan(first(side));
       }
     }
   } finally {
-    router.params = {};
+    testRouter.params = {};
   }
 });
 
@@ -62,7 +72,7 @@ test('a ticket opened by its address asks for its messages and time entries at o
 test('a ticket opened by address that is not in the list never shows another ticket\'s header, and its composer stays disabled, while its detail is missing', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
-  router.params = { conversationId: bravo.id };
+  testRouter.params = { conversationId: bravo.id };
   try {
     api.me.mockResolvedValue({ timezone: 'UTC' });
     api.conversations.mockReset();
@@ -86,14 +96,14 @@ test('a ticket opened by address that is not in the list never shows another tic
     expect(await screen.findByRole('heading', { name: 'Bravo conversation' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByLabelText('Message body').some((box) => !(box as HTMLTextAreaElement).disabled)).toBe(true));
   } finally {
-    router.params = {};
+    testRouter.params = {};
   }
 });
 
 test('a ticket whose detail fails to load never gets a usable composer, and nothing is sent to the first listed ticket', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
-  router.params = { conversationId: bravo.id };
+  testRouter.params = { conversationId: bravo.id };
   try {
     api.me.mockResolvedValue({ timezone: 'UTC' });
     api.conversations.mockReset();
@@ -114,7 +124,7 @@ test('a ticket whose detail fails to load never gets a usable composer, and noth
     for (const box of screen.getAllByLabelText('Message body')) expect(box).toBeDisabled();
     expect(api.createMessage).not.toHaveBeenCalled();
   } finally {
-    router.params = {};
+    testRouter.params = {};
   }
 });
 
@@ -145,7 +155,7 @@ test('opening a listed ticket renders its header and asks for its messages witho
 test('a ticket opened by an address that is in the list renders from its row while the detail is still pending', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
-  router.params = { conversationId: bravo.id };
+  testRouter.params = { conversationId: bravo.id };
   try {
     api.me.mockResolvedValue({ timezone: 'UTC' });
     api.conversations.mockReset();
@@ -162,7 +172,7 @@ test('a ticket opened by an address that is in the list renders from its row whi
     expect(await screen.findByRole('heading', { name: 'Bravo conversation' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByLabelText('Message body').some((box) => !(box as HTMLTextAreaElement).disabled)).toBe(true));
   } finally {
-    router.params = {};
+    testRouter.params = {};
   }
 });
 
@@ -170,7 +180,7 @@ test('a ticket opened by an address that is in the list renders from its row whi
 test('a ticket whose detail fails to load says so and Retry asks for it again', async () => {
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
-  router.params = { conversationId: bravo.id };
+  testRouter.params = { conversationId: bravo.id };
   try {
     api.me.mockResolvedValue({ timezone: 'UTC' });
     api.conversations.mockReset();
@@ -192,7 +202,7 @@ test('a ticket whose detail fails to load says so and Retry asks for it again', 
     expect(screen.queryByRole('alert')).toBeNull();
     expect(api.conversation).toHaveBeenCalledTimes(2);
   } finally {
-    router.params = {};
+    testRouter.params = {};
   }
 });
 
@@ -273,6 +283,27 @@ test('a reply the trial refuses stays in the composer with the reason', async ()
   fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
   expect(await screen.findByRole('alert')).toHaveTextContent(/verify your sending domain/i);
   expect(body).toHaveValue('Please read this');
+});
+
+// A reply that just failed may mean Gmail broke: the channel is read again, so the composer notice follows
+// without a reload.
+test('a failed delivery on the open conversation reloads the email channel', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [{
+    id: '44444444-4444-4444-8444-444444444444', conversation_id: alpha.id, author_agent_id: null, author_name: null, agent_token: null, agent_request_id: null, kind: 'outgoing', body: 'Answer.',
+    body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', email: null,
+    delivery: { status: 'failed', attempts: 1, last_error: 'Gmail stopped.', sent_at: null },
+  }] });
+  api.emailChannel.mockClear();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await screen.findByText('Gmail stopped.');
+  await waitFor(() => expect(api.emailChannel.mock.calls.length).toBeGreaterThan(1));
 });
 
 test('a retry the trial refuses says why instead of doing nothing', async () => {
@@ -543,4 +574,116 @@ test('Manage saved replies opens Settings in a new tab, so a draft is not lost',
   fireEvent.click(await screen.findByRole('button', { name: 'Manage saved replies' }));
   expect(open).toHaveBeenCalledExactlyOnceWith('/settings', '_blank', 'noopener');
   open.mockRestore();
+});
+
+test('the filters in the address are the list, and changing one keeps the open conversation in the address', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  testRouter.params = { conversationId: alpha.id };
+  testRouter.search = { priority: 'high,urgent', has_pending_draft: true, sort: 'waiting_longest' };
+  const navigate = vi.spyOn(testRouter, 'navigate');
+  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.conversation.mockResolvedValue(alpha);
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+  await waitFor(() => expect(api.conversations).toHaveBeenCalledWith('priority=high%2Curgent&sort=waiting_longest&has_pending_draft=true&status=open&page=1&page_size=50', expect.anything()));
+  expect(await screen.findByRole('list', { name: 'Active filters' })).toHaveTextContent('Reply draft waiting for approval');
+  fireEvent.click(screen.getByRole('button', { name: 'Remove filter Priority: High' }));
+  expect(navigate).toHaveBeenLastCalledWith({ to: '/conversations/$conversationId', params: { conversationId: alpha.id },
+    search: { priority: 'urgent', has_pending_draft: true, sort: 'waiting_longest' }, replace: false });
+  await waitFor(() => expect(api.conversations).toHaveBeenLastCalledWith('priority=urgent&sort=waiting_longest&has_pending_draft=true&status=open&page=1&page_size=50', expect.anything()));
+  // Opening another conversation carries the filters, so Back and a shared link show the same list.
+  fireEvent.click(await screen.findByRole('button', { name: /alpha conversation/i }));
+  expect(navigate).toHaveBeenLastCalledWith({ to: '/conversations/$conversationId', params: { conversationId: alpha.id },
+    search: { priority: 'urgent', has_pending_draft: true, sort: 'waiting_longest' } });
+});
+
+test('a saved view is saved from the filters on screen and opens them again', async () => {
+  testRouter.search = { status: 'pending', awaiting: 'team' };
+  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  views.create.mockResolvedValue({});
+  const urgent = { id: '99999999-9999-4999-8999-999999999999', name: 'Urgent', scope: 'shared', filters: { priority: ['urgent'] }, owner_agent_id: null,
+    created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', deleted_at: null, purges_at: null };
+  views.list.mockResolvedValue({ items: [urgent] });
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+  // The views menu loads on its own chunk; its button shows meanwhile.
+  fireEvent.click(await screen.findByText('Views', { selector: 'summary span' }));
+  const menu = screen.getByRole('group', { name: 'Views' });
+  fireEvent.change(within(menu).getByLabelText('View name'), { target: { value: 'Pending, our turn' } });
+  fireEvent.click(within(menu).getByRole('button', { name: 'Save view' }));
+  await waitFor(() => expect(views.create).toHaveBeenCalledWith({ name: 'Pending, our turn', scope: 'personal', filters: { status: ['pending'], awaiting: 'team' } }));
+  fireEvent.click(await within(menu).findByRole('button', { name: 'Urgent' }));
+  await waitFor(() => expect(api.conversations).toHaveBeenLastCalledWith('priority=urgent&page=1&page_size=50', expect.anything()));
+});
+
+test('on the trial with an unverified domain, New conversation says it cannot send yet; once verified it starts the conversation', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const pat = { id: '77777777-7777-4777-8777-777777777777', name: 'Pat', email: 'pat@prospect.example', organization: null, merged_into_id: null,
+    created_at: '2026-01-02T00:00:00Z', updated_at: '2026-01-02T00:00:00Z' };
+  api.me.mockResolvedValue({ timezone: 'UTC', plan: { plan: 'trial', trial_ends_at: '2026-11-01T00:00:00Z', locked: false, trial_extended: false } });
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  const channel = { support_address: 'support@desk.example', domain_verified_at: null };
+  api.emailChannel.mockResolvedValue({ channel, inbound_url: 'https://desk.example.com/x', smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false },
+    from_policy: 'verified', sending_from: 'support@desk.example' } as never);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  api.emailChannel.mockClear();
+  const { unmount } = render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await screen.findAllByText('Alpha conversation');
+  await waitFor(() => expect(api.emailChannel).toHaveBeenCalled());
+  fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Start a conversation' });
+  await waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent(/trial/));
+  unmount();
+
+  api.emailChannel.mockResolvedValue({ channel: { ...channel, domain_verified_at: '2026-10-01T00:00:00Z' }, inbound_url: 'https://desk.example.com/x',
+    smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: 'support@desk.example' } as never);
+  api.contacts.mockResolvedValue({ items: [pat] });
+  api.createConversation.mockResolvedValue({ ...alpha, id: '88888888-8888-4888-8888-888888888888', subject: 'Hello', contact_id: pat.id, contact_name: 'Pat' });
+  api.emailChannel.mockClear();
+  const second = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={second}><InboxRoute /></QueryClientProvider>);
+  await screen.findAllByText('Alpha conversation');
+  await waitFor(() => expect(api.emailChannel).toHaveBeenCalled());
+  fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
+  const ready = await screen.findByRole('dialog', { name: 'Start a conversation' });
+  expect(within(ready).queryByRole('status')).not.toBeInTheDocument();
+  fireEvent.change(within(ready).getByLabelText('Find a customer by name or email'), { target: { value: 'pat' } });
+  fireEvent.click(await within(ready).findByRole('button', { name: /pat@prospect.example/ }));
+  fireEvent.change(within(ready).getByLabelText('Subject'), { target: { value: 'Hello' } });
+  fireEvent.change(within(ready).getByLabelText('Message'), { target: { value: 'First words' } });
+  fireEvent.click(within(ready).getByRole('button', { name: 'Send' }));
+  await waitFor(() => expect(api.createConversation).toHaveBeenCalledWith(pat.id, 'Hello', { body: 'First words', files: [], cc: [] }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+});
+
+test('New conversation takes no input until the plan and the email channel are known', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.me.mockReturnValue(new Promise(() => {})); // whether the workspace is on the trial is not known yet
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  api.emailChannel.mockResolvedValue({ channel: { support_address: 'support@desk.example', domain_verified_at: null }, inbound_url: 'https://desk.example.com/x',
+    smtp: { configured: true, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: 'support@desk.example' } as never);
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
+  await screen.findAllByText('Alpha conversation');
+  fireEvent.click(screen.getByRole('button', { name: 'New conversation' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Start a conversation' });
+  // Typing now could be lost: the trial may refuse the email once the plan is known.
+  expect(within(dialog).getByLabelText('Subject')).toBeDisabled();
+  expect(within(dialog).getByLabelText('Message')).toBeDisabled();
+  expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled();
 });

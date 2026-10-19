@@ -7,7 +7,7 @@ import { TimelinePanel } from './timeline-panel';
 
 const conversation = {
   id: '22222222-2222-4222-8222-222222222222', contact_id: '55555555-5555-4555-8555-555555555555', contact_name: 'Mai Linh',
-  subject: 'Printer jam', status: 'open' as const, priority: 'normal' as const, assignee_id: null, tags: [], origin: null,
+  subject: 'Printer jam', status: 'open' as const, priority: 'normal' as const, assignee_id: null, tags: [], channel: 'email' as const, origin: null,
   created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z',
 };
 const draft = agentRequest({ kind: 'reply_draft', method: 'POST', body: { kind: 'outgoing', body: 'Try turning it off and on.' },

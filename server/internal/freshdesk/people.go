@@ -177,7 +177,8 @@ func (r *run) writeContact(ctx context.Context, key, name, email string, organiz
 	defer tx.Rollback(ctx) //nolint:errcheck
 	var id string
 	var meta *ticketMeta
-	err = tx.QueryRow(ctx, `SELECT id::text FROM contacts WHERE workspace_id=$1 AND email=$2`, r.workspaceID, email).Scan(&id)
+	// A contact merged into another hands its tickets to the contact it was merged into.
+	err = tx.QueryRow(ctx, `SELECT COALESCE(merged_into_id,id)::text FROM contacts WHERE workspace_id=$1 AND email=$2`, r.workspaceID, email).Scan(&id)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		meta = &ticketMeta{Created: true}

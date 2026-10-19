@@ -2,8 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import type { EmailChannelSettings, EmailDnsRecord } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
+import type { GmailReturn } from './gmail-return';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
+
+// "Send from Gmail" loads in its own chunk: Settings is rarely opened and the main bundle has a fixed budget
+// (docs/internals/performance.md). The Settings route preloads it when it opens, so the block is there by the
+// time the channel settings arrive.
+export const gmailPart = lazyPart(() => import('./gmail-connection'));
 
 interface EmailChannelSectionProps {
   settings?: EmailChannelSettings;
@@ -21,10 +28,19 @@ interface EmailChannelSectionProps {
   // Why the last domain check did not verify; the server's own wording.
   verifyError?: string;
   verifyPending?: boolean;
+  onConnectGmail?: () => void;
+  onDisconnectGmail?: () => void;
+  gmailPending?: boolean;
+  gmailError?: string;
+  gmailReturned?: GmailReturn;
 }
 
-export function EmailChannelSection({ settings, timezone, canManage, workspaceSlug, createdSecret, addressSave, slugSave, onSave, onSaveSlug, onRotate, onDisconnect, onVerifyDomain, verifyError, verifyPending }: EmailChannelSectionProps) {
+export function EmailChannelSection({ settings, timezone, canManage, workspaceSlug, createdSecret, addressSave, slugSave, onSave, onSaveSlug, onRotate, onDisconnect, onVerifyDomain, verifyError, verifyPending,
+  onConnectGmail, onDisconnectGmail, gmailPending, gmailError, gmailReturned }: EmailChannelSectionProps) {
   const channel = settings?.channel ?? null;
+  // A connected Gmail account sends by itself; a broken one says so in its own block.
+  const gmailConnection = channel ? settings?.gmail.connection ?? null : null;
+  const gmail = gmailPart.use();
   const [address, setAddress] = useState(channel?.support_address ?? '');
   useEffect(() => setAddress(channel?.support_address ?? ''), [channel?.support_address]);
   const [slug, setSlug] = useState(workspaceSlug ?? '');
@@ -45,6 +61,15 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
   }, [confirmingDisconnect]);
   const smtp = settings?.smtp;
   const hostedAddress = settings?.hosted_address ?? null;
+  const gmailSending = gmailConnection?.status === 'connected' && settings?.gmail.available === true;
+  const dnsVerification = channel && <div className="email-channel-dns">
+    <p className="muted-copy">{settings?.domain_verification === 'provider' ? messages.providerProofHelp : messages.domainVerificationHelp}</p>
+    <label className="invite-link"><span className="field-label">{messages.dnsRecordName}</span><input readOnly value={channel.dns_record_name} /></label>
+    <label className="invite-link"><span className="field-label">{messages.dnsRecordValue}</span><input readOnly value={channel.dns_record_value} /></label>
+    {settings?.domain_verification === 'provider' && <DnsRecordsTable records={channel.dns_records} expiredAt={channel.dns_records_expired_at} timezone={timezone} />}
+    {verifyError && <p role="alert" className="error-copy">{verifyError}</p>}
+    {canManage && <span className="button-row"><button type="button" disabled={verifyPending} onClick={() => onVerifyDomain?.()}>{verifyPending ? messages.verifyingDomain : messages.verifyDomain}</button></span>}
+  </div>;
   const copyAddress = () => {
     if (hostedAddress) void navigator.clipboard.writeText(hostedAddress).then(() => setCopied(true));
   };
@@ -84,7 +109,8 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
           {!hostedAddress && <button type="button" onClick={() => onRotate?.()}>{channel.secret_set ? messages.rotateInboundSecret : messages.createInboundSecret}</button>}
           {!confirmingDisconnect && <button type="button" className="danger-action" ref={disconnectButton} onClick={() => setConfirmingDisconnect(true)}>{messages.disconnectEmail}</button>}
         </span>}
-        {canManage && channel && confirmingDisconnect && <div className="confirm-panel" role="group" aria-labelledby="disconnect-email-question">
+        {canManage && channel && confirmingDisconnect && <div className="confirm-panel" role="group" aria-labelledby="disconnect-email-question"
+          onKeyDown={(event) => { if (event.key === 'Escape') cancelDisconnect(); }}>
           <p><strong id="disconnect-email-question">{messages.disconnectEmailQuestion}</strong> {messages.disconnectEmailConsequence(channel.support_address)}</p>
           <span className="button-row">
             <button type="button" className="danger-action" onClick={() => { setConfirmingDisconnect(false); onDisconnect?.(); }}>{messages.confirmDisconnectEmail}</button>
@@ -93,24 +119,30 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
         </div>}
         {channel && (channel.domain_verified_at
           ? <p className="muted-copy">{messages.domainVerified(channel.domain, formatDate(channel.domain_verified_at, timezone))}</p>
-          : <div className="email-channel-dns">
-              <p className="muted-copy">{settings?.domain_verification === 'provider' ? messages.providerProofHelp : messages.domainVerificationHelp}</p>
-              <label className="invite-link"><span className="field-label">{messages.dnsRecordName}</span><input readOnly value={channel.dns_record_name} /></label>
-              <label className="invite-link"><span className="field-label">{messages.dnsRecordValue}</span><input readOnly value={channel.dns_record_value} /></label>
-              {settings?.domain_verification === 'provider' && <DnsRecordsTable records={channel.dns_records} expiredAt={channel.dns_records_expired_at} timezone={timezone} />}
-              {verifyError && <p role="alert" className="error-copy">{verifyError}</p>}
-              {canManage && <span className="button-row"><button type="button" disabled={verifyPending} onClick={() => onVerifyDomain?.()}>{verifyPending ? messages.verifyingDomain : messages.verifyDomain}</button></span>}
-            </div>)}
+          : gmailSending
+            // Gmail replies need no verified domain; the records stay one click away for SMTP.
+            ? <details className="email-channel-dns-folded" open={Boolean(verifyError) || undefined}>
+                <summary>{messages.domainVerificationNotNeeded}</summary>
+                {dnsVerification}
+              </details>
+            : dnsVerification)}
         {settings?.sending_pause && <div role="alert" aria-labelledby="email-paused-heading" className="warning-note">
           <strong id="email-paused-heading">{messages.emailSendingPausedTitle}</strong>
           <p>{messages.emailSendingPausedBody(settings.sending_pause.reason, formatDate(settings.sending_pause.paused_at, timezone))}</p>
         </div>}
-        {channel && (settings?.sending_from
+        {channel && !gmailConnection && (settings?.sending_from
           ? <p className="muted-copy">{messages.sendingFrom(settings.sending_from)}</p>
           : <p role="status" className="error-copy">{messages.cannotSend}</p>)}
+        {channel && settings && (gmail.status === 'ready'
+          ? <gmail.module.GmailConnection gmail={settings.gmail} supportAddress={channel.support_address} timezone={timezone} canManage={canManage}
+              onConnect={onConnectGmail} onDisconnect={onDisconnectGmail} connectPending={gmailPending} error={gmailError} returned={gmailReturned} />
+          : gmail.status === 'error'
+            ? <PartUnavailable />
+            // Holds the block's place while its chunk arrives, so what follows does not jump.
+            : <div className="gmail-connection gmail-connection-placeholder" aria-hidden="true" />)}
         {smtp && (smtp.configured
           ? <p className="muted-copy"><strong>{messages.outgoingEmail}: </strong>{messages.smtpConfigured(smtp.host, smtp.port, smtp.starttls, smtp.authenticated)}</p>
-          : <p role="note" className="warning-note"><strong>{messages.outgoingEmail}: </strong>{messages.smtpNotConfigured}</p>)}
+          : !gmailConnection && <p role="note" className="warning-note"><strong>{messages.outgoingEmail}: </strong>{messages.smtpNotConfigured}</p>)}
       </div>
     </section>
   );

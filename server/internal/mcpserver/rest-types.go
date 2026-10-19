@@ -37,6 +37,7 @@ type restContact struct {
 	Name         string    `json:"name"`
 	Email        string    `json:"email"`
 	Organization *string   `json:"organization"`
+	MergedIntoID *string   `json:"merged_into_id"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
@@ -48,6 +49,7 @@ type restConversation struct {
 	Priority   string    `json:"priority"`
 	AssigneeID *string   `json:"assignee_id"`
 	Tags       []restTag `json:"tags"`
+	Channel    string    `json:"channel"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }
@@ -85,7 +87,8 @@ type restMessage struct {
 
 type restContactDetail struct {
 	restContact
-	Conversations []restConversation `json:"conversations"`
+	ConversationCount int                `json:"conversation_count"`
+	Merges            []restContactMerge `json:"merges"`
 }
 
 type restTimeEntry struct {

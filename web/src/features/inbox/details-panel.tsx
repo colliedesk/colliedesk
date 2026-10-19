@@ -14,9 +14,11 @@ interface DetailsPanelProps {
   onCreateTag?: (conversationId: string, name: string) => void;
   timezone?: string;
   onClose?: () => void;
+  // Narrows the list to this customer's conversations.
+  onShowContactConversations?: (contactId: string) => void;
 }
 
-export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, onRemoveTag, onCreateTag, timezone = 'UTC', onClose }: DetailsPanelProps) {
+export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, onRemoveTag, onCreateTag, timezone = 'UTC', onClose, onShowContactConversations }: DetailsPanelProps) {
   const [tagName, setTagName] = useState('');
   const createTag = () => {
     if (!conversation || !tagName.trim()) return;
@@ -58,6 +60,12 @@ export function DetailsPanel({ conversation, agents, tags, onUpdate, onAddTag, o
           <button type="submit" disabled={!conversation || !tagName.trim()}>{messages.createTag}</button>
         </form>
       </fieldset>
+      {conversation && (
+        <section className="details-section conversation-source">
+          {onShowContactConversations && <button type="button" className="link-button" onClick={() => onShowContactConversations(conversation.contact_id)}>
+            {messages.showContactConversations(conversation.contact_name)}</button>}
+        </section>
+      )}
       {conversation?.origin && <ConversationOriginBlock origin={conversation.origin} timezone={timezone} />}
     </aside>
   );

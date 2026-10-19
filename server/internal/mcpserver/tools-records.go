@@ -218,16 +218,23 @@ func contactGet(c *call, arguments map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	shown := detail.Conversations
-	if len(shown) > args.Limit {
-		shown = shown[:args.Limit]
+	var page struct {
+		Items []restConversation `json:"items"`
 	}
-	rows := make([]conversationOut, 0, len(shown))
-	for _, conversation := range shown {
+	query := url.Values{"contact": {args.ContactID}, "page_size": {strconv.Itoa(args.Limit)}}
+	if err := c.get("/api/v1/conversations", query, &page); err != nil {
+		return nil, err
+	}
+	rows := make([]conversationOut, 0, len(page.Items))
+	for _, conversation := range page.Items {
 		rows = append(rows, conversationRow(conversation, &detail.restContact, agents, false))
 	}
+	merges := make([]contactMergeOut, 0, len(detail.Merges))
+	for _, merge := range detail.Merges {
+		merges = append(merges, contactMergeRow(merge))
+	}
 	return map[string]any{"contact": contactRow(detail.restContact), "conversations": rows,
-		"conversations_total": len(detail.Conversations), "timezone": me.Workspace.Timezone}, nil
+		"conversations_total": detail.ConversationCount, "merged_into_id": detail.MergedIntoID, "merges": merges, "timezone": me.Workspace.Timezone}, nil
 }
 
 func contactRow(contact restContact) contactOutRow {

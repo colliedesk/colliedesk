@@ -33,17 +33,15 @@ func (s *Store) CreateProblemReport(ctx context.Context, workspaceID string, in 
 	defer tx.Rollback(ctx) //nolint:errcheck
 	now := s.now()
 	var contactID, tagID, conversationID, messageID string
-	if err := tx.QueryRow(ctx, `INSERT INTO contacts(workspace_id,name,email) VALUES($1,$2,$3)
-		ON CONFLICT(workspace_id,email) DO UPDATE SET email=contacts.email RETURNING id::text`,
-		workspaceID, in.ReporterName, in.ReporterEmail).Scan(&contactID); err != nil {
-		return "", fmt.Errorf("find or create reporter contact: %w", err)
+	if contactID, err = contactForEmail(ctx, tx, workspaceID, in.ReporterName, in.ReporterEmail); err != nil {
+		return "", err
 	}
 	if err := tx.QueryRow(ctx, `INSERT INTO tags(workspace_id,name) VALUES($1,$2)
 		ON CONFLICT(workspace_id,name) DO UPDATE SET name=tags.name RETURNING id::text`, workspaceID, ProblemReportTag).Scan(&tagID); err != nil {
 		return "", fmt.Errorf("find or create tag: %w", err)
 	}
-	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at) VALUES($1,$2,$3,$4,$4) RETURNING id::text`,
-		workspaceID, contactID, in.Subject, now).Scan(&conversationID); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel) VALUES($1,$2,$3,$4,$4,$5) RETURNING id::text`,
+		workspaceID, contactID, in.Subject, now, domain.ChannelProblemReport).Scan(&conversationID); err != nil {
 		return "", fmt.Errorf("create conversation: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO conversation_tags(workspace_id,conversation_id,tag_id) VALUES($1,$2,$3)`, workspaceID, conversationID, tagID); err != nil {

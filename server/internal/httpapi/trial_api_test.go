@@ -89,6 +89,7 @@ func TestLockedAllowlistIsExactlyTheOpenRoutes(t *testing.T) {
 	want := []string{
 		"DELETE /api/v1/auth/sessions/{id}",
 		"DELETE /api/v1/channels/email",
+		"DELETE /api/v1/channels/email/gmail",
 		"GET /api/v1/auth/me",
 		"GET /api/v1/auth/sessions",
 		"GET /api/v1/billing",

@@ -50,7 +50,8 @@ func conversationCreateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_conversation_create",
 		Title: "Open a conversation",
-		Description: `Open a new conversation with a customer, with a subject and no messages yet. It sends nothing; write to the customer with colliedesk_reply_send afterwards. ` +
+		Description: `Open a new conversation with a customer, with a subject and no messages yet. It sends nothing; write to the customer with colliedesk_reply_send afterwards, ` +
+			`or open and email in one step with colliedesk_conversation_start. ` +
 			`Find the customer with colliedesk_contacts_find, or add one with colliedesk_contact_create. ` +
 			`Each call opens one more conversation, so do not repeat a call that succeeded. Close one you opened by mistake with colliedesk_conversation_update.` +
 			"\n\nTier: send.",

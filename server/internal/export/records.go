@@ -24,12 +24,27 @@ type Agent struct {
 }
 
 type Contact struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	Email        string    `json:"email"`
-	Organization *string   `json:"organization"`
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Email        string  `json:"email"`
+	Organization *string `json:"organization"`
+	// MergedIntoID is the contact this one was merged into; its conversations are there.
+	MergedIntoID *string   `json:"merged_into_id"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// ContactMerge is one duplicate merged into a contact, undone or not, with the conversations it moved.
+type ContactMerge struct {
+	ID              string     `json:"id"`
+	ContactID       string     `json:"contact_id"`
+	MergedContactID string     `json:"merged_contact_id"`
+	ConversationIDs []string   `json:"conversation_ids"`
+	MergedByAgentID *string    `json:"merged_by_agent_id"`
+	TokenID         *string    `json:"token_id"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UndoneAt        *time.Time `json:"undone_at"`
+	UndoneByAgentID *string    `json:"undone_by_agent_id"`
 }
 
 type Tag struct {
@@ -50,6 +65,19 @@ type SavedReply struct {
 	// DeletedAt is set while the reply is in the trash; it is deleted for good 30 days later.
 	DeletedAt        *time.Time `json:"deleted_at"`
 	DeletedByAgentID *string    `json:"deleted_by_agent_id"`
+}
+
+// SavedView is a named set of inbox filters, personal (owner_agent_id set) or shared, also in the trash.
+type SavedView struct {
+	ID               string          `json:"id"`
+	Name             string          `json:"name"`
+	Scope            string          `json:"scope"`
+	OwnerAgentID     *string         `json:"owner_agent_id"`
+	Filters          json.RawMessage `json:"filters"`
+	CreatedByAgentID *string         `json:"created_by_agent_id"`
+	CreatedAt        time.Time       `json:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at"`
+	DeletedAt        *time.Time      `json:"deleted_at"`
 }
 
 // SavedReplyVersion is one version of a saved reply: what it said after a change, who made the change,
@@ -140,6 +168,7 @@ type ConversationHead struct {
 	Status     string                     `json:"status"`
 	Priority   string                     `json:"priority"`
 	AssigneeID *string                    `json:"assignee_id"`
+	Channel    string                     `json:"channel"`
 	Origin     *domain.ConversationOrigin `json:"origin"`
 	TagIDs     []string                   `json:"tag_ids"`
 	CreatedAt  time.Time                  `json:"created_at"`
@@ -154,15 +183,17 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// Tag*, SavedReply*, SavedReplyVersion*, AgentRequest*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
 	Agent(Agent) error
 	Contact(Contact) error
+	ContactMerge(ContactMerge) error
 	Tag(Tag) error
 	SavedReply(SavedReply) error
 	SavedReplyVersion(SavedReplyVersion) error
+	SavedView(SavedView) error
 	AgentRequest(AgentRequest) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error

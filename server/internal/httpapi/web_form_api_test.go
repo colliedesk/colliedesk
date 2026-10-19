@@ -66,6 +66,7 @@ type listedConversation struct {
 	ID        string `json:"id"`
 	ContactID string `json:"contact_id"`
 	Subject   string `json:"subject"`
+	Channel   string `json:"channel"`
 	Tags      []struct {
 		Name string `json:"name"`
 	} `json:"tags"`
@@ -146,8 +147,8 @@ func TestWebFormAcceptsSubmissionAndOpensAConversation(t *testing.T) {
 	wantAccepted(t, response)
 
 	items := f.conversations(t, f.adminA)
-	if len(items) != 1 || items[0].Subject != "Web form: site:updates" {
-		t.Fatalf("conversations=%+v, want one with subject %q", items, "Web form: site:updates")
+	if len(items) != 1 || items[0].Subject != "Web form: site:updates" || items[0].Channel != "web_form" {
+		t.Fatalf("conversations=%+v, want one web_form conversation with subject %q", items, "Web form: site:updates")
 	}
 	if len(items[0].Tags) != 1 || items[0].Tags[0].Name != "web-form" {
 		t.Fatalf("tags=%+v, want [web-form]", items[0].Tags)

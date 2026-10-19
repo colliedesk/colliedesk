@@ -95,9 +95,13 @@ export type ConversationStatus = 'open' | 'pending' | 'resolved' | 'closed';
 export type SettingsSection = 'profile' | 'preferences' | 'general' | 'team' | 'invites' | 'sessions' | 'email_channel'
   | 'web_form' | 'saved_replies' | 'export' | 'billing';
 export type SurveyId = 'switch_blocker_v1';
+export type InboxFilterKind = 'status' | 'priority' | 'assignee' | 'tag' | 'contact' | 'organization' | 'awaiting' | 'draft' | 'delivery'
+  | 'source' | 'channel' | 'created' | 'updated' | 'sort';
+
 export interface EventProperties {
   conversation_opened: { source: 'list' | 'link' };
-  inbox_filtered: { filter: 'status' | 'assignee' | 'tag' };
+  // filter names the kind of filter only, never a value: tag also covers tag_match, created and updated cover both ends of their range.
+  inbox_filtered: { filter: InboxFilterKind };
   inbox_searched: { has_results: boolean };
   saved_reply_inserted: undefined;
   conversation_status_changed: { to: ConversationStatus };

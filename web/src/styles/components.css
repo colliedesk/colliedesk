@@ -6,11 +6,12 @@
 .status-tabs label:hover { color: var(--text-1); }
 .status-tabs label:has(input:checked) { color: var(--text-1); box-shadow: inset 0 -2px var(--accent); }
 .status-tabs label:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: var(--radius-sm); }
-.filter-bar { display: flex; gap: var(--space-2); }
-.search-field { position: relative; display: block; flex: 1; min-width: 0; }
+/* Search takes the first row; Filter, Sort and Views share the second. The menus open under the whole bar. */
+.filter-bar { position: relative; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.search-field { position: relative; display: block; flex: 1 1 100%; min-width: 0; }
 .search-field svg { position: absolute; top: 50%; left: 10px; translate: 0 -50%; color: var(--text-3); pointer-events: none; }
 .search-field input { width: 100%; padding-left: 32px; }
-.filter-menu { position: relative; }
+.filter-menu { position: static; }
 .filter-menu summary {
   min-height: var(--control, 32px); display: inline-flex; align-items: center; gap: var(--space-2); list-style: none; cursor: pointer;
   border: 1px solid var(--line-control); border-radius: var(--radius); background: var(--surface-1); box-shadow: var(--shadow-1);
@@ -21,10 +22,77 @@
 .filter-menu summary svg { color: var(--text-3); }
 .filter-count { min-width: 18px; height: 18px; display: inline-grid; place-items: center; border-radius: var(--radius-full); background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 600; }
 .filter-popover {
-  position: absolute; z-index: 5; top: calc(100% + var(--space-1)); right: 0; width: 15rem; display: grid; gap: var(--space-3);
+  position: absolute; z-index: 5; top: calc(100% + var(--space-1)); left: 0; width: min(100%, 22rem); display: grid; gap: var(--space-3);
   border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-3);
 }
 .filter-popover select { width: 100%; }
+/* The Filter menu holds every filter; it scrolls inside itself so the page never moves. */
+.filter-menu > .filter-popover { max-height: min(70vh, 34rem); overflow-y: auto; overscroll-behavior: contain; }
+.filter-popover fieldset { display: grid; gap: var(--space-1); margin: 0; border: 0; padding: 0; min-width: 0; }
+.filter-popover fieldset + fieldset, .filter-popover fieldset + .field, .filter-popover .field + fieldset { border-top: 1px solid var(--line); padding-top: var(--space-3); }
+/* A floated legend is laid out like any other child, so it never sits in the fieldset's top border. */
+.filter-popover legend { float: left; width: 100%; padding: 0; margin-bottom: var(--space-1); }
+.check-row { display: flex; align-items: center; gap: var(--space-2); min-height: 28px; font-size: var(--fs-small); color: var(--text-1); cursor: pointer; }
+.check-row span { min-width: 0; overflow-wrap: anywhere; }
+.check-row:has(input:disabled) { color: var(--text-3); cursor: not-allowed; }
+.filter-match { margin-top: var(--space-1); color: var(--text-2); }
+.filter-hint { color: var(--text-3); font-size: var(--fs-small); }
+.date-range { grid-template-columns: 1fr 1fr; column-gap: var(--space-2); }
+.date-range legend { grid-column: 1 / -1; }
+.date-range input { width: 100%; min-width: 0; padding-inline: var(--space-2); }
+.sort-field { flex: 1 1 8rem; width: auto; min-width: 0; max-width: 13rem; font-size: var(--fs-small); }
+/* Active filters: one chip each, wrapping onto a second line rather than scrolling sideways. */
+.filter-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.filter-chips-pending { min-height: 26px; }
+.filter-chips ul { display: contents; list-style: none; margin: 0; padding: 0; }
+.filter-chips li {
+  display: inline-flex; align-items: center; gap: var(--space-1); max-width: 100%; min-height: 26px; border: 1px solid var(--line-strong); border-radius: var(--radius-full);
+  background: var(--surface-0); padding: 0 2px 0 var(--space-3); color: var(--text-1); font-size: var(--fs-label); font-weight: 500;
+}
+.chip-remove { width: 22px; min-height: 22px; padding: 0; border: 0; border-radius: var(--radius-full); background: transparent; box-shadow: none; color: var(--text-3); }
+.chip-remove:hover:not(:disabled) { background: var(--surface-3); color: var(--text-1); }
+.chip-remove svg { width: 14px; height: 14px; }
+.filter-chips .link-button { font-size: var(--fs-label); }
+/* Saved views. */
+.views-popover { gap: var(--space-3); }
+.views-popover h3 { color: var(--text-2); font-size: var(--fs-label); font-weight: 600; letter-spacing: var(--track-label); text-transform: uppercase; }
+.view-group { display: grid; gap: var(--space-1); }
+.view-group ul, .view-trash ul { display: grid; gap: 2px; list-style: none; margin: 0; padding: 0; }
+.view-row { position: relative; display: flex; align-items: center; gap: var(--space-1); }
+.view-open { flex: 1; min-width: 0; justify-content: flex-start; border-color: transparent; background: transparent; box-shadow: none; overflow: hidden; text-overflow: ellipsis; }
+.view-open[aria-current="true"] { background: var(--accent-soft); font-weight: 600; }
+.view-actions { position: static; }
+.view-actions summary { width: var(--control, 32px); min-height: var(--control, 32px); display: grid; place-items: center; list-style: none; cursor: pointer; border-radius: var(--radius); color: var(--text-3); }
+.view-actions summary::-webkit-details-marker { display: none; }
+.view-actions summary:hover { background: var(--surface-2); color: var(--text-1); }
+.view-actions-popover { display: grid; gap: 2px; margin-top: var(--space-1); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-0); padding: var(--space-1); }
+.view-actions[open] { position: absolute; inset: 0 0 auto auto; z-index: 1; width: 100%; }
+.view-actions[open] summary { margin-left: auto; background: var(--surface-1); }
+.view-actions-buttons { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
+.menu-item { justify-content: flex-start; border-color: transparent; background: transparent; box-shadow: none; }
+.view-save { display: grid; gap: var(--space-2); border-top: 1px solid var(--line); padding-top: var(--space-3); }
+.view-save fieldset { display: grid; gap: 0; }
+.view-save button { justify-self: start; }
+.view-trash summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-small); }
+.view-trash ul { margin-top: var(--space-2); }
+.view-trash-name { display: grid; flex: 1; min-width: 0; font-size: var(--fs-small); }
+.view-trash-name small { color: var(--text-3); font-size: var(--fs-label); }
+.view-notice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--text-2); font-size: var(--fs-small); }
+@media (max-width: 44rem) {
+  .filter-popover { width: 100%; }
+  .check-row { min-height: var(--touch); }
+  .chip-remove { width: var(--touch); min-height: var(--touch); margin-block: -8px; }
+  /* One row of chips that scrolls sideways, its bar hidden and its edges faded, so the list stays in view. */
+  /* Only the chips scroll; Clear all stays outside the scrolling row, always in view. */
+  .filter-chips { flex-wrap: nowrap; min-width: 0; }
+  .inbox-filters { grid-template-columns: minmax(0, 1fr); }
+  .filter-chips ul { display: flex; flex: 1; min-width: 0; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(to right, transparent, #000 var(--space-4), #000 calc(100% - var(--space-4)), transparent); }
+  .filter-chips ul::-webkit-scrollbar { display: none; }
+  .filter-chips li { flex: none; }
+  .filter-chips .link-button { flex: none; min-height: var(--touch); padding-inline: var(--space-2); }
+  .filter-chips li { min-height: 36px; }
+}
+@media (prefers-reduced-motion: reduce) { .chip-remove, .view-open { transition: none; } }
 
 /* Conversation rows. */
 .conversation-scroll { min-height: 0; overflow-y: auto; }
@@ -258,6 +326,14 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .confirm-panel { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--danger); border-radius: var(--radius); }
 .invite-link small { color: var(--text-3); font-size: var(--fs-label); }
 .email-channel-dns { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-0); padding: var(--space-4); }
+.gmail-connection { display: grid; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-0); padding: var(--space-4); }
+.email-channel-dns-folded { display: grid; gap: var(--space-3); }
+.email-channel-dns-folded summary { cursor: pointer; color: var(--text-2); font-size: var(--fs-small); }
+.email-channel-dns-folded summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-sm); }
+.message-envelope .delivery-reason { color: var(--text-2); }
+.gmail-connection-placeholder { min-height: 180px; }
+.gmail-connection h3 { margin: 0; font-size: var(--fs-ui); font-weight: 600; }
+.gmail-connection .warning-note .button-row { margin-top: var(--space-2); }
 .data-list { border-top: 1px solid var(--line); }
 .data-list article { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); border-bottom: 1px solid var(--line); padding: var(--space-3) 0; }
 .data-list article:last-child { border-bottom: 0; padding-bottom: 0; }
@@ -462,3 +538,69 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .report-preview dl { display: grid; gap: var(--space-1); margin: var(--space-2) 0; }
 .report-preview dt { color: var(--text-3); }
 .report-preview dd { display: grid; margin: 0; overflow-wrap: anywhere; }
+
+
+/* Contacts: the customer page, the contact picker and the customers a search finds. */
+.contact-page { display: grid; align-content: start; gap: var(--space-5); }
+.contact-page > * { max-width: 60rem; }
+.contact-header { display: grid; gap: var(--space-3); }
+.contact-name-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); }
+.contact-name-row h1 { min-width: 0; font: 400 32px/1.1 var(--font-display); letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.contact-rename { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.contact-rename input { flex: 1 1 16rem; min-height: var(--touch); }
+.contact-rename .error-copy { flex-basis: 100%; }
+.contact-facts { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); margin: 0; }
+.contact-facts dt { color: var(--text-3); font-size: var(--fs-label); }
+.contact-facts dd { margin: 0; overflow-wrap: anywhere; }
+.contact-merged-notice { border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text); padding: var(--space-3) var(--space-4); }
+.contact-merges h2, .contact-history h2 { font-size: 14px; font-weight: 600; }
+.contact-merges ul, .contact-history-list { display: grid; margin: var(--space-2) 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.contact-merges li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); padding: var(--space-3) 0; }
+.contact-merges li .error-copy { flex-basis: 100%; }
+.contact-history-list li { border-bottom: 1px solid var(--line); }
+.contact-history-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-4); min-height: var(--touch);
+  border-radius: var(--radius-sm); padding: var(--space-2); color: inherit; text-decoration: none; transition: background-color var(--dur-fast) var(--ease); }
+.contact-history-row:hover { background: var(--surface-2); }
+.contact-history-row:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.contact-history-subject { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.contact-history-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--text-3); font-size: var(--fs-small); }
+.contact-history .pagination { margin-top: var(--space-3); }
+.contact-picker { display: grid; gap: var(--space-2); }
+.contact-picker input { min-height: var(--touch); }
+.contact-picker-results { display: grid; gap: 2px; max-height: 16rem; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.contact-picker-results:empty { display: none; }
+.contact-picker-results button { display: grid; width: 100%; min-height: var(--touch); border: 0; border-radius: var(--radius-sm); background: transparent;
+  padding: var(--space-2) var(--space-3); text-align: left; transition: background-color var(--dur-fast) var(--ease); }
+.contact-picker-results button:hover:not(:disabled) { background: var(--surface-2); }
+.contact-picker-results button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.contact-picker-name { font-weight: 600; overflow-wrap: anywhere; }
+.contact-picker-email { color: var(--text-3); font-size: var(--fs-small); overflow-wrap: anywhere; }
+.contact-matches { margin: 0 0 var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-2); }
+.contact-matches h2 { padding: 0 var(--space-2); color: var(--text-3); font-size: var(--fs-label); font-weight: 600; letter-spacing: var(--track-label); text-transform: uppercase; }
+.contact-matches ul { display: grid; margin: var(--space-1) 0 0; padding: 0; list-style: none; }
+.contact-matches a { display: block; border-radius: var(--radius-sm); padding: var(--space-2); color: inherit; text-decoration: none; }
+.contact-matches a:hover { background: var(--surface-2); }
+.contact-matches a:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.timeline-contact { color: var(--text-2); font-size: var(--fs-small); text-underline-offset: 2px; }
+.timeline-contact:hover { color: var(--text-1); }
+.new-conversation-button { margin-left: auto; min-height: 32px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface-1); padding: 0 var(--space-3); font-size: var(--fs-small); font-weight: 600; }
+.new-conversation-button:hover { background: var(--surface-2); }
+.new-conversation-form { display: grid; gap: var(--space-2); }
+.new-conversation-fields { display: grid; gap: var(--space-2); min-width: 0; margin: 0; border: 0; padding: 0; }
+.new-conversation-fields:disabled { opacity: 0.6; }
+.new-conversation-existing { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.contact-history h2:focus { outline: none; }
+.contact-history h2:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.new-conversation-form > input, .new-conversation-contact input { min-height: var(--touch); }
+.new-conversation-form textarea { width: 100%; resize: vertical; }
+.new-conversation-contact { display: grid; gap: var(--space-2); margin: 0; border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-3); }
+.new-conversation-to { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.new-conversation-to > span:nth-child(2) { min-width: 0; overflow-wrap: anywhere; }
+.field-label { color: var(--text-3); font-size: var(--fs-label); }
+@media (max-width: 40rem) {
+  .new-conversation-button { min-height: var(--touch); }
+}
+/* At 320 px the status tabs no longer fit: they scroll sideways with faded edges. */
+@media (max-width: 22rem) {
+  .status-tabs { mask-image: linear-gradient(to right, transparent, #000 var(--space-4), #000 calc(100% - var(--space-4)), transparent); }
+}

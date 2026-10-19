@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { AgentRequest, Conversation, Message, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import { BulkActionBar } from './bulk-action-bar';
 import { ConversationList } from './conversation-list';
 import { DetailsPanel } from './details-panel';
-import { InboxFilters, defaultInboxFilters } from './inbox-filters';
+import { InboxFilters } from './inbox-filters';
+
+import type { InboxQuery } from '../../lib/inbox-query';
 import type { AttachmentLimits } from './attachment-picker';
 import { ReplyComposer } from './reply-composer';
 import { ReplyDraftCard } from './reply-draft-card';
@@ -24,7 +27,11 @@ interface InboxPageProps {
   tags?: Tag[];
   timezone?: string;
   onSelect?: (id: string) => void;
-  onFilters?: (filters: Record<string, string>) => void;
+  // The filters of the list, as the address carries them, and a change to them.
+  query?: InboxQuery;
+  onQuery?: (query: InboxQuery) => void;
+  // The saved views menu, which sits in the filter bar (the route loads it lazily with its data).
+  viewsMenu?: ReactNode;
   onMessage?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[]) => void | Promise<unknown>;
   attachmentLimits?: AttachmentLimits;
   savedReplies?: SavedReply[];
@@ -63,14 +70,18 @@ interface InboxPageProps {
   draftConversationIds?: ReadonlySet<string>;
   onSendDraft?: (draft: AgentRequest, edit?: DraftEdit) => Promise<unknown>;
   onDiscardDraft?: (draft: AgentRequest) => Promise<unknown>;
+  // Customers whose name or email matches the search, shown under the filters (contact-matches.tsx).
+  contactMatches?: ReactNode;
+  onOpenContact?: (contactId: string) => void;
+  onNewConversation?: () => void;
 }
 
-export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, onFilters, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, onSendDraft, onDiscardDraft }: InboxPageProps) {
+export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
-  // Filters are an uncontrolled form; clearing remounts it so every field returns to its default.
-  const [filterGeneration, setFilterGeneration] = useState(0);
-  const clearFilters = () => { setFilterGeneration((current) => current + 1); onFilters?.({ ...defaultInboxFilters }); };
+  // Clearing from the empty list returns to the Open view and puts focus back on the search box.
+  const [focusSignal, setFocusSignal] = useState(0);
+  const clearFilters = () => { setFocusSignal((current) => current + 1); onQuery?.({}); };
   const detailsToggle = useRef<HTMLButtonElement>(null);
   const listPane = useRef<HTMLElement>(null);
   const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
@@ -131,26 +142,31 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
     <main className="inbox-shell" data-details-open={detailsOpen}>
       <section className="list-pane panel" ref={listPane} tabIndex={-1} aria-label={messages.conversationList}>
         <header>
-          <div className="list-title"><h1>{messages.inbox}</h1><span>{conversations.length}</span></div>
+          <div className="list-title"><h1>{messages.inbox}</h1><span>{conversations.length}</span>
+            {onNewConversation && <button type="button" className="new-conversation-button" data-opens="new-conversation" onClick={onNewConversation}>{messages.newConversation}</button>}</div>
           <div className="list-head">
-            <InboxFilters key={filterGeneration} tags={tags} onChange={onFilters} focusSearch={filterGeneration > 0} />
+            <InboxFilters query={query} onChange={onQuery} tags={tags} agents={agents} timezone={timezone} conversations={conversations} focusSignal={focusSignal}
+              views={viewsMenu} />
           </div>
           {bulkFailed && <p role="alert" className="error-copy bulk-message">{messages.bulkUpdateFailed}</p>}
           {/* A live region without role="status": it is mounted before the first result so screen readers
               announce it, while an idle inbox still exposes no status. */}
           <p aria-live="polite" className="bulk-message">{bulkNotice}</p>
+          {contactMatches}
         </header>
         <ConversationList items={conversations} selectedId={selected?.id} timezone={timezone} onSelect={onSelect}
           page={page} hasNextPage={hasNextPage} onPage={onPage} filtered={filtered} nothingOpen={nothingOpen} loading={loading} refreshing={refreshing}
           failed={failed} onRetry={onRetry} onClearFilters={clearFilters} canManage={canManage} onOpenSettings={onOpenSettings}
           checkedIds={checked} onToggle={toggle} onToggleAll={toggleAll} selectAllRef={selectAll}
           toolbar={checkedIds.length > 0 && <BulkActionBar selected={conversations.filter((item) => checked.has(item.id))} agents={agents} tags={tags} currentAgentId={currentAgentId}
-            busy={bulkBusy} onApply={(changes) => void applyBulk(changes)} onClear={() => { changeSelection(new Set()); setRefocus((count) => count + 1); }} />} draftIds={draftConversationIds} />
+            busy={bulkBusy} onApply={(changes) => void applyBulk(changes)} onClear={() => { changeSelection(new Set()); setRefocus((count) => count + 1); }} />} draftIds={draftConversationIds}
+          grouped={(query.sort ?? 'updated_desc') === 'updated_desc'} />
       </section>
       <div className="conversation-center panel">
-        <TimelinePanel conversation={selected} items={timeline} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
+        <TimelinePanel conversation={selected} items={timeline} onOpenContact={onOpenContact} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
           detailsOpen={detailsOpen} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
-        {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}</p>}
+        {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}
+          {canManage && onOpenSettings && <> <button type="button" className="link-action" onClick={onOpenSettings}>{messages.openSettings}</button></>}</p>}
         {deliveryNotice && <p role="alert" className="composer-notice">{deliveryNotice}</p>}
         {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft} customer={customerName}
           onSend={(edit) => onSendDraft?.(draft, edit) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}
@@ -159,7 +175,8 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
           savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState} />
       </div>
       <DetailsPanel conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate}
-        onAddTag={onAddTag} onRemoveTag={onRemoveTag} onCreateTag={onCreateTag} onClose={detailsOpen ? closeDetails : undefined} />
+        onAddTag={onAddTag} onRemoveTag={onRemoveTag} onCreateTag={onCreateTag} onClose={detailsOpen ? closeDetails : undefined}
+        onShowContactConversations={onQuery ? (contact) => onQuery({ contact, status: 'all' }) : undefined} />
     </main>
   );
 }

@@ -34,6 +34,9 @@ type Outgoing struct {
 	// Standalone is mail the system writes by itself (alerts, notices, reports): Subject stays as written,
 	// not "Re: " in front, and the message is marked Auto-Submitted: auto-generated.
 	Standalone bool
+	// Opening is the first message of a thread a person starts: Subject stays as written, without
+	// "Re: ", and nothing marks it automatic.
+	Opening bool
 }
 
 // Compose renders a plain-text UTF-8 RFC 5322 message, or multipart/mixed with one part per file when
@@ -153,14 +156,22 @@ func subjectFor(message Outgoing) string {
 	if message.Standalone {
 		return cleanLine(message.Subject)
 	}
+	if message.Opening {
+		return shortSubject(message.Subject)
+	}
 	return replySubject(message.Subject)
 }
 
-func replySubject(subject string) string {
+func shortSubject(subject string) string {
 	subject = cleanLine(subject)
 	if runes := []rune(subject); len(runes) > maxSubjectRunes {
 		subject = string(runes[:maxSubjectRunes])
 	}
+	return subject
+}
+
+func replySubject(subject string) string {
+	subject = shortSubject(subject)
 	if strings.HasPrefix(strings.ToLower(subject), "re:") {
 		return subject
 	}
