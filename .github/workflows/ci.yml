@@ -115,6 +115,8 @@ jobs:
       - name: Install Chromium
         working-directory: web
         run: corepack pnpm exec playwright install chromium
+      - name: Point the test servers at the restored Go cache
+        run: for name in GOPATH GOMODCACHE GOCACHE; do echo "$name=$(go env "$name")"; done >> "$GITHUB_ENV"
       - name: Run end-to-end workflows
         working-directory: web
         run: corepack pnpm exec vite build && corepack pnpm e2e --grep-invert @onboarding --fully-parallel --workers=3
@@ -173,6 +175,8 @@ jobs:
       - name: Install Chromium
         working-directory: web
         run: corepack pnpm exec playwright install chromium
+      - name: Point the test servers at the restored Go cache
+        run: for name in GOPATH GOMODCACHE GOCACHE; do echo "$name=$(go env "$name")"; done >> "$GITHUB_ENV"
       - name: Run onboarding journeys
         working-directory: web
         env:
