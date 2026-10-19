@@ -99,6 +99,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_billing_request` | Asks for a plan checkout or the billing portal | `read` |
 | `colliedesk_email_channel_disconnect_request` | Asks to disconnect the email channel | `read` |
 | `colliedesk_email_secret_rotate_request` | Asks for a new inbound email secret; the approver sees it | `read` |
+| `colliedesk_gmail_connect_request` | Asks an admin to connect Gmail for sending replies; the approver gets Google's consent page | `read` |
+| `colliedesk_gmail_disconnect_request` | Asks to disconnect Gmail | `read` |
 | `colliedesk_workspace_slug_change_request` | Asks to change the workspace address | `read` |
 | `colliedesk_workspace_settings_get` | Shows the workspace name, address and timezone, and your own timezone | `read` |
 | `colliedesk_workspace_settings_update` | Sets the workspace timezone | `admin` |

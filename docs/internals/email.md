@@ -349,12 +349,99 @@ unchanged; the workspace's Support address stays the identity customers see.
 - A copied person's reply-all threads by `In-Reply-To`/`References` like any reply. It never changes
   the conversation contact, which is set when the conversation is created.
 
+## Sending through Gmail (issue #95, phase A)
+
+Code: `internal/google` (OAuth with PKCE, Gmail `messages.send`, no SDK), `internal/google/googletest` (the
+stand-in tests and `cmd/google-stand-in` use), `internal/tokenseal`, `store/mailbox-connections.go`,
+`httpapi/gmail-handlers.go`, `emailoutbox/gmail.go`.
+
+- **Send only.** Scopes are `gmail.send` (sensitive, no CASA) plus `openid email`: `gmail.send` cannot read
+  the address it sends from (`users.getProfile` needs a read scope), and the ID token names it. Inbound
+  stays forwarding. Mailbox sync (`gmail.modify`, restricted, CASA) is phase B.
+- **The transport is chosen when the reply is queued** (`email_outbox.transport`, also on retry), not when it
+  is sent. A reply accepted for Gmail never leaves through SMTP: no connection (disconnected meanwhile) fails
+  it with `MailboxDisconnectedNote`; a failed connection fails it with the reason. A retry chooses again.
+  Rows queued for SMTP before Gmail was connected still go through SMTP.
+- **A broken grant is a visible state, not a fallback.** `mailbox_connections.status='failed'` with
+  `error_code`: `revoked` (token endpoint `invalid_grant`) or `permission` (a 403 that is not a rate limit).
+  Only Google's answers mark it. While failed, new replies are recorded `failed` at once and retry is 409,
+  exactly like a server without SMTP. Settings show `sending_from: null` and the alert.
+- **This server's keys are not the grant's fault.** A sealed grant that does not open with
+  `MAILBOX_TOKEN_KEYS` (an unknown key id during a rolling key change, a typo in the env) only makes the reply
+  retry with `MailboxKeyNote`, and fail after the attempts; the connection stays `connected`, so fixing the
+  keys sends the next attempt without a reconnect (review 2026-10-19: an earlier `key_missing` state was
+  stored and outlived the fix). A server with no Google settings at all records Gmail replies `failed` at
+  once (`MailboxNotConfiguredNote`) and shows `sending_from: null`.
+- **Not every Gmail 403 is a broken connection.** 403 with `rateLimitExceeded`, `userRateLimitExceeded`,
+  `dailyLimitExceeded`, `quotaExceeded` and every 429/5xx retry with the normal backoff; other 4xx fail the
+  reply only. A 401 refreshes once and tries again. Source: Gmail API "Resolve errors"
+  (developers.google.com/workspace/gmail/api/guides/handle-errors, read 2026-10-19): the 403 rate reasons
+  above, 429 "User-rate limit exceeded (Mail sending)" for the daily sending limit (it can last hours, so it
+  may use all 8 attempts and fail), and 403 `domainPolicy` (the Workspace admin disabled Gmail apps), which
+  counts as a broken connection. Marking failed is conditional on the sealed grant the
+  worker used, so a reconnect that raced it is not marked.
+- **Threading does not depend on Gmail keeping our Message-ID.** `gmail.send` cannot read back what was
+  delivered. Reply-To stays `support+r-<token>@`, so the customer's answer threads by the token (test with a
+  stand-in that rewrites the Message-ID). Whether Gmail keeps a client-set Message-ID was not verified;
+  nothing relies on it.
+- **"Sent" means Gmail accepted it.** Bounces go to the connected mailbox, not to `MAIL_FROM_DOMAIN` or the
+  Resend webhook; they reach Colliedesk only if that mailbox forwards them, and then the DSN path applies.
+  Per-recipient Cc refusals are not known at send time.
+- **Identity.** From is the connected address with the workspace name; it may differ from the support
+  address (owner decision 2026-10-19: allowed, Settings say where answers go). The From is always the
+  account address (send-as aliases would need `gmail.settings.basic` to list). The
+  connected address is refused in Cc like the support address. Domain verification and
+  `EMAIL_FROM_POLICY` do not apply to Gmail replies; trial rules, Cc rules, the hourly limit and the
+  complaint pause do, in the same order as SMTP.
+- **Sealed grants.** AES-256-GCM, random nonce, additional data `colliedesk/mailbox/google/<workspace id>`
+  (`google.GrantContext`), key ring `MAILBOX_TOKEN_KEYS` = `id:base64[,id:base64]` (first seals, all open).
+  A grant copied into another workspace's row does not open there and never sends; test
+  `TestAGrantSealedForOneWorkspaceNeverSendsForAnother`. The key is not in the database on purpose.
+  **Key change:** put the new key first; a grant opened with an older key is sealed again with the first key
+  by the worker on its next send (`resealGrant`, conditional on the stored seal, and the delivery then
+  holds the new seal). Remove the old key only after every connected workspace sent a reply since, or
+  reconnected; no command re-seals idle workspaces yet.
+- **Consent binding.** `POST .../gmail` stores the SHA-256 of a random state with the agent and the PKCE
+  verifier (10 minutes, `mailbox_oauth_states`). The callback is a public route (Google's redirect) that
+  authenticates the session cookie itself, refuses bearer tokens, requires admin and an unlocked workspace,
+  looks the state up inside the session's workspace (so another workspace's state is simply not found) and
+  requires the same agent. Without this, a consent link sent to a victim would attach the victim's Gmail
+  to the sender's workspace. Every outcome is a 303 to `/settings?gmail=connected|gmail_error=<code>`.
+- **Revoking.** Disconnect, removing the channel, and replacing the account revoke the dropped grant at
+  Google (best effort, after the row is gone, never inside a transaction). Google's revoke "removes all
+  OAuth 2.0 scopes previously granted to a project, invalidating any issued access or refresh tokens for
+  all clients registered under that project" (developers.google.com/identity/protocols/oauth2/web-server,
+  read 2026-10-19), so a reconnect with the same account does not revoke the old token, and a failed save
+  after a successful exchange does not revoke the new one. **Shared account:** before revoking, the server
+  asks (`PrivilegeMailboxGrantShared`, a yes or no) whether another workspace holds a connection for the
+  address, connected or failed; if one does, nothing is revoked and the dropping workspace's token stays
+  valid at Google until the last holder drops the address. The order is fixed: remove our own row, commit,
+  ask, revoke. Asking before removing would let two workspaces dropping together both skip the revoke
+  (`TestTwoWorkspacesDisconnectingTogetherStillRevoke`).
+- **Access tokens are not cached**: one refresh per send. At the 300/hour limit that is well inside Google's
+  token endpoint quota; cache only if a profile says so.
+- **Agents.** Connect and disconnect are approval routes; the approver receives the consent URL as `url`
+  (withheld from the token, like an invite link). The callback is NotForPeople: no token can drive a
+  browser through Google.
+
 ## Open
 
 - **Filtered mail is not stored.** Dropped automatic mail is reported only in the 200 response.
+- **Retention does not revoke Gmail.** Deleting a workspace removes its sealed grant with it, but the grant
+  stays valid at Google until it expires or the account owner removes it.
 
 ## Traps
 
+- **Google returns a refresh token only with `access_type=offline` and `prompt=consent`.** Without the
+  prompt, a second consent of the same account answers without one; the callback refuses that
+  (`no_refresh_token`) and leaves the existing connection alone.
+- **A person can untick "Send email on your behalf"** on Google's screen; the token answer's `scope` then
+  lacks `gmail.send` and the callback refuses (`send_not_granted`).
+- **One Google account in two workspaces shares one grant.** Revocation is per account and project. Colliedesk
+  does not revoke while another workspace holds the address, but the account owner removing the app in their
+  Google account still stops both (`revoked` in each).
+- **Testing-mode Google apps expire refresh tokens after 7 days** (External, unverified). That shows as
+  `revoked`; use an Internal app to dogfood.
 - **Reply tokens are lowercase hex.** Some relays lowercase the local part of an address.
 - **Plus addressing must reach us.** Cloudflare Email Routing needs subaddressing or a
   catch-all for `support+r-…@`. Threading by In-Reply-To works without it.

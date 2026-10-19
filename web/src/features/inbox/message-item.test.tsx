@@ -116,3 +116,10 @@ test('an ordinary incoming message with the same body is not folded', () => {
   expect(screen.queryByRole('button', { name: /automated response/ })).toBeNull();
   expect(screen.getByTitle('Original message')).toBeInTheDocument();
 });
+
+test('a failed delivery says why in text, not only on hover', () => {
+  const reason = 'Google no longer accepts the Gmail connection. Reconnect Gmail in Settings, then retry the reply.';
+  render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, delivery: { status: 'failed', attempts: 1, last_error: reason, sent_at: null } }} timezone="UTC" />);
+  expect(screen.getByText(reason)).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Retry delivery' })).toBeInTheDocument();
+});

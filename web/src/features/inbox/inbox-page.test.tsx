@@ -93,6 +93,14 @@ test('renders message Markdown in the timeline', () => {
 test('tells the agent when replies will not be emailed', () => {
   render(<InboxPage selected={conversation} conversations={[conversation]} outboundNotice="Outgoing email is not configured on this server." />);
   expect(screen.getByText('Outgoing email is not configured on this server.')).toHaveAttribute('role', 'status');
+  expect(screen.queryByRole('button', { name: 'Open Settings' })).not.toBeInTheDocument();
+});
+
+test('an admin can go straight to Settings from the notice that replies are not emailed', () => {
+  const onOpenSettings = vi.fn();
+  render(<InboxPage selected={conversation} conversations={[conversation]} outboundNotice="Gmail stopped sending." canManage onOpenSettings={onOpenSettings} />);
+  fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: 'Open Settings' }));
+  expect(onOpenSettings).toHaveBeenCalled();
 });
 
 test('shows the author name and attachment download links on a timeline message', () => {

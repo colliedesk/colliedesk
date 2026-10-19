@@ -265,7 +265,7 @@ export const messages = {
   saved: 'Saved',
   settingsActionFailed: 'The settings action failed. Try again.',
   emailChannel: 'Email channel',
-  emailChannelDescription: 'Forward your support address to the inbound URL. Replies go out through the server SMTP relay.',
+  emailChannelDescription: 'Forward your support address to the inbound URL. Replies go out through the server SMTP relay, or through Gmail once it is connected below.',
   supportAddress: 'Support address',
   saveSupportAddress: 'Save support address',
   forwardingAddress: 'Forwarding address',
@@ -331,8 +331,14 @@ export const messages = {
   domainVerified: (domain: string, when: string) => `${domain} verified ${when}.`,
   sendingFrom: (address: string) => `Replies are sent from ${address}.`,
   cannotSend: 'Replies cannot be emailed yet: configure SMTP on the server or verify the domain.',
+  domainVerificationNotNeeded: 'Domain verification (not needed while replies go through Gmail)',
   outboundNotConfigured: 'Outgoing email is not configured on this server. Replies stay on the timeline and are not emailed.',
   outboundNeedsVerification: 'Replies are not emailed until an admin verifies the support address domain in Settings.',
+  outboundGmailNotSetUp: 'Replies are not emailed: Gmail sending is not set up on this server any more. Ask the administrator, or disconnect Gmail in Settings to send through SMTP.',
+  outboundGmailFailed: (canManage: boolean) => canManage
+    ? 'Replies are not emailed: Gmail stopped sending. Reconnect it in Settings, then retry the failed replies.'
+    : 'Replies are not emailed: Gmail stopped sending. Ask an admin to reconnect Gmail, then retry the failed replies.',
+  openSettings: 'Open Settings',
   planNotices: 'Plan notices',
   trialDaysLeft: (days: number) => `Trial: ${days} ${days === 1 ? 'day' : 'days'} left`,
   trialExtendedNote: 'Your trial was extended after your Freshdesk import.',

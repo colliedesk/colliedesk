@@ -36,6 +36,7 @@ var withheldResults = map[string]bool{
 	"POST /api/v1/auth/tokens":           true,
 	"POST /api/v1/auth/invites":          true,
 	"POST /api/v1/channels/email/secret": true,
+	"POST " + gmailPath:                  true,
 	"GET /api/v1/export":                 true,
 	"POST /api/v1/export/link":           true,
 	"POST /api/v1/billing/checkout":      true,

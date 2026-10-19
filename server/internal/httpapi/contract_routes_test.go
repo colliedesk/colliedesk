@@ -185,6 +185,9 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"DELETE /api/v1/channels/email":                              {path: "/api/v1/channels/email", token: f.deleteChannelToken, status: 204},
 		"POST /api/v1/channels/email/domain-verification":            {path: "/api/v1/channels/email/domain-verification", token: admin, status: 200},
 		"POST /api/v1/channels/email/secret":                         {path: "/api/v1/channels/email/secret", token: admin, status: 200},
+		"POST /api/v1/channels/email/gmail":                          {path: "/api/v1/channels/email/gmail", token: admin, status: 200},
+		"DELETE /api/v1/channels/email/gmail":                        {path: "/api/v1/channels/email/gmail", token: admin, status: 404},
+		"GET /api/v1/channels/email/gmail/callback":                  {path: "/api/v1/channels/email/gmail/callback?state=unknown&code=x", status: 303},
 		"POST /api/v1/channels/email/inbound": {path: inboundPath, status: 200, raw: mail([]string{
 			"From: Contract Customer <contract@customer.example>", "Subject: Contract mail", "Message-ID: <contract@customer.example>",
 		}, "Contract inbound.")},

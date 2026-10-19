@@ -722,6 +722,66 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/channels/email/gmail:
+    post:
+      operationId: connectGmail
+      x-permission: access:write
+      description: >-
+        Start connecting the workspace's Gmail account, so replies are sent through the Gmail API from that
+        address and kept in its Sent folder. Incoming mail still arrives by forwarding. Answers Google's consent
+        address (`url`), valid for 10 minutes, for the person who asked to open in their browser; Google then
+        sends that browser to `GET /api/v1/channels/email/gmail/callback`, which finishes only for the same
+        signed-in person. Google is asked for `gmail.send` and `openid email` (the address that connected) and
+        nothing that reads mail. Connecting again replaces the earlier account and revokes its grant. 409
+        `email_channel_missing` without an email channel; 409 `gmail_not_configured` when the server lacks its
+        Google settings (`gmail.missing_settings` in the channel settings names them). An agent token gets an
+        agent request; the person who approves receives the consent address.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200': {$ref: '#/components/responses/ConsentLink'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    delete:
+      operationId: disconnectGmail
+      x-permission: access:write
+      description: >-
+        Disconnect Gmail: the grant is removed here and revoked at Google. Replies are then sent the way the
+        workspace sent before connecting (SMTP); a reply still queued for Gmail fails with the reason and can be
+        retried. A locked workspace may disconnect.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '204': {description: Gmail disconnected}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/channels/email/gmail/callback:
+    get:
+      operationId: finishGmailConnect
+      security: []
+      x-permission: public
+      summary: Google's redirect after the consent screen
+      description: >-
+        Opened by the browser Google redirects, never by an API client. It needs the session cookie of the admin
+        who started the connection (a bearer token is not accepted) and the unused `state` of that start; the
+        state is looked up in that person's workspace only. Every outcome is a 303 to `/settings`:
+        `?gmail=connected`, or `?gmail_error=<reason>` with `signed_out` (no session cookie), `forbidden` (not an
+        admin, or the workspace is locked), `expired` (state unknown, used, from another workspace or older than
+        10 minutes), `wrong_person` (someone else started it), `denied` (consent cancelled at Google),
+        `send_not_granted` (the "send email" permission was unticked), `no_refresh_token`, `no_address` (Google
+        named no verified address), `email_channel_missing` and `google_unavailable`. Google's own error text is
+        never echoed.
+      parameters:
+        - {name: code, in: query, required: false, schema: {type: string}}
+        - {name: state, in: query, required: false, schema: {type: string}}
+        - {name: error, in: query, required: false, schema: {type: string}}
+      responses:
+        '303':
+          description: Back to the settings page, which explains the outcome.
+          headers:
+            Location: {schema: {type: string}, description: 'The path /settings?gmail=connected or /settings?gmail_error=<reason>.'}
   /api/v1/channels/email/inbound:
     post:
       operationId: receiveInboundEmail
@@ -2212,6 +2272,15 @@ components:
             required: [url]
             properties:
               url: {type: string, format: uri}
+    ConsentLink:
+      description: The provider's consent address for the person who started the connection, valid 10 minutes
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [url]
+            properties:
+              url: {type: string, format: uri}
     BadGateway:
       description: The billing provider failed or could not be reached; nothing changed, try again
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
@@ -3186,8 +3255,9 @@ components:
         authenticated: {type: boolean}
     EmailChannelSettings:
       type: object
-      required: [channel, inbound_url, smtp, from_policy, sending_from, hosted_address, domain_verification, sending_pause]
+      required: [channel, inbound_url, smtp, from_policy, sending_from, hosted_address, domain_verification, sending_pause, gmail]
       properties:
+        gmail: {$ref: '#/components/schemas/GmailSettings'}
         sending_pause:
           description: >
             Set when the workspace's email sending is paused after spam complaints (3 or more in 7 days and
@@ -3215,13 +3285,48 @@ components:
           description: '`verified`: send as the support address only after domain verification. `any`: always (operator owns the relay).'
         sending_from:
           type: [string, 'null']
-          description: The From address replies use now; null when replies cannot be emailed.
+          description: >-
+            The From address replies use now; null when replies cannot be emailed. With Gmail connected it is the
+            Gmail address, and null while that connection has failed (replies never fall back to SMTP then).
         channel:
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/EmailChannel'}
         inbound_url: {type: string, format: uri}
         smtp: {$ref: '#/components/schemas/SMTPStatus'}
+    GmailSettings:
+      type: object
+      required: [available, missing_settings, redirect_uri, connection]
+      properties:
+        available:
+          type: boolean
+          description: Whether this server can connect Gmail (its operator set the Google OAuth client and token keys).
+        missing_settings:
+          type: array
+          items: {type: string, enum: [GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, MAILBOX_TOKEN_KEYS]}
+          description: The server settings still needed before Gmail can be connected; empty when available.
+        redirect_uri:
+          type: string
+          format: uri
+          description: The redirect URI to register on the OAuth client in Google Cloud console.
+        connection:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/MailboxConnection'}
+    MailboxConnection:
+      type: object
+      required: [provider, address, status, error_code, error, failed_at, connected_at]
+      properties:
+        provider: {type: string, enum: [google]}
+        address: {type: string, format: email, description: The Google account replies are sent from.}
+        status:
+          type: string
+          enum: [connected, failed]
+          description: '`failed` when Google stopped honouring the grant: replies fail with `error` until an admin reconnects.'
+        error_code: {type: [string, 'null'], enum: [revoked, permission, null], description: 'revoked: Google refuses the grant. permission: Gmail refuses to send for it.'}
+        error: {type: [string, 'null']}
+        failed_at: {type: [string, 'null'], format: date-time}
+        connected_at: {type: string, format: date-time}
     InboundEmailResult:
       type: object
       required: [status, reason, conversation_id, message_id, authentication]

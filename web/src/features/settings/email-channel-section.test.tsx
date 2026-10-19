@@ -12,6 +12,7 @@ const disconnected: EmailChannelSettings = {
   hosted_address: null,
   domain_verification: 'txt',
   sending_pause: null,
+  gmail: { available: true, missing_settings: [], redirect_uri: 'https://desk.example.com/api/v1/channels/email/gmail/callback', connection: null },
 };
 const connected: EmailChannelSettings = {
   ...disconnected,
@@ -242,4 +243,48 @@ test('says the records expired and to verify again', () => {
   render(<EmailChannelSection settings={expired} timezone="UTC" canManage />);
   expect(screen.getByText(/expired because the domain was not verified within 7 days/i)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /verify domain/i })).toBeInTheDocument();
+});
+
+test('while Gmail sends, domain verification is folded away and says it is not needed', () => {
+  const gmailConnection = { provider: 'google' as const, address: 'support@example.com', status: 'connected' as const, error_code: null, error: null, failed_at: null, connected_at: '2026-10-19T08:00:00Z' };
+  render(<EmailChannelSection settings={{ ...connected, gmail: { ...connected.gmail, connection: gmailConnection } }} timezone="UTC" canManage />);
+  const summary = screen.getByText(/not needed while replies go through Gmail/);
+  const details = summary.closest('details');
+  expect(details).not.toBeNull();
+  expect(details).not.toHaveAttribute('open');
+  expect(details).toContainElement(screen.getByRole('textbox', { name: /txt record name/i }));
+});
+
+test('Escape closes the disconnect email question like Cancel', () => {
+  const onDisconnect = vi.fn();
+  render(<EmailChannelSection settings={connected} timezone="UTC" canManage onDisconnect={onDisconnect} />);
+  fireEvent.click(screen.getByRole('button', { name: /disconnect email/i }));
+  fireEvent.keyDown(screen.getByRole('group', { name: 'Disconnect email?' }), { key: 'Escape' });
+  expect(screen.queryByRole('group', { name: 'Disconnect email?' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /disconnect email/i })).toHaveFocus();
+  expect(onDisconnect).not.toHaveBeenCalled();
+});
+
+test('Gmail is offered once the channel is connected, and connecting it calls back', async () => {
+  const onConnectGmail = vi.fn();
+  const { rerender } = render(<EmailChannelSection settings={disconnected} timezone="UTC" canManage onConnectGmail={onConnectGmail} />);
+  expect(screen.queryByRole('button', { name: 'Connect Gmail' })).not.toBeInTheDocument();
+  rerender(<EmailChannelSection settings={connected} timezone="UTC" canManage onConnectGmail={onConnectGmail} />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Connect Gmail' }));
+  expect(onConnectGmail).toHaveBeenCalled();
+});
+
+test('with Gmail sending, a server without SMTP is not a warning, and a broken Gmail is not "configure SMTP"', async () => {
+  const gmailConnection = { provider: 'google' as const, address: 'support@example.com', status: 'connected' as const, error_code: null, error: null, failed_at: null, connected_at: '2026-10-19T08:00:00Z' };
+  const viaGmail: EmailChannelSettings = { ...connected, smtp: disconnected.smtp, sending_from: 'support@example.com', gmail: { ...connected.gmail, connection: gmailConnection } };
+  const { rerender } = render(<EmailChannelSection settings={viaGmail} timezone="UTC" canManage />);
+  expect(screen.queryByText(/outgoing email is not configured/i)).not.toBeInTheDocument();
+  expect(await screen.findByText(/Replies are sent through Gmail from support@example.com/)).toBeInTheDocument();
+  const broken: EmailChannelSettings = {
+    ...viaGmail, sending_from: null,
+    gmail: { ...viaGmail.gmail, connection: { ...gmailConnection, status: 'failed', error_code: 'revoked', error: 'Reconnect Gmail.', failed_at: '2026-10-19T09:00:00Z' } },
+  };
+  rerender(<EmailChannelSection settings={broken} timezone="UTC" canManage />);
+  expect(screen.queryByText(/configure SMTP on the server/i)).not.toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent('Gmail stopped sending');
 });

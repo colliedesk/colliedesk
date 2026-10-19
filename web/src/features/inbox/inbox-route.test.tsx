@@ -14,7 +14,7 @@ const api = vi.hoisted(() => ({
   emailChannel: vi.fn(async () => ({ channel: null, inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null })),
 }));
 
-vi.mock('../../api/client', () => ({ api }));
+vi.mock('../../api/client', () => ({ api, InvalidRequestError: class extends Error {} }));
 vi.mock('../contacts/contact-api', () => ({ contactApi: { startConversation: api.createConversation }, existingContact: () => undefined }));
 const views = vi.hoisted(() => ({
   list: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })), trash: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })),
@@ -283,6 +283,27 @@ test('a reply the trial refuses stays in the composer with the reason', async ()
   fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
   expect(await screen.findByRole('alert')).toHaveTextContent(/verify your sending domain/i);
   expect(body).toHaveValue('Please read this');
+});
+
+// A reply that just failed may mean Gmail broke: the channel is read again, so the composer notice follows
+// without a reload.
+test('a failed delivery on the open conversation reloads the email channel', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  api.messages.mockResolvedValue({ items: [{
+    id: '44444444-4444-4444-8444-444444444444', conversation_id: alpha.id, author_agent_id: null, author_name: null, agent_token: null, agent_request_id: null, kind: 'outgoing', body: 'Answer.',
+    body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', email: null,
+    delivery: { status: 'failed', attempts: 1, last_error: 'Gmail stopped.', sent_at: null },
+  }] });
+  api.emailChannel.mockClear();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await screen.findByText('Gmail stopped.');
+  await waitFor(() => expect(api.emailChannel.mock.calls.length).toBeGreaterThan(1));
 });
 
 test('a retry the trial refuses says why instead of doing nothing', async () => {

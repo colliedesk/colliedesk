@@ -36,6 +36,7 @@ var privilegedCallSites = []string{
 	"internal/store/email-provider-domains.go: PrivilegeProviderDomainSweep",
 	"internal/store/email-relay-bounce.go: PrivilegeVerifiedSender",
 	"internal/store/mail-image-cache.go: PrivilegeMailImageSweep",
+	"internal/store/mailbox-connections.go: PrivilegeMailboxGrantShared",
 	"internal/store/saved-reply-history.go: PrivilegeSavedReplyPurge",
 	"internal/store/server-secrets.go: PrivilegeServerSecret",
 	"internal/telemetry/usage.go: PrivilegeTelemetry",

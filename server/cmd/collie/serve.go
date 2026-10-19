@@ -19,6 +19,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
+	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
@@ -29,6 +30,9 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/webui"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// googleBaseURL replaces Google's addresses with a local stand-in; only end-to-end builds set it.
+var googleBaseURL = ""
 
 func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string) error {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
@@ -83,9 +87,19 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err != nil {
 		return err
 	}
-	if emailConfig.SMTP.Configured() {
-		worker := emailoutbox.New(store.NewWithDB(db), email.SMTPSender{Config: emailConfig.SMTP},
-			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage})
+	googleConfig, err := google.ConfigFromEnv(os.Getenv)
+	if err != nil {
+		return err
+	}
+	googleConfig.Base = googleBaseURL
+	if emailConfig.SMTP.Configured() || googleConfig.Enabled() {
+		// A server with Gmail and no relay still runs the worker; replies that need SMTP fail with the reason.
+		var sender emailoutbox.Sender
+		if emailConfig.SMTP.Configured() {
+			sender = email.SMTPSender{Config: emailConfig.SMTP}
+		}
+		worker := emailoutbox.New(store.NewWithDB(db), sender,
+			emailoutbox.Options{FromPolicy: emailConfig.FromPolicy, MailFromDomain: emailConfig.MailFromDomain, Storage: storage, Google: &googleConfig})
 		go worker.Run(ctx, 5*time.Second)
 	}
 	if emailConfig.ResendAPIKey != "" {
@@ -112,7 +126,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			go sweepRetention(ctx, retentionService)
 		}
 	}
-	apiConfig := httpapi.Config{Origin: origin, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", Funnel: telemetry.NewFunnel(telemetryConfig, nil),
+	apiConfig := httpapi.Config{Origin: origin, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", Funnel: telemetry.NewFunnel(telemetryConfig, nil),
 		ProblemReportWorkspace: strings.TrimSpace(os.Getenv("PROBLEM_REPORT_WORKSPACE"))}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.

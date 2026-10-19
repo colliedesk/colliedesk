@@ -158,6 +158,8 @@ var requestTitles = map[string]string{
 	"POST /api/v1/billing/portal":                                "Open the billing portal",
 	"DELETE /api/v1/channels/email":                              "Disconnect the email channel",
 	"POST /api/v1/channels/email/secret":                         "Rotate the inbound email secret",
+	"POST " + gmailPath:                                          "Connect Gmail for sending replies",
+	"DELETE " + gmailPath:                                        "Disconnect Gmail",
 	"PATCH /api/v1/workspace/slug":                               "Change the workspace address",
 	"PATCH /api/v1/workspace/timezone":                           "Change the workspace timezone",
 	"PATCH /api/v1/agents/me/timezone":                           "Change my timezone",

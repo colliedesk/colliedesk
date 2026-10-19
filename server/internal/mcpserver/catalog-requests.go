@@ -131,6 +131,18 @@ func emailChannelDisconnectRequestSpec() Spec {
 		[]string{"DELETE /api/v1/channels/email"}, noArguments, emailChannelDisconnectRequest)
 }
 
+func gmailConnectRequestSpec() Spec {
+	return approvalSpec("colliedesk_gmail_connect_request", "Ask a person to connect Gmail for sending",
+		`Ask an admin to connect the workspace's Gmail account, so replies are sent from that address through Gmail and kept in its Sent folder (incoming mail still arrives by forwarding). The person who approves gets Google's consent page and signs in to Google there; you never see it. Connecting again replaces the account. Needs the email channel and the server's Google settings (see colliedesk_email_channel_get, gmail).`,
+		[]string{"POST /api/v1/channels/email/gmail"}, noArguments, gmailConnectRequest)
+}
+
+func gmailDisconnectRequestSpec() Spec {
+	return approvalSpec("colliedesk_gmail_disconnect_request", "Ask to disconnect Gmail",
+		`Ask to disconnect the workspace's Gmail account: Colliedesk's access is revoked at Google and replies go out the way they did before Gmail was connected. A reply still waiting to be sent through Gmail fails and can be retried.`,
+		[]string{"DELETE /api/v1/channels/email/gmail"}, noArguments, gmailDisconnectRequest)
+}
+
 func emailSecretRotateRequestSpec() Spec {
 	return approvalSpec("colliedesk_email_secret_rotate_request", "Ask to rotate the inbound email secret",
 		`Ask for a new inbound email secret, for example after the old one leaked. The person who approves sees the new secret once and updates the mail forwarder; it is never shown to you.`,

@@ -145,8 +145,14 @@ var tokenTiers = map[string]TokenAccess{
 	"DELETE /api/v1/channels/email":      approvalRequired,
 	"POST /api/v1/channels/email/secret": approvalRequired,
 	"PATCH /api/v1/workspace/slug":       approvalRequired,
+	// Connecting Gmail grants Colliedesk a sending identity (and the consent address is for a person's
+	// browser); disconnecting changes the address customers get replies from.
+	"POST " + gmailPath:   approvalRequired,
+	"DELETE " + gmailPath: approvalRequired,
 
-	"GET /api/v1/config":                            notForPeople,
+	"GET /api/v1/config": notForPeople,
+	// Google's redirect after consent: it finishes only with the session cookie of the person who started.
+	"GET " + gmailCallbackPath:                      notForPeople,
 	"POST /api/v1/auth/cloud/exchange":              notForPeople,
 	"POST " + cloudSignupPath:                       notForPeople,
 	"POST /api/v1/auth/redeem":                      notForPeople,

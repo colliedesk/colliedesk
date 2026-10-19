@@ -1,4 +1,5 @@
 import { AttachmentsTooLargeError, AttachmentStorageError } from '../../api/attachments-error';
+import { InvalidRequestError } from '../../api/client';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { formatWait } from '../../lib/format-wait';
 import { messages } from '../../messages';
@@ -21,5 +22,7 @@ export function retryRefusalText(error: unknown): string {
   if (error instanceof OutboundRefusedError) {
     return error.code === 'trial_outbound_limit' ? messages.trialRetryLimit(formatWait(error.retryAfterSeconds ?? defaultWaitSeconds)) : messages.trialRetryRestricted;
   }
+  // A refusal with a reason (no SMTP relay, Gmail broken or not set up) will not pass by trying again.
+  if (error instanceof InvalidRequestError) return error.message;
   return messages.retryNotSent;
 }
