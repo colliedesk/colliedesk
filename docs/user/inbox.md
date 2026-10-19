@@ -50,9 +50,13 @@ cannot be loaded, it says so with **Try again** instead.
 **Change many conversations at once**
 - Tick the box at the left of a row to select it, or tick **Select all on this page**. Ticking a box
   does not open the conversation. With the keyboard, press Tab to reach a box and Space to tick it.
-- An action bar replaces the title and filters while at least one row is selected. It shows how many
-  rows are selected and offers **Set status**, **Assign to** (**Me**, **Unassigned** or a teammate),
-  **Add tag**, **Remove tag** and **Clear selection**. There is no bulk delete.
+- While at least one row is selected, the **Select all on this page** row becomes an action bar. It
+  shows how many rows are selected and a row of icon buttons; hover or focus one to see its name:
+  **Resolve** (one press), **Set status**, **Assign to** (**Me**, **Unassigned** or a teammate),
+  **Tags** and **Clear selection**. The title, search and filters stay in view. There is no bulk delete.
+- In **Tags**, a check mark means every selected row has the tag and a dash means some do. Choosing a
+  checked tag removes it from all of them; choosing any other tag adds it to the rows that lack it.
+- Press Escape to close an open menu; press it again to clear the selection.
 - A choice applies to every selected row at once, up to 50 rows. It is all or nothing: if one change
   cannot be made, no conversation changes, the selection stays and a message says so. Try again.
 - After a successful change the selection clears, the list reloads and a line says

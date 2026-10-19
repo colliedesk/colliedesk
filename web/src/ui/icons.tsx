@@ -24,3 +24,10 @@ export const FilterIcon = () => <Icon><path d="M3 6h18M7 12h10M10 18h4" /></Icon
 export const XIcon = () => <Icon><path d="M18 6 6 18M6 6l12 12" /></Icon>;
 export const BookmarkIcon = () => <Icon><path d="M19 21 12 16 5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z" /></Icon>;
 export const RequestsIcon = () => <Icon><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></Icon>;
+export const ChevronDownIcon = () => <Icon width="12" height="12"><path d="m6 9 6 6 6-6" /></Icon>;
+export const CheckCircleIcon = () => <Icon><circle cx="12" cy="12" r="9" /><path d="m8.5 12 2.5 2.5 4.5-5" /></Icon>;
+export const CircleDotIcon = () => <Icon><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2" /></Icon>;
+export const UserIcon = () => <Icon><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></Icon>;
+export const TagIcon = () => <Icon><path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4Z" /><circle cx="7.5" cy="7.5" r="1" /></Icon>;
+export const CheckIcon = () => <Icon><path d="M20 6 9 17l-5-5" /></Icon>;
+export const MinusIcon = () => <Icon><path d="M5 12h14" /></Icon>;
