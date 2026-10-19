@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 # A newer push to a PR cancels its older run. On main a run never cancels the running one, but
 # GitHub keeps only one pending run per group, so a burst of merges skips the middle commits.
@@ -16,7 +17,12 @@ concurrency:
 
 jobs:
   go:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     services:
       postgres:
         image: postgres:17-bookworm
@@ -38,6 +44,8 @@ jobs:
         with:
           go-version: '1.27.x'
           cache: false
+      - name: CI shard and elapsed-time contracts
+        run: python3 tests/ci-tools-test.py
       - name: Product name spelled Colliedesk
         run: sh tests/brand-name-test.sh
       - name: No webhook secret literals (GitHub secret scanning)
@@ -59,12 +67,17 @@ jobs:
         run: go run ./cmd/migration-check --repo=..
       - name: Format, vet and test
         working-directory: server
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
           if [ -n "$(gofmt -l .)" ]; then gofmt -l .; echo 'gofmt: format the files above' >&2; exit 1; fi
           go vet ./...
-          go test ./...
+          go test -list . ./... > "$RUNNER_TEMP/go-test-list.txt"
+          pattern=$(python3 ../.github/scripts/go-test-shard.py "$SHARD" 8 < "$RUNNER_TEMP/go-test-list.txt")
+          go test -count=1 -run "$pattern" ./...
   web:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -82,6 +95,7 @@ jobs:
         run: corepack pnpm typecheck && corepack pnpm test && corepack pnpm build && corepack pnpm bundle:check
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     services:
       postgres:
         image: postgres:17-bookworm
@@ -115,13 +129,14 @@ jobs:
         run: corepack pnpm install --frozen-lockfile
       - name: Install Chromium
         working-directory: web
-        run: corepack pnpm exec playwright install --with-deps chromium
+        run: corepack pnpm exec playwright install chromium
       - name: Run end-to-end workflows
         run: make e2e E2E_ARGS='--grep-invert @onboarding'
   # The customer onboarding journeys listed in AGENTS.md. A separate job so they run in parallel
   # with the other end-to-end tests; every test runs in exactly one of the two jobs.
   onboarding:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     services:
       postgres:
         image: postgres:17-bookworm
@@ -160,13 +175,14 @@ jobs:
         run: corepack pnpm install --frozen-lockfile
       - name: Install Chromium
         working-directory: web
-        run: corepack pnpm exec playwright install --with-deps chromium
+        run: corepack pnpm exec playwright install chromium
       - name: Run onboarding journeys
         run: make e2e E2E_ARGS='--grep @onboarding'
   # Builds the server image once, boots it, then runs install.sh exactly as a self-hoster does.
   # On main the tested image is pushed as sha-<commit>; publish-edge only retags that digest.
   image:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     permissions:
       contents: read
       packages: write
@@ -186,8 +202,6 @@ jobs:
           build-args: VERSION=${{ steps.version.outputs.value }}
           load: true
           tags: colliedesk:ci
-          cache-from: type=gha,scope=server-image
-          cache-to: type=gha,mode=max,scope=server-image
       - name: Boot image against Postgres
         run: sh tests/image-boot-test.sh colliedesk:ci "${{ steps.version.outputs.value }}"
       - name: Install with install.sh and sign in with the printed link
@@ -225,6 +239,7 @@ jobs:
   # compose.yaml as a contributor or "From a clone" self-hoster runs it.
   compose-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Start the stack from compose.yaml and reach the server
@@ -248,6 +263,7 @@ jobs:
   # an open issue labelled for its section (.github/scripts/roadmap-check.py).
   roadmap:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     permissions:
       contents: read
       issues: read
@@ -274,6 +290,7 @@ jobs:
     if: ${{ !cancelled() }}
     needs: [go, web, e2e, onboarding, image, compose-smoke, osv-scan, roadmap]
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: ci-ok waits for every job
@@ -291,12 +308,20 @@ jobs:
             case "$result" in success|skipped) ;; *) exit 1 ;; esac
           done
 
+      - name: Whole CI phase stays within 120 seconds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          started=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)
+          python3 .github/scripts/ci-budget.py --started-at "$started"
+
   # Self-hosters on the edge channel pull this tag, so it moves only after ci-ok, and only for
   # the current head of main: re-running an older run must not move edge backwards.
   publish-edge:
     needs: ci-ok
     if: ${{ !cancelled() && needs.ci-ok.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     permissions:
       contents: read
       packages: write
