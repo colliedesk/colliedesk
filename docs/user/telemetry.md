@@ -100,8 +100,10 @@ alike, and the same switch as the usage report turns it off: set `DISABLE_TELEME
 `DO_NOT_TRACK=1`) and `GET /api/v1/config` answers `product_analytics.enabled: false`, so the web app
 never loads the analytics library. Every event carries `realm` (`cloud` or `self-hosted`).
 
-- The agent is named by their random agent id, with their role (`admin` or `agent`); the workspace
-  id and plan come along. Never an email address or a name.
+- On Colliedesk Cloud the agent is named by their agent id, email address and display name, with
+  their role (`admin` or `agent`), and every event carries the workspace id, name, slug and plan, so
+  the team knows which customer it is helping. A self-hosted install sends only the random agent id,
+  role, workspace id and plan: its agents are not our customers.
 - Every element's text and attributes are masked, so no conversation, message, contact or form
   content is sent. URLs are sent without their query string or fragment, and page titles are dropped.
 - Nothing is stored in the browser for it (no cookie, no local storage), and no session is recorded.

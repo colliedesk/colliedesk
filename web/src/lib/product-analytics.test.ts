@@ -47,6 +47,15 @@ describe('startProductAnalytics', () => {
     expect(JSON.stringify([posthog.identify.mock.calls, posthog.register.mock.calls])).not.toMatch(/ada@|Acme Support|Ada/);
   });
 
+  it('on Colliedesk Cloud names the agent and the workspace, so the team knows which customer it is', async () => {
+    const posthog = fakePostHog();
+    await startProductAnalytics({ enabled: true, key: 'phc_cloudkey', host: 'https://us.i.posthog.com', realm: 'cloud' }, me, async () => posthog);
+    expect(posthog.identify).toHaveBeenCalledWith('0b8f7a52-1d2c-4a8e-9b1a-5f2c1e7d9a10', { role: 'admin', email: 'ada@acme.example.com', name: 'Ada' });
+    expect(posthog.register).toHaveBeenLastCalledWith({
+      realm: 'cloud', workspace_id: '5c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f', workspace_name: 'Acme Support', workspace_slug: 'acme', plan: 'trial',
+    });
+  });
+
   it('loads PostHog once however often the shell renders', async () => {
     const posthog = fakePostHog();
     const loader = vi.fn(async () => posthog);
