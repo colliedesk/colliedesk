@@ -20,10 +20,25 @@ export function unwrapHardWraps(text: string): string {
   return out.join('\n');
 }
 
+// tidyPlainText removes what only adds height: stored plain bodies made from HTML mail hold runs of
+// lines that are nothing but spaces (up to 105 of them), which pre-wrap would draw as tall gaps.
+// Runs of blank lines become one, trailing spaces go, leading and trailing blank lines go. The
+// leading spaces of a text line stay: signatures and indented lists use them.
+export function tidyPlainText(text: string): string {
+  const out: string[] = [];
+  for (const raw of text.replace(/\r\n/g, '\n').split('\n')) {
+    const line = raw.trimEnd();
+    if (line === '' && (out.length === 0 || out.at(-1) === '')) continue;
+    out.push(line);
+  }
+  while (out.at(-1) === '') out.pop();
+  return out.join('\n');
+}
+
 // Customer email is untrusted: show it as written. No Markdown, so no remote images and no link
 // whose text differs from its target; visible http(s) URLs become links that show their real href.
 export function PlainTextBody({ text: raw }: { text: string }) {
-  const text = unwrapHardWraps(raw);
+  const text = unwrapHardWraps(tidyPlainText(raw));
   const parts: ReactNode[] = [];
   let last = 0;
   for (const match of text.matchAll(urlPattern)) {

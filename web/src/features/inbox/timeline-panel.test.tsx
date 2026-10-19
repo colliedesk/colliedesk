@@ -56,7 +56,7 @@ test('renders customer email as plain text without remote images or disguised li
 
 test('lists stored email files and offers the original message separately', () => {
   const original = { id: '77777777-7777-4777-8777-777777777777', message_id: '88888888-8888-4888-8888-888888888888', filename: 'original-message.eml.gz',
-    content_type: 'application/gzip', size: 2048, sha256: 'a'.repeat(64), created_at: '2026-10-14T00:00:00Z' };
+    content_type: 'application/gzip', size: 2048, sha256: 'a'.repeat(64), inline: false, created_at: '2026-10-14T00:00:00Z' };
   const invoice = { ...original, id: '99999999-9999-4999-8999-999999999999', filename: 'invoice.pdf', content_type: 'application/pdf', size: 1024, sha256: 'b'.repeat(64) };
   const stored: Message = {
     ...base, id: original.message_id, kind: 'incoming', body: 'Invoice attached.', attachments: [original, invoice],
@@ -95,7 +95,7 @@ test('shows no loading status once the timeline has loaded', () => {
 
 test('an outgoing reply lists the files that went with it as downloads', () => {
   const sent: Message = { ...base, id: '66666666-6666-4666-8666-666666666666', kind: 'outgoing', body: 'Invoice attached.',
-    attachments: [{ id: '77777777-7777-4777-8777-777777777777', message_id: '66666666-6666-4666-8666-666666666666', filename: 'invoice.pdf', content_type: 'application/pdf', size: 2048, sha256: 'a'.repeat(64), created_at: '2026-10-14T00:00:00Z' }] };
+    attachments: [{ id: '77777777-7777-4777-8777-777777777777', message_id: '66666666-6666-4666-8666-666666666666', filename: 'invoice.pdf', content_type: 'application/pdf', size: 2048, sha256: 'a'.repeat(64), inline: false, created_at: '2026-10-14T00:00:00Z' }] };
   render(<TimelinePanel items={[sent]} timezone="UTC" />);
   const link = within(screen.getByRole('list', { name: 'Attachments' })).getByRole('link', { name: 'invoice.pdf' });
   expect(link).toHaveAttribute('href', '/api/v1/attachments/77777777-7777-4777-8777-777777777777');

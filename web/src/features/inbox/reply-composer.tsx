@@ -6,6 +6,7 @@ import { AttachmentPicker, attachmentProblem } from './attachment-picker';
 import { CcField } from './cc-field';
 import type { AttachmentLimits } from './attachment-picker';
 import { replyRefusalText } from './refusal-text';
+import { track } from '../../lib/product-analytics';
 import { SavedReplyPicker } from './saved-reply-picker';
 import { messages } from '../../messages';
 import { BookmarkIcon, LockIcon, ReplyIcon } from '../../ui/icons';
@@ -77,6 +78,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
     const box = field.current;
     const at = Math.min(box?.selectionStart ?? body.length, body.length);
     setPicking(false);
+    track('saved_reply_inserted');
     // The browser inserts the text as if it were typed, so Ctrl+Z takes it out again. It fires the
     // input event that updates the draft. Without it (or when it refuses) the composer writes the text.
     if (box) {

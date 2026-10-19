@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"regexp"
+	"slices"
 )
 
 // toolError is a failure the model should read and act on. It becomes an isError result, never a
@@ -44,6 +46,12 @@ func (c *call) refuse(err error, notFound string) error {
 		return &toolError{"Colliedesk refused this: " + failure.Message}
 	case failure.Status == 400:
 		return &toolError{"Colliedesk rejected the request: " + failure.Message}
+	case failure.Status == 422:
+		text := "Colliedesk rejected the request: " + failure.Message
+		for _, field := range slices.Sorted(maps.Keys(failure.Fields)) {
+			text += " " + field + ": " + failure.Fields[field]
+		}
+		return &toolError{text}
 	case failure.Status == 429:
 		wait := ""
 		if failure.RetryAfter != "" {

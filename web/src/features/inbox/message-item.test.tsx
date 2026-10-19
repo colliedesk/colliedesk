@@ -1,0 +1,118 @@
+import { fireEvent, render, screen } from '@testing-library/react';
+import { expect, test } from 'vitest';
+import type { Message } from '../../api/schemas';
+import { MessageItem } from './message-item';
+
+const base: Message = {
+  id: '22222222-2222-4222-8222-222222222222', conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: 'Vic Customer',
+  agent_token: null, agent_request_id: null, kind: 'incoming', body: 'Plain version of the newsletter', body_html: null, origin: null,
+  attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null,
+  email: { from: 'vic@customer.example', authentication: 'pass', attachments: [], original_attachment_id: null, cc: [] },
+};
+const file = (id: string, filename: string, content_type: string, inline = false) => ({ id, message_id: base.id, filename, content_type, size: 2048, sha256: 'a'.repeat(64), inline, created_at: base.created_at });
+
+test('incoming mail with HTML shows the rendered HTML by default, inline in the conversation', () => {
+  const { container } = render(<MessageItem item={{ ...base, body_html: '<h1>Weekly report</h1><table><tr><td>42</td></tr></table>' }} timezone="UTC" />);
+  const frame = screen.getByTitle('Original message');
+  expect(frame.tagName).toBe('IFRAME');
+  expect(frame.getAttribute('srcdoc')).toContain('<table>');
+  expect(frame.getAttribute('srcdoc')).toContain('Weekly report');
+  expect(container.querySelector('.plain-text-body')).toBeNull();
+});
+
+test('the frame keeps the sandbox: no scripts, no forms, no top navigation', () => {
+  render(<MessageItem item={{ ...base, body_html: '<p>Hi</p>' }} timezone="UTC" />);
+  const frame = screen.getByTitle('Original message');
+  const tokens = (frame.getAttribute('sandbox') ?? '').split(/\s+/);
+  expect(tokens).toContain('allow-same-origin');
+  expect(tokens).toContain('allow-popups');
+  for (const forbidden of ['allow-scripts', 'allow-forms', 'allow-top-navigation', 'allow-top-navigation-by-user-activation', 'allow-modals']) {
+    expect(tokens).not.toContain(forbidden);
+  }
+  expect(frame.getAttribute('srcdoc')).toContain("script-src 'none'");
+});
+
+test('Show plain text swaps the frame for the stored plain text, and back', () => {
+  const { container } = render(<MessageItem item={{ ...base, body_html: '<p>Hello <b>there</b></p>' }} timezone="UTC" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Show plain text' }));
+  expect(container.querySelector('iframe')).toBeNull();
+  expect(screen.getByText('Plain version of the newsletter')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Show formatted email' }));
+  expect(screen.getByTitle('Original message')).toBeInTheDocument();
+  expect(container.querySelector('.plain-text-body')).toBeNull();
+});
+
+test('a message without HTML keeps the plain-text view and offers no toggle', () => {
+  const { container } = render(<MessageItem item={base} timezone="UTC" />);
+  expect(container.querySelector('iframe')).toBeNull();
+  expect(screen.getByText('Plain version of the newsletter')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /plain text|formatted/i })).toBeNull();
+});
+
+test('replies and notes written in Colliedesk have no HTML view', () => {
+  const { container } = render(<MessageItem item={{ ...base, kind: 'outgoing', body: 'On its way.', email: null }} timezone="UTC" />);
+  expect(container.querySelector('iframe')).toBeNull();
+  expect(screen.getByText('On its way.')).toBeInTheDocument();
+});
+
+test('a file the server marked as embedded in the HTML is not listed again', () => {
+  const item = { ...base, body_html: '<img src="data:image/png;base64,AAAA">', attachments: [
+    file('a1', 'logo.png', 'image/png', true),
+    file('a2', 'invoice.pdf', 'application/pdf'),
+  ] };
+  render(<MessageItem item={item} timezone="UTC" />);
+  const names = Array.from(screen.getByRole('list', { name: /attachments/i }).querySelectorAll('a')).map((link) => link.textContent);
+  expect(names).toEqual(['invoice.pdf']);
+});
+
+test('the file name decides nothing: an image that was not embedded stays listed, however it is named', () => {
+  const item = { ...base, body_html: '<p>Hi</p>', attachments: [
+    file('a1', 'inline-image-1a2b3c4d5e6f7a8b.png', 'image/png', false), // over the embed budget, or a sender's choice of name
+    file('a2', 'photo.png', 'image/png', true),
+  ] };
+  render(<MessageItem item={item} timezone="UTC" />);
+  const names = Array.from(screen.getByRole('list', { name: /attachments/i }).querySelectorAll('a')).map((link) => link.textContent);
+  expect(names).toEqual(['inline-image-1a2b3c4d5e6f7a8b.png']);
+});
+
+test('in the plain-text view an embedded file is a row again, since nothing else shows it', () => {
+  const item = { ...base, body_html: '<img src="data:image/png;base64,AAAA">', attachments: [file('a1', 'logo.png', 'image/png', true)] };
+  render(<MessageItem item={item} timezone="UTC" />);
+  expect(screen.queryByRole('list', { name: /attachments/i })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Show plain text' }));
+  expect(screen.getByRole('link', { name: 'logo.png' })).toBeInTheDocument();
+});
+
+test('the stored raw email stays out of the file list as before', () => {
+  const item = { ...base, email: { ...base.email!, original_attachment_id: 'raw1' }, attachments: [file('raw1', 'original-message.eml.gz', 'application/gzip'), file('a2', 'invoice.pdf', 'application/pdf')] };
+  render(<MessageItem item={item} timezone="UTC" />);
+  const names = Array.from(screen.getByRole('list', { name: /attachments/i }).querySelectorAll('a')).map((link) => link.textContent);
+  expect(names).toEqual(['invoice.pdf']);
+});
+
+// A messenger or bot acknowledgement flagged by the source is an event, not a conversation turn: one line
+// with a chevron, open on demand.
+const automated = { ...base, body: 'We received your message and will reply soon.', body_html: '<p>We received your message</p>',
+  origin: { system: 'freshdesk', external_id: '7101', kind: 'automated_response' as const, from: 'bot@sample.example', to: ['support@acme.example'], cc: [], bcc: [] } };
+
+test('an automated response is one collapsed line that names its sender, with the message behind it', () => {
+  const { container } = render(<MessageItem item={automated} timezone="UTC" />);
+  const row = screen.getByRole('button', { name: /bot@sample.example sent an automated response/ });
+  expect(row).toHaveAttribute('aria-expanded', 'false');
+  expect(container.querySelector('iframe')).toBeNull();
+  expect(screen.queryByText(/We received your message/)).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Show plain text' })).toBeNull();
+  fireEvent.click(row);
+  expect(row).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByTitle('Original message')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Show plain text' })).toBeInTheDocument();
+  fireEvent.click(row);
+  expect(row).toHaveAttribute('aria-expanded', 'false');
+  expect(container.querySelector('iframe')).toBeNull();
+});
+
+test('an ordinary incoming message with the same body is not folded', () => {
+  render(<MessageItem item={{ ...automated, origin: { ...automated.origin, kind: 'incoming' as const } }} timezone="UTC" />);
+  expect(screen.queryByRole('button', { name: /automated response/ })).toBeNull();
+  expect(screen.getByTitle('Original message')).toBeInTheDocument();
+});

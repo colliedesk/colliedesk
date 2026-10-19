@@ -72,6 +72,8 @@ var routeTiers = map[string]string{
 	"GET /api/v1/agent-requests":                                 "read",
 	"GET /api/v1/agent-requests/{id}":                            "read",
 	"POST /api/v1/agent-requests/{id}/cancel":                    "read",
+	"POST /api/v1/support/problem-reports":                       "read",
+	"GET /api/v1/mail-image":                                     "person",
 	"POST /api/v1/agent-requests/{id}/approve":                   "person",
 	"POST /api/v1/agent-requests/{id}/reject":                    "person",
 }

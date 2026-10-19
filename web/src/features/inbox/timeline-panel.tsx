@@ -10,6 +10,9 @@ interface TimelinePanelProps {
   items: Message[];
   timeEntries?: TimeEntry[];
   loading?: boolean;
+  // The ticket an address names could not be loaded: say so, and offer to try again.
+  loadFailed?: boolean;
+  onRetryLoad?: () => void;
   timezone: string;
   onRetryDelivery?: (messageId: string) => void;
   detailsOpen?: boolean;
@@ -19,7 +22,7 @@ interface TimelinePanelProps {
   agentNames?: ReadonlyMap<string, string>;
 }
 
-export function TimelinePanel({ conversation, items, timeEntries = [], loading = false, timezone, onRetryDelivery, detailsOpen = false, onToggleDetails, detailsToggleRef, agentNames }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, items, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, onToggleDetails, detailsToggleRef, agentNames }: TimelinePanelProps) {
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
       <header className="timeline-header">
@@ -32,6 +35,8 @@ export function TimelinePanel({ conversation, items, timeEntries = [], loading =
       </header>
       <div className="timeline-scroll">
         <div className="timeline-stack">
+          {!conversation && loadFailed && <div role="alert" className="empty-copy"><p>{messages.conversationNotLoaded}</p>
+            <button type="button" onClick={onRetryLoad}>{messages.retryLoad}</button></div>}
           {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
           {items.map((item) => <MessageItem key={item.id} item={item} timezone={timezone} onRetryDelivery={onRetryDelivery}
             approvedBy={item.author_agent_id ? agentNames?.get(item.author_agent_id) : undefined} />)}

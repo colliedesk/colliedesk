@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/jackc/pgx/v5"
@@ -17,14 +18,17 @@ type usage struct {
 	emailChannel    bool
 	webForm         bool
 	freshdeskImport bool
+	// snapshots is one per workspace; read only on Colliedesk Cloud.
+	snapshots []snapshot
 }
 
 // claimUsage takes this day's report for the install and reads the counts. It returns false when
 // a report was already taken in the last 23 hours, by this process or another one on the same
 // database (a restart, a crash loop, a second replica), so an install reports at most once a day.
 // The claim is taken before sending: a failed send skips that day rather than retrying.
+// On Colliedesk Cloud the per-workspace snapshots are read in the same transaction.
 // Only aggregates leave the transaction.
-func claimUsage(ctx context.Context, db *database.DB) (usage, bool, error) {
+func claimUsage(ctx context.Context, db *database.DB, cloud bool) (usage, bool, error) {
 	var u usage
 	claimed := false
 	err := db.Privileged(ctx, database.PrivilegeTelemetry, func(tx pgx.Tx) error {
@@ -48,7 +52,7 @@ func claimUsage(ctx context.Context, db *database.DB) (usage, bool, error) {
 		}
 		claimed = true
 		// Replies imported from another helpdesk keep their original time; only replies sent here count.
-		return tx.QueryRow(ctx, `SELECT
+		err = tx.QueryRow(ctx, `SELECT
 			(SELECT count(*) FROM workspaces),
 			(SELECT count(DISTINCT (workspace_id, agent_id)) FROM sessions WHERE last_seen_at >= now() - interval '30 days'),
 			(SELECT count(*) FROM messages WHERE kind = 'outgoing' AND origin IS NULL AND created_at >= now() - interval '30 days'),
@@ -56,6 +60,11 @@ func claimUsage(ctx context.Context, db *database.DB) (usage, bool, error) {
 			EXISTS (SELECT 1 FROM web_form_channels WHERE enabled),
 			EXISTS (SELECT 1 FROM import_items WHERE source LIKE 'freshdesk:%')`).
 			Scan(&u.workspaces, &u.activeAgents, &u.replies, &u.emailChannel, &u.webForm, &u.freshdeskImport)
+		if err != nil || !cloud {
+			return err
+		}
+		u.snapshots, err = readSnapshots(ctx, tx, time.Now())
+		return err
 	})
 	return u, claimed, err
 }

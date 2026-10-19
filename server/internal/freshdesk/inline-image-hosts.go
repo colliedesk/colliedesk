@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/colliedesk/colliedesk/server/internal/importkit"
+	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 )
 
 // Hosts an image may be fetched from. Exact patterns only: a tenant portal of another Freshdesk
@@ -20,17 +20,6 @@ var (
 	// for example <tenant>.freshdesk.com then <tenant>.attachments8.freshdesk.com.
 	tenantHost = regexp.MustCompile(`^[a-z0-9-]+\.(attachments[a-z0-9-]*\.)?freshdesk\.com$`)
 )
-
-func parseImageSrc(src string) (*url.URL, bool) {
-	if strings.HasPrefix(src, "//") {
-		src = "https:" + src
-	}
-	u, err := url.Parse(strings.TrimSpace(src))
-	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
-		return nil, false
-	}
-	return u, true
-}
 
 // allowedImageURL says whether the importer may fetch from u: the importing account's own host, the
 // Freshdesk attachment hosts and Freshdesk's public asset bucket. It checks the host only, so it also
@@ -50,7 +39,7 @@ func (r *run) allowedImageURL(u *url.URL) bool {
 // http:// links; only an allowed host is upgraded). A custom support domain is not recognised: such
 // images are reported by looksHosted instead.
 func (r *run) hostedImageURL(src string) (*url.URL, bool) {
-	u, ok := parseImageSrc(src)
+	u, ok := mailimage.ParseSrc(src)
 	if !ok || !r.allowedImageURL(u) {
 		return nil, false
 	}
@@ -62,7 +51,7 @@ func (r *run) hostedImageURL(src string) (*url.URL, bool) {
 // domain, another tenant's portal): they stay links and the report warns about them.
 func (r *run) looksHosted(markup string) bool {
 	found := false
-	importkit.MapImageSources(markup, func(src string) (string, bool) {
+	mailimage.MapSources(markup, func(src string) (string, bool) {
 		if _, ok := r.hostedImageURL(src); !ok && strings.Contains(strings.ToLower(src), "freshdesk") && !strings.HasPrefix(src, "data:") {
 			found = true
 		}

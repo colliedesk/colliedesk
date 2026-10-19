@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/colliedesk/colliedesk/server/internal/importkit"
+	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5"
 )
@@ -41,7 +42,7 @@ func (r *run) commitInlineImages(ctx context.Context, conversationKey, messageID
 	}
 	embeds := map[string]string{}
 	for _, image := range images {
-		input := store.NewAttachment{MessageID: messageID, Filename: "inline-image-" + image.ref.key + importkit.ImageExtension(image.contentType), ContentType: image.contentType, Object: image.object}
+		input := store.NewAttachment{MessageID: messageID, Filename: "inline-image-" + image.ref.key + importkit.ImageExtension(image.contentType), ContentType: image.contentType, Object: image.object, Inline: image.dataURI != ""}
 		targetID, err := r.saveAttachment(ctx, tx, image.entry, image.found, input)
 		if err != nil {
 			return err
@@ -70,7 +71,7 @@ func (r *run) embedImages(ctx context.Context, tx pgx.Tx, messageID string, embe
 	if current == nil || len(embeds) == 0 {
 		return nil
 	}
-	updated := importkit.MapImageSources(*current, func(src string) (string, bool) {
+	updated := mailimage.MapSources(*current, func(src string) (string, bool) {
 		u, ok := r.hostedImageURL(src)
 		if !ok {
 			return "", false

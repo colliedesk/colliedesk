@@ -430,6 +430,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/mail-image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Serves one remote image of an incoming email on the viewer's behalf, so the sender sees the server's address and not the reader's. The address is made by the server: the message list rewrites every remote `<img src>` of `body_html` to this route for a signed-in person, with `u` (the original URL) and `s` (an HMAC over the workspace and the URL). Only signed addresses are served. The server refuses private, loopback, link-local, CGNAT, multicast and metadata addresses (also after DNS and on every redirect, at most 3), serves only PNG, JPEG, GIF and WebP, or an SVG document (checked from the bytes; an SVG is served with a sandboxing Content-Security-Policy and only ever shown through img), caps an image at 5 MiB, and keeps a fetched image per workspace so a second view does not call the source again. An agent token cannot use it; it reads the original HTML. */
+        get: operations["getMailImage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/contacts": {
         parameters: {
             query?: never;
@@ -1003,6 +1020,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/support/problem-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Send a problem report ("Report a problem" in the web app) to the support desk of this server. Where the server sets `PROBLEM_REPORT_WORKSPACE` (Colliedesk Cloud) the report becomes a conversation in that workspace, tagged `problem-report`, from the reporter's verified email, with the description, the diagnostics, facts the server knows (agent, role, workspace, plan, version, realm, the request id of this call) and the screenshots as attachments. No text from the reporter's workspace is read or sent. Every other server answers 404 `not_configured`, so the web app offers a GitHub issue instead. Any agent token tier may report. One agent may send 5 reports an hour. Send JSON, or `multipart/form-data` with `description`, `diagnostics` (a JSON string) and up to 3 `screenshots` files (PNG, JPEG or WebP, 5 MiB in total). */
+        post: operations["createProblemReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1105,6 +1139,19 @@ export interface components {
             expires_at: string;
         };
         PublicConfig: {
+            /** @description Where the web app reports which screens and buttons agents use. On by default on the cloud and self-hosted; `DISABLE_TELEMETRY` or `DO_NOT_TRACK` (and a development build) answer `enabled: false`, and then the web app never loads the analytics library. */
+            product_analytics: {
+                enabled: boolean;
+                /**
+                 * @description Carried on every event so cloud and self-hosted use are told apart.
+                 * @enum {string|null}
+                 */
+                realm: "cloud" | "self-hosted" | null;
+                /** @description Public PostHog project key; it can add events but not read them. */
+                key: string | null;
+                /** @description PostHog ingestion host. */
+                host: string | null;
+            };
             /** @description The running build: a release tag such as `v0.0.1`, `edge-<commit>` for a main build, or `dev`. */
             version?: string;
             limits: {
@@ -1556,7 +1603,7 @@ export interface components {
             /** @enum {string} */
             kind: "incoming" | "outgoing" | "note";
             body: string;
-            /** @description Original HTML of an imported message. Untrusted content: render it only in a sandboxed frame that runs no scripts and loads nothing from the network. */
+            /** @description Original HTML of an imported or incoming email. Untrusted content: render it only in a sandboxed frame that runs no scripts. For a signed-in person, every remote `<img src>` is rewritten to `/api/v1/mail-image` (the image proxy) and `srcset` is removed, so the frame can load images from the Colliedesk origin and nowhere else. An agent token reads the HTML as stored. */
             body_html: string | null;
             /** @description Where an imported message came from; null for messages written in Colliedesk. */
             origin: null | components["schemas"]["MessageOrigin"];
@@ -1585,10 +1632,10 @@ export interface components {
             system: string;
             external_id: string;
             /**
-             * @description How the source system classified the item. public_note was visible to the customer there; forward went to a third party, not to the customer.
+             * @description How the source system classified the item. public_note was visible to the customer there; forward went to a third party, not to the customer; automated_response is an automatic reply from the customer side (an out-of-office or a messenger acknowledgement) that the source flagged, which the timeline folds into one line.
              * @enum {string}
              */
-            kind: "description" | "reply" | "incoming" | "private_note" | "public_note" | "forward" | "forwarded_email" | "other";
+            kind: "description" | "reply" | "incoming" | "automated_response" | "private_note" | "public_note" | "forward" | "forwarded_email" | "other";
             from: string | null;
             to: string[];
             cc: string[];
@@ -1617,6 +1664,8 @@ export interface components {
             content_type: string;
             size: number;
             sha256: string;
+            /** @description True when the bytes are embedded in the message's `body_html` (an inline image shown in the formatted message), so the message view need not list the file again. The file stays stored and downloadable. Set by the server only when the image was actually embedded. */
+            inline: boolean;
             /** Format: date-time */
             created_at: string;
         };
@@ -1746,10 +1795,44 @@ export interface components {
             /** @description Path a website posts to; the host is this instance */
             submit_path: string;
         };
+        ProblemReportInput: {
+            description: string;
+            diagnostics?: components["schemas"]["ProblemReportDiagnostics"];
+        };
+        /** @description What the web app gathered in the browser. Ids, routes, status codes and error messages only; a query string is dropped from every path and long text is cut. Nothing a customer wrote. */
+        ProblemReportDiagnostics: {
+            app_version?: string;
+            user_agent?: string;
+            viewport?: {
+                width: number;
+                height: number;
+            };
+            /** @description Address path without query or fragment */
+            page_path?: string;
+            client_errors?: {
+                message: string;
+                source: string;
+                /** Format: date-time */
+                at: string;
+            }[];
+            failed_api_calls?: {
+                method: string;
+                /** @description Route template or path without query */
+                route: string;
+                status: number;
+                /** @description The X-Request-Id of the failed response */
+                request_id?: string;
+                /** Format: date-time */
+                at: string;
+            }[];
+            product_events?: string[];
+        };
         Error: {
             error: {
                 code: string;
                 message: string;
+                /** @description The X-Request-Id of this response; quote it when you report a failure. */
+                request_id?: string;
                 /** @description Present on validation errors (422), one message per bad field name */
                 fields?: {
                     [key: string]: string;
@@ -2859,6 +2942,83 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    getMailImage: {
+        parameters: {
+            query: {
+                /** @description Original image URL (http or https). */
+                u: string;
+                /** @description Hex HMAC signature made by the server. */
+                s: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The image */
+            200: {
+                headers: {
+                    /** @description private, max-age=2592000, immutable */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/jpeg": string;
+                    "image/gif": string;
+                    "image/webp": string;
+                    "image/svg+xml": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The signature is wrong, or the address is private or internal. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The image is over the size limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The response is not a PNG, JPEG, GIF, WebP or SVG image. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The source could not be reached or answered with an error. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many images are being fetched; retry after the `Retry-After` seconds. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     listContacts: {
@@ -4060,6 +4220,72 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    createProblemReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProblemReportInput"];
+                "multipart/form-data": {
+                    description: string;
+                    /** @description JSON text of a ProblemReportDiagnostics object */
+                    diagnostics?: string;
+                    screenshots?: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description The report reached the support desk */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description The request id of this call; quote it when you write to support */
+                        reference: string;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
+            /** @description This server has no support desk for problem reports (error code `not_configured`) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid input; `error.fields` names each bad field (`description`, `diagnostics`, `screenshots`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description This agent sent 5 reports in the last hour; retry after the `Retry-After` seconds */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
         };
     };
 }

@@ -24,6 +24,7 @@ func (a *API) createInvite(response http.ResponseWriter, request *http.Request) 
 		writeStoreError(response, err)
 		return
 	}
+	a.recordFunnel("teammate_invited", principal(request).Workspace.ID, nil)
 	writeJSON(response, http.StatusCreated, map[string]any{"invite": invite, "url": link})
 }
 

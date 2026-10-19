@@ -44,7 +44,9 @@ type EmailFile struct {
 	ContentType string
 	// Original marks the stored raw message; its attachment id is recorded in the email metadata.
 	Original bool
-	Object   attachments.Object
+	// Inline marks an image whose bytes were embedded in the message's HTML.
+	Inline bool
+	Object attachments.Object
 }
 
 // StashFunc writes an inbound message's files to attachment storage. It runs inside the ingest

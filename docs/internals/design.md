@@ -1,7 +1,29 @@
 # Web app design
 
-Decisions behind the look of `web/`. The brand is **Blue Merle**. Light is the default theme and
+Decisions behind the look of `web/`. The brand is **ink and paper** (owner decision 19/10/2026, replacing
+Blue Merle): neutral grey surfaces, ink for text and the primary action, and colour only where it carries
+meaning (status, focus, private notes; on colliedesk.com also the price). Light is the default theme and
 dark is an opt-in. The app and the colliedesk.com site share one set of tokens.
+
+## Brand guideline
+
+Chosen from 20 researched directions after measuring nine helpdesk home pages (research and evidence:
+https://design.hclabs.co, owner only). The site direction is "price ledger"; the app follows the same rules.
+
+1. **Paper and ink.** Surfaces, lines and text are neutral grey with no hue; the primary action is ink
+   (`#171717` light, `#fafafa` dark). `web/scripts/check-contrast.test.mjs` fails when a grey, a text
+   token or the primary action carries a hue.
+2. **Colour means something.** Status (open blue, pending amber, resolved green, urgent red, high orange),
+   focus (amber) and private notes (amber) keep their colours; nothing else is coloured. On the site the
+   price has its own colour (`--price`, orange) and nothing else does.
+3. **Serif for titles only.** Instrument Serif (`--font-display`) sets page titles (Inbox, Settings,
+   Requests, Billing, the sign-in heading and promise) and the site's h1/h2. Every control, label and
+   body line stays IBM Plex Sans.
+4. **Rings, not borders.** Cards and our replies sit on a 1px shadow ring (`--shadow-1`), so the eye reads
+   layers by surface and ring, not by outlines.
+5. **Links are ink and underlined** inside running text (`a:not([class])`); colour alone never marks a link.
+6. **One product, one look.** Product pictures on colliedesk.com are screenshots of this app; when the app
+   changes, the site's screenshots are retaken.
 
 ## Direction
 
@@ -22,12 +44,13 @@ dark is an opt-in. The app and the colliedesk.com site share one set of tokens.
   `role="alert"` and keeps the selection. Focus follows the change: after success or Clear it goes to
   **Select all on this page** (the list pane when no rows remain); after a failure it stays on the menu used.
 - Rows: bold subject and time, then one meta line (status dot and word, priority, `#tags`).
-- Thread: incoming messages on `--surface-2`, replies on `--accent-soft`, private notes amber.
+- Thread: incoming messages on `--surface-2`, our replies on white with a 1px ring (`--surface-1`,
+  `--shadow-1`), private notes amber.
   Composer: a raised card with Reply / Private note tabs (keys **R** and **N**) and
   **Ctrl/Cmd + Enter** to send.
 - Sign-in: a dark brand side (mascot, wordmark, one line of promise) beside the form; on narrow
   screens the brand side becomes a header.
-- The mascot is a blue-merle collie head.
+- The mascot is a collie head on an ink tile. Its colours are under review (icon options on design.hclabs.co).
 
 ## Themes
 
@@ -53,7 +76,7 @@ the Clerk form.) Do not create a second palette.
 | Surfaces | `--surface-0` page and rail, `--surface-1` list, panels, cards, `--surface-2` hover, `--surface-3` active rail item and tag, `--surface-inverse` tooltip | Separate layers by surface step first. Add shadow only to floating layers. |
 | Lines | `--line` hairline dividers and panel edges, `--line-control` secondary button outline, `--line-strong` input borders | Inputs keep `--line-strong` (3:1). Buttons are identified by their label, but their outline is about 2.3:1 so they do not look faded (owner feedback 16/10/2026: buttons looked washed out at 1.5:1). |
 | Text | `--text-1` primary, `--text-2` secondary, `--text-3` meta and labels, `--text-inverse` on the tooltip | `--text-3` is the lowest text tone. |
-| Brand | `--accent` primary fill, `--accent-hover`, `--on-accent` text on accent, `--accent-text` links, `--accent-soft` selected row and reply bubble, `--accent-strong` graphics only, `--logo-tile`, `--brand-panel`, `--on-brand-panel(-2)` | One primary action per screen. Light: white on `#2d62b3`. Dark: near-black on `#7aa5e6`. |
+| Brand | `--accent` primary fill, `--accent-hover`, `--on-accent` text on accent, `--accent-text` links, `--accent-soft` selected row and reply bubble, `--accent-strong` graphics only, `--logo-tile`, `--brand-panel`, `--on-brand-panel(-2)` | One primary action per screen. Light: white on ink `#171717`. Dark: near-black on `#fafafa`. `--accent-text` is ink; inline links are underlined. |
 | Focus and note | `--focus`, `--focus-ring`, `--note-bg`, `--note-line`, `--note-text` | Amber means focus or private note. Never use amber for status. |
 | Status | `--danger`, `--warn`, `--ok`, `--open`, `--pending` and `*-soft` backgrounds | A dot or icon plus a word. Never colour alone. |
 | Shape | `--radius` 6 px controls, `--radius-lg` 10 px panels, cards, composer, `--radius-sm` 4 px chips and keycaps, `--radius-full` avatars and tag chips | |
@@ -62,15 +85,15 @@ the Clerk form.) Do not create a second palette.
 | Elevation | `--shadow-1` cards, `--shadow-2` popovers and the composer, `--shadow-3` modals | |
 | Motion | `--ease`, `--dur-fast` 120 ms, `--dur` 180 ms | Both become 0 under `prefers-reduced-motion`. |
 
-Main values, light: app background `#f5f7fa`, panel `#ffffff`, text `#151c27`, accent `#2d62b3`,
-focus (amber) `#b86e00`. Dark: page `#0b0f15`, panel `#111721`, text `#e8edf4`, accent `#7aa5e6`,
+Main values, light: app background `#fafafa`, panel `#ffffff`, text `#171717`, primary action `#171717`,
+focus (amber) `#b86e00`. Dark: page `#0a0a0a`, panel `#141414`, text `#fafafa`, primary action `#fafafa`,
 focus `#f0b44c`. Every text pair is at least 4.5:1; focus rings and input borders at least 3:1.
 `web/scripts/check-contrast.mjs` checks every pair in both themes and runs in `pnpm test`.
 
 ## Type
 
 - IBM Plex Sans (400, 500, 600, 700) for text, buttons, tabs, labels and time stamps, always in
-  sentence case. IBM Plex Mono (400, 500) only for code, IDs, URLs and keycaps. No uppercase labels.
+  sentence case. Instrument Serif 400 (`--font-display`) only for page titles and the sign-in promise. IBM Plex Mono (400, 500) only for code, IDs, URLs and keycaps. No uppercase labels.
 - Fonts are self-hosted: `web/src/styles/fonts/` (woff2 subsets latin, latin-ext, vietnamese) and
   `fonts.css`, licence SIL OFL 1.1 (`fonts/OFL-*.txt`). Never load a font from Google Fonts or a
   CDN, and never use Be Vietnam Pro.
@@ -92,11 +115,17 @@ focus `#f0b44c`. Every text pair is at least 4.5:1; focus rings and input border
 
 - Controls are 32 px with a mouse and 44 px on touch (`--control` switches on `pointer: coarse`;
   rail links, status tabs and list rows also grow to 44 px below 44 rem).
-- Three button shapes only: primary (`--accent`), secondary (white with a light outline and a small
+- Three button shapes only: primary (`--accent`, ink), secondary (white with a light outline and a small
   shadow), danger (red text).
 - Focus is an amber outline, 2 px wide with a 2 px gap (`:focus-visible`). The gap is required:
   amber on `--accent` is low contrast in both themes, so the ring never touches a primary button. In the scrolling
   list the ring is inset (`outline-offset: -2px`) so the next row does not clip it.
+- Form controls share the neutral surface and ink tokens. Every select draws the same chevron from
+  `--select-chevron`, a per-theme token whose stroke equals `--text-3` (checked by
+  `web/scripts/form-controls.test.mjs`); it stays visible when disabled. Checkboxes and radios share
+  one rule in `base.css`: native controls with `accent-color: var(--accent)`, so checked and
+  indeterminate states are ink in both themes; their labels keep readable text when disabled.
+  Forced-colour mode keeps native checkbox and radio rendering and restores the native select arrow.
 - Settings saves show feedback inline, never a toast: the button is disabled and reads "Saving…" while the request runs (a second submit is refused), then a "Saved" line (`role="status"`) or the error (`role="alert"`) appears beside that form. "Saved" clears when the form is edited. `features/settings/save-feedback.tsx` holds the pattern.
 - Status is a dot plus its word. Only High and Urgent priorities get colour, with an arrow icon.
 - Private notes are amber (`--note-*`), on the timeline and in the composer while writing one.
@@ -143,116 +172,116 @@ need 3:1. The focus ring keeps a 2 px gap from `--accent` in both themes.
 
 | Foreground | Background | Ratio | Min | Use |
 |---|---|---|---|---|
-| `--text-1` #151c27 | `--surface-0` #f5f7fa | 15.94 | 4.5 | text |
-| `--text-1` #151c27 | `--surface-1` #ffffff | 17.11 | 4.5 | text |
-| `--text-1` #151c27 | `--surface-2` #eef1f5 | 15.10 | 4.5 | text |
-| `--text-1` #151c27 | `--surface-3` #e4e9f0 | 14.02 | 4.5 | text |
-| `--text-2` #465267 | `--surface-0` #f5f7fa | 7.35 | 4.5 | text |
-| `--text-2` #465267 | `--surface-1` #ffffff | 7.89 | 4.5 | text |
-| `--text-2` #465267 | `--surface-2` #eef1f5 | 6.96 | 4.5 | text |
-| `--text-2` #465267 | `--surface-3` #e4e9f0 | 6.46 | 4.5 | text |
-| `--text-3` #5b687c | `--surface-0` #f5f7fa | 5.27 | 4.5 | text |
-| `--text-3` #5b687c | `--surface-1` #ffffff | 5.65 | 4.5 | text |
-| `--text-3` #5b687c | `--surface-2` #eef1f5 | 4.99 | 4.5 | text |
-| `--text-3` #5b687c | `--surface-3` #e4e9f0 | 4.63 | 4.5 | text |
-| `--accent-text` #2a5ca9 | `--surface-0` #f5f7fa | 6.11 | 4.5 | text |
-| `--accent-text` #2a5ca9 | `--surface-1` #ffffff | 6.56 | 4.5 | text |
-| `--accent-text` #2a5ca9 | `--surface-2` #eef1f5 | 5.79 | 4.5 | text |
-| `--accent-text` #2a5ca9 | `--surface-3` #e4e9f0 | 5.38 | 4.5 | text |
-| `--danger` #c0261b | `--surface-0` #f5f7fa | 5.54 | 4.5 | text |
+| `--text-1` #171717 | `--surface-0` #fafafa | 17.18 | 4.5 | text |
+| `--text-1` #171717 | `--surface-1` #ffffff | 17.93 | 4.5 | text |
+| `--text-1` #171717 | `--surface-2` #f4f4f4 | 16.30 | 4.5 | text |
+| `--text-1` #171717 | `--surface-3` #ebebeb | 15.04 | 4.5 | text |
+| `--text-2` #4d4d4d | `--surface-0` #fafafa | 8.10 | 4.5 | text |
+| `--text-2` #4d4d4d | `--surface-1` #ffffff | 8.45 | 4.5 | text |
+| `--text-2` #4d4d4d | `--surface-2` #f4f4f4 | 7.69 | 4.5 | text |
+| `--text-2` #4d4d4d | `--surface-3` #ebebeb | 7.09 | 4.5 | text |
+| `--text-3` #636363 | `--surface-0` #fafafa | 5.76 | 4.5 | text |
+| `--text-3` #636363 | `--surface-1` #ffffff | 6.01 | 4.5 | text |
+| `--text-3` #636363 | `--surface-2` #f4f4f4 | 5.46 | 4.5 | text |
+| `--text-3` #636363 | `--surface-3` #ebebeb | 5.04 | 4.5 | text |
+| `--accent-text` #171717 | `--surface-0` #fafafa | 17.18 | 4.5 | text |
+| `--accent-text` #171717 | `--surface-1` #ffffff | 17.93 | 4.5 | text |
+| `--accent-text` #171717 | `--surface-2` #f4f4f4 | 16.30 | 4.5 | text |
+| `--accent-text` #171717 | `--surface-3` #ebebeb | 15.04 | 4.5 | text |
+| `--danger` #c0261b | `--surface-0` #fafafa | 5.69 | 4.5 | text |
 | `--danger` #c0261b | `--surface-1` #ffffff | 5.94 | 4.5 | text |
-| `--danger` #c0261b | `--surface-2` #eef1f5 | 5.24 | 4.5 | text |
-| `--danger` #c0261b | `--surface-3` #e4e9f0 | 4.87 | 4.5 | text |
-| `--warn` #a3460a | `--surface-0` #f5f7fa | 5.69 | 4.5 | text |
+| `--danger` #c0261b | `--surface-2` #f4f4f4 | 5.40 | 4.5 | text |
+| `--danger` #c0261b | `--surface-3` #ebebeb | 4.98 | 4.5 | text |
+| `--warn` #a3460a | `--surface-0` #fafafa | 5.85 | 4.5 | text |
 | `--warn` #a3460a | `--surface-1` #ffffff | 6.11 | 4.5 | text |
-| `--warn` #a3460a | `--surface-2` #eef1f5 | 5.39 | 4.5 | text |
-| `--warn` #a3460a | `--surface-3` #e4e9f0 | 5.01 | 4.5 | text |
-| `--ok` #11703d | `--surface-0` #f5f7fa | 5.74 | 4.5 | text |
+| `--warn` #a3460a | `--surface-2` #f4f4f4 | 5.55 | 4.5 | text |
+| `--warn` #a3460a | `--surface-3` #ebebeb | 5.12 | 4.5 | text |
+| `--ok` #11703d | `--surface-0` #fafafa | 5.90 | 4.5 | text |
 | `--ok` #11703d | `--surface-1` #ffffff | 6.16 | 4.5 | text |
-| `--ok` #11703d | `--surface-2` #eef1f5 | 5.44 | 4.5 | text |
-| `--ok` #11703d | `--surface-3` #e4e9f0 | 5.05 | 4.5 | text |
-| `--accent-text` #2a5ca9 | `--accent-soft` #e8effa | 5.67 | 4.5 | link on selected row |
-| `--text-1` #151c27 | `--accent-soft` #e8effa | 14.80 | 4.5 | selected row |
-| `--text-3` #5b687c | `--accent-soft` #e8effa | 4.89 | 4.5 | meta on selected row |
-| `--on-accent` #ffffff | `--accent` #2d62b3 | 5.98 | 4.5 | primary button |
-| `--on-accent` #ffffff | `--accent-hover` #234f94 | 8.02 | 4.5 | primary button hover |
-| `--text-inverse` #ffffff | `--surface-inverse` #1b2330 | 15.79 | 4.5 | tooltip |
+| `--ok` #11703d | `--surface-2` #f4f4f4 | 5.60 | 4.5 | text |
+| `--ok` #11703d | `--surface-3` #ebebeb | 5.17 | 4.5 | text |
+| `--accent-text` #171717 | `--accent-soft` #efefef | 15.59 | 4.5 | link on selected row |
+| `--text-1` #171717 | `--accent-soft` #efefef | 15.59 | 4.5 | selected row |
+| `--text-3` #636363 | `--accent-soft` #efefef | 5.22 | 4.5 | meta on selected row |
+| `--on-accent` #ffffff | `--accent` #171717 | 17.93 | 4.5 | primary button |
+| `--on-accent` #ffffff | `--accent-hover` #3d3d3d | 10.86 | 4.5 | primary button hover |
+| `--text-inverse` #ffffff | `--surface-inverse` #171717 | 17.93 | 4.5 | tooltip |
 | `--note-text` #7f5200 | `--note-bg` #fff6e0 | 6.27 | 4.5 | private note label |
-| `--text-1` #151c27 | `--note-bg` #fff6e0 | 15.90 | 4.5 | private note body |
+| `--text-1` #171717 | `--note-bg` #fff6e0 | 16.66 | 4.5 | private note body |
 | `--danger` #c0261b | `--danger-soft` #fdeceb | 5.20 | 4.5 | urgent chip |
-| `--text-1` #151c27 | `--danger-soft` #fdeceb | 14.97 | 4.5 | error card body |
+| `--text-1` #171717 | `--danger-soft` #fdeceb | 15.69 | 4.5 | error card body |
 | `--warn` #a3460a | `--warn-soft` #fdf0e5 | 5.46 | 4.5 | high chip |
 | `--ok` #11703d | `--ok-soft` #e6f5ec | 5.47 | 4.5 | sent badge, reconcile footer |
-| `--text-2` #465267 | `--ok-soft` #e6f5ec | 7.00 | 4.5 | reconcile footer body |
-| `--accent-text` #2a5ca9 | `--ok-soft` #e6f5ec | 5.82 | 4.5 | reconcile footer link |
-| `--on-brand-panel` #ffffff | `--brand-panel` #141b26 | 17.29 | 4.5 | sign-in brand side |
-| `--on-brand-panel-2` #b4bfcf | `--brand-panel` #141b26 | 9.30 | 4.5 | sign-in brand side, secondary |
+| `--text-2` #4d4d4d | `--ok-soft` #e6f5ec | 7.50 | 4.5 | reconcile footer body |
+| `--accent-text` #171717 | `--ok-soft` #e6f5ec | 15.91 | 4.5 | reconcile footer link |
+| `--on-brand-panel` #fafafa | `--brand-panel` #0a0a0a | 18.97 | 4.5 | sign-in brand side |
+| `--on-brand-panel-2` #a3a3a3 | `--brand-panel` #0a0a0a | 7.85 | 4.5 | sign-in brand side, secondary |
 | `--pending` #a3730f | `--surface-1` #ffffff | 4.19 | 3 | pending dot |
 | `--open` #2d62b3 | `--surface-1` #ffffff | 5.98 | 3 | open dot |
-| `--focus` #b86e00 | `--surface-0` #f5f7fa | 3.71 | 3 | focus ring |
+| `--focus` #b86e00 | `--surface-0` #fafafa | 3.82 | 3 | focus ring |
 | `--focus` #b86e00 | `--surface-1` #ffffff | 3.99 | 3 | focus ring |
-| `--focus` #b86e00 | `--surface-2` #eef1f5 | 3.52 | 3 | focus ring |
-| `--focus` #b86e00 | `--surface-3` #e4e9f0 | 3.27 | 3 | focus ring |
-| `--line-strong` #77839a | `--surface-0` #f5f7fa | 3.56 | 3 | input border |
-| `--line-strong` #77839a | `--surface-1` #ffffff | 3.82 | 3 | input border |
-| `--line-strong` #77839a | `--surface-2` #eef1f5 | 3.37 | 3 | input border |
-| `--accent` #2d62b3 | `--surface-1` #ffffff | 5.98 | 3 | selected bar, active tab |
+| `--focus` #b86e00 | `--surface-2` #f4f4f4 | 3.62 | 3 | focus ring |
+| `--focus` #b86e00 | `--surface-3` #ebebeb | 3.34 | 3 | focus ring |
+| `--line-strong` #858585 | `--surface-0` #fafafa | 3.54 | 3 | input border |
+| `--line-strong` #858585 | `--surface-1` #ffffff | 3.69 | 3 | input border |
+| `--line-strong` #858585 | `--surface-2` #f4f4f4 | 3.35 | 3 | input border |
+| `--accent` #171717 | `--surface-1` #ffffff | 17.93 | 3 | selected bar, active tab |
 
 ### dark
 
 | Foreground | Background | Ratio | Min | Use |
 |---|---|---|---|---|
-| `--text-1` #e8edf4 | `--surface-0` #0b0f15 | 16.33 | 4.5 | text |
-| `--text-1` #e8edf4 | `--surface-1` #111721 | 15.28 | 4.5 | text |
-| `--text-1` #e8edf4 | `--surface-2` #18202c | 13.93 | 4.5 | text |
-| `--text-1` #e8edf4 | `--surface-3` #212c3d | 11.96 | 4.5 | text |
-| `--text-2` #b4bfcf | `--surface-0` #0b0f15 | 10.33 | 4.5 | text |
-| `--text-2` #b4bfcf | `--surface-1` #111721 | 9.67 | 4.5 | text |
-| `--text-2` #b4bfcf | `--surface-2` #18202c | 8.81 | 4.5 | text |
-| `--text-2` #b4bfcf | `--surface-3` #212c3d | 7.57 | 4.5 | text |
-| `--text-3` #8e9bb0 | `--surface-0` #0b0f15 | 6.83 | 4.5 | text |
-| `--text-3` #8e9bb0 | `--surface-1` #111721 | 6.39 | 4.5 | text |
-| `--text-3` #8e9bb0 | `--surface-2` #18202c | 5.82 | 4.5 | text |
-| `--text-3` #8e9bb0 | `--surface-3` #212c3d | 5.00 | 4.5 | text |
-| `--accent-text` #8fb3ea | `--surface-0` #0b0f15 | 8.97 | 4.5 | text |
-| `--accent-text` #8fb3ea | `--surface-1` #111721 | 8.39 | 4.5 | text |
-| `--accent-text` #8fb3ea | `--surface-2` #18202c | 7.65 | 4.5 | text |
-| `--accent-text` #8fb3ea | `--surface-3` #212c3d | 6.57 | 4.5 | text |
-| `--danger` #f2837a | `--surface-0` #0b0f15 | 7.59 | 4.5 | text |
-| `--danger` #f2837a | `--surface-1` #111721 | 7.11 | 4.5 | text |
-| `--danger` #f2837a | `--surface-2` #18202c | 6.48 | 4.5 | text |
-| `--danger` #f2837a | `--surface-3` #212c3d | 5.56 | 4.5 | text |
-| `--warn` #f19a55 | `--surface-0` #0b0f15 | 8.68 | 4.5 | text |
-| `--warn` #f19a55 | `--surface-1` #111721 | 8.13 | 4.5 | text |
-| `--warn` #f19a55 | `--surface-2` #18202c | 7.41 | 4.5 | text |
-| `--warn` #f19a55 | `--surface-3` #212c3d | 6.36 | 4.5 | text |
-| `--ok` #6fcf97 | `--surface-0` #0b0f15 | 10.10 | 4.5 | text |
-| `--ok` #6fcf97 | `--surface-1` #111721 | 9.46 | 4.5 | text |
-| `--ok` #6fcf97 | `--surface-2` #18202c | 8.62 | 4.5 | text |
-| `--ok` #6fcf97 | `--surface-3` #212c3d | 7.40 | 4.5 | text |
-| `--accent-text` #8fb3ea | `--accent-soft` #1a2940 | 6.83 | 4.5 | link on selected row |
-| `--text-1` #e8edf4 | `--accent-soft` #1a2940 | 12.44 | 4.5 | selected row |
-| `--text-3` #8e9bb0 | `--accent-soft` #1a2940 | 5.20 | 4.5 | meta on selected row |
-| `--on-accent` #0b0f15 | `--accent` #7aa5e6 | 7.64 | 4.5 | primary button |
-| `--on-accent` #0b0f15 | `--accent-hover` #96b9ee | 9.58 | 4.5 | primary button hover |
-| `--text-inverse` #0b0f15 | `--surface-inverse` #e8edf4 | 16.33 | 4.5 | tooltip |
+| `--text-1` #fafafa | `--surface-0` #0a0a0a | 18.97 | 4.5 | text |
+| `--text-1` #fafafa | `--surface-1` #141414 | 17.65 | 4.5 | text |
+| `--text-1` #fafafa | `--surface-2` #1c1c1c | 16.33 | 4.5 | text |
+| `--text-1` #fafafa | `--surface-3` #262626 | 14.50 | 4.5 | text |
+| `--text-2` #d4d4d4 | `--surface-0` #0a0a0a | 13.36 | 4.5 | text |
+| `--text-2` #d4d4d4 | `--surface-1` #141414 | 12.43 | 4.5 | text |
+| `--text-2` #d4d4d4 | `--surface-2` #1c1c1c | 11.50 | 4.5 | text |
+| `--text-2` #d4d4d4 | `--surface-3` #262626 | 10.21 | 4.5 | text |
+| `--text-3` #a3a3a3 | `--surface-0` #0a0a0a | 7.85 | 4.5 | text |
+| `--text-3` #a3a3a3 | `--surface-1` #141414 | 7.30 | 4.5 | text |
+| `--text-3` #a3a3a3 | `--surface-2` #1c1c1c | 6.76 | 4.5 | text |
+| `--text-3` #a3a3a3 | `--surface-3` #262626 | 6.00 | 4.5 | text |
+| `--accent-text` #fafafa | `--surface-0` #0a0a0a | 18.97 | 4.5 | text |
+| `--accent-text` #fafafa | `--surface-1` #141414 | 17.65 | 4.5 | text |
+| `--accent-text` #fafafa | `--surface-2` #1c1c1c | 16.33 | 4.5 | text |
+| `--accent-text` #fafafa | `--surface-3` #262626 | 14.50 | 4.5 | text |
+| `--danger` #f2837a | `--surface-0` #0a0a0a | 7.83 | 4.5 | text |
+| `--danger` #f2837a | `--surface-1` #141414 | 7.28 | 4.5 | text |
+| `--danger` #f2837a | `--surface-2` #1c1c1c | 6.74 | 4.5 | text |
+| `--danger` #f2837a | `--surface-3` #262626 | 5.98 | 4.5 | text |
+| `--warn` #f19a55 | `--surface-0` #0a0a0a | 8.95 | 4.5 | text |
+| `--warn` #f19a55 | `--surface-1` #141414 | 8.33 | 4.5 | text |
+| `--warn` #f19a55 | `--surface-2` #1c1c1c | 7.70 | 4.5 | text |
+| `--warn` #f19a55 | `--surface-3` #262626 | 6.84 | 4.5 | text |
+| `--ok` #6fcf97 | `--surface-0` #0a0a0a | 10.42 | 4.5 | text |
+| `--ok` #6fcf97 | `--surface-1` #141414 | 9.69 | 4.5 | text |
+| `--ok` #6fcf97 | `--surface-2` #1c1c1c | 8.97 | 4.5 | text |
+| `--ok` #6fcf97 | `--surface-3` #262626 | 7.96 | 4.5 | text |
+| `--accent-text` #fafafa | `--accent-soft` #222222 | 15.24 | 4.5 | link on selected row |
+| `--text-1` #fafafa | `--accent-soft` #222222 | 15.24 | 4.5 | selected row |
+| `--text-3` #a3a3a3 | `--accent-soft` #222222 | 6.31 | 4.5 | meta on selected row |
+| `--on-accent` #0a0a0a | `--accent` #fafafa | 18.97 | 4.5 | primary button |
+| `--on-accent` #0a0a0a | `--accent-hover` #e0e0e0 | 15.00 | 4.5 | primary button hover |
+| `--text-inverse` #0a0a0a | `--surface-inverse` #fafafa | 18.97 | 4.5 | tooltip |
 | `--note-text` #f2cd8a | `--note-bg` #2a2213 | 10.38 | 4.5 | private note label |
-| `--text-1` #e8edf4 | `--note-bg` #2a2213 | 13.36 | 4.5 | private note body |
+| `--text-1` #fafafa | `--note-bg` #2a2213 | 15.05 | 4.5 | private note body |
 | `--danger` #f2837a | `--danger-soft` #3a1c1b | 6.10 | 4.5 | urgent chip |
-| `--text-1` #e8edf4 | `--danger-soft` #3a1c1b | 13.11 | 4.5 | error card body |
+| `--text-1` #fafafa | `--danger-soft` #3a1c1b | 14.77 | 4.5 | error card body |
 | `--warn` #f19a55 | `--warn-soft` #3a2615 | 6.47 | 4.5 | high chip |
 | `--ok` #6fcf97 | `--ok-soft` #13291e | 8.10 | 4.5 | sent badge, reconcile footer |
-| `--text-2` #b4bfcf | `--ok-soft` #13291e | 8.28 | 4.5 | reconcile footer body |
-| `--accent-text` #8fb3ea | `--ok-soft` #13291e | 7.19 | 4.5 | reconcile footer link |
-| `--on-brand-panel` #e8edf4 | `--brand-panel` #111721 | 15.28 | 4.5 | sign-in brand side |
-| `--on-brand-panel-2` #b4bfcf | `--brand-panel` #111721 | 9.67 | 4.5 | sign-in brand side, secondary |
-| `--pending` #c9a35a | `--surface-1` #111721 | 7.59 | 3 | pending dot |
-| `--open` #7aa5e6 | `--surface-1` #111721 | 7.15 | 3 | open dot |
-| `--focus` #f0b44c | `--surface-0` #0b0f15 | 10.37 | 3 | focus ring |
-| `--focus` #f0b44c | `--surface-1` #111721 | 9.70 | 3 | focus ring |
-| `--focus` #f0b44c | `--surface-2` #18202c | 8.85 | 3 | focus ring |
-| `--focus` #f0b44c | `--surface-3` #212c3d | 7.60 | 3 | focus ring |
-| `--line-strong` #6b7a93 | `--surface-0` #0b0f15 | 4.42 | 3 | input border |
-| `--line-strong` #6b7a93 | `--surface-1` #111721 | 4.13 | 3 | input border |
-| `--line-strong` #6b7a93 | `--surface-2` #18202c | 3.77 | 3 | input border |
-| `--accent` #7aa5e6 | `--surface-1` #111721 | 7.15 | 3 | selected bar, active tab |
+| `--text-2` #d4d4d4 | `--ok-soft` #13291e | 10.39 | 4.5 | reconcile footer body |
+| `--accent-text` #fafafa | `--ok-soft` #13291e | 14.75 | 4.5 | reconcile footer link |
+| `--on-brand-panel` #fafafa | `--brand-panel` #141414 | 17.65 | 4.5 | sign-in brand side |
+| `--on-brand-panel-2` #a3a3a3 | `--brand-panel` #141414 | 7.30 | 4.5 | sign-in brand side, secondary |
+| `--pending` #c9a35a | `--surface-1` #141414 | 7.78 | 3 | pending dot |
+| `--open` #79a8ff | `--surface-1` #141414 | 7.77 | 3 | open dot |
+| `--focus` #f0b44c | `--surface-0` #0a0a0a | 10.69 | 3 | focus ring |
+| `--focus` #f0b44c | `--surface-1` #141414 | 9.95 | 3 | focus ring |
+| `--focus` #f0b44c | `--surface-2` #1c1c1c | 9.20 | 3 | focus ring |
+| `--focus` #f0b44c | `--surface-3` #262626 | 8.17 | 3 | focus ring |
+| `--line-strong` #787878 | `--surface-0` #0a0a0a | 4.48 | 3 | input border |
+| `--line-strong` #787878 | `--surface-1` #141414 | 4.17 | 3 | input border |
+| `--line-strong` #787878 | `--surface-2` #1c1c1c | 3.86 | 3 | input border |
+| `--accent` #fafafa | `--surface-1` #141414 | 17.65 | 3 | selected bar, active tab |

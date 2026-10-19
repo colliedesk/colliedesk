@@ -16,10 +16,12 @@ export const workspaceSchema = z.object({
 export const workspaceChoiceSchema = z.object({ slug: z.string(), name: z.string() }) satisfies z.ZodType<Generated<'WorkspaceChoice'>>;
 export const cloudWorkspaceChoicesSchema = z.object({ workspaces: z.array(workspaceChoiceSchema).min(2) }) satisfies z.ZodType<Generated<'CloudWorkspaceChoices'>>;
 export const publicConfigSchema = z.object({
+  version: z.string().optional(),
   cloud_sign_in: z.object({ enabled: z.boolean(), publishable_key: z.string().nullable() }),
   billing: z.object({ enabled: z.boolean() }),
   signup: z.object({ enabled: z.boolean() }),
   limits: z.object({ outgoing_attachments_bytes: z.number().int(), outgoing_attachments_files: z.number().int() }),
+  product_analytics: z.object({ enabled: z.boolean(), key: z.string().nullable(), host: z.string().nullable(), realm: z.enum(['cloud', 'self-hosted']).nullable() }),
 }) satisfies z.ZodType<Generated<'PublicConfig'>>;
 export const checkoutPlanSchema = z.enum(['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding']);
 export const planSchema = z.enum(['trial', 'team', 'team25', 'founding', 'none']);
@@ -70,7 +72,7 @@ export const conversationOriginSchema = z.object({
 }) satisfies z.ZodType<Generated<'ConversationOrigin'>>;
 export const messageOriginSchema = z.object({
   system: z.string(), external_id: z.string(),
-  kind: z.enum(['description', 'reply', 'incoming', 'private_note', 'public_note', 'forward', 'forwarded_email', 'other']),
+  kind: z.enum(['description', 'reply', 'incoming', 'automated_response', 'private_note', 'public_note', 'forward', 'forwarded_email', 'other']),
   from: z.string().nullable(), to: stringList, cc: stringList, bcc: stringList,
 }) satisfies z.ZodType<Generated<'MessageOrigin'>>;
 export const timeEntrySchema = z.object({
@@ -96,7 +98,7 @@ export const incomingEmailSchema = z.object({
 }) satisfies z.ZodType<Generated<'IncomingEmail'>>;
 export const attachmentSchema = z.object({
   id: z.string().uuid(), message_id: z.string().uuid(), filename: z.string(), content_type: z.string(),
-  size: z.number().int().nonnegative(), sha256: z.string().regex(/^[0-9a-f]{64}$/), created_at: z.string().datetime(),
+  size: z.number().int().nonnegative(), sha256: z.string().regex(/^[0-9a-f]{64}$/), inline: z.boolean(), created_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'Attachment'>>;
 export const messageAgentTokenSchema = z.object({
   id: z.string().uuid(), label: z.string(), scope: z.enum(['read', 'draft', 'send', 'admin']), agent_name: z.string(),

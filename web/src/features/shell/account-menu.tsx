@@ -1,18 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { Me } from '../../api/schemas';
 import { messages } from '../../messages';
 import { Avatar } from '../../ui/avatar';
 
+// The dialog is a chunk of its own: nobody pays for it until they report a problem.
+const ReportProblemDialog = lazy(() => import('./report-problem-dialog').then((module) => ({ default: module.ReportProblemDialog })));
+
 interface AccountMenuProps {
   me: Me;
+  appVersion?: string;
   onSignOut?: () => void;
   signOutFailed?: boolean;
   signingOut?: boolean;
 }
 
 // AccountMenu is the avatar at the end of the rail: who is signed in, in which workspace, and the way out.
-export function AccountMenu({ me, onSignOut, signOutFailed = false, signingOut = false }: AccountMenuProps) {
+export function AccountMenu({ me, appVersion, onSignOut, signOutFailed = false, signingOut = false }: AccountMenuProps) {
   const [open, setOpen] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const name = me.agent.display_name || me.agent.email;
@@ -32,8 +37,12 @@ export function AccountMenu({ me, onSignOut, signOutFailed = false, signingOut =
       {open && <div className="account-popover" role="group" aria-label={messages.account}>
         <p><strong>{name}</strong>{me.agent.display_name && <span>{me.agent.email}</span>}<span>{me.workspace.name} · {messages.roles[me.agent.role]}</span></p>
         {signOutFailed && <p role="alert" className="error-copy">{messages.signOutFailed}</p>}
+        <button type="button" onClick={() => { setOpen(false); setReporting(true); }}>{messages.reportProblem}</button>
         <button type="button" disabled={signingOut} onClick={onSignOut}>{messages.signOut}</button>
       </div>}
+      {reporting && <Suspense fallback={null}>
+        <ReportProblemDialog appVersion={appVersion} onClose={() => { setReporting(false); button.current?.focus(); }} />
+      </Suspense>}
     </div>
   );
 }

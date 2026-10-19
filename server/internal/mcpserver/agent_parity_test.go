@@ -23,7 +23,7 @@ var mcpToolPending = map[string]int{}
 const (
 	maxMCPToolPending = 0
 	maxClosedToTokens = 0
-	maxPersonOnly     = 2
+	maxPersonOnly     = 3 // the two agent-request decisions, and the signed image address of the email view (an agent reads the stored HTML and has no screen)
 )
 
 const (

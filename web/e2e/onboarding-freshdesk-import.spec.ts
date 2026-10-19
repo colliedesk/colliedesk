@@ -87,15 +87,16 @@ test('freshdesk import: reconcile OK with exact counts, tickets searchable with 
     await expect(row.locator('time')).toHaveAttribute('dateTime', '2024-01-02T18:30:00Z');
     await expect(row.locator('time')).toContainText('2024');
     await row.click();
-    await expect(page.getByText('Description of ticket 42.')).toBeVisible();
-    await expect(page.getByText('Customer follow-up on 42')).toBeVisible();
+    // Imported HTML is shown formatted, inside the locked frame.
+    await expect(page.frameLocator('iframe.email-frame').first().getByText('Description of ticket 42.')).toBeVisible();
+    await expect(page.frameLocator('iframe.email-frame').nth(1).getByText('Customer follow-up on 42')).toBeVisible();
     const found = await (await page.request.get(`${baseURL}/api/v1/conversations?search=${fixture.searchableWord}`)).json() as { items: Array<{ id: string; created_at: string }> };
     expect(found.items.map((item) => item.created_at)).toEqual(['2024-01-02T18:00:00Z']);
 
     // The archived ticket came over with its attachment, byte for byte.
     await page.getByRole('searchbox', { name: 'Search conversations' }).fill('Fixture ticket 150:');
     await page.getByRole('button', { name: /Fixture ticket 150:/ }).click();
-    await expect(page.getByText('Description of ticket 150.')).toBeVisible();
+    await expect(page.frameLocator('iframe.email-frame').first().getByText('Description of ticket 150.')).toBeVisible();
     const invoice = page.getByRole('link', { name: 'invoice-150.pdf' });
     expect(Buffer.from(await (await page.request.get(`${baseURL}${await invoice.getAttribute('href')}`)).body())).toEqual(fileBody(900_150));
 

@@ -15,6 +15,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
 	"github.com/colliedesk/colliedesk/server/internal/store"
@@ -35,6 +36,19 @@ type Config struct {
 	CloudAuth   cloudauth.Config
 	Email       email.Config
 	Attachments attachments.Storage
+	// MailImages fetches the remote images of incoming email for the image proxy; nil uses the
+	// production fetcher (public addresses only). MailImageConcurrency caps fetches running at once
+	// (default 8); more get 503 with Retry-After.
+	MailImages *mailimage.Fetcher
+	// MailImageConcurrency caps fetches running at once (default 8) and MailImageWorkspaceConcurrency the
+	// share of one workspace (default 4). A request over the cap waits up to MailImageQueueWait (default
+	// 10 s) for a slot, then gets 503 with Retry-After.
+	MailImageConcurrency          int
+	MailImageWorkspaceConcurrency int
+	MailImageQueueWait            time.Duration
+	// MailImageCacheBytes caps the image cache of one workspace (default 1 GiB, MAIL_IMAGE_CACHE_BYTES);
+	// past it an image is served without being kept. The periodic sweep applies the same cap to the whole cache.
+	MailImageCacheBytes int64
 	// UploadTimeout is the longest one multipart message upload may take to arrive (default 3 minutes).
 	UploadTimeout time.Duration
 	// RequestPool, when set, runs workspace-scoped queries as a separate request login
@@ -69,12 +83,27 @@ type Config struct {
 	SignupDisabled bool
 	// Random is the entropy for generated workspace slug suffixes; nil uses crypto/rand.
 	Random io.Reader
-	// Funnel receives the cloud's trial_started and subscription_activated events; nil records
-	// nothing.
+	// Funnel receives the cloud's trial, activation (email channel, reply, teammate) and payment
+	// events; nil records nothing.
 	Funnel FunnelRecorder
+	// ProductAnalytics is the PostHog project the web app reports to; nil (telemetry turned off
+	// with DISABLE_TELEMETRY or DO_NOT_TRACK, or a development build) keeps it from loading.
+	ProductAnalytics *ProductAnalytics
+	// ProblemReportWorkspace is the slug of the workspace on this server that receives "Report a problem"
+	// reports as conversations (PROBLEM_REPORT_WORKSPACE). Empty answers 404 not_configured, so the web app
+	// offers a GitHub issue instead.
+	ProblemReportWorkspace string
 }
 
-// FunnelRecorder takes one sign-up or payment event of a workspace. Record must not block the
+// ProductAnalytics names the PostHog project key and host the web app sends usage events to, and
+// the realm ("cloud" or "self-hosted") its events carry.
+type ProductAnalytics struct {
+	Key   string
+	Host  string
+	Realm string
+}
+
+// FunnelRecorder takes one sign-up, activation or payment event of a workspace. Record must not block the
 // request; telemetry.Funnel sends in the background.
 type FunnelRecorder interface {
 	Record(event, workspaceID string, properties map[string]any)
@@ -98,6 +127,11 @@ type API struct {
 	// exports admits workspace exports; see exportLimiter.
 	exports     *exportLimiter
 	exportLinks *exportLinks
+	// mailImageSigner signs the proxy addresses of remote email images; mailImageFetcher fetches them;
+	// mailImageLimits bounds the fetches running at once.
+	mailImageSigner  *mailimage.Signer
+	mailImageFetcher *mailimage.Fetcher
+	mailImageLimits  *mailImageLimiter
 	// webForms limits the public web form per client address and workspace.
 	webForms       *webFormLimiter
 	webFormClients *webFormLimiter
@@ -105,6 +139,8 @@ type API struct {
 	domainChecks *webFormLimiter
 	// providerChecks limits the domain checks of one workspace that reach the email provider.
 	providerChecks *webFormLimiter
+	// problemReports limits the problem reports one agent may file per hour.
+	problemReports *webFormLimiter
 	polar          *polar.Client
 	// resend verifies sending domains through the provider; nil when RESEND_API_KEY is not set.
 	resend   *resend.Client
@@ -155,9 +191,16 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), exportLinks: newExportLinks(), webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
 		domainChecks:   newWindowLimiter(tokenDomainChecksPerHour, webFormMaxKeys, time.Hour),
 		providerChecks: newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
+		problemReports: newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
 		auth:           auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25()),
 		store:          store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25())}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
+	api.mailImageSigner = mailimage.NewSigner(api.mailImageKey())
+	api.mailImageFetcher = config.MailImages
+	if api.mailImageFetcher == nil {
+		api.mailImageFetcher = mailimage.NewFetcher(mailimage.Options{})
+	}
+	api.mailImageLimits = newMailImageLimiter(config.MailImageConcurrency, config.MailImageWorkspaceConcurrency, config.MailImageQueueWait)
 	if config.Email.ResendAPIKey != "" {
 		api.resend = &resend.Client{APIKey: config.Email.ResendAPIKey, Base: config.Email.ResendAPIBase}
 	}
@@ -183,7 +226,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	// The CORS preflight of the public web form is sent by the browser, never by an agent.
 	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)
-	return &Server{Handler: mux, api: api}
+	return &Server{Handler: withRequestID(mux), api: api}
 }
 
 func Routes() []Route {
@@ -212,6 +255,7 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/conversations/{id}/time-entries", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/inbox/activity", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/attachments/{id}", auth.PermissionConversationsRead},
+		{http.MethodGet, mailimage.ProxyPath, auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/contacts", auth.PermissionContactsRead},
 		{http.MethodPost, "/api/v1/contacts", auth.PermissionContactsWrite},
 		{http.MethodGet, "/api/v1/contacts/{id}", auth.PermissionContactsRead},
@@ -258,6 +302,7 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/agent-requests/{id}/approve", auth.PermissionAuthenticated},
 		{http.MethodPost, "/api/v1/agent-requests/{id}/reject", auth.PermissionAuthenticated},
 		{http.MethodPost, "/api/v1/agent-requests/{id}/cancel", auth.PermissionAuthenticated},
+		{http.MethodPost, problemReportPath, auth.PermissionAuthenticated},
 	}
 }
 

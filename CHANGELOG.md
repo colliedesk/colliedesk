@@ -8,6 +8,18 @@ From 0.0.2, the notes of each release are on the
 [releases page](https://github.com/colliedesk/colliedesk/releases), generated from the merged pull
 requests. This file keeps the first release.
 
+## Unreleased
+
+API changes in the email view (the full notes will be on the releases page):
+
+- `MessageOrigin.kind` in message responses has a new value, `automated_response`: an automatic reply that
+  Freshdesk flagged. A client that rejects unknown enum values must accept it. Tickets imported before this
+  change keep `incoming`; import them again to get the new value.
+- `Attachment` has a new required boolean, `inline`: true when the file's bytes are embedded in the
+  message's `body_html`. Existing attachments are `false`.
+- For a signed-in person, `body_html` in `GET /conversations/{id}/messages` has its remote images rewritten
+  to the new `GET /api/v1/mail-image` route; an agent token still reads the HTML as stored.
+
 ## 0.0.1
 
 First tagged release. Everything built so far:

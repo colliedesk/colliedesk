@@ -2,46 +2,11 @@ package importkit
 
 import (
 	"fmt"
-	"html"
 	"mime"
-	"net/http"
-	"regexp"
 	"strings"
+
+	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 )
-
-var (
-	imgSrc          = regexp.MustCompile(`(?is)(<img\b[^>]*?\ssrc\s*=\s*)(?:"([^"]*)"|'([^']*)')`)
-	rasterMediaType = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true}
-)
-
-// MapImageSources rewrites the src of every <img>. fn gets the attribute value with HTML entities
-// decoded and returns the new value, or false to leave the tag as written. The new value is escaped.
-func MapImageSources(markup string, fn func(src string) (string, bool)) string {
-	return imgSrc.ReplaceAllStringFunc(markup, func(tag string) string {
-		parts := imgSrc.FindStringSubmatch(tag)
-		src := parts[2]
-		if src == "" {
-			src = parts[3]
-		}
-		replacement, ok := fn(html.UnescapeString(src))
-		if !ok {
-			return tag
-		}
-		return parts[1] + `"` + html.EscapeString(replacement) + `"`
-	})
-}
-
-// SniffRaster returns the raster media type of the first bytes of data, or "".
-func SniffRaster(data []byte) string {
-	sniffed := http.DetectContentType(data)
-	if i := strings.IndexByte(sniffed, ';'); i >= 0 {
-		sniffed = sniffed[:i]
-	}
-	if rasterMediaType[sniffed] {
-		return sniffed
-	}
-	return ""
-}
 
 // ImageType decides the media type of a downloaded image. Only PNG, JPEG, GIF and WebP are kept:
 // the declared type must be one of them (or a generic binary type) and the bytes must agree. The
@@ -52,7 +17,7 @@ func ImageType(header string, data []byte) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("the Content-Type %q is not valid", Clip(header))
 	}
-	sniffed := SniffRaster(data)
+	sniffed := mailimage.SniffRaster(data)
 	switch {
 	case sniffed == "":
 		return "", fmt.Errorf("the response (%q) is not a PNG, JPEG, GIF or WebP image", Clip(declared))

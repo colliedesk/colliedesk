@@ -158,19 +158,19 @@ func (a *API) stashEmail(workspaceID string, raw []byte, files []email.File) sto
 			return nil, fmt.Errorf("compress original message: %w", err)
 		}
 		stored := make([]store.EmailFile, 0, len(files)+1)
-		put := func(filename, contentType string, data []byte, original bool) error {
+		put := func(filename, contentType string, data []byte, original, inline bool) error {
 			object, err := a.config.Attachments.Put(ctx, workspaceID, bytes.NewReader(data), int64(len(data)))
 			if err != nil {
 				return err
 			}
-			stored = append(stored, store.EmailFile{Filename: filename, ContentType: contentType, Original: original, Object: object})
+			stored = append(stored, store.EmailFile{Filename: filename, ContentType: contentType, Original: original, Inline: inline, Object: object})
 			return nil
 		}
-		if err := put("original-message.eml.gz", "application/gzip", compressed.Bytes(), true); err != nil {
+		if err := put("original-message.eml.gz", "application/gzip", compressed.Bytes(), true, false); err != nil {
 			return nil, err
 		}
 		for _, file := range files {
-			if err := put(file.Filename, file.ContentType, file.Data, false); err != nil {
+			if err := put(file.Filename, file.ContentType, file.Data, false, file.Embedded); err != nil {
 				return nil, err
 			}
 		}

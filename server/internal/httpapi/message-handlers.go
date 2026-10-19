@@ -24,6 +24,12 @@ func (a *API) listMessages(response http.ResponseWriter, request *http.Request) 
 		writeStoreError(response, err)
 		return
 	}
+	// A person's screen gets remote images through the image proxy; an agent token reads the HTML as stored.
+	if identity.Scope == "" {
+		for i := range items {
+			items[i].BodyHTML = a.presentMessageHTML(identity.Workspace.ID, items[i].BodyHTML)
+		}
+	}
 	writeJSON(response, http.StatusOK, map[string]any{"items": items})
 }
 
@@ -71,6 +77,7 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		writeStoreError(response, err)
 		return
 	}
+	a.recordReply(identity, input.Kind)
 	writeJSON(response, http.StatusCreated, item)
 }
 

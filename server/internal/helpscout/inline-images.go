@@ -13,6 +13,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/importkit"
+	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 )
 
 // maxImageBytes bounds one image and the images embedded as data: URIs in one message, the budget
@@ -49,7 +50,7 @@ func imageKey(u *url.URL) string {
 func (r *run) inlineImages(markup string) []imageRef {
 	var refs []imageRef
 	seen := map[string]bool{}
-	importkit.MapImageSources(markup, func(src string) (string, bool) {
+	mailimage.MapSources(markup, func(src string) (string, bool) {
 		if u, ok := r.hostedImageURL(src); ok {
 			if key := imageKey(u); !seen[key] {
 				seen[key] = true

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { api } from '../../api/client';
@@ -6,6 +6,7 @@ import type { BulkConversationChanges, UpdateConversationRequest } from '../../a
 import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
 import { defaultInboxFilters } from './inbox-filters';
+import { track } from '../../lib/product-analytics';
 import { agentSignatureName } from '../../lib/saved-reply-variables';
 import { messages } from '../../messages';
 import { retryRefusalText } from './refusal-text';
@@ -17,6 +18,17 @@ function errorMessage(result: unknown): string | undefined {
   const { error } = result as { error?: { message?: unknown } };
   return typeof error?.message === 'string' ? error.message : undefined;
 }
+
+function bulkActionOf(changes: BulkConversationChanges): 'status' | 'assign' | 'add_tag' | 'remove_tag' | undefined {
+  if (changes.status) return 'status';
+  if ('assignee_id' in changes) return 'assign';
+  if (changes.add_tag_ids) return 'add_tag';
+  if (changes.remove_tag_ids) return 'remove_tag';
+  return undefined;
+}
+
+// How long a search term stays unchanged before it counts as a finished search, so typing "refund" is one search.
+const searchSettleMs = 800;
 
 export function InboxRoute() {
   const client = useQueryClient();
@@ -36,17 +48,24 @@ export function InboxRoute() {
   const conversations = useQuery({ queryKey: ['conversations', query], queryFn: () => api.conversations(query), refetchOnMount: 'always',
     // A new search or filter keeps the old rows on screen until its response arrives.
     placeholderData: keepPreviousData });
-  const agents = useQuery({ queryKey: ['agents'], queryFn: api.agents });
-  const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags });
-  // Fetched once and shared with Settings, so the picker opens from memory.
-  const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
-  const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
-  // Shared with the app shell, so the limits cost no extra request.
-  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
-  const limits = config?.limits;
-  const outbound = emailChannel.data;
-  const outboundNotice = outbound?.channel && outbound.sending_from === null
-    ? (outbound.smtp.configured ? messages.outboundNeedsVerification : messages.outboundNotConfigured) : undefined;
+  // A search is reported once its term settled and its answer arrived: whether it found anything, never the term.
+  const searchTerm = filters.search ?? '';
+  const searchSettled = searchTerm !== '' && conversations.isSuccess && !conversations.isPlaceholderData;
+  const hasResults = (conversations.data?.items.length ?? 0) > 0;
+  const reportedSearch = useRef('');
+  useEffect(() => {
+    if (!searchSettled || reportedSearch.current === searchTerm) return;
+    const timer = setTimeout(() => { reportedSearch.current = searchTerm; track('inbox_searched', { has_results: hasResults }); }, searchSettleMs);
+    return () => clearTimeout(timer);
+  }, [searchSettled, searchTerm, hasResults]);
+  // A conversation reached by its address counts once; one picked from the list was counted when picked.
+  const reportedOpen = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const id = params.conversationId;
+    if (!id || selectedId === id || reportedOpen.current === id) return;
+    reportedOpen.current = id;
+    track('conversation_opened', { source: 'link' });
+  }, [params.conversationId, selectedId]);
   const narrowed = Boolean(filters.search || filters.assignee || filters.tag);
   const filtered = narrowed || !['', defaultInboxFilters.status].includes(filters.status ?? '');
   // An empty Open view is either a new workspace or one that is caught up; one row of All tells which.
@@ -60,8 +79,15 @@ export function InboxRoute() {
   // fetched alongside the list for a deep link, and seeded from every change so the panes never swap.
   const opened = useQuery({ queryKey: ['conversations', 'one', activeID], queryFn: () => api.conversation(activeID!),
     enabled: Boolean(activeID && !listed) });
-  const selected = listed ?? (opened.data?.id === activeID ? opened.data : undefined) ?? conversations.data?.items[0];
-  const timeline = useQuery({ queryKey: ['messages', selected?.id], queryFn: () => api.messages(selected!.id), enabled: Boolean(selected),
+  // Header, composer and timeline all belong to one ticket. With an address in the URL that is the ticket the
+  // address names, once its row or its detail has loaded; until then nothing is shown for it, never the first
+  // row of the list, whose composer would send a reply to the wrong customer.
+  const selected = listed ?? (opened.data?.id === activeID ? opened.data : undefined) ?? (activeID ? undefined : conversations.data?.items[0]);
+  // The messages and time entries need only the id. A ticket opened by its address knows it from the URL, so
+  // they go out together with the list and the detail instead of after one of them. Without an address the id
+  // is the first row of the list, which is the one thing that has to be waited for.
+  const openID = activeID ?? selected?.id;
+  const timeline = useQuery({ queryKey: ['messages', openID], queryFn: () => api.messages(openID!), enabled: Boolean(openID),
     // Poll while a reply waits in the email outbox so its delivery status updates without a reload.
     refetchInterval: (query) => (query.state.data?.items.some((item) => item.delivery?.status === 'queued') ? 5000 : false) });
   // Reply drafts AI agents left: the list marks their conversations, the open one shows them above the composer.
@@ -78,11 +104,34 @@ export function InboxRoute() {
     if (conversationId) void client.invalidateQueries({ queryKey: ['messages', conversationId] });
     return refresh();
   };
-  const timeEntries = useQuery({ queryKey: ['time-entries', selected?.id], queryFn: () => api.timeEntries(selected!.id), enabled: Boolean(selected) });
+  const timeEntries = useQuery({ queryKey: ['time-entries', openID], queryFn: () => api.timeEntries(openID!), enabled: Boolean(openID) });
+  // The side lists come after everything the open ticket needs: a browser allows six HTTP/1.1 connections per
+  // host, and a request that waits for one is a request the person waits for.
+  const agents = useQuery({ queryKey: ['agents'], queryFn: api.agents });
+  const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags });
+  // Fetched once and shared with Settings, so the picker opens from memory.
+  const savedReplies = useQuery({ queryKey: ['saved-replies'], queryFn: api.savedReplies });
+  const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
+  // Shared with the app shell, so the limits cost no extra request.
+  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
+  const limits = config?.limits;
+  const outbound = emailChannel.data;
+  const outboundNotice = outbound?.channel && outbound.sending_from === null
+    ? (outbound.smtp.configured ? messages.outboundNeedsVerification : messages.outboundNotConfigured) : undefined;
   const refresh = () => client.invalidateQueries({ queryKey: ['conversations'] });
   const keepOpened = (changed: Conversation) => { client.setQueryData(['conversations', 'one', changed.id], changed); return refresh(); };
-  const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes), onSuccess: keepOpened });
+  const agentId = me.data?.agent?.id;
+  const update = useMutation({ mutationFn: ({ conversationId, changes }: { conversationId: string; changes: UpdateConversationRequest }) => api.updateConversation(conversationId, changes),
+    onSuccess: (changed, { changes }) => {
+      if (changes.status) track('conversation_status_changed', { to: changes.status });
+      if (changes.assignee_id) track('conversation_assigned', { to_self: changes.assignee_id === agentId });
+      return keepOpened(changed);
+    } });
   const bulkUpdate = useMutation({ mutationFn: ({ ids, changes }: { ids: string[]; changes: BulkConversationChanges }) => api.bulkUpdateConversations(ids, changes),
+    onSuccess: (_result, { ids, changes }) => {
+      const action = bulkActionOf(changes);
+      if (action) track('bulk_action_applied', { action, count: ids.length });
+    },
     // A refusal usually means a row is gone or changed under the agent; reload so the list shows it.
     onSettled: refresh });
   const addTag = useMutation({ mutationFn: ({ conversationId, tagId }: { conversationId: string; tagId: string }) => api.addConversationTag(conversationId, tagId), onSuccess: keepOpened });
@@ -97,11 +146,19 @@ export function InboxRoute() {
     onSuccess: (retried) => client.invalidateQueries({ queryKey: ['messages', retried.conversation_id] }) });
   // A refusal belongs to the conversation it happened in; opening another one hides it.
   const retryError = retryDelivery.isError && retryDelivery.variables?.conversationId === selected?.id ? retryDelivery.error : undefined;
-  return <InboxPage hosted={config?.billing.enabled ?? false} conversations={conversations.data?.items} selected={selected} timeline={timeline.data?.items} timeEntries={timeEntries.data?.items}
+  return <InboxPage hosted={config?.billing.enabled ?? false} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
     agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone}
     page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} onPage={setPage}
-    onSelect={(id) => { setSelectedId(id); navigate({ to: '/conversations/$conversationId', params: { conversationId: id } }); }}
-    onFilters={(values) => { setFilters(values); setPage(1); }} onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
+    onSelect={(id) => { reportedOpen.current = id; track('conversation_opened', { source: 'list' }); setSelectedId(id); navigate({ to: '/conversations/$conversationId', params: { conversationId: id } }); }}
+    onFilters={(values) => {
+      // Typing a search widens the status to All by itself; that is not a choice of the person.
+      const typing = (values.search ?? '') !== (filters.search ?? '');
+      for (const filter of ['status', 'assignee', 'tag'] as const) {
+        if (filter === 'status' && typing) continue;
+        if ((values[filter] ?? '') !== (filters[filter] ?? '')) track('inbox_filtered', { filter });
+      }
+      setFilters(values); setPage(1);
+    }} onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
     onMessage={(kind, body, files, cc) => message.mutateAsync({ kind, body, files, cc })}
@@ -112,6 +169,7 @@ export function InboxRoute() {
     attachmentLimits={limits ? { bytes: limits.outgoing_attachments_bytes, files: limits.outgoing_attachments_files } : undefined}
     outboundNotice={outboundNotice} deliveryNotice={retryError ? retryRefusalText(retryError) : draftNotice} filtered={filtered} nothingOpen={nothingOpen} loading={conversations.isPending || (checkAny && anyConversation.isPending)} refreshing={conversations.isFetching && !conversations.isPending}
     timelineLoading={Boolean(selected) && timeline.isPending}
+    conversationFailed={Boolean(activeID && !selected && opened.isError)} onRetryConversation={() => void opened.refetch()}
     failed={conversations.isError} onRetry={() => void conversations.refetch()}
     currentAgentId={me.data?.agent?.id} onBulkUpdate={(ids, changes) => bulkUpdate.mutateAsync({ ids, changes })}
     canManage={me.data?.agent?.role === 'admin'} onOpenSettings={() => void navigate({ to: '/settings' })}
@@ -120,9 +178,10 @@ export function InboxRoute() {
     replyDrafts={selectedDrafts} draftConversationIds={draftConversationIds}
     onSendDraft={async (draft, edit) => {
       const outcome = await api.approveAgentRequest(draft.id, edit);
+      track('agent_request_decided', { decision: 'approved' });
       await afterDraft(draft.conversation_id);
       // Approved but refused by the reply route (for example the trial's limits): say why, the draft is spent.
       setDraftNotice(outcome.request.status === 'failed' ? messages.draftRefused(errorMessage(outcome.result)) : undefined);
     }}
-    onDiscardDraft={async (draft) => { await api.rejectAgentRequest(draft.id); await afterDraft(draft.conversation_id); }} />;
+    onDiscardDraft={async (draft) => { await api.rejectAgentRequest(draft.id); track('agent_request_decided', { decision: 'rejected' }); await afterDraft(draft.conversation_id); }} />;
 }

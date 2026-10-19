@@ -112,6 +112,7 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 		writeStoreError(response, err)
 		return
 	}
+	a.recordReply(identity, fields.kind)
 	stored = nil // referenced now: keep the bytes
 	writeJSON(response, http.StatusCreated, item)
 }

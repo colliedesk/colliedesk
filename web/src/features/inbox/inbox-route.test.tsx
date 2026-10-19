@@ -13,12 +13,187 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock('../../api/client', () => ({ api }));
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn(), useParams: () => ({}) }));
+const router = vi.hoisted(() => ({ params: {} as { conversationId?: string } }));
+vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn(), useParams: () => router.params }));
 
 const conversation = (id: string, subject: string) => ({
   id, contact_id: '22222222-2222-4222-8222-222222222222', contact_name: 'Mai Linh', subject,
   status: 'open' as const, priority: 'normal' as const, assignee_id: null, tags: [], origin: null,
   created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z',
+});
+
+// A ticket opened by its address must not wait for the list or for the conversation detail before it asks for
+// its messages: those three requests are independent, and a chain of them costs a round trip each.
+test('a ticket opened by its address asks for its messages and time entries at once, before the list or the detail arrive', async () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  router.params = { conversationId: id };
+  try {
+    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.conversations.mockReset();
+    api.conversations.mockReturnValue(new Promise(() => {})); // the list never answers in this test
+    api.conversation.mockReturnValue(new Promise(() => {})); // nor does the detail
+    api.agents.mockResolvedValue({ items: [] });
+    api.tags.mockResolvedValue({ items: [] });
+    api.messages.mockReset();
+    api.messages.mockReturnValue(new Promise(() => {}));
+    api.timeEntries.mockReset();
+    api.timeEntries.mockReturnValue(new Promise(() => {}));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+    await waitFor(() => expect(api.messages).toHaveBeenCalledWith(id));
+    expect(api.timeEntries).toHaveBeenCalledWith(id);
+    expect(api.conversations).toHaveBeenCalled();
+    expect(api.conversation).toHaveBeenCalledWith(id);
+    // What the open ticket needs goes out before the side lists (agents, tags, saved replies, channel): a
+    // browser allows only six HTTP/1.1 connections per host, and the later requests wait for a free one.
+    const first = (mock: { mock: { invocationCallOrder: number[] } }) => mock.mock.invocationCallOrder[0];
+    for (const critical of [api.conversations, api.conversation, api.messages, api.timeEntries]) {
+      for (const side of [api.agents, api.tags, api.savedReplies, api.emailChannel]) {
+        expect(first(critical), 'a side list was requested before the open ticket').toBeLessThan(first(side));
+      }
+    }
+  } finally {
+    router.params = {};
+  }
+});
+
+// A ticket opened by its address that is not in the list shows nothing of another ticket: not its header, not its
+// composer. A reply typed under the wrong header would go to the wrong customer.
+test('a ticket opened by address that is not in the list never shows another ticket\'s header, and its composer stays disabled, while its detail is missing', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
+  router.params = { conversationId: bravo.id };
+  try {
+    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.conversations.mockReset();
+    api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+    let resolveDetail!: (value: typeof bravo) => void;
+    api.conversation.mockReset();
+    api.conversation.mockReturnValue(new Promise((resolve) => { resolveDetail = resolve; }));
+    api.agents.mockResolvedValue({ items: [] });
+    api.tags.mockResolvedValue({ items: [] });
+    api.messages.mockReset();
+    api.messages.mockResolvedValue({ items: [] });
+    api.timeEntries.mockResolvedValue({ items: [] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+    await waitFor(() => expect(api.messages).toHaveBeenCalledWith(bravo.id));
+    await screen.findByRole('button', { name: /alpha conversation/i }); // the list has arrived, the detail has not
+    expect(screen.queryByRole('heading', { name: 'Alpha conversation' })).toBeNull();
+    for (const box of screen.getAllByLabelText('Message body')) expect(box).toBeDisabled(); // nothing can be sent yet
+    expect(api.messages).not.toHaveBeenCalledWith(alpha.id);
+    resolveDetail(bravo);
+    expect(await screen.findByRole('heading', { name: 'Bravo conversation' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByLabelText('Message body').some((box) => !(box as HTMLTextAreaElement).disabled)).toBe(true));
+  } finally {
+    router.params = {};
+  }
+});
+
+test('a ticket whose detail fails to load never gets a usable composer, and nothing is sent to the first listed ticket', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
+  router.params = { conversationId: bravo.id };
+  try {
+    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.conversations.mockReset();
+    api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+    api.conversation.mockReset();
+    api.conversation.mockRejectedValue(new Error('server error'));
+    api.agents.mockResolvedValue({ items: [] });
+    api.tags.mockResolvedValue({ items: [] });
+    api.messages.mockReset();
+    api.messages.mockResolvedValue({ items: [] });
+    api.timeEntries.mockResolvedValue({ items: [] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+    await screen.findByRole('button', { name: /alpha conversation/i });
+    await waitFor(() => expect(api.conversation).toHaveBeenCalledWith(bravo.id));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByRole('heading', { name: 'Alpha conversation' })).toBeNull();
+    for (const box of screen.getAllByLabelText('Message body')) expect(box).toBeDisabled();
+    expect(api.createMessage).not.toHaveBeenCalled();
+  } finally {
+    router.params = {};
+  }
+});
+
+// A ticket the person opens from the list has its row already. Its header and composer come from that row at
+// once; the detail request is not made, and a slow one would not matter. This is what keeps a warm open fast.
+test('opening a listed ticket renders its header and asks for its messages without any detail request', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
+  api.me.mockResolvedValue({ timezone: 'UTC' });
+  api.conversations.mockReset();
+  api.conversations.mockResolvedValue({ items: [alpha, bravo], page: 1, page_size: 50 });
+  api.conversation.mockReset();
+  api.conversation.mockReturnValue(new Promise(() => {}));
+  api.agents.mockResolvedValue({ items: [] });
+  api.tags.mockResolvedValue({ items: [] });
+  api.messages.mockReset();
+  api.messages.mockResolvedValue({ items: [] });
+  api.timeEntries.mockResolvedValue({ items: [] });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+  await screen.findByRole('button', { name: /bravo conversation/i });
+  fireEvent.click(screen.getByRole('button', { name: /bravo conversation/i }));
+  expect(await screen.findByRole('heading', { name: 'Bravo conversation' })).toBeInTheDocument();
+  await waitFor(() => expect(api.messages).toHaveBeenCalledWith(bravo.id));
+  expect(api.conversation).not.toHaveBeenCalled();
+});
+
+test('a ticket opened by an address that is in the list renders from its row while the detail is still pending', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
+  router.params = { conversationId: bravo.id };
+  try {
+    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.conversations.mockReset();
+    api.conversations.mockResolvedValue({ items: [alpha, bravo], page: 1, page_size: 50 });
+    api.conversation.mockReset();
+    api.conversation.mockReturnValue(new Promise(() => {})); // never answers
+    api.agents.mockResolvedValue({ items: [] });
+    api.tags.mockResolvedValue({ items: [] });
+    api.messages.mockReset();
+    api.messages.mockResolvedValue({ items: [] });
+    api.timeEntries.mockResolvedValue({ items: [] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+    expect(await screen.findByRole('heading', { name: 'Bravo conversation' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByLabelText('Message body').some((box) => !(box as HTMLTextAreaElement).disabled)).toBe(true));
+  } finally {
+    router.params = {};
+  }
+});
+
+// When the ticket an address names cannot be loaded, the pane says so and offers to try again.
+test('a ticket whose detail fails to load says so and Retry asks for it again', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  const bravo = conversation('33333333-3333-4333-8333-333333333333', 'Bravo conversation');
+  router.params = { conversationId: bravo.id };
+  try {
+    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.conversations.mockReset();
+    api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+    api.conversation.mockReset();
+    api.conversation.mockRejectedValueOnce(new Error('server error')).mockResolvedValue(bravo);
+    api.agents.mockResolvedValue({ items: [] });
+    api.tags.mockResolvedValue({ items: [] });
+    api.messages.mockReset();
+    api.messages.mockResolvedValue({ items: [] });
+    api.timeEntries.mockResolvedValue({ items: [] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/could not be loaded/i);
+    expect(screen.queryByRole('heading', { name: 'Alpha conversation' })).toBeNull();
+    fireEvent.click(within(alert).getByRole('button', { name: /retry/i }));
+    expect(await screen.findByRole('heading', { name: 'Bravo conversation' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(api.conversation).toHaveBeenCalledTimes(2);
+  } finally {
+    router.params = {};
+  }
 });
 
 test('inline tag creation stays bound to the conversation selected at call time', async () => {

@@ -387,7 +387,7 @@ func newDB(t *testing.T) *database.DB {
 
 // fixture builds two workspaces with agents, sessions, replies, a note, an email channel and an
 // import ledger row, with some activity older than 30 days.
-func fixture(t *testing.T, db *database.DB) {
+func fixture(t *testing.T, db *database.DB) (acme, beta string) {
 	t.Helper()
 	ctx := context.Background()
 	service := auth.NewWithDB(db, "https://help.acme.com")
@@ -432,9 +432,33 @@ func fixture(t *testing.T, db *database.DB) {
 		SELECT id FROM messages WHERE kind = 'outgoing' AND created_at >= now() - interval '2 hours')`)
 	message("outgoing", "Refund please", "30 minutes")
 
+	// Agent tokens are sessions with a scope. Acme has one in use, one revoked and one expired; the
+	// reply sent 30 minutes ago was written with the one in use. Beta's only token is revoked and
+	// was used an hour ago by an agent whose last sign-in was 29 days ago: a token's use is not a sign-in.
+	token := func(workspaceID, email, scope, revokedAt, expiresIn string) {
+		exec(`INSERT INTO sessions(workspace_id,agent_id,token_hash,role_ceiling,label,scope,last_seen_at,expires_at,revoked_at)
+			SELECT workspace_id,id,convert_to(gen_random_uuid()::text,'UTF8'),'agent','token',$3,now()-interval '1 hour',now()+$5::interval,
+				CASE WHEN $4 = '' THEN NULL ELSE now() END
+			FROM agents WHERE workspace_id=$1 AND email=$2`, workspaceID, email, scope, revokedAt, expiresIn)
+	}
+	token(a.ID, "owner-a@example.com", "send", "", "30 days")
+	token(a.ID, "owner-a@example.com", "read", "revoked", "30 days")
+	token(a.ID, "owner-a@example.com", "read", "", "-1 day")
+	token(b.ID, "owner-b@example.com", "read", "revoked", "30 days")
+	exec(`UPDATE messages SET agent_token_id = (SELECT id FROM sessions WHERE workspace_id=$1 AND scope='send')
+		WHERE workspace_id=$1 AND created_at >= now() - interval '31 minutes' AND kind='outgoing'`, a.ID)
+	exec(`UPDATE agents SET deactivated_at = now() WHERE workspace_id=$1 AND email='idle-b@example.com'`, b.ID)
+
+	// Acme is 10 days old and still in its trial; Beta is 45 days old and pays for Team.
+	exec(`UPDATE workspaces SET created_at = now() - interval '10 days', trial_ends_at = now() + interval '5 days 12 hours' WHERE id=$1`, a.ID)
+	exec(`UPDATE workspaces SET created_at = now() - interval '45 days', trial_ends_at = now() - interval '31 days' WHERE id=$1`, b.ID)
+	exec(`INSERT INTO workspace_billing(workspace_id,plan,polar_subscription_id,polar_customer_id,status,current_period_end,source_modified_at)
+		VALUES($1,'team','sub_beta','cus_beta','active',now() + interval '20 days',now())`, b.ID)
+
 	exec(`INSERT INTO email_channels(workspace_id,support_address,domain_verification_token) VALUES($1,'support@beta.example','token')`, b.ID)
 	exec(`INSERT INTO web_form_channels(workspace_id,enabled) VALUES($1,false)`, a.ID)
 	exec(`INSERT INTO import_items(workspace_id,source,entity,source_id,status) VALUES($1,'freshdesk:account:42','ticket','1','done')`, a.ID)
+	return a.ID, b.ID
 }
 
 func execSQL(t *testing.T, db *database.DB, sql string, args ...any) {
@@ -446,5 +470,175 @@ func execSQL(t *testing.T, db *database.DB, sql string, args ...any) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+type batch struct {
+	APIKey string      `json:"api_key"`
+	Batch  []heartbeat `json:"batch"`
+}
+
+// bodyAt returns the body of the only request made to path.
+func (c *capture) bodyAt(t *testing.T, path string) []byte {
+	t.Helper()
+	var found [][]byte
+	for i, p := range c.paths {
+		if p == path {
+			found = append(found, c.bodies[i])
+		}
+	}
+	if len(found) != 1 {
+		t.Fatalf("requests to %s = %d, want 1 (all: %v)", path, len(found), c.paths)
+	}
+	return found[0]
+}
+
+func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
+	db := newDB(t)
+	acme, beta := fixture(t, db)
+	execSQL(t, db, `UPDATE web_form_channels SET enabled = true WHERE workspace_id = $1`, acme)
+	recorded := &capture{}
+	server := recorded.server(t)
+
+	if err := telemetry.New(db, cloudConfig(server.URL), server.Client()).SendOnce(context.Background()); err != nil {
+		t.Fatalf("SendOnce: %v", err)
+	}
+	if len(recorded.bodies) != 2 {
+		t.Fatalf("requests = %v, want the heartbeat and one batch", recorded.paths)
+	}
+	if heart := decode(t, recorded.bodyAt(t, "POST /i/v0/e/")); heart.Event != "instance heartbeat" {
+		t.Fatalf("capture event = %q, want the unchanged instance heartbeat", heart.Event)
+	}
+	var sent batch
+	if err := json.Unmarshal(recorded.bodyAt(t, "POST /batch/"), &sent); err != nil {
+		t.Fatal(err)
+	}
+	if sent.APIKey != "phc_test" || len(sent.Batch) != 2 {
+		t.Fatalf("batch = key %q with %d events, want phc_test with 2", sent.APIKey, len(sent.Batch))
+	}
+	byWorkspace := map[string]heartbeat{}
+	for _, event := range sent.Batch {
+		if event.Event != "workspace_snapshot" {
+			t.Errorf("event = %q, want workspace_snapshot", event.Event)
+		}
+		if _, err := time.Parse(time.RFC3339, event.Timestamp); err != nil {
+			t.Errorf("timestamp %q: %v", event.Timestamp, err)
+		}
+		byWorkspace[event.DistinctID] = event
+	}
+
+	// Expected values are worked out by hand from fixture(). Acme: trial ending in 5.5 days, 10 days
+	// old; owner and helper signed in within 7 days; replies sent here: 30 minutes ago (written by
+	// an AI agent token) and 10 days ago (the 1-hour-old one was imported, the 40-day-old one is
+	// too old); one open conversation made today; the web form switched on above; one token in use
+	// (one revoked, one expired); a Freshdesk import. Beta: Team plan, 45 days old; one agent left
+	// (the other is deactivated); the last sign-in 29 days ago; the revoked token used an hour ago
+	// does not count as a sign-in; an email channel.
+	want := map[string]map[string]any{
+		acme: {
+			"plan": "trial", "trial_days_left": float64(6), "days_since_created": float64(10),
+			"agents_total": float64(2), "agents_active_7d": float64(2), "agents_active_30d": float64(2),
+			"replies_7d": float64(1), "replies_30d": float64(2), "ai_agent_replies_7d": float64(1),
+			"conversations_open": float64(1), "conversations_created_7d": float64(1),
+			"email_channel": false, "web_form": true, "tokens_active": float64(1), "freshdesk_import": true,
+			"workspace_name": "Acme Support", "workspace_slug": "acme-support",
+		},
+		beta: {
+			"plan": "team", "trial_days_left": nil, "days_since_created": float64(45),
+			"agents_total": float64(1), "agents_active_7d": float64(0), "agents_active_30d": float64(1),
+			"replies_7d": float64(0), "replies_30d": float64(0), "ai_agent_replies_7d": float64(0),
+			"conversations_open": float64(0), "conversations_created_7d": float64(0),
+			"email_channel": true, "web_form": false, "tokens_active": float64(0), "freshdesk_import": false,
+			"workspace_name": "Beta Help", "workspace_slug": "beta-help",
+		},
+	}
+	for id, fields := range want {
+		event, ok := byWorkspace[id]
+		if !ok {
+			t.Fatalf("no snapshot for workspace %s", id)
+		}
+		for key, value := range fields {
+			if got, present := event.Properties[key]; !present || got != value {
+				t.Errorf("workspace %s properties[%q] = %#v (present %v), want %#v", id, key, got, present, value)
+			}
+		}
+		if event.Properties["realm"] != "cloud" || event.Properties["version"] != "0.1.0" || event.Properties["$process_person_profile"] != false {
+			t.Errorf("workspace %s realm/version/$process_person_profile = %#v/%#v/%#v", id, event.Properties["realm"], event.Properties["version"], event.Properties["$process_person_profile"])
+		}
+		// The fields are exactly the ones docs/user/telemetry.md lists; a new one needs the docs first.
+		const listed = "$process_person_profile,agents_active_30d,agents_active_7d,agents_total,ai_agent_replies_7d,conversations_created_7d,conversations_open,days_since_created,email_channel,freshdesk_import,plan,realm,replies_30d,replies_7d,tokens_active,trial_days_left,version,web_form,workspace_name,workspace_slug"
+		if got := keys(event.Properties); got != listed {
+			t.Errorf("workspace %s property keys = %s, want %s", id, got, listed)
+		}
+	}
+
+	// The workspace name and slug are sent (they say which customer it is); addresses, what anyone
+	// wrote and billing ids never are.
+	raw := string(recorded.bodyAt(t, "POST /batch/"))
+	for _, secret := range []string{"owner-a@example.com", "owner-b@example.com", "helper-a@example.com", "idle-b@example.com", "buyer@example.org",
+		"Where is my order", "Refund please", "Internal note", "support@beta.example", "sub_beta", "cus_beta"} {
+		if strings.Contains(raw, secret) {
+			t.Errorf("snapshot contains %q: %s", secret, raw)
+		}
+	}
+}
+
+func TestSelfHostedSendsNoSnapshot(t *testing.T) {
+	db := newDB(t)
+	fixture(t, db)
+	recorded := &capture{}
+	server := recorded.server(t)
+	config := cloudConfig(server.URL)
+	config.Realm = "self-hosted"
+	if err := telemetry.New(db, config, server.Client()).SendOnce(context.Background()); err != nil {
+		t.Fatalf("SendOnce: %v", err)
+	}
+	if len(recorded.paths) != 1 || recorded.paths[0] != "POST /i/v0/e/" {
+		t.Fatalf("requests = %v, want only the instance heartbeat", recorded.paths)
+	}
+}
+
+func TestSnapshotsAreSentOncePerDay(t *testing.T) {
+	db := newDB(t)
+	fixture(t, db)
+	recorded := &capture{}
+	server := recorded.server(t)
+	for range 3 {
+		if err := telemetry.New(db, cloudConfig(server.URL), server.Client()).SendOnce(context.Background()); err != nil {
+			t.Fatalf("SendOnce: %v", err)
+		}
+	}
+	if len(recorded.bodies) != 2 {
+		t.Fatalf("requests = %v, want one heartbeat and one batch within a day", recorded.paths)
+	}
+	execSQL(t, db, `UPDATE instance SET last_reported_at = now() - interval '24 hours'`)
+	if err := telemetry.New(db, cloudConfig(server.URL), server.Client()).SendOnce(context.Background()); err != nil {
+		t.Fatalf("next-day SendOnce: %v", err)
+	}
+	if len(recorded.bodies) != 4 {
+		t.Fatalf("requests = %v, want a second heartbeat and batch after a day", recorded.paths)
+	}
+}
+
+func TestFailedHeartbeatDoesNotSkipSnapshots(t *testing.T) {
+	db := newDB(t)
+	fixture(t, db)
+	var mu sync.Mutex
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		if r.URL.Path == "/i/v0/e/" {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	t.Cleanup(server.Close)
+	err := telemetry.New(db, cloudConfig(server.URL), server.Client()).SendOnce(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "500") {
+		t.Fatalf("SendOnce error = %v, want one naming status 500", err)
+	}
+	if !slices.Contains(paths, "/batch/") {
+		t.Fatalf("requests = %v, want the snapshots sent although the heartbeat failed", paths)
 	}
 }

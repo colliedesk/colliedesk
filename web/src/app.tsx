@@ -15,9 +15,11 @@ import type { NavItem } from './features/settings/settings-nav';
 import { AppShell } from './features/shell/app-shell';
 import { LockedRoute } from './features/shell/locked-route';
 import { PlanNotices } from './features/shell/plan-notices';
+import { TrialSurvey } from './features/shell/trial-survey';
 import { messages } from './messages';
 import { InboxIcon, RequestsIcon, SettingsIcon } from './ui/icons';
 import { LogoMark } from './ui/logo';
+import { resetProductAnalytics, useProductAnalytics } from './lib/product-analytics';
 
 function AppLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
@@ -27,12 +29,14 @@ function AppLayout() {
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config, enabled: !onSignIn });
   const client = useQueryClient();
   // After sign out /auth/me answers 401, which turns the view into the signed-out screen.
-  const signOut = useMutation({ mutationFn: api.logout, onSuccess: () => client.invalidateQueries({ queryKey: ['me'] }) });
+  const signOut = useMutation({ mutationFn: api.logout, onSuccess: () => { resetProductAnalytics(); return client.invalidateQueries({ queryKey: ['me'] }); } });
   const locked = me.data?.plan?.locked === true;
   // A locked workspace chooses its plan on the locked screen, so a remembered plan must not fire later.
   useEffect(() => { if (locked) clearCheckoutIntent(); }, [locked]);
   // New, newly assigned and changed conversations are picked up on every signed-in page, not only in the inbox.
   useInboxActivity(!onSignIn && Boolean(me.data) && !signedOut && !locked, me.data?.agent?.id);
+  // The server's config enables it unless telemetry is off; otherwise the library is never loaded.
+  useProductAnalytics(config.data?.product_analytics, me.data);
   // Agent requests waiting for a person, for the rail badge; a locked workspace has none to decide.
   const waiting = usePendingRequests(!onSignIn && Boolean(me.data) && !signedOut && !locked).data?.items.length ?? 0;
   // On an instance with cloud sign-in the way back in is the sign-in page, not a new pairing link.
@@ -44,8 +48,8 @@ function AppLayout() {
   // Plan and billing is a page inside Settings, so Settings stays the current rail destination there.
   const inSettings = path.startsWith('/settings');
   const inRequests = path.startsWith('/requests');
-  return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} signedOut={signedOut} signIn={signIn}
-    notice={me.data && <PlanNotices me={me.data} onBillingPage={inBilling} />} lockedScreen={locked && me.data ? <LockedRoute me={me.data} /> : undefined}
+  return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} appVersion={config.data?.version} signedOut={signedOut} signIn={signIn}
+    notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} /><TrialSurvey me={me.data} analytics={config.data?.product_analytics} /></>} lockedScreen={locked && me.data ? <LockedRoute me={me.data} /> : undefined}
     onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending}
     brand={<span className="rail-brand" role="img" aria-label={messages.brand}><LogoMark /></span>}
     links={locked ? undefined : <>

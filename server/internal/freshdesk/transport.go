@@ -27,8 +27,6 @@ func withRedirectGuard(ctx context.Context, allowed func(*url.URL) bool) context
 	return context.WithValue(ctx, redirectGuardKey{}, allowed)
 }
 
-var errBlockedAddress = importkit.ErrBlockedAddress
-
 func newTransport(hooks testHooks) *http.Transport {
 	return importkit.NewTransport(hooks.rootCAs, hooks.allowDial)
 }
