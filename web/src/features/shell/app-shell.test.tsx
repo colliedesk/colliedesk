@@ -95,3 +95,17 @@ test('Sign out cannot be sent twice while the first request runs', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Account' }));
   expect(screen.getByRole('button', { name: 'Sign out' })).toBeDisabled();
 });
+
+test('Report a problem in the account menu opens the dialog, and closing it returns focus to the avatar', async () => {
+  render(<AppShell me={me} appVersion="0.0.41" onSignOut={() => {}}><p>inbox</p></AppShell>);
+  const avatar = screen.getByRole('button', { name: 'Account' });
+  fireEvent.click(avatar);
+  fireEvent.click(screen.getByRole('button', { name: 'Report a problem' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Report a problem' });
+  expect(screen.queryByRole('group', { name: 'Account' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText('What will be sent'));
+  expect(dialog).toHaveTextContent('0.0.41');
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(avatar).toHaveFocus();
+});

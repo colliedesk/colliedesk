@@ -201,6 +201,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/agent-requests/{id}/approve":      {path: "/api/v1/agent-requests/" + f.approveRequestID + "/approve", token: admin, status: 200},
 		"POST /api/v1/agent-requests/{id}/reject":       {path: "/api/v1/agent-requests/" + f.rejectRequestID + "/reject", body: map[string]any{"reason": "Not now"}, token: admin, status: 200},
 		"POST /api/v1/agent-requests/{id}/cancel":       {path: "/api/v1/agent-requests/" + f.cancelRequestID + "/cancel", token: f.requestToken, status: 200},
+		"POST /api/v1/support/problem-reports":          {path: "/api/v1/support/problem-reports", body: goodReport(), token: admin, status: 201},
 		"POST /api/v1/public/forms/{workspace_slug}":    {path: "/api/v1/public/forms/contract-desk" /* the slug set by PATCH /api/v1/workspace/slug, which runs earlier */, body: map[string]any{"email": "visitor@contract.example.com", "source": "site:updates"}, status: 202},
 	}
 }

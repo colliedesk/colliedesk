@@ -428,3 +428,18 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .reply-draft-copies { display: grid; gap: var(--space-1); margin: 0; border: 0; padding: 0; font-size: var(--fs-small); }
 .reply-draft-copies legend { margin-bottom: var(--space-1); color: var(--text-2); }
 .request-recipients { color: var(--text-2); font-size: var(--fs-small); overflow-wrap: anywhere; }
+
+/* Report a problem. */
+.dialog-backdrop { position: fixed; z-index: 40; inset: 0; display: grid; place-items: center; background: rgb(0 0 0 / 0.45); padding: var(--space-3); }
+.dialog {
+  display: grid; gap: var(--space-3); width: min(36rem, 100%); max-height: 100%; overflow-y: auto; border: 1px solid var(--line);
+  border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); padding: var(--space-5);
+}
+.dialog h2, .dialog p { margin: 0; }
+.dialog textarea { width: 100%; resize: vertical; border: 1px solid var(--line); border-radius: var(--radius-sm); background: transparent; padding: var(--space-2) var(--space-3); line-height: 1.5; }
+.dialog textarea:focus-visible, .dialog input:focus-visible, .dialog summary:focus-visible, .dialog a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.report-preview { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); font-size: var(--fs-small); }
+.report-preview summary { cursor: pointer; font-weight: 600; }
+.report-preview dl { display: grid; gap: var(--space-1); margin: var(--space-2) 0; }
+.report-preview dt { color: var(--text-3); }
+.report-preview dd { display: grid; margin: 0; overflow-wrap: anywhere; }

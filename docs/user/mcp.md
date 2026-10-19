@@ -107,6 +107,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_email_channel_update` | Connects the email channel or changes the support address | `admin` |
 | `colliedesk_email_domain_verify` | Checks the DNS record that verifies the sending domain | `admin` |
 | `colliedesk_billing_get` | Shows the plan, trial and seats on the hosted cloud | `admin` |
+| `colliedesk_problem_report` | Sends a problem report to the team that runs the server, with the request ids of failed calls | `read` |
 
 Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the
 model to show you what it will do and wait for your yes, unless you already asked for exactly that.

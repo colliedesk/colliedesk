@@ -30,6 +30,8 @@ type restError struct {
 	Code       string
 	Message    string
 	RetryAfter string
+	// Fields names what is wrong with each bad input of a 422, keyed by field.
+	Fields map[string]string
 }
 
 func (e *restError) Error() string {
@@ -116,12 +118,13 @@ func parseRESTError(r *recorder) *restError {
 	failure := &restError{Status: r.status, RetryAfter: r.header.Get("Retry-After")}
 	var envelope struct {
 		Error struct {
-			Code    string `json:"code"`
-			Message string `json:"message"`
+			Code    string            `json:"code"`
+			Message string            `json:"message"`
+			Fields  map[string]string `json:"fields"`
 		} `json:"error"`
 	}
 	if json.Unmarshal(r.body.Bytes(), &envelope) == nil {
-		failure.Code, failure.Message = envelope.Error.Code, strings.TrimSpace(envelope.Error.Message)
+		failure.Code, failure.Message, failure.Fields = envelope.Error.Code, strings.TrimSpace(envelope.Error.Message), envelope.Error.Fields
 	}
 	return failure
 }

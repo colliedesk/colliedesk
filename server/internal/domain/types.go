@@ -168,6 +168,8 @@ const (
 	ViaWorkspace = "workspace"
 	// ViaWebForm marks a message typed into the public web form: the address was never verified.
 	ViaWebForm = "web_form"
+	// ViaProblemReport marks a report an agent filed with "Report a problem": the sender is a signed-in agent.
+	ViaProblemReport = "problem_report"
 )
 
 // IncomingEmail is the envelope of a message that arrived by email.

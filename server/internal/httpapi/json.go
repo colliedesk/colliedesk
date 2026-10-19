@@ -31,7 +31,16 @@ func writeJSON(response http.ResponseWriter, status int, value any) {
 }
 
 func writeError(response http.ResponseWriter, status int, code, message string) {
-	writeJSON(response, status, map[string]any{"error": map[string]string{"code": code, "message": message}})
+	writeJSON(response, status, map[string]any{"error": errorBody(response, map[string]any{"code": code, "message": message})})
+}
+
+// errorBody adds the request id (the X-Request-Id header withRequestID set) to an error object, so a person
+// reporting a failure can quote the id that finds it in the server log.
+func errorBody(response http.ResponseWriter, body map[string]any) map[string]any {
+	if id := response.Header().Get(requestIDHeader); id != "" {
+		body["request_id"] = id
+	}
+	return body
 }
 
 func writeStoreError(response http.ResponseWriter, err error) {
@@ -89,11 +98,11 @@ func writeTrialOutbound(response http.ResponseWriter, refusal *domain.TrialOutbo
 		if len(refusal.RefusedCC) > 0 {
 			body["refused_cc"] = refusal.RefusedCC
 		}
-		writeJSON(response, http.StatusForbidden, map[string]any{"error": body})
+		writeJSON(response, http.StatusForbidden, map[string]any{"error": errorBody(response, body)})
 		return
 	}
 	seconds := int((refusal.RetryAfter + time.Second - 1) / time.Second)
 	response.Header().Set("Retry-After", strconv.Itoa(seconds))
-	writeJSON(response, http.StatusTooManyRequests, map[string]any{"error": map[string]any{
-		"code": "trial_outbound_limit", "message": refusal.Error(), "retry_after_seconds": seconds}})
+	writeJSON(response, http.StatusTooManyRequests, map[string]any{"error": errorBody(response, map[string]any{
+		"code": "trial_outbound_limit", "message": refusal.Error(), "retry_after_seconds": seconds})})
 }

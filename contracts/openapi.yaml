@@ -24,6 +24,11 @@ info:
     or the inbound secret is never in an answer to a token. A token is refused as a cookie. A token
     expires 30 days after its last use and never lives longer than one year from its creation. A
     message it writes carries `agent_token`, so a person can tell it from their own.
+
+    Every response carries an `X-Request-Id` header. A proxy's own `X-Request-Id` (8 to 64 characters of
+    letters, digits, `.`, `_` and `-`) is kept; otherwise the server makes a 12-character one. The same
+    id is on every server log line of the request and in `error.request_id` of an error body, so a
+    person reporting a failure can quote it.
 servers:
   - url: /
 security:
@@ -1750,6 +1755,64 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/support/problem-reports:
+    post:
+      operationId: createProblemReport
+      x-permission: authenticated
+      description: >
+        Send a problem report ("Report a problem" in the web app) to the support desk of this server.
+        Where the server sets `PROBLEM_REPORT_WORKSPACE` (Colliedesk Cloud) the report becomes a
+        conversation in that workspace, tagged `problem-report`, from the reporter's verified email,
+        with the description, the diagnostics, facts the server knows (agent, role, workspace, plan,
+        version, realm, the request id of this call) and the screenshots as attachments. No text from the
+        reporter's workspace is read or sent. Every other server answers 404 `not_configured`, so the
+        web app offers a GitHub issue instead. Any agent token tier may report. One agent may send 5
+        reports an hour. Send JSON, or `multipart/form-data` with `description`, `diagnostics` (a JSON
+        string) and up to 3 `screenshots` files (PNG, JPEG or WebP, 5 MiB in total).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProblemReportInput'}
+          multipart/form-data:
+            schema:
+              type: object
+              required: [description]
+              properties:
+                description: {type: string, minLength: 1, maxLength: 5000}
+                diagnostics: {type: string, description: 'JSON text of a ProblemReportDiagnostics object'}
+                screenshots:
+                  type: array
+                  maxItems: 3
+                  items: {type: string, format: binary}
+            encoding:
+              screenshots: {contentType: 'image/png, image/jpeg, image/webp'}
+      responses:
+        '201':
+          description: The report reached the support desk
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reference]
+                properties:
+                  reference: {type: string, description: 'The request id of this call; quote it when you write to support'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404':
+          description: This server has no support desk for problem reports (error code `not_configured`)
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '422':
+          description: Invalid input; `error.fields` names each bad field (`description`, `diagnostics`, `screenshots`)
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '429':
+          description: This agent sent 5 reports in the last hour; retry after the `Retry-After` seconds
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '500': {$ref: '#/components/responses/InternalError'}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
@@ -2735,6 +2798,55 @@ components:
         enabled: {type: boolean}
         allowed_origins: {type: array, items: {type: string}}
         submit_path: {type: string, description: Path a website posts to; the host is this instance}
+    ProblemReportInput:
+      type: object
+      required: [description]
+      additionalProperties: false
+      properties:
+        description: {type: string, minLength: 1, maxLength: 5000}
+        diagnostics: {$ref: '#/components/schemas/ProblemReportDiagnostics'}
+    ProblemReportDiagnostics:
+      type: object
+      description: >
+        What the web app gathered in the browser. Ids, routes, status codes and error messages only;
+        a query string is dropped from every path and long text is cut. Nothing a customer wrote.
+      additionalProperties: false
+      properties:
+        app_version: {type: string, maxLength: 40}
+        user_agent: {type: string, maxLength: 300}
+        viewport:
+          type: object
+          required: [width, height]
+          properties:
+            width: {type: integer, minimum: 0, maximum: 20000}
+            height: {type: integer, minimum: 0, maximum: 20000}
+        page_path: {type: string, maxLength: 300, description: Address path without query or fragment}
+        client_errors:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [message, source, at]
+            properties:
+              message: {type: string, maxLength: 2000}
+              source: {type: string, maxLength: 100}
+              at: {type: string, format: date-time}
+        failed_api_calls:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [method, route, status, at]
+            properties:
+              method: {type: string, maxLength: 10}
+              route: {type: string, maxLength: 300, description: Route template or path without query}
+              status: {type: integer, minimum: 100, maximum: 599}
+              request_id: {type: string, maxLength: 64, description: The X-Request-Id of the failed response}
+              at: {type: string, format: date-time}
+        product_events:
+          type: array
+          maxItems: 30
+          items: {type: string, maxLength: 60}
     Error:
       type: object
       required: [error]
@@ -2745,6 +2857,7 @@ components:
           properties:
             code: {type: string}
             message: {type: string}
+            request_id: {type: string, description: 'The X-Request-Id of this response; quote it when you report a failure.'}
             fields:
               type: object
               description: 'Present on validation errors (422), one message per bad field name'

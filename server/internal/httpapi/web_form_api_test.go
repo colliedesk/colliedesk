@@ -206,7 +206,7 @@ func TestWebFormIsOffByDefaultAndAnswersLikeAnUnknownWorkspace(t *testing.T) {
 	}
 	disabled := f.submit(f.slugA, `{"email":"a@example.com"}`, "", "")
 	unknown := f.submit("no-such-workspace", `{"email":"a@example.com"}`, "", "")
-	if disabled.Code != http.StatusNotFound || unknown.Code != http.StatusNotFound || disabled.Body.String() != unknown.Body.String() {
+	if disabled.Code != http.StatusNotFound || unknown.Code != http.StatusNotFound || withoutRequestID(disabled.Body.String()) != withoutRequestID(unknown.Body.String()) {
 		t.Fatalf("disabled=%d %s unknown=%d %s, want identical 404", disabled.Code, disabled.Body.String(), unknown.Code, unknown.Body.String())
 	}
 	if conversations := f.count(t, "conversations", f.workspaceA); conversations != "0" {
@@ -516,7 +516,7 @@ func TestLockedWorkspaceWebFormAnswersLikeAnUnknownWorkspace(t *testing.T) {
 	f.upgrade(t, f.workspaceB, "sub_form_bravo")
 	f.clock.set(trialEnd)
 	locked, unknown := post(slugA, "192.0.2.2:1"), post("no-such-workspace", "192.0.2.3:1")
-	if locked.Code != http.StatusNotFound || locked.Body.String() != unknown.Body.String() {
+	if locked.Code != http.StatusNotFound || withoutRequestID(locked.Body.String()) != withoutRequestID(unknown.Body.String()) {
 		t.Fatalf("locked=%d %s unknown=%d %s, want the same 404", locked.Code, locked.Body.String(), unknown.Code, unknown.Body.String())
 	}
 	wantAccepted(t, post(slugB, "192.0.2.4:1"))

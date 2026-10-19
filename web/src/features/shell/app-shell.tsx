@@ -7,6 +7,8 @@ import { AccountMenu } from './account-menu';
 interface AppShellProps {
   me?: Me;
   signedOut?: boolean;
+  // appVersion is the server's version, sent with a problem report.
+  appVersion?: string;
   brand?: ReactNode;
   links?: ReactNode;
   // signIn is shown on the signed-out screen of instances with cloud sign-in.
@@ -42,7 +44,7 @@ function useDismissibleTooltips() {
   }, []);
 }
 
-export function AppShell({ me, signedOut = false, brand, links, signIn, notice, lockedScreen, onSignOut, signOutFailed, signingOut, children }: AppShellProps) {
+export function AppShell({ me, appVersion, signedOut = false, brand, links, signIn, notice, lockedScreen, onSignOut, signOutFailed, signingOut, children }: AppShellProps) {
   useDismissibleTooltips();
   const view = signedOut
     ? <main className="redeem-page"><section className="redeem-panel">
@@ -56,7 +58,7 @@ export function AppShell({ me, signedOut = false, brand, links, signIn, notice, 
         {brand}
         {/* Signed out, every destination ends on the same screen, so the rail offers none. */}
         {!signedOut && <div className="rail-links">{links}</div>}
-        {me && !signedOut && <AccountMenu me={me} onSignOut={onSignOut} signOutFailed={signOutFailed} signingOut={signingOut} />}
+        {me && !signedOut && <AccountMenu me={me} appVersion={appVersion} onSignOut={onSignOut} signOutFailed={signOutFailed} signingOut={signingOut} />}
       </nav>
       <div className="app-main">
         {me && <section className="identity-bar" aria-label={messages.signedInAs}>

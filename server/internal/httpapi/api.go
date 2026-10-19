@@ -89,6 +89,10 @@ type Config struct {
 	// ProductAnalytics is the PostHog project the web app reports to; nil (telemetry turned off
 	// with DISABLE_TELEMETRY or DO_NOT_TRACK, or a development build) keeps it from loading.
 	ProductAnalytics *ProductAnalytics
+	// ProblemReportWorkspace is the slug of the workspace on this server that receives "Report a problem"
+	// reports as conversations (PROBLEM_REPORT_WORKSPACE). Empty answers 404 not_configured, so the web app
+	// offers a GitHub issue instead.
+	ProblemReportWorkspace string
 }
 
 // ProductAnalytics names the PostHog project key and host the web app sends usage events to, and
@@ -135,6 +139,8 @@ type API struct {
 	domainChecks *webFormLimiter
 	// providerChecks limits the domain checks of one workspace that reach the email provider.
 	providerChecks *webFormLimiter
+	// problemReports limits the problem reports one agent may file per hour.
+	problemReports *webFormLimiter
 	polar          *polar.Client
 	// resend verifies sending domains through the provider; nil when RESEND_API_KEY is not set.
 	resend   *resend.Client
@@ -185,6 +191,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), exportLinks: newExportLinks(), webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
 		domainChecks:   newWindowLimiter(tokenDomainChecksPerHour, webFormMaxKeys, time.Hour),
 		providerChecks: newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
+		problemReports: newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
 		auth:           auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25()),
 		store:          store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25())}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
@@ -219,7 +226,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	// The CORS preflight of the public web form is sent by the browser, never by an agent.
 	mux.HandleFunc("OPTIONS "+webFormSubmitPattern, api.preflightWebForm)
-	return &Server{Handler: mux, api: api}
+	return &Server{Handler: withRequestID(mux), api: api}
 }
 
 func Routes() []Route {
@@ -295,6 +302,7 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/agent-requests/{id}/approve", auth.PermissionAuthenticated},
 		{http.MethodPost, "/api/v1/agent-requests/{id}/reject", auth.PermissionAuthenticated},
 		{http.MethodPost, "/api/v1/agent-requests/{id}/cancel", auth.PermissionAuthenticated},
+		{http.MethodPost, problemReportPath, auth.PermissionAuthenticated},
 	}
 }
 

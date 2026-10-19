@@ -112,7 +112,8 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			go sweepRetention(ctx, retentionService)
 		}
 	}
-	apiConfig := httpapi.Config{Origin: origin, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", Funnel: telemetry.NewFunnel(telemetryConfig, nil)}
+	apiConfig := httpapi.Config{Origin: origin, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", Funnel: telemetry.NewFunnel(telemetryConfig, nil),
+		ProblemReportWorkspace: strings.TrimSpace(os.Getenv("PROBLEM_REPORT_WORKSPACE"))}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.
 	if telemetryConfig.Enabled() {

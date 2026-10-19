@@ -3,6 +3,7 @@ import { AttachmentsTooLargeError, AttachmentStorageError } from './attachments-
 import { NotAnAgentError, signUpCloud } from './cloud-signup';
 import { OutboundRefusedError } from './outbound-error';
 import { requestExportLink } from './workspace-export';
+import { recordFailedCall } from '../lib/diagnostics';
 import type { operations } from './generated';
 import {
   agentListSchema, agentSchema, contactDetailSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
@@ -118,10 +119,16 @@ async function diskFull(response: Response): Promise<Error> {
   return error instanceof InvalidRequestError ? new AttachmentStorageError(error.message) : error;
 }
 
+// noteFailure keeps a failed call, with the id the server gave it, for "Report a problem".
+function noteFailure(path: string, init: RequestInit | undefined, response: Response): void {
+  recordFailedCall(init?.method ?? 'GET', path, response.status, response.headers.get('X-Request-Id') ?? '');
+}
+
 async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
   // A FormData body sets its own multipart Content-Type, with the boundary.
   const headers = init?.body instanceof FormData ? init.headers : { 'Content-Type': 'application/json', ...init?.headers };
   const response = await fetch(path, { credentials: 'same-origin', ...init, headers });
+  if (!response.ok) noteFailure(path, init, response);
   if (response.status === 402) throw await planLimitFailure(response);
   if (response.status === 413) throw await tooLarge(response);
   if (response.status === 507) throw await diskFull(response);
@@ -133,6 +140,7 @@ async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit
 
 async function requestNoContent(path: string, init: RequestInit): Promise<void> {
   const response = await fetch(path, { credentials: 'same-origin', ...init });
+  if (!response.ok) noteFailure(path, init, response);
   if (!response.ok) throw failure(response.status);
 }
 

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { CaptureResult, PostHog, PostHogConfig } from 'posthog-js';
+import { recordProductEvent } from './diagnostics';
 
 // Product analytics. The server's public config says whether to report (DISABLE_TELEMETRY or
 // DO_NOT_TRACK turn it off, on the cloud and self-hosted alike), and only then is posthog-js
@@ -97,6 +98,7 @@ export interface EventProperties {
   agent_request_decided: { decision: 'approved' | 'rejected' };
   settings_section_opened: { section: SettingsSection };
   workspace_export_requested: undefined;
+  problem_reported: undefined;
   survey_answered: { survey: SurveyId; answer: string };
   survey_dismissed: { survey: SurveyId };
 }
@@ -112,6 +114,8 @@ let realm: string | null = null;
 // or blocked), and a failure of the library never reaches the app. It answers whether the event was
 // handed to PostHog, which only the survey needs: it must not say "thank you" for an answer that was dropped.
 export function track<E extends EventName>(event: E, ...[properties]: PropertiesArg<E>): boolean {
+  // The name alone is kept for a problem report, whether or not analytics runs.
+  recordProductEvent(event);
   if (!started) return false;
   try {
     started.capture(event, properties);
