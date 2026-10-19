@@ -2,7 +2,7 @@
 
 ## Pull requests and `main`
 
-`.github/workflows/ci.yml` runs `go`, `web`, `e2e`, `onboarding`, `compose-smoke` and `image` in parallel. The `image`
+`.github/workflows/ci.yml` runs `go`, `web`, `e2e`, `onboarding`, `image` and `roadmap` (which also runs the compose smoke test) in parallel. The `image`
 job builds the server image once, then:
 
 1. `tests/image-boot-test.sh`: checks the stamped version, then boots the image against Postgres

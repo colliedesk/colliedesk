@@ -81,5 +81,60 @@ class Budget(unittest.TestCase):
                                     '--now', '2026-10-19T13:00:00Z').returncode, 0)
 
 
+# GitHub Free runs at most 20 GitHub-hosted jobs at once for the whole account, across every repo.
+# A pull request's jobs that start together must stay under it, with a slot left for another
+# repository's job, or the last ones queue and that wait counts toward the 120-second CI clock.
+RUNNER_LIMIT = 20
+RUNNER_SLACK = 1
+
+
+def workflow_jobs(path):
+    """Yields (name, lines) for each top-level job of a workflow file."""
+    name, body, in_jobs = None, [], False
+    for line in path.read_text().splitlines():
+        if line == 'jobs:':
+            in_jobs = True
+        elif in_jobs and re.match(r'^  [A-Za-z0-9_-]+:\s*$', line):
+            if name:
+                yield name, body
+            name, body = line.strip()[:-1], []
+        elif in_jobs and name:
+            body.append(line)
+    if name:
+        yield name, body
+
+
+def runners(path):
+    """How many runners a workflow's jobs without needs ask for at the same moment."""
+    total = 0
+    for _, body in workflow_jobs(path):
+        text = '\n'.join(body)
+        if re.search(r'^    needs:', text, re.M):
+            continue
+        local = re.search(r'^    uses: \./(\S+)', text, re.M)
+        if local:
+            total += runners(ROOT / local.group(1))
+            continue
+        matrix = re.search(r'^      matrix:\n((?:        .*\n?)+)', text, re.M)
+        if not matrix:
+            total += 1
+            continue
+        inline = re.search(r'^        [a-z]+: \[([^]]*)\]', matrix.group(1), re.M)
+        include = re.findall(r'^          - ', matrix.group(1), re.M)
+        total += len(inline.group(1).split(',')) if inline else len(include)
+    return total
+
+
+class RunnerConcurrency(unittest.TestCase):
+    def test_pull_request_jobs_fit_the_account_runner_limit(self):
+        workflows = [path for path in sorted((ROOT / '.github/workflows').glob('*.yml'))
+                     if re.search(r'^  pull_request:', path.read_text(), re.M)]
+        counts = {path.name: runners(path) for path in workflows}
+        self.assertLessEqual(sum(counts.values()), RUNNER_LIMIT - RUNNER_SLACK, counts)
+
+    def test_matrix_sizes_are_counted(self):
+        self.assertEqual(runners(ROOT / '.github/workflows/codeql.yml'), 3)
+
+
 if __name__ == '__main__':
     unittest.main()

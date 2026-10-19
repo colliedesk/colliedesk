@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     services:
@@ -46,18 +46,19 @@ jobs:
           go-version: '1.27.x'
           cache-dependency-path: server/go.sum
       - name: Validate migrations
-        if: matrix.shard == 9
+        if: matrix.shard == strategy.job-total
         working-directory: server
         run: go run ./cmd/migration-check --repo=..
       - name: Format, vet and test
         working-directory: server
         env:
           SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ strategy.job-total }}
         run: |
           if [ -n "$(gofmt -l .)" ]; then gofmt -l .; echo 'gofmt: format the files above' >&2; exit 1; fi
-          if [ "$SHARD" = 9 ]; then go vet ./...; fi
+          if [ "$SHARD" = "$SHARDS" ]; then go vet ./...; fi
           go test -list . ./... > "$RUNNER_TEMP/go-test-list.txt"
-          pattern=$(python3 ../.github/scripts/go-test-shard.py "$SHARD" 9 < "$RUNNER_TEMP/go-test-list.txt")
+          pattern=$(python3 ../.github/scripts/go-test-shard.py "$SHARD" "$SHARDS" < "$RUNNER_TEMP/go-test-list.txt")
           go test -count=1 -run "$pattern" ./...
   web:
     runs-on: ubuntu-latest
@@ -243,15 +244,6 @@ jobs:
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
-  # compose.yaml as a contributor or "From a clone" self-hoster runs it.
-  compose-smoke:
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Start the stack from compose.yaml and reach the server
-        run: sh tests/compose-smoke.sh
-
   # The one check to watch: adding or splitting jobs above never renames it.
   # Fails a PR that brings in a dependency version with a known vulnerability (OSV database).
   # Compares the PR against its base, so an advisory published later for an existing
@@ -316,6 +308,10 @@ jobs:
             echo "closes: ${ROADMAP_CLOSING:-none}"
           fi
           python3 -I .github/scripts/roadmap-check.py ROADMAP.md
+      # compose.yaml as a contributor or "From a clone" self-hoster runs it. Shares this runner
+      # with the gates above so a pull request stays under the account's concurrent job limit.
+      - name: Start the stack from compose.yaml and reach the server
+        run: sh tests/compose-smoke.sh
 
   codeql:
     permissions:
@@ -325,7 +321,7 @@ jobs:
 
   ci-ok:
     if: ${{ !cancelled() }}
-    needs: [go, web, e2e, onboarding, image, compose-smoke, osv-scan, roadmap, codeql]
+    needs: [go, web, e2e, onboarding, image, osv-scan, roadmap, codeql]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
