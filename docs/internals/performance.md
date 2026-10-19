@@ -65,3 +65,17 @@ Warm open (a click on a list row, synthetic data, 5 tickets including a 285 KB H
 `corepack pnpm bundle:check` reads the production Vite output. The largest JavaScript asset must be at most 200 KiB gzip. The largest CSS asset must be at most 30 KiB gzip. `make test` and the web CI job build the bundle before running this gate.
 
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
+
+## CI phase budget
+
+CI has a 120-second wall-clock budget from the workflow trigger, including queue, setup, all tests, security checks and smoke tests. The `ci-ok` job waits for CodeQL and every other check, then `.github/scripts/ci-budget.py` rejects an over-budget phase. Jobs also have native two-minute deadlines. A provider-green result alone is not acceptance evidence; inspect the completed run timestamps, including job cleanup.
+
+The Go matrix partitions the inventory printed by `go test -list . ./...` into nine disjoint name sets: eight regular shards and one for the large latency fixtures. Tests, examples and fuzz seed cases all run once; selecting a parent runs its subtests. `.github/scripts/go-test-shard.py` fails on an empty inventory and anchors each selected name. `tests/ci-tools-test.py` verifies coverage, determinism and the elapsed-time boundary. PostgreSQL services use disposable tmpfs data directories; the production database configuration is unchanged.
+
+The email-layout fixtures reload after the inbound API creates their synthetic email. This avoids waiting for the inbox's 20-second activity poll; all layout stability and security assertions remain. The web job owns API drift checks, TypeScript checks and the production bundle gate. Browser jobs build the same Vite assets without repeating those checks. The non-onboarding fixtures each own a workspace and run on three Playwright workers. Their stability observation windows remain unchanged. Onboarding separates import journeys from the remaining journeys using complementary title filters. Both jobs have separate databases and servers; their journeys remain sequential. Native file sharding grouped seven tests against three, putting every expensive import case on the busier runner.
+
+Independent guards run before the final gate; full vet and migration validation run once on the latency runner.
+
+Image builds use a fresh builder without a remote layer cache: the measured cache restore/export cost exceeded the rebuild savings. Keep image boot, real installer and compose smoke checks before publishing.
+
+Measured on 2026-10-19: the original PR CI took 370 seconds. Removing idle polling reduced the browser step from 248 to 56 seconds before parallel workers; removing the remote image cache reduced its build from 103 to 54 seconds. The final partition's [full run](https://github.com/colliedesk/colliedesk/actions/runs/39260278182) passed every test and security job, but the phase gate rejected its 199 seconds: 84 seconds waiting for the previous run, then 115 seconds through the final job. These numbers do **not** establish budget compliance. Go CodeQL was the longest execution job at 107 seconds. The workflow has no Go, pnpm or Docker GHA cache to warm; acceptance requires the completed phase clock, never execution time with the queue subtracted.

@@ -20,7 +20,8 @@ async function deskWithMail(page: Page, subject: string, html: string): Promise<
       'MIME-Version: 1.0', 'Content-Type: text/html; charset=utf-8', '', html].join('\r\n')),
   });
   expect(inbound.status()).toBe(200);
-  await page.getByRole('link', { name: 'Inbox' }).click();
+  // The fixture arrived out of band. Fetch it now instead of waiting for the 20s activity poll.
+  await page.reload();
   await page.getByRole('button', { name: new RegExp(subject) }).click();
   await page.waitForSelector('iframe.email-frame');
   return suffix;
