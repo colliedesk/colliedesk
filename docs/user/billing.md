@@ -45,7 +45,7 @@ Nothing else is limited. Conversations, contacts, tags, notes and search work as
 | Small | $39 per month or $390 per year, per workspace | up to 3 |
 | Team | $69 per month or $690 per year, per workspace | up to 10 |
 | Team 25 | $149 per month or $1,490 per year, per workspace | up to 25 (contact us for more) |
-| Founding | $100 per year, for life | up to 10 |
+| Founding | $99 every 3 months, for life | up to 10 |
 
 There is no free plan; every workspace starts with the free trial. Unlimited, for teams with more
 than 25 agents at $349 per month billed yearly, is coming soon.
