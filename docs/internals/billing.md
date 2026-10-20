@@ -324,7 +324,7 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
   bytes and map the error through `writeStoreError` (it answers 403 with the same code). Web reply
   attachments, when they land, are one such path.
 - **Founding plan: 20 GiB, imports included.** `domain.FoundingStorageBytes` (21474836480). Founding is
-  $100 once a year for life and attachments are the one cost that grows without bound (break-even is
+  $99 every 3 months ($396 a year) for life and attachments are the one cost that grows without bound (break-even is
   roughly 41-56 GB), so it has a cap. Unlike the trial, imported files count: the number is
   `workspaces.stored_storage_bytes`, the sum of every attachment, kept by the same triggers (migration
   `founding-storage-counter`, additive; the three trigger functions now update both counters). Solo
