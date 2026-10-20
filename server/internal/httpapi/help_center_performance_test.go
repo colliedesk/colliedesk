@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,6 +38,34 @@ func TestHelpCenterPagesLatencyBudget(t *testing.T) {
 		t.Logf("help center %s p95=%s", name, p95)
 		if p95 > inboxLatencyBudget {
 			t.Errorf("help center %s p95 %s exceeds %s", name, p95, inboxLatencyBudget)
+		}
+	}
+}
+
+// TestHelpCenterHostileArticlesLatencyBudget holds an article page to the same budget when its text is
+// built to be slow to parse: one line of 100,000 quote or list markers nests that deep, which the
+// Markdown parser handles in quadratic time (2.7 s for ">" on its own). Its excerpt is parsed too.
+func TestHelpCenterHostileArticlesLatencyBudget(t *testing.T) {
+	api, service, _, _ := testAPIWithStorage(t)
+	site := helpCenterSite(api)
+	admin := createSession(t, api, service, "Help Hostile", "admin@help-hostile.example.com")
+	slug := workspaceSlug(t, api, admin)
+	enableHelpCenter(t, api, admin, "", true)
+	collection := kbCollection(t, api, admin, map[string]any{"name": "Hostile"})
+	bodies := map[string]string{
+		"quotes":         strings.Repeat(">", 100000),
+		"spaced quotes":  strings.Repeat("> ", 50000),
+		"ordered lists":  strings.Repeat("1. ", 33333),
+		"bullet lists":   strings.Repeat("+ ", 50000),
+		"mixed":          strings.Repeat("> 1. - ", 14285),
+		"quoted players": strings.Repeat("> <iframe src=\"https://player.vimeo.com/video/1\"></iframe>\n", 1500),
+	}
+	for name, body := range bodies {
+		article := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": name, "body_md": body, "status": "published"})
+		p95 := helpCenterP95(t, site, fmt.Sprintf("/help/%s/a/%d-%s", slug, article.Number, article.Slug))
+		t.Logf("help center hostile %s p95=%s", name, p95)
+		if p95 > inboxLatencyBudget {
+			t.Errorf("help center hostile %s p95 %s exceeds %s", name, p95, inboxLatencyBudget)
 		}
 	}
 }

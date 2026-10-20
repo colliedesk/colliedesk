@@ -105,6 +105,11 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
 
 ## Traps
 
+- **A line nests at most 16 quotes or lists.** goldmark parses one line of `>` (or `1. `, `+ `)
+  markers in time quadratic in its length: 100,000 characters took 2.7 s, on every visit, since
+  pages are not cached. `capNesting` escapes the 17th marker of a line (fenced code is left alone)
+  before rendering and before the excerpt; `TestHelpCenterHostileArticlesLatencyBudget` holds it.
+
 - **A build without a version still changes its ETag.** Development builds have an empty version;
   the template hash in the ETag keeps an edited page from being revalidated as the old one.
 - **The labels are English.** `locale` sets `<html lang>`; translating the page chrome is not done.

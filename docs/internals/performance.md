@@ -55,6 +55,12 @@ words, a short prefix, no match and a title. Each must stay at or below 100 ms p
 A page is five short scoped transactions at most (slug lookup, settings and lock, collections,
 articles, neighbours); a 304 stops after the second.
 
+`TestHelpCenterHostileArticlesLatencyBudget` holds an article page to the same 100 ms when its
+100,000 characters are built to be slow to parse: one line of quote or list markers (`>`, `> `,
+`1. `, `+ `, mixed) and 1,500 quoted players. goldmark takes time quadratic in the depth one line
+opens (2.7 s for `>` alone, and the excerpt parses it again), and pages are not cached, so
+`capNesting` shows markers past 16 levels on a line as text before parsing (7–19 ms locally).
+
 ## Pending agent requests budget
 
 `TestPendingAgentRequestsLatencyBudget` holds the store query behind

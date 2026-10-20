@@ -48,7 +48,7 @@ func renderArticle(body, base string) (template.HTML, error) {
 	var out bytes.Buffer
 	context := parser.NewContext()
 	context.Set(baseKey, base)
-	if err := markdown.Convert([]byte(body), &out, parser.WithContext(context)); err != nil {
+	if err := markdown.Convert(capNesting([]byte(body)), &out, parser.WithContext(context)); err != nil {
 		return "", err
 	}
 	return template.HTML(out.String()), nil //nolint:gosec // goldmark escapes text; rawHTML keeps only kbhtml's output
@@ -177,7 +177,7 @@ func safeURL(value string) bool {
 
 // excerpt is the start of an article's text as plain words, at most limit characters, cut at a word.
 func excerpt(body string, limit int) string {
-	source := []byte(body)
+	source := capNesting([]byte(body))
 	var words strings.Builder
 	_ = ast.Walk(plain.Parser().Parse(text.NewReader(source)), func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		// Words of one line join as written ("an **admin**." stays "an admin."); blocks and line
@@ -212,4 +212,104 @@ func excerpt(body string, limit int) string {
 		cut = limit
 	}
 	return strings.TrimRightFunc(string(runes[:cut]), func(char rune) bool { return unicode.IsSpace(char) || unicode.IsPunct(char) }) + "…"
+}
+
+// maxNesting is how many quote and list markers a line may open. The parser takes time quadratic in
+// the depth a single line opens (100,000 ">" took 2.7 s), and a public page renders on every visit.
+const maxNesting = 16
+
+// capNesting shows the markers of a line past maxNesting as text, by escaping the first of them.
+// Fenced code is left alone. It returns source itself when nothing changes.
+func capNesting(source []byte) []byte {
+	var out []byte
+	var fence []byte
+	for start := 0; start <= len(source); {
+		end := bytes.IndexByte(source[start:], '\n')
+		if end < 0 {
+			end = len(source)
+		} else {
+			end += start
+		}
+		line := source[start:end]
+		at := -1
+		if marker := fenceOf(line); fence == nil && marker != nil {
+			fence = marker
+		} else if fence != nil {
+			if marker != nil && marker[0] == fence[0] && len(marker) >= len(fence) {
+				fence = nil
+			}
+		} else {
+			at = deepMarker(line)
+		}
+		if at >= 0 && out == nil {
+			out = append(make([]byte, 0, len(source)+64), source[:start]...)
+		}
+		if out != nil {
+			if at >= 0 {
+				out = append(append(append(out, line[:at]...), '\\'), line[at:]...)
+			} else {
+				out = append(out, line...)
+			}
+			if end < len(source) {
+				out = append(out, '\n')
+			}
+		}
+		start = end + 1
+	}
+	if out == nil {
+		return source
+	}
+	return out
+}
+
+// fenceOf returns the ``` or ~~~ run that opens or closes a code fence on line, or nil.
+func fenceOf(line []byte) []byte {
+	trimmed := bytes.TrimLeft(line, " ")
+	if len(line)-len(trimmed) > 3 || len(trimmed) < 3 || (trimmed[0] != '`' && trimmed[0] != '~') {
+		return nil
+	}
+	run := 0
+	for run < len(trimmed) && trimmed[run] == trimmed[0] {
+		run++
+	}
+	if run < 3 {
+		return nil
+	}
+	return trimmed[:run]
+}
+
+// deepMarker returns where on line the marker past maxNesting is, or -1: the ">" of a quote, the "-",
+// "*" or "+" of a bullet, or the "." or ")" of a number.
+func deepMarker(line []byte) int {
+	blank := func(at int) bool { return at == len(line) || line[at] == ' ' || line[at] == '\t' }
+	for i, depth := 0, 0; ; depth++ {
+		for i < len(line) && (line[i] == ' ' || line[i] == '\t') {
+			i++
+		}
+		if i == len(line) {
+			return -1
+		}
+		marker := -1
+		switch char := line[i]; {
+		case char == '>':
+			marker = i
+		case (char == '-' || char == '*' || char == '+') && blank(i+1):
+			marker = i
+		case char >= '0' && char <= '9':
+			digits := i
+			for digits < len(line) && digits-i < 9 && line[digits] >= '0' && line[digits] <= '9' {
+				digits++
+			}
+			if digits < len(line) && (line[digits] == '.' || line[digits] == ')') && blank(digits+1) {
+				marker = digits
+			}
+		}
+		if marker < 0 {
+			return -1
+		}
+		if depth == maxNesting {
+			return marker
+		}
+		i = marker + 1
+	}
 }

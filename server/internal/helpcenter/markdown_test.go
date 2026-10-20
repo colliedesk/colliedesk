@@ -3,6 +3,7 @@ package helpcenter
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestArticleMarkdownNeverRendersScriptOrUnsafeHTML(t *testing.T) {
@@ -122,5 +123,41 @@ func TestExcerptIsPlainTextCutAtAWord(t *testing.T) {
 	}
 	if got := excerpt("Short text.", 40); got != "Short text." {
 		t.Fatalf("short excerpt=%q", got)
+	}
+}
+
+// One line of quote or list markers nests as deep as it is long, and the Markdown parser takes
+// quadratic time in that depth (seconds at 100,000 characters). Past 16 levels on a line, a marker is
+// shown as text.
+func TestArticleMarkdownNestsAtMost16LevelsOnALine(t *testing.T) {
+	html, err := renderArticle(strings.Repeat("> ", 16)+"deep\n\n"+strings.Repeat(">", 18)+" deeper\n\n```\n"+strings.Repeat(">", 20)+"\n```", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(html)
+	if count := strings.Count(got, "<blockquote>"); count != 32 {
+		t.Errorf("rendered %d quotes, want 16 + 16:\n%s", count, got)
+	}
+	if !strings.Contains(got, "<p>&gt;&gt; deeper</p>") || !strings.Contains(got, "<code>"+strings.Repeat("&gt;", 20)+"\n</code>") {
+		t.Errorf("rendered %s", got)
+	}
+	if html, _ := renderArticle(strings.Repeat("1. ", 17)+"x", ""); strings.Count(string(html), "<ol>") != 16 || !strings.Contains(string(html), "1. x") {
+		t.Errorf("ordered lists rendered %s", html)
+	}
+	for name, body := range map[string]string{
+		"quotes":        strings.Repeat(">", 100000),
+		"spaced quotes": strings.Repeat("> ", 50000),
+		"ordered lists": strings.Repeat("1. ", 33333),
+		"bullet lists":  strings.Repeat("+ ", 50000),
+		"mixed":         strings.Repeat("> 1) - ", 14285),
+	} {
+		started := time.Now()
+		if _, err := renderArticle(body, ""); err != nil {
+			t.Fatal(err)
+		}
+		excerpt(body, descriptionChars)
+		if took := time.Since(started); took > 150*time.Millisecond {
+			t.Errorf("%s took %s", name, took)
+		}
 	}
 }
