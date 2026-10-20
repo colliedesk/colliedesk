@@ -135,7 +135,9 @@ The public help center is in `help-center.md`.
   workspace's open uploads still need (`PrivilegeKBUploadDisk`), one start at a time under a mutex
   (one process), so workspaces starting together never promise the same room twice; counting the
   database rather than memory survives a restart. Past 200 uploads in progress on the server a new
-  one is 503 `server_busy`: a safety valve, not a share (counting staged files instead let seven
+  one is 503 `server_busy`: a safety valve, not a share (about 67 workspaces with 3 open uploads each
+  can fill it until theirs complete or expire), and checked before the workspace's own plan, so a
+  busy or full server answers first (counting staged files instead let seven
   trial workspaces block every other one). Complete checks the cap and the plan before it renames the file, so a refusal
   keeps the parts for a retry, and a lost file is 409 `upload_lost`.
 - **Neutralising MP4 is an allowlist.** Each container keeps only the boxes a player reads
