@@ -3,7 +3,8 @@
 Decisions and traps only. Code: `server/internal/store/kb-*.go`, `server/internal/httpapi/kb-handlers.go`,
 `server/internal/mcpserver/catalog-kb.go` and `tools-kb.go`, `server/internal/domain/kb.go`, migration
 `knowledge-base`. Issue #90. This first part is the data model, the API, the MCP tools and the export;
-the editor, the public help center and the Freshdesk import come in later pull requests.
+the editor and the public help center come in later pull requests. The Freshdesk import writes through
+`server/internal/store/kb-import.go` (decisions in `docs/internals/freshdesk-import.md`, "Knowledge base").
 
 ## Decisions
 
