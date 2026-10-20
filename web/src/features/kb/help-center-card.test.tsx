@@ -38,3 +38,20 @@ test('everyone sees the public address as a link, also while the help center is 
   expect(link).toHaveAttribute('href', 'https://desk.example.com/help/acme');
   expect(link).toHaveAttribute('rel', 'noopener noreferrer');
 });
+
+test('Settings opened at #help-center-heading (the reply box links there) scrolls to the card once it is there', async () => {
+  serve({ 'GET /api/v1/help-center': () => json(200, off) });
+  const scrolled = vi.fn();
+  Element.prototype.scrollIntoView = scrolled;
+  window.history.replaceState(null, '', '/settings#help-center-heading');
+  try {
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <h2 id="help-center-heading">Help center</h2><HelpCenterSettings canManage workspaceName="Acme" /></QueryClientProvider>);
+    await screen.findByText(/The help center is off/);
+    await waitFor(() => expect(scrolled).toHaveBeenCalledOnce());
+    expect(scrolled.mock.contexts[0]).toBe(screen.getByRole('heading', { name: 'Help center' }));
+  } finally {
+    window.history.replaceState(null, '', '/');
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  }
+});
