@@ -120,7 +120,11 @@ jobs:
       - name: Upgrade from the previous release
         env:
           TAG: ${{ steps.target.outputs.tag }}
+          SHA: ${{ steps.target.outputs.sha }}
         run: |
+          # docs/user/upgrade.md sends operators to restore-workspace.sh at their release's tag.
+          git cat-file -e "$SHA:restore-workspace.sh" || {
+            echo "::error::$SHA has no restore-workspace.sh, which the upgrade guide promises in every release after v0.0.1."; exit 1; }
           git worktree add --detach "$RUNNER_TEMP/upgrade-test" origin/main
           previous=$(sh "$RUNNER_TEMP/upgrade-test/.github/scripts/previous-release.sh" "$TAG")
           if [ -z "$previous" ]; then

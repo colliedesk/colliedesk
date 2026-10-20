@@ -41,6 +41,7 @@ To release one of those commits, re-run CI for it first or tag a later commit.
    - rejects a tag that is not `vX.Y.Z` or `vX.Y.Z-prerelease`;
    - requires a successful CI push run on `main` for that commit;
    - rebuilds the image stamped with the tag and boots it;
+   - requires `restore-workspace.sh` in the release commit (the upgrade guide links it at the tag);
    - upgrades an install of the previous release to it (`tests/upgrade-test.sh`, the test and
      fixture from `main`) and tests the rollback and the one-workspace restore; a failure stops the
      release before anything is published. On the tag-push path the tag already exists, so a
