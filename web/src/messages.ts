@@ -419,7 +419,7 @@ export const messages = {
   perMonth: 'per month',
   billedMonthly: 'Billed monthly',
   billedYearly: (amount: string) => `Billed ${amount} yearly`,
-  billedFounding: 'Billed $100 yearly, the price never changes',
+  billedFounding: 'Billed $99 every 3 months, the price never changes',
   planAndBilling: 'Plan and billing',
   monthly: 'Monthly',
   yearlyTwoMonthsFree: 'Yearly, 2 months free',
