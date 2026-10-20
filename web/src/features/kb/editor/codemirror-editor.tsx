@@ -11,6 +11,7 @@ import type { Active, Block, LineKind } from './commands';
 import { Icon } from './icons';
 import type { IconName } from './icons';
 import { markdownHighlight, markdownLanguage } from './theme';
+import { embedSnippet, parseVideoLink } from '../video-link';
 import { startUpload, uploadEvents, uploads as uploadField, uploadsPending } from './upload';
 import type { UploadHooks } from './upload';
 import './editor.css';
@@ -65,6 +66,9 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
   const fileInput = useRef<HTMLInputElement>(null);
+  const videoLink = useRef<HTMLInputElement>(null);
+  // video is the Insert video row: closed, open, or open with why the link cannot be used.
+  const [video, setVideo] = useState<{ error: string } | undefined>();
   const [active, setActive] = useState<Active>();
   // rover is the toolbar button that is the Tab stop; when it is disabled (Undo with nothing to undo), the first
   // button is, so the toolbar never loses its stop.
@@ -150,6 +154,25 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
     buttons[next].focus();
   };
 
+  useEffect(() => {
+    if (video && !video.error) videoLink.current?.focus();
+  }, [video]);
+  const closeVideo = () => {
+    setVideo(undefined);
+    viewRef.current?.focus();
+  };
+  // insertVideo puts the player of a YouTube or Vimeo link in a block of its own, or says why it cannot.
+  const insertVideo = () => {
+    const parsed = parseVideoLink(videoLink.current?.value ?? '');
+    if ('error' in parsed) {
+      setVideo({ error: parsed.error });
+      videoLink.current?.focus();
+      return;
+    }
+    setVideo(undefined);
+    act((view) => insertBlock(view, embedSnippet(parsed)));
+  };
+
   const editing = mode !== 'preview' && !!active;
   const stop = (rover === 'undo' && !active?.canUndo) || (rover === 'redo' && !active?.canRedo) ? 'bold' : rover;
   const t = kbMessages.tools;
@@ -190,11 +213,30 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
           onMouseDown={(event) => event.preventDefault()} onClick={() => fileInput.current?.click()}>
           <Icon name="image" /><span>{t.insertImage}</span>
         </button>
+        <button type="button" data-tool="insertVideo" className="md-tool md-tool-text" tabIndex={stop === 'insertVideo' ? 0 : -1} disabled={!editing}
+          aria-expanded={!!video} aria-controls={`${id}-video`} onMouseDown={(event) => event.preventDefault()}
+          onClick={() => (video ? closeVideo() : setVideo({ error: '' }))}>
+          <Icon name="video" /><span>{t.insertVideo}</span>
+        </button>
         <span className="md-sep" aria-hidden="true" />
         {tool('search', t.search, `${mod}F`, openSearchPanel)}
         {tool('undo', t.undo, `${mod}Z`, undo, undefined, !active?.canUndo)}
         {tool('redo', t.redo, `${mod}Shift+Z`, redo, undefined, !active?.canRedo)}
       </div>
+      {video && editing && (
+        <div id={`${id}-video`} className="md-video" role="group" aria-label={t.insertVideo}
+          onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); closeVideo(); } }}>
+          <label htmlFor={`${id}-video-link`}>{kbMessages.videoLink}</label>
+          <input ref={videoLink} id={`${id}-video-link`} type="url" inputMode="url" autoComplete="off" placeholder="https://www.youtube.com/watch?v=…"
+            aria-invalid={video.error ? true : undefined} aria-describedby={`${id}-video-help`} onChange={() => { if (video.error) setVideo({ error: '' }); }}
+            onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); insertVideo(); } }} />
+          <button type="button" className="primary-action" onClick={insertVideo}>{kbMessages.insert}</button>
+          <button type="button" onClick={closeVideo}>{kbMessages.cancel}</button>
+          <small id={`${id}-video-help`} className={video.error ? 'md-video-help error-copy' : 'md-video-help kb-hint'} role={video.error ? 'alert' : undefined}>
+            {video.error || kbMessages.videoLinkHelp}
+          </small>
+        </div>
+      )}
       <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden tabIndex={-1} aria-hidden="true"
         onChange={(event) => {
           const files = [...(event.target.files ?? [])];

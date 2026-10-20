@@ -47,7 +47,7 @@ link opens the same list.
    shown, except a [YouTube or Vimeo video](#videos).
    - The toolbar sets the block (**Text**, **Heading 1** to **3**) and adds bold, italic,
      strikethrough, code, a link, bulleted and numbered lists, a checklist, a quote, a code block, a
-     table, a divider and an image. With the keyboard, Tab reaches the toolbar and the arrow keys move
+     table, a divider, an image and a [video](#videos). With the keyboard, Tab reaches the toolbar and the arrow keys move
      along it.
    - Shortcuts: `Ctrl+B` bold, `Ctrl+I` italic, `Ctrl+E` code, `Ctrl+K` link, `Ctrl+Z` undo,
      `Ctrl+F` find and replace (`Cmd` on a Mac).
@@ -80,8 +80,14 @@ the preview or on the help center; the preview says so. Download it and paste it
 
 ### Videos
 
-An article can show a YouTube or Vimeo video. Put the video's embed HTML in a paragraph of its own,
-with a blank line before and after it, for example the code from YouTube's **Share → Embed**:
+An article can show a YouTube or Vimeo video. Select **Insert video** in the toolbar, paste the
+video's link (a watch page, a `youtu.be` short link, a Vimeo page, or a player address), and press
+Enter: the player goes in a block of its own after the one the cursor is in. A YouTube link's start
+time (`?t=1m5s`) is kept. A link the help center cannot show is refused, with the reason; Escape
+closes the box.
+
+You can also write the embed HTML yourself, in a paragraph of its own with a blank line before and
+after it, for example the code from YouTube's **Share → Embed**:
 
 ```html
 <iframe src="https://www.youtube.com/embed/jNQXAC9IVRw?start=65" title="Me at the zoo" allowfullscreen></iframe>

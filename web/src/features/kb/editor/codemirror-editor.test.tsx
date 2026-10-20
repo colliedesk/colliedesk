@@ -97,3 +97,32 @@ test('a list, checklist or heading put on the line of the cursor leaves the curs
   view.dispatch(view.state.replaceSelection('Steps'));
   expect(handle.markdown()).toBe('- [ ] Open Settings\n## Steps');
 });
+
+test('Insert video takes a YouTube or Vimeo link and puts its player in a block of its own; a link it cannot use says why', async () => {
+  const { handle, text } = await make('Intro');
+  const open = screen.getByRole('button', { name: 'Insert video' });
+  fireEvent.click(open);
+  expect(open).toHaveAttribute('aria-expanded', 'true');
+  const link = screen.getByRole('textbox', { name: 'YouTube or Vimeo link' });
+  await waitFor(() => expect(link).toHaveFocus());
+
+  fireEvent.change(link, { target: { value: 'https://evil.example/watch?v=jNQXAC9IVRw' } });
+  fireEvent.keyDown(link, { key: 'Enter' });
+  expect(screen.getByRole('alert')).toHaveTextContent('evil.example is not a video site articles can show: paste a YouTube or Vimeo link.');
+  expect(link).toHaveAttribute('aria-invalid', 'true');
+  expect(handle.markdown()).toBe('Intro');
+
+  fireEvent.change(link, { target: { value: 'https://youtu.be/jNQXAC9IVRw?t=1m5s' } });
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  fireEvent.keyDown(link, { key: 'Enter' });
+  expect(handle.markdown()).toBe('Intro\n\n<iframe src="https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=65" title="YouTube video" width="560" height="315" allow="encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe>\n');
+  expect(screen.queryByRole('group', { name: 'Insert video' })).not.toBeInTheDocument();
+  expect(open).toHaveAttribute('aria-expanded', 'false');
+  await waitFor(() => expect(text).toHaveFocus());
+
+  // Escape closes the row and gives the text back its focus.
+  fireEvent.click(open);
+  fireEvent.keyDown(screen.getByRole('textbox', { name: 'YouTube or Vimeo link' }), { key: 'Escape' });
+  expect(screen.queryByRole('group', { name: 'Insert video' })).not.toBeInTheDocument();
+  await waitFor(() => expect(text).toHaveFocus());
+});
