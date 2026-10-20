@@ -15,9 +15,11 @@ job builds the server image once, then:
 `ci-ok` collects every job result. It is the one check to watch, so adding or splitting jobs never
 renames it. `tests/ci-ok-needs-test.sh` fails the run when a job is missing from `ci-ok`'s `needs`.
 
-On `main`, `publish-edge` runs after `ci-ok` passes and retags the `sha-<commit>` digest of that tested run as
-`edge`. It skips the retag when `main` has already moved on, so re-running an old run never moves
-`edge` backwards. The image reports `edge-<12-char sha>` from `collie version`.
+On `main`, `.github/workflows/publish-edge.yml` runs when CI completes and retags that run's `sha-<commit>`
+digest as `edge` only if CI passed on a push to this repository's `main`. It skips the retag when `main`
+has already moved on, so a late run never moves `edge` backwards. It is the CD phase, with its own
+60-second clock from the CI run's completion (`ci-budget.py --phase cd`). The image reports
+`edge-<12-char sha>` from `collie version`.
 
 A newer push to a PR cancels its older run. On `main` a running run is never cancelled, but GitHub
 keeps only one pending run per group: during a burst of merges the middle commits get no CI run.

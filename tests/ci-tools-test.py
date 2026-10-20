@@ -79,6 +79,12 @@ class Budget(unittest.TestCase):
             result = run('ci-budget.py', '--started-at', '2026-10-19T13:00:00Z', '--now', now)
             self.assertEqual(result.returncode, expected, result.stderr)
 
+    def test_cd_phase_has_a_60_second_limit(self):
+        for now, expected in [('2026-10-19T13:01:00Z', 0), ('2026-10-19T13:01:01Z', 1)]:
+            result = run('ci-budget.py', '--phase', 'cd', '--started-at', '2026-10-19T13:00:00Z', '--now', now)
+            self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+        self.assertNotEqual(run('ci-budget.py', '--phase', 'qa', '--started-at', '2026-10-19T13:00:00Z').returncode, 0)
+
     def test_missing_timezone_and_future_start_fail_closed(self):
         for start in ['bad', '2026-10-19T13:00:00', '2026-10-19T14:00:00Z']:
             self.assertNotEqual(run('ci-budget.py', '--started-at', start,
@@ -139,6 +145,21 @@ class RunnerConcurrency(unittest.TestCase):
     def test_matrix_sizes_are_counted(self):
         self.assertEqual(runners(ROOT / '.github/workflows/codeql.yml'), 3)
 
+
+class PublishEdge(unittest.TestCase):
+    """edge is what Cloud and self-hosters pull: it moves only for a passing CI run of a push to this
+    repository's main, only to that run's commit, and only while that commit is still main's head."""
+
+    def test_edge_moves_only_after_ci_passed_on_main(self):
+        workflow = (ROOT / '.github/workflows/publish-edge.yml').read_text()
+        self.assertRegex(workflow, r'workflow_run:\n\s+workflows: \[CI\]\n\s+types: \[completed\]\n\s+branches: \[main\]')
+        for guard in ["github.event.workflow_run.conclusion == 'success'",
+                      "github.event.workflow_run.event == 'push'",
+                      'github.event.workflow_run.head_repository.full_name == github.repository']:
+            self.assertIn(guard, workflow)
+        self.assertIn('ci-budget.py --phase cd', workflow)
+        ci = (ROOT / '.github/workflows/ci.yml').read_text()
+        self.assertIsNone(re.search(r'^  publish-edge:', ci, re.M), 'ci.yml still defines publish-edge')
 
 class PackageManager(unittest.TestCase):
     def test_workflows_run_pnpm_through_corepack_only(self):
