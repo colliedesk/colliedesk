@@ -175,12 +175,16 @@ acme=$(workspace_id acme) beta=$(workspace_id beta) cobalt=$(workspace_id cobalt
 [ -n "$acme" ] && [ -n "$beta" ] && [ -n "$cobalt" ] || fail 'the fixture has no acme, beta and cobalt workspaces'
 
 check snapshot "$TMP/before" '' || fail 'the fixture database fails its own check'
+cp "$TMP/files.now" "$TMP/files.before"
 step "snapshot: $(grep -c '^rows' "$TMP/before") tables, $(awk -F "$tab" '$1 == "rows" { n += $3 } END { print n }' "$TMP/before") rows, $(grep -c . "$TMP/files.now") files"
 
 # The check must catch what it is for: lost rows and a row linked to another workspace.
 { echo 'BEGIN;'
   echo "DELETE FROM messages WHERE id = md5('msg-beta-2-note')::uuid OR id = md5('msg-acme-60-3')::uuid;"
   echo "UPDATE saved_replies SET created_by_agent_id = md5('agent-beta-cy')::uuid WHERE id = md5('reply-acme-2')::uuid;"
+  # A policy that lets the request role read every workspace's conversations.
+  echo "DO \$\$ BEGIN EXECUTE format('CREATE POLICY upgrade_selftest_leak ON conversations FOR SELECT TO %I USING (true)',
+    (SELECT roles[1] FROM pg_policies WHERE tablename = 'workspaces' AND policyname = 'workspace_isolation')); END \$\$;"
   echo "SET upgrade.mode = 'compare'; SET upgrade.workspace = ''; SET upgrade.allow = 'allow';"
   echo 'CREATE TEMP TABLE input (kind text, a text, b text, c text);'
   echo 'COPY input FROM stdin;'
@@ -189,8 +193,9 @@ step "snapshot: $(grep -c '^rows' "$TMP/before") tables, $(awk -F "$tab" '$1 == 
   cat "$FIXTURE/check.sql"
 } | psql_as postgres colliedesk >"$TMP/selftest" 2>&1 && fail 'the check passed a database that lost rows'
 grep -q '^problem.messages: [0-9]* rows, had [0-9]*' "$TMP/selftest" &&
-  grep -q 'saved_replies_created_by_agent_id_fkey: 1 rows of saved_replies point at a row of agents in another workspace' "$TMP/selftest" ||
-  { cat "$TMP/selftest" >&2; fail 'the check missed deliberately lost rows or a cross-workspace link'; }
+  grep -q 'saved_replies_created_by_agent_id_fkey: 1 rows of saved_replies point at a row of agents in another workspace' "$TMP/selftest" &&
+  grep -q "^problem.conversations: the request role in workspace $acme reads [0-9]* rows of other workspaces" "$TMP/selftest" ||
+  { cat "$TMP/selftest" >&2; fail 'the check missed deliberately lost rows, a cross-workspace link or a leaking policy'; }
 
 # The backup, exactly as docs/user/upgrade.md tells an operator to take it.
 step 'backup'
@@ -307,8 +312,7 @@ while IFS="$tab" read -r table column migration reason; do
 done <"$TMP/declared"
 step "$(grep -c . "$TMP/new-migrations" || :) new migrations, $(grep -c . "$TMP/allowed" || :) declared changes"
 check compare "$TMP/after" '' "$TMP/before" "$TMP/allowed" || fail "upgrading to $CANDIDATE lost or changed data (above)"
-grep '^file' "$TMP/files.now" >"$TMP/files.after"
-files | diff "$TMP/files.after" - >/dev/null || fail 'the upgrade changed stored files'
+diff "$TMP/files.before" "$TMP/files.now" >&2 || fail 'the upgrade changed stored files (above)'
 
 # The upgraded server boots and serves each workspace its own inbox.
 step 'serving the upgraded install'

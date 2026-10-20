@@ -24,5 +24,11 @@ expect '' "$all" v0.0.1
 expect '' ''
 expect '' 'v0.1.0-rc.1'
 
+# A remote that cannot be read is an error, never "no earlier release": the release gate would skip.
+if out=$(PREVIOUS_RELEASE_REMOTE=https://127.0.0.1:9/unreachable.git sh "$ROOT/.github/scripts/previous-release.sh" v0.0.2 2>/dev/null); then
+  echo "previous-release.sh with an unreachable remote succeeded and printed '$out'; it must fail" >&2
+  failed=1
+fi
+
 [ "$failed" = 0 ] && echo 'previous-release tests passed'
 exit "$failed"

@@ -183,6 +183,57 @@ BEGIN
 END
 $isolation$;
 
+-- What the request role reads in each workspace: every row of that workspace and none of another,
+-- in every table with workspace_id and in workspaces. This reads through the policies themselves,
+-- so a policy or grant that opens another workspace fails here even when the flags above are on.
+DO $policies$
+DECLARE
+    app_role text;
+    w record;
+    t record;
+    own bigint;
+    seen_own bigint;
+    seen_other bigint;
+    key text;
+BEGIN
+    SELECT roles[1]::text INTO app_role FROM pg_policies
+        WHERE schemaname = 'public' AND tablename = 'workspaces' AND policyname = 'workspace_isolation';
+    IF app_role IS NULL THEN
+        INSERT INTO problems VALUES ('workspaces: the workspace_isolation policy is gone');
+        RETURN;
+    END IF;
+    FOR w IN SELECT id FROM workspaces ORDER BY id LOOP
+        FOR t IN
+            SELECT c.relname AS name FROM pg_class c
+            JOIN pg_namespace ns ON ns.oid = c.relnamespace AND ns.nspname = 'public'
+            WHERE c.relkind IN ('r', 'p')
+              AND (c.relname = 'workspaces' OR EXISTS (
+                  SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'workspace_id' AND NOT a.attisdropped))
+            ORDER BY c.relname
+        LOOP
+            key := CASE WHEN t.name = 'workspaces' THEN 'id' ELSE 'workspace_id' END;
+            EXECUTE format('SELECT count(*) FROM %I WHERE %I = %L', t.name, key, w.id) INTO own;
+            IF NOT has_table_privilege(app_role, format('%I', t.name), 'SELECT') THEN
+                CONTINUE;
+            END IF;
+            PERFORM set_config('app.workspace_id', w.id::text, true);
+            EXECUTE format('SET LOCAL ROLE %I', app_role);
+            EXECUTE format('SELECT count(*) FILTER (WHERE %1$I = %2$L), count(*) FILTER (WHERE %1$I IS DISTINCT FROM %2$L) FROM %3$I',
+                           key, w.id, t.name)
+                INTO seen_own, seen_other;
+            RESET ROLE;
+            PERFORM set_config('app.workspace_id', '', true);
+            IF seen_other > 0 THEN
+                INSERT INTO problems VALUES (format('%s: the request role in workspace %s reads %s rows of other workspaces', t.name, w.id, seen_other));
+            END IF;
+            IF seen_own <> own THEN
+                INSERT INTO problems VALUES (format('%s: the request role in workspace %s reads %s of its %s rows', t.name, w.id, seen_own, own));
+            END IF;
+        END LOOP;
+    END LOOP;
+END
+$policies$;
+
 \pset format unaligned
 \pset tuples_only on
 \pset fieldsep '\t'

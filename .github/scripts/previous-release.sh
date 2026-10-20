@@ -11,7 +11,12 @@ REMOTE=${PREVIOUS_RELEASE_REMOTE:-origin}
 if [ -n "${PREVIOUS_RELEASE_TAGS+set}" ]; then
   tags=$PREVIOUS_RELEASE_TAGS
 else
-  tags=$(git ls-remote --tags --refs "$REMOTE" 'v*' | sed 's#.*refs/tags/##')
+  # Its own command, so a remote that cannot be read fails here instead of reading as "no release".
+  refs=$(git ls-remote --tags --refs "$REMOTE" 'v*') || {
+    echo "previous-release: cannot list the tags of $REMOTE" >&2
+    exit 1
+  }
+  tags=$(printf '%s\n' "$refs" | sed 's#.*refs/tags/##')
 fi
 
 # Prereleases (v1.2.0-rc.1) are never the starting point: self-hosters run stable releases.

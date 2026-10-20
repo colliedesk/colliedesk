@@ -22,7 +22,10 @@ job) and gates every release (`release.yml`, step "Upgrade from the previous rel
    and purge jobs that change rows): every table of the snapshot with the same row count and the
    same rows over the previous release's columns, the same rows per workspace, every attachment row
    with its file and checksum, no foreign key joining two workspaces, row-level security enabled and
-   forced on every table with `workspace_id`, and the stored files unchanged.
+   forced on every table with `workspace_id`, and the stored files unchanged. It also reads every
+   table with `workspace_id` (and `workspaces`) as the request role in each workspace, through the
+   policies themselves: all of that workspace's rows and none of another's, so a policy or grant
+   that opens another workspace fails even when the flags are on. The self-test adds such a policy.
 7. Starts the candidate and, for two workspaces, signs in with `collie pair`, loads the inbox, and
    checks it lists its own conversations, no conversation or contact of another workspace, and
    that another workspace's conversation answers 404.
