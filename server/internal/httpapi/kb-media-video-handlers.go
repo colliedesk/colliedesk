@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -84,6 +85,8 @@ func writeKBUploadError(response http.ResponseWriter, err error) {
 			"message": sentence(err) + ".", "offset": offset.Offset})})
 	case errors.Is(err, domain.ErrKBMediaUploadNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "The upload was not found; it may have expired after 24 hours.")
+	case errors.Is(err, domain.ErrKBMediaUploadNotYours):
+		writeError(response, http.StatusForbidden, "not_your_upload", sentence(err)+".")
 	case errors.Is(err, domain.ErrKBMediaUploadLimit):
 		writeError(response, http.StatusTooManyRequests, "too_many_uploads", sentence(err)+".")
 	case errors.Is(err, domain.ErrKBMediaUploadIncomplete):
@@ -143,6 +146,15 @@ func (a *API) createKBMediaUpload(response http.ResponseWriter, request *http.Re
 		return
 	}
 	writeJSON(response, http.StatusCreated, upload)
+}
+
+func (a *API) listKBMediaUploads(response http.ResponseWriter, request *http.Request) {
+	uploads, err := a.store.ListKBMediaUploads(request.Context(), principal(request).Workspace.ID)
+	if err != nil {
+		writeKBUploadError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, map[string]any{"items": uploads})
 }
 
 func (a *API) getKBMediaUpload(response http.ResponseWriter, request *http.Request) {
@@ -246,7 +258,12 @@ func (a *API) cancelKBMediaUpload(response http.ResponseWriter, request *http.Re
 	id := request.PathValue("id")
 	// No wait for a part being written (a page that goes away cannot retry): that part finds the upload
 	// gone when it records itself and removes the file it wrote (dropCancelledParts).
-	if err := a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id); err != nil {
+	// Someone else's upload is theirs to cancel, or an admin's.
+	startedBy := who.Agent.ID
+	if who.Agent.Role == "admin" {
+		startedBy = ""
+	}
+	if err := a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id, startedBy); err != nil {
 		writeKBUploadError(response, err)
 		return
 	}
@@ -309,14 +326,14 @@ func (a *API) completeKBMediaUpload(response http.ResponseWriter, request *http.
 		return
 	}
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		_ = a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id)
+		_ = a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id, "")
 		writeError(response, http.StatusConflict, "upload_lost", "The parts of this upload are gone from the server; start the upload again.")
 		return
 	}
 	video, err := checkKBVideo(path, upload.Size)
 	if err != nil {
 		// The bytes cannot become a library item; the upload goes with them.
-		_ = a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id)
+		_ = a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id, "")
 		_ = staging.RemoveStaged(id)
 		writeKBUploadError(response, err)
 		return

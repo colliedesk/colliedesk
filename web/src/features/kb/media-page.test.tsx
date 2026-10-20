@@ -143,7 +143,7 @@ test('an agent cannot delete forever', async () => {
 
 // The queue, with the parts sent through a stand-in for the network.
 test('a video goes up in the parts the server asks for, resumes from the offset it holds, and an image in one request', async () => {
-  const upload = { id: id(7), kind: 'video', name: 'tour', size: 20, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z', media_id: null };
+  const upload = { id: id(7), kind: 'video', name: 'tour', size: 20, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z', media_id: null, created_by: null, created_at: '2026-10-21T00:00:00Z' };
   let held = 0;
   const calls = serve({
     'POST /api/v1/kb/media-uploads': () => json(201, upload),
@@ -176,7 +176,7 @@ test('a video goes up in the parts the server asks for, resumes from the offset 
 });
 
 test('a paused video sends nothing more until it resumes, and a cancelled one is thrown away on the server', async () => {
-  const upload = { id: id(7), kind: 'video', name: 'tour', size: 16, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z', media_id: null };
+  const upload = { id: id(7), kind: 'video', name: 'tour', size: 16, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z', media_id: null, created_by: null, created_at: '2026-10-21T00:00:00Z' };
   let held = 0;
   const calls = serve({
     'POST /api/v1/kb/media-uploads': () => json(201, upload),
@@ -202,7 +202,7 @@ test('a paused video sends nothing more until it resumes, and a cancelled one is
 });
 
 test('leaving the page cancels an unfinished video upload on the server, so it holds no slot for a day', async () => {
-  const upload = { id: id(7), kind: 'video', name: 'tour', size: 16, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z', media_id: null };
+  const upload = { id: id(7), kind: 'video', name: 'tour', size: 16, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z', media_id: null, created_by: null, created_at: '2026-10-21T00:00:00Z' };
   const calls = serve({
     'POST /api/v1/kb/media-uploads': () => json(201, upload),
     [`GET /api/v1/kb/media-uploads/${id(7)}`]: () => json(200, upload),
@@ -219,7 +219,7 @@ test('leaving the page cancels an unfinished video upload on the server, so it h
 });
 
 test('a part refused while the server still finishes the one a pause cut off is sent again after a wait', async () => {
-  const upload = { id: id(7), kind: 'video', name: 'tour', size: 8, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z', media_id: null };
+  const upload = { id: id(7), kind: 'video', name: 'tour', size: 8, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z', media_id: null, created_by: null, created_at: '2026-10-21T00:00:00Z' };
   serve({
     'POST /api/v1/kb/media-uploads': () => json(201, upload),
     [`GET /api/v1/kb/media-uploads/${id(7)}`]: () => json(200, upload),
@@ -233,4 +233,31 @@ test('a part refused while the server still finishes the one a pause cut off is 
   queue.add([new File([new Uint8Array(8)], 'tour.webm', { type: 'video/webm' })]);
   await waitFor(() => expect(queue.rows()[0]?.state).toBe('done'), { timeout: 3000 });
   expect(tries).toBe(2);
+});
+
+test('uploads in progress that this page is not sending are listed, go on with the same file, and are cancelled by whoever may', async () => {
+  const open_ = { id: id(7), kind: 'video', name: 'tour', size: 16, offset: 8, part_size: 8, expires_at: '2026-10-22T00:00:00Z', media_id: null,
+    created_by: { agent_id: '99999999-9999-4999-8999-999999999999', name: 'Grace' }, created_at: '2026-10-21T00:00:00Z' };
+  const calls = serve({ ...base, 'GET /api/v1/kb/media-uploads': () => json(200, { items: [open_] }), [`DELETE /api/v1/kb/media-uploads/${id(7)}`]: () => json(204) });
+  open();
+  const section = await screen.findByRole('region', { name: 'Uploads in progress' });
+  expect(section).toHaveTextContent('50% · started by Grace');
+  const input = section.querySelector('input[type="file"]') as HTMLInputElement;
+  fireEvent.click(within(section).getByRole('button', { name: 'Resume tour: choose the same file' }));
+  fireEvent.change(input, { target: { files: [new File([new Uint8Array(3)], 'other.mp4', { type: 'video/mp4' })] } });
+  expect(within(section).getByRole('alert')).toHaveTextContent('That is not tour');
+  // An admin cancels anyone's upload.
+  fireEvent.click(within(section).getByRole('button', { name: 'Cancel the upload of tour' }));
+  await waitFor(() => expect(calls.some((call) => call.method === 'DELETE' && call.path === `/api/v1/kb/media-uploads/${id(7)}`)).toBe(true));
+});
+
+test('an agent sees uploads in progress but cancels only their own', async () => {
+  const agent = { ...me, agent: { ...me.agent, role: 'agent' } };
+  const open_ = { id: id(7), kind: 'video', name: 'tour', size: 16, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z', media_id: null,
+    created_by: { agent_id: '99999999-9999-4999-8999-999999999999', name: 'Grace' }, created_at: '2026-10-21T00:00:00Z' };
+  serve({ ...base, 'GET /api/v1/auth/me': () => json(200, agent), 'GET /api/v1/kb/media-uploads': () => json(200, { items: [open_] }) });
+  open();
+  const section = await screen.findByRole('region', { name: 'Uploads in progress' });
+  await waitFor(() => expect(within(section).queryByRole('button', { name: 'Cancel the upload of tour' })).not.toBeInTheDocument());
+  expect(within(section).getByRole('button', { name: /^Resume tour/ })).toBeInTheDocument();
 });

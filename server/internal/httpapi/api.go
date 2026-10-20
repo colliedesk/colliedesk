@@ -338,6 +338,7 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/kb/media/{id}/replace", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/kb/media-replacements/{id}/undo", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/kb/media-uploads", auth.PermissionConversationsWrite},
+		{http.MethodGet, "/api/v1/kb/media-uploads", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/kb/media-uploads/{id}", auth.PermissionConversationsRead},
 		{http.MethodPut, "/api/v1/kb/media-uploads/{id}", auth.PermissionConversationsWrite},
 		{http.MethodDelete, "/api/v1/kb/media-uploads/{id}", auth.PermissionConversationsWrite},

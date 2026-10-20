@@ -38,7 +38,7 @@ func Catalog() []Spec {
 		kbArticlesSearchSpec(), kbArticleGetSpec(), kbArticleCreateSpec(), kbArticleUpdateSpec(), kbArticleDeleteSpec(), kbArticlesTrashSpec(), kbArticleUndeleteSpec(),
 		kbArticleHistorySpec(), kbArticleVersionRestoreSpec(), kbImageUploadSpec(), kbImageGetSpec(),
 		kbMediaListSpec(), kbMediaGetSpec(), kbMediaUpdateSpec(), kbMediaTrashSpec(), kbMediaTrashListSpec(), kbMediaUndeleteSpec(), kbMediaPurgeSpec(), kbMediaReplaceSpec(), kbMediaReplaceUndoSpec(),
-		kbVideoUploadStartSpec(), kbVideoUploadPartSpec(), kbVideoUploadStatusSpec(), kbVideoUploadCancelSpec(), kbVideoUploadCompleteSpec(), kbVideoPosterSetSpec(), helpCenterGetSpec(),
+		kbVideoUploadStartSpec(), kbVideoUploadPartSpec(), kbVideoUploadStatusSpec(), kbVideoUploadListSpec(), kbVideoUploadCancelSpec(), kbVideoUploadCompleteSpec(), kbVideoPosterSetSpec(), helpCenterGetSpec(),
 		tokenRevokeSpec(), docsSearchSpec(),
 		replyDraftSpec(), requestsListSpec(), requestGetSpec(), requestCancelSpec(),
 		tokenCreateRequestSpec(), workspaceExportRequestSpec(), billingRequestSpec(), emailChannelDisconnectRequestSpec(),

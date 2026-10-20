@@ -3,6 +3,7 @@ package mcpserver_test
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"image"
 	"image/png"
 	"os"
@@ -32,6 +33,9 @@ func TestSendTokenUploadsVideosAndManagesTheMediaLibrary(t *testing.T) {
 	status := e.ok(session, "colliedesk_kb_video_upload_status", map[string]any{"upload_id": uploadID})
 	if at(t, status, "offset") != float64(half) {
 		t.Fatalf("status = %v", status)
+	}
+	if listed := fmt.Sprint(e.ok(session, "colliedesk_kb_video_upload_list", map[string]any{})); !strings.Contains(listed, uploadID) || !strings.Contains(listed, "Tour") {
+		t.Fatalf("uploads in progress = %s", listed)
 	}
 	e.ok(session, "colliedesk_kb_video_upload_part", map[string]any{"upload_id": uploadID, "offset": half, "data_base64": base64.StdEncoding.EncodeToString(data[half:])})
 	done := e.ok(session, "colliedesk_kb_video_upload_complete", map[string]any{"upload_id": uploadID})

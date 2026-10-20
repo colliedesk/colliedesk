@@ -92,7 +92,12 @@ and a sort (newest, oldest, name, largest). **Upload** takes several files at on
 anywhere on the page; an upload made here is kept. Each file shows its progress; a video shows its
 speed and the time left, and can be paused, resumed (also after a lost connection: it goes on from
 the bytes the server already has) or cancelled. The same file uploaded twice says **Already in the
-library**.
+library**. Leaving the page cancels the videos it was still sending.
+
+A workspace has at most three video uploads in progress. **Uploads in progress** lists those this
+page is not sending (from another tab, or a page that closed), with who started each and when its
+parts expire (24 hours after the start): **Resume…** goes on when you choose the same file again, and
+**Cancel** frees its place; only the person who started an upload, or an admin, cancels it.
 
 Choose an item to see it in a panel: its type, size, length and where it is used, with a link to
 each article. There you rename it, write its alt text (a video's title for screen readers), keep it,

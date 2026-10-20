@@ -35,7 +35,9 @@ const replacementSchema = z.object({
 const uploadSchema = z.object({
   id: z.string().uuid(), kind: z.literal('video'), name: z.string(), size: z.number().int(), offset: z.number().int(), part_size: z.number().int(),
   expires_at: z.string().datetime(), media_id: z.string().uuid().nullable(),
+  created_by: z.object({ agent_id: z.string().uuid().nullable(), name: z.string() }).nullable(), created_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'KBMediaUpload'>>;
+const uploadListSchema = z.object({ items: z.array(uploadSchema) }) satisfies z.ZodType<JsonResponse<'listKBMediaUploads', 200>>;
 
 export type KBMedia = z.infer<typeof kbMediaSchema>;
 export type KBMediaDetails = z.infer<typeof detailsSchema>;
@@ -80,6 +82,7 @@ export const mediaApi = {
   setPoster: (id: string, image: Blob) => request(`/api/v1/kb/media/${id}/poster`, kbMediaSchema, { method: 'PUT', body: image, headers: { 'Content-Type': image.type } }),
   startUpload: (value: RequestBody<'createKBMediaUpload'>) => request('/api/v1/kb/media-uploads', uploadSchema, { method: 'POST', body: json<'createKBMediaUpload'>(value) }),
   upload: (id: string) => request(`/api/v1/kb/media-uploads/${id}`, uploadSchema),
+  uploads: () => request('/api/v1/kb/media-uploads', uploadListSchema),
   cancelUpload: (id: string) => request(`/api/v1/kb/media-uploads/${id}`, noContent, { method: 'DELETE' }),
   completeUpload: (id: string) => request(`/api/v1/kb/media-uploads/${id}/complete`, kbMediaSchema, { method: 'POST' }),
 };

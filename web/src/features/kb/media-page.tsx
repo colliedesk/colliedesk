@@ -11,12 +11,12 @@ import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-key
 import { typingDelayMs } from '../inbox/inbox-filters';
 import { reason } from './kb-tree';
 import { mediaApi } from './media-api';
-import type { KBMedia, MediaKind, MediaSort, MediaUsage } from './media-api';
+import type { KBMedia, KBMediaUpload, MediaKind, MediaSort, MediaUsage } from './media-api';
 import { MediaDetail } from './media-detail';
 import { MediaCard, SelectCard, mediaName, usageLabel } from './media-grid';
 import { mediaMessages } from './media-messages';
 import { useUploadQueue } from './media-uploads';
-import type { UploadRow } from './media-uploads';
+import type { UploadQueue, UploadRow } from './media-uploads';
 
 export interface MediaSearch {
   q?: string;
@@ -85,11 +85,68 @@ export function MediaRoute({ view, search }: { view: MediaView; search: MediaSea
       {view === 'library' && <p id="media-upload-hint" className="kb-hint">{mediaMessages.uploadHint}</p>}
       {dragging && <p className="media-drop" aria-hidden="true">{mediaMessages.dropHere}</p>}
       {refused.length > 0 && <p role="alert" className="error-copy">{mediaMessages.notMedia(refused.join(', '))}</p>}
+      {view === 'library' && <InProgress queue={queue} rows={rows} />}
       {rows.length > 0 && <Uploads rows={rows} onPause={(key) => queue.pause(key)} onResume={(key) => queue.resume(key)} onCancel={(key) => queue.cancel(key)} onClear={() => queue.clear()} />}
       {view === 'library' && <Library search={search} go={go} onChanged={() => void refresh()} />}
       {view === 'unused' && <Unused onChanged={() => void refresh()} />}
       {view === 'trash' && <Trash onChanged={() => void refresh()} />}
     </main>
+  );
+}
+
+// InProgress lists the workspace's uploads this page is not sending: what holds the three a workspace
+// may have, with a way to go on (the same file again) or to cancel (for whoever started it, or an admin).
+function InProgress({ queue, rows }: { queue: UploadQueue; rows: UploadRow[] }) {
+  const uploads = useQuery({ queryKey: ['kb-media-uploads', rows.map((row) => `${row.key}:${row.state}`).join()], queryFn: mediaApi.uploads, placeholderData: keepPreviousData });
+  const me = useQuery({ queryKey: ['me'], queryFn: api.me });
+  const [now] = useState(() => new Date());
+  const [problem, setProblem] = useState<string>();
+  const file = useRef<HTMLInputElement>(null);
+  const resuming = useRef<KBMediaUpload | undefined>(undefined);
+  const mine = queue.sessions();
+  const items = (uploads.data?.items ?? []).filter((upload) => !mine.has(upload.id));
+  if (items.length === 0) return null;
+  const timezone = me.data?.timezone ?? 'UTC';
+  const admin = me.data?.agent.role === 'admin';
+  const cancel = async (upload: KBMediaUpload) => {
+    setProblem(undefined);
+    try {
+      await mediaApi.cancelUpload(upload.id);
+      void uploads.refetch();
+    } catch (error) {
+      setProblem(reason(error, mediaMessages.actionFailed));
+    }
+  };
+  return (
+    <section className="media-uploads" aria-labelledby="media-in-progress-heading">
+      <h2 id="media-in-progress-heading">{mediaMessages.inProgress}</h2>
+      <p className="kb-hint">{mediaMessages.inProgressHelp}</p>
+      {problem && <p role="alert" className="error-copy">{problem}</p>}
+      <ul>
+        {items.map((upload) => (
+          <li key={upload.id}>
+            <span className="media-upload-name">{upload.name || mediaMessages.unnamed}</span>
+            <progress max={upload.size} value={upload.offset} aria-label={upload.name} />
+            <span className="media-upload-status">{mediaMessages.inProgressRow(Math.floor((upload.offset / upload.size) * 100), upload.created_by?.name ?? mediaMessages.someone,
+              formatDate(upload.expires_at, timezone, now))}</span>
+            <span className="button-row">
+              <button type="button" aria-label={mediaMessages.resumeChooseName(upload.name)} onClick={() => { resuming.current = upload; file.current?.click(); }}>{mediaMessages.resumeChoose}</button>
+              {(admin || upload.created_by?.agent_id === me.data?.agent.id) && <button type="button" aria-label={mediaMessages.cancelUploadName(upload.name)} onClick={() => void cancel(upload)}>{mediaMessages.cancel}</button>}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <input ref={file} type="file" hidden accept="video/mp4,video/webm,video/quicktime,.mov" onChange={(event) => {
+        const chosen = event.target.files?.[0];
+        event.target.value = '';
+        const upload = resuming.current;
+        if (!chosen || !upload) return;
+        // The server knows the size, not the bytes: the size must match, and complete checks the file.
+        if (chosen.size !== upload.size) { setProblem(mediaMessages.notTheSameFile(upload.name)); return; }
+        setProblem(undefined);
+        queue.resumeUpload(chosen, upload.id);
+      }} />
+    </section>
   );
 }
 

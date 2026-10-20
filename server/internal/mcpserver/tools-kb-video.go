@@ -14,10 +14,14 @@ const kbVideoPartLimit = 5 << 20
 
 type restKBUpload struct {
 	ID        string  `json:"id"`
+	Name      string  `json:"name"`
 	Size      int64   `json:"size"`
 	Offset    int64   `json:"offset"`
 	ExpiresAt string  `json:"expires_at"`
 	MediaID   *string `json:"media_id"`
+	CreatedBy *struct {
+		Name string `json:"name"`
+	} `json:"created_by"`
 }
 
 func kbUploadView(upload restKBUpload) map[string]any {
@@ -86,6 +90,25 @@ func kbVideoUploadStatus(c *call, arguments map[string]any) (any, error) {
 		return nil, err
 	}
 	return kbUploadView(upload), nil
+}
+
+func kbVideoUploadList(c *call, _ map[string]any) (any, error) {
+	var page struct {
+		Items []restKBUpload `json:"items"`
+	}
+	if err := c.get("/api/v1/kb/media-uploads", nil, &page); err != nil {
+		return nil, err
+	}
+	uploads := make([]map[string]any, 0, len(page.Items))
+	for _, upload := range page.Items {
+		view := kbUploadView(upload)
+		view["name"] = upload.Name
+		if upload.CreatedBy != nil {
+			view["started_by"] = upload.CreatedBy.Name
+		}
+		uploads = append(uploads, view)
+	}
+	return map[string]any{"uploads": uploads}, nil
 }
 
 func kbVideoUploadCancel(c *call, arguments map[string]any) (any, error) {

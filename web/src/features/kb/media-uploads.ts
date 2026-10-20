@@ -80,6 +80,17 @@ export class UploadQueue {
     return refused;
   }
 
+  // resumeUpload goes on with an upload this page did not start (another tab, a page that closed): the
+  // person chooses the same file again, and the parts go from the bytes the server holds.
+  resumeUpload(file: File, uploadId: string) {
+    this.jobs.push({ file, session: { id: uploadId }, row: { key: this.next++, name: file.name, size: file.size, kind: 'video', state: 'waiting', sent: 0, bytesPerSecond: 0, duplicate: false } });
+    this.changed();
+    void this.run();
+  }
+
+  // sessions are the server uploads this page is sending.
+  sessions = () => new Set(this.jobs.map((job) => job.session.id).filter((id): id is string => Boolean(id)));
+
   pause(key: number) {
     const job = this.find(key);
     if (!job || job.row.kind !== 'video' || (job.row.state !== 'sending' && job.row.state !== 'waiting')) return;

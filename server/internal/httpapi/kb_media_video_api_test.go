@@ -431,3 +431,39 @@ func TestKBVideoCancelDuringAPartLeavesNothing(t *testing.T) {
 	}
 	kbCall(t, api, http.MethodGet, "/api/v1/kb/media-uploads/"+upload.ID, nil, admin, http.StatusNotFound, nil)
 }
+
+// The uploads in progress are listed with who started each, so a workspace whose three are held
+// sees why and frees one: the person who started it, or an admin, cancels it; another agent cannot.
+func TestKBVideoUploadsInProgressAreListedAndCancelledByTheirOwnerOrAnAdmin(t *testing.T) {
+	api, service, _, _ := testAPIWithStorage(t)
+	admin := createSession(t, api, service, "KB Video Open", "admin@kb-video-open.example.com")
+	other := createSession(t, api, service, "KB Video Open Other", "admin@kb-video-open-other.example.com")
+	ada := joinAsAgent(t, api, admin, "ada@kb-video-open.example.com")
+	grace := joinAsAgent(t, api, admin, "grace@kb-video-open.example.com")
+	mine := startKBUpload(t, api, ada, 1000, map[string]any{"name": "tour"})
+	theirs := startKBUpload(t, api, grace, 2000, map[string]any{"name": "demo"})
+	startKBUpload(t, api, other, 3000, nil)
+	var list struct {
+		Items []struct {
+			ID        string `json:"id"`
+			Name      string `json:"name"`
+			CreatedBy *struct {
+				AgentID string `json:"agent_id"`
+			} `json:"created_by"`
+		} `json:"items"`
+	}
+	kbCall(t, api, http.MethodGet, "/api/v1/kb/media-uploads", nil, ada, http.StatusOK, &list)
+	if len(list.Items) != 2 || list.Items[0].ID != mine.ID || list.Items[1].ID != theirs.ID || list.Items[0].CreatedBy == nil || list.Items[0].CreatedBy.AgentID != agentID(t, api, ada) {
+		t.Fatalf("uploads in progress = %+v", list.Items)
+	}
+	refused := kbCall(t, api, http.MethodDelete, "/api/v1/kb/media-uploads/"+theirs.ID, nil, ada, http.StatusForbidden, nil)
+	if errorCode(t, refused) != "not_your_upload" {
+		t.Fatalf("cancel of another's upload = %s", refused.Body.String())
+	}
+	kbCall(t, api, http.MethodDelete, "/api/v1/kb/media-uploads/"+mine.ID, nil, ada, http.StatusNoContent, nil)
+	kbCall(t, api, http.MethodDelete, "/api/v1/kb/media-uploads/"+theirs.ID, nil, admin, http.StatusNoContent, nil)
+	kbCall(t, api, http.MethodGet, "/api/v1/kb/media-uploads", nil, ada, http.StatusOK, &list)
+	if len(list.Items) != 0 {
+		t.Fatalf("after the cancels: %+v", list.Items)
+	}
+}

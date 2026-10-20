@@ -148,6 +148,7 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/kb/media-replacements/{id}/undo":             {path: "/api/v1/kb/media-replacements/" + kb.replacementID + "/undo", token: admin, status: 200},
 		"POST /api/v1/kb/media-uploads":                            {"/api/v1/kb/media-uploads", map[string]any{"size": 1000, "name": "Tour"}, admin, 201, ""},
 		"GET /api/v1/kb/media-uploads/{id}":                        {path: "/api/v1/kb/media-uploads/" + kb.partUploadID, token: admin, status: 200},
+		"GET /api/v1/kb/media-uploads":                             {path: "/api/v1/kb/media-uploads", token: admin, status: 200},
 		"PUT /api/v1/kb/media-uploads/{id}":                        {path: "/api/v1/kb/media-uploads/" + kb.partUploadID, token: admin, status: 200},
 		"DELETE /api/v1/kb/media-uploads/{id}":                     {path: "/api/v1/kb/media-uploads/" + kb.partUploadID, token: admin, status: 204},
 		"POST /api/v1/kb/media-uploads/{id}/complete":              {path: "/api/v1/kb/media-uploads/" + kb.completeUploadID + "/complete", token: admin, status: 201},
