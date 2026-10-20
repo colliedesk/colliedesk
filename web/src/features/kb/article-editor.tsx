@@ -235,11 +235,12 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   // its own: right after a table row or inside a line, Markdown would read it as part of the table or the text.
   // A video goes up in parts (media-uploads.ts); leaving the page cancels the ones still going, so they
   // hold none of the workspace's three uploads in progress.
-  const videoUploads = useRef(new Map<File, { id?: string }>());
+  const videoUploads = useRef(new Set<{ id?: string }>());
+  const videoTurn = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     const uploads = videoUploads.current;
     const leave = () => {
-      for (const session of uploads.values())
+      for (const session of uploads)
         if (session.id) void fetch(`/api/v1/kb/media-uploads/${session.id}`, { method: 'DELETE', credentials: 'same-origin', keepalive: true }).catch(() => undefined);
       uploads.clear();
     };
@@ -261,13 +262,16 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     upload: async (file, progress) => {
       if (kindOf(file) === 'image') return { snippet: `![${altText(file.name)}](${(await kbApi.uploadImage(file)).url})` };
       const session: { id?: string } = {};
-      videoUploads.current.set(file, session);
+      videoUploads.current.add(session);
+      // One video at a time, in the order they came: a workspace has three uploads in progress at most.
+      const turn = videoTurn.current.then(() => uploadVideo(file, { keep: false, signal: new AbortController().signal, session, onProgress: (sent) => progress(sent / file.size) }));
+      videoTurn.current = turn.then(() => undefined, () => undefined);
       try {
-        const item = await uploadVideo(file, { keep: false, signal: new AbortController().signal, session, onProgress: (sent) => progress(sent / file.size) });
+        const item = await turn;
         if (!item) throw new Error(kbMessages.imageFailed(file.name));
         return { snippet: embedFor(item) };
       } finally {
-        videoUploads.current.delete(file);
+        videoUploads.current.delete(session);
       }
     },
     onStart: () => setUploading((count) => count + 1),
@@ -294,13 +298,14 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const ids = useMemo(() => (previewText === null ? [] : videoIds(previewText)), [previewText]);
   // combine runs again only when an answer changes (it is stable for the same ids), so the preview gets the
   // same map until then and does not render again on every keystroke.
-  const combineVideos = useCallback((answers: { data?: KBMediaDetails; isError: boolean }[]) => {
+  const combineVideos = useCallback((answers: { data?: KBMediaDetails; isError: boolean; error: unknown }[]) => {
     const known = new Map<string, PreviewVideo>();
     answers.forEach((answer, index) => {
       const videoId = ids[index]!;
       if (answer.data) known.set(videoId, answer.data.kind === 'video' && !answer.data.deleted_at
         ? { poster: answer.data.poster_url, width: answer.data.width, height: answer.data.height } : null);
-      else if (answer.isError) known.set(videoId, null);
+      // Only a 404 says the library has no such video; a failure that may pass leaves it as not looked up.
+      else if (answer.isError && answer.error instanceof Error && answer.error.message === 'API 404') known.set(videoId, null);
     });
     return known;
   }, [ids]);
