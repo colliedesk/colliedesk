@@ -273,7 +273,7 @@ export const messages = {
   forwardingOutlook: 'Outlook: Settings → Mail → Forwarding, enter the address and select Start forwarding.',
   workspaceAddressName: 'Workspace address name',
   saveAddressName: 'Save address name',
-  addressNameWarning: 'Changing the name changes the forwarding address. The old address stops receiving mail at once, so update your mailbox forwarding too.',
+  addressNameWarning: 'Changing the name changes the forwarding address and the help center address. The old address stops receiving mail at once and old help center links stop working, so update your mailbox forwarding and links too.',
   inboundURL: 'Inbound URL',
   inboundSecret: 'Inbound secret',
   inboundSecretNotice: 'Copy this secret now. It is not shown again; rotating it stops the old one.',
