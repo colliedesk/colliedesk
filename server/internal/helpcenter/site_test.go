@@ -62,3 +62,23 @@ func TestAddresses(t *testing.T) {
 		}
 	}
 }
+
+// Every link a visitor taps on a phone is at least 44 px tall (2.75rem).
+func TestTouchTargetsAreAtLeast44Pixels(t *testing.T) {
+	style, err := files.ReadFile("static/site.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, selector := range []string{".brand {", ".crumbs a {", ".card-tab a {", ".card-list a {", ".chips a {", ".card-more {", ".index-rail a {", ".result-title {", ".foot a {", ".pager a {", ".meta a {"} {
+		start := strings.Index(string(style), selector)
+		if start < 0 {
+			t.Errorf("no rule %s", selector)
+			continue
+		}
+		rule := string(style[start:])
+		rule = rule[:strings.Index(rule, "}")]
+		if !strings.Contains(rule, "min-height: 2.75rem") {
+			t.Errorf("%s} has no min-height: 2.75rem", rule)
+		}
+	}
+}

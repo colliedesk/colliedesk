@@ -99,7 +99,8 @@ test('a pasted image is uploaded as raw bytes and its address put where the curs
   text.setSelectionRange(7, 7);
   const file = new File([new Uint8Array([137, 80, 78, 71])], 'login screen.png', { type: 'image/png' });
   fireEvent.paste(text, { clipboardData: { files: [file] } });
-  await waitFor(() => expect(text).toHaveValue(`Before ![login screen](/api/v1/kb/images/${ids.image})after`));
+  // The image goes on a line of its own, between blank lines, so it never joins a table row or a paragraph.
+  await waitFor(() => expect(text).toHaveValue(`Before \n\n![login screen](/api/v1/kb/images/${ids.image})\n\nafter`));
   const upload = calls.find((call) => call.path === '/api/v1/kb/images')!;
   expect(upload.headers['Content-Type']).toBe('image/png');
   expect(upload.body).toBe(file);
@@ -237,4 +238,28 @@ test('spaces around the title or address name are not a change, so the form neve
   fireEvent.change(screen.getByRole('textbox', { name: 'Address name' }), { target: { value: ' reset-your-password' } });
   expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+});
+
+test('an image pasted at the end of a table row gets its own paragraph, so the table does not swallow it', async () => {
+  serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: '| Plan | Agents |\n| --- | --- |\n| Team | 5 |' })),
+    'POST /api/v1/kb/images': () => json(201, { id: ids.image, content_type: 'image/png', size: 4, sha256: 'ab', url: `/api/v1/kb/images/${ids.image}`, created_at: '2026-10-02T00:00:00Z' }) });
+  open({ articleId: ids.article });
+  const text = await screen.findByRole('textbox', { name: 'Text' }) as HTMLTextAreaElement;
+  text.setSelectionRange(text.value.length, text.value.length);
+  fireEvent.paste(text, { clipboardData: { files: [new File(['x'], 'plans.png', { type: 'image/png' })] } });
+  await waitFor(() => expect(text).toHaveValue(`| Plan | Agents |\n| --- | --- |\n| Team | 5 |\n\n![plans](/api/v1/kb/images/${ids.image})`));
+  fireEvent.click(screen.getByRole('tab', { name: 'Preview' }));
+  const panel = screen.getByRole('tabpanel', { name: 'Preview' });
+  expect(within(panel).getByRole('img', { name: 'plans' })).toBeInTheDocument();
+  expect(within(panel).getByRole('table')).not.toHaveTextContent('plans');
+});
+
+test('an image pasted on an empty line between paragraphs adds no extra blank lines', async () => {
+  serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: 'One\n\n\n\nTwo' })),
+    'POST /api/v1/kb/images': () => json(201, { id: ids.image, content_type: 'image/png', size: 4, sha256: 'ab', url: `/api/v1/kb/images/${ids.image}`, created_at: '2026-10-02T00:00:00Z' }) });
+  open({ articleId: ids.article });
+  const text = await screen.findByRole('textbox', { name: 'Text' }) as HTMLTextAreaElement;
+  text.setSelectionRange(5, 5);
+  fireEvent.paste(text, { clipboardData: { files: [new File(['x'], 'step.png', { type: 'image/png' })] } });
+  await waitFor(() => expect(text).toHaveValue(`One\n\n![step](/api/v1/kb/images/${ids.image})\n\nTwo`));
 });

@@ -136,6 +136,8 @@
 @media (pointer: coarse) {
   .kb-tree-link, .kb-back { min-height: var(--touch); }
   .kb-tabs button { --control: var(--touch); }
+  /* The status filter is a control of its own on a touch screen: each choice is a whole touch target. */
+  .kb-filters .segmented label { min-height: var(--touch); }
 }
 @media (prefers-reduced-motion: reduce) {
   .kb-tree-link, .kb-article-row, .button-link, .kb-article-list[aria-busy="true"] { transition: none; }

@@ -191,12 +191,18 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   };
 
   // Images pasted or dropped into the text are uploaded; a placeholder holds their place meanwhile.
+  // Images go in as a paragraph of their own: right after a table row or inside a line, Markdown would
+  // read them as part of the table or the text, and a table swallows them.
   const insertAtCursor = (text: string) => {
     const field = body.current;
     setDraft((current) => {
       const start = field?.selectionStart ?? current.body.length;
       const end = field?.selectionEnd ?? start;
-      return { ...current, body: current.body.slice(0, start) + text + current.body.slice(end) };
+      const before = current.body.slice(0, start);
+      const after = current.body.slice(end);
+      const lead = before === '' || before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+      const trail = after === '' || after.startsWith('\n\n') ? '' : after.startsWith('\n') ? '\n' : '\n\n';
+      return { ...current, body: before + lead + text + trail + after };
     });
     setSavedOnce(false);
   };
