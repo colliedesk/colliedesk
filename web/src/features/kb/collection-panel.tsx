@@ -83,10 +83,9 @@ export function CollectionTree({ tree, selected, onSelect }: CollectionTreeProps
   const item = (node: TreeNode) => (
     <li key={node.collection.id}>
       <RouterLink href={`/knowledge?${new URLSearchParams({ collection: node.collection.id })}`} className="kb-tree-link" current={selected === node.collection.id}
-        onFollow={() => onSelect(node.collection)}>
+        label={`${node.collection.name}, ${kbMessages.articleCount(node.collection.article_count)}`} onFollow={() => onSelect(node.collection)}>
         <span className="kb-tree-name">{node.collection.name}</span>
-        <span className="kb-tree-count" aria-hidden="true">{node.collection.article_count}</span>
-        <span className="sr-only">, {kbMessages.articleCount(node.collection.article_count)}</span>
+        <span className="kb-tree-count">{node.collection.article_count}</span>
       </RouterLink>
       {node.children.length > 0 && <ul>{node.children.map(item)}</ul>}
     </li>

@@ -16,6 +16,7 @@ Running Colliedesk on your own server? Install, email delivery, configuration an
 - [Plan and billing](billing.md) (hosted cloud only)
 - [Tags](tags.md)
 - [Saved replies](saved-replies.md)
+- [Knowledge base](knowledge-base.md)
 - [Timezones](timezones.md)
 - [Sessions and devices](sessions.md)
 - [Connect an AI agent (MCP)](mcp.md)

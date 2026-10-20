@@ -133,7 +133,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
           {selected && <CollectionHead node={selected} tree={tree} form={form} confirming={confirming} problem={problem}
             onForm={(next) => { setProblem(undefined); setConfirming(false); setForm(next); }} onSave={save}
             onConfirm={setConfirming} onDelete={() => void remove(selected.collection)} />}
-          <h2 id="kb-articles-heading" className={selected ? 'sr-only' : 'kb-articles-title'}>{selected ? selected.collection.name : kbMessages.allArticles}</h2>
+          {!selected && <h2 id="kb-articles-heading" className="kb-articles-title">{kbMessages.allArticles}</h2>}
           <div className="kb-filters" role="search">
             <label className="search-field kb-search">
               <SearchIcon />
@@ -184,7 +184,7 @@ function CollectionHead({ node, tree, form, confirming, problem, onForm, onSave,
   return (
     <div className="kb-collection-head">
       <div className="kb-collection-title">
-        <h2>{collection.name}</h2>
+        <h2 id="kb-articles-heading">{collection.name}</h2>
         {collection.description && <p className="muted-copy">{collection.description}</p>}
       </div>
       {problem && <p role="alert" className="error-copy">{problem}</p>}

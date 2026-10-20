@@ -310,7 +310,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
               ? <button type="button" disabled={busy || invalid} onClick={() => void save('draft')}>{kbMessages.unpublish}</button>
               : <button type="button" disabled={busy || invalid} onClick={() => void save('published')}>{dirty || !base ? kbMessages.saveAndPublish : kbMessages.publish}</button>}
           </div>
-          <p className="kb-hint" aria-hidden="true">{dirty ? kbMessages.unsaved : savedOnce ? kbMessages.saved : ' '}</p>
+          <p className="kb-hint kb-save-state" aria-hidden="true">{dirty ? kbMessages.unsaved : savedOnce ? kbMessages.saved : ' '}</p>
           <div className="field"><label htmlFor={`${id}-collection`}>{kbMessages.articleCollection}</label>
             <select id={`${id}-collection`} value={draft.collection_id} required onChange={(event) => set({ collection_id: event.target.value })}>
               {!draft.collection_id && <option value="">{kbMessages.chooseCollection}</option>}
