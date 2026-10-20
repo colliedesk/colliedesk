@@ -74,11 +74,16 @@ come in later pull requests.
   `\n` endings. Highlighting is the bare `@lezer/markdown` GFM parser in a
   `Language`, not `@codemirror/lang-markdown`, which imports the HTML, CSS and JavaScript languages
   (74 KB gzip) for code blocks. History, find and replace (`@codemirror/search`, Ctrl/Cmd+F), line
-  wrapping. The toolbar only adds or removes Markdown around the selection (`editor/commands.ts`); a
+  wrapping. Enter does not continue a list or quote and Tab is not bound, so focus moves on: both
+  belong to `lang-markdown` and the default keymap's indentation, which are left out on purpose (no
+  keyboard trap, 74 KB). The toolbar only adds or removes Markdown around the selection (`editor/commands.ts`); a
   marker put on the cursor's line leaves the cursor after it. Its Tab stop is React state (`rover`) and
   falls back to Bold when the button that held it is disabled, so the toolbar never loses its stop.
 - **Write, Side by side, Preview.** Side by side shows only in a window at least 1,180 px wide and is
-  the default there. The preview (`markdown-preview.tsx`, react-markdown) is the only costly part:
+  the default there for an article up to 20,000 characters (`splitLimit`); a longer one opens in Write,
+  since every pause in typing redraws its preview in one long task (measured on a structured article of
+  99,600 characters at 4× CPU: 190–220 ms). The preview's first draw waits for the editor's first frame
+  (a frame, then a task: `previewReady`). The preview (`markdown-preview.tsx`, react-markdown) is the only costly part:
   rendering 100,000 characters takes tens of milliseconds. It never runs on the typing path: the
   editor tells the page of typing 120 ms after it stops, the preview reads that text through
   `useDeferredValue` (starting from `null`, so opening an article shows the editor first), and both

@@ -63,7 +63,7 @@ export const kbMessages = {
   split: 'Side by side',
   preview: 'Preview',
   editorTabs: 'Editor',
-  body: 'Text',
+  body: 'Text (Markdown)',
   bodyHelp: 'Markdown: **bold**, _italic_, # headings, - lists, [links](https://example.com), tables. Paste or drop an image to add it.',
   writePlaceholder: 'Write in Markdown',
   loadingEditor: 'Loading the editor…',

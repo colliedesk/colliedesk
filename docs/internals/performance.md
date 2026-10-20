@@ -101,6 +101,8 @@ Measured on 2026-10-20 against a local `collie serve` (PostgreSQL on the same ho
 | List → editor, 99,600 characters | 40 ms | 54 ms | 38 ms | 61 ms |
 | … and its preview drawn (Side by side) | 145 ms | 435 ms | – | – |
 
+Those articles are flat text. On a structured one (sections of a heading, a paragraph with a link, a numbered and a bulleted list), measured from the click to the second frame after the editor appears, 1,440 px wide, median of 5: 19,500 characters, which opens side by side, 86 ms at 1× and 172 ms at 4× (the preview then draws in one task of 100 ms); 99,600 characters, which opens in Write (`splitLimit`, 20,000), 66 ms and 86 ms. The same 99,600 characters side by side took 269–302 ms at 4× before the limit and the preview's wait for the first frame (`previewReady`).
+
 The editor never waits for the preview: it renders through `useDeferredValue` starting from nothing (without that start value, the first render drew the preview too and 99,600 characters took 359 ms at 4×). Typing in that article, from the key to the frame that shows it (Event Timing, 19 keys 80 ms apart): Write 40 ms median at 1× and 4×; Side by side 48 ms (max 72) at 1× and 64 ms (max 104) at 4×, with `contain: content` on both panes (before it, a key at 4× once took 272 ms). The preview's own render (react-markdown, 51–88 ms at 1× for 100,000 characters) runs 120 ms after typing stops, not between keys.
 
 ## CI phase budget

@@ -26,7 +26,7 @@ test('a new article is saved as a draft in the collection it was started from, t
   const calls = serve({ ...base, 'POST /api/v1/kb/articles': () => json(201, article({ title: 'Reset your password', body_md: '# Steps' })) });
   open({ collectionId: ids.setup });
   fireEvent.change(await screen.findByRole('textbox', { name: 'Title' }), { target: { value: '  Reset your password ' } });
-  fireEvent.change(screen.getByRole('textbox', { name: 'Text' }), { target: { value: '# Steps' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Text (Markdown)' }), { target: { value: '# Steps' } });
   expect(screen.getByRole('combobox', { name: 'Collection' })).toHaveValue(ids.setup);
   fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
   await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/knowledge/articles/$articleId', params: { articleId: ids.article }, replace: true }));
@@ -41,7 +41,7 @@ test('an edit sends only what changed with the version it was made on, and the n
       return json(200, article({ ...sent, body_md: sent.body_md ?? first.body_md, updated_at: calls.filter((item) => item.method === 'PATCH').length === 1 ? '2026-10-03T00:00:00Z' : '2026-10-04T00:00:00Z' }));
     } });
   open({ articleId: ids.article });
-  fireEvent.change(await screen.findByRole('textbox', { name: 'Text' }), { target: { value: 'Open **Settings**, then Security.' } });
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Text (Markdown)' }), { target: { value: 'Open **Settings**, then Security.' } });
   await settle();
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1));
@@ -60,7 +60,7 @@ test('when someone else saved first, the text stays on screen and the person cho
       ? json(200, (current = article({ body_md: (call.body as { body_md: string }).body_md, updated_at: '2026-10-05T00:00:00Z' })))
       : refusal(409, 'changed_elsewhere', 'This article was saved by someone else.')) });
   open({ articleId: ids.article });
-  const text = await screen.findByRole('textbox', { name: 'Text' });
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
   current = article({ body_md: 'Their text', updated_at: '2026-10-03T00:00:00Z' });
   fireEvent.change(text, { target: { value: 'My text' } });
   await settle();
@@ -79,7 +79,7 @@ test('discarding mine shows their version', async () => {
     'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, current),
     'PATCH /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => refusal(409, 'changed_elsewhere', 'Saved by someone else.') });
   open({ articleId: ids.article });
-  const text = await screen.findByRole('textbox', { name: 'Text' });
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
   current = article({ body_md: 'Their text', updated_at: '2026-10-03T00:00:00Z' });
   fireEvent.change(text, { target: { value: 'My text' } });
   await settle();
@@ -91,7 +91,7 @@ test('discarding mine shows their version', async () => {
 test('a text over 100,000 characters is never cut: saving waits until it is shorter, counting characters as the server does', async () => {
   serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article()) });
   open({ articleId: ids.article });
-  const text = await screen.findByRole('textbox', { name: 'Text' });
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
   expect(text).not.toHaveAttribute('maxlength');
   // 50,000 emoji are 100,000 UTF-16 units but 50,000 characters: within the limit.
   fireEvent.change(text, { target: { value: '😀'.repeat(50000) } });
@@ -108,7 +108,7 @@ test('a pasted image is uploaded as raw bytes and goes in as a paragraph of its 
   const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: 'Before after' })),
     'POST /api/v1/kb/images': () => json(201, uploaded) });
   open({ articleId: ids.article });
-  const text = await screen.findByRole('textbox', { name: 'Text' });
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
   const file = new File([new Uint8Array([137, 80, 78, 71])], 'login screen.png', { type: 'image/png' });
   fireEvent.paste(text, { clipboardData: { files: [file] } });
   await waitFor(() => expect(text).toHaveValue(`Before after\n\n![login screen](/api/v1/kb/images/${ids.image})`));
@@ -121,7 +121,7 @@ test('an image the server refuses leaves no placeholder and says why; a wrong ty
   const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: '' })),
     'POST /api/v1/kb/images': () => refusal(403, 'storage_limit_reached', 'Storage is full.') });
   open({ articleId: ids.article });
-  const text = await screen.findByRole('textbox', { name: 'Text' });
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
   fireEvent.paste(text, { clipboardData: { files: [new File(['x'], 'shot.png', { type: 'image/png' }), new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' })] } });
   expect(await screen.findByText('logo.svg is not a PNG, JPEG, GIF or WebP image.')).toBeInTheDocument();
   expect(await screen.findByText('Storage is full.')).toBeInTheDocument();
@@ -134,7 +134,8 @@ test('the preview renders Markdown with tables, and raw HTML never runs', async 
   open({ articleId: ids.article });
   fireEvent.click(await screen.findByRole('tab', { name: 'Preview' }));
   const panel = screen.getByRole('tabpanel', { name: 'Preview' });
-  expect(within(panel).getByRole('table')).toHaveTextContent('Team10');
+  // The preview draws after the editor is on screen.
+  expect(await within(panel).findByRole('table')).toHaveTextContent('Team10');
   expect(panel.querySelector('img')).toBeNull();
 });
 
@@ -163,7 +164,7 @@ test('an article in the trash is not opened for editing, and a missing one says 
   serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ deleted_at: '2026-10-03T00:00:00Z' })) });
   open({ articleId: ids.article });
   expect(await screen.findByText(/This article is in the trash/)).toBeInTheDocument();
-  expect(screen.queryByRole('textbox', { name: 'Text' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('textbox', { name: 'Text (Markdown)' })).not.toBeInTheDocument();
 });
 
 test('a deleted article goes to the trash with the version it was read at, then the list opens', async () => {
@@ -179,7 +180,7 @@ test('a deleted article goes to the trash with the version it was read at, then 
 test('a save with nothing to send asks nothing of the server: Ctrl+S on an unchanged article, or an emptied address name', async () => {
   const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article()) });
   open({ articleId: ids.article });
-  const text = await screen.findByRole('textbox', { name: 'Text' });
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
   fireEvent.keyDown(text, { key: 's', ctrlKey: true });
   fireEvent.change(screen.getByRole('textbox', { name: 'Address name' }), { target: { value: '  ' } });
   expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
@@ -194,7 +195,7 @@ test('saving waits while an image uploads, so a placeholder is never stored; a $
   const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: '' })),
     'POST /api/v1/kb/images': () => new Promise<Response>((resolve) => { finish = resolve; }) });
   open({ articleId: ids.article });
-  const text = await screen.findByRole('textbox', { name: 'Text' });
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
   fireEvent.paste(text, { clipboardData: { files: [new File(['x'], 'cost$$ $&.png', { type: 'image/png' })] } });
   expect((text as HTMLTextAreaElement).value).toBe('');
   expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
@@ -223,7 +224,7 @@ test('the preview shows only images of the knowledge base, as the help center do
   open({ articleId: ids.article });
   fireEvent.click(await screen.findByRole('tab', { name: 'Preview' }));
   const panel = screen.getByRole('tabpanel', { name: 'Preview' });
-  expect(within(panel).getByRole('img', { name: 'ours' })).toHaveAttribute('src', `/api/v1/kb/images/${ids.image}`);
+  expect(await within(panel).findByRole('img', { name: 'ours' })).toHaveAttribute('src', `/api/v1/kb/images/${ids.image}`);
   expect(panel.querySelectorAll('img')).toHaveLength(1);
   expect(panel).toHaveTextContent('Image from another site, not shown here or on the help center: tracker');
 });
@@ -238,7 +239,7 @@ test('an open history loads again after a save adds a version', async () => {
   open({ articleId: ids.article });
   fireEvent.click(await screen.findByRole('button', { name: 'History' }));
   expect(await screen.findByText(/Version 1 ·/)).toBeInTheDocument();
-  fireEvent.change(screen.getByRole('textbox', { name: 'Text' }), { target: { value: 'Text 2' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Text (Markdown)' }), { target: { value: 'Text 2' } });
   await settle();
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(await screen.findByText(/Version 2 ·/)).toBeInTheDocument();
@@ -257,7 +258,7 @@ test('Ctrl+S right after typing saves what was typed, and leaving at once asks f
   const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article()),
     'PATCH /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: 'Typed', updated_at: '2026-10-03T00:00:00Z' })) });
   open({ articleId: ids.article });
-  const text = await screen.findByRole('textbox', { name: 'Text' });
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
   fireEvent.change(text, { target: { value: 'Typed' } });
   // The page has not heard of the typing yet; leaving and saving read the editor.
   expect(blocker.mock.calls.at(-1)?.[0].enableBeforeUnload()).toBe(true);
@@ -272,7 +273,7 @@ test('a wrong type or a file over 5 MB is refused before any upload', async () =
   open({ articleId: ids.article });
   const big = new File(['x'], 'huge.png', { type: 'image/png' });
   Object.defineProperty(big, 'size', { value: 6 * 1024 * 1024 });
-  fireEvent.paste(await screen.findByRole('textbox', { name: 'Text' }), { clipboardData: { files: [new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' }), big] } });
+  fireEvent.paste(await screen.findByRole('textbox', { name: 'Text (Markdown)' }), { clipboardData: { files: [new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' }), big] } });
   expect(await screen.findByText('logo.svg is not a PNG, JPEG, GIF or WebP image.')).toBeInTheDocument();
   expect(screen.getByText('huge.png is over 5 MB.')).toBeInTheDocument();
   expect(calls.some((call) => call.path === '/api/v1/kb/images')).toBe(false);
@@ -288,7 +289,7 @@ test('a restore puts the restored text in the editor', async () => {
   open({ articleId: ids.article });
   fireEvent.click(await screen.findByRole('button', { name: 'History' }));
   fireEvent.click(await within(await screen.findByRole('region', { name: 'History of Reset your password' })).findByRole('button', { name: 'Restore version 1' }));
-  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Text' })).toHaveValue('Restored text'));
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Text (Markdown)' })).toHaveValue('Restored text'));
   expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
 });
 
@@ -296,7 +297,7 @@ test('an article with Windows line endings opened untouched is no change: nothin
   const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: 'Steps\r\n\r\nOpen **Settings**.\r\n' })),
     'PATCH /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ status: 'published', updated_at: '2026-10-03T00:00:00Z' })) });
   open({ articleId: ids.article });
-  await screen.findByRole('textbox', { name: 'Text' });
+  await screen.findByRole('textbox', { name: 'Text (Markdown)' });
   expect(blocker.mock.calls.at(-1)?.[0].enableBeforeUnload()).toBe(false);
   expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: 'Publish' }));

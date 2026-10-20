@@ -49,6 +49,11 @@ const formatKeys = Prec.high(keymap.of([
   { key: 'Mod-e', run: (view) => (inlineCode(view), true) },
   { key: 'Mod-k', run: (view) => (insertLink(view), true) },
 ]));
+// The find and replace panel in the app's words (CodeMirror's own are lowercase).
+const phrases = EditorState.phrases.of({
+  Find: 'Find', Replace: 'Replace', next: 'Next', previous: 'Previous', all: 'All', 'match case': 'Match case', regexp: 'Regular expression',
+  'by word': 'Whole words', replace: 'Replace', 'replace all': 'Replace all', close: 'Close',
+});
 const mod = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl+';
 
 // CodeMirrorEditor is the article's text as Markdown source: what is typed is what body_md stores, byte for byte
@@ -89,7 +94,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
     const build = (): Extension[] => [
       EditorView.lineWrapping, history(), drawSelection(), dropCursor(), highlightSpecialChars(), formatKeys,
       keymap.of([...searchKeymap, ...defaultKeymap, ...historyKeymap]), search({ top: true }), markdownLanguage, markdownHighlight,
-      placeholder(kbMessages.writePlaceholder),
+      placeholder(kbMessages.writePlaceholder), phrases,
       EditorView.contentAttributes.of({ 'aria-label': latest.current.label, 'aria-describedby': latest.current.describedBy, 'aria-multiline': 'true', spellcheck: 'true' }),
       uploadField, uploadEvents(hooks),
       EditorView.updateListener.of((update) => {

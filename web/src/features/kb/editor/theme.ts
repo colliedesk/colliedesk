@@ -17,7 +17,8 @@ export const markdownHighlight = syntaxHighlighting(
     { tag: tags.strikethrough, textDecoration: 'line-through' },
     { tag: tags.link, color: 'var(--accent-text)' },
     { tag: tags.url, color: 'var(--accent-text)', textDecoration: 'underline', textUnderlineOffset: '2px' },
-    { tag: tags.monospace, backgroundColor: 'var(--surface-2)', borderRadius: '3px' },
+    // Code is coloured, not shaded: a shade drawn per line breaks up in a wrapped code block.
+    { tag: tags.monospace, color: 'var(--text-2)' },
     { tag: [tags.processingInstruction, tags.contentSeparator, tags.labelName], color: 'var(--text-3)' },
     { tag: tags.quote, color: 'var(--text-2)' },
     { tag: tags.atom, color: 'var(--accent-text)', fontWeight: '600' },

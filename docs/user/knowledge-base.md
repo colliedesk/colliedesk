@@ -52,8 +52,13 @@ link opens the same list.
 4. Select **Save draft** to keep it for agents only, or **Save and publish**.
 
 **Write** shows the Markdown, **Preview** shows how the article reads, and **Side by side** (in a wide
-window, where it is the default) shows both. Raw HTML in the text never runs: the preview and the help
-center leave it out.
+window) shows both. A wide window opens an article side by side, unless it is longer than 20,000
+characters: then it opens in **Write**, which stays fast at any length. Raw HTML in the text never runs:
+the preview shows it as text, and the help center leaves it out.
+
+Enter starts a plain new line (type `- ` or `> ` again to go on with a list or quote), and Tab moves on
+to the next control instead of indenting, so the keyboard never gets stuck in the text; indent with
+spaces.
 
 `Ctrl+S` (`Cmd+S` on a Mac) saves. The text holds at most 100,000 characters and a title 300. A longer
 text is never cut: the counter turns red and saving waits until you shorten it, or split it into

@@ -73,9 +73,10 @@
   background: var(--surface-1); color: var(--text-1); padding: 0 var(--space-2); font-size: var(--fs-small);
 }
 .kb-editor-card .cm-host .cm-search .cm-button {
-  --control: 30px; margin: 0; background-image: none; border-radius: var(--radius); font-size: var(--fs-label); text-transform: capitalize;
+  --control: 30px; margin: 0; background-image: none; border-radius: var(--radius); font-size: var(--fs-label);
 }
 .kb-editor-card .cm-host .cm-search label { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--text-2); font-size: var(--fs-label); }
+.kb-editor-card .cm-host .cm-search input[type="checkbox"] { margin: 0; }
 .kb-editor-card .cm-host .cm-search [name="close"] {
   position: absolute; top: var(--space-2); right: var(--space-2); width: 28px; height: 28px; min-height: 0; padding: 0; border: 0;
   border-radius: var(--radius-sm); background: transparent; box-shadow: none; color: var(--text-3); font-size: 18px; line-height: 1;
@@ -102,6 +103,8 @@
 @media (pointer: coarse) {
   .kb-editor-card .cm-host .cm-search .cm-textfield, .kb-editor-card .cm-host .cm-search .cm-button { --control: var(--touch); }
   .kb-editor-card .cm-host .cm-search [name="close"] { width: var(--touch); height: var(--touch); }
+  .kb-editor-card .cm-host .cm-search label { min-height: var(--touch); padding-right: var(--space-2); }
+  .kb-editor-card .cm-host .cm-search input[type="checkbox"] { width: 20px; height: 20px; }
   .md-tool, .md-block { --control: var(--touch); }
   .md-tool { width: var(--touch); }
 }

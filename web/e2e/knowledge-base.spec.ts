@@ -25,7 +25,7 @@ test('knowledge base: a collection, an article written in the Markdown editor wi
 
   await page.getByRole('link', { name: 'New article' }).click();
   await page.getByRole('textbox', { name: 'Title' }).fill('Reset your password');
-  const text = page.getByRole('textbox', { name: 'Text' });
+  const text = page.getByRole('textbox', { name: 'Text (Markdown)' });
   await text.click();
   await page.keyboard.type('## Steps');
   await page.keyboard.press('Enter');
@@ -103,7 +103,7 @@ test('knowledge base: an article opened and published untouched keeps its Markdo
 
   // Find and replace (Ctrl+F, Cmd+F) is CodeMirror's panel inside the editor.
   await page.getByRole('tab', { name: 'Write' }).click();
-  await page.getByRole('textbox', { name: 'Text' }).click();
+  await page.getByRole('textbox', { name: 'Text (Markdown)' }).click();
   await page.keyboard.press('ControlOrMeta+f');
   await expect(page.getByRole('textbox', { name: 'Find' })).toBeFocused();
 });

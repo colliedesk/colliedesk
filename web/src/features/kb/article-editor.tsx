@@ -73,6 +73,9 @@ const subscribeWide = (change: () => void) => {
   return () => query?.removeEventListener('change', change);
 };
 const isWide = () => window.matchMedia?.(wideQuery).matches ?? false;
+// A longer article opens in Write even in a wide window: drawing its preview takes a long task (around 200 ms
+// for 100,000 characters on a slow computer) after every pause in typing. Side by side is a click away.
+export const splitLimit = 20000;
 
 interface ArticleEditorProps {
   article?: KBArticle;
@@ -92,7 +95,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const [base, setBase] = useState(article);
   const [draft, setDraft] = useState<Draft>(() => (article ? draftOf(article) : { title: '', slug: '', body: '', collection_id: defaultCollection }));
   const wide = useSyncExternalStore(subscribeWide, isWide);
-  const [chosen, setMode] = useState<ViewMode>(() => (isWide() ? 'split' : 'edit'));
+  const [chosen, setMode] = useState<ViewMode>(() => (isWide() && (!article || characters(article.body_md) <= splitLimit) ? 'split' : 'edit'));
   const mode: ViewMode = chosen === 'split' && !wide ? 'edit' : chosen;
   const modes: ViewMode[] = wide ? ['edit', 'split', 'preview'] : ['edit', 'preview'];
   const [handle, setHandle] = useState<EditorHandle>();
@@ -246,8 +249,11 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const draftNow = useRef(draft);
   draftNow.current = draft;
   const madeWith = useRef<string>(undefined);
+  // The preview first draws after the editor is on screen, so opening never waits for it.
+  const [previewReady, setPreviewReady] = useState(false);
   const onReady = (ready: EditorHandle) => {
     setHandle(ready);
+    requestAnimationFrame(() => { setTimeout(() => setPreviewReady(true), 0); });
     if (madeWith.current !== undefined && madeWith.current !== draftNow.current.body) ready.load(draftNow.current.body);
   };
   // The preview follows the text at low priority: rendering a long article takes tens of milliseconds, and typing
@@ -302,7 +308,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
               <Part part={editorPart} failed={<div className="kb-editor-loading"><PartUnavailable /></div>} render={({ default: Editor }) => {
                 madeWith.current ??= draft.body;
                 return <Editor initial={madeWith.current} uploads={imageHooks} label={kbMessages.body} describedBy={`${id}-help ${id}-count`} invalid={tooLong} mode={mode}
-                  preview={mode === 'edit' || previewText === null ? undefined : <MarkdownPreview text={previewText} />} onChange={(text) => set({ body: text })} onReady={onReady} />;
+                  preview={mode === 'edit' || !previewReady || previewText === null ? undefined : <MarkdownPreview text={previewText} />} onChange={(text) => set({ body: text })} onReady={onReady} />;
               }} />
               {!handle && <p role="status" className="kb-editor-loading kb-hint">{kbMessages.loadingEditor}</p>}
             </div>
