@@ -29,11 +29,13 @@ export function ArticleLinkPicker({ onPick, onClose, onManageHelpCenter }: Artic
     queryFn: ({ signal }) => kbApi.articles({ q: q || undefined, status: 'published' }, signal),
     enabled, placeholderData: keepPreviousData, refetchOnMount: 'always',
   });
+  // Until the list answers what is in the search box, it shows the answer to the search before.
+  const pending = enabled && (text.trim() !== q || list.isPending || list.isPlaceholderData);
   const state = center.isError || list.isError ? 'failed' : center.isPending || (enabled && list.isPending) ? 'loading' : 'ready';
   const notice = center.data && !enabled && (
     <p className="saved-reply-empty" role="status">{kbMessages.linkHelpCenterOff}{' '}
       {onManageHelpCenter ? <button type="button" className="link-action" onClick={onManageHelpCenter}>{kbMessages.linkOpenSettings}</button> : kbMessages.linkHelpCenterAdmins}</p>
   );
   return <SavedReplyPicker replies={enabled ? list.data?.items ?? [] : []} onPick={onPick} onClose={onClose} state={state} texts={kbMessages.linkPicker}
-    onQueryChange={setText} notice={notice} />;
+    onQueryChange={setText} notice={notice} pending={pending} />;
 }

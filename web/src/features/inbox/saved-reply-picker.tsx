@@ -28,11 +28,14 @@ interface SavedReplyPickerProps<T extends { id: string; title: string }> {
   onQueryChange?: (query: string) => void;
   // Takes the place of the list and its states when there is nothing to pick and a reason to say why.
   notice?: ReactNode;
+  // The source has not answered the latest search yet: the list on screen is the one from before, so
+  // Enter waits for the answer and then picks from it.
+  pending?: boolean;
 }
 
 // SavedReplyPicker is a searchable list the keyboard drives end to end: type to filter by title,
 // arrows to move, Enter to insert, Escape to close. The list is already in memory, so it opens at once.
-export function SavedReplyPicker<T extends { id: string; title: string } = SavedReply>({ replies, onPick, onClose, onManage, state = 'ready', texts = savedReplyTexts, onQueryChange, notice }: SavedReplyPickerProps<T>) {
+export function SavedReplyPicker<T extends { id: string; title: string } = SavedReply>({ replies, onPick, onClose, onManage, state = 'ready', texts = savedReplyTexts, onQueryChange, notice, pending = false }: SavedReplyPickerProps<T>) {
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const search = useRef<HTMLInputElement>(null);
@@ -41,13 +44,19 @@ export function SavedReplyPicker<T extends { id: string; title: string } = Saved
   const current = Math.min(active, matches.length - 1);
   // Without a search, an empty list means there is nothing at all, not nothing that matches.
   const nothing = onQueryChange ? query.trim() === '' : replies.length === 0;
+  const [waiting, setWaiting] = useState(false);
   useEffect(() => search.current?.focus(), []);
+  useEffect(() => {
+    if (!waiting || pending) return;
+    setWaiting(false);
+    if (matches[current]) onPick(matches[current]);
+  }, [waiting, pending, matches, current, onPick]);
   const onKey = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.nativeEvent.isComposing || event.keyCode === 229) return;
     if (event.key === 'Escape') { event.preventDefault(); onClose(true); }
     else if (event.key === 'ArrowDown') { event.preventDefault(); setActive(Math.min(current + 1, matches.length - 1)); }
     else if (event.key === 'ArrowUp') { event.preventDefault(); setActive(Math.max(current - 1, 0)); }
-    else if (event.key === 'Enter') { event.preventDefault(); if (matches[current]) onPick(matches[current]); }
+    else if (event.key === 'Enter') { event.preventDefault(); if (pending) setWaiting(true); else if (matches[current]) onPick(matches[current]); }
   };
   const optionId = (index: number) => `${prefix}-option-${index}`;
   return (
@@ -57,7 +66,7 @@ export function SavedReplyPicker<T extends { id: string; title: string } = Saved
       <input ref={search} type="text" role="combobox" aria-expanded="true" aria-controls={`${prefix}-list`} aria-autocomplete="list"
         aria-activedescendant={matches.length > 0 ? optionId(current) : undefined} aria-label={texts.search}
         placeholder={texts.search} autoComplete="off" value={query} onKeyDown={onKey}
-        onChange={(event) => { setQuery(event.target.value); setActive(0); onQueryChange?.(event.target.value); }} />
+        onChange={(event) => { setQuery(event.target.value); setActive(0); setWaiting(false); onQueryChange?.(event.target.value); }} />
       <ul id={`${prefix}-list`} role="listbox" aria-label={texts.label} onMouseDown={(event) => event.preventDefault()}>
         {matches.map((reply, index) => (
           <li key={reply.id} id={optionId(index)} role="option" aria-selected={index === current} onClick={() => onPick(reply)}

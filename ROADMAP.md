@@ -20,7 +20,7 @@ database schema.
 - **Help Scout importer**: conversations of one inbox, replies, notes, attachments (checksummed),
   inline images, tags and customers, with a reconcile report and undo.
 - **Knowledge base and public help center**: Markdown articles in collections with history and a
-  trash, a media library with images and videos, a help center without scripts on its own address,
+  trash, a media library with images and videos, a public help center without scripts,
   your Freshdesk solution articles imported, and article links in replies.
 - Team settings: invite, deactivate and reactivate agents.
 - **MCP server** so your AI agent (Claude, Codex, Cursor) can work the queue: search, read and

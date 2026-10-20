@@ -76,3 +76,22 @@ test('opening it asks again: the help center turned on in another tab, or an art
   open({}, client);
   expect(await screen.findByRole('option', { name: 'Reset your password' })).toBeInTheDocument();
 });
+
+test('Enter right after typing waits for the search and links what was searched, never the list from before', async () => {
+  let asked = false;
+  let answer: (value: Response) => void = () => {};
+  serve({
+    'GET /api/v1/help-center': () => json(200, center(true)),
+    'GET /api/v1/kb/articles': (call) => (call.search.get('q') === 'refund' ? new Promise<Response>((resolve) => { asked = true; answer = resolve; }) : json(200, { items: [reset, refund], next_cursor: null })),
+  });
+  const onPick = open();
+  await screen.findByRole('option', { name: 'Reset your password', selected: true });
+  const search = screen.getByRole('combobox', { name: 'Search published articles' });
+  fireEvent.change(search, { target: { value: 'refund' } });
+  fireEvent.keyDown(search, { key: 'Enter' });
+  expect(onPick).not.toHaveBeenCalled();
+  await waitFor(() => expect(asked).toBe(true));
+  expect(onPick).not.toHaveBeenCalled();
+  answer(json(200, { items: [refund], next_cursor: null }));
+  await waitFor(() => expect(onPick).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ title: 'Refund steps' })));
+});
