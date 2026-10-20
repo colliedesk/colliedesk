@@ -72,7 +72,11 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   `/media/<id>` is the same rule for a video (`HelpCenterVideo`, path `/api/v1/kb/media/<id>`),
   served with ranges by `attachments.Serve` (`http.ServeContent` on local disk), the app's route
   too; its poster is public under the same rule, at its versioned address only. Every range request
-  counts toward the 600 pages a minute per address. Images are `immutable` for a year: an id always names the
+  counts toward the 600 pages a minute per address, and since that counts requests, not bytes, at
+  most 4 video responses are sent at once to one address and 64 on the server (503 with
+  `Retry-After`; `streams.go`): a player reads one or two ranges at a time. Like an image, a video
+  is public once a published text names its path anywhere, a code block or an HTML comment
+  included, not only in a `<video>` the page shows. Images are `immutable` for a year: an id always names the
   same bytes. A cache that kept one keeps it after the article is unpublished; the id is a random
   UUID that was public while the article was.
 - **Two addresses, one handler.** `APP_ORIGIN/help/<slug>` always works. With `HELP_CENTER_DOMAIN`,

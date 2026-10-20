@@ -11,6 +11,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -68,6 +69,9 @@ type Config struct {
 	// Allow reports whether the client of request may load one more page (or run one more search),
 	// and how long to wait when not. Nil allows everything.
 	Allow func(request *http.Request, search bool) (bool, time.Duration)
+	// Client names the address a request comes from (behind trusted proxies), for the bound on videos
+	// sent at once; nil uses the connection's address.
+	Client func(request *http.Request) string
 }
 
 // Site serves every workspace's help center.
@@ -79,6 +83,8 @@ type Site struct {
 	renders *renders
 	// notFound and notFoundOnHost are the 404 page of an address that is no open help center.
 	notFound, notFoundOnHost []byte
+	// videos bounds the videos being sent at once (streams.go).
+	videos *streams
 }
 
 // New builds the help center from its configuration. It panics when a template is broken, which the
@@ -86,7 +92,7 @@ type Site struct {
 func New(config Config) *Site {
 	config.Origin = strings.TrimRight(config.Origin, "/")
 	config.Domain = strings.ToLower(strings.TrimSpace(config.Domain))
-	site := &Site{config: config, pages: parsePages(), renders: defaultRenders()}
+	site := &Site{config: config, pages: parsePages(), renders: defaultRenders(), videos: newStreams()}
 	if parsed, err := url.Parse(config.Origin); err == nil {
 		site.originHost = strings.ToLower(parsed.Hostname())
 	}
@@ -362,9 +368,31 @@ func (s *Site) video(response http.ResponseWriter, request *http.Request, v view
 		served = attachments.Served{Key: video.PosterKey, ContentType: video.PosterContentType, ETag: video.PosterKey[strings.LastIndex(video.PosterKey, "/")+1:],
 			Cache: "public, max-age=31536000, immutable"}
 	}
+	if !poster {
+		client := s.client(request)
+		if !s.videos.enter(client) {
+			securityHeaders(response.Header())
+			response.Header().Set("Cache-Control", "no-store")
+			response.Header().Set("Retry-After", "5")
+			http.Error(response, "Too many videos are playing; try again in a moment.", http.StatusServiceUnavailable)
+			return
+		}
+		defer s.videos.leave(client)
+	}
 	if !attachments.Serve(response, request, s.config.Objects, served) {
 		s.writeSiteNotFound(response, v)
 	}
+}
+
+func (s *Site) client(request *http.Request) string {
+	if s.config.Client != nil {
+		return s.config.Client(request)
+	}
+	host, _, err := net.SplitHostPort(request.RemoteAddr)
+	if err != nil {
+		return request.RemoteAddr
+	}
+	return host
 }
 
 // image streams an image that a published article shows. It never changes under its id, so any cache

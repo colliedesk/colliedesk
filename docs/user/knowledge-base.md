@@ -146,7 +146,9 @@ camera or phone writes (GPS, subtitles) are removed from the file without changi
 name of the app that wrote a WebM stays. A video can be at most 8,192 pixels on a side. A video can have a
 poster, the still picture shown before it plays. The help center plays a video a published article
 shows from its own address, with seeking, and shows its poster; a video in the trash, or that no
-published article shows, is not public. For now videos are uploaded through the API and AI agents;
+published article shows, is not public. Browsers and proxies may keep a copy of a video once
+it was public, as with images: unpublishing or moving it to the trash stops new readers, not copies
+already made, so keep a video that must stay private out of published articles. For now videos are uploaded through the API and AI agents;
 the library page and the editor's button come next.
 
 ### Publish, unpublish, edit

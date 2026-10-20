@@ -33,6 +33,11 @@ A video plays and seeks with HTTP ranges (`Range`, `206 Partial Content`); keep 
 the proxy, and do not compress `video/*` (Caddy's `encode` leaves video alone; with nginx, leave
 `video/mp4` and `video/webm` out of `gzip_types`).
 
+A help center sends at most 4 videos at once to one reader's address and 64 in all (503 with
+`Retry-After` beyond); set `TRUSTED_PROXIES` so the address is the reader's, not the proxy's. A help
+center video never changes under its address (`Cache-Control: public, immutable`), so a caching
+proxy or CDN in front of `/help/*/media/` takes that load off the server.
+
 Videos take disk room: the server refuses an upload when the disk has less than the video, the
 uploads in progress and 1 GiB free. Back up `ATTACHMENTS_DIR` with the database; a backup and an
 [export](../user/export.md) grow with the videos.
