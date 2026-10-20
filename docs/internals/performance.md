@@ -104,9 +104,25 @@ Warm open (a click on a list row, synthetic data, 5 tickets including a 285 KB H
 
 `corepack pnpm bundle:check` reads the production Vite output. The largest JavaScript asset must be at most 200 KiB gzip. The largest CSS asset must be at most 30 KiB gzip. `make test` and the web CI job build the bundle before running this gate.
 
-On 2026-10-20 the first bundle was 203,268 bytes of 204,800. Plan and billing, the locked screen, the trial survey and their strings (and those of Report a problem) moved to their own chunks, which brought it to 200,433; the knowledge base then added only its rail link and routes (201,420). Its pages, the Markdown editor with `remark-gfm`, and the help center card in Settings are lazy parts; the rail link preloads them on hover and focus.
+On 2026-10-20 the first bundle was 203,268 bytes of 204,800. Plan and billing, the locked screen, the trial survey and their strings (and those of Report a problem) moved to their own chunks, which brought it to 200,433; the knowledge base then added only its rail link and routes (201,420). Its pages with the preview and `remark-gfm`, and the help center card in Settings are lazy parts; the rail link preloads them on hover and focus. The article editor (CodeMirror 6) is a chunk of its own, 117,572 bytes gzip plus 1,502 bytes of CSS, loaded only by an article page; `kb-chunk` is 20,890 bytes. The first bundle went from 201,430 to 201,440 bytes (+10, the names of React hooks the chunks now import) and its CSS from 14,267 to 14,263.
 
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
+
+## Knowledge base editor open and typing
+
+Measured on 2026-10-20 against a local `collie serve` (PostgreSQL on the same host), Chromium, median of 5 runs, from a programmatic click (no hover preload) to the first frame with the content (`performance.now` in the page):
+
+| From the click | 1×, 1,440 px (Side by side) | 4×, 1,440 px | 1×, 1,024 px (Write) | 4×, 1,024 px |
+| --- | --- | --- | --- | --- |
+| Rail → article list | 56 ms | 63 ms | 52 ms | 55 ms |
+| List → editor, 30 characters | 44 ms | 43 ms | 34 ms | 42 ms |
+| List → editor, 10,000 characters | 44 ms | 52 ms | 34 ms | 54 ms |
+| List → editor, 99,600 characters | 40 ms | 54 ms | 38 ms | 61 ms |
+| … and its preview drawn (Side by side) | 145 ms | 435 ms | – | – |
+
+Those articles are flat text. On a structured one (sections of a heading, a paragraph with a link, a numbered and a bulleted list), measured from the click to the second frame after the editor appears, 1,440 px wide, median of 5: 19,500 characters, which opens side by side, 86 ms at 1× and 172 ms at 4× (the preview then draws in one task of 100 ms); 99,600 characters, which opens in Write (`splitLimit`, 20,000), 66 ms and 86 ms. The same 99,600 characters side by side took 269–302 ms at 4× before the limit and the preview's wait for the first frame (`previewReady`).
+
+The editor never waits for the preview: it renders through `useDeferredValue` starting from nothing (without that start value, the first render drew the preview too and 99,600 characters took 359 ms at 4×). Typing in that article, from the key to the frame that shows it (Event Timing, 19 keys 80 ms apart): Write 40 ms median at 1× and 4×; Side by side 48 ms (max 72) at 1× and 64 ms (max 104) at 4×, with `contain: content` on both panes (before it, a key at 4× once took 272 ms). The preview's own render (react-markdown, 51–88 ms at 1× for 100,000 characters) runs 120 ms after typing stops, not between keys.
 
 ## CI phase budget
 

@@ -8,6 +8,7 @@ import { messages } from '../../messages';
 import { SearchIcon } from '../../ui/icons';
 import { typingDelayMs } from '../inbox/inbox-filters';
 import { RouterLink } from '../../ui/router-link';
+import { editorPart } from './editor-part';
 import { SavedReplyTrash } from '../settings/saved-reply-panels';
 import { CollectionForm, CollectionTree } from './collection-panel';
 import type { CollectionValues } from './collection-panel';
@@ -112,7 +113,8 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
           <h1 id="kb-heading">{kbMessages.heading}</h1>
           <p>{kbMessages.description}</p>
         </div>
-        <div className="button-row">
+        {/* A pointer or the focus on these links loads the editor's chunk ahead of the click (editor-part.ts). */}
+        <div className="button-row" onPointerOver={editorPart.preload} onFocus={editorPart.preload}>
           <button type="button" ref={trashButton} aria-expanded={trashOpen} onClick={() => (trashOpen ? closeTrash() : setTrashOpen(true))}>{kbMessages.trash}</button>
           {!noCollections && <RouterLink className="button-link primary-action" href={`/knowledge/new${selected ? `?${new URLSearchParams({ collection: selected.collection.id })}` : ''}`}
             onFollow={() => void navigate({ to: '/knowledge/new', search: selected ? { collection: selected.collection.id } : {} })}>{kbMessages.newArticle}</RouterLink>}
@@ -155,7 +157,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
             <button type="button" className="link-action" onClick={() => void articles.refetch()}>{kbMessages.retry}</button></p>}
           {articles.isPending && <p role="status" className="empty-copy">{messages.loading}</p>}
           {articles.isSuccess && items.length === 0 && <p className="empty-copy">{search.q ? kbMessages.noMatches : kbMessages.noArticles}</p>}
-          {items.length > 0 && <ul className="kb-article-list" aria-busy={articles.isFetching && !articles.isFetchingNextPage}>
+          {items.length > 0 && <ul className="kb-article-list" aria-busy={articles.isFetching && !articles.isFetchingNextPage} onPointerOver={editorPart.preload} onFocus={editorPart.preload}>
             {items.map((article) => <ArticleRow key={article.id} article={article} timezone={timezone}
               collection={selected ? undefined : names.get(article.collection_id)}
               onOpen={() => void navigate({ to: '/knowledge/articles/$articleId', params: { articleId: article.id } })} />)}
