@@ -96,6 +96,8 @@ Warm open (a click on a list row, synthetic data, 5 tickets including a 285 KB H
 
 `corepack pnpm bundle:check` reads the production Vite output. The largest JavaScript asset must be at most 200 KiB gzip. The largest CSS asset must be at most 30 KiB gzip. `make test` and the web CI job build the bundle before running this gate.
 
+On 2026-10-20 the first bundle was 203,268 bytes of 204,800. Plan and billing, the locked screen, the trial survey and their strings (and those of Report a problem) moved to their own chunks, which brought it to 200,433; the knowledge base then added only its rail link and routes (201,420). Its pages, the Markdown editor with `remark-gfm`, and the help center card in Settings are lazy parts; the rail link preloads them on hover and focus.
+
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
 
 ## CI phase budget

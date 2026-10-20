@@ -230,3 +230,17 @@ test('a paused admin can still open the billing portal from the paused screen', 
   await waitFor(() => expect(assign).toHaveBeenCalledWith('https://polar.test/portal'));
   Object.defineProperty(window, 'location', { configurable: true, value: original });
 });
+
+test('the rail opens the knowledge base, which marks Knowledge as the current destination', async () => {
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('agent', null)),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/kb/collections': () => json(200, { items: [] }),
+    '/api/v1/kb/articles': () => json(200, { items: [], next_cursor: null }),
+  });
+  open('/knowledge');
+  expect(await screen.findByRole('heading', { level: 1, name: 'Knowledge base' })).toBeInTheDocument();
+  const rail = screen.getByRole('navigation', { name: 'Main' });
+  expect(within(rail).getByRole('link', { name: 'Knowledge' })).toHaveAttribute('aria-current', 'page');
+  expect(within(rail).getByRole('link', { name: 'Inbox' })).not.toHaveAttribute('aria-current');
+});

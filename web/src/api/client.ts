@@ -153,7 +153,8 @@ export async function request<T>(path: string, schema: z.ZodType<T>, init?: Requ
   if (response.status === 400 || response.status === 409) throw await invalidRequest(response);
   if (response.status === 403 || response.status === 429) throw await outboundRefusal(response);
   if (!response.ok) throw failure(response.status);
-  return schema.parse(await response.json());
+  // 204 has no body: a call that expects one passes a schema that accepts undefined.
+  return schema.parse(response.status === 204 ? undefined : await response.json());
 }
 
 async function requestNoContent(path: string, init: RequestInit): Promise<void> {

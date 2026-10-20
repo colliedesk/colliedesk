@@ -2,9 +2,9 @@
 
 Decisions and traps only. Code: `server/internal/store/kb-*.go`, `server/internal/httpapi/kb-handlers.go`,
 `server/internal/mcpserver/catalog-kb.go` and `tools-kb.go`, `server/internal/domain/kb.go`, migration
-`knowledge-base`. Issue #90. This first part is the data model, the API, the MCP tools and the export;
-the editor and the Freshdesk import come in later pull requests. The public help center is in
-`help-center.md`.
+`knowledge-base`, and the web app in `web/src/features/kb/`. Issue #90. So far: the data model, the API,
+the MCP tools, the export and the editor in the web app; the Freshdesk import comes in a later pull
+request. The public help center is in `help-center.md`.
 
 ## Decisions
 
@@ -56,6 +56,25 @@ the editor and the Freshdesk import come in later pull requests. The public help
   `files_need_approval`, like a multipart upload.
 - **Locked workspaces get 402 on every KB route.** None is in `lockedAllowed`; the export still runs.
 
+## Editor (web app)
+
+- **Lazy, all of it.** The first bundle carries only the rail link and the three routes; the pages, the
+  editor with `remark-gfm` and their styles are the `kb-chunk` part, and the Help center card in
+  Settings is a small part of its own (`features/kb/kb-part.tsx`). `react-markdown` is already in the
+  first bundle for messages, so the preview shares it.
+- **A text is never cut.** The body has no `maxLength` (a browser cuts a paste to it silently); a
+  counter of code points, as the server counts (`[...text].length`, not `.length`), refuses the save.
+- **A lost race keeps the person's text.** On `changed_elsewhere` the editor offers "save mine over
+  theirs" (reads the article again and saves with its `updated_at`; theirs stays in the history) or
+  "discard mine". Every save takes the answer's `updated_at`, so a second save does not race itself.
+- **Images go in by placeholder.** A pasted or dropped image is checked (type, 5 MiB), a placeholder
+  with a unique `#upload-N` target marks its place, and the upload's `url` replaces it; a refusal
+  removes it and shows the server's reason.
+- **Only collection address names break links.** An article's address carries its number, so a new
+  article slug is harmless; a collection's is not redirected, so its form warns before saving.
+- **History and trash are the saved reply panels** (`saved-reply-panels.tsx`), made generic with
+  optional props; the change line reads the same, with `import` added.
+
 ## Traps
 
 - **Default privileges grant UPDATE and DELETE on every new table.** The schema's default privileges
@@ -84,5 +103,8 @@ the editor and the Freshdesk import come in later pull requests. The public help
   every workspace table forces row-level security, which the isolation gate and the upgrade check
   enforce); (2) a leakproof match function installed by a superuser (self-hosters would need one);
   (3) an external search engine.
+- **No object literal inside an API path in the web app.** `TestEveryAPIPathTheWebAppCallsIsARoute`
+  reads a path literal up to its first `}`, so `` `/kb/articles${query({ cursor })}` `` reads as a path
+  that is not a route. `kb-api.ts` builds queries through small helpers called with variables.
 - **`ListKBArticles` pages by offset** (an opaque cursor) because search orders by rank. A workspace holds
   at most 2,000 articles, so the offset stays small.
