@@ -34,6 +34,15 @@ If the gate fails:
 3. Check for N+1 queries, tenant-unscoped scans, missing filter/order indexes, and repeated search scans.
 4. Optimize the query or infrastructure. Do not raise the 100 ms threshold.
 
+## Knowledge base search budget
+
+`TestKnowledgeBaseSearchLatencyBudget` seeds two workspaces with 2,000 articles each (about 9,000
+characters of text, 20 of them at the 100,000-character limit) and calls the article list 50 times per
+path at the largest page: a two-word search, a search that matches nothing, a title search, the
+published articles, and the collections. Each path must stay at or below 100 ms p95. The search reads
+every tsvector of the workspace; see `docs/internals/knowledge-base.md` before raising the article cap
+or the seeded count.
+
 ## Pending agent requests budget
 
 `TestPendingAgentRequestsLatencyBudget` holds the store query behind

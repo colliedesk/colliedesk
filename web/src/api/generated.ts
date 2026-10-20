@@ -1664,7 +1664,7 @@ export interface components {
                 agents: number;
                 /**
                  * Format: int64
-                 * @description Attachment bytes counted against `limits.storage_bytes`. On the trial files of imported messages are not counted; on a paid plan every file is, imported ones included.
+                 * @description Attachment and knowledge base image bytes counted against `limits.storage_bytes`. On the trial files of imported messages are not counted; on a paid plan every file is, imported ones included.
                  */
                 storage_bytes: number;
                 /** @description People reached by the emailed replies of the last 24 hours (the contact plus every Cc address of each reply), which count against the trial cap of 200; 0 on other plans. */

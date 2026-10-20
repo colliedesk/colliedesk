@@ -62,5 +62,12 @@ the editor, the public help center and the Freshdesk import come in later pull r
   attachment would delete the image's bytes.
 - **An agent request holds at most 64 KiB of JSON.** A read or draft token proposing a long article gets
   413; a send token writes it directly.
+- **The GIN index does not carry the search yet.** For a prefix query the planner prefers the
+  `workspace_id` index and reads every tsvector of the workspace (its cost model does not count reading
+  them back from TOAST); a GIN prefix scan over random words was no faster. `TestKnowledgeBaseSearchLatencyBudget`
+  holds 2 × 2,000 articles of about 9,000 characters to 100 ms p95 (about 19 ms locally). At the
+  10,000-article cap a search measured 66–83 ms p95 locally, too close to the budget for a slower
+  runner. Before raising the gate to the cap, measure a composite `(workspace_id, search)` GIN index
+  (`btree_gin`) and whole-word matching first, prefix only for the last word.
 - **`ListKBArticles` pages by offset** (an opaque cursor) because search orders by rank. A workspace holds
   at most 10,000 articles, so the offset stays small.
