@@ -276,7 +276,7 @@ type NewKBMediaUpload struct {
 var (
 	ErrKBMediaUploadNotFound = errors.New("knowledge base media upload not found")
 	// ErrKBMediaUploadLimit means too many uploads in progress, or started this hour.
-	ErrKBMediaUploadLimit = fmt.Errorf("at most %d uploads may be in progress in a workspace and %d started by one person in an hour; finish or cancel one under Uploads in progress on the Media page (GET /api/v1/kb/media-uploads lists them), or wait", MaxKBMediaUploadsOpen, MaxKBMediaUploadsPerHour)
+	ErrKBMediaUploadLimit = fmt.Errorf("at most %d uploads may be in progress in a workspace and %d started by one person in an hour; finish or cancel one under Uploads in progress on the Knowledge → Media page, or wait", MaxKBMediaUploadsOpen, MaxKBMediaUploadsPerHour)
 	// ErrKBMediaUploadNotYours means a cancel of another person's upload by someone who is not an admin.
 	ErrKBMediaUploadNotYours = errors.New("only the person who started this upload, or an admin, can cancel it")
 	// ErrKBMediaUploadIncomplete means a complete before every byte arrived.
