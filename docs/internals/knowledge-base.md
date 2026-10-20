@@ -169,7 +169,9 @@ The public help center is in `help-center.md`.
   for the unused page). The library index carries `size`, `poster_size`, `kept`, `kind` and `name`
   (not `alt`: 500 four-byte characters with the name could pass the 2,704 bytes a btree entry holds),
   and a page selects its ids from it before reading the rows, so the unused page and its summary read
-  the index alone once the visibility map is current.
+  the index alone once the visibility map is current. Until autovacuum has run after a large import
+  they read a heap page per row (32 ms on CI; 7–14 ms locally after the vacuum; inside the 100 ms
+  list budget).
 - **An agent request holds at most 64 KiB of JSON.** A read or draft token proposing a long article gets
   413; a send token writes it directly.
 - **Row-level security turns GIN off for `@@`.** Postgres uses a condition as an index condition on a

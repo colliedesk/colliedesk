@@ -50,13 +50,16 @@ only with this gate, after reading `docs/internals/knowledge-base.md`.
 `seedKBMediaBudget` adds 10,000 library items (`domain.MaxKBMedia`) in the first workspace, spread
 evenly between the rows of 20 other workspaces of 2,000 items each (as interleaved uploads leave a
 workspace's rows, one in five on a page), and five links on each of its 2,000 articles (three
-current). There is no VACUUM, so the visibility map is as stale as right after an import. It calls the
-library list 50 times per path: the first page, a search, the unused items largest first with their
-summary, the items in use, and the items missing alt text sorted by name. Each must stay at or below
-25 ms p95; measured locally on 2026-10-20: 3.5, 12, 17, 4.5 and 8.5 ms. The unused page adds its
-summary with window sums in the scan of its page (two scans took 32–41 ms). The design asked for
-10,000 items in each other workspace too; the measured workspace stays at the cap, but the others hold
-2,000 because 10,000 took 4 s more of seeding on the latency runner, against the 120-second CI budget.
+current), then `VACUUM ANALYZE`, the steady state autovacuum keeps. It calls the library list 50
+times per path: the first page, a search, the unused items largest first with their summary, the
+items in use, and the items missing alt text sorted by name. Each must stay at or below 25 ms p95
+(5–14 ms locally on 2026-10-20; the search, which reads the alt text from the table, 12–18 ms). The
+unused page adds its summary with window sums in the scan of its page (two scans took 32–41 ms
+without the vacuum). Right after a large import, before autovacuum has run, the visibility map is
+stale and the unused page reads a heap page per row: 17 ms locally and 32 ms on CI, inside the 100 ms
+list budget. The design asked for 10,000 items in each other workspace too; the measured workspace
+stays at the cap, but the others hold 2,000 because 10,000 took 4 s more of seeding on the latency
+runner, against the 120-second CI budget.
 
 ## Help center pages budget
 
