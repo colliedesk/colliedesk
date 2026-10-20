@@ -60,7 +60,15 @@ func articleMarkdown(markup string) (string, []string, error) {
 		for child := node.FirstChild; child != nil; {
 			next := child.NextSibling
 			if snippet, ok := kbhtml.PlayerSnippet(child); ok {
-				node.InsertBefore(&html.Node{Type: html.TextNode, Data: mark + strconv.Itoa(len(players)) + "x"}, child)
+				marker := &html.Node{Type: html.TextNode, Data: mark + strconv.Itoa(len(players)) + "x"}
+				if !inCell(node) {
+					// A paragraph of its own: a line that starts with <iframe> is an HTML block in
+					// Markdown, which would take the text after it on that line along.
+					paragraph := &html.Node{Type: html.ElementNode, Data: "p", DataAtom: atom.P}
+					paragraph.AppendChild(marker)
+					marker = paragraph
+				}
+				node.InsertBefore(marker, child)
 				node.RemoveChild(child)
 				players = append(players, snippet)
 				child = next
@@ -118,6 +126,16 @@ func articleMarkdown(markup string) (string, []string, error) {
 
 // htmlTag finds a tag the converter left in the Markdown as raw HTML.
 var htmlTag = regexp.MustCompile(`</?[A-Za-z][A-Za-z0-9-]*(\s[^<>]*)?/?>`)
+
+// inCell tells whether node is or sits in a table cell, where a player stays inline in its row.
+func inCell(node *html.Node) bool {
+	for ; node != nil; node = node.Parent {
+		if node.Type == html.ElementNode && (node.DataAtom == atom.Td || node.DataAtom == atom.Th) {
+			return true
+		}
+	}
+	return false
+}
 
 // holdsBlock tells whether a table cell holds a line break or block content.
 func holdsBlock(cell *html.Node) bool {

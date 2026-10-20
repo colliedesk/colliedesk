@@ -584,7 +584,9 @@ func TestSolutionsKeepYouTubeAndVimeoPlayers(t *testing.T) {
 	env.editSolutions(func(fixture map[string]any) {
 		fixtureArticle(fixture, "11", 101)["description"] = `<p>Intro</p><iframe width="560" height="315" src="https://www.youtube.com/embed/jNQXAC9IVRw?si=x&amp;start=7" title="Tour" frameborder="0" onload="alert(1)" allowfullscreen></iframe>` +
 			`<p>Watch <iframe src="https://player.vimeo.com/video/76979871"></iframe> inline.</p><iframe src="https://evil.example/embed/x"></iframe><video src="https://cdn.example/a.mp4" controls></video>`
-		fixtureArticle(fixture, "11", 102)["description"] = `<p>See</p><div class="video"><iframe src="https://player.vimeo.com/video/1?h=ab12cd34ef"></iframe></div>`
+		// Text beside a player keeps showing: a player gets a paragraph of its own (a table cell keeps it in its row).
+		fixtureArticle(fixture, "11", 102)["description"] = `<p>See</p><div class="video"><iframe src="https://player.vimeo.com/video/1?h=ab12cd34ef"></iframe><br>Step 1: press play</div>` +
+			`<ul><li><iframe src="https://player.vimeo.com/video/2"></iframe> item text</li></ul><table><tr><th>A</th></tr><tr><td><iframe src="https://player.vimeo.com/video/3"></iframe> cell</td></tr></table>`
 	})
 	report := env.mustRun(t)
 	if warningIDs(report, "kb_article_markup_dropped") != "101,106" {
@@ -593,12 +595,18 @@ func TestSolutionsKeepYouTubeAndVimeoPlayers(t *testing.T) {
 	articles := env.kbArticles(t, env.workspaceID)
 	want := "Intro\n\n" +
 		`<iframe src="https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=7" title="Tour" width="560" height="315" allowfullscreen="" loading="lazy"></iframe>` + "\n\n" +
-		`Watch <iframe src="https://player.vimeo.com/video/76979871" title="Vimeo video" loading="lazy"></iframe> inline.`
+		"Watch\n\n" + `<iframe src="https://player.vimeo.com/video/76979871" title="Vimeo video" loading="lazy"></iframe>` + "\n\ninline."
 	if body := articles["101"].Body; body != want {
 		t.Fatalf("body =\n%q\nwant\n%q", body, want)
 	}
-	if body := articles["102"].Body; body != "See\n\n"+`<iframe src="https://player.vimeo.com/video/1?h=ab12cd34ef" title="Vimeo video" loading="lazy"></iframe>` {
-		t.Fatalf("102 body = %q", body)
+	for _, want := range []string{
+		"See\n\n" + `<iframe src="https://player.vimeo.com/video/1?h=ab12cd34ef" title="Vimeo video" loading="lazy"></iframe>` + "\n\nStep 1: press play",
+		"- " + `<iframe src="https://player.vimeo.com/video/2" title="Vimeo video" loading="lazy"></iframe>` + "\n  \n  item text",
+		"| " + `<iframe src="https://player.vimeo.com/video/3" title="Vimeo video" loading="lazy"></iframe>` + " cell |",
+	} {
+		if body := articles["102"].Body; !strings.Contains(body, want) {
+			t.Fatalf("102 body = %q\nwant it to hold %q", body, want)
+		}
 	}
 	var meta string
 	if err := env.pool.QueryRow(context.Background(), `SELECT source_meta->>'markup_dropped' FROM kb_articles WHERE workspace_id=$1 AND source_meta->>'freshdesk_id'='101'`, env.workspaceID).Scan(&meta); err != nil ||
