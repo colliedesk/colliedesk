@@ -210,7 +210,7 @@ jobs:
           JOURNEY_PATTERN: ${{ matrix.pattern }}
         run: corepack pnpm exec vite build && corepack pnpm e2e --grep "$JOURNEY_PATTERN"
   # Builds the server image once, boots it, then runs install.sh exactly as a self-hoster does.
-  # On main the tested image is pushed as sha-<commit>; publish-edge only retags that digest.
+  # On main the image is pushed as sha-<commit>; publish-edge.yml retags that digest after CI.
   image:
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -241,7 +241,7 @@ jobs:
           tags: colliedesk:ci
       # The boot and install checks run in the background while main pushes and attests the image
       # (about 15 seconds). sha-<commit> may therefore exist for a commit that then fails them;
-      # nothing deploys it: edge, which self-hosters and Cloud pull, moves only after ci-ok.
+      # nothing deploys it: edge, which self-hosters and Cloud pull, moves only after CI passed.
       - name: Start the boot and install checks in the background
         env:
           VERSION: ${{ steps.version.outputs.value }}
@@ -383,34 +383,3 @@ jobs:
         run: |
           started=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)
           python3 .github/scripts/ci-budget.py --started-at "$started"
-
-  # Self-hosters on the edge channel pull this tag, so it moves only after ci-ok, and only for
-  # the current head of main: re-running an older run must not move edge backwards.
-  publish-edge:
-    needs: ci-ok
-    if: ${{ !cancelled() && needs.ci-ok.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - id: head
-        run: |
-          head=$(git ls-remote origin refs/heads/main | cut -f1)
-          if [ "$head" = "$GITHUB_SHA" ]; then echo "current=true" >> "$GITHUB_OUTPUT"; else
-            echo "::notice::main moved to $head; edge stays on the newer commit."
-            echo "current=false" >> "$GITHUB_OUTPUT"
-          fi
-      - if: steps.head.outputs.current == 'true'
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      # imagetools works on the registry alone, so the runner's bundled buildx needs no builder
-      # container (setup-buildx cost 7 of this job's 14 seconds).
-      - if: steps.head.outputs.current == 'true'
-        name: Point edge at the tested digest
-        run: docker buildx imagetools create -t ghcr.io/colliedesk/colliedesk:edge "ghcr.io/colliedesk/colliedesk:sha-$GITHUB_SHA"
