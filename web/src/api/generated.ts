@@ -1638,7 +1638,7 @@ export interface paths {
         /** @description Send the next part, at most `part_size` bytes, with `Content-Range: bytes <first>-<last>/<size>`. A part that does not start at the upload's offset is refused with 409 `upload_offset_mismatch`, the offset in `Upload-Offset` and in the answer; send that part again. One part of an upload at a time; a part must arrive within 120 seconds. */
         put: operations["putKBMediaUploadPart"];
         post?: never;
-        /** @description Cancel an upload in progress and throw its parts away. */
+        /** @description Cancel an upload in progress and throw its parts away. A token below `send` gets 403 `files_need_approval`. */
         delete: operations["cancelKBMediaUpload"];
         options?: never;
         head?: never;
