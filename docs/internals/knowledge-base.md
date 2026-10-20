@@ -197,6 +197,12 @@ The public help center is in `help-center.md`.
   plan, but after five runs of a prepared statement Postgres may keep a generic plan, which cannot drop
   the branch and reads every row's alt text from the table: the unused page took 17 ms through the API
   against 5 ms for the same query run once. `ListKBMedia` writes only the conditions a request has.
+- **A library search matches a lowercased copy.** `kb_media.search` is `lower(name || '\n' || alt)`,
+  stored on write, and a search is `search LIKE '%' || lower(q) || '%'`: `ILIKE` on name and alt
+  folded case per character of every row (a search reads the workspace's 10,000 rows), 12 ms locally
+  and 25 ms on CI against the 25 ms budget; the copy takes it to 7–8 ms locally. The alt text cannot go
+  into the library index instead: with the name, 500 characters of 4 bytes pass the 2,704 bytes a
+  btree entry holds (measured: 2,880).
 - **An agent request holds at most 64 KiB of JSON.** A read or draft token proposing a long article gets
   413; a send token writes it directly.
 - **Row-level security turns GIN off for `@@`.** Postgres uses a condition as an index condition on a
