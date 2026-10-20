@@ -38,6 +38,9 @@ ALTER TABLE kb_media
     ADD COLUMN name text NOT NULL DEFAULT '' CHECK (char_length(name) <= 200),
     -- An image's alt text; a video's title for screen readers.
     ADD COLUMN alt text NOT NULL DEFAULT '' CHECK (char_length(alt) <= 500),
+    -- What a library search matches, lowercased once on write: ILIKE folds case per character of every
+    -- row it reads, and a search reads every row of the workspace.
+    ADD COLUMN search text GENERATED ALWAYS AS (lower(name || E'\n' || alt)) STORED,
     ADD COLUMN width integer CHECK (width BETWEEN 1 AND 65535),
     ADD COLUMN height integer CHECK (height BETWEEN 1 AND 65535),
     ADD COLUMN duration_ms bigint CHECK (duration_ms >= 0),

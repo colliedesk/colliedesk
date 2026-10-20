@@ -31,7 +31,7 @@ DROP INDEX kb_media_backfill_idx;
 ALTER TABLE kb_media
     DROP CONSTRAINT kb_media_content_type_check,
     DROP CONSTRAINT kb_media_kind_check_type,
-    DROP COLUMN kind, DROP COLUMN name, DROP COLUMN alt, DROP COLUMN width, DROP COLUMN height,
+    DROP COLUMN kind, DROP COLUMN search, DROP COLUMN name, DROP COLUMN alt, DROP COLUMN width, DROP COLUMN height,
     DROP COLUMN duration_ms, DROP COLUMN codecs, DROP COLUMN thumb_storage_key, DROP COLUMN thumb_size,
     DROP COLUMN poster_storage_key, DROP COLUMN poster_size, DROP COLUMN inspected_at, DROP COLUMN kept,
     DROP COLUMN deleted_at, DROP COLUMN deleted_by_agent_id, DROP COLUMN updated_at, DROP COLUMN updated_by_agent_id,
