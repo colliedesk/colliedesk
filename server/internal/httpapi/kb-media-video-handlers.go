@@ -259,11 +259,7 @@ func (a *API) cancelKBMediaUpload(response http.ResponseWriter, request *http.Re
 	// No wait for a part being written (a page that goes away cannot retry): that part finds the upload
 	// gone when it records itself and removes the file it wrote (dropCancelledParts).
 	// Someone else's upload is theirs to cancel, or an admin's.
-	startedBy := who.Agent.ID
-	if who.Agent.Role == "admin" {
-		startedBy = ""
-	}
-	if err := a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id, startedBy); err != nil {
+	if err := a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id, who.Agent.ID, who.Agent.Role == "admin"); err != nil {
 		writeKBUploadError(response, err)
 		return
 	}
@@ -326,14 +322,14 @@ func (a *API) completeKBMediaUpload(response http.ResponseWriter, request *http.
 		return
 	}
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		_ = a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id, "")
+		_ = a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id, "", true)
 		writeError(response, http.StatusConflict, "upload_lost", "The parts of this upload are gone from the server; start the upload again.")
 		return
 	}
 	video, err := checkKBVideo(path, upload.Size)
 	if err != nil {
 		// The bytes cannot become a library item; the upload goes with them.
-		_ = a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id, "")
+		_ = a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id, "", true)
 		_ = staging.RemoveStaged(id)
 		writeKBUploadError(response, err)
 		return

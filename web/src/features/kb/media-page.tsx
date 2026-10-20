@@ -15,7 +15,7 @@ import type { KBMedia, KBMediaUpload, MediaKind, MediaSort, MediaUsage } from '.
 import { MediaDetail } from './media-detail';
 import { MediaCard, SelectCard, mediaName, usageLabel } from './media-grid';
 import { mediaMessages } from './media-messages';
-import { useUploadQueue } from './media-uploads';
+import { baseName, useUploadQueue } from './media-uploads';
 import type { UploadQueue, UploadRow } from './media-uploads';
 
 export interface MediaSearch {
@@ -141,8 +141,8 @@ function InProgress({ queue, rows }: { queue: UploadQueue; rows: UploadRow[] }) 
         event.target.value = '';
         const upload = resuming.current;
         if (!chosen || !upload) return;
-        // The server knows the size, not the bytes: the size must match, and complete checks the file.
-        if (chosen.size !== upload.size) { setProblem(mediaMessages.notTheSameFile(upload.name)); return; }
+        // The server knows the name and size, not the bytes: both must match, and complete checks the file.
+        if (chosen.size !== upload.size || baseName(chosen.name) !== upload.name) { setProblem(mediaMessages.notTheSameFile(upload.name)); return; }
         setProblem(undefined);
         queue.resumeUpload(chosen, upload.id);
       }} />

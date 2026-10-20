@@ -244,7 +244,7 @@ test('uploads in progress that this page is not sending are listed, go on with t
   expect(section).toHaveTextContent('50% · started by Grace');
   const input = section.querySelector('input[type="file"]') as HTMLInputElement;
   fireEvent.click(within(section).getByRole('button', { name: 'Resume tour: choose the same file' }));
-  fireEvent.change(input, { target: { files: [new File([new Uint8Array(3)], 'other.mp4', { type: 'video/mp4' })] } });
+  fireEvent.change(input, { target: { files: [new File([new Uint8Array(16)], 'other.mp4', { type: 'video/mp4' })] } });
   expect(within(section).getByRole('alert')).toHaveTextContent('That is not tour');
   // An admin cancels anyone's upload.
   fireEvent.click(within(section).getByRole('button', { name: 'Cancel the upload of tour' }));
