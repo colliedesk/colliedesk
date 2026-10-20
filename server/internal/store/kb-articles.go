@@ -219,13 +219,15 @@ func addKBArticleVersion(ctx context.Context, tx pgx.Tx, workspaceID, articleID 
 	return bumpKB(ctx, tx, workspaceID)
 }
 
-// checkKBCollection refuses a collection that is missing or in the trash.
+// checkKBCollection refuses a collection that is missing or in the trash. The share lock holds off a
+// concurrent delete of the collection until this transaction commits, and makes this read wait for one
+// in progress, so a live article never lands in a collection in the trash.
 func checkKBCollection(ctx context.Context, tx pgx.Tx, workspaceID, id string) error {
 	if !savedReplyID.MatchString(id) {
 		return &domain.InvalidKBError{Message: "The collection was not found."}
 	}
 	var live bool
-	err := tx.QueryRow(ctx, `SELECT deleted_at IS NULL FROM kb_collections WHERE workspace_id=$1 AND id=$2`, workspaceID, id).Scan(&live)
+	err := tx.QueryRow(ctx, `SELECT deleted_at IS NULL FROM kb_collections WHERE workspace_id=$1 AND id=$2 FOR SHARE`, workspaceID, id).Scan(&live)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !live) {
 		return &domain.InvalidKBError{Message: "The collection was not found, or it is in the trash."}
 	}
@@ -393,8 +395,9 @@ func (s *Store) UndeleteKBArticle(ctx context.Context, workspaceID string, actor
 			return domain.KBArticle{}, err
 		}
 		var collectionLive bool
+		// Share lock as in checkKBCollection.
 		if err := tx.QueryRow(ctx, `SELECT c.deleted_at IS NULL FROM kb_articles a JOIN kb_collections c ON c.workspace_id=a.workspace_id AND c.id=a.collection_id
-			WHERE a.workspace_id=$1 AND a.id=$2`, workspaceID, id).Scan(&collectionLive); err != nil {
+			WHERE a.workspace_id=$1 AND a.id=$2 FOR SHARE OF c`, workspaceID, id).Scan(&collectionLive); err != nil {
 			return domain.KBArticle{}, err
 		}
 		if !collectionLive {

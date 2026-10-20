@@ -558,3 +558,85 @@ func TestExportCarriesTheWholeKnowledgeBaseAndNoOtherWorkspace(t *testing.T) {
 		}
 	}
 }
+
+// A move into a collection, or an undelete, that runs while the collection is being deleted waits
+// for the delete and then refuses: a live article never ends up inside a collection in the trash.
+func TestKnowledgeBaseArticleNeverLandsInACollectionBeingDeleted(t *testing.T) {
+	api, service, pool, _ := testAPIWithStorage(t)
+	admin := createSession(t, api, service, "KB Race", "admin@kb-race.example.com")
+	home := kbCollection(t, api, admin, map[string]any{"name": "Home"})
+	target := kbCollection(t, api, admin, map[string]any{"name": "Target"})
+	article := kbArticle(t, api, admin, map[string]any{"collection_id": home.ID, "title": "Mover", "body_md": "x"})
+	ctx := context.Background()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	// The delete of the target, between its emptiness check and its commit.
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM kb_collections WHERE id=$1 FOR UPDATE`, target.ID); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		done <- serve(api, newRequest(t, http.MethodPatch, "/api/v1/kb/articles/"+article.ID, map[string]any{"updated_at": article.UpdatedAt, "collection_id": target.ID}, admin, nil))
+	}()
+	select {
+	case response := <-done:
+		t.Fatalf("the move did not wait for the delete: status=%d body=%s", response.Code, response.Body.String())
+	case <-time.After(300 * time.Millisecond):
+	}
+	if _, err := tx.Exec(ctx, `UPDATE kb_collections SET deleted_at=now(), updated_at=now() WHERE id=$1`, target.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if response := <-done; response.Code != http.StatusBadRequest {
+		t.Fatalf("move into a collection deleted meanwhile: status=%d body=%s, want 400", response.Code, response.Body.String())
+	}
+	var current kbArticleView
+	kbCall(t, api, http.MethodGet, "/api/v1/kb/articles/"+article.ID, nil, admin, http.StatusOK, &current)
+	if current.CollectionID != home.ID {
+		t.Fatalf("article is in %s, want %s", current.CollectionID, home.ID)
+	}
+}
+
+// A lower tier's knowledge base write waits for a person; once approved it runs as that person, and
+// the version names the token that asked and the request.
+func TestApprovedKnowledgeBaseRequestsRunAndNameTheirToken(t *testing.T) {
+	api, service, _, _ := testAPIWithStorage(t)
+	admin := createSession(t, api, service, "KB Approvals", "admin@kb-approvals.example.com")
+	read := issueToken(t, api, admin, "Proposer", "read").Token
+	send := issueToken(t, api, admin, "Writer", "send").Token
+	collection := kbCollection(t, api, admin, map[string]any{"name": "Docs"})
+
+	filed := accepted(t, api, http.MethodPost, "/api/v1/kb/articles", map[string]any{"collection_id": collection.ID, "title": "Proposed guide", "body_md": "Steps."}, read)
+	if response := approve(t, api, admin, filed.RequestID, nil); response.Code != http.StatusOK {
+		t.Fatalf("approve article status=%d body=%s", response.Code, response.Body.String())
+	}
+	var page struct {
+		Items []kbArticleView `json:"items"`
+	}
+	kbCall(t, api, http.MethodGet, "/api/v1/kb/articles", nil, admin, http.StatusOK, &page)
+	if len(page.Items) != 1 || page.Items[0].Title != "Proposed guide" {
+		t.Fatalf("articles after approval = %+v", page.Items)
+	}
+	change := page.Items[0].LastChange
+	if change == nil || change.AgentRequestID == nil || *change.AgentRequestID != filed.RequestID || change.Token == nil || change.Token.Label != "Proposer" || change.ChangedBy == nil {
+		t.Fatalf("approved version = %+v", change)
+	}
+
+	asked := accepted(t, api, http.MethodPut, "/api/v1/help-center", map[string]any{"enabled": true, "title": "Help", "locale": "de"}, send)
+	if response := approve(t, api, admin, asked.RequestID, nil); response.Code != http.StatusOK {
+		t.Fatalf("approve help center status=%d body=%s", response.Code, response.Body.String())
+	}
+	var center struct {
+		Enabled bool   `json:"enabled"`
+		Locale  string `json:"locale"`
+	}
+	kbCall(t, api, http.MethodGet, "/api/v1/help-center", nil, admin, http.StatusOK, &center)
+	if !center.Enabled || center.Locale != "de" {
+		t.Fatalf("help center after approval = %+v", center)
+	}
+}
