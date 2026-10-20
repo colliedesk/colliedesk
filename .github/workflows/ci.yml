@@ -113,16 +113,8 @@ jobs:
         run: corepack pnpm install --frozen-lockfile
       - name: Typecheck, test, and build
         working-directory: web
-        # The type check runs beside the unit tests instead of before them: it took 12 of the step's 77
-        # seconds on 2026-10-20 and uses one core while Vitest's workers use the others.
-        run: |
-          corepack pnpm typecheck > "$RUNNER_TEMP/typecheck.log" 2>&1 &
-          typecheck=$!
-          if corepack pnpm test; then tests=0; else tests=1; fi
-          if wait "$typecheck"; then checked=0; else checked=1; fi
-          cat "$RUNNER_TEMP/typecheck.log"
-          [ "$tests$checked" = 00 ]
-          corepack pnpm exec vite build && corepack pnpm bundle:check
+        # The type check runs in the e2e job, which finishes early; Vitest was this job's long pole.
+        run: corepack pnpm test && corepack pnpm exec vite build && corepack pnpm bundle:check
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -174,6 +166,11 @@ jobs:
       - name: Install frozen dependencies
         working-directory: web
         run: corepack pnpm install --frozen-lockfile
+      # The API drift and TypeScript checks of the web app: here, while Chromium installs and the
+      # database starts, not in the web job, where Vitest already takes the whole step.
+      - name: Start the type check in the background
+        working-directory: web
+        run: sh ../.github/scripts/ci-background.sh start typecheck corepack pnpm typecheck
       - name: Install Chromium
         working-directory: web
         run: corepack pnpm exec playwright install --only-shell chromium
@@ -184,6 +181,9 @@ jobs:
       - name: Run end-to-end workflows
         working-directory: web
         run: corepack pnpm exec vite build && corepack pnpm e2e --grep-invert @onboarding --fully-parallel --workers=3
+      - name: The web app type-checks and matches the API contract
+        if: ${{ !cancelled() }}
+        run: sh .github/scripts/ci-background.sh wait typecheck
   # The customer onboarding journeys listed in AGENTS.md. A separate job so they run in parallel
   # with the other end-to-end tests; every test runs in exactly one of the two jobs.
   onboarding:

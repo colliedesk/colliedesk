@@ -6,7 +6,9 @@ RUN corepack pnpm install --frozen-lockfile
 COPY contracts /src/contracts
 COPY web ./
 COPY server/internal/webui/static /src/server/internal/webui/static
-RUN corepack pnpm build
+# Only the Vite build: the e2e job runs the API drift and type checks on the same commit, and here
+# they competed for the runner's cores with the Go stage, the image's long pole.
+RUN corepack pnpm exec vite build
 
 # Alpine only builds the static binary (CGO_ENABLED=0). Its pull is 75 MB against 302 MB for
 # bookworm, whose pull took about 25 seconds in CI while the Go stage waited for it.
