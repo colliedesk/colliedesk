@@ -368,7 +368,7 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 		s.writeError(response, err)
 		return
 	}
-	rendered := s.renders.article(v.site.WorkspaceID, article.Number, v.base, article.BodyMD)
+	rendered := s.renders.article(v.site.WorkspaceID, article.Number, v.base, article.BodyMD, article.Videos...)
 	collection := t.byID[article.CollectionID]
 	data := s.page(v, article.Title, v.crumbs(collection))
 	data.Heading, data.Body = article.Title, rendered.body

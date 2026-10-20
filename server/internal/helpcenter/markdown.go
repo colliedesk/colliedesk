@@ -1,6 +1,7 @@
 package helpcenter
 
 import (
+	"bufio"
 	"bytes"
 	"html"
 	"html/template"
@@ -74,22 +75,71 @@ var emailAddress = regexp.MustCompile("^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A
 var plain = goldmark.New(goldmark.WithExtensions(extension.Strikethrough, extension.Table),
 	goldmark.WithParserOptions(parser.WithASTTransformers(util.Prioritized(hiddenText{}, 200))))
 
-// baseKey carries the help center's base path to publicLinks.
-var baseKey = parser.NewContextKey()
+// baseKey carries the help center's base path to publicLinks; libraryKey the page's library to
+// hiddenText, which must leave out what rawHTML will.
+var baseKey, libraryKey = parser.NewContextKey(), parser.NewContextKey()
 
 // kbImageID matches the path an article uses for its own images, as the API writes it (lowercase):
 // the public image route looks for exactly this path in the published text.
 var kbImageID = regexp.MustCompile(`^` + regexp.QuoteMeta(domain.KBImagePath) + `([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$`)
 
-// renderArticle turns an article's Markdown into HTML for a help center at base.
+// renderArticle turns an article's Markdown into HTML for a help center at base, with no library
+// video known.
 func renderArticle(body, base string) (template.HTML, error) {
+	return renderArticleWith(body, base, nil)
+}
+
+// renderArticleWith is renderArticle for a text whose library videos are videos: each plays from the
+// help center at base, with its poster and size; any other <video> is left out.
+func renderArticleWith(body, base string, videos []domain.PublicKBVideo) (template.HTML, error) {
 	var out bytes.Buffer
 	context := parser.NewContext(parser.WithIDs(&headingIDs{used: map[string]bool{}, next: map[string]int{}}))
 	context.Set(baseKey, base)
-	if err := markdown.Convert(tame([]byte(body)), &out, parser.WithContext(context)); err != nil {
+	library := publicLibrary(base, videos)
+	context.Set(libraryKey, library)
+	// The node renderers are shared by every render; the writer carries this page's library to them.
+	writer := &pageWriter{Writer: bufio.NewWriter(&out), library: library}
+	if err := markdown.Convert(tame([]byte(body)), writer, parser.WithContext(context)); err != nil {
+		return "", err
+	}
+	if err := writer.Flush(); err != nil {
 		return "", err
 	}
 	return template.HTML(out.String()), nil //nolint:gosec // goldmark escapes text; rawHTML keeps only kbhtml's output
+}
+
+// pageWriter is the buffered writer goldmark renders a page into, with the library of that page.
+type pageWriter struct {
+	*bufio.Writer
+	library kbhtml.Library
+}
+
+func libraryOf(writer util.BufWriter) kbhtml.Library {
+	if page, ok := writer.(*pageWriter); ok {
+		return page.library
+	}
+	return publicLibrary("", nil)
+}
+
+// publicLibrary finds the videos of a page at base: the help center's own addresses, the poster's
+// version in its address, and the size scaled to the 4,096 pixels a page's attribute takes.
+func publicLibrary(base string, videos []domain.PublicKBVideo) kbhtml.Library {
+	return func(id string) (kbhtml.Video, bool) {
+		for _, video := range videos {
+			if video.ID != id {
+				continue
+			}
+			found := kbhtml.Video{Src: base + "/media/" + id, Width: video.Width, Height: video.Height}
+			if video.PosterVersion != "" {
+				found.Poster = base + "/media/" + id + "/poster/" + video.PosterVersion
+			}
+			if side := max(found.Width, found.Height); side > 4096 {
+				found.Width, found.Height = max(1, found.Width*4096/side), max(1, found.Height*4096/side)
+			}
+			return found, true
+		}
+		return kbhtml.Video{}, false
+	}
 }
 
 // rawHTML renders each piece of raw HTML through kbhtml, the allowlist the editor preview shares:
@@ -112,7 +162,7 @@ func (rawHTML) RegisterFuncs(registerer renderer.NodeRendererFuncRegisterer) {
 		if block.HasClosure() {
 			raw.Write(block.ClosureLine.Value(source))
 		}
-		shown, _ := kbhtml.Fragment(raw.String())
+		shown, _ := kbhtml.FragmentIn(raw.String(), libraryOf(writer))
 		_, _ = writer.WriteString(shown)
 		return ast.WalkContinue, nil
 	})
@@ -120,7 +170,7 @@ func (rawHTML) RegisterFuncs(registerer renderer.NodeRendererFuncRegisterer) {
 		if !entering {
 			return ast.WalkSkipChildren, nil
 		}
-		shown, _ := kbhtml.Fragment(string(node.(*ast.RawHTML).Segments.Value(source)))
+		shown, _ := kbhtml.FragmentIn(string(node.(*ast.RawHTML).Segments.Value(source)), libraryOf(writer))
 		_, _ = writer.WriteString(shown)
 		return ast.WalkSkipChildren, nil
 	})
@@ -131,8 +181,12 @@ func (rawHTML) RegisterFuncs(registerer renderer.NodeRendererFuncRegisterer) {
 // paragraph left with nothing to show.
 type hiddenText struct{}
 
-func (hiddenText) Transform(document *ast.Document, reader text.Reader, _ parser.Context) {
+func (hiddenText) Transform(document *ast.Document, reader text.Reader, context parser.Context) {
 	source := reader.Source()
+	library, _ := context.Get(libraryKey).(kbhtml.Library)
+	if library == nil {
+		library = publicLibrary("", nil)
+	}
 	var empty []ast.Node
 	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering || !hasInline(node) {
@@ -155,7 +209,7 @@ func (hiddenText) Transform(document *ast.Document, reader text.Reader, _ parser
 				node.RemoveChild(node, child)
 			case isRaw:
 				hidden = kbhtml.HidesWhatFollows(value)
-				if out, _ := kbhtml.Fragment(value); out != "" {
+				if out, _ := kbhtml.FragmentIn(value, library); out != "" {
 					shown = true
 				}
 			default:

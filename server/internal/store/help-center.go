@@ -112,9 +112,26 @@ func (s *Store) HelpCenterArticles(ctx context.Context, workspaceID string, coll
 func (s *Store) HelpCenterArticle(ctx context.Context, workspaceID string, number int64) (domain.PublicKBArticle, error) {
 	article, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.PublicKBArticle, error) {
 		var body string
-		article, err := scanPublicKBArticle(tx.QueryRow(ctx, `SELECT `+publicKBArticleColumns+`, a.body_md FROM kb_articles a
-			WHERE `+publishedKBArticle+` AND a.number=$2`, workspaceID, number), &body)
+		var id string
+		article, err := scanPublicKBArticle(tx.QueryRow(ctx, `SELECT `+publicKBArticleColumns+`, a.body_md, a.id::text FROM kb_articles a
+			WHERE `+publishedKBArticle+` AND a.number=$2`, workspaceID, number), &body, &id)
 		article.BodyMD = body
+		if err != nil || !strings.Contains(body, domain.KBMediaPath) {
+			return article, err
+		}
+		// The videos its current text links, in the same transaction: the page shows their poster and size.
+		rows, err := tx.Query(ctx, `SELECT m.id::text, COALESCE(m.width,0), COALESCE(m.height,0), COALESCE(right(m.poster_storage_key,8),'')
+			FROM kb_article_media l JOIN kb_media m ON m.workspace_id=l.workspace_id AND m.id=l.media_id
+			WHERE l.workspace_id=$1 AND l.article_id=$2 AND l.current AND m.kind='video' AND m.deleted_at IS NULL
+			ORDER BY m.id`, workspaceID, id)
+		if err != nil {
+			return article, err
+		}
+		article.Videos, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.PublicKBVideo, error) {
+			var video domain.PublicKBVideo
+			err := row.Scan(&video.ID, &video.Width, &video.Height, &video.PosterVersion)
+			return video, err
+		})
 		return article, err
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -124,6 +141,29 @@ func (s *Store) HelpCenterArticle(ctx context.Context, workspaceID string, numbe
 		return domain.PublicKBArticle{}, fmt.Errorf("get help center article: %w", err)
 	}
 	return article, nil
+}
+
+// HelpCenterVideo returns a video the help center may play, by the rule of HelpCenterImage: the
+// current text of a published article outside the trash links it by its media path, and it is not in
+// the library's trash.
+func (s *Store) HelpCenterVideo(ctx context.Context, workspaceID, id string) (StoredKBMedia, error) {
+	if !savedReplyID.MatchString(id) || id != strings.ToLower(id) {
+		return StoredKBMedia{}, domain.ErrKBMediaNotFound
+	}
+	video, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (StoredKBMedia, error) {
+		return scanKBMedia(tx.QueryRow(ctx, `SELECT `+kbMediaColumns+` FROM kb_media m WHERE m.workspace_id=$1 AND m.id=$2
+			AND m.kind='video' AND m.deleted_at IS NULL AND EXISTS (
+			SELECT 1 FROM kb_article_media l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
+			WHERE l.workspace_id=$1 AND l.media_id=$2 AND l.current AND `+publishedKBArticle+` AND strpos(a.body_md, $3) > 0)`,
+			workspaceID, id, domain.KBMediaPath+id))
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return StoredKBMedia{}, domain.ErrKBMediaNotFound
+	}
+	if err != nil {
+		return StoredKBMedia{}, fmt.Errorf("get help center video: %w", err)
+	}
+	return video, nil
 }
 
 // helpCenterExcerptChars is how much of an article's text a search result reads for its excerpt.

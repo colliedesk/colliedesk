@@ -174,6 +174,8 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, slug, 
 		s.article(response, request, view, strings.TrimPrefix(sub, "/a/"))
 	case strings.HasPrefix(sub, "/images/"):
 		s.image(response, request, view, strings.TrimPrefix(sub, "/images/"))
+	case strings.HasPrefix(sub, "/media/"):
+		s.video(response, request, view, strings.TrimPrefix(sub, "/media/"))
 	case sub == "/robots.txt" && base == "":
 		s.robots(response, request, view)
 	default:
@@ -328,6 +330,40 @@ func (s *Site) robots(response http.ResponseWriter, request *http.Request, v vie
 	response.Header().Set("X-Content-Type-Options", "nosniff")
 	if request.Method != http.MethodHead {
 		_, _ = io.WriteString(response, body)
+	}
+}
+
+// video plays a library video that a published article shows (<id>), with ranges, or its poster
+// (<id>/poster/<version>), by the rule of image. A poster's address holds the end of its content
+// address, so an older version is a 404, never another picture a cache would keep.
+func (s *Site) video(response http.ResponseWriter, request *http.Request, v view, address string) {
+	site := v.site
+	id, version, poster := strings.Cut(address, "/poster/")
+	if s.config.Objects == nil || strings.Contains(id, "/") {
+		s.writeSiteNotFound(response, v)
+		return
+	}
+	video, err := s.config.Store.HelpCenterVideo(request.Context(), site.WorkspaceID, id)
+	if errors.Is(err, domain.ErrKBMediaNotFound) || err == nil && !strings.HasPrefix(video.StorageKey, site.WorkspaceID+"/") {
+		s.writeSiteNotFound(response, v)
+		return
+	}
+	if err != nil {
+		s.writeError(response, err)
+		return
+	}
+	served := attachments.Served{Key: video.StorageKey, ContentType: video.ContentType, Size: video.Size, ETag: video.SHA256,
+		Cache: "public, max-age=31536000, immutable"}
+	if poster {
+		if video.PosterKey == "" || !strings.HasPrefix(video.PosterKey, site.WorkspaceID+"/") || len(version) != 8 || !strings.HasSuffix(video.PosterKey, version) {
+			s.writeSiteNotFound(response, v)
+			return
+		}
+		served = attachments.Served{Key: video.PosterKey, ContentType: video.PosterContentType, ETag: video.PosterKey[strings.LastIndex(video.PosterKey, "/")+1:],
+			Cache: "public, max-age=31536000, immutable"}
+	}
+	if !attachments.Serve(response, request, s.config.Objects, served) {
+		s.writeSiteNotFound(response, v)
 	}
 }
 

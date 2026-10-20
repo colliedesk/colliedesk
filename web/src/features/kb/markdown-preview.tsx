@@ -60,12 +60,8 @@ function articleHtml() {
       );
     };
     visit(tree);
-    const waiting = dropped.includes('video (media library)');
-    const others = dropped.filter((what) => what !== 'video (media library)');
-    if (!waiting && others.length === 0) return;
-    const text = [others.length ? kbMessages.htmlLeftOut(others.join(', ')) : '', waiting ? kbMessages.libraryVideoLater : '']
-      .filter(Boolean)
-      .join(' ');
+    if (dropped.length === 0) return;
+    const text = kbMessages.htmlLeftOut(dropped.join(', '));
     tree.children?.unshift({
       type: 'element',
       tagName: 'p',

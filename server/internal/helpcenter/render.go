@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"html"
 	"html/template"
 	"log"
@@ -13,11 +14,13 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
 // renderVersion changes when rendering changes, so a cached article is never served as an older
 // renderer wrote it.
-const renderVersion = "1"
+const renderVersion = "2"
 
 // renderWait is how long a visitor waits for an article to render before getting its text as it
 // is. Articles render in 1–20 ms, so only a text built to be slow reaches it.
@@ -48,7 +51,7 @@ func (r rendered) size() int { return len(r.body) + len(r.description) }
 //   - A visitor waits at most wait, then gets the text escaped as it is; the render goes on and
 //     keeps its page for the next visitor.
 type renders struct {
-	render func(body, base string) (rendered, error)
+	render func(body, base string, videos []domain.PublicKBVideo) (rendered, error)
 	slots  chan struct{}
 	wait   time.Duration
 	limit  int
@@ -73,15 +76,15 @@ type flight struct {
 	ok   bool
 }
 
-func newRenders(render func(body, base string) (rendered, error), slots int, wait time.Duration, limit int) *renders {
+func newRenders(render func(body, base string, videos []domain.PublicKBVideo) (rendered, error), slots int, wait time.Duration, limit int) *renders {
 	return &renders{render: render, slots: make(chan struct{}, slots), wait: wait, limit: limit,
 		order: list.New(), pages: map[string]*list.Element{}, flights: map[string]*flight{}, busy: map[string]chan struct{}{}}
 }
 
 // defaultRenders renders with renderArticle, a quarter of the processors at once (at least two).
 func defaultRenders() *renders {
-	return newRenders(func(body, base string) (rendered, error) {
-		page, err := renderArticle(body, base)
+	return newRenders(func(body, base string, videos []domain.PublicKBVideo) (rendered, error) {
+		page, err := renderArticleWith(body, base, videos)
 		if err != nil {
 			return rendered{}, err
 		}
@@ -89,15 +92,20 @@ func defaultRenders() *renders {
 	}, max(2, runtime.GOMAXPROCS(0)/4), renderWait, renderCacheBytes)
 }
 
-func renderKey(workspaceID string, number int64, base, body string) string {
-	sum := sha256.Sum256([]byte(renderVersion + "\x00" + workspaceID + "\x00" + strconv.FormatInt(number, 10) + "\x00" + base + "\x00" + body))
-	return hex.EncodeToString(sum[:])
+func renderKey(workspaceID string, number int64, base, body string, videos []domain.PublicKBVideo) string {
+	key := sha256.New()
+	key.Write([]byte(renderVersion + "\x00" + workspaceID + "\x00" + strconv.FormatInt(number, 10) + "\x00" + base + "\x00" + body))
+	// A new poster or a video gone to the trash is a new page, though the text is the same.
+	for _, video := range videos {
+		fmt.Fprintf(key, "\x00%s %d %d %s", video.ID, video.Width, video.Height, video.PosterVersion)
+	}
+	return hex.EncodeToString(key.Sum(nil))
 }
 
 // article returns the page of an article: rendered, or its text escaped as it is when rendering
-// would keep the visitor waiting.
-func (r *renders) article(workspaceID string, number int64, base, body string) rendered {
-	key := renderKey(workspaceID, number, base, body)
+// would keep the visitor waiting. videos are the library videos the text may show.
+func (r *renders) article(workspaceID string, number int64, base, body string, videos ...domain.PublicKBVideo) rendered {
+	key := renderKey(workspaceID, number, base, body, videos)
 	deadline := time.NewTimer(r.wait)
 	defer deadline.Stop()
 	for {
@@ -134,7 +142,7 @@ func (r *renders) article(workspaceID string, number int64, base, body string) r
 			return plainPage(body)
 		}
 		go func() {
-			page, err := r.render(body, base)
+			page, err := r.render(body, base, videos)
 			<-r.slots
 			if err != nil {
 				log.Printf("help center: render an article of workspace %s: %v", workspaceID, err)

@@ -79,7 +79,6 @@ export const kbMessages = {
   insert: 'Insert',
   nothingToPreview: 'Nothing to preview yet.',
   htmlLeftOut: (what: string) => `Left out of the article: ${what}. Articles show YouTube and Vimeo players and no other HTML; your saved text keeps it as written.`,
-  libraryVideoLater: 'Videos from the media library are not shown yet.',
   videoLinkNotHttps: 'Paste the whole link, starting with https://.',
   videoLinkOtherSite: (host: string) => `${host} is not a video site articles can show: paste a YouTube or Vimeo link.`,
   videoLinkFile: 'A link to a video file cannot be shown: paste a YouTube or Vimeo link.',

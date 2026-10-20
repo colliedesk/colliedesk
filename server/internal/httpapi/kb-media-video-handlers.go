@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -387,28 +386,9 @@ func downloadName(item store.StoredKBMedia) string {
 // serveKBMediaBytes serves stored bytes that never change under their key, with ranges when the backend
 // can seek (local disk), and nothing in them able to run.
 func serveKBMediaBytes(response http.ResponseWriter, request *http.Request, objects attachments.Storage, key, contentType string, size int64, sha, disposition, name string) {
-	body, err := objects.Open(request.Context(), key)
-	if err != nil {
-		log.Printf("knowledge base media %s: open stored bytes: %v", key, err)
+	if !attachments.Serve(response, request, objects, attachments.Served{Key: key, ContentType: contentType, Size: size, ETag: sha,
+		Cache: "private, max-age=31536000, immutable", Disposition: disposition + `; filename="` + name + `"`}) {
 		writeKBMediaError(response, domain.ErrKBMediaNotFound)
-		return
-	}
-	defer body.Close()
-	header := response.Header()
-	header.Set("Content-Type", contentType)
-	header.Set("X-Content-Type-Options", "nosniff")
-	header.Set("Content-Security-Policy", "default-src 'none'; sandbox")
-	header.Set("Cache-Control", "private, max-age=31536000, immutable")
-	header.Set("ETag", `"`+sha+`"`)
-	header.Set("Content-Disposition", disposition+`; filename="`+name+`"`)
-	if seeker, ok := body.(io.ReadSeeker); ok {
-		http.ServeContent(response, request, "", time.Time{}, seeker)
-		return
-	}
-	header.Set("Content-Length", strconv.FormatInt(size, 10))
-	response.WriteHeader(http.StatusOK)
-	if _, err := io.Copy(response, body); err != nil && !errors.Is(err, context.Canceled) {
-		log.Printf("knowledge base media %s: stream: %v", key, err)
 	}
 }
 

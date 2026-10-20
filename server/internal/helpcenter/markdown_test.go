@@ -79,7 +79,7 @@ func TestArticleMarkdownShowsAllowedPlayersAndNoOtherHTML(t *testing.T) {
 			t.Errorf("rendered %s\nwant it to hold %s", got, want)
 		}
 	}
-	// A library video waits for the media library: until then the page shows no broken player.
+	// A video the library does not know (renderArticle knows none) shows no broken player.
 	// Other HTML goes with its text, as it always did; words between inline tags are Markdown and stay.
 	for _, bad := range []string{"<b>", "<div", "<span", "Note", "here", "<video", "/api/v1/", "youtube.com/"} {
 		if strings.Contains(got, bad) {

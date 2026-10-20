@@ -33,10 +33,11 @@
     }
   },
   "video": {
-    "enabled": false,
-    "disabledBecause": "Turned on with the media library: until /api/v1/kb/media serves files, a <video> would only show a broken player. Its poster, width and height will come from the library, not from the article.",
+    "enabled": true,
+    "about": "A video of the workspace's media library; its poster, and a width and height the author did not give, come from the library, never from the article (no poster attribute). The help center plays it from its own address. No autoplay: a reader starts it.",
     "attributes": ["src", "title", "aria-label", "width", "height", "controls", "preload", "muted", "loop", "playsinline"],
     "src": "^/api/v1/kb/media/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    "prefix": "/api/v1/kb/media/",
     "preload": ["none", "metadata"],
     "flags": ["muted", "loop", "playsinline"]
   },
