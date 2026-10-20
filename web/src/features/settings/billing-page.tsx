@@ -28,16 +28,11 @@ function periodNote(billing: Billing, timezone: string): string | null {
 }
 
 const isPaid = (billing: Billing) => billing.plan !== 'trial' && billing.plan !== 'none';
-// The plan with more storage a workspace can move to; Team and Team 25 raise the cap by asking us.
-const storageUpgradePlan: Partial<Record<Billing['plan'], string>> = { solo: messages.plans.small, small: messages.plans.team, founding: messages.plans.team };
-const paidStorageNext = (billing: Billing) => {
-  const next = storageUpgradePlan[billing.plan];
-  return next ? messages.storageUpgradeTo(next) : messages.storageContactUs;
-};
-const paidStorageWarningNext = (billing: Billing) => {
-  const next = storageUpgradePlan[billing.plan];
-  return next ? messages.storageWarningUpgradeTo(next) : messages.storageContactUs;
-};
+// The server names the plan with more storage it sells; without one the cap is raised by asking us.
+const paidStorageNext = (billing: Billing) =>
+  billing.storage_upgrade_plan ? messages.storageUpgradeTo(messages.plans[billing.storage_upgrade_plan]) : messages.storageContactUs;
+const paidStorageWarningNext = (billing: Billing) =>
+  billing.storage_upgrade_plan ? messages.storageWarningUpgradeTo(messages.plans[billing.storage_upgrade_plan]) : messages.storageContactUs;
 
 // StorageFull says what the cap does once it is reached, which differs by plan: on a paid plan customer
 // email is always stored, on the trial and when locked it is refused. Below the cap the 80% warning
@@ -80,6 +75,8 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
           {checkoutReturned && <p role="status">{messages.checkoutReturned}</p>}
           {billing.active_subscriptions > 1 && <p role="alert" className="error-copy">{messages.duplicateSubscriptions}</p>}
           {billing.status === 'past_due' && <p role="alert" className="error-copy">{messages.pastDueNotice}</p>}
+          {isPaid(billing) && billing.usage.agents > billing.limits.agents && <p role="alert" aria-label={messages.usageAgents} className="error-copy">
+            {messages.agentsOverPlan(billing.usage.agents - billing.limits.agents, messages.plans[billing.plan])}</p>}
           <section className="current-plan-card" aria-labelledby="current-plan-heading">
             <div className="current-plan">
               <h2 className="settings-group-label" id="current-plan-heading">{messages.currentPlan}</h2>
@@ -110,7 +107,7 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
           </section>
           {(billing.plan === 'trial' || billing.plan === 'none') && <section className="settings-card" aria-labelledby="upgrade-heading">
             <div className="section-heading"><h2 id="upgrade-heading">{messages.upgradeHeading}</h2><p>{messages.upgradeHelp}</p></div>
-            <div className="settings-body"><PlanPicker sellable={billing.checkout_plans} busy={busy} onChoose={onCheckout} /></div>
+            <div className="settings-body"><PlanPicker sellable={billing.checkout_plans} refusals={billing.checkout_refusals} busy={busy} onChoose={onCheckout} /></div>
           </section>}
         </div>
       </div>

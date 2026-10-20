@@ -628,7 +628,7 @@ test('on the trial with an unverified domain, New conversation says it cannot se
   const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
   const pat = { id: '77777777-7777-4777-8777-777777777777', name: 'Pat', email: 'pat@prospect.example', organization: null, merged_into_id: null,
     created_at: '2026-01-02T00:00:00Z', updated_at: '2026-01-02T00:00:00Z' };
-  api.me.mockResolvedValue({ timezone: 'UTC', plan: { plan: 'trial', trial_ends_at: '2026-11-01T00:00:00Z', locked: false, trial_extended: false } });
+  api.me.mockResolvedValue({ timezone: 'UTC', plan: { plan: 'trial', trial_ends_at: '2026-11-01T00:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false } });
   api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
   api.agents.mockResolvedValue({ items: [] });
   api.tags.mockResolvedValue({ items: [] });

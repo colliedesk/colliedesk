@@ -4,11 +4,11 @@ import type { Billing } from '../../api/schemas';
 import { BillingPage } from './billing-page';
 
 const free: Billing = {
-  plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_plans: ['solo_monthly', 'solo_yearly', 'small_monthly', 'small_yearly', 'team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
+  plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_refusals: [], storage_upgrade_plan: null, checkout_plans: ['solo_monthly', 'solo_yearly', 'small_monthly', 'small_yearly', 'team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
   limits: { agents: 10, replies_per_24h: 200, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 2, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 const team: Billing = {
-  plan: 'team', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'active', current_period_end: '2026-11-15T09:30:00Z', cancel_at_period_end: false, active_subscriptions: 1, complimentary: false, complimentary_until: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
+  plan: 'team', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'active', current_period_end: '2026-11-15T09:30:00Z', cancel_at_period_end: false, active_subscriptions: 1, complimentary: false, complimentary_until: null, checkout_refusals: [], storage_upgrade_plan: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
   limits: { agents: 10, replies_per_24h: null, storage_bytes: 107374182400, storage_warn_bytes: 85899345920 }, usage: { agents: 6, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 
@@ -215,4 +215,23 @@ test('the current plan, its usage and Manage billing sit together at the top', (
   const current = screen.getByRole('region', { name: 'Current plan' });
   expect(within(current).getByRole('button', { name: /manage billing/i })).toBeInTheDocument();
   expect(within(current).getByRole('meter', { name: 'Agents' })).toBeInTheDocument();
+});
+
+test('a plan the workspace does not fit stays visible, cannot be chosen and says why', () => {
+  const reason = 'The Solo plan allows 1 agent and this workspace uses 3 seats (agents and pending invites). Deactivate agents or revoke invites to free 2 seats, then choose Solo.';
+  const onCheckout = vi.fn();
+  render(<BillingPage billing={{ ...free, checkout_refusals: [{ plan: 'solo_monthly', reason }, { plan: 'solo_yearly', reason }] }} timezone="UTC" onCheckout={onCheckout} onManage={vi.fn()} />);
+  const solo = screen.getByRole('article', { name: 'Solo' });
+  const choose = within(solo).getByRole('button', { name: /choose solo/i });
+  expect(choose).toBeDisabled();
+  expect(choose).toHaveAccessibleDescription(reason);
+  fireEvent.click(choose);
+  expect(onCheckout).not.toHaveBeenCalled();
+  expect(within(screen.getByRole('article', { name: 'Small' })).getByRole('button')).toBeEnabled();
+});
+
+test('a workspace with more agents than its plan tells the admin who is paused and what to do', () => {
+  render(<BillingPage billing={{ ...team, plan: 'small', limits: { ...team.limits, agents: 3 }, usage: { ...team.usage, agents: 5 } }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.getByRole('alert', { name: 'Agents' })).toHaveTextContent(
+    'This workspace has 2 agents more than the Small plan allows. The 2 most recently added cannot work until you deactivate agents in Settings > Team or upgrade under Manage billing.');
 });

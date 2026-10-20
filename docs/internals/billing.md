@@ -182,8 +182,8 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
 
 ### Agent seats
 
-- Cap: 10 on trial, Team and Founding (more than 10 is "contact us", so the message says that instead of
-  offering an upgrade). A seat is an active agent, or a person with an unused, unrevoked, unexpired invite.
+- Cap: 1 on Solo, 3 on Small, 10 on trial, Team and Founding, 25 on Team 25. A refusal names the next plan
+  up that the server sells (`domain.UpgradeFor`); Founding and Team 25 say "contact us". A seat is an active agent, or a person with an unused, unrevoked, unexpired invite.
   A deactivated agent holds no seat. Pending invites count by distinct address: re-sending an invite to the
   same address, or inviting someone who is already an active agent (a role change), takes no new seat.
 - Checked when an invite is created, when one is redeemed and when a deactivated agent is reactivated.
@@ -197,6 +197,18 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
   (402 `plan_limit_reached` when none is free) and does not restore assignments or sessions. An invite for the
   address of a deactivated agent is refused with 409 `agent_deactivated`: reactivate instead. Downgrading a
   plan still removes nobody; the admin frees seats by deactivating agents or revoking invites.
+- Checkout refuses a plan the workspace does not fit (409 `plan_does_not_fit`, `domain.PlanFitRefusal`): more
+  seats than the plan's cap, or `stored_storage_bytes` (imported files included, as every paid plan counts
+  them) above its storage cap. `GET /billing` lists the same refusals in `checkout_refusals` and the web app
+  disables those plan cards with the reason. Checkout only serves the trial and a locked workspace.
+- A smaller plan chosen in the Polar portal cannot be refused: the webhook stores it. Then the agents beyond
+  the cap are paused. Authentication counts the active agents in its existing query; only when they exceed
+  the cap does it rank them (`store.AgentSeatRank`): the owner (the first admin added) first, then by
+  `created_at`, oldest first. An agent ranked beyond the cap gets 402 `seat_paused` on every route except
+  `GET /auth/me`, sign out, the session list and problem reports, and the web app shows a paused screen.
+  `plan.agents_over` on `/auth/me` drives an admin banner on every page and an alert on Plan and billing.
+  Invites stay refused because the seats are already over the cap. Deactivating agents (or upgrading)
+  restores access on the next request; nothing is stored about the pause.
 - Error: HTTP 402, code `plan_limit_reached`, message names the plan, the cap and the way out.
 
 ### Rollback of the cleanup
@@ -312,7 +324,10 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
   (100 GiB, `domain.TeamStorageBytes`, $69 or $690) and Team 25 (250 GiB, `domain.Team25StorageBytes`, 25 agents,
   $149 or $1,490) have the same shape: imports count, warn at 80%, same inbound exemption. The rule is
   `domain.StorageCountsImports`: every capped plan except the trial and a locked workspace. When one
-  workspace holds several paid subscriptions, the better plan wins (`planRank`: Team 25 > Team > Founding > Small > Solo, by agents then storage). The migration `allow-team25-plan` cannot be rolled back while a subscription row is on `team25` (it raises, naming the count; deleting or downgrading the row would lock or shrink a paying workspace, and Polar does not redeliver an event it already delivered). Move those subscriptions to another plan in Polar first; `allow-solo-and-small-plans` refuses the same way while a row is on `solo` or `small`. A workspace at its last seat is told to upgrade to the next plan up the ladder Solo, Small, Team, Team 25 that is on sale (`domain.UpgradeFor`); Founding and Team 25 are told to contact us; the switch itself happens in the Polar portal, there is no in-app flow. Over the cap nothing is deleted. Inbound customer mail is exempt (`Store.CheckInboundStorage` lets a paid plan
+  workspace holds several paid subscriptions, the better plan wins (`planRank`: Team 25 > Team > Founding > Small > Solo, by agents then storage), and the
+  storage cap is the largest among the paid plans held (`Access.StorageLimit`): Founding with Small keeps
+  Founding's 10 agents and Small's 30 GiB. Storage refusals name `domain.StorageUpgradeFor`: the first plan on
+  sale with more storage and as many agents (Solo to Small, Small or Founding to Team, Team to Team 25). The migration `allow-team25-plan` cannot be rolled back while a subscription row is on `team25` (it raises, naming the count; deleting or downgrading the row would lock or shrink a paying workspace, and Polar does not redeliver an event it already delivered). Move those subscriptions to another plan in Polar first; `allow-solo-and-small-plans` refuses the same way while a row is on `solo` or `small`. A workspace at its last seat is told to upgrade to the next plan up the ladder Solo, Small, Team, Team 25 that is on sale (`domain.UpgradeFor`); Founding and Team 25 are told to contact us; the switch itself happens in the Polar portal, there is no in-app flow. Over the cap nothing is deleted. Inbound customer mail is exempt (`Store.CheckInboundStorage` lets a paid plan
   through, so it is stored in full and its bytes still count: a bounced customer email hurts the paying
   team's own customers and looks like an outage; the cost is bounded by real mail). The cap still refuses
   what an agent or an import supplies (`Store.CheckStorage`, the importer's guard). There is no agent
@@ -456,6 +471,18 @@ buyer of the static checkout link has no workspace and the webhook ignores that 
 - Trap: two buyers who pay at the same moment at slot 9 both get in (11 of 10). Accepted.
 - Trap: if the archive call fails, the app is already closed but the checkout link stays live until the next
   Founding event or restart retries it. The token needs the product write scope.
+
+## Changing a plan price
+
+1. In Polar, add the new price to the plan's existing product and archive the old price
+   (`PATCH /v1/products/{id}` with only the new price archives the ones left out).
+2. Before that, list the subscriptions on the product. A subscription keeps the price it was bought at,
+   so an archived price still renews; say so to the owner when one exists.
+3. Never create a new product for a new price and swap the `POLAR_PRODUCT_*` id. The webhook maps
+   events by product id, so a subscription on the old product would be "not sold here" and lose its plan.
+4. Change the price shown in `web/src/features/settings/plan-options.ts` and `docs/user/billing.md` in the
+   same release, and deploy soon after the Polar change: until then the app shows the old price, while
+   Polar's checkout page shows the new one before anyone pays.
 
 ## Reconcile with Polar
 

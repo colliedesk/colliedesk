@@ -39,6 +39,51 @@ func TestSoloAndSmallSubscriptionsCanBeStored(t *testing.T) {
 	}
 }
 
+func TestSoloSmallUpKeepsTheSubscriptionsOfEveryOlderPlan(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("up: %v", err)
+	}
+	if err := rollbackThrough(ctx, pool, soloSmallMigration); err != nil {
+		t.Fatalf("down: %v", err)
+	}
+	older := []string{"team", "team25", "founding"}
+	if err := New(pool).Privileged(ctx, PrivilegeMigrate, func(tx pgx.Tx) error {
+		for _, plan := range older {
+			if err := insertSubscription(ctx, tx, "before-up-"+plan, plan); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("store the older plans before the up migration: %v", err)
+	}
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("up over existing subscriptions: %v", err)
+	}
+	var got []string
+	err := New(pool).Privileged(ctx, PrivilegeMigrate, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT plan||':'||polar_subscription_id FROM workspace_billing ORDER BY plan`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var row string
+			if err := rows.Scan(&row); err != nil {
+				return err
+			}
+			got = append(got, row)
+		}
+		return rows.Err()
+	})
+	want := "founding:sub_before-up-founding,team:sub_before-up-team,team25:sub_before-up-team25"
+	if err != nil || strings.Join(got, ",") != want {
+		t.Fatalf("subscriptions after the up migration: %v err=%v, want %s", got, err, want)
+	}
+}
+
 func TestSoloSmallDownRefusesWhileASubscriptionUsesThePlans(t *testing.T) {
 	for _, plan := range []string{"solo", "small"} {
 		t.Run(plan, func(t *testing.T) {

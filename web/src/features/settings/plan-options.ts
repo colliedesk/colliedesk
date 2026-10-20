@@ -3,7 +3,8 @@ import { messages } from '../../messages';
 
 export type Interval = 'monthly' | 'yearly';
 // amount is the price per month, so plans compare at a glance; billed says what a yearly plan charges.
-export interface PlanPrice { plan: CheckoutPlan; interval: Interval; amount: string; billed?: string; label: string }
+// refusal is the server's reason this workspace cannot buy the price now; the button is then disabled.
+export interface PlanPrice { plan: CheckoutPlan; interval: Interval; amount: string; billed?: string; label: string; refusal?: string }
 export interface PlanCard { name: string; includes: string[]; prices: PlanPrice[] }
 
 // What each plan includes; the numbers match docs/user/billing.md and the server's plan limits.
@@ -27,10 +28,11 @@ const allPlans: { name: string; includes: string[]; prices: (Omit<PlanPrice, 'la
 
 // The plans a workspace can buy, in the order they are offered: only the prices the server says it
 // can sell, and only plans with at least one of them.
-export function planCardsFor(sellable: readonly CheckoutPlan[]): PlanCard[] {
+export function planCardsFor(sellable: readonly CheckoutPlan[], refusals: readonly { plan: CheckoutPlan; reason: string }[] = []): PlanCard[] {
   return allPlans
     .map((card) => ({ ...card, prices: card.prices.filter((price) => sellable.includes(price.plan))
-      .map(({ charge, ...price }) => ({ ...price, label: messages.choosePlanPrice(card.name, charge) })) }))
+      .map(({ charge, ...price }) => ({ ...price, label: messages.choosePlanPrice(card.name, charge),
+        refusal: refusals.find((refusal) => refusal.plan === price.plan)?.reason })) }))
     .filter((card) => card.prices.length > 0);
 }
 

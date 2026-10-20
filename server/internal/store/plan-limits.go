@@ -75,6 +75,18 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 	return nil
 }
 
+// AgentSeatRank is the place of agentID among the workspace's active agents when a smaller plan
+// keeps only some of them: the owner (the first admin added) first, then by when each was added,
+// oldest first. Agents ranked beyond the plan's cap are paused, the most recently added first.
+func AgentSeatRank(ctx context.Context, tx pgx.Tx, workspaceID, agentID string) (int, error) {
+	var rank int
+	err := tx.QueryRow(ctx, `WITH active AS (SELECT id, role, created_at FROM agents WHERE workspace_id=$1 AND deactivated_at IS NULL),
+		owner AS (SELECT id FROM active WHERE role='admin' ORDER BY created_at, id LIMIT 1)
+		SELECT r FROM (SELECT id, row_number() OVER (ORDER BY (id = (SELECT id FROM owner)) IS TRUE DESC, created_at, id) AS r FROM active) ranked
+		WHERE id=$2`, workspaceID, agentID).Scan(&rank)
+	return rank, err
+}
+
 // countedDelivery is a delivery that uses up the trial's daily cap: queued, sent, or failed after it
 // was handed to the relay (sent_at set). A delivery report can fail a reply that already reached its
 // people, and anyone can post one to the workspace's inbound address, so a later failure never gives
@@ -217,6 +229,15 @@ func (s *Store) storageCap(plan string) int64 {
 	return domain.StorageCap(plan)
 }
 
+// accessStorageCap is the cap in effect for access: the largest cap of the paid plans it holds
+// (Access.StorageLimit), or the test override of WithPaidStorageBytes.
+func (s *Store) accessStorageCap(access domain.Access) int64 {
+	if domain.StorageCountsImports(access.Plan) && s.paidStorage > 0 {
+		return s.paidStorage
+	}
+	return access.StorageLimit()
+}
+
 // storageUsed reads the bytes plan's cap counts for the workspace.
 func storageUsed(ctx context.Context, tx pgx.Tx, workspaceID, plan string) (int64, error) {
 	query := ownStorageBytes
@@ -236,6 +257,8 @@ type StorageRoom struct {
 	// Capped is false for plans and installs without a cap; Limit and Used are then zero.
 	Capped      bool
 	Limit, Used int64
+	// Upgrade is the plan with more storage this server sells, "" when none (domain.StorageUpgradeFor).
+	Upgrade string
 }
 
 // GetStorageRoom reads the plan's storage cap and the bytes it counts, for the importer to check
@@ -249,7 +272,7 @@ func (s *Store) GetStorageRoom(ctx context.Context, workspaceID string) (Storage
 		if err != nil {
 			return StorageRoom{}, err
 		}
-		room := StorageRoom{Plan: access.Plan, Limit: s.storageCap(access.Plan)}
+		room := StorageRoom{Plan: access.Plan, Limit: s.accessStorageCap(access), Upgrade: domain.StorageUpgradeFor(access.Plan, s.plansOnSale)}
 		if room.Limit == 0 {
 			return room, nil
 		}
@@ -294,7 +317,7 @@ func (s *Store) CheckStorage(ctx context.Context, tx pgx.Tx, workspaceID string,
 	if err != nil {
 		return err
 	}
-	limit := s.storageCap(access.Plan)
+	limit := s.accessStorageCap(access)
 	if limit == 0 {
 		return nil
 	}
@@ -303,7 +326,7 @@ func (s *Store) CheckStorage(ctx context.Context, tx pgx.Tx, workspaceID string,
 		return err
 	}
 	if used+addBytes > limit {
-		return &domain.StorageLimitError{Plan: access.Plan, Used: used, Adding: addBytes, Limit: limit}
+		return &domain.StorageLimitError{Plan: access.Plan, Used: used, Adding: addBytes, Limit: limit, Upgrade: domain.StorageUpgradeFor(access.Plan, s.plansOnSale)}
 	}
 	return nil
 }

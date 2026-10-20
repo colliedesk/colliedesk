@@ -39,6 +39,15 @@ export class WorkspaceLockedError extends PlanLimitError {
   }
 }
 
+// SeatPausedError is the 402 `seat_paused` answer: the workspace moved to a plan with fewer agents
+// than it has and this agent is one of the most recently added, so the app shows why instead.
+export class SeatPausedError extends PlanLimitError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SeatPausedError';
+  }
+}
+
 // InvalidRequestError means the server refused the input (HTTP 400); its message says what to fix.
 export class InvalidRequestError extends Error {
   constructor(message: string) {
@@ -91,7 +100,8 @@ async function planLimitFailure(response: Response): Promise<PlanLimitError> {
   try {
     const body = await response.json() as { error?: { code?: unknown; message?: unknown } };
     if (typeof body.error?.message === 'string' && body.error.message) {
-      return body.error.code === 'workspace_locked' ? new WorkspaceLockedError(body.error.message) : new PlanLimitError(body.error.message);
+      if (body.error.code === 'workspace_locked') return new WorkspaceLockedError(body.error.message);
+      return body.error.code === 'seat_paused' ? new SeatPausedError(body.error.message) : new PlanLimitError(body.error.message);
     }
     if (body.error?.code === 'workspace_locked') return new WorkspaceLockedError('This workspace is locked.');
   } catch {

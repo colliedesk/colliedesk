@@ -14,15 +14,14 @@ import (
 type StorageCapError struct {
 	Plan                string
 	Needed, Used, Limit int64
+	// Upgrade is the plan with more storage the server sells (StorageRoom.Upgrade), "" when none.
+	Upgrade string
 }
 
 func (e *StorageCapError) Error() string {
 	remedy := "Contact us for more storage"
-	switch e.Plan {
-	case domain.PlanFounding:
-		remedy = "Upgrade to the Team plan (Billing > Manage billing) for a higher cap"
-	case domain.PlanSolo, domain.PlanSmall:
-		remedy = "Upgrade to the " + domain.PlanName(domain.NextPlan(e.Plan)) + " plan (Billing > Manage billing) for a higher cap"
+	if e.Upgrade != "" {
+		remedy = "Upgrade to the " + domain.PlanName(e.Upgrade) + " plan (Billing > Manage billing) for a higher cap"
 	}
 	name := domain.PlanName(e.Plan)
 	return fmt.Sprintf("this import needs %s of attachments, but only %s is free under the %s attachment cap of the %s plan. "+
@@ -32,12 +31,12 @@ func (e *StorageCapError) Error() string {
 
 // CappedRoom returns the storage room of the workspace, or ok false when no cap that counts imported
 // files applies (self-hosted, trial). paidStorageBytes replaces the cap of every plan that counts
-// imports when above zero; tests use a small one.
-func CappedRoom(ctx context.Context, db *database.DB, workspaceID string, cloud bool, paidStorageBytes int64) (store.StorageRoom, bool, error) {
+// imports when above zero; tests use a small one. plansOnSale picks the upgrade the room names.
+func CappedRoom(ctx context.Context, db *database.DB, workspaceID string, cloud bool, paidStorageBytes int64, plansOnSale []string) (store.StorageRoom, bool, error) {
 	if !cloud {
 		return store.StorageRoom{}, false, nil
 	}
-	room, err := store.NewWithDB(db).WithPlanLimits(true).WithPaidStorageBytes(paidStorageBytes).GetStorageRoom(ctx, workspaceID)
+	room, err := store.NewWithDB(db).WithPlanLimits(true).WithPaidStorageBytes(paidStorageBytes).WithPlansOnSale(plansOnSale).GetStorageRoom(ctx, workspaceID)
 	if err != nil {
 		return store.StorageRoom{}, false, err
 	}

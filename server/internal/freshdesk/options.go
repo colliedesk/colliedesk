@@ -39,6 +39,8 @@ type Options struct {
 	// PaidStorageBytes replaces the attachment cap of every plan that counts imports when above zero; tests
 	// use a small one.
 	PaidStorageBytes int64
+	// PlansOnSale are the plans the server sells; a storage refusal names the next one with more storage.
+	PlansOnSale []string
 	// Now is the clock of the trial extension; nil means time.Now.
 	Now func() time.Time
 

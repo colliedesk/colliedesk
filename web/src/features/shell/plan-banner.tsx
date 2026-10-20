@@ -22,6 +22,11 @@ const clockSlackMs = 5 * 60 * 1000;
 export function PlanBanner({ plan, isAdmin, billing, now, onChoosePlan }: PlanBannerProps) {
   // The day count follows the calendar day of the browser, so a tab left open overnight updates.
   const clock = useNow('UTC');
+  if (plan && plan.plan !== 'trial' && plan.agents_over > 0 && isAdmin) {
+    return <section className="plan-banner" aria-label={messages.planNotices}>
+      <p role="alert" className="plan-banner-warning">{messages.agentsOverPlan(plan.agents_over, messages.plans[plan.plan])}</p>
+    </section>;
+  }
   if (plan?.plan !== 'trial') return null;
   const msLeft = Date.parse(plan.trial_ends_at) - (now ?? clock).getTime();
   const daysLeft = Math.max(1, Math.ceil((msLeft - clockSlackMs) / dayMs));

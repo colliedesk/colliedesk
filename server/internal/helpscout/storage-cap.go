@@ -13,7 +13,7 @@ import (
 // refuses the whole import when they do not fit: a partial import is a failure. Trial and
 // self-hosted runs skip it. An import that passes is never stopped by the cap afterwards.
 func (r *run) guardStorage(ctx context.Context) error {
-	if _, ok, err := importkit.CappedRoom(ctx, r.db, r.workspaceID, r.opts.Cloud, r.opts.PaidStorageBytes); err != nil || !ok {
+	if _, ok, err := importkit.CappedRoom(ctx, r.db, r.workspaceID, r.opts.Cloud, r.opts.PaidStorageBytes, r.opts.PlansOnSale); err != nil || !ok {
 		return err
 	}
 	needed, err := r.sizeIncoming(ctx)
@@ -21,19 +21,19 @@ func (r *run) guardStorage(ctx context.Context) error {
 		return err
 	}
 	// The sizing can take long on a large inbox: judge against the room as it is now.
-	room, ok, err := importkit.CappedRoom(ctx, r.db, r.workspaceID, r.opts.Cloud, r.opts.PaidStorageBytes)
+	room, ok, err := importkit.CappedRoom(ctx, r.db, r.workspaceID, r.opts.Cloud, r.opts.PaidStorageBytes, r.opts.PlansOnSale)
 	if err != nil || !ok {
 		return err
 	}
 	if room.Used+needed > room.Limit {
-		return &importkit.StorageCapError{Plan: room.Plan, Needed: needed, Used: room.Used, Limit: room.Limit}
+		return &importkit.StorageCapError{Plan: room.Plan, Needed: needed, Used: room.Used, Limit: room.Limit, Upgrade: room.Upgrade}
 	}
 	return nil
 }
 
 // checkDryRunStorage tells a dry run on a capped workspace whether the real run would be refused.
 func (r *run) checkDryRunStorage(ctx context.Context, report *Report) error {
-	room, ok, err := importkit.CappedRoom(ctx, r.db, r.workspaceID, r.opts.Cloud, r.opts.PaidStorageBytes)
+	room, ok, err := importkit.CappedRoom(ctx, r.db, r.workspaceID, r.opts.Cloud, r.opts.PaidStorageBytes, r.opts.PlansOnSale)
 	if err != nil || !ok {
 		return err
 	}

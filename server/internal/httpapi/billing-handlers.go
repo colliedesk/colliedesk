@@ -22,6 +22,18 @@ func (a *API) getBilling(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 	billing.CheckoutPlans = a.checkoutPlans()
+	billing.CheckoutRefusals = []domain.CheckoutRefusal{}
+	for _, plan := range billing.CheckoutPlans {
+		product, _ := a.checkoutProduct(plan)
+		if reason := billing.PlanRefusals[a.config.Billing.Products.PlanOf(product)]; reason != "" {
+			billing.CheckoutRefusals = append(billing.CheckoutRefusals, domain.CheckoutRefusal{Plan: plan, Reason: reason})
+		}
+	}
+	if domain.StorageCountsImports(billing.Plan) {
+		if upgrade := domain.StorageUpgradeFor(billing.Plan, a.config.Billing.PlansOnSale()); upgrade != "" {
+			billing.StorageUpgradePlan = &upgrade
+		}
+	}
 	writeJSON(response, http.StatusOK, billing)
 }
 
@@ -95,6 +107,11 @@ func (a *API) createCheckout(response http.ResponseWriter, request *http.Request
 	}
 	if current.Plan != domain.PlanTrial && current.Plan != domain.PlanNone {
 		writeError(response, http.StatusConflict, "already_subscribed", "This workspace already has a paid plan. Change or cancel it from the billing portal.")
+		return
+	}
+	// A plan the workspace does not fit would pause agents or refuse every upload the moment it is paid.
+	if reason := current.PlanRefusals[a.config.Billing.Products.PlanOf(product)]; reason != "" {
+		writeError(response, http.StatusConflict, "plan_does_not_fit", reason)
 		return
 	}
 	customerID, err := a.polar.EnsureCustomer(request.Context(), who.Workspace.ID, who.Agent.Email, who.Workspace.Name)

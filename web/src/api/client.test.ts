@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { api, ConflictError, PlanLimitError, WorkspaceLockedError } from './client';
+import { api, ConflictError, PlanLimitError, SeatPausedError, WorkspaceLockedError } from './client';
 import { AttachmentsTooLargeError, AttachmentStorageError } from './attachments-error';
 import { NotAnAgentError, SignupError } from './cloud-signup';
 import { ExportRefusedError } from './workspace-export';
@@ -184,4 +184,12 @@ test('a trial refusal for a merged address carries the address the reply would g
   const error = await api.createMessage('33333333-3333-4333-8333-333333333333', 'outgoing', 'Hi').catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(OutboundRefusedError);
   expect((error as OutboundRefusedError).replyTo).toBe('dana@work.example');
+});
+
+test('402 seat_paused becomes a SeatPausedError with the server\'s explanation', async () => {
+  fetchMock.mockResolvedValue(reply(402, apiError('seat_paused', 'Your access is paused.')));
+  const error = await api.tags().catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(SeatPausedError);
+  expect(error).not.toBeInstanceOf(WorkspaceLockedError);
+  expect((error as Error).message).toBe('Your access is paused.');
 });

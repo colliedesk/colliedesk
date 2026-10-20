@@ -119,7 +119,11 @@ func LoadAllSubscriptions(ctx context.Context, tx pgx.Tx) (map[string][]domain.S
 	return all, rows.Err()
 }
 
-// GetBilling returns the workspace's plan, state and current usage at now.
+// paidPlans are the plans a checkout can buy, checked against the workspace's usage by GetBilling.
+var paidPlans = []string{domain.PlanSolo, domain.PlanSmall, domain.PlanTeam, domain.PlanTeam25, domain.PlanFounding}
+
+// GetBilling returns the workspace's plan, state and current usage at now, and the paid plans the
+// workspace does not fit (Billing.PlanRefusals).
 func (s *Store) GetBilling(ctx context.Context, workspaceID string, now time.Time) (domain.Billing, error) {
 	billing, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.Billing, error) {
 		subscriptions, err := LoadSubscriptions(ctx, tx, workspaceID)
@@ -143,7 +147,13 @@ func (s *Store) GetBilling(ctx context.Context, workspaceID string, now time.Tim
 		billing := domain.NewBilling(subscriptions, trialEndsAt, usage, now)
 		if domain.StorageCountsImports(billing.Plan) {
 			billing.Usage.StorageBytes = storedBytes
-			billing.Limits = domain.LimitsForStorage(billing.Plan, s.storageCap(billing.Plan))
+			billing.Limits = domain.LimitsForStorage(billing.Plan, s.accessStorageCap(domain.NewAccess(subscriptions, trialEndsAt, now)))
+		}
+		billing.PlanRefusals = map[string]string{}
+		for _, plan := range paidPlans {
+			if reason := domain.PlanFitRefusal(plan, usage.Agents+usage.PendingInvites, storedBytes, s.storageCap(plan)); reason != "" {
+				billing.PlanRefusals[plan] = reason
+			}
 		}
 		if billing.Plan == domain.PlanTrial {
 			if billing.Usage.RepliesLast24h, err = repliesLast24h(ctx, tx, workspaceID, now); err != nil {

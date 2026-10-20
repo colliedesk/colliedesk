@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -16,6 +17,24 @@ type Access struct {
 	Locked      bool      `json:"locked"`
 	// TrialExtended is true when a Freshdesk import already extended this workspace's trial.
 	TrialExtended bool `json:"trial_extended"`
+	// AgentsOver is how many active agents the workspace has beyond its plan's agent cap, after a
+	// move to a smaller plan; 0 when it fits. Set where the agents are counted (authentication).
+	AgentsOver int `json:"agents_over"`
+	// SeatPaused is true for an agent beyond the cap: the most recently added agents are paused
+	// first and the owner never is. Such an agent can only see why and sign out.
+	SeatPaused bool `json:"seat_paused"`
+	// storageBytes is the largest storage cap among the paid plans held, which can be above the cap
+	// of Plan: Founding outranks Small on agents but Small stores more. 0 means StorageCap(Plan).
+	storageBytes int64
+}
+
+// StorageLimit is the attachment storage cap in effect: the largest cap among the paid plans the
+// workspace holds, or the cap of Plan.
+func (a Access) StorageLimit() int64 {
+	if a.storageBytes > 0 {
+		return a.storageBytes
+	}
+	return StorageCap(a.Plan)
 }
 
 // NewAccess derives the plan in effect: the best subscription that is still paid, else the trial
@@ -25,19 +44,34 @@ func NewAccess(subscriptions []Subscription, trialEndsAt, now time.Time) Access 
 	var best *Subscription
 	for index := range subscriptions {
 		candidate := &subscriptions[index]
-		if candidate.Entitled(now) && (best == nil || betterThan(*candidate, *best)) {
+		if !candidate.Entitled(now) {
+			continue
+		}
+		if best == nil || betterThan(*candidate, *best) {
 			best = candidate
 		}
+		access.storageBytes = max(access.storageBytes, StorageCap(candidate.Plan))
 	}
 	switch {
 	case best != nil:
 		access.Plan = best.Plan
 	case now.Before(trialEndsAt):
-		access.Plan = PlanTrial
+		access.Plan, access.storageBytes = PlanTrial, 0
 	default:
-		access.Plan, access.Locked = PlanNone, true
+		access.Plan, access.Locked, access.storageBytes = PlanNone, true, 0
 	}
 	return access
+}
+
+// SeatPausedError refuses an agent paused because the workspace has more active agents than its
+// plan allows (see Access.SeatPaused).
+type SeatPausedError struct {
+	Plan   string
+	Agents int
+}
+
+func (e *SeatPausedError) Error() string {
+	return fmt.Sprintf("Your access is paused. The %s plan allows %s and this workspace has more, so the most recently added agents are paused. It opens again when a workspace admin deactivates agents or upgrades the plan.", PlanName(e.Plan), agentCount(e.Agents))
 }
 
 // LockedError means the workspace's trial or subscription has ended and the action is not allowed.

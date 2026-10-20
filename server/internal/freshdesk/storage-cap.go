@@ -21,7 +21,7 @@ type StorageCapError = importkit.StorageCapError
 // cappedRoom returns the storage room of the workspace, or ok false when no cap that counts imported
 // files applies to this run (self-hosted, trial).
 func (r *run) cappedRoom(ctx context.Context) (store.StorageRoom, bool, error) {
-	return importkit.CappedRoom(ctx, r.db, r.workspaceID, r.opts.Cloud, r.opts.PaidStorageBytes)
+	return importkit.CappedRoom(ctx, r.db, r.workspaceID, r.opts.Cloud, r.opts.PaidStorageBytes, r.opts.PlansOnSale)
 }
 
 // guardStorage runs before the first write. On a paid plan imported files count toward
@@ -50,7 +50,7 @@ func (r *run) guardStorage(ctx context.Context) error {
 		return err
 	}
 	if room.Used+needed > room.Limit {
-		return &StorageCapError{Plan: room.Plan, Needed: needed, Used: room.Used, Limit: room.Limit}
+		return &StorageCapError{Plan: room.Plan, Needed: needed, Used: room.Used, Limit: room.Limit, Upgrade: room.Upgrade}
 	}
 	return nil
 }

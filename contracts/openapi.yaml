@@ -11,6 +11,12 @@ info:
     plan, export the data (`GET /api/v1/export`), and show or disconnect the email channel. Paying unlocks the
     workspace on the next request. Self-hosted instances have no trial and no lock.
 
+    When a workspace moves to a plan with fewer agents than it has (a change in the billing portal),
+    the agents beyond the cap are paused, the most recently added first and never the owner (the
+    first admin added): their requests answer 402 `seat_paused` except `GET /api/v1/auth/me`, signing
+    out, the session list and problem reports. `plan.agents_over` and `plan.seat_paused` of
+    `GET /api/v1/auth/me` show it. Access returns once an admin deactivates agents or upgrades.
+
     An agent token (`POST /api/v1/auth/tokens`) is a bearer credential for an AI agent. It starts with
     `cdk_agent_` and acts as the agent who created it, limited to a tier: `read` (conversations,
     messages, contacts, tags, the team list, and the session, invite and channel settings without
@@ -1704,6 +1710,9 @@ paths:
         Start a hosted checkout for the signed-in workspace. The workspace is taken from the session,
         never from the body. A workspace that already has a paid plan gets 409; it changes or cancels
         its plan in the portal. The `founding` plan gets 409 `founding_closed` once its slots are used up.
+        A plan the workspace does not fit gets 409 `plan_does_not_fit` with what to remove: more seats
+        (agents and pending invites) than the plan allows, or more stored attachment bytes, imported
+        files included, than its storage cap. `checkout_refusals` of `GET /api/v1/billing` lists them.
       requestBody:
         required: true
         content:
@@ -2509,7 +2518,7 @@ components:
         status: {type: string, enum: [applied, duplicate, stale, ignored]}
     Billing:
       type: object
-      required: [plan, trial_ends_at, locked, status, current_period_end, cancel_at_period_end, active_subscriptions, complimentary, complimentary_until, limits, usage, checkout_plans]
+      required: [plan, trial_ends_at, locked, status, current_period_end, cancel_at_period_end, active_subscriptions, complimentary, complimentary_until, limits, usage, checkout_plans, checkout_refusals, storage_upgrade_plan]
       properties:
         plan:
           type: string
@@ -2541,6 +2550,20 @@ components:
           type: [string, 'null']
           format: date-time
           description: 'When a complimentary plan ends; null when it has no end or the plan is not complimentary.'
+        checkout_refusals:
+          type: array
+          description: The checkout plans this workspace does not fit now, each with the reason checkout would give. The web app disables their buttons.
+          items:
+            type: object
+            required: [plan, reason]
+            additionalProperties: false
+            properties:
+              plan: {$ref: '#/components/schemas/CheckoutPlan'}
+              reason: {type: string}
+        storage_upgrade_plan:
+          type: [string, 'null']
+          enum: [solo, small, team, team25, founding, null]
+          description: The plan this server sells with more storage and as many agents as the plan in effect, for the storage notice; null on the trial and when none is on sale.
         checkout_plans:
           type: array
           items: {$ref: '#/components/schemas/CheckoutPlan'}
@@ -2728,9 +2751,11 @@ components:
           oneOf:
             - type: 'null'
             - type: object
-              required: [plan, trial_ends_at, locked, trial_extended]
+              required: [plan, trial_ends_at, locked, trial_extended, agents_over, seat_paused]
               properties:
                 plan: {type: string, enum: [trial, solo, small, team, team25, founding, none]}
+                agents_over: {type: integer, description: How many active agents the workspace has beyond its plan's agent cap; 0 when it fits.}
+                seat_paused: {type: boolean, description: 'True when this agent is beyond the cap and paused (requests answer 402 `seat_paused`).'}
                 trial_ends_at: {type: string, format: date-time}
                 locked: {type: boolean}
                 trial_extended: {type: boolean, description: True when a Freshdesk import already extended the trial.}
