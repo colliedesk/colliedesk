@@ -13,7 +13,7 @@ export function HelpCenterSettings({ canManage, workspaceName }: { canManage: bo
   const settings = useQuery({ queryKey: ['help-center'], queryFn: kbApi.helpCenter });
   const save = useMutation({
     // The language is not edited here yet, so the one stored is sent back as it is.
-    mutationFn: ({ enabled, title }: { enabled: boolean; title: string }) => kbApi.saveHelpCenter({ enabled, title, locale: settings.data?.locale ?? 'en' }),
+    mutationFn: ({ enabled, title }: { enabled: boolean; title: string }) => kbApi.saveHelpCenter({ enabled, title, locale: settings.data?.locale || 'en' }),
     onSuccess: (saved) => client.setQueryData(['help-center'], saved),
   });
   const [enabled, setEnabled] = useState(false);

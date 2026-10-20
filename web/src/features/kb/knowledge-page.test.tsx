@@ -49,7 +49,10 @@ test('the search goes to the address a moment after typing stops, and asks the s
   fireEvent.change(box, { target: { value: 'password' } });
   await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/knowledge', search: { q: 'password' }, replace: true }));
   expect(navigate).toHaveBeenCalledTimes(1);
+  // A status picked while the search waited keeps it.
+  fireEvent.change(box, { target: { value: 'reset' } });
   show({ q: 'password', status: 'draft' });
+  await waitFor(() => expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge', search: { q: 'reset', status: 'draft' }, replace: true }));
   await waitFor(() => expect(calls.some((call) => call.search.get('q') === 'password' && call.search.get('status') === 'draft')).toBe(true));
 });
 

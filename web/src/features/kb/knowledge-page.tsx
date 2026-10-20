@@ -49,8 +49,11 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
     getNextPageParam: (page) => page.next_cursor ?? undefined,
     placeholderData: keepPreviousData,
   });
+  // The latest filters, so a search typed before a status was picked does not bring the old status back.
+  const current = useRef(search);
+  current.current = search;
   const setSearch = (change: Partial<KnowledgeSearch>, replace = false) =>
-    void navigate({ to: '/knowledge', search: { ...search, ...change }, replace });
+    void navigate({ to: '/knowledge', search: { ...current.current, ...change }, replace });
   // The search box writes the address as the person types, a moment after the last key.
   const [text, setText] = useState(search.q ?? '');
   useEffect(() => setText(search.q ?? ''), [search.q]);
