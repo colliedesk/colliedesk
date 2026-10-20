@@ -116,7 +116,8 @@ async function outboundRefusal(response: Response): Promise<Error> {
     const { code, message, retry_after_seconds: retry, refused_cc: refused, reply_to: replyTo } = body.error ?? {};
     if (code === 'storage_limit_reached' && typeof message === 'string' && message) return new AttachmentStorageError(message);
     // The knowledge base's video uploads: the answer says which upload holds the place, or whose it is.
-    if ((code === 'too_many_uploads' || code === 'not_your_upload') && typeof message === 'string' && message) return new ConflictError(message, { code });
+    if (['too_many_uploads', 'not_your_upload', 'server_busy', 'files_need_approval'].includes(String(code)) && typeof message === 'string' && message)
+      return new ConflictError(message, { code });
     if (code === 'trial_outbound_restricted' || code === 'trial_outbound_limit') {
       const refusedCc = Array.isArray(refused) ? refused.filter((item): item is string => typeof item === 'string') : [];
       return new OutboundRefusedError(code, typeof message === 'string' ? message : '', typeof retry === 'number' ? retry : undefined, refusedCc,
@@ -153,7 +154,7 @@ export async function request<T>(path: string, schema: z.ZodType<T>, init?: Requ
   if (response.status === 413) throw await tooLarge(response);
   if (response.status === 507) throw await diskFull(response);
   if (response.status === 400 || response.status === 409) throw await invalidRequest(response);
-  if (response.status === 403 || response.status === 429) throw await outboundRefusal(response);
+  if (response.status === 403 || response.status === 429 || response.status === 503) throw await outboundRefusal(response);
   if (!response.ok) throw failure(response.status);
   // 204 has no body: a call that expects one passes a schema that accepts undefined.
   return schema.parse(response.status === 204 ? undefined : await response.json());
