@@ -17,9 +17,7 @@ import { SeatPausedScreen } from './features/shell/seat-paused-screen';
 import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
 import { InboxIcon, RequestsIcon, SettingsIcon } from './ui/icons';
-import { lazyPart, PartUnavailable } from './ui/lazy-part';
-import type { LazyPart } from './ui/lazy-part';
-import type { ReactNode } from 'react';
+import { lazyPart, Part, PartUnavailable } from './ui/lazy-part';
 import { LogoMark } from './ui/logo';
 import { resetProductAnalytics, useProductAnalytics } from './lib/product-analytics';
 import { inboxQueryFromSearch } from './lib/inbox-query';
@@ -28,12 +26,6 @@ import { inboxQueryFromSearch } from './lib/inbox-query';
 const billingRoutePart = lazyPart(() => import('./features/settings/billing-route'));
 const lockedRoutePart = lazyPart(() => import('./features/shell/locked-route'));
 const trialSurveyPart = lazyPart(() => import('./features/shell/trial-survey'));
-
-// Part renders a piece of a lazy part once its chunk is there; failed stands in when it cannot load.
-function Part<T>({ part, render, failed = null }: { part: LazyPart<T>; render: (module: T) => ReactNode; failed?: ReactNode }) {
-  const state = part.use();
-  return state.status === 'ready' ? render(state.module) : state.status === 'error' ? failed : null;
-}
 
 function AppLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
@@ -49,6 +41,8 @@ function AppLayout() {
   const locked = me.data?.plan?.locked === true || paused;
   // A locked workspace chooses its plan on the locked screen, so a remembered plan must not fire later.
   useEffect(() => { if (locked) clearCheckoutIntent(); }, [locked]);
+  // An admin's locked screen shows the plans: billing is asked for while its chunk loads, not after.
+  useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: locked && !paused && me.data?.agent.role === 'admin' });
   // New, newly assigned and changed conversations are picked up on every signed-in page, not only in the inbox.
   useInboxActivity(!onSignIn && Boolean(me.data) && !signedOut && !locked, me.data?.agent?.id);
   // The server's config enables it unless telemetry is off; otherwise the library is never loaded.
@@ -115,6 +109,10 @@ const billingRoute = createRoute({
   },
   component: function Billing() {
     const checkoutReturned = billingRoute.useSearch().checkout === 'success';
+    // Billing is asked for while the page's chunk loads, not after it (billing-route.tsx asks the same).
+    const me = useQuery({ queryKey: ['me'], queryFn: api.me });
+    const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
+    useQuery({ queryKey: ['billing'], queryFn: api.billing, enabled: me.data?.agent.role === 'admin' && config.data?.billing.enabled === true });
     return <Part part={billingRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ BillingRoute }) => <BillingRoute checkoutReturned={checkoutReturned} />} />;
   },
 });
