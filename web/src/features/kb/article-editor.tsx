@@ -242,15 +242,22 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const videoSignal = useRef(new AbortController().signal);
   useEffect(() => {
     const uploads = videoUploads.current;
-    const controller = new AbortController();
+    let controller = new AbortController();
     videoSignal.current = controller.signal;
     const leave = () => {
       controller.abort();
       for (const session of uploads) cancelVideoUpload(session);
       uploads.clear();
     };
+    // A page the browser kept and shows again (Back) uploads again with a fresh signal.
+    const back = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      controller = new AbortController();
+      videoSignal.current = controller.signal;
+    };
     window.addEventListener('pagehide', leave);
-    return () => { window.removeEventListener('pagehide', leave); leave(); };
+    window.addEventListener('pageshow', back);
+    return () => { window.removeEventListener('pagehide', leave); window.removeEventListener('pageshow', back); leave(); };
   }, []);
   const imageHooks = useMemo<UploadHooks>(() => ({
     accept: (files) => {
