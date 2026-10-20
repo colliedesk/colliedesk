@@ -230,19 +230,23 @@ jobs:
           build-args: VERSION=${{ steps.version.outputs.value }}
           load: true
           tags: colliedesk:ci
-      - name: Boot image against Postgres
-        run: sh tests/image-boot-test.sh colliedesk:ci "${{ steps.version.outputs.value }}"
-      - name: Install with install.sh and sign in with the printed link
-        run: sh tests/install-smoke.sh
+      # The boot and install checks run in the background while main pushes and attests the image
+      # (about 15 seconds). sha-<commit> may therefore exist for a commit that then fails them;
+      # nothing deploys it: edge, which self-hosters and Cloud pull, moves only after ci-ok.
+      - name: Start the boot and install checks in the background
         env:
+          VERSION: ${{ steps.version.outputs.value }}
           COLLIE_DESK_IMAGE: colliedesk:ci
+        run: |
+          sh .github/scripts/ci-background.sh start image-checks \
+            sh -c 'sh tests/image-boot-test.sh colliedesk:ci "$VERSION" && sh tests/install-smoke.sh'
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # Same builder and inputs as the loaded image, so this pushes the layers that just booted.
+      # Same builder and inputs as the loaded image, so this pushes the layers the checks run against.
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         name: Push tested image as sha-<commit>
         id: push
@@ -263,6 +267,8 @@ jobs:
           subject-name: ghcr.io/colliedesk/colliedesk
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+      - name: Image boots against Postgres and install.sh signs in with the printed link
+        run: sh .github/scripts/ci-background.sh wait image-checks
 
   # The one check to watch: adding or splitting jobs above never renames it.
   # Fails a PR that brings in a dependency version with a known vulnerability (OSV database).
