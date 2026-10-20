@@ -19,6 +19,9 @@ export function MediaDetail({ id, onChanged, onClose }: { id: string; onChanged:
   // What the last change said, with an Undo when it has one. It lives here, above the body, which is drawn
   // again for each new version of the item.
   const [notice, setNotice] = useState<{ text: string; undo?: () => void }>();
+  // The notice is at the top of the panel; on a phone the person is at its foot, so it comes into view.
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => { if (notice) noticeRef.current?.scrollIntoView?.({ block: 'nearest' }); }, [notice]);
   return (
     <aside className="media-detail" aria-labelledby="media-detail-heading" onKeyDown={(event) => { if (event.key === 'Escape' && !(event.target instanceof HTMLVideoElement)) onClose(); }}>
       <div className="media-detail-head">
@@ -28,7 +31,7 @@ export function MediaDetail({ id, onChanged, onClose }: { id: string; onChanged:
       {details.isPending && <p role="status" className="empty-copy">{mediaMessages.loading}</p>}
       {details.isError && <p role="alert" className="error-copy">{mediaMessages.listFailed}{' '}
         <button type="button" className="link-action" onClick={() => void details.refetch()}>{mediaMessages.retry}</button></p>}
-      {notice && <p role="status" className="media-toast">{notice.text}{' '}
+      {notice && <p ref={noticeRef} role="status" className="media-toast">{notice.text}{' '}
         {notice.undo && <button type="button" className="link-action" onClick={notice.undo}>{mediaMessages.undo}</button>}</p>}
       {details.data && <DetailBody key={details.data.updated_at} item={details.data} onChanged={refresh} onNotice={setNotice} onTrashed={() => { onChanged(); onClose(); }} />}
     </aside>
