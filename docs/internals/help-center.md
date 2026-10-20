@@ -11,11 +11,40 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   self-hosted server the help center shares the app's origin, and the session cookie has `Path=/`
   and no `Domain`, so a script running there could act as a signed-in agent. Pages are Go
   `html/template` with goldmark (GitHub Flavored Markdown, like the editor's preview), without
-  `html.WithUnsafe`: raw HTML is left out, and a transformer drops links whose scheme is not http,
-  https, mailto or tel (after decoding references and dropping the control characters browsers
-  ignore). The CSP is `default-src 'none'; img-src 'self'; style-src 'self'; script-src 'none';
-  form-action 'self'; frame-ancestors 'none'; base-uri 'none'`; table alignment is an `align`
+  `html.WithUnsafe`: each piece of raw HTML goes through `kbhtml` instead (see "Video players"
+  below), and a transformer drops links whose scheme is not http, https, mailto or tel (after
+  decoding references and dropping the control characters browsers ignore). The CSP is
+  `default-src 'none'; img-src 'self'; style-src 'self'; frame-src https://www.youtube-nocookie.com
+  https://player.vimeo.com; media-src 'self'; script-src 'none'; form-action 'self'; frame-ancestors
+  'none'; base-uri 'none'` (`frame-src` comes from the allowlist); table alignment is an `align`
   attribute because a `style` attribute would be refused. Fonts are the system's.
+- **Video players, and no other HTML.** `server/internal/kbhtml/allowlist.json` is the only raw HTML
+  an article may show; the editor preview (`web/src/features/kb/kb-html.ts`) reads the same file and
+  both run `testdata/cases.json`, so they cannot drift. goldmark hands raw HTML over in pieces (an
+  HTML block, or each inline tag on its own: `<video …>` and `</video>` are two pieces), so each piece
+  is parsed alone (`x/net/html` on the server, `DOMParser` in the preview, both HTML5 parsers):
+  - An `<iframe>` is kept only for a YouTube or Vimeo player, and is written again from the video id,
+    so no host, path or query of the author's comes through; `youtube.com/embed` becomes
+    `youtube-nocookie.com/embed`. An address with a space, control character or backslash, a port,
+    a user or another scheme is refused: browsers read those differently from a server parser.
+  - The rebuilt tag must pass bluemonday unchanged (a second gate; anything it would alter is left
+    out). Then `sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"`,
+    `referrerpolicy="strict-origin-when-cross-origin"` and `loading="lazy"` are added; the author
+    cannot set them. `allow-scripts allow-same-origin` is safe only because `src` is always the
+    player's own origin, never relative and never `srcdoc`.
+  - Every other element is left out and its text kept (escaped); `script`, `style`, `svg`, `object`
+    and the rest of `dropWithContent` go with their content.
+  - Why so strict: an iframe of any site would let an article frame a phishing page under the help
+    center's address, leak readers' addresses to sites nobody chose, and break when that site
+    goes away; only these two players have a stable, documented embed address (No lock-in: the
+    article's Markdown keeps the HTML as written, and the export carries it).
+  - `<video>` is ready in the allowlist (`video.enabled: false`) for the media library: until
+    `/api/v1/kb/media/<id>` serves files it would show a broken player, so the help center leaves it
+    out and the preview says it is not shown yet. Turning it on needs the route, a rewrite to
+    `<help center>/media/<id>` like images, and its tests.
+  - Cost: a 100,000-character article of nothing but raw HTML (about 4,500 pieces, 900 of them
+    players) renders in about 12 ms on an M-series Mac (plain text: 1 ms); pages are cached by
+    content version.
 - **Images from other sites become links.** `img-src 'self'` would show them broken, and on a
   shared origin an image pointing at an API path would fire a request with the reader's cookies.
   Article images (`/api/v1/kb/images/<id>`) are rewritten to `<help center>/images/<id>`.

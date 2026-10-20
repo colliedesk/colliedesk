@@ -9,8 +9,9 @@ The public help center is in `help-center.md`.
 
 ## Decisions
 
-- **Markdown is the only stored format.** `body_md` is what agents write and what the help center will
-  render, without raw HTML. An import keeps the original HTML in `source_html` and the fields Colliedesk
+- **Markdown is the only stored format.** `body_md` is what agents write and what the help center
+  renders; of raw HTML it shows only YouTube and Vimeo players (`server/internal/kbhtml`, see
+  [help-center.md](help-center.md)), and the text keeps every byte of it. An import keeps the original HTML in `source_html` and the fields Colliedesk
   has no column for in `source_meta`; only an import writes them, the API never does, the export carries
   them, and the help center never renders `source_html`.
 - **Copied from saved replies.** Versions, the 30-day trash, optimistic writes with `updated_at`, the
@@ -73,6 +74,11 @@ The public help center is in `help-center.md`.
   removes it and shows the server's reason.
 - **Only collection address names break links.** An article's address carries its number, so a new
   article slug is harmless; a collection's is not redirected, so its form warns before saving.
+- **The preview shows raw HTML as the help center does, without rehype-raw.** `rehype-raw` and
+  `rehype-sanitize` would add about 56 KB gzip (parse5 and its entity table) to the knowledge base
+  chunk; `kb-html.ts` instead parses each raw piece with the browser's `DOMParser` (an inert document:
+  no script runs, nothing loads) and applies `allowlist.json`, for 2.5 KB. Vite reads that file from
+  `server/internal/kbhtml` (`server.fs.allow`), and the Dockerfile's web stage copies it.
 - **History and trash are the saved reply panels** (`saved-reply-panels.tsx`), made generic with
   optional props; the change line reads the same, with `import` added.
 

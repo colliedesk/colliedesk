@@ -43,7 +43,7 @@ link opens the same list.
 1. Select **New article** (inside a collection, it starts there).
 2. Type a **Title** and the **Text** in Markdown: `**bold**`, `_italic_`, `#` headings, `-` and `1.`
    lists, `[links](https://example.com)`, tables, `> quotes` and code. **Preview** shows how it reads.
-   Raw HTML in the text is never shown.
+   Raw HTML in the text is not shown, except a [YouTube or Vimeo video](#videos).
 3. Choose the **Collection**.
 4. Select **Save draft** to keep it for agents only, or **Save and publish**.
 
@@ -60,6 +60,26 @@ uploaded twice is stored once. Saving waits until every image has finished uploa
 
 Only uploaded images are shown. An image linked from another site (`![x](https://…)`) is not shown in
 the preview or on the help center; the preview says so. Download it and paste it in instead.
+
+### Videos
+
+An article can show a YouTube or Vimeo video. Put the video's embed HTML on a line of its own, for
+example the code from YouTube's **Share → Embed**:
+
+```html
+<iframe src="https://www.youtube.com/embed/jNQXAC9IVRw?start=65" title="Me at the zoo" allowfullscreen></iframe>
+```
+
+- The address must be `https://www.youtube.com/embed/<id>`, `https://www.youtube-nocookie.com/embed/<id>`
+  or `https://player.vimeo.com/video/<id>`. YouTube videos play from `youtube-nocookie.com`, YouTube's
+  privacy-enhanced mode. Of the address only the video id, YouTube's `start=`
+  (seconds) and Vimeo's `h=` (the key of an unlisted video) are kept.
+- `title`, `width`, `height`, `allow` and `allowfullscreen` are kept. The video fills the width of the
+  page at 16:9 whatever size you give, and loads only when a reader scrolls to it.
+- Any other HTML is not shown: an iframe from another site, a `<video>` or `<audio>` file, a script, a
+  `style`, a form. Text inside a left-out element is shown as plain text. **Preview** names what it
+  left out on a line above the article; the saved text keeps the HTML as you wrote it.
+- Uploading a video file to the knowledge base is not available yet.
 
 ### Publish, unpublish, edit
 
@@ -132,7 +152,9 @@ address name** (Settings → Email) changes every help center address, and old l
   text, and any part of a title. It shows the best 25 matches.
 - Images you added to an article are shown while a published article uses them. An image from
   another site is shown as a link to it: the help center loads nothing from other sites.
-- Raw HTML in the text is never shown, and links work only for `http`, `https`, `mailto` and `tel`.
+- Raw HTML in the text is not shown, except [YouTube and Vimeo videos](#videos), and links work only
+  for `http`, `https`, `mailto` and `tel`. A video's site sees the reader's address when the video
+  loads, as with any embedded video.
 
 Pages have no scripts, no cookies and no tracking, follow the visitor's light or dark setting, and
 fit a phone. The page labels (Search, Home and so on) are in English; the help center's language
