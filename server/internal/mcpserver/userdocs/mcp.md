@@ -88,6 +88,24 @@ with `billing` and leave a note with a summary."
 | `colliedesk_saved_view_update` | Changes the name, the filters or who sees a view | `draft` |
 | `colliedesk_saved_view_delete` | Moves a view to the trash for 30 days; changes no conversation | `draft` |
 | `colliedesk_saved_view_restore` | Takes a view out of the trash | `draft` |
+| `colliedesk_kb_collections_list` | Lists the knowledge base collections (at most three levels deep) with how many articles each holds | `read` |
+| `colliedesk_kb_collection_create` | Adds a collection, at the top or inside another | `send` |
+| `colliedesk_kb_collection_update` | Renames, reorders or moves a collection | `send` |
+| `colliedesk_kb_collection_delete` | Moves an empty collection to the trash for 30 days | `send` |
+| `colliedesk_kb_collections_trash` | Lists the collections in the trash | `read` |
+| `colliedesk_kb_collection_undelete` | Takes a collection out of the trash | `send` |
+| `colliedesk_kb_articles_search` | Lists or searches the articles, without their text, a page at a time | `read` |
+| `colliedesk_kb_article_get` | Reads one article with its whole Markdown text, also from the trash | `read` |
+| `colliedesk_kb_article_create` | Writes an article, as a draft or published | `send` |
+| `colliedesk_kb_article_update` | Edits, moves, publishes or unpublishes an article; every change is a version | `send` |
+| `colliedesk_kb_article_delete` | Moves an article to the trash and off the help center. Restorable for 30 days, so not marked destructive | `send` |
+| `colliedesk_kb_articles_trash` | Lists the articles in the trash a page at a time | `read` |
+| `colliedesk_kb_article_undelete` | Takes an article out of the trash | `send` |
+| `colliedesk_kb_article_history` | Lists the versions of an article a page at a time (text cut after 2,000 characters; one version by number comes whole) | `read` |
+| `colliedesk_kb_article_version_restore` | Makes the text of an earlier version current again, as a new version | `send` |
+| `colliedesk_kb_image_upload` | Stores an image for articles (base64, at most 5 MiB) and gives the link to put in one | `send` |
+| `colliedesk_kb_image_get` | Shows a knowledge base image to the model | `read` |
+| `colliedesk_help_center_get` | Says whether the public help center is on, its title and language | `read` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any |
 | `colliedesk_docs_search` | Searches these user guides | any |
 | `colliedesk_reply_draft` | Leaves a reply draft that a person edits, sends or discards; never emails by itself | `read` |
@@ -114,6 +132,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_session_revoke` | Revokes a token or signs out one of your own devices; signing out another person waits for approval. Cannot be undone | `admin` |
 | `colliedesk_web_form_get` | Shows the web form settings | `read` |
 | `colliedesk_web_form_update` | Turns the web form on or off and sets the allowed origins | `admin` |
+| `colliedesk_help_center_update` | Turns the public help center on or off and sets its title and language | `admin` |
 | `colliedesk_email_channel_get` | Shows the email channel, never the inbound secret | `read` |
 | `colliedesk_email_channel_update` | Connects the email channel or changes the support address | `admin` |
 | `colliedesk_email_domain_verify` | Checks the DNS record that verifies the sending domain | `admin` |
