@@ -40,24 +40,26 @@ const KBMediaPath = "/api/v1/kb/media/"
 // Height are the size shown (a quarter-turned photo has them swapped); they are null until the
 // server read them. Usage and PurgeAt are set by the library list and details.
 type KBMedia struct {
-	ID           string        `json:"id"`
-	Kind         string        `json:"kind"`
-	ContentType  string        `json:"content_type"`
-	Size         int64         `json:"size"`
-	SHA256       string        `json:"sha256"`
-	URL          string        `json:"url"`
-	Name         string        `json:"name"`
-	Alt          string        `json:"alt"`
-	Width        *int          `json:"width"`
-	Height       *int          `json:"height"`
-	DurationMS   *int64        `json:"duration_ms"`
-	Codecs       []string      `json:"codecs"`
-	ThumbnailURL *string       `json:"thumbnail_url"`
-	Kept         bool          `json:"kept"`
-	DeletedAt    *time.Time    `json:"deleted_at"`
-	CreatedAt    time.Time     `json:"created_at"`
-	UpdatedAt    time.Time     `json:"updated_at"`
-	Usage        *KBMediaUsage `json:"usage,omitempty"`
+	ID           string   `json:"id"`
+	Kind         string   `json:"kind"`
+	ContentType  string   `json:"content_type"`
+	Size         int64    `json:"size"`
+	SHA256       string   `json:"sha256"`
+	URL          string   `json:"url"`
+	Name         string   `json:"name"`
+	Alt          string   `json:"alt"`
+	Width        *int     `json:"width"`
+	Height       *int     `json:"height"`
+	DurationMS   *int64   `json:"duration_ms"`
+	Codecs       []string `json:"codecs"`
+	ThumbnailURL *string  `json:"thumbnail_url"`
+	// PosterURL is a video's still picture; a new poster is a new URL.
+	PosterURL *string       `json:"poster_url"`
+	Kept      bool          `json:"kept"`
+	DeletedAt *time.Time    `json:"deleted_at"`
+	CreatedAt time.Time     `json:"created_at"`
+	UpdatedAt time.Time     `json:"updated_at"`
+	Usage     *KBMediaUsage `json:"usage,omitempty"`
 	// PurgeAt is when the daily purge deletes an item no article ever saved and nobody kept.
 	PurgeAt *time.Time `json:"purge_at,omitempty"`
 }
@@ -227,4 +229,57 @@ func ReplaceKBMediaIDs(text, from, to string) string {
 		}
 		return link
 	})
+}
+
+// Limits of video uploads.
+const (
+	// MaxKBVideoBytes is the largest video by default (about ten minutes of a 1080p screen
+	// recording); a self-hosted server changes it with KB_VIDEO_MAX_BYTES.
+	MaxKBVideoBytes = 200 << 20
+	// KBMediaPartSize is the most bytes one part of an upload carries.
+	KBMediaPartSize = 8 << 20
+	// MaxKBMediaUploadsOpen is the most uploads a workspace has in progress at once.
+	MaxKBMediaUploadsOpen = 3
+	// MaxKBMediaUploadsServer is the most uploads in progress on a server.
+	MaxKBMediaUploadsServer = 20
+	// MaxKBMediaUploadsPerHour is the most uploads one person or token starts in an hour.
+	MaxKBMediaUploadsPerHour = 10
+	// KBMediaUploadTTL is how long an upload may take before its parts are thrown away.
+	KBMediaUploadTTL = 24 * time.Hour
+	// KBMediaDiskMargin is the room a disk keeps free besides the uploads in progress.
+	KBMediaDiskMargin = 1 << 30
+)
+
+// KBMediaUpload is an upload of a video in parts: Offset bytes of Size received so far.
+type KBMediaUpload struct {
+	ID        string    `json:"id"`
+	Kind      string    `json:"kind"`
+	Name      string    `json:"name"`
+	Size      int64     `json:"size"`
+	Offset    int64     `json:"offset"`
+	PartSize  int64     `json:"part_size"`
+	ExpiresAt time.Time `json:"expires_at"`
+	// MediaID is set once the upload is complete.
+	MediaID *string `json:"media_id"`
+}
+
+// NewKBMediaUpload is what starting an upload asks.
+type NewKBMediaUpload struct {
+	Size int64
+	KBImageUpload
+}
+
+var (
+	ErrKBMediaUploadNotFound = errors.New("knowledge base media upload not found")
+	// ErrKBMediaUploadLimit means too many uploads in progress, or started this hour.
+	ErrKBMediaUploadLimit = fmt.Errorf("at most %d uploads may be in progress in a workspace and %d started by one person in an hour; finish or cancel one first", MaxKBMediaUploadsOpen, MaxKBMediaUploadsPerHour)
+	// ErrKBMediaUploadIncomplete means a complete before every byte arrived.
+	ErrKBMediaUploadIncomplete = errors.New("the upload has not received every byte yet")
+)
+
+// KBMediaOffsetError means a part did not start where the upload stands; Offset is where it does.
+type KBMediaOffsetError struct{ Offset int64 }
+
+func (e *KBMediaOffsetError) Error() string {
+	return fmt.Sprintf("the upload stands at byte %d; send the part that starts there", e.Offset)
 }

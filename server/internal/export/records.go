@@ -187,6 +187,34 @@ type KBImage struct {
 	StorageKey       string     `json:"-"`
 }
 
+// KBVideo is a video of the knowledge base media library; its bytes are the file at Path and its
+// poster, if it has one, the file at PosterPath. DurationMS is null when the file did not say.
+type KBVideo struct {
+	ID                string     `json:"id"`
+	ContentType       string     `json:"content_type"`
+	Size              int64      `json:"size"`
+	SHA256            string     `json:"sha256"`
+	Path              string     `json:"path"`
+	PosterPath        *string    `json:"poster_path"`
+	Name              string     `json:"name"`
+	Alt               string     `json:"alt"`
+	Width             *int       `json:"width"`
+	Height            *int       `json:"height"`
+	DurationMS        *int64     `json:"duration_ms"`
+	Codecs            []string   `json:"codecs"`
+	Kept              bool       `json:"kept"`
+	CreatedByAgentID  *string    `json:"created_by_agent_id"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+	UpdatedByAgentID  *string    `json:"updated_by_agent_id"`
+	DeletedAt         *time.Time `json:"deleted_at"`
+	DeletedByAgentID  *string    `json:"deleted_by_agent_id"`
+	StorageKey        string     `json:"-"`
+	PosterKey         string     `json:"-"`
+	PosterSize        int64      `json:"-"`
+	PosterContentType string     `json:"-"`
+}
+
 // KBMediaReplacement is one replacement of a library item in the articles that showed it: the articles
 // that got a version naming ToMediaID instead of FromMediaID (and the number of that version), the
 // translations rewritten with their text before and after, and when it was undone, if it was.
@@ -317,6 +345,7 @@ type Sink interface {
 	KBArticleVersion(KBArticleVersion) error
 	KBArticleTranslation(KBArticleTranslation) error
 	KBImage(KBImage) error
+	KBVideo(KBVideo) error
 	KBMediaReplacement(KBMediaReplacement) error
 	HelpCenter(HelpCenter) error
 	AgentRequest(AgentRequest) error

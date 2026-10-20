@@ -2863,6 +2863,42 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/kb/media/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getKBMediaFile
+      x-permission: conversations:read
+      description: >
+        The bytes of a library item, with ranges (206) so a video seeks, `nosniff` and a sandboxing
+        Content-Security-Policy. An id always names the same bytes: the answer may be cached for a
+        year. `download=1` asks the browser to save it under its name.
+      parameters:
+        - {name: download, in: query, schema: {type: string, enum: ['1']}}
+      responses:
+        '200':
+          description: The bytes
+          headers:
+            Cache-Control: {schema: {type: string}, description: 'private, max-age=31536000, immutable'}
+            ETag: {schema: {type: string}}
+            Accept-Ranges: {schema: {type: string}}
+          content:
+            video/mp4: {schema: {type: string, format: binary}}
+            video/webm: {schema: {type: string, format: binary}}
+            image/png: {schema: {type: string, format: binary}}
+            image/jpeg: {schema: {type: string, format: binary}}
+            image/gif: {schema: {type: string, format: binary}}
+            image/webp: {schema: {type: string, format: binary}}
+        '206':
+          description: The range asked for
+          content:
+            video/mp4: {schema: {type: string, format: binary}}
+            video/webm: {schema: {type: string, format: binary}}
+            image/png: {schema: {type: string, format: binary}}
+            image/jpeg: {schema: {type: string, format: binary}}
+            image/gif: {schema: {type: string, format: binary}}
+            image/webp: {schema: {type: string, format: binary}}
+        '304': {description: Not modified (If-None-Match)}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '416': {description: The range is outside the bytes}
     patch:
       operationId: updateKBMedia
       x-permission: conversations:write
@@ -2973,6 +3009,173 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/media-uploads:
+    post:
+      operationId: createKBMediaUpload
+      x-permission: conversations:write
+      description: >
+        Start an upload of a video in parts: MP4 (H.264 or AV1 with AAC sound, QuickTime .mov included)
+        or WebM (VP8, VP9 or AV1 with Opus or Vorbis), at most 200 MiB unless the server says
+        otherwise. Nothing is converted, so the video must be one every browser plays: an H.265
+        (HEVC) video, the default of iPhones, is refused when the upload completes. Send the parts with
+        `PUT /api/v1/kb/media-uploads/{id}`, then complete it. The plan's storage (counting the uploads
+        in progress) and the server's disk must have room before any byte is sent: 403
+        `storage_limit_reached`, 507 `insufficient_disk`. At most 3 uploads are in progress in a
+        workspace and 10 are started by one person in an hour (429 `too_many_uploads`). The parts are
+        thrown away after 24 hours. A token below `send` gets 403 `files_need_approval`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [size]
+              properties:
+                size: {type: integer, minimum: 1}
+                name: {type: string, maxLength: 200}
+                alt: {type: string, maxLength: 500, description: The video's title for screen readers.}
+                keep: {type: boolean, description: 'true keeps the video from the purge of unused items, as an upload in the library does.'}
+      responses:
+        '201':
+          description: The upload, at offset 0
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBMediaUpload'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413':
+          description: The video is larger than the server takes; nothing was stored.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '429':
+          description: Too many uploads in progress or started this hour.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '507':
+          description: The server's disk has no room for the video.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  /api/v1/kb/media-uploads/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getKBMediaUpload
+      x-permission: conversations:read
+      description: 'Where an upload stands; after a lost connection, send the part that starts at `offset`.'
+      responses:
+        '200':
+          description: The upload
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBMediaUpload'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    put:
+      operationId: putKBMediaUploadPart
+      x-permission: conversations:write
+      description: >
+        Send the next part, at most `part_size` bytes, with `Content-Range: bytes <first>-<last>/<size>`.
+        A part that does not start at the upload's offset is refused with 409 `upload_offset_mismatch`,
+        the offset in `Upload-Offset` and in the answer; send that part again. One part of an upload at
+        a time; a part must arrive within 120 seconds.
+      parameters:
+        - {name: Content-Range, in: header, required: true, schema: {type: string, pattern: '^bytes \d+-\d+/\d+$'}}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream: {schema: {type: string, format: binary}}
+      responses:
+        '200':
+          description: The upload, at its new offset
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBMediaUpload'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: The part does not start where the upload stands, or the upload is complete.
+          headers:
+            Upload-Offset: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '429':
+          description: Another part of this upload, or too many of the workspace, are being sent.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    delete:
+      operationId: cancelKBMediaUpload
+      x-permission: conversations:write
+      description: Cancel an upload in progress and throw its parts away.
+      responses:
+        '204': {description: Cancelled}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/media-uploads/{id}/complete:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: completeKBMediaUpload
+      x-permission: conversations:write
+      description: >
+        Check and store the video once every part arrived. The server reads its length, size and codecs
+        from the file, and removes in place what a camera or phone leaves in it (location, titles,
+        XMP, tracks of data such as GPS or subtitles) without changing a frame. A video it refuses
+        (400 `unsupported_codec`, `invalid_request`) is thrown away with the upload. The same bytes give
+        the item that holds them, and a repeated complete answers the same item. Put it in an article
+        as `<video controls src="/api/v1/kb/media/<id>"></video>`.
+      responses:
+        '201':
+          description: The video in the library
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBMedia'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429':
+          description: A part of this upload is being sent.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  /api/v1/kb/media/{id}/poster:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    put:
+      operationId: putKBVideoPoster
+      x-permission: conversations:write
+      description: >
+        Give a video its poster, the still picture shown before it plays: the raw bytes of a PNG, JPEG,
+        GIF or WebP image, at most 5 MiB, metadata removed. It counts toward the plan's storage with the
+        video and becomes the video's thumbnail in the library. A new poster is a new `poster_url`;
+        the old one is deleted. Images have no poster (400).
+      requestBody:
+        required: true
+        content:
+          image/png: {schema: {type: string, format: binary}}
+          image/jpeg: {schema: {type: string, format: binary}}
+          image/gif: {schema: {type: string, format: binary}}
+          image/webp: {schema: {type: string, format: binary}}
+      responses:
+        '200':
+          description: The video with its poster
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBMedia'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '413':
+          description: The poster is over 5 MiB; nothing was stored.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  /api/v1/kb/media/{id}/poster/{version}:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: version, in: path, required: true, schema: {type: string, pattern: '^[0-9a-f]{8}$'}}
+    get:
+      operationId: getKBVideoPoster
+      x-permission: conversations:read
+      description: 'A video''s poster, the version `poster_url` names; an older version is 404, so a cache never shows another picture under an address.'
+      responses:
+        '200':
+          description: The poster
+          headers:
+            Cache-Control: {schema: {type: string}, description: 'private, max-age=31536000, immutable'}
+          content:
+            image/png: {schema: {type: string, format: binary}}
+            image/jpeg: {schema: {type: string, format: binary}}
+            image/gif: {schema: {type: string, format: binary}}
+            image/webp: {schema: {type: string, format: binary}}
+        '304': {description: Not modified (If-None-Match)}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/kb/media/{id}/details:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -3956,7 +4159,7 @@ components:
         collection_id: {type: [string, 'null'], format: uuid, description: Null once that collection was deleted for good.}
     KBMedia:
       type: object
-      required: [id, kind, content_type, size, sha256, url, name, alt, width, height, duration_ms, codecs, thumbnail_url, kept, deleted_at, created_at, updated_at]
+      required: [id, kind, content_type, size, sha256, url, name, alt, width, height, duration_ms, codecs, thumbnail_url, poster_url, kept, deleted_at, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         kind: {type: string, enum: [image, video]}
@@ -3971,6 +4174,7 @@ components:
         duration_ms: {type: [integer, 'null'], description: A video's length; null for an image or when the file does not say.}
         codecs: {type: array, items: {type: string}, description: A video's codecs; empty for an image.}
         thumbnail_url: {type: [string, 'null'], description: 'The thumbnail, /api/v1/kb/media/<id>/thumbnail?v=<version>; a new thumbnail gets a new version. Null while there is none.'}
+        poster_url: {type: [string, 'null'], description: 'A video''s still picture, /api/v1/kb/media/<id>/poster/<version>; a new poster is a new URL. Null for an image or a video without one.'}
         kept: {type: boolean, description: The purge never deletes a kept item.}
         deleted_at: {type: [string, 'null'], format: date-time, description: Set while the item is in the library's trash.}
         created_at: {type: string, format: date-time}
@@ -4033,6 +4237,18 @@ components:
         skipped_article_ids: {type: array, items: {type: string, format: uuid}, description: 'After an undo: the articles (or their translations) that changed since the replacement and kept their text.'}
         created_at: {type: string, format: date-time}
         undone_at: {type: [string, 'null'], format: date-time}
+    KBMediaUpload:
+      type: object
+      required: [id, kind, name, size, offset, part_size, expires_at, media_id]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [video]}
+        name: {type: string}
+        size: {type: integer, description: The bytes announced.}
+        offset: {type: integer, description: The bytes received; the next part starts here.}
+        part_size: {type: integer, description: The most bytes one part may carry (8 MiB).}
+        expires_at: {type: string, format: date-time, description: The parts are thrown away after this (24 hours after the start).}
+        media_id: {type: [string, 'null'], format: uuid, description: The library item once the upload is complete.}
     KBMediaUnusedSummary:
       type: object
       required: [count, bytes, kept_count, kept_bytes]
@@ -4547,6 +4763,7 @@ components:
               description: 'Present on validation errors (422), one message per bad field name'
               additionalProperties: {type: string}
             retry_after_seconds: {type: integer, description: 'Only on trial_outbound_limit: seconds until a reply can be sent.'}
+            offset: {type: integer, description: 'Only on upload_offset_mismatch: where the upload stands; send the part that starts there.'}
             articles:
               type: array
               description: 'Only on media_in_use: the live articles whose current text names the item.'

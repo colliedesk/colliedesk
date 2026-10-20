@@ -122,6 +122,14 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/kb/media/{id}/restore":                         tier(auth.ScopeSend),
 	"POST /api/v1/kb/media/{id}/replace":                         tier(auth.ScopeSend),
 	"POST /api/v1/kb/media-replacements/{id}/undo":               tier(auth.ScopeSend),
+	"POST /api/v1/kb/media-uploads":                              tier(auth.ScopeSend),
+	"GET /api/v1/kb/media-uploads/{id}":                          tier(auth.ScopeRead),
+	"PUT /api/v1/kb/media-uploads/{id}":                          tier(auth.ScopeSend),
+	"DELETE /api/v1/kb/media-uploads/{id}":                       tier(auth.ScopeSend),
+	"POST /api/v1/kb/media-uploads/{id}/complete":                tier(auth.ScopeSend),
+	"GET /api/v1/kb/media/{id}":                                  tier(auth.ScopeRead),
+	"PUT /api/v1/kb/media/{id}/poster":                           tier(auth.ScopeSend),
+	"GET /api/v1/kb/media/{id}/poster/{version}":                 tier(auth.ScopeRead),
 	"GET /api/v1/kb/media/{id}/details":                          tier(auth.ScopeRead),
 	"GET /api/v1/kb/media/{id}/thumbnail":                        tier(auth.ScopeRead),
 	"GET /api/v1/help-center":                                    tier(auth.ScopeRead),
@@ -227,6 +235,19 @@ func (a *API) gateToken(response http.ResponseWriter, request *http.Request, rou
 		writeError(response, http.StatusForbidden, "scope_insufficient", "Agent tokens cannot use this route. Sign in as a person to do this.")
 		return true
 	}
+	if kbFileRoutes[route.Method+" "+route.Pattern] {
+		writeFilesNeedApproval(response)
+		return true
+	}
 	a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, nil, "")
 	return true
+}
+
+// kbFileRoutes carry a video's bytes or start an upload of them: a file never waits for approval, so a
+// token below their tier is refused (files_need_approval), not filed.
+var kbFileRoutes = map[string]bool{
+	"POST /api/v1/kb/media-uploads":               true,
+	"PUT /api/v1/kb/media-uploads/{id}":           true,
+	"POST /api/v1/kb/media-uploads/{id}/complete": true,
+	"PUT /api/v1/kb/media/{id}/poster":            true,
 }

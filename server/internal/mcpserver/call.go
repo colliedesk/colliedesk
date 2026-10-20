@@ -57,6 +57,15 @@ func (c *call) upload(path, contentType string, data []byte, into any) error {
 	return c.refuse(err, c.notFound)
 }
 
+// sendBytes sends raw bytes with method and headers as the caller.
+func (c *call) sendBytes(method, path, contentType string, headers map[string]string, data []byte, into any) error {
+	err := c.rest.sendBytes(c.ctx, c.token, method, path, contentType, headers, data, into)
+	if err == nil {
+		c.wrote = true
+	}
+	return c.refuse(err, c.notFound)
+}
+
 // me is the caller's identity, workspace and tier.
 func (c *call) me() (*restMe, error) {
 	if c.session == nil {

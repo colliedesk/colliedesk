@@ -23,6 +23,20 @@ reaches the server directly through Docker's bridge, could then send a fake `X-F
 pick its own address for the limits. The shipped files publish on `127.0.0.1` only. If you
 expose the port directly, set `TRUSTED_PROXIES=` (empty).
 
+## Large uploads
+
+Knowledge base videos go up in parts of at most 8 MiB, each one request. Caddy takes them as they
+are. nginx refuses a body over 1 MB by default, so raise it for the API:
+`client_max_body_size 16m;`. A part must arrive within 120 seconds.
+
+A video plays and seeks with HTTP ranges (`Range`, `206 Partial Content`); keep them working through
+the proxy, and do not compress `video/*` (Caddy's `encode` leaves video alone; with nginx, leave
+`video/mp4` and `video/webm` out of `gzip_types`).
+
+Videos take disk room: the server refuses an upload when the disk has less than the video, the
+uploads in progress and 1 GiB free. Back up `ATTACHMENTS_DIR` with the database; a backup and an
+[export](../user/export.md) grow with the videos.
+
 ## Help center host names
 
 Every workspace's [help center](../user/knowledge-base.md#public-help-center) works at

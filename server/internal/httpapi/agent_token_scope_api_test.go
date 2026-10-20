@@ -69,6 +69,14 @@ var routeTiers = map[string]string{
 	"POST /api/v1/kb/media/{id}/restore":                         "send",
 	"POST /api/v1/kb/media/{id}/replace":                         "send",
 	"POST /api/v1/kb/media-replacements/{id}/undo":               "send",
+	"POST /api/v1/kb/media-uploads":                              "send",
+	"GET /api/v1/kb/media-uploads/{id}":                          "read",
+	"PUT /api/v1/kb/media-uploads/{id}":                          "send",
+	"DELETE /api/v1/kb/media-uploads/{id}":                       "send",
+	"POST /api/v1/kb/media-uploads/{id}/complete":                "send",
+	"GET /api/v1/kb/media/{id}":                                  "read",
+	"PUT /api/v1/kb/media/{id}/poster":                           "send",
+	"GET /api/v1/kb/media/{id}/poster/{version}":                 "read",
 	"GET /api/v1/kb/media/{id}/details":                          "read",
 	"GET /api/v1/kb/media/{id}/thumbnail":                        "read",
 	"GET /api/v1/help-center":                                    "read",
@@ -121,6 +129,10 @@ var routeTiers = map[string]string{
 	"POST /api/v1/agent-requests/{id}/reject":                    "person",
 }
 
+// kbFileRouteKeys carry video bytes; like an image upload, a lower tier is refused, not filed.
+var kbFileRouteKeys = map[string]bool{"POST /api/v1/kb/media-uploads": true, "PUT /api/v1/kb/media-uploads/{id}": true,
+	"POST /api/v1/kb/media-uploads/{id}/complete": true, "PUT /api/v1/kb/media/{id}/poster": true}
+
 func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
 	fixture := newContractFixture(t)
 	cases := successfulContractCases(fixture)
@@ -152,7 +164,7 @@ func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
 				response = serve(fixture.api, kbImageRequest(token, nil))
 			}
 			switch {
-			case key == "POST "+kbImagesPath && tierRank[tier] < tierRank[want]:
+			case (key == "POST "+kbImagesPath || kbFileRouteKeys[key]) && tierRank[tier] < tierRank[want]:
 				// Bytes never wait for approval: a lower tier is refused, not filed.
 				if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "files_need_approval") {
 					t.Errorf("%s with a %s token: status=%d body=%s, want 403 files_need_approval", key, tier, response.Code, response.Body.String())
@@ -164,6 +176,11 @@ func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
 			case want == "approval" || tierRank[tier] < tierRank[want]:
 				if response.Code != http.StatusAccepted {
 					t.Errorf("%s with a %s token: status=%d body=%s, want 202 (an agent request)", key, tier, response.Code, response.Body.String())
+				}
+			case kbFileRouteKeys[key]:
+				// The gate let the token through; the bytes and their checks are the contract cases'.
+				if response.Code == http.StatusAccepted || strings.Contains(response.Body.String(), "files_need_approval") || strings.Contains(response.Body.String(), "scope_insufficient") {
+					t.Errorf("%s with a %s token: status=%d body=%s, want past the gate", key, tier, response.Code, response.Body.String())
 				}
 			case strings.HasPrefix(route.Pattern, "/api/v1/agent-requests/{id}"):
 				// The fixture's request belongs to another token, which this one cannot see.

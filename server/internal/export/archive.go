@@ -30,13 +30,13 @@ const (
 // Record files in archive order. A record of an earlier file after a later one is a programming
 // error, because a ZIP entry is written in one piece.
 var recordFiles = []string{"agents.ndjson", "contacts.ndjson", "contact-merges.ndjson", "tags.ndjson", "saved-replies.ndjson", "saved-reply-versions.ndjson", "saved-views.ndjson",
-	"kb-collections.ndjson", "kb-articles.ndjson", "kb-article-versions.ndjson", "kb-article-translations.ndjson", "kb-images.ndjson", "kb-media-replacements.ndjson", "help-center.ndjson",
+	"kb-collections.ndjson", "kb-articles.ndjson", "kb-article-versions.ndjson", "kb-article-translations.ndjson", "kb-images.ndjson", "kb-videos.ndjson", "kb-media-replacements.ndjson", "help-center.ndjson",
 	"agent-requests.ndjson", "conversations.ndjson"}
 
 var countKeys = map[string]string{
 	"agents.ndjson": "agents", "contacts.ndjson": "contacts", "contact-merges.ndjson": "contact_merges", "tags.ndjson": "tags", "saved-replies.ndjson": "saved_replies", "saved-reply-versions.ndjson": "saved_reply_versions", "saved-views.ndjson": "saved_views",
 	"kb-collections.ndjson": "kb_collections", "kb-articles.ndjson": "kb_articles", "kb-article-versions.ndjson": "kb_article_versions",
-	"kb-article-translations.ndjson": "kb_article_translations", "kb-images.ndjson": "kb_images", "kb-media-replacements.ndjson": "kb_media_replacements", "help-center.ndjson": "help_center", "agent-requests.ndjson": "agent_requests", "conversations.ndjson": "conversations",
+	"kb-article-translations.ndjson": "kb_article_translations", "kb-images.ndjson": "kb_images", "kb-videos.ndjson": "kb_videos", "kb-media-replacements.ndjson": "kb_media_replacements", "help-center.ndjson": "help_center", "agent-requests.ndjson": "agent_requests", "conversations.ndjson": "conversations",
 }
 
 // Opener reads stored attachment bytes; attachments.Storage satisfies it.
@@ -81,7 +81,7 @@ func NewWriter(out io.Writer, opener Opener, workspaceID string, exportedAt time
 		zip: zip.NewWriter(out), out: out, opener: opener, workspaceID: workspaceID,
 		exportedAt: exportedAt.UTC(), current: -1,
 		counts: map[string]int{"agents": 0, "contacts": 0, "tags": 0, "saved_replies": 0, "saved_reply_versions": 0, "saved_views": 0,
-			"kb_collections": 0, "kb_articles": 0, "kb_article_versions": 0, "kb_article_translations": 0, "kb_images": 0, "kb_media_replacements": 0, "help_center": 0, "agent_requests": 0, "conversations": 0, "messages": 0, "attachments": 0, "time_entries": 0},
+			"kb_collections": 0, "kb_articles": 0, "kb_article_versions": 0, "kb_article_translations": 0, "kb_images": 0, "kb_videos": 0, "kb_media_replacements": 0, "help_center": 0, "agent_requests": 0, "conversations": 0, "messages": 0, "attachments": 0, "time_entries": 0},
 	}
 }
 
@@ -141,6 +141,29 @@ func (w *Writer) KBImage(record KBImage) error {
 		return err
 	}
 	return w.record("kb-images.ndjson", record)
+}
+
+// KBVideo records a knowledge base video; Finish copies its bytes to kb-videos/<id>.<ext> and its
+// poster to kb-videos/<id>.poster.<ext>, checked against their sizes and SHA-256.
+func (w *Writer) KBVideo(record KBVideo) error {
+	if w.err != nil {
+		return w.err
+	}
+	record.Path = "kb-videos/" + record.ID + map[string]string{"video/mp4": ".mp4", "video/webm": ".webm"}[record.ContentType]
+	if err := w.open("kb-videos.ndjson"); err != nil {
+		return err
+	}
+	if err := w.spillFile(spillRecord{ID: record.ID, Key: record.StorageKey, Path: record.Path, Size: record.Size, SHA256: record.SHA256}); err != nil {
+		return err
+	}
+	if record.PosterKey != "" {
+		poster := "kb-videos/" + record.ID + ".poster" + kbImageExtensions[record.PosterContentType]
+		record.PosterPath = &poster
+		if err := w.spillFile(spillRecord{ID: record.ID + "-poster", Key: record.PosterKey, Path: poster, Size: record.PosterSize, SHA256: record.PosterKey[len(record.PosterKey)-64:]}); err != nil {
+			return err
+		}
+	}
+	return w.record("kb-videos.ndjson", record)
 }
 
 var kbImageExtensions = map[string]string{"image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp"}

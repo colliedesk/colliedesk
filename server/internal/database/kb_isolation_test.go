@@ -22,14 +22,15 @@ func seedKB(t *testing.T, ctx context.Context, tx pgx.Tx, workspaceID, name stri
 		i AS (INSERT INTO kb_media(workspace_id,storage_key,sha256,size,content_type) VALUES($1,$1::text||'/00/'||$3,$3,10,'image/png') RETURNING id),
 		l AS (INSERT INTO kb_article_media(workspace_id,article_id,media_id,current) SELECT $1,a.id,i.id,true FROM a,i RETURNING 1),
 		b AS (INSERT INTO kb_media_batches(workspace_id,action,media_ids) SELECT $1,'trash',ARRAY[i.id] FROM i RETURNING 1),
-		r AS (INSERT INTO kb_media_replacements(workspace_id,from_media_id,to_media_id) SELECT $1,i.id,gen_random_uuid() FROM i RETURNING 1)
+		r AS (INSERT INTO kb_media_replacements(workspace_id,from_media_id,to_media_id) SELECT $1,i.id,gen_random_uuid() FROM i RETURNING 1),
+		u AS (INSERT INTO kb_media_uploads(workspace_id,size,expires_at) VALUES($1,100,now()+interval '1 day') RETURNING 1)
 		INSERT INTO help_centers(workspace_id,title) VALUES($1,$2)`, workspaceID, name, sha)
 	if err != nil {
 		t.Fatalf("seed knowledge base of %s: %v", name, err)
 	}
 }
 
-var kbTables = []string{"kb_collections", "kb_articles", "kb_article_versions", "kb_article_translations", "kb_media", "kb_article_media", "kb_media_batches", "kb_media_replacements", "help_centers"}
+var kbTables = []string{"kb_collections", "kb_articles", "kb_article_versions", "kb_article_translations", "kb_media", "kb_article_media", "kb_media_batches", "kb_media_replacements", "kb_media_uploads", "help_centers"}
 
 func TestKnowledgeBaseTablesAreScopedByRowLevelSecurity(t *testing.T) {
 	pool := testPool(t)
@@ -156,7 +157,7 @@ func TestKnowledgeBaseMediaCountTowardStorage(t *testing.T) {
 	stored("after thumbnails", 100, 154)
 	exec(`INSERT INTO kb_media(workspace_id,kind,storage_key,sha256,size,content_type) VALUES ($1,'video','v1',repeat('c',64),1000,'video/mp4')`)
 	stored("after video", 1100, 1154)
-	exec(`UPDATE kb_media SET poster_storage_key='p1', poster_size=50, thumb_storage_key='pt1', thumb_size=5 WHERE storage_key='v1' AND workspace_id=$1`)
+	exec(`UPDATE kb_media SET poster_storage_key='p1', poster_size=50, poster_content_type='image/jpeg', thumb_storage_key='pt1', thumb_size=5 WHERE storage_key='v1' AND workspace_id=$1`)
 	stored("after poster", 1150, 1209)
 	exec(`UPDATE kb_media SET poster_storage_key='p2', poster_size=30 WHERE storage_key='v1' AND workspace_id=$1`)
 	stored("after poster change", 1130, 1189)

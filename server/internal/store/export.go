@@ -567,6 +567,30 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 		return err
 	}
 
+	rows, err = tx.Query(ctx, `SELECT id::text,content_type,size,sha256,storage_key,COALESCE(poster_storage_key,''),COALESCE(poster_size,0),COALESCE(poster_content_type,''),
+			name,alt,width,height,duration_ms,codecs,kept,created_by_agent_id::text,created_at,updated_at,updated_by_agent_id::text,deleted_at,deleted_by_agent_id::text
+		FROM kb_media WHERE workspace_id=$1 AND kind='video' ORDER BY id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export knowledge base videos: %w", err)
+	}
+	for rows.Next() {
+		var record export.KBVideo
+		if err := rows.Scan(&record.ID, &record.ContentType, &record.Size, &record.SHA256, &record.StorageKey, &record.PosterKey, &record.PosterSize, &record.PosterContentType,
+			&record.Name, &record.Alt, &record.Width, &record.Height, &record.DurationMS, &record.Codecs, &record.Kept, &record.CreatedByAgentID, &record.CreatedAt,
+			&record.UpdatedAt, &record.UpdatedByAgentID, &record.DeletedAt, &record.DeletedByAgentID); err != nil {
+			rows.Close()
+			return fmt.Errorf("export knowledge base videos: %w", err)
+		}
+		record.CreatedAt, record.UpdatedAt, record.DeletedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt), domain.UTCOptional(record.DeletedAt)
+		if err := sink.KBVideo(record); err != nil {
+			rows.Close()
+			return err
+		}
+	}
+	if err := rowsError("export knowledge base videos", rows); err != nil {
+		return err
+	}
+
 	rows, err = tx.Query(ctx, `SELECT id::text,from_media_id::text,to_media_id::text,article_ids::text[],article_versions,translations,skipped_article_ids::text[],replaced_by_agent_id::text,created_at,undone_at,undone_by_agent_id::text
 		FROM kb_media_replacements WHERE workspace_id=$1 ORDER BY created_at, id`, workspaceID)
 	if err != nil {

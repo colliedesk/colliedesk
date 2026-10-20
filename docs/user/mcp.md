@@ -114,6 +114,12 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_media_purge` | Deletes items in the trash for good, freeing their storage | `admin` |
 | `colliedesk_kb_media_replace` | Puts another image or video in place of one in every article that shows it | `send` |
 | `colliedesk_kb_media_replace_undo` | Undoes a replacement | `send` |
+| `colliedesk_kb_video_upload_start` | Starts uploading a video (MP4 or WebM, up to 200 MiB) in parts | `send` |
+| `colliedesk_kb_video_upload_part` | Sends the next part of an upload (up to 5 MiB, base64) | `send` |
+| `colliedesk_kb_video_upload_status` | Says where an upload stands, to go on after an interruption | `read` |
+| `colliedesk_kb_video_upload_cancel` | Cancels an upload and throws its parts away | `send` |
+| `colliedesk_kb_video_upload_complete` | Checks and stores the uploaded video | `send` |
+| `colliedesk_kb_video_poster_set` | Sets a video's poster, the still picture shown before it plays | `send` |
 | `colliedesk_help_center_get` | Says whether the public help center is on, its title and language | `read` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any |
 | `colliedesk_docs_search` | Searches these user guides | any |

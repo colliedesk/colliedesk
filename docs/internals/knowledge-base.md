@@ -106,6 +106,32 @@ The public help center is in `help-center.md`.
   the old item was purged is refused (`media_gone`). Zendesk keeps the URL instead; we do not.
 - **A restore starts the 30 days again.** Taking an item out of the trash (or a save that does) sets
   `last_uploaded_at`, or an old item nobody kept would go with the next purge.
+- **Videos are not converted, and the server reads them itself.** Only what every browser plays as it
+  is: MP4 (H.264, AV1; AAC) and WebM (VP8, VP9, AV1; Opus, Vorbis). `server/internal/media` walks MP4
+  boxes and WebM elements (depth 8, 10,000 boxes) for the brand, codecs, size (a quarter-turned track
+  matrix swaps it) and length; `http.DetectContentType` names neither a `.mov` (`qt  `) nor an MP4
+  branded `isom` alone. HEVC is refused with how to export H.264: browsers play it only on some
+  hardware. No ffmpeg in the image (tens of MB, licences, minutes of CPU a video).
+- **Location leaves a video in place.** MP4 `udta`, `meta` and `uuid` boxes (top level, `moov`,
+  `trak`) become `free` with zeroed content; a track that is not picture, sound or timecode (GoPro
+  GPS, subtitles) has its samples zeroed (from `stsz`, `stsc`, `stco`/`co64`) and its `trak` freed.
+  Sizes and offsets never move, so nothing is rewritten. A file where that is not safe is refused:
+  `stz2`, missing tables, a `dref` to another file, a fragmented file with such a track, a sample
+  outside `mdat` or overlapping picture or sound. WebM `Tags`, `Attachments` and the title become
+  `Void`; a WebM track that is not picture or sound is refused, and the walk stops at a cluster of
+  unknown size (a browser's recording, which writes no tags).
+- **Uploads in parts, one replica.** `POST /kb/media-uploads` reserves room (the plan's storage and the
+  disk, counting what the open uploads still need), then parts of 8 MiB go to
+  `<ATTACHMENTS_DIR>/.incoming/media-<id>` with `Content-Range`; a part not at the offset is 409 with
+  `Upload-Offset`. Complete checks the file, neutralises it in place and renames it to its content
+  address (`attachments.Staging.Adopt`), so a video never needs twice its size on disk. One part of an
+  upload at a time and six of a workspace, held in memory: the server runs as one process (like
+  `billing.md`'s single replica). Each part must arrive within 120 s (`SetReadDeadline`), against a
+  client sending a byte now and then. Expired uploads go with the daily purge, their files too.
+- **Video bytes seek.** `GET /kb/media/{id}` serves through `http.ServeContent` when storage hands back
+  a seeker (local disk): ranges, `If-Range`, `ETag` = SHA-256, `immutable`. A poster has its own
+  address `/poster/<last 8 hex of its content address>`, so a new poster is a new URL and an old one
+  is 404; it counts toward the plan, and its thumbnail is the video's in the library.
 - **Limits:** 10,000 library items per workspace, the trash included (`domain.MaxKBMedia`, counted
   under `lockKB`); 5 MiB, 8,192 px on a side and 40 megapixels per image.
 - **Tiers.** Reads are `read`; writes, publishing and image uploads are `send` like saved replies (a

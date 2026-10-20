@@ -33,6 +33,9 @@ type Mailer interface {
 
 type Config struct {
 	Origin string
+	// KBVideoMaxBytes (KB_VIDEO_MAX_BYTES) is the largest knowledge base video; 0 is
+	// domain.MaxKBVideoBytes.
+	KBVideoMaxBytes int64
 	// HelpCenterDomain (HELP_CENTER_DOMAIN) serves each workspace's help center on <slug>.<domain>;
 	// empty serves it on <Origin>/help/<slug> only.
 	HelpCenterDomain string
@@ -157,6 +160,8 @@ type API struct {
 	resend   *resend.Client
 	founding foundingState
 	now      func() time.Time
+	// kbUploads serializes the parts of one video upload and bounds the parts a workspace sends at once.
+	kbUploads kbUploadGate
 	// mux serves every route; an approved agent request is replayed through it as the approver.
 	mux *http.ServeMux
 }
@@ -328,6 +333,14 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/kb/media/{id}/restore", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/kb/media/{id}/replace", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/kb/media-replacements/{id}/undo", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/kb/media-uploads", auth.PermissionConversationsWrite},
+		{http.MethodGet, "/api/v1/kb/media-uploads/{id}", auth.PermissionConversationsRead},
+		{http.MethodPut, "/api/v1/kb/media-uploads/{id}", auth.PermissionConversationsWrite},
+		{http.MethodDelete, "/api/v1/kb/media-uploads/{id}", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/kb/media-uploads/{id}/complete", auth.PermissionConversationsWrite},
+		{http.MethodGet, "/api/v1/kb/media/{id}", auth.PermissionConversationsRead},
+		{http.MethodPut, "/api/v1/kb/media/{id}/poster", auth.PermissionConversationsWrite},
+		{http.MethodGet, "/api/v1/kb/media/{id}/poster/{version}", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/kb/media/{id}/details", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/kb/media/{id}/thumbnail", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/help-center", auth.PermissionConversationsRead},

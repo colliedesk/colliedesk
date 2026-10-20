@@ -28,7 +28,15 @@ type contractKB struct {
 	// replaceMediaID is shown by an article; replacementID is a replacement made at seeding to undo.
 	replaceMediaID, replaceWithID string
 	replacementID                 string
+	// A video with a poster, one to give a poster, an upload to send a part to (then cancel, in route
+	// order) and one whose parts all arrived.
+	videoID, posterPath, posterVideoID string
+	partUploadID, completeUploadID     string
+	cancelUploadID                     string
 }
+
+// contractVideoPart is the part the contract case sends: the whole of a tiny upload.
+var contractVideoPart = []byte("ten bytes!")
 
 func seedContractKB(t *testing.T, api http.Handler, admin string) contractKB {
 	t.Helper()
@@ -60,6 +68,23 @@ func seedContractKB(t *testing.T, api http.Handler, admin string) contractKB {
 	}
 	kbCall(t, api, http.MethodPost, "/api/v1/kb/media/"+undone+"/replace", map[string]any{"with_media_id": kb.replaceWithID}, admin, http.StatusOK, &replacement)
 	kb.replacementID = replacement.ID
+	video := uploadKBVideo(t, api, admin, mediaVideo(t, "h264.mp4"), 4096, nil)
+	kb.videoID = video.ID
+	var posted kbMediaView
+	posterResponse := serve(api, kbPosterRequest(video.ID, admin, pngImage(208)))
+	if posterResponse.Code != http.StatusOK {
+		t.Fatalf("poster status=%d body=%s", posterResponse.Code, posterResponse.Body.String())
+	}
+	decode(t, posterResponse, &posted)
+	kb.posterPath = *posted.PosterURL
+	kb.partUploadID = startKBUpload(t, api, admin, len(contractVideoPart), nil).ID
+	kb.posterVideoID = uploadKBVideo(t, api, admin, mediaVideo(t, "fragmented.mp4"), 4096, nil).ID
+	webm := mediaVideo(t, "vp9.webm")
+	ready := startKBUpload(t, api, admin, len(webm), nil)
+	if response := serve(api, kbPartRequest(ready.ID, admin, webm, 0, len(webm)-1, len(webm))); response.Code != http.StatusOK {
+		t.Fatalf("part status=%d body=%s", response.Code, response.Body.String())
+	}
+	kb.completeUploadID = ready.ID
 	article := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Contract article", "body_md": "![Screen](" + image.URL + ")"})
 	kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Contract article to replace in", "body_md": "![Old](/api/v1/kb/images/" + kb.replaceMediaID + ")"})
 	kb.articleID, kb.articleSeen = article.ID, article.UpdatedAt
@@ -121,6 +146,14 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/kb/media/{id}/restore":                       {path: "/api/v1/kb/media/" + kb.restoreMediaID + "/restore", token: admin, status: 200},
 		"POST /api/v1/kb/media/{id}/replace":                       {"/api/v1/kb/media/" + kb.replaceMediaID + "/replace", map[string]any{"with_media_id": kb.replaceWithID}, admin, 200, ""},
 		"POST /api/v1/kb/media-replacements/{id}/undo":             {path: "/api/v1/kb/media-replacements/" + kb.replacementID + "/undo", token: admin, status: 200},
+		"POST /api/v1/kb/media-uploads":                            {"/api/v1/kb/media-uploads", map[string]any{"size": 1000, "name": "Tour"}, admin, 201, ""},
+		"GET /api/v1/kb/media-uploads/{id}":                        {path: "/api/v1/kb/media-uploads/" + kb.partUploadID, token: admin, status: 200},
+		"PUT /api/v1/kb/media-uploads/{id}":                        {path: "/api/v1/kb/media-uploads/" + kb.partUploadID, token: admin, status: 200},
+		"DELETE /api/v1/kb/media-uploads/{id}":                     {path: "/api/v1/kb/media-uploads/" + kb.partUploadID, token: admin, status: 204},
+		"POST /api/v1/kb/media-uploads/{id}/complete":              {path: "/api/v1/kb/media-uploads/" + kb.completeUploadID + "/complete", token: admin, status: 201},
+		"GET /api/v1/kb/media/{id}":                                {path: "/api/v1/kb/media/" + kb.videoID, token: admin, status: 200},
+		"PUT /api/v1/kb/media/{id}/poster":                         {path: "/api/v1/kb/media/" + kb.posterVideoID + "/poster", token: admin, status: 200},
+		"GET /api/v1/kb/media/{id}/poster/{version}":               {path: kb.posterPath, token: admin, status: 200},
 		"GET /api/v1/kb/media/{id}/details":                        {path: "/api/v1/kb/media/" + kb.imageID + "/details", token: admin, status: 200},
 		"GET /api/v1/kb/media/{id}/thumbnail":                      {path: "/api/v1/kb/media/" + kb.imageID + "/thumbnail", token: admin, status: 200},
 		"GET /api/v1/help-center":                                  {"/api/v1/help-center", nil, admin, 200, ""},

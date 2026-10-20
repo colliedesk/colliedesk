@@ -26,6 +26,9 @@ type kbMediaView struct {
 	Width        *int       `json:"width"`
 	Height       *int       `json:"height"`
 	ThumbnailURL *string    `json:"thumbnail_url"`
+	PosterURL    *string    `json:"poster_url"`
+	DurationMS   *int64     `json:"duration_ms"`
+	Codecs       []string   `json:"codecs"`
 	Kept         bool       `json:"kept"`
 	UpdatedAt    string     `json:"updated_at"`
 	PurgeAt      *string    `json:"purge_at"`

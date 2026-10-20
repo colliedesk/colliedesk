@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
@@ -44,4 +45,18 @@ func sweepMailImageCache(ctx context.Context, data *store.Store, maxBytes int64)
 		case <-ticker.C:
 		}
 	}
+}
+
+// kbVideoMaxBytesFromEnv reads KB_VIDEO_MAX_BYTES, the largest knowledge base video a self-hosted
+// server takes; unset is domain.MaxKBVideoBytes (200 MiB).
+func kbVideoMaxBytesFromEnv(getenv func(string) string) (int64, error) {
+	value := strings.TrimSpace(getenv("KB_VIDEO_MAX_BYTES"))
+	if value == "" {
+		return domain.MaxKBVideoBytes, nil
+	}
+	size, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || size <= 0 {
+		return 0, fmt.Errorf("KB_VIDEO_MAX_BYTES must be a whole number of bytes above zero")
+	}
+	return size, nil
 }

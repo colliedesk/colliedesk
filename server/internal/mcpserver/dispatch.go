@@ -89,20 +89,28 @@ func (r *restClient) do(ctx context.Context, token, method, path string, query u
 // upload posts raw bytes of contentType as the caller and decodes a 2xx JSON answer into into. A non-2xx
 // answer comes back as a *restError.
 func (r *restClient) upload(ctx context.Context, token, path, contentType string, data []byte, into any) error {
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, path, bytes.NewReader(data))
+	return r.sendBytes(ctx, token, http.MethodPost, path, contentType, nil, data, into)
+}
+
+// sendBytes is upload with any method and extra headers, such as the Content-Range of a part.
+func (r *restClient) sendBytes(ctx context.Context, token, method, path, contentType string, headers map[string]string, data []byte, into any) error {
+	request, err := http.NewRequestWithContext(ctx, method, path, bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
 	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Content-Type", contentType)
+	for name, value := range headers {
+		request.Header.Set(name, value)
+	}
 	recorder := &recorder{header: http.Header{}}
 	r.api.ServeHTTP(recorder, request)
 	if recorder.status < 200 || recorder.status > 299 {
 		return parseRESTError(recorder)
 	}
 	if err := json.Unmarshal(recorder.body.Bytes(), into); err != nil {
-		return fmt.Errorf("decode POST %s answer: %w", path, err)
+		return fmt.Errorf("decode %s %s answer: %w", method, path, err)
 	}
 	return nil
 }

@@ -307,3 +307,102 @@ func (d *LocalDisk) RemoveTrash(_ context.Context, entry TrashEntry) error {
 	}
 	return nil
 }
+
+// Staging is implemented by backends that keep an upload in parts on their own disk: StagingFile is
+// the file the parts are written into, Adopt stores it under its content address by renaming it (no
+// second copy, so a 200 MiB upload never needs twice the room) and Staged counts the files staged now.
+type Staging interface {
+	StagingFile(uploadID string) (string, error)
+	Adopt(ctx context.Context, workspaceID, path string) (Object, error)
+	Staged() (int, error)
+	RemoveStaged(uploadID string) error
+}
+
+var uploadPattern = workspacePattern
+
+// stagedPrefix marks the files of uploads in parts in .incoming; NewLocalDisk removes them, like any
+// temp file, 24 hours after they last changed.
+const stagedPrefix = "media-"
+
+// StagingFile is the path of the file the parts of upload uploadID go into.
+func (d *LocalDisk) StagingFile(uploadID string) (string, error) {
+	if !uploadPattern.MatchString(uploadID) {
+		return "", errors.New("stage upload: invalid upload id")
+	}
+	return filepath.Join(d.root, ".incoming", stagedPrefix+uploadID), nil
+}
+
+// RemoveStaged removes the file of an upload in parts, if it is there.
+func (d *LocalDisk) RemoveStaged(uploadID string) error {
+	path, err := d.StagingFile(uploadID)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+// Staged counts the uploads in parts on this disk.
+func (d *LocalDisk) Staged() (int, error) {
+	entries, err := os.ReadDir(filepath.Join(d.root, ".incoming"))
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), stagedPrefix) {
+			count++
+		}
+	}
+	return count, nil
+}
+
+// Adopt hashes the staged file at path and renames it to its content address in the workspace; the
+// same bytes already stored are replaced by an identical file.
+func (d *LocalDisk) Adopt(ctx context.Context, workspaceID, path string) (Object, error) {
+	if !workspacePattern.MatchString(workspaceID) || filepath.Dir(path) != filepath.Join(d.root, ".incoming") || !strings.HasPrefix(filepath.Base(path), stagedPrefix) {
+		return Object{}, errors.New("adopt upload: invalid path")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return Object{}, fmt.Errorf("adopt upload: %w", err)
+	}
+	size, sum, err := Checksum(contextReader{ctx: ctx, reader: file})
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return Object{}, fmt.Errorf("adopt upload: %w", err)
+	}
+	key := workspaceID + "/" + sum[:2] + "/" + sum
+	target := filepath.Join(d.root, filepath.FromSlash(key))
+	if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+		return Object{}, fmt.Errorf("adopt upload: %w", err)
+	}
+	if err := syncFile(path); err != nil {
+		return Object{}, fmt.Errorf("adopt upload: %w", err)
+	}
+	if err := os.Rename(path, target); err != nil {
+		return Object{}, fmt.Errorf("adopt upload: %w", err)
+	}
+	for _, dir := range []string{filepath.Dir(target), filepath.Dir(filepath.Dir(target))} {
+		if err := d.syncDir(dir); err != nil {
+			return Object{}, fmt.Errorf("adopt upload: sync directory: %w", err)
+		}
+	}
+	return Object{Key: key, Size: size, SHA256: sum}, nil
+}
+
+func syncFile(path string) error {
+	file, err := os.OpenFile(path, os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		file.Close()
+		return err
+	}
+	return file.Close()
+}

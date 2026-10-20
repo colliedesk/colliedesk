@@ -19,6 +19,7 @@ import (
 type StoredKBMedia struct {
 	domain.KBMedia
 	StorageKey, ThumbKey, PosterKey string
+	PosterContentType               string
 	LastUploadedAt                  time.Time
 }
 
@@ -26,12 +27,12 @@ type StoredKBMedia struct {
 type StoredKBImage = StoredKBMedia
 
 const kbMediaColumns = `m.id::text,m.kind,m.storage_key,m.content_type,m.size,m.sha256,m.name,m.alt,m.width,m.height,m.duration_ms,m.codecs,
-	COALESCE(m.thumb_storage_key,''),COALESCE(m.poster_storage_key,''),m.kept,m.deleted_at,m.created_at,m.updated_at,m.last_uploaded_at`
+	COALESCE(m.thumb_storage_key,''),COALESCE(m.poster_storage_key,''),COALESCE(m.poster_content_type,''),m.kept,m.deleted_at,m.created_at,m.updated_at,m.last_uploaded_at`
 
 func scanKBMedia(row pgx.Row, extra ...any) (StoredKBMedia, error) {
 	var media StoredKBMedia
 	err := row.Scan(append([]any{&media.ID, &media.Kind, &media.StorageKey, &media.ContentType, &media.Size, &media.SHA256, &media.Name, &media.Alt,
-		&media.Width, &media.Height, &media.DurationMS, &media.Codecs, &media.ThumbKey, &media.PosterKey, &media.Kept, &media.DeletedAt,
+		&media.Width, &media.Height, &media.DurationMS, &media.Codecs, &media.ThumbKey, &media.PosterKey, &media.PosterContentType, &media.Kept, &media.DeletedAt,
 		&media.CreatedAt, &media.UpdatedAt, &media.LastUploadedAt}, extra...)...)
 	media.CreatedAt, media.UpdatedAt, media.LastUploadedAt = domain.UTC(media.CreatedAt), domain.UTC(media.UpdatedAt), domain.UTC(media.LastUploadedAt)
 	media.DeletedAt = domain.UTCOptional(media.DeletedAt)
@@ -47,6 +48,10 @@ func scanKBMedia(row pgx.Row, extra ...any) (StoredKBMedia, error) {
 		// so the immutable cache of the old one never shows it.
 		thumbnail := domain.KBMediaPath + media.ID + "/thumbnail?v=" + media.ThumbKey[max(0, len(media.ThumbKey)-8):]
 		media.ThumbnailURL = &thumbnail
+	}
+	if media.PosterKey != "" {
+		poster := domain.KBMediaPath + media.ID + "/poster/" + media.PosterKey[max(0, len(media.PosterKey)-8):]
+		media.PosterURL = &poster
 	}
 	return media, err
 }
@@ -266,6 +271,7 @@ func (s *Store) PurgeKBTrash(ctx context.Context) (KBPurge, error) {
 	var purged KBPurge
 	type orphan struct{ workspaceID, key string }
 	var orphans []orphan
+	var expiredUploads []string
 	cutoff := s.now().Add(-domain.KBTrashRetention)
 	err := s.db.Privileged(ctx, database.PrivilegeKBPurge, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `DELETE FROM kb_articles WHERE deleted_at IS NOT NULL AND deleted_at<$1`, cutoff)
@@ -285,6 +291,9 @@ func (s *Store) PurgeKBTrash(ctx context.Context) (KBPurge, error) {
 		}
 		if err := purgeKBMediaBatches(ctx, tx, cutoff); err != nil {
 			return fmt.Errorf("purge knowledge base media batches: %w", err)
+		}
+		if expiredUploads, err = expireKBMediaUploads(ctx, tx, s.now()); err != nil {
+			return fmt.Errorf("purge expired knowledge base media uploads: %w", err)
 		}
 		rows, err := tx.Query(ctx, `SELECT m.id::text FROM kb_media m WHERE `+kbMediaPurgeable+` FOR UPDATE OF m SKIP LOCKED`, cutoff)
 		if err != nil {
@@ -321,6 +330,13 @@ func (s *Store) PurgeKBTrash(ctx context.Context) (KBPurge, error) {
 		for _, item := range orphans {
 			if err := s.DiscardObject(ctx, item.workspaceID, item.key); err != nil {
 				return purged, fmt.Errorf("delete purged knowledge base media file: %w", err)
+			}
+		}
+		if staging, ok := s.objects.(attachments.Staging); ok {
+			for _, id := range expiredUploads {
+				if err := staging.RemoveStaged(id); err != nil {
+					return purged, fmt.Errorf("delete expired knowledge base media upload: %w", err)
+				}
 			}
 		}
 	}
