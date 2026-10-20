@@ -107,9 +107,7 @@ jobs:
       - name: Typecheck, test, and build
         working-directory: web
         # The type check runs in the e2e job, which finishes early; Vitest was this job's long pole.
-        # Its workers spend most of their time building jsdom and importing modules; it starts one
-        # fewer than the runner's four cores unless told.
-        run: corepack pnpm test --maxWorkers=4 && corepack pnpm exec vite build && corepack pnpm bundle:check
+        run: corepack pnpm test && corepack pnpm exec vite build && corepack pnpm bundle:check
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 2
