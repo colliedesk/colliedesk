@@ -61,8 +61,11 @@ func (r *run) kbLimitProblems(ctx context.Context) ([]string, error) {
 		} else if !done {
 			newCollections++
 		}
-		_, name, _ := kb.collectionPlacement(folder)
-		if _, err := domain.CleanKBText("name", fitName(name), domain.MaxKBCollectionName); err != nil {
+		_, name, flattened := kb.collectionPlacement(folder)
+		if flattened {
+			name = fitName(name)
+		}
+		if _, err := domain.CleanKBText("name", name, domain.MaxKBCollectionName); err != nil {
 			add("folder %s: %s", key, err.Error())
 		}
 		if err := domain.CheckKBDescription(deref(folder.Description)); err != nil {

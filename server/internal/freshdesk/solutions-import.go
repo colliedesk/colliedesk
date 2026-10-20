@@ -56,6 +56,10 @@ func (r *run) importKnowledgeBase(ctx context.Context) error {
 		folder := kb.folders[folderID]
 		key := strconv.FormatInt(folderID, 10)
 		parent, name, flattened := kb.collectionPlacement(folder)
+		if fitted := fitName(name); flattened && fitted != name {
+			r.warn("kb_collection_name_shortened", "The flattened name of this Freshdesk folder is longer than a collection name may be, so it was shortened; the full name is in the collection's source_meta.", key)
+			name = fitted
+		}
 		parentKey := "c" + strconv.FormatInt(folder.categoryID, 10)
 		if parent != nil {
 			parentKey = "f" + strconv.FormatInt(parent.ID, 10)
@@ -70,8 +74,8 @@ func (r *run) importKnowledgeBase(ctx context.Context) error {
 		}
 		meta := map[string]any{"freshdesk_id": folder.ID, "kind": "folder", "category_id": folder.categoryID, "parent_folder_id": folder.ParentFolderID,
 			"visibility": folder.Visibility, "company_ids": folder.CompanyIDs, "contact_segment_ids": folder.ContactSegmentIDs, "company_segment_ids": folder.CompanySegmentIDs,
-			"name": folder.Name}
-		id, err := r.ensureCollection(ctx, entityKBFolder, key, &parentID, fitName(name), deref(folder.Description), meta, folder.CreatedAt, folder.UpdatedAt)
+			"name": folder.Name, "path": kb.pathNames(folder)}
+		id, err := r.ensureCollection(ctx, entityKBFolder, key, &parentID, name, deref(folder.Description), meta, folder.CreatedAt, folder.UpdatedAt)
 		if err != nil {
 			return err
 		}
@@ -100,7 +104,7 @@ func deref(value *string) string {
 	return *value
 }
 
-// fitName keeps a flattened folder name within the collection limit; the full name stays in source_meta.
+// fitName keeps a flattened folder name within the collection limit; the full path stays in source_meta.
 func fitName(name string) string {
 	if runes := []rune(name); len(runes) > domain.MaxKBCollectionName {
 		return strings.TrimSpace(string(runes[:domain.MaxKBCollectionName-1])) + "…"
@@ -272,16 +276,23 @@ func (r *run) importKBArticle(ctx context.Context, article kbArticle) error {
 	var existing string
 	if found && entry.TargetID != nil {
 		existing = *entry.TargetID
-		var imported bool
+		var exists, imported bool
 		if err := r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) (err error) {
-			imported, err = store.KBArticleImportedLast(ctx, tx, r.workspaceID, existing)
+			exists, imported, err = store.KBArticleImportedLast(ctx, tx, r.workspaceID, existing)
 			return err
 		}); err != nil {
 			return fmt.Errorf("read knowledge base article: %w", err)
 		}
-		if !imported {
+		switch {
+		case !exists:
+			state.gone = append(state.gone, key)
+			return nil
+		case !imported:
 			return r.keepKBArticle(ctx, key, existing)
 		}
+	}
+	if len(article.Attachments) > 0 {
+		r.warn("kb_article_attachments_not_imported", "This Freshdesk article has files attached. Knowledge base articles hold text and images only, so the files were not imported; download them from Freshdesk if they are still needed.", key)
 	}
 	images, pending, failed, err := r.fetchKBImages(ctx, key, article.Description)
 	if err != nil {

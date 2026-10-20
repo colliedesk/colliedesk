@@ -500,3 +500,38 @@ func TestSolutionsImagesCountTowardTheStorageCap(t *testing.T) {
 		t.Fatalf("fits: %v status=%v stored=%d", err, report, env.storedBytes(t, env.workspaceID))
 	}
 }
+
+func TestSolutionsMarkupMarkdownCannotHoldIsNamed(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	env.editSolutions(func(fixture map[string]any) {
+		fixtureArticle(fixture, "11", 101)["description"] = "<table><tr><th>A</th><th>B</th></tr><tr><td><p>one</p><p>two</p></td><td>x</td></tr></table><p>H<sub>2</sub>O</p>"
+		fixtureArticle(fixture, "11", 102)["attachments"] = []any{map[string]any{"id": 1.0, "name": "guide.pdf", "size": 3.0}}
+	})
+	report := env.mustRun(t)
+	if warningIDs(report, "kb_article_markup_dropped") != "101,106" || warningIDs(report, "kb_article_attachments_not_imported") != "102" {
+		t.Fatalf("warnings = %+v", report.Warnings)
+	}
+	var meta string
+	if err := env.pool.QueryRow(context.Background(), `SELECT source_meta->>'markup_dropped' FROM kb_articles WHERE workspace_id=$1 AND source_meta->>'freshdesk_id'='101'`, env.workspaceID).Scan(&meta); err != nil ||
+		!strings.Contains(meta, "table with lines or lists inside a cell") || !strings.Contains(meta, "subscript or superscript") {
+		t.Fatalf("markup_dropped = %s, %v", meta, err)
+	}
+	if body := env.kbArticles(t, env.workspaceID)["101"].Body; !strings.Contains(body, "one") || !strings.Contains(body, "two") || strings.Contains(body, "<") {
+		t.Fatalf("body = %q", body)
+	}
+}
+
+func TestSolutionsAnArticleDeletedForGoodIsNotBroughtBack(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	env.mustRun(t)
+	if _, err := env.pool.Exec(context.Background(), `DELETE FROM kb_articles WHERE workspace_id=$1 AND source_meta->>'freshdesk_id'='102'`, env.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	env.editSolutions(func(fixture map[string]any) {
+		fixtureArticle(fixture, "11", 102)["updated_at"] = "2024-06-01T10:00:00Z"
+	})
+	report := env.mustRun(t)
+	if strings.Join(report.KnowledgeBase.DeletedInColliedesk, ",") != "102" || len(report.KnowledgeBase.ChangedInBoth) != 0 || env.count(t, "kb_articles") != 5 {
+		t.Fatalf("deleted=%v changed=%v articles=%d", report.KnowledgeBase.DeletedInColliedesk, report.KnowledgeBase.ChangedInBoth, env.count(t, "kb_articles"))
+	}
+}

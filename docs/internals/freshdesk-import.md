@@ -203,9 +203,12 @@ numbering and versions as the API (`docs/internals/knowledge-base.md`).
   one, and warn `kb_folder_flattened`. A slug taken by a sibling gets `-<Freshdesk id>`.
 - **HTML to Markdown** with html-to-markdown v2 (MIT; base, commonmark, table, strikethrough). Before
   converting, iframes, video, audio, embeds, objects, forms, scripts, styles, SVG and MathML are
-  removed and named in `kb_article_markup_dropped`, as is a table cell with `colspan`/`rowspan` (its
-  content is repeated in the cells it spans) and a link whose scheme is not http, https or mailto
-  (its text stays). `source_html` keeps the original; `source_meta` keeps `tags`, `seo_data`, `hits`,
+  removed and named in `kb_article_markup_dropped`, as are a table cell with `colspan`/`rowspan` (its
+  content is repeated in the cells it spans), a table cell holding a line break or a block (a Markdown
+  cell is one line, so the converter writes that table as plain text: the words stay, the grid goes),
+  subscript and superscript, a link whose scheme is not http, https or mailto (its text stays), and
+  any tag left in the Markdown (raw HTML is never rendered). Files on an article are not in the
+  documented attributes; if the API sends them they are listed (`kb_article_attachments_not_imported`). `source_html` keeps the original; `source_meta` keeps `tags`, `seo_data`, `hits`,
   `thumbs_*`, `type`, `status`, `hierarchy`, `agent_id` and the draft reason. Timestamps are
   Freshdesk's; `published_at` is `updated_at` (Freshdesk has no publish time). The author is the
   Colliedesk agent with the Freshdesk agent's email.
@@ -262,6 +265,9 @@ numbering and versions as the API (`docs/internals/knowledge-base.md`).
 4. Which rights the API key needs for solutions, `/settings/helpdesk` and `/products`.
 5. Whether a single-portal account really omits `visible_in_portals`, and what the field holds on an
    account with several products.
+6. Whether an article can carry attached files in the API (the docs list no `attachments` attribute).
+
+Stored knowledge base images are not re-hashed by the reconcile, unlike attachments and message images.
 
 ## Not verified against a live account
 

@@ -88,7 +88,8 @@ are in the report under `knowledge_base.portals`); without it, all articles of t
 drafts.
 
 Markdown cannot hold everything HTML can. Embedded video, iframes, forms and scripts are left out of
-the article, and a table cell that spans several columns is repeated in each. The report names the
+the article, a table cell that spans several columns is repeated in each, and a table whose cells hold
+several lines or a list becomes plain text (the words stay). The report names the
 articles under the warning `kb_article_markup_dropped`. The original HTML stays with the article and
 is in the export.
 

@@ -57,6 +57,8 @@ type fdSolutionArticle struct {
 	ThumbsUp    int64          `json:"thumbs_up"`
 	ThumbsDown  int64          `json:"thumbs_down"`
 	Hierarchy   []any          `json:"hierarchy"`
+	// Attachments are not in the documented article attributes; they are read in case the API sends them.
+	Attachments []fdAttachment `json:"attachments"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 }
@@ -428,4 +430,13 @@ func (kb *knowledgeBase) collectionPlacement(folder *kbFolder) (parent *kbFolder
 		names = append(names, strings.TrimSpace(step.Name))
 	}
 	return chain[0], strings.Join(names, folderSeparator), true
+}
+
+// pathNames is the names of the folders from the top of the category down to folder.
+func (kb *knowledgeBase) pathNames(folder *kbFolder) []string {
+	var names []string
+	for _, step := range kb.path(folder) {
+		names = append(names, step.Name)
+	}
+	return names
 }

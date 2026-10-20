@@ -1,6 +1,7 @@
 package freshdesk
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 	"unicode"
@@ -61,6 +62,12 @@ func articleMarkdown(markup string) (string, []string, error) {
 							note("table cell spanning rows or columns")
 						}
 					}
+					if holdsBlock(child) {
+						// A Markdown table cell is one line: the converter shows such a table as plain text.
+						note("table with lines or lists inside a cell (shown as text, not as a table)")
+					}
+				case atom.Sub, atom.Sup:
+					note("subscript or superscript (shown as plain text)")
 				case atom.A:
 					child.Attr = safeLink(child.Attr, note)
 				}
@@ -74,7 +81,32 @@ func articleMarkdown(markup string) (string, []string, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	return strings.TrimSpace(string(out)), dropped, nil
+	markdown := strings.TrimSpace(string(out))
+	if htmlTag.MatchString(markdown) {
+		// Raw HTML in Markdown is never rendered (the help center and the editor's preview skip it).
+		note("HTML the converter could not turn into Markdown")
+	}
+	return markdown, dropped, nil
+}
+
+// htmlTag finds a tag the converter left in the Markdown as raw HTML.
+var htmlTag = regexp.MustCompile(`</?[A-Za-z][A-Za-z0-9-]*(\s[^<>]*)?/?>`)
+
+// holdsBlock tells whether a table cell holds a line break or block content.
+func holdsBlock(cell *html.Node) bool {
+	for node := cell.FirstChild; node != nil; node = node.NextSibling {
+		if node.Type != html.ElementNode {
+			continue
+		}
+		switch node.DataAtom {
+		case atom.Br, atom.P, atom.Div, atom.Ul, atom.Ol, atom.Table, atom.Pre, atom.Blockquote, atom.H1, atom.H2, atom.H3, atom.H4, atom.H5, atom.H6, atom.Hr:
+			return true
+		}
+		if holdsBlock(node) {
+			return true
+		}
+	}
+	return false
 }
 
 // safeLink drops an href whose scheme is not http, https or mailto (javascript:, data:, ...). A

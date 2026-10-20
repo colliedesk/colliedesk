@@ -116,15 +116,14 @@ const (
 	KBGone = "gone"
 )
 
-// KBArticleImportedLast tells whether the newest version of an article is an import, and false
-// when the article does not exist.
-func KBArticleImportedLast(ctx context.Context, tx pgx.Tx, workspaceID, id string) (bool, error) {
+// KBArticleImportedLast tells whether an article exists and whether its newest version is an import.
+func KBArticleImportedLast(ctx context.Context, tx pgx.Tx, workspaceID, id string) (exists, imported bool, err error) {
 	var kind string
-	err := tx.QueryRow(ctx, `SELECT kind FROM kb_article_versions WHERE workspace_id=$1 AND article_id=$2 ORDER BY version DESC LIMIT 1`, workspaceID, id).Scan(&kind)
+	err = tx.QueryRow(ctx, `SELECT kind FROM kb_article_versions WHERE workspace_id=$1 AND article_id=$2 ORDER BY version DESC LIMIT 1`, workspaceID, id).Scan(&kind)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
+		return false, false, nil
 	}
-	return kind == domain.KBArticleImported, err
+	return err == nil, kind == domain.KBArticleImported, err
 }
 
 // ReimportKBArticle writes the source's newer article over an imported one, as a new version of
@@ -142,7 +141,7 @@ func ReimportKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string, i
 	if err != nil {
 		return "", err
 	}
-	imported, err := KBArticleImportedLast(ctx, tx, workspaceID, id)
+	_, imported, err := KBArticleImportedLast(ctx, tx, workspaceID, id)
 	if err != nil {
 		return "", err
 	}
