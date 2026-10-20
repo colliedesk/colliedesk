@@ -243,11 +243,12 @@ func (a *API) gateToken(response http.ResponseWriter, request *http.Request, rou
 	return true
 }
 
-// kbFileRoutes carry a video's bytes or start an upload of them: a file never waits for approval, so a
-// token below their tier is refused (files_need_approval), not filed.
+// kbFileRoutes carry a video's bytes or start, finish or cancel an upload of them: a file never waits
+// for approval, so a token below their tier is refused (files_need_approval), not filed.
 var kbFileRoutes = map[string]bool{
 	"POST /api/v1/kb/media-uploads":               true,
 	"PUT /api/v1/kb/media-uploads/{id}":           true,
+	"DELETE /api/v1/kb/media-uploads/{id}":        true,
 	"POST /api/v1/kb/media-uploads/{id}/complete": true,
 	"PUT /api/v1/kb/media/{id}/poster":            true,
 }

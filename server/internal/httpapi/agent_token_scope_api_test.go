@@ -131,7 +131,7 @@ var routeTiers = map[string]string{
 
 // kbFileRouteKeys carry video bytes; like an image upload, a lower tier is refused, not filed.
 var kbFileRouteKeys = map[string]bool{"POST /api/v1/kb/media-uploads": true, "PUT /api/v1/kb/media-uploads/{id}": true,
-	"POST /api/v1/kb/media-uploads/{id}/complete": true, "PUT /api/v1/kb/media/{id}/poster": true}
+	"DELETE /api/v1/kb/media-uploads/{id}": true, "POST /api/v1/kb/media-uploads/{id}/complete": true, "PUT /api/v1/kb/media/{id}/poster": true}
 
 func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
 	fixture := newContractFixture(t)

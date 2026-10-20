@@ -3101,7 +3101,7 @@ paths:
     delete:
       operationId: cancelKBMediaUpload
       x-permission: conversations:write
-      description: Cancel an upload in progress and throw its parts away.
+      description: Cancel an upload in progress and throw its parts away. A token below `send` gets 403 `files_need_approval`.
       responses:
         '204': {description: Cancelled}
         '401': {$ref: '#/components/responses/Unauthorized'}
