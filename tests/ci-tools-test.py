@@ -136,5 +136,18 @@ class RunnerConcurrency(unittest.TestCase):
         self.assertEqual(runners(ROOT / '.github/workflows/codeql.yml'), 3)
 
 
+class PackageManager(unittest.TestCase):
+    def test_workflows_run_pnpm_through_corepack_only(self):
+        # corepack reads packageManager; pnpm/action-setup installed a second pnpm from npm on
+        # every job and once hung 84 seconds on a registry reset.
+        for path in sorted((ROOT / '.github/workflows').glob('*.yml')):
+            text = path.read_text()
+            self.assertFalse('pnpm/action-setup' in text, f'{path.name} uses pnpm/action-setup')
+            for line in text.splitlines():
+                for match in re.finditer(r'(\S*)\s+pnpm\s', ' ' + line + ' '):
+                    if match.group(1) in ('run:', '&&', '||', ';', ''):
+                        self.fail(f'{path.name}: pnpm without corepack: {line.strip()}')
+
+
 if __name__ == '__main__':
     unittest.main()
