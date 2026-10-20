@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"runtime"
 	"strconv"
@@ -395,4 +397,37 @@ func TestKBVideoUploadsOfManyWorkspacesShareTheDisk(t *testing.T) {
 	if errorCode(t, busy) != "server_busy" {
 		t.Fatalf("busy server = %s", busy.Body.String())
 	}
+}
+
+// A cancel while a part is still arriving answers at once, and the part, finding the upload gone,
+// leaves no file behind: a page that goes away mid-part cannot ask twice.
+func TestKBVideoCancelDuringAPartLeavesNothing(t *testing.T) {
+	api, service, _, storage := testAPIWithStorage(t)
+	admin := createSession(t, api, service, "KB Video Cancel", "admin@kb-video-cancel.example.com")
+	data := mediaVideo(t, "h264.mp4")
+	upload := startKBUpload(t, api, admin, len(data), nil)
+	body, writer := io.Pipe()
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/kb/media-uploads/"+upload.ID, body)
+	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set("Content-Range", fmt.Sprintf("bytes 0-%d/%d", len(data)-1, len(data)))
+	req.ContentLength = int64(len(data))
+	req.Header.Set("Authorization", "Bearer "+admin)
+	done := make(chan int)
+	go func() { done <- serve(api, req).Code }()
+	if _, err := writer.Write(data[:1024]); err != nil {
+		t.Fatal(err)
+	}
+	kbCall(t, api, http.MethodDelete, "/api/v1/kb/media-uploads/"+upload.ID, nil, admin, http.StatusNoContent, nil)
+	if _, err := writer.Write(data[1024:]); err != nil {
+		t.Fatal(err)
+	}
+	writer.Close()
+	if code := <-done; code != http.StatusNotFound {
+		t.Fatalf("the part after the cancel = %d, want 404", code)
+	}
+	staged, _ := storage.(interface{ StagingFile(string) (string, error) }).StagingFile(upload.ID)
+	if _, err := os.Stat(staged); !os.IsNotExist(err) {
+		t.Fatalf("the part's file is still on disk: %v", err)
+	}
+	kbCall(t, api, http.MethodGet, "/api/v1/kb/media-uploads/"+upload.ID, nil, admin, http.StatusNotFound, nil)
 }

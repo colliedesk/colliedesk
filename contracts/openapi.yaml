@@ -3101,15 +3101,14 @@ paths:
     delete:
       operationId: cancelKBMediaUpload
       x-permission: conversations:write
-      description: Cancel an upload in progress and throw its parts away. A token below `send` gets 403 `files_need_approval`.
+      description: >
+        Cancel an upload in progress and throw its parts away, at once, even while a part is being sent
+        (that part then answers 404). A token below `send` gets 403 `files_need_approval`.
       responses:
         '204': {description: Cancelled}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
-        '429':
-          description: A part of this upload is being sent; cancel once it is done.
-          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/kb/media-uploads/{id}/complete:
     parameters: [{$ref: '#/components/parameters/ID'}]
     post:

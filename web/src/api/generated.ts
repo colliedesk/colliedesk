@@ -1638,7 +1638,7 @@ export interface paths {
         /** @description Send the next part, at most `part_size` bytes, with `Content-Range: bytes <first>-<last>/<size>`. A part that does not start at the upload's offset is refused with 409 `upload_offset_mismatch`, the offset in `Upload-Offset` and in the answer; send that part again. One part of an upload at a time; a part must arrive within 120 seconds. */
         put: operations["putKBMediaUploadPart"];
         post?: never;
-        /** @description Cancel an upload in progress and throw its parts away. A token below `send` gets 403 `files_need_approval`. */
+        /** @description Cancel an upload in progress and throw its parts away, at once, even while a part is being sent (that part then answers 404). A token below `send` gets 403 `files_need_approval`. */
         delete: operations["cancelKBMediaUpload"];
         options?: never;
         head?: never;
@@ -7117,15 +7117,6 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description A part of this upload is being sent; cancel once it is done. */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
         };
     };
     completeKBMediaUpload: {
