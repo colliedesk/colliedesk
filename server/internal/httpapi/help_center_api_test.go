@@ -418,3 +418,75 @@ func TestHelpCenterSearchTakesAnyTextAndPagesDescribeThemselves(t *testing.T) {
 		[]string{`<link rel="canonical" href="` + testOrigin + base + `/c/guides">`, `<meta name="description" content="How to start">`}, nil)
 	wantPage(t, visit(site, base, "192.0.2.70"), http.StatusOK, []string{`<link rel="canonical" href="` + testOrigin + base + `">`}, nil)
 }
+
+// Every answer that carries an article carries its public address, the one the help center serves it
+// at, on the path of a self-hosted server and on the workspace's own host name when the server has a
+// help center domain. A person or an AI agent puts that address in a reply.
+func TestEveryArticleAnswerCarriesTheAddressTheHelpCenterServesItAt(t *testing.T) {
+	for _, mode := range []struct {
+		name, domain string
+	}{{"path", ""}, {"host", "help.example.net"}} {
+		t.Run(mode.name, func(t *testing.T) {
+			f := newLimitsFixtureConfigured(t, true, nil, func(config *httpapi.Config) { config.HelpCenterDomain = mode.domain })
+			site := helpCenterSite(f.api)
+			slugA, slugB := workspaceSlug(t, f.api, f.adminA), workspaceSlug(t, f.api, f.adminB)
+			home := testOrigin + "/help/" + slugA
+			if mode.domain != "" {
+				home = "https://" + slugA + "." + mode.domain
+			}
+			enableHelpCenter(t, f.api, f.adminA, "Alpha help", true)
+			collection := kbCollection(t, f.api, f.adminA, map[string]any{"name": "Guides"})
+			created := kbArticle(t, f.api, f.adminA, map[string]any{"collection_id": collection.ID, "title": "Đặt lại mật khẩu", "status": "published", "body_md": "Steps"})
+			want := fmt.Sprintf("%s/a/%d-%s", home, created.Number, url.PathEscape(created.Slug))
+			if created.URL != want {
+				t.Fatalf("create url=%q, want %q", created.URL, want)
+			}
+			address, err := url.Parse(created.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantPage(t, visit(site, address.RequestURI(), "192.0.2.60", "Host", address.Host), http.StatusOK, []string{"Đặt lại mật khẩu", "Steps"}, nil)
+
+			var got kbArticleView
+			kbCall(t, f.api, http.MethodGet, "/api/v1/kb/articles/"+created.ID, nil, f.adminA, http.StatusOK, &got)
+			var page struct {
+				Items []kbArticleView `json:"items"`
+			}
+			kbCall(t, f.api, http.MethodGet, "/api/v1/kb/articles?status=published&q="+url.QueryEscape("mật"), nil, f.adminA, http.StatusOK, &page)
+			if got.URL != want || len(page.Items) != 1 || page.Items[0].URL != want {
+				t.Fatalf("get url=%q, list=%+v, want %q", got.URL, page.Items, want)
+			}
+			// A new slug is a new address; the answer to the change already has it.
+			var renamed kbArticleView
+			kbCall(t, f.api, http.MethodPatch, "/api/v1/kb/articles/"+created.ID, map[string]any{"updated_at": created.UpdatedAt, "slug": "reset"}, f.adminA, http.StatusOK, &renamed)
+			if want := fmt.Sprintf("%s/a/%d-reset", home, created.Number); renamed.URL != want {
+				t.Fatalf("update url=%q, want %q", renamed.URL, want)
+			}
+			var restored kbArticleView
+			kbCall(t, f.api, http.MethodPost, "/api/v1/kb/articles/"+created.ID+"/versions/1/restore", map[string]any{"updated_at": renamed.UpdatedAt}, f.adminA, http.StatusOK, &restored)
+			if restored.URL != want {
+				t.Fatalf("version restore url=%q, want %q", restored.URL, want)
+			}
+			kbCall(t, f.api, http.MethodDelete, "/api/v1/kb/articles/"+created.ID+"?updated_at="+url.QueryEscape(restored.UpdatedAt), nil, f.adminA, http.StatusNoContent, nil)
+			var trash struct {
+				Items []kbTrashItem `json:"items"`
+			}
+			kbCall(t, f.api, http.MethodGet, "/api/v1/kb/articles/trash", nil, f.adminA, http.StatusOK, &trash)
+			if len(trash.Items) != 1 || trash.Items[0].URL != want {
+				t.Fatalf("trash = %+v, want url %q", trash.Items, want)
+			}
+			var back kbArticleView
+			kbCall(t, f.api, http.MethodPost, "/api/v1/kb/articles/"+created.ID+"/restore", map[string]any{"updated_at": trash.Items[0].UpdatedAt}, f.adminA, http.StatusOK, &back)
+			if back.URL != want {
+				t.Fatalf("undelete url=%q, want %q", back.URL, want)
+			}
+
+			// Each workspace's articles carry its own address, never another workspace's.
+			betaCollection := kbCollection(t, f.api, f.adminB, map[string]any{"name": "Guides"})
+			beta := kbArticle(t, f.api, f.adminB, map[string]any{"collection_id": betaCollection.ID, "title": "Beta page", "body_md": "x"})
+			if !strings.Contains(beta.URL, slugB) || strings.Contains(beta.URL, slugA) {
+				t.Fatalf("beta url=%q, want beta's slug %q only", beta.URL, slugB)
+			}
+		})
+	}
+}

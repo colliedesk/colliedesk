@@ -16,19 +16,23 @@ const (
 
 	kbProposeBelowSend = `With a send token the change happens now. With a read or draft token Colliedesk files it as an agent request (at most 64 KiB of JSON) a person approves in Colliedesk (Requests); follow it with colliedesk_request_get.`
 
+	// kbURLDescription tells an AI agent where an article is public and how to link it in a reply.
+	kbURLDescription = `The public address of the article on the help center. To point a customer to it, put the title and this address on two lines in the reply: mail goes out as plain text, so Markdown links show as written. ` +
+		`It opens only while the article is published and the help center is on (colliedesk_help_center_get).`
+
 	kbArticleIDProperty    = `"article_id":{"type":"string",` + uuid + `,"description":"From colliedesk_kb_articles_search or colliedesk_kb_articles_trash."}`
 	kbCollectionIDProperty = `"collection_id":{"type":"string",` + uuid + `,"description":"From colliedesk_kb_collections_list."}`
 	kbUpdatedAtProperty    = `"updated_at":{"type":"string","format":"date-time","maxLength":40,"description":"The updated_at as you last read it. If someone saved it since, nothing changes and you are told to read it again."}`
 	kbSlugProperty         = `"slug":{"type":"string","minLength":1,"maxLength":120,"description":"Lowercase letters and digits of any script joined by hyphens. Changing it changes the help center address; old addresses are not redirected."}`
 
-	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","status","slug","published_at","updated_at","last_change","team_text"],"properties":{` +
+	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","status","slug","published_at","updated_at","last_change","url","team_text"],"properties":{` +
 		`"id":{"type":"string"},"number":{"type":"integer","description":"Never changes; the help center address is /a/<number>-<slug>."},"collection_id":{"type":"string"},` +
 		`"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
-		`"last_change":` + savedReplyChangeSchema + `,"team_text":{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}}}}`
+		`"last_change":` + savedReplyChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}}}}`
 
-	kbArticleSchema = `{"type":"object","required":["id","number","collection_id","status","slug","published_at","updated_at","last_change","team_text","in_trash","translations"],"properties":{` +
+	kbArticleSchema = `{"type":"object","required":["id","number","collection_id","status","slug","published_at","updated_at","last_change","url","team_text","in_trash","translations"],"properties":{` +
 		`"id":{"type":"string"},"number":{"type":"integer"},"collection_id":{"type":"string"},"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},` +
-		`"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},"last_change":` + savedReplyChangeSchema + `,"team_text":` + teamTextSchema + `,` +
+		`"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},"last_change":` + savedReplyChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":` + teamTextSchema + `,` +
 		`"in_trash":{"type":"boolean"},"has_source_html":{"type":"boolean","description":"An import kept the original HTML; it is in the workspace export."},` +
 		`"translations":{"type":"array","description":"Locales of translations an import brought in; the help center does not show them yet.","items":{"type":"string"}}}}`
 
@@ -138,7 +142,8 @@ func kbArticlesSearchSpec() Spec {
 		Description: `List or search the articles outside the trash, without their text, one page at a time. With query, articles whose title or text hold every word of it as a word or the start of one ` +
 			`(or whose title holds it) come first by relevance; without it the most recently updated come first. Filter by status or collection_id. ` +
 			`Words are matched with no language rules: a word inside another word, or text in scripts written without spaces (Chinese, Japanese, Thai), is found only where it starts a word or in the title. ` +
-			`Read one whole with colliedesk_kb_article_get. For the next page pass next_cursor as cursor.` + "\n\n" + kbTextNotice + "\n\nTier: read.",
+			`Read one whole with colliedesk_kb_article_get. For the next page pass next_cursor as cursor. ` +
+			`Each article has its public address (url); to link one in a reply, search with status published.` + "\n\n" + kbTextNotice + "\n\nTier: read.",
 		Tier: "read", ReadOnly: true,
 		REST: []string{"GET /api/v1/kb/articles"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"query":{"type":"string","maxLength":200},"status":{"type":"string","enum":["draft","published"]},` +
@@ -153,7 +158,7 @@ func kbArticleGetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_article_get",
 		Title: "Read a knowledge base article",
-		Description: `Read one article with its whole Markdown text. It also finds an article in the trash, and says so with in_trash. Use its updated_at when you change it.` +
+		Description: `Read one article with its whole Markdown text and its public address (url). It also finds an article in the trash, and says so with in_trash. Use its updated_at when you change it.` +
 			"\n\n" + kbTextNotice + "\n\nTier: read.",
 		Tier: "read", ReadOnly: true,
 		REST:   []string{"GET /api/v1/kb/articles/{id}"},

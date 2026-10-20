@@ -57,6 +57,7 @@ type restKBArticle struct {
 	PublishedAt   *string               `json:"published_at"`
 	UpdatedAt     string                `json:"updated_at"`
 	LastChange    *restSavedReplyChange `json:"last_change"`
+	URL           string                `json:"url"`
 	BodyMD        string                `json:"body_md"`
 	HasSourceHTML bool                  `json:"has_source_html"`
 	Translations  []struct {
@@ -80,6 +81,7 @@ type kbArticleRowOut struct {
 	PublishedAt  *string              `json:"published_at"`
 	UpdatedAt    string               `json:"updated_at"`
 	LastChange   *savedReplyChangeOut `json:"last_change"`
+	URL          string               `json:"url"`
 	TeamText     kbTitle              `json:"team_text"`
 	DeletedAt    string               `json:"deleted_at,omitempty"`
 	DeletedBy    *string              `json:"deleted_by,omitempty"`
@@ -88,7 +90,7 @@ type kbArticleRowOut struct {
 
 func kbArticleRow(article restKBArticle) kbArticleRowOut {
 	out := kbArticleRowOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, Status: article.Status, Slug: article.Slug,
-		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), TeamText: kbTitle{article.Title}, PurgesAt: article.PurgesAt}
+		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTitle{article.Title}, PurgesAt: article.PurgesAt}
 	if article.DeletedAt != nil {
 		out.DeletedAt = *article.DeletedAt
 	}
@@ -107,6 +109,7 @@ type kbArticleOut struct {
 	PublishedAt   *string              `json:"published_at"`
 	UpdatedAt     string               `json:"updated_at"`
 	LastChange    *savedReplyChangeOut `json:"last_change"`
+	URL           string               `json:"url"`
 	TeamText      teamText             `json:"team_text"`
 	InTrash       bool                 `json:"in_trash"`
 	HasSourceHTML bool                 `json:"has_source_html"`
@@ -115,7 +118,7 @@ type kbArticleOut struct {
 
 func kbArticleView(article restKBArticle) map[string]any {
 	out := kbArticleOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, Status: article.Status, Slug: article.Slug,
-		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), TeamText: teamText{article.Title, article.BodyMD},
+		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: teamText{article.Title, article.BodyMD},
 		InTrash: article.DeletedAt != nil, HasSourceHTML: article.HasSourceHTML, Translations: []string{}}
 	for _, translation := range article.Translations {
 		out.Translations = append(out.Translations, translation.Locale)
