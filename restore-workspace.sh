@@ -1,6 +1,6 @@
 #!/bin/sh
 # Restores one workspace of a self-hosted Colliedesk from a backup, leaving every other workspace as
-# it is. The backup is the pair docs/user/upgrade.md makes: a pg_dump file (custom format) and a tar
+# it is. The backup is the pair docs/self-host/upgrade.md makes: a pg_dump file (custom format) and a tar
 # of the attachments directory. Run it in the install directory (compose.yaml and .env), server stopped:
 #   docker compose stop server
 #   sh restore-workspace.sh --workspace SLUG --database colliedesk.dump --attachments attachments.tar

@@ -2,7 +2,7 @@
 
 `tests/upgrade-test.sh PREVIOUS_IMAGE CANDIDATE_IMAGE` proves that an install of the previous release
 upgrades to a candidate without losing anything, and that both recovery paths of
-[the upgrade guide](../user/upgrade.md) work. It runs in CI on every pull request and push (`image`
+[the upgrade guide](../self-host/upgrade.md) work. It runs in CI on every pull request and push (`image`
 job) and gates every release (`release.yml`, step "Upgrade from the previous release").
 
 ## What it does

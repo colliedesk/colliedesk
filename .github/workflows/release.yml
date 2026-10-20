@@ -115,14 +115,14 @@ jobs:
         run: sh tests/image-boot-test.sh colliedesk:release "$TAG"
       # No release that loses data on upgrade: an install of the previous release, filled with the
       # upgrade fixture, must upgrade to this image keeping every row and file, and the rollback and
-      # one-workspace restore of docs/user/upgrade.md must work (docs/internals/upgrades.md). The test
+      # one-workspace restore of docs/self-host/upgrade.md must work (docs/internals/upgrades.md). The test
       # and fixture come from main, so a release of an older commit meets the current test.
       - name: Upgrade from the previous release
         env:
           TAG: ${{ steps.target.outputs.tag }}
           SHA: ${{ steps.target.outputs.sha }}
         run: |
-          # docs/user/upgrade.md sends operators to restore-workspace.sh at their release's tag.
+          # docs/self-host/upgrade.md sends operators to restore-workspace.sh at their release's tag.
           git cat-file -e "$SHA:restore-workspace.sh" || {
             echo "::error::$SHA has no restore-workspace.sh, which the upgrade guide promises in every release after v0.0.1."; exit 1; }
           git worktree add --detach "$RUNNER_TEMP/upgrade-test" origin/main
@@ -200,4 +200,4 @@ jobs:
           case "$TAG" in *-*) prerelease=--prerelease ;; esac
           if gh release view "$TAG" >/dev/null 2>&1; then echo "$TAG is already released"; exit 0; fi
           gh release create "$TAG" --verify-tag --generate-notes $prerelease \
-            --notes 'Self-hosted? Back up first, then follow the [upgrade guide](https://github.com/colliedesk/colliedesk/blob/main/docs/user/upgrade.md); it also says how to roll back.'
+            --notes 'Self-hosted? Back up first, then follow the [upgrade guide](https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/upgrade.md); it also says how to roll back.'

@@ -64,21 +64,8 @@ Answers:
   accepts at most 50 form conversations in 10 minutes. That ceiling is separate from email, so form
   spam never blocks incoming mail. The per-address counts live in the server process: a restart
   clears them.
-- Behind a reverse proxy, Colliedesk must know the proxy to read the visitor's address from
-  `X-Forwarded-For`. The server trusts **no** proxy unless `TRUSTED_PROXIES` names one, whether the
-  variable is unset or empty. The shipped `compose.yaml` and installer file set it to loopback and
-  the Docker bridge range (`127.0.0.0/8,::1/128,172.16.0.0/12`) when you do not, which fits a proxy
-  on the same host. For another setup, set it to your proxy's addresses or ranges, comma
-  separated, for example `TRUSTED_PROXIES=10.0.0.5,10.1.0.0/16` (with the installer, put it in
-  `.env`). With no trusted proxy the server logs a warning at startup, and behind a proxy every
-  visitor counts as the proxy and shares one limit.
-- On Colliedesk Cloud, sign-up already refuses to start unless `TRUSTED_PROXIES` is set to the
-  proxy's address, so the web form uses that same value.
-- **Warning:** do not publish the server port on `0.0.0.0` (or any public address) without a proxy
-  in front while the compose default is active. A client inside a trusted range, or one that
-  reaches the server directly through Docker's bridge, could then send a fake `X-Forwarded-For` and
-  pick its own address for the limits. The shipped files publish on `127.0.0.1` only. If you
-  expose the port directly, set `TRUSTED_PROXIES=` (empty).
+- The limits count per visitor address. On your own server behind a reverse proxy, the server must
+  trust that proxy to read the address; see [running behind a proxy](../self-host/running-behind-proxy.md).
 - Extra fields in the JSON body, such as `name`, are ignored.
 - Answers to a request that is refused before the form is found (too many requests from one
   address) carry no CORS permission on purpose (the origin list is not known yet and the server never echoes

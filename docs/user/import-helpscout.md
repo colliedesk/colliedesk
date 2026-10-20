@@ -33,7 +33,8 @@ customers who have no conversation in the inbox.
 
 ## Before you start
 
-1. Create the Colliedesk workspace (see [Install](install.md)).
+1. Create the Colliedesk workspace (on your own server, see
+   [self-host](../self-host/README.md)).
 2. Invite your team first. Replies by a Help Scout user link to a Colliedesk agent only when an agent
    with the same email exists.
 3. Create a Help Scout app. Use an account that can see the inbox:

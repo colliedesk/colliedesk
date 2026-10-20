@@ -3,7 +3,7 @@
 # is upgraded to a candidate image. It fails when the candidate's migrations lose or change a row, a
 # column or a stored file, or link a row to another workspace, or when the upgraded server does not
 # boot and serve each workspace its own inbox and nothing else. It also tests the two recovery paths
-# of docs/user/upgrade.md: restoring one workspace (restore-workspace.sh, twice) and rolling the
+# of docs/self-host/upgrade.md: restoring one workspace (restore-workspace.sh, twice) and rolling the
 # whole install back to the backup and the previous image. Needs Docker with Compose v2 and curl.
 # See docs/internals/upgrades.md.
 #   sh tests/upgrade-test.sh PREVIOUS_IMAGE CANDIDATE_IMAGE
@@ -197,7 +197,7 @@ grep -q '^problem.messages: [0-9]* rows, had [0-9]*' "$TMP/selftest" &&
   grep -q "^problem.conversations: the request role in workspace $acme reads [0-9]* rows of other workspaces" "$TMP/selftest" ||
   { cat "$TMP/selftest" >&2; fail 'the check missed deliberately lost rows, a cross-workspace link or a leaking policy'; }
 
-# The backup, exactly as docs/user/upgrade.md tells an operator to take it.
+# The backup, exactly as docs/self-host/upgrade.md tells an operator to take it.
 step 'backup'
 (cd "$TMP" && "$DOCKER" compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" --format=custom colliedesk' >colliedesk.dump) ||
   fail 'pg_dump failed'
@@ -237,7 +237,7 @@ restore_one_workspace() {
   step 'acme restored twice the same; beta and cobalt untouched'
 }
 
-# The whole install back to the backup and the previous image, as docs/user/upgrade.md says.
+# The whole install back to the backup and the previous image, as docs/self-host/upgrade.md says.
 roll_back() {
   step "rolling back to $PREVIOUS from the backup"
   (cd "$TMP" && "$DOCKER" compose stop server >/dev/null 2>&1 &&

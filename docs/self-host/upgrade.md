@@ -15,7 +15,7 @@ and both restores below are part of the same test. Details:
 Releases are tested from the release just before them. If you are several releases behind, upgrade
 one release at a time.
 
-The commands below are for an install made with the [installer](install.md): run them in its
+The commands below are for an install made with the [installer](README.md#with-the-installer): run them in its
 directory (`./colliedesk` by default), where `compose.yaml` and `.env` are.
 
 ## 1. Back up
@@ -94,7 +94,7 @@ Every `exec` and `run` here has `-T` (no terminal), so the commands also work fr
 Roll back when the migration fails or the new release does not work for you. The install goes back
 to the moment of the backup: anything written since then (new conversations, replies, received
 mail, changes) is gone. If you keep the new release running for a while before you decide, export
-what you need first ([Export all your data](export.md)).
+what you need first ([Export all your data](../user/export.md)).
 
 1. Stop the server and put the release you noted back in `.env` (here `0.0.1`; edit the file by
    hand if you prefer):
@@ -125,7 +125,7 @@ what you need first ([Export all your data](export.md)).
    ```
 
 Sessions come back as they were at the backup. If you revoked a session or an agent token after the
-backup, revoke it again ([Sessions and devices](sessions.md)). An install rolled back to `v0.0.1`
+backup, revoke it again ([Sessions and devices](../user/sessions.md)). An install rolled back to `v0.0.1`
 cannot restore one workspace (below), only the whole install as above.
 
 ## Restore one workspace

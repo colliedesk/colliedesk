@@ -1,14 +1,14 @@
 name: Docs site
 
-# docs/user/*.md and ROADMAP.md are published at colliedesk.com by colliedesk/colliedesk.com.
+# docs/user/*.md, docs/self-host/*.md and ROADMAP.md are published at colliedesk.com by colliedesk/colliedesk.com.
 # Build that site against this change so a broken link, missing "# Title" or bad fragment
 # fails here, before merge, instead of breaking the site's next deploy.
 on:
   pull_request:
-    paths: [docs/user/**, ROADMAP.md, .github/workflows/docs-site.yml]
+    paths: [docs/user/**, docs/self-host/**, ROADMAP.md, .github/scripts/user-docs-check.sh, .github/workflows/docs-site.yml]
   push:
     branches: [main]
-    paths: [docs/user/**, ROADMAP.md, .github/workflows/docs-site.yml]
+    paths: [docs/user/**, docs/self-host/**, ROADMAP.md, .github/scripts/user-docs-check.sh, .github/workflows/docs-site.yml]
 
 permissions:
   contents: read
@@ -22,11 +22,30 @@ jobs:
           path: product
           sparse-checkout: |
             docs/user
+            docs/self-host
             ROADMAP.md
+            .github/scripts
           sparse-checkout-cone-mode: false
+      - name: User guides hold no server operation
+        working-directory: product
+        run: sh .github/scripts/user-docs-check.sh
+      # A pull request whose branch also exists in colliedesk/colliedesk.com builds that branch of
+      # the site, so a docs change that spans both repos can be checked before either side merges.
+      - id: site
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          ref=
+          if [ -n "$HEAD_REF" ] &&
+            git ls-remote --exit-code --heads https://github.com/colliedesk/colliedesk.com.git "$HEAD_REF" >/dev/null; then
+            ref=$HEAD_REF
+          fi
+          echo "site ref: ${ref:-main}"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: colliedesk/colliedesk.com
+          ref: ${{ steps.site.outputs.ref }}
           path: site
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
