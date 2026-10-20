@@ -30,14 +30,14 @@ test('a trial workspace sees when the trial ends, its usage and every way to sub
   fireEvent.click(screen.getByRole('button', { name: 'Choose Small, $390 per year' }));
   fireEvent.click(screen.getByRole('button', { name: 'Choose Team, $690 per year' }));
   fireEvent.click(screen.getByRole('button', { name: 'Choose Team 25, $1,490 per year' }));
-  fireEvent.click(screen.getByRole('button', { name: /founding.*\$100.*year/i }));
+  fireEvent.click(screen.getByRole('button', { name: /founding.*\$99.*quarter/i }));
   expect(onCheckout.mock.calls).toEqual([['solo_monthly'], ['small_monthly'], ['team_monthly'], ['team25_monthly'],
     ['solo_yearly'], ['small_yearly'], ['team_yearly'], ['team25_yearly'], ['founding']]);
 });
 
 test('a server without the optional products offers only the plans it can sell', () => {
   render(<BillingPage billing={{ ...free, checkout_plans: ['team_monthly', 'team_yearly', 'founding'] }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
-  expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Choose Team, $69 per month', 'Choose Founding, $100 per year for life']);
+  expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Choose Team, $69 per month', 'Choose Founding, $99 per quarter for life']);
   for (const name of ['Solo', 'Small', 'Team 25']) expect(screen.queryByRole('article', { name })).not.toBeInTheDocument();
 });
 
@@ -171,7 +171,7 @@ test('each plan is a card with its price, what it includes and one clear Choose 
   expect(card('Small')).toHaveTextContent('Billed $390 yearly');
   expect(card('Team')).toHaveTextContent('Billed $690 yearly');
   expect(card('Team 25')).toHaveTextContent('Billed $1,490 yearly');
-  expect(card('Founding')).toHaveTextContent('Billed $100 yearly');
+  expect(card('Founding')).toHaveTextContent('Billed $99 every 3 months');
 });
 
 test('without any monthly and yearly pair there is no Monthly/Yearly switch', () => {
@@ -199,8 +199,8 @@ test('trial and renewal dates are days, not times', () => {
 test('yearly prices read per month with what is billed, so plans compare at a glance', () => {
   render(<BillingPage billing={free} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
   const card = (name: string) => screen.getByRole('article', { name });
-  expect(card('Founding')).toHaveTextContent('$8.33per month');
-  expect(card('Founding')).toHaveTextContent('Billed $100 yearly, the price never changes');
+  expect(card('Founding')).toHaveTextContent('$33per month');
+  expect(card('Founding')).toHaveTextContent('Billed $99 every 3 months, the price never changes');
   fireEvent.click(screen.getByRole('radio', { name: /yearly/i }));
   expect(card('Solo')).toHaveTextContent('$15.83per month');
   expect(card('Small')).toHaveTextContent('$32.50per month');
