@@ -96,6 +96,96 @@ type SavedReplyVersion struct {
 	CreatedAt           time.Time `json:"created_at"`
 }
 
+// KBCollection is a knowledge base collection, also in the trash. SourceMeta is what an import read
+// that has no column of its own.
+type KBCollection struct {
+	ID               string          `json:"id"`
+	ParentID         *string         `json:"parent_id"`
+	Name             string          `json:"name"`
+	Slug             string          `json:"slug"`
+	Description      string          `json:"description"`
+	Position         int             `json:"position"`
+	SourceMeta       json.RawMessage `json:"source_meta"`
+	CreatedAt        time.Time       `json:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at"`
+	DeletedAt        *time.Time      `json:"deleted_at"`
+	DeletedByAgentID *string         `json:"deleted_by_agent_id"`
+}
+
+// KBArticle is a knowledge base article in Markdown, also in the trash. SourceHTML is the original HTML
+// an import read; ImageIDs are the images its versions link (files under kb-images/).
+type KBArticle struct {
+	ID               string          `json:"id"`
+	CollectionID     string          `json:"collection_id"`
+	Number           int64           `json:"number"`
+	Title            string          `json:"title"`
+	Slug             string          `json:"slug"`
+	BodyMD           string          `json:"body_md"`
+	Status           string          `json:"status"`
+	PublishedAt      *time.Time      `json:"published_at"`
+	AuthorAgentID    *string         `json:"author_agent_id"`
+	SourceMeta       json.RawMessage `json:"source_meta"`
+	SourceHTML       *string         `json:"source_html"`
+	ImageIDs         []string        `json:"image_ids"`
+	CreatedAt        time.Time       `json:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at"`
+	DeletedAt        *time.Time      `json:"deleted_at"`
+	DeletedByAgentID *string         `json:"deleted_by_agent_id"`
+}
+
+// KBArticleVersion is one version of an article: what it said after a change and who made it.
+type KBArticleVersion struct {
+	ArticleID           string    `json:"article_id"`
+	Version             int       `json:"version"`
+	Kind                string    `json:"kind"`
+	RestoredFromVersion *int      `json:"restored_from_version"`
+	Title               string    `json:"title"`
+	Slug                string    `json:"slug"`
+	BodyMD              string    `json:"body_md"`
+	Status              string    `json:"status"`
+	CollectionID        *string   `json:"collection_id"`
+	ChangedByAgentID    *string   `json:"changed_by_agent_id"`
+	TokenID             *string   `json:"token_id"`
+	TokenLabel          *string   `json:"token_label"`
+	AgentRequestID      *string   `json:"agent_request_id"`
+	CreatedAt           time.Time `json:"created_at"`
+}
+
+// KBArticleTranslation is a translation of an article an import brought in.
+type KBArticleTranslation struct {
+	ArticleID  string          `json:"article_id"`
+	Locale     string          `json:"locale"`
+	Title      string          `json:"title"`
+	BodyMD     string          `json:"body_md"`
+	SourceMeta json.RawMessage `json:"source_meta"`
+	SourceHTML *string         `json:"source_html"`
+	CreatedAt  time.Time       `json:"created_at"`
+	UpdatedAt  time.Time       `json:"updated_at"`
+}
+
+// KBImage is an image of the knowledge base; its bytes are the file at Path. StorageKey stays out of
+// the archive.
+type KBImage struct {
+	ID               string    `json:"id"`
+	ContentType      string    `json:"content_type"`
+	Size             int64     `json:"size"`
+	SHA256           string    `json:"sha256"`
+	Path             string    `json:"path"`
+	CreatedByAgentID *string   `json:"created_by_agent_id"`
+	CreatedAt        time.Time `json:"created_at"`
+	StorageKey       string    `json:"-"`
+}
+
+// HelpCenter is the public help center's settings and the knowledge base counters.
+type HelpCenter struct {
+	Enabled           bool      `json:"enabled"`
+	Title             string    `json:"title"`
+	Locale            string    `json:"locale"`
+	ContentVersion    int64     `json:"content_version"`
+	LastArticleNumber int64     `json:"last_article_number"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
 // AgentRequest is a call an agent token asked a person to approve, and what became of it. The answer
 // of an approved call is not exported: credentials and links are never stored, and other answers are
 // the records exported elsewhere. Body, EditedBody and SavedReplyBefore are null once 90 days passed
@@ -194,6 +284,12 @@ type Sink interface {
 	SavedReply(SavedReply) error
 	SavedReplyVersion(SavedReplyVersion) error
 	SavedView(SavedView) error
+	KBCollection(KBCollection) error
+	KBArticle(KBArticle) error
+	KBArticleVersion(KBArticleVersion) error
+	KBArticleTranslation(KBArticleTranslation) error
+	KBImage(KBImage) error
+	HelpCenter(HelpCenter) error
 	AgentRequest(AgentRequest) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error

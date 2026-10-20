@@ -203,18 +203,24 @@ type idleSink struct {
 	sleep time.Duration
 }
 
-func (s idleSink) Workspace(domain.Workspace) error                 { return nil }
-func (s idleSink) Agent(export.Agent) error                         { time.Sleep(s.sleep); return nil }
-func (s idleSink) Contact(export.Contact) error                     { return nil }
-func (s idleSink) ContactMerge(export.ContactMerge) error           { return nil }
-func (s idleSink) Tag(export.Tag) error                             { return nil }
-func (s idleSink) SavedReply(export.SavedReply) error               { return nil }
-func (s idleSink) SavedReplyVersion(export.SavedReplyVersion) error { return nil }
-func (s idleSink) SavedView(export.SavedView) error                 { return nil }
-func (s idleSink) AgentRequest(export.AgentRequest) error           { return nil }
-func (s idleSink) BeginConversation(export.ConversationHead) error  { return nil }
-func (s idleSink) Message(export.Message) error                     { return nil }
-func (s idleSink) EndConversation([]domain.TimeEntry) error         { return nil }
+func (s idleSink) Workspace(domain.Workspace) error                       { return nil }
+func (s idleSink) Agent(export.Agent) error                               { time.Sleep(s.sleep); return nil }
+func (s idleSink) Contact(export.Contact) error                           { return nil }
+func (s idleSink) ContactMerge(export.ContactMerge) error                 { return nil }
+func (s idleSink) Tag(export.Tag) error                                   { return nil }
+func (s idleSink) SavedReply(export.SavedReply) error                     { return nil }
+func (s idleSink) SavedReplyVersion(export.SavedReplyVersion) error       { return nil }
+func (s idleSink) SavedView(export.SavedView) error                       { return nil }
+func (s idleSink) KBCollection(export.KBCollection) error                 { return nil }
+func (s idleSink) KBArticle(export.KBArticle) error                       { return nil }
+func (s idleSink) KBArticleVersion(export.KBArticleVersion) error         { return nil }
+func (s idleSink) KBArticleTranslation(export.KBArticleTranslation) error { return nil }
+func (s idleSink) KBImage(export.KBImage) error                           { return nil }
+func (s idleSink) HelpCenter(export.HelpCenter) error                     { return nil }
+func (s idleSink) AgentRequest(export.AgentRequest) error                 { return nil }
+func (s idleSink) BeginConversation(export.ConversationHead) error        { return nil }
+func (s idleSink) Message(export.Message) error                           { return nil }
+func (s idleSink) EndConversation([]domain.TimeEntry) error               { return nil }
 
 func TestExportTransactionIsEndedByTheDatabaseWhenItIdlesTooLong(t *testing.T) {
 	api, service, pool, _ := testAPIWithConfig(t, nil)

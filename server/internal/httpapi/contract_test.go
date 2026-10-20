@@ -69,6 +69,10 @@ func TestAPIResponsesMatchOpenAPIContract(t *testing.T) {
 func init() {
 	// Inbound email bodies are raw RFC 5322 bytes; validate them as an opaque string.
 	openapi3filter.RegisterBodyDecoder("message/rfc822", openapi3filter.FileBodyDecoder)
+	// Knowledge base images arrive as their raw bytes.
+	for _, mediaType := range []string{"image/png", "image/jpeg", "image/gif", "image/webp"} {
+		openapi3filter.RegisterBodyDecoder(mediaType, openapi3filter.FileBodyDecoder)
+	}
 }
 
 func loadContract(t *testing.T) *openapi3.T {

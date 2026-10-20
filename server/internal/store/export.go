@@ -79,6 +79,9 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string, sink ex
 	if err := exportSavedReplies(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
+	if err := exportKB(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
 	if err := exportAgentRequests(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
@@ -438,4 +441,138 @@ func exportMessages(ctx context.Context, tx pgx.Tx, workspaceID, conversationID 
 		}
 	}
 	return rowsError("export messages", rows)
+}
+
+// exportKB writes the whole knowledge base: collections and articles in the trash too, every version,
+// translation and image, and the help center settings. Articles carry the original HTML an import kept.
+func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	rows, err := tx.Query(ctx, `SELECT id::text,parent_id::text,name,slug,description,position,source_meta,created_at,updated_at,deleted_at,deleted_by_agent_id::text
+		FROM kb_collections WHERE workspace_id=$1 ORDER BY id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export knowledge base collections: %w", err)
+	}
+	for rows.Next() {
+		var record export.KBCollection
+		var meta []byte
+		if err := rows.Scan(&record.ID, &record.ParentID, &record.Name, &record.Slug, &record.Description, &record.Position, &meta,
+			&record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID); err != nil {
+			rows.Close()
+			return fmt.Errorf("export knowledge base collections: %w", err)
+		}
+		record.SourceMeta = meta
+		record.CreatedAt, record.UpdatedAt, record.DeletedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt), domain.UTCOptional(record.DeletedAt)
+		if err := sink.KBCollection(record); err != nil {
+			rows.Close()
+			return err
+		}
+	}
+	if err := rowsError("export knowledge base collections", rows); err != nil {
+		return err
+	}
+
+	rows, err = tx.Query(ctx, `SELECT a.id::text,a.collection_id::text,a.number,a.title,a.slug,a.body_md,a.status,a.published_at,a.author_agent_id::text,a.source_meta,a.source_html,
+			COALESCE((SELECT array_agg(l.image_id::text ORDER BY l.image_id) FROM kb_article_images l WHERE l.workspace_id=a.workspace_id AND l.article_id=a.id), '{}'),
+			a.created_at,a.updated_at,a.deleted_at,a.deleted_by_agent_id::text
+		FROM kb_articles a WHERE a.workspace_id=$1 ORDER BY a.number`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export knowledge base articles: %w", err)
+	}
+	for rows.Next() {
+		var record export.KBArticle
+		var meta []byte
+		if err := rows.Scan(&record.ID, &record.CollectionID, &record.Number, &record.Title, &record.Slug, &record.BodyMD, &record.Status, &record.PublishedAt,
+			&record.AuthorAgentID, &meta, &record.SourceHTML, &record.ImageIDs, &record.CreatedAt, &record.UpdatedAt, &record.DeletedAt, &record.DeletedByAgentID); err != nil {
+			rows.Close()
+			return fmt.Errorf("export knowledge base articles: %w", err)
+		}
+		record.SourceMeta = meta
+		record.CreatedAt, record.UpdatedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt)
+		record.PublishedAt, record.DeletedAt = domain.UTCOptional(record.PublishedAt), domain.UTCOptional(record.DeletedAt)
+		if err := sink.KBArticle(record); err != nil {
+			rows.Close()
+			return err
+		}
+	}
+	if err := rowsError("export knowledge base articles", rows); err != nil {
+		return err
+	}
+
+	rows, err = tx.Query(ctx, `SELECT article_id::text,version,kind,restored_from_version,title,slug,body_md,status,collection_id::text,changed_by_agent_id::text,
+			token_id::text,token_label,agent_request_id::text,created_at
+		FROM kb_article_versions WHERE workspace_id=$1 ORDER BY article_id,version`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export knowledge base versions: %w", err)
+	}
+	for rows.Next() {
+		var record export.KBArticleVersion
+		if err := rows.Scan(&record.ArticleID, &record.Version, &record.Kind, &record.RestoredFromVersion, &record.Title, &record.Slug, &record.BodyMD, &record.Status,
+			&record.CollectionID, &record.ChangedByAgentID, &record.TokenID, &record.TokenLabel, &record.AgentRequestID, &record.CreatedAt); err != nil {
+			rows.Close()
+			return fmt.Errorf("export knowledge base versions: %w", err)
+		}
+		record.CreatedAt = domain.UTC(record.CreatedAt)
+		if err := sink.KBArticleVersion(record); err != nil {
+			rows.Close()
+			return err
+		}
+	}
+	if err := rowsError("export knowledge base versions", rows); err != nil {
+		return err
+	}
+
+	rows, err = tx.Query(ctx, `SELECT article_id::text,locale,title,body_md,source_meta,source_html,created_at,updated_at
+		FROM kb_article_translations WHERE workspace_id=$1 ORDER BY article_id,locale`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export knowledge base translations: %w", err)
+	}
+	for rows.Next() {
+		var record export.KBArticleTranslation
+		var meta []byte
+		if err := rows.Scan(&record.ArticleID, &record.Locale, &record.Title, &record.BodyMD, &meta, &record.SourceHTML, &record.CreatedAt, &record.UpdatedAt); err != nil {
+			rows.Close()
+			return fmt.Errorf("export knowledge base translations: %w", err)
+		}
+		record.SourceMeta = meta
+		record.CreatedAt, record.UpdatedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt)
+		if err := sink.KBArticleTranslation(record); err != nil {
+			rows.Close()
+			return err
+		}
+	}
+	if err := rowsError("export knowledge base translations", rows); err != nil {
+		return err
+	}
+
+	rows, err = tx.Query(ctx, `SELECT id::text,content_type,size,sha256,storage_key,created_by_agent_id::text,created_at
+		FROM kb_images WHERE workspace_id=$1 ORDER BY id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export knowledge base images: %w", err)
+	}
+	for rows.Next() {
+		var record export.KBImage
+		if err := rows.Scan(&record.ID, &record.ContentType, &record.Size, &record.SHA256, &record.StorageKey, &record.CreatedByAgentID, &record.CreatedAt); err != nil {
+			rows.Close()
+			return fmt.Errorf("export knowledge base images: %w", err)
+		}
+		record.CreatedAt = domain.UTC(record.CreatedAt)
+		if err := sink.KBImage(record); err != nil {
+			rows.Close()
+			return err
+		}
+	}
+	if err := rowsError("export knowledge base images", rows); err != nil {
+		return err
+	}
+
+	var center export.HelpCenter
+	err = tx.QueryRow(ctx, `SELECT enabled,title,locale,content_version,last_article_number,updated_at FROM help_centers WHERE workspace_id=$1`, workspaceID).
+		Scan(&center.Enabled, &center.Title, &center.Locale, &center.ContentVersion, &center.LastArticleNumber, &center.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("export help center: %w", err)
+	}
+	center.UpdatedAt = domain.UTC(center.UpdatedAt)
+	return sink.HelpCenter(center)
 }

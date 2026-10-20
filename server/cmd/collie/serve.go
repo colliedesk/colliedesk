@@ -112,7 +112,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	hostedCloud := cloudAuth.Enabled() && billing.Enabled()
 	telemetryConfig := telemetry.ConfigFromEnv(os.Getenv, origin, hostedCloud, version)
 	go telemetry.New(db, telemetryConfig, nil).Run(ctx, slog.Default())
-	go sweepDaily(ctx, store.NewWithDB(db))
+	go sweepDaily(ctx, store.NewWithDB(db).WithObjects(storage))
 	mailImageCacheBytes, err := mailImageCacheBytesFromEnv(os.Getenv)
 	if err != nil {
 		return err
@@ -214,7 +214,8 @@ func sweepSignupAddresses(ctx context.Context, service *auth.Service) {
 
 // sweepDaily runs the daily clean-up at start and then daily until ctx ends: it clears the call and
 // answer of agent requests decided more than 90 days ago (the rows stay as the record of who asked and
-// who decided), and deletes for good the saved replies that have been in the trash for 30 days.
+// who decided), and deletes for good the saved replies and knowledge base articles and collections that
+// have been in the trash for 30 days, and knowledge base images no article has linked for 30 days.
 func sweepDaily(ctx context.Context, data *store.Store) {
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
@@ -228,6 +229,12 @@ func sweepDaily(ctx context.Context, data *store.Store) {
 			slog.Error("purge saved reply trash", "error", err)
 		} else if purged > 0 {
 			slog.Info("purged saved replies deleted more than 30 days ago", "count", purged)
+		}
+		if purged, err := data.PurgeKBTrash(ctx); err != nil && ctx.Err() == nil {
+			slog.Error("purge knowledge base trash", "error", err)
+		} else if purged != (store.KBPurge{}) {
+			slog.Info("purged knowledge base articles and collections deleted more than 30 days ago, and unused images",
+				"articles", purged.Articles, "collections", purged.Collections, "images", purged.Images)
 		}
 		select {
 		case <-ctx.Done():

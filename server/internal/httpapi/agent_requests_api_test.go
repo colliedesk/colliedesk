@@ -563,6 +563,11 @@ func TestEveryRequestableRouteDeclaresTheAgentRequestAnswer(t *testing.T) {
 		}
 		method, pattern, _ := strings.Cut(key, " ")
 		operation := document.Paths.Find(pattern).GetOperation(method)
+		// A body that is only a file (an image upload) is never filed: it gets 403 files_need_approval,
+		// which TestEveryRouteIsOpenToTokensOnlyFromItsTier checks.
+		if operation != nil && operation.RequestBody != nil && operation.RequestBody.Value.Content.Get("application/json") == nil {
+			continue
+		}
 		if operation == nil || operation.Responses.Value("202") == nil {
 			t.Errorf("%s can become an agent request but contracts/openapi.yaml declares no 202 for it: add '202': {$ref: '#/components/responses/AgentRequestAccepted'}", key)
 		}
