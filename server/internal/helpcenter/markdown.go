@@ -29,11 +29,46 @@ var markdown = goldmark.New(
 	goldmark.WithExtensions(
 		// Alignment as an attribute: a style attribute would be refused by the page's CSP.
 		extension.NewTable(extension.WithTableCellAlignMethod(extension.TableCellAlignAttribute)),
-		extension.Strikethrough, extension.Linkify, extension.TaskList, extension.Footnote),
+		extension.Strikethrough, linkify{}, extension.TaskList, extension.Footnote),
 	goldmark.WithParserOptions(parser.WithAutoHeadingID(), parser.WithASTTransformers(util.Prioritized(publicLinks{}, 100), util.Prioritized(hiddenText{}, 200))),
 	// Below the default renderers' 1000, so these functions replace theirs.
 	goldmark.WithRendererOptions(renderer.WithNodeRenderers(util.Prioritized(rawHTML{}, 100))),
 )
+
+// linkify is goldmark's Linkify (bare URLs, www. addresses and e-mail addresses become links), asked
+// only where a link can start. Every space, "*", "_", "~" and "(" starts its search, and its e-mail
+// search read the rest of the line each time: a line of "*a" took 0.7 s per 100,000 characters.
+type linkify struct{}
+
+func (linkify) Extend(m goldmark.Markdown) {
+	m.Parser().AddOptions(parser.WithInlineParsers(util.Prioritized(
+		linkStarts{extension.NewLinkifyParser(extension.WithLinkifyEmailRegexp(emailAddress))}, 999)))
+}
+
+type linkStarts struct{ parser.InlineParser }
+
+var linkPrefixes = [][]byte{[]byte("http://"), []byte("https://"), []byte("ftp://"), []byte("www.")}
+
+func (l linkStarts) Parse(parent ast.Node, block text.Reader, pc parser.Context) ast.Node {
+	line, _ := block.PeekLine()
+	if len(line) > 0 && bytes.IndexByte([]byte(" *_~("), line[0]) >= 0 {
+		line = line[1:]
+	}
+	for _, prefix := range linkPrefixes {
+		if bytes.HasPrefix(line, prefix) {
+			return l.InlineParser.Parse(parent, block, pc)
+		}
+	}
+	// An e-mail address's "@" comes after a local part of at most 64 characters.
+	if bytes.IndexByte(line[:min(len(line), 65)], '@') < 0 {
+		return nil
+	}
+	return l.InlineParser.Parse(parent, block, pc)
+}
+
+// emailAddress is what Linkify links as an e-mail address where a word starts; its local part holds
+// at most 64 characters (RFC 5321), so the search stops there.
+var emailAddress = regexp.MustCompile("^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+")
 
 // plain parses text for excerpts, leaving out what the page hides (hiddenText).
 var plain = goldmark.New(goldmark.WithExtensions(extension.Strikethrough, extension.Table),

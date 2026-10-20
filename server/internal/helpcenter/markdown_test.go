@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -172,6 +173,11 @@ func TestArticleMarkdownNestsAtMost16LevelsOnALine(t *testing.T) {
 		"images":        strings.Repeat("![](", 25000),
 		"closed links":  strings.Repeat("[a](", 25000) + ")",
 		"nested links":  strings.Repeat("[a](()", 16666) + ")",
+		"emphasis":      strings.Repeat("*a", 50000),
+		"underscores":   strings.Repeat("_a", 50000),
+		"tildes":        strings.Repeat("~a", 50000),
+		"strong":        strings.Repeat("**a", 33333),
+		"email-like":    strings.Repeat("*a", 49990) + "@example.com",
 	} {
 		started := time.Now()
 		if _, err := renderArticle(body, ""); err != nil {
@@ -266,5 +272,50 @@ func TestHeadingIDsAreGoldmarksInLinearTime(t *testing.T) {
 		if took := time.Since(started); took > 500*time.Millisecond {
 			t.Errorf("%s headings took %s", name, took)
 		}
+	}
+}
+
+// Linkify still finds e-mail addresses, as goldmark's own search did, with a local part of at most 64
+// characters: goldmark read every "*a" of a line to its end looking for an "@" (0.7 s per 100,000).
+func TestEmailAddressesAreLinkedAsBefore(t *testing.T) {
+	for body, want := range map[string]string{
+		"Mail help@example.com today.":                      `<a href="mailto:help@example.com">help@example.com</a>`,
+		"(first.last+tag@sub.example.co.uk)":                `<a href="mailto:first.last+tag@sub.example.co.uk">first.last+tag@sub.example.co.uk</a>`,
+		"*bold@example.com*":                                `<em><a href="mailto:bold@example.com">bold@example.com</a></em>`,
+		"see https://example.com/a?b=c and www.example.org": `<a href="https://example.com/a?b=c">https://example.com/a?b=c</a>`,
+	} {
+		html, err := renderArticle(body, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(html), want) {
+			t.Errorf("%q rendered %s\nwant it to hold %s", body, html, want)
+		}
+	}
+	if html, _ := renderArticle(strings.Repeat("a", 65)+"@example.com", ""); strings.Contains(string(html), "mailto:") {
+		t.Errorf("a 65-character local part was linked: %s", html)
+	}
+}
+
+// linkify links what goldmark's Linkify links.
+func TestLinkifyLinksWhatGoldmarkLinks(t *testing.T) {
+	texts := "Visit https://example.com/a_b?c=(d) or http://x.example, www.example.org/path.\n\n" +
+		"Write to help@example.com, (first.last+tag@sub.example.co.uk), *bold@example.com*, _under@example.com_, ~t@example.com~.\n\n" +
+		"Not links: a@b, @example.com, me@localhost, name@-x.com, x@example.com- end, wwwexample.com, https:/x.\n\n" +
+		"* list https://example.com\n* item mail@example.net\n\n| a | b |\n|---|---|\n| www.example.com | c@example.com |\n"
+	ours := regexp.MustCompile(`<a href="[^"]*">`).FindAllString(func() string {
+		html, err := renderArticle(texts, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(html)
+	}(), -1)
+	var out bytes.Buffer
+	if err := goldmark.New(goldmark.WithExtensions(extension.Linkify, extension.NewTable())).Convert([]byte(texts), &out); err != nil {
+		t.Fatal(err)
+	}
+	want := regexp.MustCompile(`<a href="[^"]*">`).FindAllString(out.String(), -1)
+	if strings.Join(ours, " ") != strings.Join(want, " ") {
+		t.Errorf("links\n%q\nwant\n%q", ours, want)
 	}
 }

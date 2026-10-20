@@ -58,9 +58,9 @@ articles, neighbours); a 304 stops after the second.
 `TestHelpCenterHostileArticlesLatencyBudget` holds an article page to the same 100 ms when its
 100,000 characters are built to be slow to parse: one line of quote or list markers (`>`, `> `,
 `1. `, `+ `, mixed), 1,500 quoted players, same-named ATX and setext headings, open links and
-images, and an emphasis run (goldmark's quadratic paths: up to 24 s before `tame`
-and `headingIDs`). An article renders once per text behind a guard (`help-center.md`), so the
-visits (20 each, to spare the shared latency runner) measure the kept page after the first (6–14 ms locally).
+images, and emphasis runs (goldmark's quadratic paths: up to 24 s before `tame`, `headingIDs` and
+`linkify`). Each article's first visit renders it cold and is held to the budget (6–35 ms locally);
+then 20 visits (not 50, to spare the shared latency runner) read the kept page (4–12 ms).
 `TestHelpCenterRenderedPagesAreNeverSharedAcrossWorkspaces` keeps that memory per workspace.
 
 ## Pending agent requests budget

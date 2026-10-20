@@ -125,11 +125,13 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
 
 - **goldmark has quadratic paths, and every visit renders.** Measured on 100,000 characters: one line
   of `>` (or `1. `, `+ `) markers 2.7 s; one line of `[a](` or `![](` (links that never close) 3.6 s;
-  25,000 headings of one name 24 s (goldmark looks for a free id suffix from 1 each time); emphasis
-  runs and Linkify on `*a`, `~a` about 0.7 s. `tame` escapes, per line outside fenced code, the 17th
-  nested marker and every link start past 16 whose `(` does not close before the next one;
-  `headingIDs` gives goldmark's ids (`a`, `a-1`, …) remembering the next free suffix. What is left is
-  bounded by the render guard above. `TestHelpCenterHostileArticlesLatencyBudget` holds them.
+  25,000 headings of one name 24 s (goldmark looks for a free id suffix from 1 each time); `*a`, `_a`,
+  `~a` 0.7 s (Linkify starts an e-mail search at every `*`, `_`, `~`, space and `(`, and it read the
+  rest of the line). `tame` escapes, per line outside fenced code, the 17th nested marker and every
+  link start past 16 whose `(` does not close before the next one; `headingIDs` gives goldmark's ids
+  (`a`, `a-1`, …) remembering the next free suffix; `linkify` asks goldmark's Linkify only where a
+  URL prefix or an `@` within 65 characters follows, with a local part of at most 64. Every known
+  text now renders cold in under 30 ms locally; the render guard above bounds what is not known. `TestHelpCenterHostileArticlesLatencyBudget` holds them.
 
 - **A build without a version still changes its ETag.** Development builds have an empty version;
   the template hash in the ETag keeps an edited page from being revalidated as the old one.

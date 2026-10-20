@@ -42,10 +42,9 @@ func TestHelpCenterPagesLatencyBudget(t *testing.T) {
 	}
 }
 
-// TestHelpCenterHostileArticlesLatencyBudget holds an article page to the same budget when its text is
-// built to be slow to parse (docs/internals/help-center.md, Traps): deep nesting, open links and
-// same-named headings are tamed; what is left (emphasis runs, about 0.7 s) renders once, and the page
-// is kept for the next visits.
+// TestHelpCenterHostileArticlesLatencyBudget holds an article page to the same budget, its first
+// (cold) render included, when its text is built to be slow to parse (docs/internals/help-center.md,
+// Traps): deep nesting, open links, same-named headings and Linkify's e-mail search are tamed.
 func TestHelpCenterHostileArticlesLatencyBudget(t *testing.T) {
 	api, service, _, _ := testAPIWithStorage(t)
 	site := helpCenterSite(api)
@@ -65,22 +64,21 @@ func TestHelpCenterHostileArticlesLatencyBudget(t *testing.T) {
 		"open links":     strings.Repeat("[a](", 25000),
 		"open images":    strings.Repeat("![](", 20000),
 		"emphasis":       strings.Repeat("*a", 50000),
+		"strong":         strings.Repeat("**a", 33333),
 	}
 	for name, body := range bodies {
 		article := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": name, "body_md": body, "status": "published"})
 		path := fmt.Sprintf("/help/%s/a/%d-%s", slug, article.Number, article.Slug)
-		// The first visit renders (the emphasis run takes about 0.7 s, on CI past the 1 s wait, when the
-		// visitor reads the text as written); it must stay within the wait, and the page is then kept.
+		// The first visit renders the text cold: it is held to the budget too, and must be the
+		// rendered page, not the text shown while a render runs late.
 		started := time.Now()
-		for strings.Contains(visit(site, path, "198.51.100.250").Body.String(), `class="plain-note"`) {
-			if time.Since(started) > 10*time.Second {
-				t.Fatalf("help center hostile %s never rendered", name)
-			}
-			time.Sleep(50 * time.Millisecond)
+		first := visit(site, path, "198.51.100.250").Body.String()
+		cold := time.Since(started)
+		t.Logf("help center hostile %s cold=%s", name, cold)
+		if cold > inboxLatencyBudget || strings.Contains(first, `class="plain-note"`) {
+			t.Errorf("help center hostile %s rendered cold in %s (budget %s)", name, cold, inboxLatencyBudget)
 		}
-		t.Logf("help center hostile %s rendered in %s", name, time.Since(started))
-		// 20 visits each, not 50: every one reads the kept page, and this gate shares its CI runner with
-		// every other latency gate.
+		// 20 visits each, not 50, since this gate shares its CI runner with every other latency gate.
 		p95 := helpCenterPercentile(t, site, path, 20)
 		t.Logf("help center hostile %s p95=%s", name, p95)
 		if p95 > inboxLatencyBudget {
