@@ -5,9 +5,9 @@ import type { CodeMirrorEditorProps } from './codemirror-editor';
 // FakeEditor stands in for the editor in the article page's tests (jsdom types into a field better than into
 // CodeMirror): a field with the editor's contract. It tells the page of typing 120 ms after it, as the editor
 // does, pastes images through the upload hooks, each as a paragraph at the end, and shows the preview it is
-// given. codemirror-editor.test.tsx tests the real editor.
+// given. Like CodeMirror, it writes every line ending as \n. codemirror-editor.test.tsx tests the real editor.
 export default function FakeEditor({ initial, uploads, label, describedBy, invalid, mode, preview, onChange, onReady }: CodeMirrorEditorProps) {
-  const [value, setValue] = useState(initial);
+  const [value, setValue] = useState(() => initial.replace(/\r\n?/g, '\n'));
   const text = useRef(value);
   const timer = useRef<number | undefined>(undefined);
   const emitted = useRef(value);
@@ -23,7 +23,7 @@ export default function FakeEditor({ initial, uploads, label, describedBy, inval
   useEffect(() => {
     props.current.onReady({
       markdown: emit,
-      load: (markdown) => { put(markdown); emitted.current = markdown; },
+      load: (markdown) => { const text = markdown.replace(/\r\n?/g, '\n'); put(text); emitted.current = text; },
       uploading: () => pending.current > 0,
       focus: () => {},
     });

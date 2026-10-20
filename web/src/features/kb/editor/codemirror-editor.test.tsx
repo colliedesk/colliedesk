@@ -20,8 +20,11 @@ async function make(initial: string, uploads: UploadHooks = never) {
 
 test('the text is kept byte for byte: what is loaded is what is saved', async () => {
   const article = 'Steps\n-----\n\nSee [the guide][g].\n\n|a|b|\n|-|-|\n|1|2|\n\n<b>raw</b>\r\n\n[g]: https://example.com\n[unused]: https://example.com\n';
-  const { handle } = await make(article);
+  const { handle, onChange } = await make(article);
+  // CodeMirror splits lines on \r\n, \r and \n alike and writes \n: the one byte change it makes, and it is
+  // no change the page hears of (the page compares line endings out, article-editor.tsx sameBody).
   expect(handle.markdown()).toBe(article.replace('\r\n', '\n'));
+  expect(onChange).not.toHaveBeenCalled();
   handle.load('# Other');
   expect(handle.markdown()).toBe('# Other');
 });

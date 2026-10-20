@@ -109,10 +109,13 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const conflictNote = useRef<HTMLDivElement>(null);
   useEffect(() => { if (conflict) conflictNote.current?.scrollIntoView?.({ block: 'nearest' }); }, [conflict]);
   const set = (change: Partial<Draft>) => { setSavedOnce(false); setDraft((current) => ({ ...current, ...change })); };
+  // sameBody: the editor writes every line ending as \n, so a text that differs from the stored one only there (an
+  // import or an API client wrote \r\n) is the article's own text, not an edit.
+  const sameBody = (text: string, of: KBArticle) => text === of.body_md || text === of.body_md.replace(/\r\n?/g, '\n');
   const isDirty = (form: Draft) => (base
     // Compared as save() sends them: title and address name trimmed, and an emptied address name is not
     // a change (the server keeps the old one), so a form is never dirty with nothing to send.
-    ? form.title.trim() !== base.title || (form.slug.trim() !== '' && form.slug.trim() !== base.slug) || form.body !== base.body_md || form.collection_id !== base.collection_id
+    ? form.title.trim() !== base.title || (form.slug.trim() !== '' && form.slug.trim() !== base.slug) || !sameBody(form.body, base) || form.collection_id !== base.collection_id
     : form.title.trim() !== '' || form.body.trim() !== '');
   const dirty = isDirty(draft);
   // bodyNow reads the editor at once: it tells the page of typing a moment after it stops.
@@ -153,7 +156,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       const change = {
         ...(sent.title.trim() !== current.title ? { title: sent.title.trim() } : {}),
         ...(sent.slug.trim() && sent.slug.trim() !== current.slug ? { slug: sent.slug.trim() } : {}),
-        ...(sent.body !== current.body_md ? { body_md: sent.body } : {}),
+        ...(!sameBody(sent.body, current) ? { body_md: sent.body } : {}),
         ...(sent.collection_id !== current.collection_id ? { collection_id: sent.collection_id } : {}),
         ...(status && status !== current.status ? { status } : {}),
       };

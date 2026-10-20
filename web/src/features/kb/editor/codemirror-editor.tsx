@@ -51,7 +51,8 @@ const formatKeys = Prec.high(keymap.of([
 ]));
 const mod = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl+';
 
-// CodeMirrorEditor is the article's text as Markdown source: what is typed is what body_md stores, byte for byte.
+// CodeMirrorEditor is the article's text as Markdown source: what is typed is what body_md stores, byte for byte
+// (line endings aside: CodeMirror writes \n for \r\n and \r, and the page does not count that as a change).
 // CodeMirror 6 with the bare @lezer/markdown GFM parser for highlighting (not @codemirror/lang-markdown, which
 // brings the HTML, CSS and JavaScript languages along), history and search.
 export default function CodeMirrorEditor({ initial, uploads, label, describedBy, invalid, mode, preview, onChange, onReady }: CodeMirrorEditorProps) {
@@ -76,8 +77,9 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   useEffect(() => {
     let alive = true;
     let timer: number | undefined;
-    // emitted is the text the page last heard of, so a load or an undo back to it is not sent as a change.
-    let emitted = latest.current.initial;
+    // emitted is the text the page last heard of, so a load or an undo back to it is not sent as a change. It is
+    // the text as CodeMirror holds it: line endings \r\n and \r come out as \n, which is no edit.
+    let emitted = '';
     const emit = (view: EditorView) => {
       window.clearTimeout(timer);
       const markdown = view.state.doc.toString();
@@ -103,6 +105,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
     ];
     const view = new EditorView({ parent: host.current!, state: EditorState.create({ doc: latest.current.initial, extensions: build() }) });
     viewRef.current = view;
+    emitted = view.state.doc.toString();
     setActive(activeOf(view.state));
     latest.current.onReady({
       markdown: () => emit(view),
@@ -110,7 +113,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
         window.clearTimeout(timer);
         view.setState(EditorState.create({ doc: markdown, extensions: build() }));
         view.scrollDOM.scrollTop = 0;
-        emitted = markdown;
+        emitted = view.state.doc.toString();
         setActive(activeOf(view.state));
       },
       uploading: () => uploadsPending(view),

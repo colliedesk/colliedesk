@@ -291,3 +291,15 @@ test('a restore puts the restored text in the editor', async () => {
   await waitFor(() => expect(screen.getByRole('textbox', { name: 'Text' })).toHaveValue('Restored text'));
   expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
 });
+
+test('an article with Windows line endings opened untouched is no change: nothing to save, nothing to ask on leaving', async () => {
+  const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: 'Steps\r\n\r\nOpen **Settings**.\r\n' })),
+    'PATCH /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ status: 'published', updated_at: '2026-10-03T00:00:00Z' })) });
+  open({ articleId: ids.article });
+  await screen.findByRole('textbox', { name: 'Text' });
+  expect(blocker.mock.calls.at(-1)?.[0].enableBeforeUnload()).toBe(false);
+  expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+  await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1));
+  expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ updated_at: '2026-10-02T00:00:00Z', status: 'published' });
+});

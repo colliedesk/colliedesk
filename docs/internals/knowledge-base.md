@@ -68,7 +68,10 @@ come in later pull requests.
   words in its code (`italic`, `underline`) would otherwise become utilities in the first CSS.
 - **The editor is CodeMirror 6 on Markdown source, byte for byte** (`editor/codemirror-editor.tsx`):
   what the person types is what `body_md` stores, so opening and saving an article an AI agent or an
-  import wrote never rewrites its syntax. Highlighting is the bare `@lezer/markdown` GFM parser in a
+  import wrote never rewrites its syntax. One exception: CodeMirror splits lines on `\r\n`, `\r` and `\n`
+  and writes `\n`. The page compares bodies with line endings normalized (`sameBody`), so opening,
+  publishing or leaving an article stored with `\r\n` sends nothing; its first real edit saves it with
+  `\n` endings. Highlighting is the bare `@lezer/markdown` GFM parser in a
   `Language`, not `@codemirror/lang-markdown`, which imports the HTML, CSS and JavaScript languages
   (74 KB gzip) for code blocks. History, find and replace (`@codemirror/search`, Ctrl/Cmd+F), line
   wrapping. The toolbar only adds or removes Markdown around the selection (`editor/commands.ts`); a
