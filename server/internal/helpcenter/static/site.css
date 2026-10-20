@@ -168,11 +168,11 @@ a:hover { text-decoration-thickness: 2px; }
 .card-list a:hover { color: var(--accent); text-decoration: underline; }
 .chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .chips a {
-  display: inline-block; padding: 0.375rem 0.75rem; border-radius: 999px; font-size: 0.9375rem;
+  display: inline-flex; align-items: center; min-height: 2.75rem; padding: 0 0.875rem; border-radius: 999px; font-size: 0.9375rem;
   background: var(--accent-soft); color: var(--ink); text-decoration: none;
 }
 .chips a:hover { color: var(--accent); }
-.card-more { margin-top: auto; font-weight: 600; text-decoration: none; padding-top: 0.25rem; }
+.card-more { margin-top: auto; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; min-height: 2.75rem; align-self: flex-start; }
 .card-more:hover { text-decoration: underline; }
 .cards-compact { grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); }
 
@@ -249,7 +249,7 @@ a:hover { text-decoration-thickness: 2px; }
 .results { list-style: none; margin: 0; padding: 0; max-width: 46rem; }
 .results li { padding: 1.125rem 0; border-bottom: 1px solid var(--rule); }
 .results li:first-child { padding-top: 0; }
-.result-title { font: 600 1.1875rem/1.35 var(--serif); text-decoration: none; }
+.result-title { font: 600 1.1875rem/1.35 var(--serif); text-decoration: none; display: inline-flex; align-items: center; min-height: 2.75rem; }
 .result-title:hover { text-decoration: underline; }
 .result-where { display: block; color: var(--muted); font-size: 0.875rem; margin-top: 0.125rem; }
 .results p { margin: 0.375rem 0 0; color: var(--muted); }
