@@ -1,5 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { ConflictError } from '../../api/client';
+import { ConflictError, InvalidRequestError } from '../../api/client';
+import { AttachmentsTooLargeError } from '../../api/attachments-error';
 import { mediaApi, sendPart } from './media-api';
 import type { KBMedia, PartSender } from './media-api';
 import { mediaMessages } from './media-messages';
@@ -23,6 +24,8 @@ export interface UploadRow {
   // duplicate is set when the library already held the same bytes.
   duplicate: boolean;
   problem?: string;
+  // permanent marks a refusal another try cannot change (a file too large, a codec the server refuses).
+  permanent?: boolean;
   item?: KBMedia;
 }
 
@@ -82,8 +85,8 @@ export class UploadQueue {
 
   // resumeUpload goes on with an upload this page did not start (another tab, a page that closed): the
   // person chooses the same file again, and the parts go from the bytes the server holds.
-  resumeUpload(file: File, uploadId: string) {
-    this.jobs.push({ file, session: { id: uploadId }, row: { key: this.next++, name: file.name, size: file.size, kind: 'video', state: 'waiting', sent: 0, bytesPerSecond: 0, duplicate: false } });
+  resumeUpload(file: File, uploadId: string, name = file.name) {
+    this.jobs.push({ file, session: { id: uploadId }, row: { key: this.next++, name, size: file.size, kind: 'video', state: 'waiting', sent: 0, bytesPerSecond: 0, duplicate: false } });
     this.changed();
     void this.run();
   }
@@ -156,6 +159,8 @@ export class UploadQueue {
           if ((job.row.state as UploadState) === 'paused' || (job.row.state as UploadState) === 'cancelled') continue;
           job.row.state = 'failed';
           job.row.problem = reason(error, mediaMessages.uploadFailed);
+          // 400 and 413 say what is wrong with the file; a conflict (a full library, no slot) can pass.
+          job.row.permanent = error instanceof AttachmentsTooLargeError || (error instanceof InvalidRequestError && !(error instanceof ConflictError));
         } finally {
           this.changed();
         }
