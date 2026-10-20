@@ -66,7 +66,7 @@ func (s *Store) ListKBMedia(ctx context.Context, workspaceID string, filter doma
 		where += ` AND m.kind=$4`
 	}
 	if strings.TrimSpace(filter.Query) != "" {
-		where += ` AND (m.name ILIKE '%'||$5||'%' ESCAPE '\' OR m.alt ILIKE '%'||$5||'%' ESCAPE '\')`
+		where += ` AND m.search LIKE '%'||lower($5)||'%' ESCAPE '\'`
 	}
 	switch filter.Usage {
 	case "in_use":
