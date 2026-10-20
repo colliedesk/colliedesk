@@ -274,7 +274,7 @@ func TestKnowledgeBaseNeverCrossesWorkspaces(t *testing.T) {
 	alpha := createSession(t, api, service, "KB Alpha", "admin@kb-alpha.example.com")
 	beta := createSession(t, api, service, "KB Beta", "admin@kb-beta.example.com")
 	collection := kbCollection(t, api, alpha, map[string]any{"name": "Alpha docs"})
-	image := uploadKBImage(t, api, alpha, tinyPNG, http.StatusCreated)
+	image := uploadKBImage(t, api, alpha, kbPNG, http.StatusCreated)
 	article := kbArticle(t, api, alpha, map[string]any{"collection_id": collection.ID, "title": "Alpha secret", "body_md": "![x](/api/v1/kb/images/" + image.ID + ")"})
 	betaCollection := kbCollection(t, api, beta, map[string]any{"name": "Beta docs"})
 
@@ -333,16 +333,18 @@ func TestKnowledgeBaseNeverCrossesWorkspaces(t *testing.T) {
 		t.Errorf("beta collections = %+v", collections.Items)
 	}
 	// The same bytes in beta are beta's own image, not alpha's.
-	if betaImage := uploadKBImage(t, api, beta, tinyPNG, http.StatusCreated); betaImage.ID == image.ID {
+	if betaImage := uploadKBImage(t, api, beta, kbPNG, http.StatusCreated); betaImage.ID == image.ID {
 		t.Fatal("beta got alpha's image id for the same bytes")
 	}
 }
 
 type kbImageView struct {
-	ID          string `json:"id"`
-	ContentType string `json:"content_type"`
-	Size        int64  `json:"size"`
-	URL         string `json:"url"`
+	ID           string  `json:"id"`
+	ContentType  string  `json:"content_type"`
+	Size         int64   `json:"size"`
+	URL          string  `json:"url"`
+	UpdatedAt    string  `json:"updated_at"`
+	ThumbnailURL *string `json:"thumbnail_url"`
 }
 
 func uploadKBImage(t *testing.T, api http.Handler, token string, data []byte, want int) kbImageView {
@@ -364,19 +366,19 @@ func uploadKBImage(t *testing.T, api http.Handler, token string, data []byte, wa
 func TestKnowledgeBaseImagesAreCheckedStoredOnceAndServedInert(t *testing.T) {
 	api, service, _, _ := testAPIWithStorage(t)
 	admin := createSession(t, api, service, "KB Images", "admin@kb-images.example.com")
-	image := uploadKBImage(t, api, admin, tinyPNG, http.StatusCreated)
-	if image.ContentType != "image/png" || image.Size != int64(len(tinyPNG)) || image.URL != "/api/v1/kb/images/"+image.ID {
+	image := uploadKBImage(t, api, admin, kbPNG, http.StatusCreated)
+	if image.ContentType != "image/png" || image.Size != int64(len(kbPNG)) || image.URL != "/api/v1/kb/images/"+image.ID {
 		t.Fatalf("image = %+v", image)
 	}
-	if again := uploadKBImage(t, api, admin, tinyPNG, http.StatusCreated); again.ID != image.ID {
+	if again := uploadKBImage(t, api, admin, kbPNG, http.StatusCreated); again.ID != image.ID {
 		t.Fatalf("the same bytes gave a second image %s", again.ID)
 	}
 	uploadKBImage(t, api, admin, []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`), http.StatusBadRequest)
 	uploadKBImage(t, api, admin, []byte("<html><script>alert(1)</script></html>"), http.StatusBadRequest)
-	uploadKBImage(t, api, admin, append(append([]byte{}, tinyPNG...), bytes.Repeat([]byte{0}, 5<<20)...), http.StatusRequestEntityTooLarge)
+	uploadKBImage(t, api, admin, append(append([]byte{}, kbPNG...), bytes.Repeat([]byte{0}, 5<<20)...), http.StatusRequestEntityTooLarge)
 
 	served := request(t, api, http.MethodGet, image.URL, nil, admin, nil)
-	if served.Code != http.StatusOK || !bytes.Equal(served.Body.Bytes(), tinyPNG) {
+	if served.Code != http.StatusOK || !bytes.Equal(served.Body.Bytes(), kbPNG) {
 		t.Fatalf("served status=%d len=%d", served.Code, served.Body.Len())
 	}
 	validateContractResponse(t, newRequest(t, http.MethodGet, image.URL, nil, admin, nil), served)
@@ -409,13 +411,13 @@ func TestKnowledgeBaseTokenTiers(t *testing.T) {
 		t.Fatalf("agent version = %+v", article.LastChange)
 	}
 	// An image never waits for approval: the bytes are refused, not filed.
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/kb/images", bytes.NewReader(tinyPNG))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/kb/images", bytes.NewReader(kbPNG))
 	req.Header.Set("Content-Type", "image/png")
 	req.Header.Set("Authorization", "Bearer "+read)
 	if response := serve(api, req); response.Code != http.StatusForbidden || errorCode(t, response) != "files_need_approval" {
 		t.Fatalf("read token image status=%d body=%s", response.Code, response.Body.String())
 	}
-	uploadKBImage(t, api, send, tinyPNG, http.StatusCreated)
+	uploadKBImage(t, api, send, kbPNG, http.StatusCreated)
 	// Turning the help center on is an admin's: a send token files a request.
 	put := map[string]any{"enabled": true, "title": "Help", "locale": "en"}
 	if response := request(t, api, http.MethodPut, "/api/v1/help-center", put, send, nil); response.Code != http.StatusAccepted {
@@ -463,8 +465,8 @@ func TestKnowledgeBaseTrashIsPurgedAfterThirtyDaysWithUnusedImages(t *testing.T)
 	api, service, pool, storage := testAPIWithStorage(t)
 	admin := createSession(t, api, service, "KB Purge", "admin@kb-purge.example.com")
 	collection := kbCollection(t, api, admin, map[string]any{"name": "Old"})
-	kept := uploadKBImage(t, api, admin, tinyPNG, http.StatusCreated)
-	orphan := uploadKBImage(t, api, admin, append(append([]byte{}, tinyPNG...), 'x'), http.StatusCreated)
+	kept := uploadKBImage(t, api, admin, kbPNG, http.StatusCreated)
+	orphan := uploadKBImage(t, api, admin, pngImage(1), http.StatusCreated)
 	article := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Old", "body_md": "![a](/api/v1/kb/images/" + kept.ID + ")"})
 	live := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Live", "body_md": "![a](/api/v1/kb/images/" + kept.ID + ")"})
 	kbCall(t, api, http.MethodDelete, "/api/v1/kb/articles/"+article.ID+"?updated_at="+url.QueryEscape(article.UpdatedAt), nil, admin, http.StatusNoContent, nil)
@@ -472,11 +474,11 @@ func TestKnowledgeBaseTrashIsPurgedAfterThirtyDaysWithUnusedImages(t *testing.T)
 	if _, err := pool.Exec(ctx, `UPDATE kb_articles SET deleted_at=now()-interval '31 days' WHERE id=$1`, article.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `UPDATE kb_images SET created_at=now()-interval '31 days', last_uploaded_at=now()-interval '31 days'`); err != nil {
+	if _, err := pool.Exec(ctx, `UPDATE kb_media SET created_at=now()-interval '31 days', last_uploaded_at=now()-interval '31 days'`); err != nil {
 		t.Fatal(err)
 	}
 	var orphanKey string
-	if err := pool.QueryRow(ctx, `SELECT storage_key FROM kb_images WHERE id=$1`, orphan.ID).Scan(&orphanKey); err != nil {
+	if err := pool.QueryRow(ctx, `SELECT storage_key FROM kb_media WHERE id=$1`, orphan.ID).Scan(&orphanKey); err != nil {
 		t.Fatal(err)
 	}
 	purged, err := store.New(pool).WithObjects(storage).PurgeKBTrash(ctx)
@@ -504,7 +506,7 @@ func TestExportCarriesTheWholeKnowledgeBaseAndNoOtherWorkspace(t *testing.T) {
 	admin := createSession(t, api, service, "KB Export", "admin@kb-export.example.com")
 	rival := createSession(t, api, service, "KB Export Rival", "admin@kb-export-rival.example.com")
 	collection := kbCollection(t, api, admin, map[string]any{"name": "Guides"})
-	image := uploadKBImage(t, api, admin, tinyPNG, http.StatusCreated)
+	image := uploadKBImage(t, api, admin, kbPNG, http.StatusCreated)
 	article := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Exported guide", "body_md": "![s](" + image.URL + ")", "status": "published"})
 	trashed := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Trashed guide", "body_md": "gone"})
 	kbCall(t, api, http.MethodDelete, "/api/v1/kb/articles/"+trashed.ID+"?updated_at="+url.QueryEscape(trashed.UpdatedAt), nil, admin, http.StatusNoContent, nil)
@@ -537,7 +539,7 @@ func TestExportCarriesTheWholeKnowledgeBaseAndNoOtherWorkspace(t *testing.T) {
 	}
 	images := ndjsonLines(t, entries["kb-images.ndjson"])
 	path, _ := images[0]["path"].(string)
-	if path != "kb-images/"+image.ID+".png" || !bytes.Equal(entries[path], tinyPNG) || images[0]["storage_key"] != nil {
+	if path != "kb-images/"+image.ID+".png" || !bytes.Equal(entries[path], kbPNG) || images[0]["storage_key"] != nil {
 		t.Fatalf("image record %v, file %d bytes", images[0], len(entries[path]))
 	}
 	var manifest struct {
@@ -655,19 +657,19 @@ func TestUploadingAnImageAgainKeepsItAndNeedsNoRoom(t *testing.T) {
 	}
 	f := newLimitsFixtureConfigured(t, true, nil, func(config *httpapi.Config) { config.Attachments = storage })
 	api, pool, admin := f.api, f.pool, f.adminA
-	image := uploadKBImage(t, api, admin, tinyPNG, http.StatusCreated)
+	image := uploadKBImage(t, api, admin, kbPNG, http.StatusCreated)
 	ctx := context.Background()
-	if _, err := pool.Exec(ctx, `UPDATE kb_images SET created_at=now()-interval '40 days', last_uploaded_at=now()-interval '40 days' WHERE id=$1`, image.ID); err != nil {
+	if _, err := pool.Exec(ctx, `UPDATE kb_media SET created_at=now()-interval '40 days', last_uploaded_at=now()-interval '40 days' WHERE id=$1`, image.ID); err != nil {
 		t.Fatal(err)
 	}
 	// The trial's storage is full.
 	if _, err := pool.Exec(ctx, `UPDATE workspaces SET counted_storage_bytes=2147483648, stored_storage_bytes=2147483648 WHERE id=$1`, f.workspaceA); err != nil {
 		t.Fatal(err)
 	}
-	if again := uploadKBImage(t, api, admin, tinyPNG, http.StatusCreated); again.ID != image.ID {
+	if again := uploadKBImage(t, api, admin, kbPNG, http.StatusCreated); again.ID != image.ID {
 		t.Fatalf("the same bytes gave image %s, want %s", again.ID, image.ID)
 	}
-	uploadKBImage(t, api, admin, append(append([]byte{}, tinyPNG...), 'n', 'e', 'w'), http.StatusForbidden)
+	uploadKBImage(t, api, admin, pngImage(2), http.StatusForbidden)
 	if _, err := store.New(pool).WithObjects(storage).PurgeKBTrash(ctx); err != nil {
 		t.Fatal(err)
 	}

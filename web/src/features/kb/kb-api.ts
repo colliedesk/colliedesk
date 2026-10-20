@@ -41,7 +41,7 @@ const versionSchema = z.object({
 const imageSchema = z.object({
   id: z.string().uuid(), content_type: z.enum(['image/png', 'image/jpeg', 'image/gif', 'image/webp']), size: z.number().int(), sha256: z.string(),
   url: z.string(), created_at: z.string().datetime(),
-}) satisfies z.ZodType<Generated<'KBImage'>>;
+}) satisfies z.ZodType<Pick<Generated<'KBMedia'>, 'id' | 'content_type' | 'size' | 'sha256' | 'url' | 'created_at'>>;
 const helpCenterSchema = z.object({
   enabled: z.boolean(), title: z.string(), locale: z.string(), content_version: z.number().int(), updated_at: nullableDate, url: z.string(),
 }) satisfies z.ZodType<Generated<'HelpCenter'>>;

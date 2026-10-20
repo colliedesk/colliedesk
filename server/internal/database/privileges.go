@@ -20,8 +20,10 @@ const (
 	// trash for more than 30 days, with their history.
 	PrivilegeSavedReplyPurge Privilege = "saved-reply-purge"
 	// PrivilegeKBPurge deletes, in every workspace, the knowledge base articles and collections that
-	// have been in the trash for more than 30 days, and the images no article links once 30 days old.
-	// Only image storage keys leave the transaction; their bytes go through the scoped DiscardObject.
+	// have been in the trash for more than 30 days, and the library items the purge rule names; and it
+	// finds the images the backfill has not read yet. Only workspace ids, item ids and storage keys
+	// leave the transaction; bytes go through the scoped DiscardObject, and the backfill reads and
+	// writes each image in its own workspace.
 	PrivilegeKBPurge Privilege = "kb-purge"
 	// PrivilegeRetention finds locked workspaces, records and sends their deletion notice, and deletes
 	// the ones locked for a year with their attachment files.

@@ -282,12 +282,14 @@ func kbImageUploadSpec() Spec {
 		Name:  "colliedesk_kb_image_upload",
 		Title: "Upload an image for knowledge base articles",
 		Description: `Store a PNG, JPEG, GIF or WebP image (at most 5 MiB, given as base64) and get the url to link in an article as ![text](url). The type is judged from the bytes. ` +
-			`The same bytes give the same image. Images count toward the plan's storage. An image no article links is deleted 30 days after its last upload. ` +
+			`Location and camera data are removed. The same bytes give the same image. Images count toward the plan's storage. An image no article links is deleted 30 days after its last upload unless keep is true. ` +
 			`A read or draft token cannot upload: a file never waits for approval.` + "\n\nTier: send.",
 		Tier: "send", Idempotent: true,
 		REST: []string{"POST /api/v1/kb/images"},
 		Input: `{"type":"object","additionalProperties":false,"required":["data_base64"],"properties":{"data_base64":{"type":"string","minLength":4,"maxLength":7000000,` +
-			`"description":"The image bytes, standard base64."}}}`,
+			`"description":"The image bytes, standard base64."},"name":{"type":"string","maxLength":200,"description":"What the media library shows."},` +
+			`"alt":{"type":"string","maxLength":500,"description":"Alt text the editor offers when it inserts the image."},` +
+			`"keep":{"type":"boolean","description":"Keep it in the library even if no article ever uses it."}}}`,
 		Output: `{"type":"object","required":["image"],"properties":{"image":{"type":"object","required":["id","url","content_type","size"],"properties":{` +
 			`"id":{"type":"string"},"url":{"type":"string"},"content_type":{"type":"string"},"size":{"type":"integer"},"sha256":{"type":"string"}}}}}`,
 		run: kbImageUpload,

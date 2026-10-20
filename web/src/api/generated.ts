@@ -1416,7 +1416,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Store an image for articles. The body is the raw image, at most 5 MiB; only PNG, JPEG, GIF and WebP are accepted, judged from the bytes, not from the declared type (400 otherwise). The same bytes uploaded twice give the same image. Images count toward the plan's storage cap (403 `storage_limit_reached` when it is full). Put it in an article as `![text](url)`. A `send` agent token may upload; a lower tier gets 403 `files_need_approval`. */
+        /** @description Store an image in the knowledge base's media library. The body is the raw image, at most 5 MiB; only PNG, JPEG, GIF and WebP are accepted, judged from the bytes, not from the declared type, at most 8,192 pixels on a side and 40 megapixels (400 otherwise). Location, camera data, XMP and comments are removed without touching the pixels (a JPEG keeps its orientation), and the server makes a thumbnail. The same bytes uploaded twice give the same item (and take an item in the library's trash out of it). Images count toward the plan's storage cap (403 `storage_limit_reached` when it is full). Put it in an article as `![text](url)`. An image no article ever saved is deleted 30 days after its last upload unless it is kept: `keep=true` is for an upload made in the library. A workspace holds at most 10,000 items, its trash included (409 `kb_limit`). A `send` agent token may upload; a lower tier gets 403 `files_need_approval`. */
         post: operations["uploadKBImage"];
         delete?: never;
         options?: never;
@@ -1435,6 +1435,80 @@ export interface paths {
         };
         /** @description The bytes of one image of the workspace's knowledge base, with `nosniff` and a sandboxing Content-Security-Policy so nothing in it can run. */
         get: operations["getKBImage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The media library outside its trash, 60 items a page unless `limit` says otherwise, newest first unless `sort` says otherwise, each with its usage. `usage=unused` lists what no live article's current text names (articles in the trash and older versions do not count as use); its first page adds `summary`, the count and bytes of every unused item the filter selects, kept items apart. `q` matches the name or alt text. */
+        get: operations["listKBMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/media/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Change the name, alt text (a video's title) or kept mark of a library item outside the trash. A new name or alt text keeps the item unless `kept` is sent too. The alt text is what the editor offers next time; articles keep the text they have. Send back the `updated_at` you read (409 `changed_elsewhere`). */
+        patch: operations["updateKBMedia"];
+        trace?: never;
+    };
+    "/api/v1/kb/media/{id}/details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description One library item, in the trash or not, with its usage and every article that names it: live articles first, then those in the trash; `current` is false where only an older version does. */
+        get: operations["getKBMediaDetails"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/media/{id}/thumbnail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The thumbnail of a library item, at most 320 pixels on its longest side: a JPEG, or a PNG when the image has transparency. 404 while it has none (`thumbnail_url` is null): an image too large to decode within the server's memory budget, or one stored before thumbnails that the daily backfill has not reached yet. */
+        get: operations["getKBMediaThumbnail"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2238,18 +2312,76 @@ export interface components {
              */
             collection_id: string | null;
         };
-        KBImage: {
+        KBMedia: {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            content_type: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
-            /** @description Bytes. */
+            kind: "image" | "video";
+            /** @enum {string} */
+            content_type: "image/png" | "image/jpeg" | "image/gif" | "image/webp" | "video/mp4" | "video/webm";
+            /** @description Bytes of the original. */
             size: number;
             sha256: string;
-            /** @description The path to put in an article: /api/v1/kb/images/<id>. */
+            /** @description The path to put in an article: /api/v1/kb/images/<id> for an image, /api/v1/kb/media/<id> for a video. */
             url: string;
+            /** @description What the library shows; empty when nobody named it. */
+            name: string;
+            /** @description An image's alt text or a video's title; the editor offers it when it inserts the item. */
+            alt: string;
+            /** @description Pixels as shown (a photo turned a quarter has width and height swapped); null until the server read them. */
+            width: number | null;
+            height: number | null;
+            /** @description A video's length; null for an image or when the file does not say. */
+            duration_ms: number | null;
+            /** @description A video's codecs; empty for an image. */
+            codecs: string[];
+            /** @description The thumbnail, /api/v1/kb/media/<id>/thumbnail?v=<version>; a new thumbnail gets a new version. Null while there is none. */
+            thumbnail_url: string | null;
+            /** @description The purge never deletes a kept item. */
+            kept: boolean;
+            /**
+             * Format: date-time
+             * @description Set while the item is in the library's trash.
+             */
+            deleted_at: string | null;
             /** Format: date-time */
             created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            usage?: components["schemas"]["KBMediaUsage"];
+            /**
+             * Format: date-time
+             * @description When the purge deletes it: set only for an item nobody kept and no article ever saved.
+             */
+            purge_at?: string;
+        };
+        KBMediaUsage: {
+            /** @description Live articles whose current text or a translation names it; above 0 means in use. */
+            articles: number;
+            /** @description Articles in the trash whose current text names it. */
+            trashed_articles: number;
+            /** @description Articles where only an older version names it. */
+            older_versions: number;
+        };
+        KBMediaDetails: components["schemas"]["KBMedia"] & {
+            articles: {
+                /** Format: uuid */
+                id: string;
+                number: number;
+                title: string;
+                /** @enum {string} */
+                status: "draft" | "published";
+                in_trash: boolean;
+                /** @description False when only an older version names the item. */
+                current: boolean;
+            }[];
+        };
+        /** @description Every unused item the filter selects, not only the page; kept items apart. Bytes count the original and a video's poster. */
+        KBMediaUnusedSummary: {
+            count: number;
+            bytes: number;
+            kept_count: number;
+            kept_bytes: number;
         };
         HelpCenterInput: {
             enabled: boolean;
@@ -6021,7 +6153,14 @@ export interface operations {
     };
     uploadKBImage: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The name the library shows; the file name without its extension is a good one. */
+                name?: string;
+                /** @description Alt text the editor offers when it inserts the image. */
+                alt?: string;
+                /** @description true keeps the image from the purge of unused items, as an upload in the library does. */
+                keep?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6035,18 +6174,19 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The stored image */
+            /** @description The stored image, or the item that already held the same bytes */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["KBImage"];
+                    "application/json": components["schemas"]["KBMedia"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
             /** @description The image is over 5 MiB; nothing was stored. */
             413: {
                 headers: {
@@ -6082,6 +6222,133 @@ export interface operations {
                     "image/jpeg": string;
                     "image/gif": string;
                     "image/webp": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    listKBMedia: {
+        parameters: {
+            query?: {
+                kind?: "image" | "video";
+                q?: string;
+                usage?: "in_use" | "unused" | "missing_alt";
+                sort?: "newest" | "oldest" | "name" | "largest";
+                /** @description The next_cursor of the previous page. */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the library */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["KBMedia"][];
+                        /** @description Null on the last page. */
+                        next_cursor: string | null;
+                        summary?: components["schemas"]["KBMediaUnusedSummary"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    updateKBMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    updated_at: string;
+                    name?: string;
+                    alt?: string;
+                    kept?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The changed item */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBMedia"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getKBMediaDetails: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The item and its articles */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBMediaDetails"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getKBMediaThumbnail: {
+        parameters: {
+            query?: {
+                /** @description The version thumbnail_url names; it only makes a new thumbnail a new URL. */
+                v?: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The thumbnail */
+            200: {
+                headers: {
+                    /** @description private, max-age=31536000, immutable */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": string;
+                    "image/png": string;
                 };
             };
             401: components["responses"]["Unauthorized"];

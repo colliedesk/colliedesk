@@ -126,16 +126,6 @@ type KBArticleVersion struct {
 	CollectionID *string `json:"collection_id"`
 }
 
-// KBImage is an image stored for articles; URL is the path an article links.
-type KBImage struct {
-	ID          string    `json:"id"`
-	ContentType string    `json:"content_type"`
-	Size        int64     `json:"size"`
-	SHA256      string    `json:"sha256"`
-	URL         string    `json:"url"`
-	CreatedAt   time.Time `json:"created_at"`
-}
-
 // HelpCenter is the public help center's settings. UpdatedAt is nil until the first write.
 type HelpCenter struct {
 	Enabled        bool       `json:"enabled"`
@@ -270,22 +260,6 @@ func CheckLocale(locale string) error {
 	}
 	return nil
 }
-
-// KBImageIDs returns the image ids an article text links through KBImagePath, each once.
-func KBImageIDs(body string) []string {
-	var ids []string
-	seen := map[string]bool{}
-	for _, match := range kbImageLink.FindAllStringSubmatch(body, -1) {
-		id := strings.ToLower(match[1])
-		if !seen[id] {
-			seen[id] = true
-			ids = append(ids, id)
-		}
-	}
-	return ids
-}
-
-var kbImageLink = regexp.MustCompile(regexp.QuoteMeta(KBImagePath) + `([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})`)
 
 // HelpCenterSite is what every public help center page needs to know about its workspace. Trial is
 // true while the workspace is on a trial: its pages ask search engines not to index them.

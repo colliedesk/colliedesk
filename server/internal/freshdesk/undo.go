@@ -57,7 +57,7 @@ const targetExists = `CASE i.entity
 	WHEN 'kb_article' THEN EXISTS(SELECT 1 FROM kb_articles x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'kb_translation' THEN EXISTS(SELECT 1 FROM kb_article_translations x WHERE x.workspace_id=i.workspace_id AND x.article_id=i.target_id
 		AND x.locale=split_part(i.source_id,':',2))
-	WHEN 'kb_image' THEN EXISTS(SELECT 1 FROM kb_images x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
+	WHEN 'kb_image' THEN EXISTS(SELECT 1 FROM kb_media x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	ELSE false END`
 
 // Undo removes what one import (Freshdesk or Help Scout: both write the same ledger entities, a
@@ -80,7 +80,7 @@ func Undo(ctx context.Context, pool *pgxpool.Pool, storage attachments.Storage, 
 	// Undo usually follows an import within minutes, before autovacuum has analyzed the rows it
 	// wrote; with stale statistics the keep query below took 37 s for a 300-ticket import.
 	if err := db.RefreshStatistics(ctx, "import_items", "conversations", "messages", "attachments", "contacts", "tags", "conversation_tags", "time_entries", "saved_replies",
-		"kb_articles", "kb_article_versions", "kb_collections", "kb_images", "kb_article_images", "kb_article_translations"); err != nil {
+		"kb_articles", "kb_article_versions", "kb_collections", "kb_media", "kb_article_media", "kb_article_translations"); err != nil {
 		return UndoResult{}, err
 	}
 	tx, err := db.BeginWorkspace(ctx, workspaceID)
@@ -202,7 +202,8 @@ func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoR
 	var orphans []string
 	for _, key := range orphanCandidates {
 		var used bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM attachments WHERE storage_key=$1) OR EXISTS(SELECT 1 FROM kb_images WHERE storage_key=$1)`, key).Scan(&used); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM attachments WHERE storage_key=$1)
+			OR EXISTS(SELECT 1 FROM kb_media WHERE storage_key=$1 OR thumb_storage_key=$1 OR poster_storage_key=$1)`, key).Scan(&used); err != nil {
 			return result, nil, fmt.Errorf("check stored file: %w", err)
 		}
 		if !used {
@@ -215,7 +216,8 @@ func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoR
 // undoKnowledgeBase removes the imported articles nobody changed in Colliedesk since (their newest
 // version is the import; updated_at cannot tell, an article carries Freshdesk's timestamps), then the
 // imported collections left with no article and no collection, then the images the import added that
-// no article links. It returns the storage keys of the images removed.
+// no article links and nobody kept in the library. It returns the storage keys of the images removed
+// and of their thumbnails.
 func undoKnowledgeBase(ctx context.Context, tx pgx.Tx, workspaceID, source string, result *UndoResult) ([]string, error) {
 	rows, err := tx.Query(ctx, `SELECT i.source_id FROM import_items i JOIN kb_articles a ON a.workspace_id=i.workspace_id AND a.id=i.target_id
 		WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_article'
@@ -244,17 +246,25 @@ func undoKnowledgeBase(ctx context.Context, tx pgx.Tx, workspaceID, source strin
 		}
 		result.KBCollections += int(tag.RowsAffected())
 	}
-	rows, err = tx.Query(ctx, `DELETE FROM kb_images k USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_image'
-		AND (i.meta->>'created')::boolean AND k.workspace_id=i.workspace_id AND k.id=i.target_id
-		AND NOT EXISTS (SELECT 1 FROM kb_article_images l WHERE l.workspace_id=k.workspace_id AND l.image_id=k.id) RETURNING k.storage_key`, workspaceID, source)
+	rows, err = tx.Query(ctx, `DELETE FROM kb_media k USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_image'
+		AND (i.meta->>'created')::boolean AND k.workspace_id=i.workspace_id AND k.id=i.target_id AND NOT k.kept
+		AND NOT EXISTS (SELECT 1 FROM kb_article_media l WHERE l.workspace_id=k.workspace_id AND l.media_id=k.id)
+		RETURNING k.storage_key, COALESCE(k.thumb_storage_key,'')`, workspaceID, source)
 	if err != nil {
 		return nil, fmt.Errorf("undo knowledge base images: %w", err)
 	}
-	keys, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
+	var keys []string
+	var key, thumb string
+	if _, err := pgx.ForEachRow(rows, []any{&key, &thumb}, func() error {
+		result.KBImages++
+		keys = append(keys, key)
+		if thumb != "" {
+			keys = append(keys, thumb)
+		}
+		return nil
+	}); err != nil {
 		return nil, fmt.Errorf("undo knowledge base images: %w", err)
 	}
-	result.KBImages = len(keys)
 	if result.KBArticles+result.KBCollections+result.KBImages > 0 {
 		// A help center page cached under the old content version is stale now.
 		if _, err := tx.Exec(ctx, `UPDATE help_centers SET content_version=content_version+1, updated_at=clock_timestamp() WHERE workspace_id=$1`, workspaceID); err != nil {

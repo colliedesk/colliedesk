@@ -168,8 +168,8 @@ func TestSolutionsBecomeTheKnowledgeBaseWithOriginalTimestampsDraftsAndTranslati
 	api := articles["104"].Body
 	var imageID, imageSource string
 	var counted bool
-	if err := env.pool.QueryRow(context.Background(), `SELECT i.id::text,i.counted,a.source_html FROM kb_images i
-		JOIN kb_article_images l ON l.workspace_id=i.workspace_id AND l.image_id=i.id JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
+	if err := env.pool.QueryRow(context.Background(), `SELECT i.id::text,i.counted,a.source_html FROM kb_media i
+		JOIN kb_article_media l ON l.workspace_id=i.workspace_id AND l.media_id=i.id JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
 		WHERE i.workspace_id=$1`, env.workspaceID).Scan(&imageID, &counted, &imageSource); err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +191,7 @@ func TestSolutionsBecomeTheKnowledgeBaseWithOriginalTimestampsDraftsAndTranslati
 
 	// A second run changes nothing and adds nothing.
 	again := env.mustRun(t)
-	if again.Status != freshdesk.StatusOK || env.count(t, "kb_articles") != 6 || env.count(t, "kb_collections") != 7 || env.count(t, "kb_article_versions") != 6 || env.count(t, "kb_images") != 1 {
+	if again.Status != freshdesk.StatusOK || env.count(t, "kb_articles") != 6 || env.count(t, "kb_collections") != 7 || env.count(t, "kb_article_versions") != 6 || env.count(t, "kb_media") != 1 {
 		t.Fatalf("rerun: status=%s articles=%d collections=%d versions=%d", again.Status, env.count(t, "kb_articles"), env.count(t, "kb_collections"), env.count(t, "kb_article_versions"))
 	}
 }
@@ -451,7 +451,7 @@ func TestSolutionsUndoRemovesTheImportKeepsEditedArticlesAndNeverTouchesAnotherW
 		t.Fatal(err)
 	}
 	var imageKey string
-	if err := env.pool.QueryRow(ctx, `SELECT storage_key FROM kb_images WHERE workspace_id=$1`, env.workspaceID).Scan(&imageKey); err != nil {
+	if err := env.pool.QueryRow(ctx, `SELECT storage_key FROM kb_media WHERE workspace_id=$1`, env.workspaceID).Scan(&imageKey); err != nil {
 		t.Fatal(err)
 	}
 
@@ -473,7 +473,7 @@ func TestSolutionsUndoRemovesTheImportKeepsEditedArticlesAndNeverTouchesAnotherW
 	if _, err := os.Stat(filepath.Join(env.storageRoot, filepath.FromSlash(imageKey))); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the imported image file is still stored: %v", err)
 	}
-	if len(env.kbArticles(t, beta.ID)) != betaArticles || betaArticles != 6 || env.countIn(t, beta.ID, "kb_images") != 1 {
+	if len(env.kbArticles(t, beta.ID)) != betaArticles || betaArticles != 6 || env.countIn(t, beta.ID, "kb_media") != 1 {
 		t.Fatalf("beta articles %d -> %d", betaArticles, len(env.kbArticles(t, beta.ID)))
 	}
 	// The kept article keeps its ledger row, so importing again does not add it twice.

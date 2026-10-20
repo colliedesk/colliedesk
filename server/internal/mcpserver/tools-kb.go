@@ -477,6 +477,9 @@ type restKBImage struct {
 func kbImageUpload(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
 		Data string `json:"data_base64"`
+		Name string `json:"name"`
+		Alt  string `json:"alt"`
+		Keep bool   `json:"keep"`
 	}](arguments)
 	if err != nil {
 		return nil, err
@@ -491,7 +494,20 @@ func kbImageUpload(c *call, arguments map[string]any) (any, error) {
 		contentType = "image/png"
 	}
 	var image restKBImage
-	if err := c.upload("/api/v1/kb/images", contentType, data, &image); err != nil {
+	query := url.Values{}
+	for key, value := range map[string]string{"name": args.Name, "alt": args.Alt} {
+		if value != "" {
+			query.Set(key, value)
+		}
+	}
+	if args.Keep {
+		query.Set("keep", "true")
+	}
+	path := "/api/v1/kb/images"
+	if len(query) > 0 {
+		path += "?" + query.Encode()
+	}
+	if err := c.upload(path, contentType, data, &image); err != nil {
 		return nil, err
 	}
 	return map[string]any{"image": image}, nil

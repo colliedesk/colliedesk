@@ -48,8 +48,8 @@ func wantPage(t *testing.T, response *httptest.ResponseRecorder, status int, hol
 	}
 }
 
-// otherPNG is tinyPNG with a trailing byte: a different image of the same type.
-func otherPNG(n byte) []byte { return append(append([]byte{}, tinyPNG...), n) }
+// otherPNG is an image of the same type other than kbPNG.
+func otherPNG(n byte) []byte { return pngImage(100 + n) }
 
 func enableHelpCenter(t *testing.T, api http.Handler, admin, title string, enabled bool) {
 	t.Helper()
@@ -68,7 +68,7 @@ func TestHelpCenterShowsOnlyPublishedArticlesOfItsOwnWorkspace(t *testing.T) {
 	billing := kbCollection(t, api, adminA, map[string]any{"name": "Billing", "description": "Plans and invoices"})
 	cards := kbCollection(t, api, adminA, map[string]any{"name": "Cards", "parent_id": billing.ID})
 	internal := kbCollection(t, api, adminA, map[string]any{"name": "Internal roadmap"})
-	shown := uploadKBImage(t, api, adminA, tinyPNG, http.StatusCreated)
+	shown := uploadKBImage(t, api, adminA, kbPNG, http.StatusCreated)
 	hidden := uploadKBImage(t, api, adminA, otherPNG(1), http.StatusCreated)
 	published := kbArticle(t, api, adminA, map[string]any{"collection_id": cards.ID, "title": "Pay by card", "status": "published",
 		"body_md": "Use **any card**: pinewood.\n\n![Card form](" + shown.URL + ")"})
@@ -106,7 +106,7 @@ func TestHelpCenterShowsOnlyPublishedArticlesOfItsOwnWorkspace(t *testing.T) {
 		wantPage(t, visit(site, path, "192.0.2.10"), http.StatusNotFound, nil, secrets)
 	}
 	image := visit(site, base+"/images/"+shown.ID, "192.0.2.10")
-	if image.Code != http.StatusOK || image.Body.String() != string(tinyPNG) || image.Header().Get("Cache-Control") != "public, max-age=31536000, immutable" ||
+	if image.Code != http.StatusOK || image.Body.String() != string(kbPNG) || image.Header().Get("Cache-Control") != "public, max-age=31536000, immutable" ||
 		image.Header().Get("Content-Security-Policy") != "default-src 'none'; sandbox" || image.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("published image status=%d headers=%v", image.Code, image.Header())
 	}

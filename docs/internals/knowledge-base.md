@@ -44,14 +44,50 @@ The public help center is in `help-center.md`.
   sides; every word matches as a prefix. A title `ILIKE` with `%`, `_` and `\` escaped catches the rest.
   A word inside another word, and text in scripts written without spaces, are found only at a word
   start or in a title. There is no GIN index: see the trap on row-level security.
-- **Images are their own table.** `attachments` needs a message, and its download is `no-store`.
-  `kb_images` stores bytes in the same attachment storage, one row per workspace and SHA-256, counted in
-  `counted_storage_bytes` and `stored_storage_bytes` by statement triggers like attachments. The type
-  comes from the bytes (PNG, JPEG, GIF, WebP; never SVG); the download sends `nosniff` and a sandboxing
-  CSP. `kb_article_images` links an image to every article whose version ever named it, and links go only
-  with the article, so restoring an old version never shows a deleted image. The purge deletes an image no
-  article links once its last upload is 30 days old (`last_uploaded_at`; uploading the same bytes again
-  gives the same image, touches it and needs no storage room).
+- **Images and videos are one media library table.** `attachments` needs a message, and its download
+  is `no-store`. `kb_media` (renamed from `kb_images` by migration `kb-media-library`, `kind` image or
+  video) stores bytes in the same attachment storage, one row per workspace and SHA-256, counted in
+  `counted_storage_bytes` (original and a video's poster) and `stored_storage_bytes` (those and the
+  thumbnail) by statement triggers like attachments; a thumbnail or poster comes by UPDATE, so an
+  update trigger moves the counters by the difference (Postgres refuses transition tables on a trigger
+  with a column list, so it fires on every update). The type comes from the bytes (PNG, JPEG, GIF,
+  WebP; never SVG) and the decoder of that type must read the header too; the download sends
+  `nosniff` and a sandboxing CSP. `kb_article_media` links an item to every article whose version ever
+  named it, and links go only with the article, so restoring an old version never shows a deleted
+  item; `current` marks the links the article's text or a translation names now.
+- **Uploads lose their metadata, imports keep their bytes.** `server/internal/media` drops whole
+  segments or chunks, never re-encodes: a JPEG loses APP1/APP3–13/APP15, comments, an APP2
+  Multi-Picture index and everything after its end-of-image marker (a phone's motion-photo video, its
+  other pictures), and gets its orientation back as a minimal EXIF segment; a PNG and a WebP keep only
+  the chunks that draw the picture (an allowlist, so a C2PA manifest or a new kind of metadata goes
+  too); a GIF loses comments and application blocks other than the loop count. The SHA-256 is taken after, so the same photo uploaded
+  twice is one item, but an image stored before the library (or imported) is a second item when its
+  bytes come again. Imports keep the bytes Freshdesk served ("No data loss"); removing their metadata
+  is a later, explicit action.
+- **Thumbnails under a memory budget.** 320 px on the long side, JPEG (PNG with transparency), made in
+  the upload request under a semaphore weighted by the decoded size (`width × height × bytes per
+  pixel`, 128 MB in all): a 16-bit 40-megapixel PNG decodes to 305 MB from a 572 KB file, and a
+  progressive JPEG keeps 4 bytes of coefficients per sample besides its picture (515 MB for
+  6000 × 6000, against 103 MB baseline). An image over
+  the budget, or one the decoder cannot read (an animated WebP), has no thumbnail and the library shows
+  the original. Older and imported images get theirs from `BackfillKBMedia` with the daily purge;
+  `inspected_at` marks a row tried once. `thumbnail_url` carries the thumbnail's hash, so a new
+  thumbnail is a new URL under the `immutable` cache.
+- **"In use" is a live article's current text.** An article in the trash and an older version only are
+  counted apart (`usage.trashed_articles`, `usage.older_versions`) and do not keep an item "in use".
+  `linkKBMedia` reads the article's text and every translation from the database (a translation's write
+  must not unmark the main text's links), takes named items out of the library's trash (rows locked in
+  id order), then locks every named row `FOR SHARE`, inserts links and sets `current`. Share first and
+  update after deadlocked two saves naming the same trashed item.
+- **The purge keeps what someone kept.** It deletes an item in the library's trash for 30 days, or one
+  not `kept`, linked by no version and last uploaded 30 days ago; either way never one a live article's
+  current text names. It locks the rows `FOR UPDATE SKIP LOCKED` first, then checks the rule again in a
+  new statement: in READ COMMITTED a waiting DELETE rechecks only the row itself, not the `NOT EXISTS`
+  on the links, so a save that committed a link while the DELETE waited would lose its item. Uploading
+  in the library (`keep=true`) or naming an item or writing its alt text keeps it. A Freshdesk undo
+  leaves kept images.
+- **Limits:** 10,000 library items per workspace, the trash included (`domain.MaxKBMedia`, counted
+  under `lockKB`); 5 MiB, 8,192 px on a side and 40 megapixels per image.
 - **Tiers.** Reads are `read`; writes, publishing and image uploads are `send` like saved replies (a
   publish reaches customers, but it is a version and can be undone); `PUT /help-center` is `admin`.
   A lower tier's write becomes an agent request, except an image: its bytes are refused with
@@ -125,8 +161,15 @@ The public help center is in `help-center.md`.
 - **A generated column cannot be copied in.** `restore-workspace.sh` skips columns with
   `attgenerated` set; the database computes `kb_articles.search` again.
 - **One file can back several rows.** Storage keys are content addresses, so an image and an attachment
-  with the same bytes share a file. `DiscardObject` checks `kb_images` too; without that, deleting the
+  with the same bytes share a file, and so can a thumbnail or poster. `DiscardObject` checks
+  `kb_media.storage_key`, `thumb_storage_key` and `poster_storage_key`; without that, deleting the
   attachment would delete the image's bytes.
+- **A workspace's library rows are spread over the table.** Uploads of every workspace interleave, so
+  reading 10,000 rows of one workspace touched about 9,800 heap pages (16 ms for a search, 29 ms HTTP
+  for the unused page). The library index carries `size`, `poster_size`, `kept`, `kind` and `name`
+  (not `alt`: 500 four-byte characters with the name could pass the 2,704 bytes a btree entry holds),
+  and a page selects its ids from it before reading the rows, so the unused page and its summary read
+  the index alone once the visibility map is current.
 - **An agent request holds at most 64 KiB of JSON.** A read or draft token proposing a long article gets
   413; a send token writes it directly.
 - **Row-level security turns GIN off for `@@`.** Postgres uses a condition as an index condition on a

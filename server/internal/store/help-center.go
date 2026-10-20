@@ -159,8 +159,9 @@ func (s *Store) SearchHelpCenter(ctx context.Context, workspaceID, query string,
 }
 
 // HelpCenterImage returns an image the help center may serve: one that the current text of a
-// published article outside the trash links. kb_article_images alone is not enough, since it keeps the
-// images of every version, and an older version may have named an image the article no longer shows.
+// published article outside the trash links. kb_article_media alone is not enough: an item in the
+// library's trash is never served, and the text is checked for the image path itself, since a link
+// marks the article's text or a translation and translations are not published yet.
 func (s *Store) HelpCenterImage(ctx context.Context, workspaceID, id string) (StoredKBImage, error) {
 	if !savedReplyID.MatchString(id) {
 		return StoredKBImage{}, domain.ErrKBImageNotFound
@@ -168,9 +169,10 @@ func (s *Store) HelpCenterImage(ctx context.Context, workspaceID, id string) (St
 	// Texts link the id as the database prints it, in lowercase.
 	id = strings.ToLower(id)
 	image, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (StoredKBImage, error) {
-		return scanKBImage(tx.QueryRow(ctx, `SELECT `+kbImageColumns+` FROM kb_images i WHERE i.workspace_id=$1 AND i.id=$2 AND EXISTS (
-			SELECT 1 FROM kb_article_images l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
-			WHERE l.workspace_id=$1 AND l.image_id=$2 AND `+publishedKBArticle+` AND strpos(a.body_md, $3) > 0)`,
+		return scanKBImage(tx.QueryRow(ctx, `SELECT `+kbMediaColumns+` FROM kb_media m WHERE m.workspace_id=$1 AND m.id=$2
+			AND m.kind='image' AND m.deleted_at IS NULL AND EXISTS (
+			SELECT 1 FROM kb_article_media l JOIN kb_articles a ON a.workspace_id=l.workspace_id AND a.id=l.article_id
+			WHERE l.workspace_id=$1 AND l.media_id=$2 AND l.current AND `+publishedKBArticle+` AND strpos(a.body_md, $3) > 0)`,
 			workspaceID, id, domain.KBImagePath+id))
 	})
 	if errors.Is(err, pgx.ErrNoRows) {

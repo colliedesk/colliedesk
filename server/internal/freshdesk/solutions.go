@@ -74,7 +74,7 @@ const (
 	entityKBFolder      = "kb_folder"
 	entityKBArticle     = "kb_article"
 	entityKBTranslation = "kb_translation"
-	// entityKBImage is an image of an article's HTML that Freshdesk hosts, stored as a kb_images row;
+	// entityKBImage is an image of an article's HTML that Freshdesk hosts, stored as a kb_media row;
 	// its source id is <article id>:<image key> (or <article id>:<language>:<image key>).
 	entityKBImage = "kb_image"
 )

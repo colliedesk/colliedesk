@@ -2621,11 +2621,21 @@ paths:
       operationId: uploadKBImage
       x-permission: conversations:write
       description: >
-        Store an image for articles. The body is the raw image, at most 5 MiB; only PNG, JPEG, GIF and
-        WebP are accepted, judged from the bytes, not from the declared type (400 otherwise). The same
-        bytes uploaded twice give the same image. Images count toward the plan's storage cap (403
-        `storage_limit_reached` when it is full). Put it in an article as `![text](url)`. A `send` agent token may
-        upload; a lower tier gets 403 `files_need_approval`.
+        Store an image in the knowledge base's media library. The body is the raw image, at most 5 MiB;
+        only PNG, JPEG, GIF and WebP are accepted, judged from the bytes, not from the declared type, at
+        most 8,192 pixels on a side and 40 megapixels (400 otherwise). Location, camera data, XMP and
+        comments are removed without touching the pixels (a JPEG keeps its orientation), and the
+        server makes a thumbnail. The same bytes uploaded twice give the same item (and take an item
+        in the library's trash out of it). Images count toward the plan's storage cap (403
+        `storage_limit_reached` when it is full). Put it in an article as `![text](url)`. An image no
+        article ever saved is deleted 30 days after its last upload unless it is kept: `keep=true`
+        is for an upload made in the library. A workspace holds at most 10,000 items, its trash
+        included (409 `kb_limit`). A `send` agent token may upload; a lower tier gets 403
+        `files_need_approval`.
+      parameters:
+        - {name: name, in: query, description: The name the library shows; the file name without its extension is a good one., schema: {type: string, maxLength: 200}}
+        - {name: alt, in: query, description: Alt text the editor offers when it inserts the image., schema: {type: string, maxLength: 500}}
+        - {name: keep, in: query, description: 'true keeps the image from the purge of unused items, as an upload in the library does.', schema: {type: boolean}}
       requestBody:
         required: true
         content:
@@ -2635,11 +2645,12 @@ paths:
           image/webp: {schema: {type: string, format: binary}}
       responses:
         '201':
-          description: The stored image
-          content: {application/json: {schema: {$ref: '#/components/schemas/KBImage'}}}
+          description: The stored image, or the item that already held the same bytes
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBMedia'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
         '413':
           description: The image is over 5 MiB; nothing was stored.
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
@@ -2662,6 +2673,105 @@ paths:
             image/jpeg: {schema: {type: string, format: binary}}
             image/gif: {schema: {type: string, format: binary}}
             image/webp: {schema: {type: string, format: binary}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/media:
+    get:
+      operationId: listKBMedia
+      x-permission: conversations:read
+      description: >
+        The media library outside its trash, 60 items a page unless `limit` says otherwise, newest
+        first unless `sort` says otherwise, each with its usage. `usage=unused` lists what no live
+        article's current text names (articles in the trash and older versions do not count as use);
+        its first page adds `summary`, the count and bytes of every unused item the filter selects,
+        kept items apart. `q` matches the name or alt text.
+      parameters:
+        - {name: kind, in: query, schema: {type: string, enum: [image, video]}}
+        - {name: q, in: query, schema: {type: string, maxLength: 200}}
+        - {name: usage, in: query, schema: {type: string, enum: [in_use, unused, missing_alt]}}
+        - {name: sort, in: query, schema: {type: string, enum: [newest, oldest, name, largest], default: newest}}
+        - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 60}}
+      responses:
+        '200':
+          description: A page of the library
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/KBMedia'}}
+                  next_cursor: {type: [string, 'null'], description: Null on the last page.}
+                  summary: {$ref: '#/components/schemas/KBMediaUnusedSummary'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/kb/media/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    patch:
+      operationId: updateKBMedia
+      x-permission: conversations:write
+      description: >
+        Change the name, alt text (a video's title) or kept mark of a library item outside the trash.
+        A new name or alt text keeps the item unless `kept` is sent too. The alt text is what the
+        editor offers next time; articles keep the text they have. Send back the `updated_at` you
+        read (409 `changed_elsewhere`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updated_at]
+              properties:
+                updated_at: {type: string, format: date-time}
+                name: {type: string, maxLength: 200}
+                alt: {type: string, maxLength: 500}
+                kept: {type: boolean}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: The changed item
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBMedia'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/media/{id}/details:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getKBMediaDetails
+      x-permission: conversations:read
+      description: >
+        One library item, in the trash or not, with its usage and every article that names it: live
+        articles first, then those in the trash; `current` is false where only an older version does.
+      responses:
+        '200':
+          description: The item and its articles
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBMediaDetails'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/media/{id}/thumbnail:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getKBMediaThumbnail
+      x-permission: conversations:read
+      description: >
+        The thumbnail of a library item, at most 320 pixels on its longest side: a JPEG, or a PNG when
+        the image has transparency. 404 while it has none (`thumbnail_url` is null): an image too
+        large to decode within the server's memory budget, or one stored before thumbnails that the
+        daily backfill has not reached yet.
+      parameters:
+        - {name: v, in: query, description: 'The version thumbnail_url names; it only makes a new thumbnail a new URL.', schema: {type: string, maxLength: 64}}
+      responses:
+        '200':
+          description: The thumbnail
+          headers:
+            Cache-Control: {schema: {type: string}, description: 'private, max-age=31536000, immutable'}
+          content:
+            image/jpeg: {schema: {type: string, format: binary}}
+            image/png: {schema: {type: string, format: binary}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/help-center:
@@ -3605,16 +3715,63 @@ components:
         body_md: {type: string}
         status: {$ref: '#/components/schemas/KBArticleStatus'}
         collection_id: {type: [string, 'null'], format: uuid, description: Null once that collection was deleted for good.}
-    KBImage:
+    KBMedia:
       type: object
-      required: [id, content_type, size, sha256, url, created_at]
+      required: [id, kind, content_type, size, sha256, url, name, alt, width, height, duration_ms, codecs, thumbnail_url, kept, deleted_at, created_at, updated_at]
       properties:
         id: {type: string, format: uuid}
-        content_type: {type: string, enum: [image/png, image/jpeg, image/gif, image/webp]}
-        size: {type: integer, description: Bytes.}
+        kind: {type: string, enum: [image, video]}
+        content_type: {type: string, enum: [image/png, image/jpeg, image/gif, image/webp, video/mp4, video/webm]}
+        size: {type: integer, description: Bytes of the original.}
         sha256: {type: string}
-        url: {type: string, description: 'The path to put in an article: /api/v1/kb/images/<id>.'}
+        url: {type: string, description: 'The path to put in an article: /api/v1/kb/images/<id> for an image, /api/v1/kb/media/<id> for a video.'}
+        name: {type: string, maxLength: 200, description: What the library shows; empty when nobody named it.}
+        alt: {type: string, maxLength: 500, description: An image's alt text or a video's title; the editor offers it when it inserts the item.}
+        width: {type: [integer, 'null'], description: Pixels as shown (a photo turned a quarter has width and height swapped); null until the server read them.}
+        height: {type: [integer, 'null']}
+        duration_ms: {type: [integer, 'null'], description: A video's length; null for an image or when the file does not say.}
+        codecs: {type: array, items: {type: string}, description: A video's codecs; empty for an image.}
+        thumbnail_url: {type: [string, 'null'], description: 'The thumbnail, /api/v1/kb/media/<id>/thumbnail?v=<version>; a new thumbnail gets a new version. Null while there is none.'}
+        kept: {type: boolean, description: The purge never deletes a kept item.}
+        deleted_at: {type: [string, 'null'], format: date-time, description: Set while the item is in the library's trash.}
         created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        usage: {$ref: '#/components/schemas/KBMediaUsage'}
+        purge_at: {type: string, format: date-time, description: 'When the purge deletes it: set only for an item nobody kept and no article ever saved.'}
+    KBMediaUsage:
+      type: object
+      required: [articles, trashed_articles, older_versions]
+      properties:
+        articles: {type: integer, description: Live articles whose current text or a translation names it; above 0 means in use.}
+        trashed_articles: {type: integer, description: Articles in the trash whose current text names it.}
+        older_versions: {type: integer, description: Articles where only an older version names it.}
+    KBMediaDetails:
+      allOf:
+        - {$ref: '#/components/schemas/KBMedia'}
+        - type: object
+          required: [articles]
+          properties:
+            articles:
+              type: array
+              items:
+                type: object
+                required: [id, number, title, status, in_trash, current]
+                properties:
+                  id: {type: string, format: uuid}
+                  number: {type: integer}
+                  title: {type: string}
+                  status: {type: string, enum: [draft, published]}
+                  in_trash: {type: boolean}
+                  current: {type: boolean, description: False when only an older version names the item.}
+    KBMediaUnusedSummary:
+      type: object
+      required: [count, bytes, kept_count, kept_bytes]
+      description: Every unused item the filter selects, not only the page; kept items apart. Bytes count the original and a video's poster.
+      properties:
+        count: {type: integer}
+        bytes: {type: integer}
+        kept_count: {type: integer}
+        kept_bytes: {type: integer}
     HelpCenterInput:
       type: object
       required: [enabled, title, locale]

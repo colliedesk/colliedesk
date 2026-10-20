@@ -215,7 +215,7 @@ func PutKBArticleTranslation(ctx context.Context, tx pgx.Tx, workspaceID, articl
 		workspaceID, articleID, input.Locale, title, input.BodyMD, input.SourceMeta, input.SourceHTML, input.CreatedAt, input.UpdatedAt); err != nil {
 		return fmt.Errorf("import knowledge base translation: %w", err)
 	}
-	if err := linkKBImages(ctx, tx, workspaceID, articleID, input.BodyMD); err != nil {
+	if _, err := linkKBMedia(ctx, tx, workspaceID, articleID); err != nil {
 		return err
 	}
 	return bumpKB(ctx, tx, workspaceID)
@@ -225,7 +225,7 @@ func PutKBArticleTranslation(ctx context.Context, tx pgx.Tx, workspaceID, articl
 // (counted false, like imported attachments; a plan that counts imports counts stored bytes). The same
 // bytes give the image that already holds them, and created false.
 func ImportKBImage(ctx context.Context, tx pgx.Tx, storage attachments.Storage, workspaceID string, object attachments.Object, contentType string) (string, bool, error) {
-	existing, err := touchKBImage(ctx, tx, workspaceID, object.SHA256)
+	existing, err := touchKBImage(ctx, tx, workspaceID, object.SHA256, domain.KBImageUpload{})
 	if err == nil {
 		return existing.ID, false, nil
 	}
@@ -236,7 +236,7 @@ func ImportKBImage(ctx context.Context, tx pgx.Tx, storage attachments.Storage, 
 		return "", false, err
 	}
 	var id string
-	if err := tx.QueryRow(ctx, `INSERT INTO kb_images(workspace_id,storage_key,sha256,size,content_type,counted)
+	if err := tx.QueryRow(ctx, `INSERT INTO kb_media(workspace_id,storage_key,sha256,size,content_type,counted)
 		VALUES($1,$2,$3,$4,$5,false) RETURNING id::text`, workspaceID, object.Key, object.SHA256, object.Size, contentType).Scan(&id); err != nil {
 		return "", false, fmt.Errorf("import knowledge base image: %w", err)
 	}

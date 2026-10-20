@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -13,7 +14,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/media"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -33,7 +36,7 @@ func writeKBError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusConflict, "parent_in_trash", domain.ErrKBParentInTrash.Error()+".")
 	case errors.Is(err, domain.ErrKBCollectionInTrash):
 		writeError(response, http.StatusConflict, "collection_in_trash", domain.ErrKBCollectionInTrash.Error()+".")
-	case errors.Is(err, domain.ErrKBArticleLimit), errors.Is(err, domain.ErrKBCollectionLimit):
+	case errors.Is(err, domain.ErrKBArticleLimit), errors.Is(err, domain.ErrKBCollectionLimit), errors.Is(err, domain.ErrKBMediaLimit):
 		writeError(response, http.StatusConflict, "kb_limit", err.Error()+".")
 	case errors.Is(err, domain.ErrKBArticleNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "The article was not found.")
@@ -373,9 +376,6 @@ func (a *API) restoreKBArticleVersion(response http.ResponseWriter, request *htt
 	writeJSON(response, http.StatusOK, article)
 }
 
-// kbImageTypes are the image types an article may hold, as http.DetectContentType names them.
-var kbImageTypes = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true}
-
 func (a *API) uploadKBImage(response http.ResponseWriter, request *http.Request) {
 	if a.config.Attachments == nil {
 		writeError(response, http.StatusServiceUnavailable, "storage_unavailable", "File storage is not configured on this server.")
@@ -386,6 +386,8 @@ func (a *API) uploadKBImage(response http.ResponseWriter, request *http.Request)
 		writeError(response, http.StatusRequestEntityTooLarge, "too_large", "An image holds at most 5 MiB; nothing was stored.")
 		return
 	}
+	query := request.URL.Query()
+	upload := domain.KBImageUpload{Name: query.Get("name"), Alt: query.Get("alt"), Keep: query.Get("keep") == "true"}
 	data, err := io.ReadAll(io.LimitReader(request.Body, domain.MaxKBImageBytes+1))
 	if err != nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "The image could not be read.")
@@ -396,14 +398,20 @@ func (a *API) uploadKBImage(response http.ResponseWriter, request *http.Request)
 		return
 	}
 	// The bytes decide the type, never the declared Content-Type, so nothing else is served as an image.
-	contentType, _, _ := strings.Cut(http.DetectContentType(data), ";")
-	if len(data) == 0 || !kbImageTypes[contentType] {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send the raw bytes of a PNG, JPEG, GIF or WebP image.")
+	info, err := media.InspectImage(data)
+	if err != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", sentence(err)+"; nothing was stored.")
+		return
+	}
+	// Location, camera and comments leave before anything is stored or compared.
+	data, err = media.StripMetadata(info, data)
+	if err != nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", sentence(err)+"; nothing was stored.")
 		return
 	}
 	sum := sha256.Sum256(data)
-	if image, found, err := a.store.FindKBImage(request.Context(), who.Workspace.ID, hex.EncodeToString(sum[:])); err != nil {
-		writeStoreError(response, err)
+	if image, found, err := a.store.FindKBImage(request.Context(), who.Workspace.ID, hex.EncodeToString(sum[:]), upload); err != nil {
+		writeKBError(response, err)
 		return
 	} else if found {
 		// Bytes the workspace already holds take no room: a full workspace can still use them again.
@@ -419,15 +427,52 @@ func (a *API) uploadKBImage(response http.ResponseWriter, request *http.Request)
 		writeInternalError(response, err)
 		return
 	}
-	image, err := a.store.CreateKBImage(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), object, contentType)
-	if err != nil {
-		if discardErr := a.store.DiscardObject(request.Context(), who.Workspace.ID, object.Key); discardErr != nil {
-			log.Printf("knowledge base image: discard unrecorded bytes: %v", discardErr)
+	input := store.NewKBImage{Object: object, ContentType: info.ContentType, Width: info.Width, Height: info.Height, KBImageUpload: upload}
+	input.Thumb = a.storeKBThumbnail(request.Context(), who.Workspace.ID, info, data)
+	image, created, err := a.store.CreateKBImage(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), input)
+	discard := func(keys ...string) {
+		for _, key := range keys {
+			if discardErr := a.store.DiscardObject(request.Context(), who.Workspace.ID, key); discardErr != nil {
+				log.Printf("knowledge base image: discard unrecorded bytes: %v", discardErr)
+			}
 		}
-		writeStoreError(response, err)
+	}
+	if err != nil {
+		discard(object.Key)
+		if input.Thumb != nil {
+			discard(input.Thumb.Key)
+		}
+		writeKBError(response, err)
 		return
 	}
+	if !created && input.Thumb != nil {
+		discard(input.Thumb.Key)
+	}
 	writeJSON(response, http.StatusCreated, image)
+}
+
+// storeKBThumbnail makes and stores the library thumbnail of an image, or returns nil: an image too
+// large to decode within the budget has none, and a failure only costs the thumbnail.
+func (a *API) storeKBThumbnail(ctx context.Context, workspaceID string, info media.Image, data []byte) *attachments.Object {
+	thumb, _, err := media.Thumbnail(ctx, info, data)
+	if err != nil {
+		if !errors.Is(err, media.ErrNoThumbnail) {
+			log.Printf("knowledge base image: thumbnail: %v", err)
+		}
+		return nil
+	}
+	object, err := a.config.Attachments.Put(ctx, workspaceID, bytes.NewReader(thumb), int64(len(thumb)))
+	if err != nil {
+		log.Printf("knowledge base image: store thumbnail: %v", err)
+		return nil
+	}
+	return &object
+}
+
+// sentence makes an error message the start of a sentence.
+func sentence(err error) string {
+	message := err.Error()
+	return strings.ToUpper(message[:1]) + message[1:]
 }
 
 func (a *API) getKBImage(response http.ResponseWriter, request *http.Request) {

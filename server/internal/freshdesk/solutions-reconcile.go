@@ -304,4 +304,4 @@ func (r *run) countKBLedger(ctx context.Context, report *Report, count *Knowledg
 }
 
 // kbStatsTables are the knowledge base tables an undo reads.
-var kbStatsTables = []string{"kb_articles", "kb_article_versions", "kb_collections", "kb_images", "kb_article_images", "kb_article_translations"}
+var kbStatsTables = []string{"kb_articles", "kb_article_versions", "kb_collections", "kb_media", "kb_article_media", "kb_article_translations"}

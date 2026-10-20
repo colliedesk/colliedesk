@@ -105,6 +105,9 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_article_version_restore` | Makes the text of an earlier version current again, as a new version | `send` |
 | `colliedesk_kb_image_upload` | Stores an image for articles (base64, at most 5 MiB) and gives the link to put in one | `send` |
 | `colliedesk_kb_image_get` | Shows a knowledge base image to the model | `read` |
+| `colliedesk_kb_media_list` | Lists the media library: what no article uses (with the space it takes) and images missing alt text | `read` |
+| `colliedesk_kb_media_get` | Shows one library item, its thumbnail and the articles that use it | `read` |
+| `colliedesk_kb_media_update` | Names an item, writes its alt text, or keeps it from the purge of unused images | `send` |
 | `colliedesk_help_center_get` | Says whether the public help center is on, its title and language | `read` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any |
 | `colliedesk_docs_search` | Searches these user guides | any |
