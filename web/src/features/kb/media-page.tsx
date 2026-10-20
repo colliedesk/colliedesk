@@ -52,8 +52,11 @@ export function MediaRoute({ view, search }: { view: MediaView; search: MediaSea
   const refresh = useRefreshMedia();
   const current = useRef(search);
   current.current = search;
-  const go = (to: MediaView, change: Partial<MediaSearch> = {}, replace = false) =>
-    void navigate({ to: viewPath[to], search: to === view ? { ...current.current, ...change } : change, replace });
+  // go is stable: the cards are memoized, and a new function each render would draw them all again.
+  const latest = useRef({ navigate, view });
+  latest.current = { navigate, view };
+  const go = useCallback((to: MediaView, change: Partial<MediaSearch> = {}, replace = false) =>
+    void latest.current.navigate({ to: viewPath[to], search: to === latest.current.view ? { ...current.current, ...change } : change, replace }), []);
   const { queue, rows } = useUploadQueue(() => void refresh());
   const [refused, setRefused] = useState<string[]>([]);
   const add = (files: File[]) => setRefused(queue.add(files));
@@ -142,9 +145,9 @@ function InProgress({ queue, rows }: { queue: UploadQueue; rows: UploadRow[] }) 
         const upload = resuming.current;
         if (!chosen || !upload) return;
         // The server knows the name and size, not the bytes: both must match, and complete checks the file.
-        if (chosen.size !== upload.size || baseName(chosen.name) !== upload.name) { setProblem(mediaMessages.notTheSameFile(upload.name)); return; }
+        if (chosen.size !== upload.size || baseName(chosen.name).trim() !== upload.name) { setProblem(mediaMessages.notTheSameFile(upload.name)); return; }
         setProblem(undefined);
-        queue.resumeUpload(chosen, upload.id);
+        queue.resumeUpload(chosen, upload.id, upload.name || chosen.name);
       }} />
     </section>
   );
@@ -165,7 +168,7 @@ function Uploads({ rows, onPause, onResume, onCancel, onClear }: { rows: UploadR
           const status = row.state === 'done' ? (row.duplicate ? mediaMessages.alreadyInLibrary : mediaMessages.uploaded)
             : row.state === 'sending' ? [mediaMessages.sending(row.sent, row.size), row.kind === 'video' && row.bytesPerSecond > 0 ? mediaMessages.speed(row.bytesPerSecond) : '',
               left !== undefined && row.kind === 'video' ? mediaMessages.timeLeft(left) : ''].filter(Boolean).join(' · ')
-            : row.state === 'paused' ? mediaMessages.paused : row.state === 'waiting' ? mediaMessages.waiting : row.state === 'cancelled' ? mediaMessages.cancelled : row.problem;
+            : row.state === 'paused' ? `${mediaMessages.paused} · ${mediaMessages.sending(row.sent, row.size)}` : row.state === 'waiting' ? mediaMessages.waiting : row.state === 'cancelled' ? mediaMessages.cancelled : row.problem;
           return (
             <li key={row.key} data-state={row.state}>
               <span className="media-upload-name">{row.name}</span>
@@ -173,7 +176,7 @@ function Uploads({ rows, onPause, onResume, onCancel, onClear }: { rows: UploadR
               <span className="media-upload-status" role={row.state === 'failed' ? 'alert' : undefined}>{status}</span>
               <span className="button-row">
                 {row.kind === 'video' && (row.state === 'sending' || row.state === 'waiting') && <button type="button" onClick={() => onPause(row.key)} aria-label={mediaMessages.pauseName(row.name)}>{mediaMessages.pause}</button>}
-                {(row.state === 'paused' || row.state === 'failed') && <button type="button" onClick={() => onResume(row.key)} aria-label={mediaMessages.resumeName(row.name)}>{mediaMessages.resume}</button>}
+                {(row.state === 'paused' || (row.state === 'failed' && !row.permanent)) && <button type="button" onClick={() => onResume(row.key)} aria-label={mediaMessages.resumeName(row.name)}>{mediaMessages.resume}</button>}
                 {row.state !== 'done' && row.state !== 'cancelled' && <button type="button" onClick={() => onCancel(row.key)} aria-label={mediaMessages.cancelName(row.name)}>{mediaMessages.cancel}</button>}
               </span>
             </li>
@@ -211,13 +214,23 @@ function Library({ search, go, onChanged }: { search: MediaSearch; go: (to: Medi
   };
   const items = list.data?.pages.flatMap((page) => page.items) ?? [];
   const filtered = Boolean(search.q || search.kind || search.usage);
+  const openNow = useRef(search.item);
+  openNow.current = search.item;
+  const openItem = useCallback((chosen: KBMedia) => go('library', { item: chosen.id === openNow.current ? undefined : chosen.id }), [go]);
+  // Closing gives the focus back to the card the panel was opened from.
+  const closeItem = useCallback(() => {
+    const closed = openNow.current;
+    go('library', { item: undefined });
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-media-id="${closed}"]`)?.focus());
+  }, [go]);
   return (
     <div className="media-layout" data-open={search.item ? 'true' : undefined}>
       <section className="media-main" aria-labelledby="media-list-heading">
-        <h2 id="media-list-heading" className="sr-only">{mediaMessages.heading}</h2>
+        <h2 id="media-list-heading" className="sr-only">{mediaMessages.libraryHeading}</h2>
         {summary && summary.count + summary.kept_count > 0 && <p className="media-summary">
-          {mediaMessages.unusedSummary(summary.count + summary.kept_count, summary.bytes + summary.kept_bytes)}{' · '}
-          <RouterLink href={viewPath.unused} onFollow={() => go('unused')}>{mediaMessages.review}</RouterLink>
+          {summary.count > 0 && mediaMessages.unusedSummary(summary.count, summary.bytes)}
+          {summary.kept_count > 0 && <span className="muted-copy">{summary.count > 0 ? ' · ' : ''}{mediaMessages.keptUnused(summary.kept_count, summary.kept_bytes)}</span>}{' · '}
+          <RouterLink className="media-review" href={viewPath.unused} onFollow={() => go('unused')}>{mediaMessages.review}</RouterLink>
         </p>}
         <div className="kb-filters media-filters" role="search">
           <label className="search-field kb-search">
@@ -253,14 +266,13 @@ function Library({ search, go, onChanged }: { search: MediaSearch; go: (to: Medi
           <button type="button" className="link-action" onClick={() => void list.refetch()}>{mediaMessages.retry}</button></p>}
         {list.isPending && <p role="status" className="empty-copy">{mediaMessages.loading}</p>}
         {list.isSuccess && items.length === 0 && <p className="empty-copy">{filtered ? mediaMessages.noMatches : mediaMessages.empty}</p>}
-        {items.length > 0 && <ul className="media-grid" aria-label={mediaMessages.heading} aria-busy={list.isFetching && !list.isFetchingNextPage}>
-          {items.map((item) => <MediaCard key={item.id} item={item} open={item.id === search.item}
-            onOpen={(chosen) => go('library', { item: chosen.id === search.item ? undefined : chosen.id })} />)}
+        {items.length > 0 && <ul className="media-grid" aria-label={mediaMessages.libraryHeading} aria-busy={list.isFetching && !list.isFetchingNextPage}>
+          {items.map((item) => <MediaCard key={item.id} item={item} open={item.id === search.item} onOpen={openItem} />)}
         </ul>}
         {list.hasNextPage && <button type="button" className="kb-more" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
           {list.isFetchingNextPage ? mediaMessages.loading : mediaMessages.loadMore}</button>}
       </section>
-      {search.item && <MediaDetail key={search.item} id={search.item} onChanged={onChanged} onClose={() => go('library', { item: undefined })} />}
+      {search.item && <MediaDetail key={search.item} id={search.item} onChanged={onChanged} onClose={closeItem} />}
     </div>
   );
 }
@@ -269,22 +281,26 @@ function Library({ search, go, onChanged }: { search: MediaSearch; go: (to: Medi
 function useSelection(items: KBMedia[]) {
   const [ids, setIds] = useState<Set<string>>(new Set());
   const last = useRef<string | undefined>(undefined);
-  const toggle = (item: KBMedia, range: boolean) => {
+  const list = useRef(items);
+  list.current = items;
+  // Stable, so a tick draws the two cards that change, not the page.
+  const toggle = useCallback((item: KBMedia, range: boolean) => {
     // Read now: the updater runs later, when last already names this item.
     const anchor = range ? last.current : undefined;
+    const all = list.current;
     setIds((before) => {
       const next = new Set(before);
-      const from = anchor ? items.findIndex((each) => each.id === anchor) : -1;
-      const to = items.findIndex((each) => each.id === item.id);
+      const from = anchor ? all.findIndex((each) => each.id === anchor) : -1;
+      const to = all.findIndex((each) => each.id === item.id);
       if (from >= 0 && to >= 0) {
         const on = !before.has(item.id);
-        for (const each of items.slice(Math.min(from, to), Math.max(from, to) + 1)) { if (on) next.add(each.id); else next.delete(each.id); }
+        for (const each of all.slice(Math.min(from, to), Math.max(from, to) + 1)) { if (on) next.add(each.id); else next.delete(each.id); }
       } else if (next.has(item.id)) next.delete(item.id);
       else next.add(item.id);
       return next;
     });
     last.current = item.id;
-  };
+  }, []);
   const chosen = items.filter((item) => ids.has(item.id));
   return { ids, chosen, toggle, all: () => setIds(new Set(items.map((item) => item.id))), clear: () => setIds(new Set()) };
 }
@@ -490,7 +506,7 @@ function Trash({ onChanged }: { onChanged: () => void }) {
       {list.isSuccess && items.length === 0 && <p className="empty-copy">{mediaMessages.trashEmpty}</p>}
       {items.length > 0 && <ul className="media-grid" aria-label={mediaMessages.trashHeading}>
         {items.map((item) => <SelectCard key={item.id} item={item} checked={selection.ids.has(item.id)} onToggle={selection.toggle}
-          extra={item.deleted_at ? mediaMessages.trashedOn(formatDate(item.deleted_at, timezone, now)) : undefined} />)}
+          extra={item.deleted_at ? mediaMessages.goneOn(formatDate(new Date(Date.parse(item.deleted_at) + 30 * 86_400_000).toISOString(), timezone, now)) : undefined} />)}
       </ul>}
       {list.hasNextPage && <button type="button" className="kb-more" disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>{mediaMessages.loadMore}</button>}
       {deleting && <ConfirmDialog heading={mediaMessages.deleteForeverHeading} confirm={mediaMessages.deleteForeverConfirm(selection.chosen.length)} danger

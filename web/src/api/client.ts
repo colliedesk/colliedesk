@@ -115,6 +115,8 @@ async function outboundRefusal(response: Response): Promise<Error> {
     const body = await response.json() as { error?: { code?: unknown; message?: unknown; retry_after_seconds?: unknown; refused_cc?: unknown; reply_to?: unknown } };
     const { code, message, retry_after_seconds: retry, refused_cc: refused, reply_to: replyTo } = body.error ?? {};
     if (code === 'storage_limit_reached' && typeof message === 'string' && message) return new AttachmentStorageError(message);
+    // The knowledge base's video uploads: the answer says which upload holds the place, or whose it is.
+    if ((code === 'too_many_uploads' || code === 'not_your_upload') && typeof message === 'string' && message) return new ConflictError(message, { code });
     if (code === 'trial_outbound_restricted' || code === 'trial_outbound_limit') {
       const refusedCc = Array.isArray(refused) ? refused.filter((item): item is string => typeof item === 'string') : [];
       return new OutboundRefusedError(code, typeof message === 'string' ? message : '', typeof retry === 'number' ? retry : undefined, refusedCc,

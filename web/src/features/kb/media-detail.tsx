@@ -16,6 +16,9 @@ export function MediaDetail({ id, onChanged, onClose }: { id: string; onChanged:
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { heading.current?.focus(); }, [id]);
   const refresh = () => { void details.refetch(); onChanged(); };
+  // What the last change said, with an Undo when it has one. It lives here, above the body, which is drawn
+  // again for each new version of the item.
+  const [notice, setNotice] = useState<{ text: string; undo?: () => void }>();
   return (
     <aside className="media-detail" aria-labelledby="media-detail-heading" onKeyDown={(event) => { if (event.key === 'Escape' && !(event.target instanceof HTMLVideoElement)) onClose(); }}>
       <div className="media-detail-head">
@@ -25,12 +28,16 @@ export function MediaDetail({ id, onChanged, onClose }: { id: string; onChanged:
       {details.isPending && <p role="status" className="empty-copy">{mediaMessages.loading}</p>}
       {details.isError && <p role="alert" className="error-copy">{mediaMessages.listFailed}{' '}
         <button type="button" className="link-action" onClick={() => void details.refetch()}>{mediaMessages.retry}</button></p>}
-      {details.data && <DetailBody key={details.data.updated_at} item={details.data} onChanged={refresh} onTrashed={() => { onChanged(); onClose(); }} />}
+      {notice && <p role="status" className="media-toast">{notice.text}{' '}
+        {notice.undo && <button type="button" className="link-action" onClick={notice.undo}>{mediaMessages.undo}</button>}</p>}
+      {details.data && <DetailBody key={details.data.updated_at} item={details.data} onChanged={refresh} onNotice={setNotice} onTrashed={() => { onChanged(); onClose(); }} />}
     </aside>
   );
 }
 
-function DetailBody({ item, onChanged, onTrashed }: { item: KBMediaDetails; onChanged: () => void; onTrashed: () => void }) {
+type Notify = (notice: { text: string; undo?: () => void } | undefined) => void;
+
+function DetailBody({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDetails; onChanged: () => void; onNotice: Notify; onTrashed: () => void }) {
   const video = item.kind === 'video';
   const player = useRef<HTMLVideoElement>(null);
   return (
@@ -40,19 +47,19 @@ function DetailBody({ item, onChanged, onTrashed }: { item: KBMediaDetails; onCh
           ? <video ref={player} controls preload="metadata" src={item.url} poster={item.poster_url ?? undefined} />
           : <img src={item.url} alt={item.alt} />}
       </div>
-      <MetaForm item={item} onSaved={onChanged} />
+      <MetaForm item={item} onSaved={() => { onNotice({ text: mediaMessages.saved }); onChanged(); }} />
       <section aria-labelledby="media-facts">
         <h3 id="media-facts">{mediaMessages.facts}</h3>
         <dl className="media-facts">
-          <dt>Type</dt><dd>{item.content_type}{item.codecs.length > 0 ? ` (${item.codecs.join(', ')})` : ''}</dd>
-          {item.width !== null && item.height !== null && <><dt>Size</dt><dd>{mediaMessages.dimensions(item.width, item.height)}</dd></>}
-          {item.duration_ms !== null && <><dt>Length</dt><dd>{mediaMessages.duration(item.duration_ms)}</dd></>}
-          <dt>File</dt><dd>{formatBytes(item.size)}</dd>
+          <dt>{mediaMessages.factType}</dt><dd>{item.content_type}{item.codecs.length > 0 ? ` (${item.codecs.join(', ')})` : ''}</dd>
+          {item.width !== null && item.height !== null && <><dt>{mediaMessages.factDimensions}</dt><dd>{mediaMessages.dimensions(item.width, item.height)}</dd></>}
+          {item.duration_ms !== null && <><dt>{mediaMessages.factLength}</dt><dd>{mediaMessages.duration(item.duration_ms)}</dd></>}
+          <dt>{mediaMessages.factSize}</dt><dd>{formatBytes(item.size)}</dd>
         </dl>
       </section>
-      {video && <Poster item={item} player={player} onSaved={onChanged} />}
+      {video && <Poster item={item} player={player} onSaved={() => { onNotice({ text: mediaMessages.posterSaved }); onChanged(); }} />}
       <Usage item={item} />
-      <Actions item={item} onChanged={onChanged} onTrashed={onTrashed} />
+      <Actions item={item} onChanged={onChanged} onNotice={onNotice} onTrashed={onTrashed} />
     </div>
   );
 }
@@ -71,7 +78,7 @@ function MetaForm({ item, onSaved }: { item: KBMediaDetails; onSaved: () => void
         updated_at: item.updated_at,
         ...(name !== item.name ? { name } : {}), ...(alt !== item.alt ? { alt } : {}), ...(kept !== item.kept ? { kept } : {}),
       });
-      setState({ saved: true });
+      setState({});
       onSaved();
     } catch (error) {
       setState({ problem: reason(error, mediaMessages.saveFailed) });
@@ -94,7 +101,6 @@ function MetaForm({ item, onSaved }: { item: KBMediaDetails; onSaved: () => void
       <p id="media-keep-help" className="kb-hint">{mediaMessages.keepHelp}</p>
       <div className="button-row">
         <button type="submit" className="primary-action" disabled={!changed || state.saving}>{mediaMessages.save}</button>
-        {state.saved && <span role="status" className="muted-copy">{mediaMessages.saved}</span>}
       </div>
       {state.problem && <p role="alert" className="error-copy">{state.problem}</p>}
     </form>
@@ -120,7 +126,7 @@ function Poster({ item, player, onSaved }: { item: KBMediaDetails; player: RefOb
     setState({ busy: true });
     try {
       await mediaApi.setPoster(item.id, await image);
-      setState({ saved: true });
+      setState({});
       onSaved();
     } catch (error) {
       setState({ problem: reason(error, failed) });
@@ -144,7 +150,6 @@ function Poster({ item, player, onSaved }: { item: KBMediaDetails; player: RefOb
         <button type="button" disabled={state.busy} onClick={() => file.current?.click()}>{mediaMessages.uploadPoster}</button>
         <input ref={file} type="file" hidden accept="image/png,image/jpeg,image/gif,image/webp"
           onChange={(event) => { const chosen = event.target.files?.[0]; event.target.value = ''; if (chosen) void send(chosen, mediaMessages.posterFailed); }} />
-        {state.saved && <span role="status" className="muted-copy">{mediaMessages.posterSaved}</span>}
       </div>
       {state.problem && <p role="alert" className="error-copy">{state.problem}</p>}
     </section>
@@ -177,11 +182,9 @@ export function embedFor(item: KBMedia) {
   return `<video controls preload="metadata" src="${item.url}"${title}></video>`;
 }
 
-function Actions({ item, onChanged, onTrashed }: { item: KBMediaDetails; onChanged: () => void; onTrashed: () => void }) {
-  const [message, setMessage] = useState<string>();
+function Actions({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDetails; onChanged: () => void; onNotice: Notify; onTrashed: () => void }) {
   const [problem, setProblem] = useState<string>();
   const [replacing, setReplacing] = useState(false);
-  const [undo, setUndo] = useState<string>();
   const live = item.articles.filter((article) => !article.in_trash && article.current);
   const trash = async () => {
     setProblem(undefined);
@@ -198,19 +201,16 @@ function Actions({ item, onChanged, onTrashed }: { item: KBMediaDetails; onChang
     try {
       const done = await mediaApi.replace(item.id, other.id);
       setReplacing(false);
-      setUndo(done.id);
-      setMessage(mediaMessages.replaced(done.article_ids.length));
+      onNotice({ text: mediaMessages.replaced(done.article_ids.length), undo: () => void undoReplace(done.id) });
       onChanged();
     } catch (error) {
       setProblem(reason(error, mediaMessages.actionFailed));
     }
   };
-  const undoReplace = async () => {
-    if (!undo) return;
+  const undoReplace = async (replacement: string) => {
     try {
-      const done = await mediaApi.undoReplacement(undo);
-      setUndo(undefined);
-      setMessage(done.skipped_article_ids.length ? mediaMessages.undoneSkipped(done.skipped_article_ids.length) : mediaMessages.undone);
+      const done = await mediaApi.undoReplacement(replacement);
+      onNotice({ text: done.skipped_article_ids.length ? mediaMessages.undoneSkipped(done.skipped_article_ids.length) : mediaMessages.undone });
       onChanged();
     } catch (error) {
       setProblem(reason(error, mediaMessages.actionFailed));
@@ -226,8 +226,6 @@ function Actions({ item, onChanged, onTrashed }: { item: KBMediaDetails; onChang
         <button type="button" className="danger-action" onClick={() => void trash()}>{mediaMessages.moveToTrash}</button>
         {copied && <span role="status" className="muted-copy">{mediaMessages.copied}</span>}
       </div>
-      {message && <p role="status" className="muted-copy">{message}{' '}
-        {undo && <button type="button" className="link-action" onClick={() => void undoReplace()}>{mediaMessages.undo}</button>}</p>}
       {problem && <div role="alert" className="error-copy">
         <p>{problem}</p>
         {problem === mediaMessages.inUseRefused && <ul className="media-articles">

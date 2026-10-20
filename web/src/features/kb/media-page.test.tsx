@@ -37,10 +37,11 @@ const base = {
 test('the library shows images and videos, a video with its length, and leads to what no article uses', async () => {
   const calls = serve(base);
   open();
-  const grid = await screen.findByRole('list', { name: 'Media' });
-  expect(await within(grid).findByRole('button', { name: 'Product tour, video, 4.0 KiB' })).toHaveTextContent('1:24');
-  expect(within(grid).getByRole('button', { name: 'Screenshot 1, image, 2.0 KiB' })).toHaveTextContent('In 1 article');
-  expect(await screen.findByText(/42 items not used in any article · 430\.0 MiB/)).toBeInTheDocument();
+  const grid = await screen.findByRole('list', { name: 'Library items' });
+  expect(await within(grid).findByRole('button', { name: 'Product tour, video, 1:24, 4.0 KiB, In 1 article' })).toHaveTextContent('1:24');
+  expect(within(grid).getByRole('button', { name: 'Screenshot 1, image, 2.0 KiB, In 1 article' })).toHaveTextContent('In 1 article');
+  expect(await screen.findByText(/37 items not used in any article · 412\.0 MiB/)).toBeInTheDocument();
+  expect(screen.getByText(/5 kept items not used · 18\.0 MiB/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('link', { name: 'Review' }));
   expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge/media/unused', search: {}, replace: false });
   fireEvent.click(screen.getByRole('radio', { name: 'Videos' }));
