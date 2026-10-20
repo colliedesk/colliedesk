@@ -97,10 +97,11 @@ the editor, the public help center and the Freshdesk import come in later pull r
   found these triggers: `_` next to a letter or digit, `/` with `.` or `~`, `@` after a word with
   digits (`a1@`), `-` between words with digits (`a-1-`), `-` with `.` (`a-a.`). `.` alone, letters,
   digits, non-ASCII text and controls stayed linear. `kb_search_vector` turns the 31 ASCII punctuation
-  characters other than `.` into spaces before parsing (`translate`, immutable and independent of the
-  locale; a regular-expression class such as `[[:punct:]]` depends on the collation), so the parser sees
-  words, numbers, hosts and versions only: every pattern above then costs 10–40 ms at 100,000
-  characters, like prose (16 ms). `_` was already a separator; what changes is that an email, a URL, a
+  characters other than `.` into spaces before parsing (`regexp_replace` with the characters listed one
+  by one: a class such as `[[:punct:]]` depends on the collation; `translate` gives the same text but
+  made indexing ordinary text two to three times slower, 3.4 s instead of 1.2 s for the 2,000 articles
+  of the search budget), so the parser sees words, numbers, hosts and versions only: every pattern
+  above then costs 10–40 ms at 100,000 characters, prose 7 ms. `_` was already a separator; what changes is that an email, a URL, a
   file path and a hyphenated word are indexed as their words, not as one more lexeme. Keeping `.` keeps
   hosts and versions (`status.acme.example`, `1.2.3`) whole. `q` holds at most 200 characters, so the
   query side was never slow. `TestKnowledgeBaseSearchVectorCostsLinearTime` holds every write of these
