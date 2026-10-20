@@ -78,7 +78,10 @@ The public help center is in `help-center.md`.
   `rehype-sanitize` would add about 56 KB gzip (parse5 and its entity table) to the knowledge base
   chunk; `kb-html.ts` instead parses each raw piece with the browser's `DOMParser` (an inert document:
   no script runs, nothing loads) and applies `allowlist.json`, for 2.5 KB. Vite reads that file from
-  `server/internal/kbhtml` (`server.fs.allow`), and the Dockerfile's web stage copies it.
+  `server/internal/kbhtml` (`server.fs.allow`), and the Dockerfile's web stage copies it. Each piece is
+  parsed once and kept (closing tags and players repeat). In Chromium (dev build) a 10,000-character
+  article with 3 players previews in 6 ms (4.5 ms with no HTML); 100,000 characters of nothing but HTML
+  take about 100 ms, or about 260 ms with 900 players, nearly all of it the browser creating the iframes.
 - **History and trash are the saved reply panels** (`saved-reply-panels.tsx`), made generic with
   optional props; the change line reads the same, with `import` added.
 

@@ -1,8 +1,9 @@
 // Package kbhtml decides what raw HTML in a knowledge base article may be shown: a YouTube or Vimeo
 // player, rebuilt from its video id, and (once the media library ships) a <video> of the workspace's
-// library. Every other element is left out, keeping its text. The rules are allowlist.json, which the
-// editor preview reads too; testdata/cases.json holds the cases both must agree on.
-// docs/internals/knowledge-base.md records why the list is this short.
+// library. Everything else in the HTML is left out, its text too, as raw HTML always was (the words
+// between inline tags are Markdown and stay). The rules are allowlist.json, which the editor preview
+// reads too; testdata/cases.json holds the cases both must agree on. docs/internals/help-center.md
+// records why the list is this short.
 package kbhtml
 
 import (
@@ -52,11 +53,10 @@ type Rules struct {
 		Enabled    bool     `json:"enabled"`
 		Attributes []string `json:"attributes"`
 		Src        string   `json:"src"`
-		Poster     string   `json:"poster"`
 		Preload    []string `json:"preload"`
 		Flags      []string `json:"flags"`
 
-		src, poster *regexp.Regexp
+		src *regexp.Regexp
 	} `json:"video"`
 	Dimension struct {
 		Pattern string `json:"pattern"`
@@ -87,7 +87,6 @@ func Load() *Rules {
 		sources = append(sources, regexp.QuoteMeta(embed.Src))
 	}
 	r.Video.src = regexp.MustCompile(r.Video.Src)
-	r.Video.poster = regexp.MustCompile(r.Video.Poster)
 	r.Dimension.pattern = regexp.MustCompile(r.Dimension.Pattern)
 
 	// The second gate: what the rebuild below writes must pass bluemonday unchanged, or it is left
@@ -102,7 +101,7 @@ func Load() *Rules {
 	policy.AllowAttrs("allowfullscreen").OnElements("iframe")
 	policy.AllowAttrs("width", "height").Matching(r.Dimension.pattern).OnElements("iframe", "video")
 	policy.AllowAttrs("src").Matching(r.Video.src).OnElements("video")
-	policy.AllowAttrs("poster").Matching(r.Video.poster).OnElements("video")
+	policy.AllowAttrs("title", "aria-label").OnElements("video")
 	policy.AllowAttrs("preload").Matching(regexp.MustCompile(`^(?:` + strings.Join(r.Video.Preload, "|") + `)$`)).OnElements("video")
 	policy.AllowAttrs(append([]string{"controls"}, r.Video.Flags...)...).OnElements("video")
 	r.policy = policy
@@ -127,9 +126,9 @@ func FrameSources() []string {
 // Fragment is (*Rules).Fragment with allowlist.json.
 func Fragment(raw string) (string, []string) { return rules.Fragment(raw) }
 
-// Fragment turns one piece of raw HTML, as the Markdown parser hands it over, into HTML a page may
-// show, and names what it left out, in order and once each. A closing tag alone, or a comment, shows
-// nothing and is not named.
+// Fragment turns one piece of raw HTML, as the Markdown parser hands it over, into the players a page
+// may show, and names the elements it left out, in order and once each. Text, a closing tag alone or a
+// comment shows nothing and is not named.
 func (r *Rules) Fragment(raw string) (string, []string) {
 	nodes, err := nethtml.ParseFragment(strings.NewReader(raw), &nethtml.Node{Type: nethtml.ElementNode, Data: "body", DataAtom: atom.Body})
 	if err != nil {
@@ -156,9 +155,6 @@ func (f *fragment) drop(what string) {
 
 func (f *fragment) walk(node *nethtml.Node) {
 	switch node.Type {
-	case nethtml.TextNode:
-		f.out.WriteString(html.EscapeString(node.Data))
-		return
 	case nethtml.ElementNode:
 	default:
 		return
@@ -175,7 +171,7 @@ func (f *fragment) walk(node *nethtml.Node) {
 		f.drop(name)
 		return
 	}
-	// Any other element is left out and its children are shown in its place.
+	// Any other element is left out with its text, as raw HTML always was; a player inside it is kept.
 	f.drop(name)
 	for child := node.FirstChild; child != nil; child = child.NextSibling {
 		f.walk(child)
@@ -293,11 +289,10 @@ func (f *fragment) video(node *nethtml.Node) {
 		tag.WriteString(" " + key + `="` + html.EscapeString(value) + `"`)
 	}
 	attr("src", src)
-	if poster, ok := given["poster"]; ok {
-		if r.Video.poster.MatchString(poster) {
-			attr("poster", poster)
-		} else {
-			f.drop("video poster")
+	// The poster, and a missing width or height, will come from the media library, not the article.
+	for _, key := range []string{"title", "aria-label"} {
+		if value, ok := given[key]; ok {
+			attr(key, value)
 		}
 	}
 	for _, key := range []string{"width", "height"} {

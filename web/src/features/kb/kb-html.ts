@@ -2,24 +2,21 @@ import allowlist from '../../../../server/internal/kbhtml/allowlist.json';
 
 // Raw HTML in an article, as the preview shows it: the same rules as the help center
 // (server/internal/kbhtml, which reads the same allowlist.json and runs the same testdata/cases.json). A
-// YouTube or Vimeo player is rebuilt from its video id; any other element is left out and its text kept.
+// YouTube or Vimeo player is rebuilt from its video id; everything else in the HTML is left out, its text
+// too (the words between inline tags are Markdown and stay).
 // The HTML is parsed by DOMParser, whose document runs no script and loads nothing. The saved Markdown keeps
 // every byte; only what is shown leaves HTML out.
 
 export type Rules = typeof allowlist;
 type Embed = Rules['iframe']['embeds'][number];
 
-export interface HtmlText {
-  type: 'text';
-  value: string;
-}
 export interface HtmlElement {
   type: 'element';
   tagName: 'iframe' | 'video';
   properties: Record<string, string | boolean>;
   children: [];
 }
-export type HtmlNode = HtmlText | HtmlElement;
+export type HtmlNode = HtmlElement;
 
 // A space, control character or backslash inside an address is refused: browsers read those in ways the
 // server's parser does not.
@@ -88,10 +85,6 @@ class Fragment {
   }
 
   walk(node: Node) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      this.nodes.push({ type: 'text', value: node.nodeValue ?? '' });
-      return;
-    }
     if (node.nodeType !== Node.ELEMENT_NODE) return;
     const element = node as Element;
     const name = element.localName;
@@ -99,7 +92,7 @@ class Fragment {
     if (element.namespaceURI === XHTML && name === 'video') return this.video(element);
     this.drop(name);
     if (this.rules.dropWithContent.includes(name)) return;
-    // Any other element is left out and its children are shown in its place.
+    // Any other element is left out with its text, as raw HTML always was; a player inside it is kept.
     for (const child of Array.from(element.childNodes)) this.walk(child);
   }
 
@@ -150,10 +143,10 @@ class Fragment {
     if (!new RegExp(video.src).test(src)) return this.drop(`video (${hostOf(src)})`);
     if (!video.enabled) return this.drop('video (media library)');
     const properties: HtmlElement['properties'] = { src };
-    const poster = element.getAttribute('poster');
-    if (poster !== null) {
-      if (new RegExp(video.poster).test(poster)) properties.poster = poster;
-      else this.drop('video poster');
+    // The poster, and a missing width or height, will come from the media library, not the article.
+    for (const key of ['title', 'aria-label']) {
+      const value = element.getAttribute(key);
+      if (value !== null) properties[key === 'aria-label' ? 'ariaLabel' : key] = value;
     }
     for (const key of ['width', 'height']) {
       const value = element.getAttribute(key);
@@ -174,11 +167,30 @@ class Fragment {
   }
 }
 
-// fragment turns one piece of raw HTML, as the Markdown parser hands it over, into what the preview may
-// show, and names what it left out, in order and once each. A closing tag alone, or a comment, shows nothing
-// and is not named.
-export function fragment(raw: string, rules: Rules = allowlist) {
-  const document = new DOMParser().parseFromString(raw, 'text/html');
+// fragment turns one piece of raw HTML, as the Markdown parser hands it over, into the players the preview
+// may show, and names the elements it left out, in order and once each. Text, a closing tag alone or a
+// comment shows nothing and is not named.
+export function fragment(raw: string, rules: Rules = allowlist): { nodes: HtmlNode[]; dropped: string[] } {
+  const known = rules === allowlist ? seen.get(raw) : undefined;
+  const result = known ?? parse(raw, rules);
+  if (rules === allowlist && !known) {
+    // Closing tags and repeated players come back on every keystroke; parse each piece once.
+    if (seen.size >= 2000) seen.clear();
+    seen.set(raw, result);
+  }
+  // Copies: the Markdown renderer writes to the nodes it is given.
+  return {
+    nodes: result.nodes.map((node) => ({ ...node, properties: { ...node.properties } })),
+    dropped: [...result.dropped],
+  };
+}
+
+const seen = new Map<string, { nodes: HtmlNode[]; dropped: string[] }>();
+let parser: DOMParser | undefined;
+
+function parse(raw: string, rules: Rules) {
+  parser ??= new DOMParser();
+  const document = parser.parseFromString(raw, 'text/html');
   const result = new Fragment(rules);
   // A fragment that starts with <style>, <script> or <title> puts it in the head.
   for (const node of [...Array.from(document.head.childNodes), ...Array.from(document.body.childNodes)])

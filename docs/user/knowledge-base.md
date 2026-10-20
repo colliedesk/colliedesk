@@ -76,9 +76,10 @@ example the code from YouTube's **Share → Embed**:
   (seconds) and Vimeo's `h=` (the key of an unlisted video) are kept.
 - `title`, `width`, `height`, `allow` and `allowfullscreen` are kept. The video fills the width of the
   page at 16:9 whatever size you give, and loads only when a reader scrolls to it.
-- Any other HTML is not shown: an iframe from another site, a `<video>` or `<audio>` file, a script, a
-  `style`, a form. Text inside a left-out element is shown as plain text. **Preview** names what it
-  left out on a line above the article; the saved text keeps the HTML as you wrote it.
+- Any other HTML is not shown, text included: an iframe from another site, a `<video>` or `<audio>`
+  file, a script, a `style`, a form. Inside a paragraph only the tags are left out and the words
+  between them stay. **Preview** names what it left out on a line above the article; the saved text
+  keeps the HTML as you wrote it.
 - Uploading a video file to the knowledge base is not available yet.
 
 ### Publish, unpublish, edit

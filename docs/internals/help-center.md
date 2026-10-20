@@ -32,8 +32,10 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
     `referrerpolicy="strict-origin-when-cross-origin"` and `loading="lazy"` are added; the author
     cannot set them. `allow-scripts allow-same-origin` is safe only because `src` is always the
     player's own origin, never relative and never `srcdoc`.
-  - Every other element is left out and its text kept (escaped); `script`, `style`, `svg`, `object`
-    and the rest of `dropWithContent` go with their content.
+  - Everything else in a piece is left out, text included, as raw HTML always was, so imported
+    articles that still hold HTML read as before; a player nested in another element is still found,
+    except inside `dropWithContent` elements (`svg`, `object`, `template`…). Words between inline
+    tags are Markdown, not part of a piece, and stay.
   - Why so strict: an iframe of any site would let an article frame a phishing page under the help
     center's address, leak readers' addresses to sites nobody chose, and break when that site
     goes away; only these two players have a stable, documented embed address (No lock-in: the
@@ -41,7 +43,9 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   - `<video>` is ready in the allowlist (`video.enabled: false`) for the media library: until
     `/api/v1/kb/media/<id>` serves files it would show a broken player, so the help center leaves it
     out and the preview says it is not shown yet. Turning it on needs the route, a rewrite to
-    `<help center>/media/<id>` like images, and its tests.
+    `<help center>/media/<id>` like images, and its tests. An article cannot set a `poster`: the
+    renderer will add the library's poster, width and height, so changing a poster never edits an
+    article.
   - Cost: a 100,000-character article of nothing but raw HTML (about 4,500 pieces, 900 of them
     players) renders in about 12 ms on an M-series Mac (plain text: 1 ms); pages are cached by
     content version.

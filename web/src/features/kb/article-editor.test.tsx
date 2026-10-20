@@ -146,6 +146,7 @@ test('the preview shows YouTube and Vimeo players as the help center does, and n
   expect(panel).toHaveTextContent('Inline and bold.');
   const warning = within(panel).getByRole('status');
   expect(warning).toHaveTextContent('Left out of the article: iframe onload, iframe (evil.example), b, script.');
+  expect(panel).not.toHaveTextContent('__xss');
   expect(warning).toHaveTextContent('Videos from the media library are not shown yet.');
   expect((window as { __xss?: number }).__xss).toBeUndefined();
 });

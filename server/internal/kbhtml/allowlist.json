@@ -1,5 +1,5 @@
 {
-  "about": "The only raw HTML a knowledge base article may show. The help center (server/internal/kbhtml) and the editor preview (web/src/features/kb/kb-html.ts) both read this file; docs/internals/knowledge-base.md explains each rule. Attribute names are HTML names. The Markdown an author saves keeps every byte; only what is shown leaves HTML out.",
+  "about": "The only raw HTML a knowledge base article may show: these players, rebuilt; any other HTML is left out with its text. The help center (server/internal/kbhtml) and the editor preview (web/src/features/kb/kb-html.ts) both read this file; docs/internals/knowledge-base.md explains each rule. Attribute names are HTML names. The Markdown an author saves keeps every byte; only what is shown leaves HTML out.",
   "iframe": {
     "embeds": [
       {
@@ -29,10 +29,9 @@
   },
   "video": {
     "enabled": false,
-    "disabledBecause": "Turned on with the media library: until /api/v1/kb/media serves files, a <video> would only show a broken player.",
-    "attributes": ["src", "poster", "width", "height", "controls", "preload", "muted", "loop", "playsinline"],
+    "disabledBecause": "Turned on with the media library: until /api/v1/kb/media serves files, a <video> would only show a broken player. Its poster, width and height will come from the library, not from the article.",
+    "attributes": ["src", "title", "aria-label", "width", "height", "controls", "preload", "muted", "loop", "playsinline"],
     "src": "^/api/v1/kb/media/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-    "poster": "^/api/v1/kb/media/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/poster$",
     "preload": ["none", "metadata"],
     "flags": ["muted", "loop", "playsinline"]
   },

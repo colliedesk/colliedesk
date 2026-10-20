@@ -17,8 +17,8 @@ type fixture struct {
 		Name    string   `json:"name"`
 		HTML    string   `json:"html"`
 		Iframes []string `json:"iframes"`
-		Text    string   `json:"text"`
 		Dropped []string `json:"dropped"`
+		Titles  []string `json:"titles"`
 	} `json:"cases"`
 }
 
@@ -87,11 +87,20 @@ func TestFragmentFollowsTheSharedCases(t *testing.T) {
 			if !reflect.DeepEqual(append([]string{}, got.iframes...), append([]string{}, c.Iframes...)) {
 				t.Errorf("iframes %q, want %q (out %s)", got.iframes, c.Iframes, out)
 			}
-			if got.text != c.Text {
-				t.Errorf("text %q, want %q (out %s)", got.text, c.Text, out)
+			if got.text != "" {
+				t.Errorf("shows the text %q (out %s)", got.text, out)
 			}
 			if !reflect.DeepEqual(append([]string{}, dropped...), append([]string{}, c.Dropped...)) {
 				t.Errorf("dropped %q, want %q", dropped, c.Dropped)
+			}
+			if c.Titles != nil {
+				var titles []string
+				for _, attrs := range got.attrs {
+					titles = append(titles, attrs["title"])
+				}
+				if !reflect.DeepEqual(titles, c.Titles) {
+					t.Errorf("titles %q, want %q (out %s)", titles, c.Titles, out)
+				}
 			}
 			for _, element := range got.elements {
 				if element != "iframe" {
@@ -138,12 +147,12 @@ func TestVideoRuleOnceTheMediaLibraryIsOn(t *testing.T) {
 	rules := kbhtml.Load()
 	rules.Video.Enabled = true
 	id := "/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b"
-	out, dropped := rules.Fragment(`<video src="` + id + `" poster="` + id + `/poster" width="640" preload="auto" autoplay muted playsinline onplay="x()"><source src="https://evil.example/a.mp4"><track src="x"></video>`)
-	want := `<video src="` + id + `" poster="` + id + `/poster" width="640" preload="metadata" muted="" playsinline="" controls=""></video>`
+	out, dropped := rules.Fragment(`<video src="` + id + `" poster="` + id + `/poster" title="Tour" aria-label="Product tour" width="640" preload="auto" autoplay muted playsinline onplay="x()"><source src="https://evil.example/a.mp4"><track src="x"></video>`)
+	want := `<video src="` + id + `" title="Tour" aria-label="Product tour" width="640" preload="metadata" muted="" playsinline="" controls=""></video>`
 	if out != want {
 		t.Errorf("out\n%s\nwant\n%s", out, want)
 	}
-	if !reflect.DeepEqual(dropped, []string{"video preload=auto", "video autoplay", "video onplay", "source", "track"}) {
+	if !reflect.DeepEqual(dropped, []string{"video preload=auto", "video poster", "video autoplay", "video onplay", "source", "track"}) {
 		t.Errorf("dropped %q", dropped)
 	}
 	for _, bad := range []string{
@@ -155,9 +164,6 @@ func TestVideoRuleOnceTheMediaLibraryIsOn(t *testing.T) {
 		if out, _ := rules.Fragment(bad); strings.Contains(out, "<video") {
 			t.Errorf("%s rendered %s", bad, out)
 		}
-	}
-	if out, dropped := rules.Fragment(`<video src="` + id + `" poster="https://evil.example/p.png"></video>`); strings.Contains(out, "evil") || !reflect.DeepEqual(dropped, []string{"video poster"}) {
-		t.Errorf("outside poster: %s %q", out, dropped)
 	}
 	if out, _ := kbhtml.Fragment(`<video src="` + id + `"></video>`); out != "" {
 		t.Errorf("with the library off a video rendered %s", out)

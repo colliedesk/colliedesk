@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestArticleMarkdownNeverRendersScriptOrRawHTML(t *testing.T) {
+func TestArticleMarkdownNeverRendersScriptOrUnsafeHTML(t *testing.T) {
 	cases := map[string]string{
 		"raw script":             "Hello <script>alert(1)</script>",
 		"raw block":              "<div onclick=\"alert(1)\">x</div>",
@@ -53,7 +53,7 @@ func TestArticleMarkdownNeverRendersScriptOrRawHTML(t *testing.T) {
 	}
 }
 
-func TestArticleMarkdownShowsAllowedPlayersAndTheTextOfOtherHTML(t *testing.T) {
+func TestArticleMarkdownShowsAllowedPlayersAndNoOtherHTML(t *testing.T) {
 	html, err := renderArticle("Intro\n\n<iframe src=\"https://www.youtube.com/embed/jNQXAC9IVRw?start=65\" title=\"Tour\" allowfullscreen></iframe>\n\nWatch <iframe src=\"https://player.vimeo.com/video/76979871\"></iframe> inline, <b>bold</b> stays text.\n\n<div class=\"note\">\nNote <span>here</span>\n</div>\n\n<video src=\"/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b\" controls></video>", "/help/acme")
 	if err != nil {
 		t.Fatal(err)
@@ -63,14 +63,14 @@ func TestArticleMarkdownShowsAllowedPlayersAndTheTextOfOtherHTML(t *testing.T) {
 	for _, want := range []string{
 		`<iframe src="https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=65" title="Tour" allowfullscreen=""` + forced,
 		`<p>Watch <iframe src="https://player.vimeo.com/video/76979871" title="Vimeo video"` + forced + ` inline, bold stays text.</p>`,
-		"Note here",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("rendered %s\nwant it to hold %s", got, want)
 		}
 	}
 	// A library video waits for the media library: until then the page shows no broken player.
-	for _, bad := range []string{"<b>", "<div", "<span", "<video", "/api/v1/", "youtube.com/"} {
+	// Other HTML goes with its text, as it always did; words between inline tags are Markdown and stay.
+	for _, bad := range []string{"<b>", "<div", "<span", "Note", "here", "<video", "/api/v1/", "youtube.com/"} {
 		if strings.Contains(got, bad) {
 			t.Errorf("rendered %s, which holds %s", got, bad)
 		}
