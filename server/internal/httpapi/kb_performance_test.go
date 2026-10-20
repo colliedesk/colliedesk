@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -124,6 +125,53 @@ func TestKnowledgeBaseSearchLatencyBudget(t *testing.T) {
 		t.Logf("knowledge base %s p95=%s", name, p95)
 		if p95 > inboxLatencyBudget {
 			t.Errorf("knowledge base %s p95 %s exceeds %s", name, p95, inboxLatencyBudget)
+		}
+	}
+}
+
+// TestKnowledgeBaseSearchVectorCostsLinearTime writes and rewrites articles of 100,000 characters
+// built from the runs that make the 'simple' parser quadratic (docs/internals/knowledge-base.md):
+// unnormalized, each took seconds to tens of seconds of one database core. Every write path (API,
+// MCP, import, approved request) computes the same generated column, so writing the row is the test.
+func TestKnowledgeBaseSearchVectorCostsLinearTime(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	_ = createSession(t, api, service, "KB Parser", "admin@kb-parser.example.com")
+	ctx := context.Background()
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Release()
+	// An unfixed parser fails here in seconds instead of hanging the run.
+	if _, err := conn.Exec(ctx, `SET statement_timeout = '3s'`); err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Exec(ctx, `RESET statement_timeout`) //nolint:errcheck
+	collection := ""
+	if err := conn.QueryRow(ctx, `INSERT INTO kb_collections(workspace_id,name,slug)
+		SELECT id,'Parser','parser' FROM workspaces WHERE name='KB Parser' RETURNING id`).Scan(&collection); err != nil {
+		t.Fatal(err)
+	}
+	runs := []string{"_a", "a_", "_1", "~/", "/.", "a1@", "ab1@", "a-1-", "-aa-1", "a-a.", "e:a"}
+	for index, run := range runs {
+		other := runs[(index+1)%len(runs)]
+		body, next := strings.Repeat(run, 100000/len(run)), strings.Repeat(other, 100000/len(other))
+		started := time.Now()
+		id := ""
+		if err := conn.QueryRow(ctx, `INSERT INTO kb_articles(workspace_id,collection_id,number,title,slug,body_md)
+			SELECT workspace_id,id,$2::bigint,'Run '||$2::text,'run-'||$2::text,$3 FROM kb_collections WHERE id=$1 RETURNING id`,
+			collection, index+1, body).Scan(&id); err != nil {
+			t.Fatalf("create with %q: %v", run, err)
+		}
+		created := time.Since(started)
+		started = time.Now()
+		if _, err := conn.Exec(ctx, `UPDATE kb_articles SET body_md=$2 WHERE id=$1`, id, next); err != nil {
+			t.Fatalf("edit to %q: %v", other, err)
+		}
+		edited := time.Since(started)
+		t.Logf("%q create=%s edit=%s", run, created, edited)
+		if created > 200*time.Millisecond || edited > 200*time.Millisecond {
+			t.Errorf("%q create %s, edit %s: want at most 200ms each", run, created, edited)
 		}
 	}
 }
