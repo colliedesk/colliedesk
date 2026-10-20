@@ -90,10 +90,10 @@ type page struct {
 	Lang, Title, SiteTitle, Home, SearchURL, Style string
 	// Canonical (and Description, which a collection also shows) describe the page to search engines
 	// and link previews.
-	Canonical string
-	NoIndex, HeroSearch    bool
-	Query                  string
-	Crumbs                 []link
+	Canonical           string
+	NoIndex, HeroSearch bool
+	Query               string
+	Crumbs              []link
 
 	Collections []collectionCard
 
