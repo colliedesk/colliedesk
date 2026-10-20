@@ -44,6 +44,11 @@ func (r *run) guardStorage(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	images, err := r.sizeKnowledgeBase(ctx)
+	if err != nil {
+		return err
+	}
+	needed += images
 	// The sizing can take hours on a large account: judge against the room as it is now.
 	room, ok, err := r.cappedRoom(ctx)
 	if err != nil || !ok {
@@ -67,6 +72,11 @@ func (r *run) checkDryRunStorage(ctx context.Context, report *Report) error {
 	if err != nil {
 		return err
 	}
+	images, err := r.sizeKnowledgeBase(ctx)
+	if err != nil {
+		return err
+	}
+	needed += images
 	free := max(room.Limit-room.Used, 0)
 	report.StorageCap = &StorageCapCheck{Plan: room.Plan, LimitBytes: room.Limit, UsedBytes: room.Used, NeededBytes: needed, FreeBytes: free, WouldRefuse: needed > free, SkippedTickets: skipped}
 	return nil

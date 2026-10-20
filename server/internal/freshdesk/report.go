@@ -58,9 +58,10 @@ type Verification struct {
 }
 
 type Verifications struct {
-	Tickets      Verification `json:"tickets"`
-	Contacts     Verification `json:"contacts"`
-	SavedReplies Verification `json:"saved_replies"`
+	Tickets       Verification `json:"tickets"`
+	Contacts      Verification `json:"contacts"`
+	SavedReplies  Verification `json:"saved_replies"`
+	KnowledgeBase Verification `json:"knowledge_base"`
 }
 
 // SavedReplyCount counts canned responses. A response with no text is not counted in Source: it is
@@ -80,6 +81,54 @@ type SavedReplyCount struct {
 	// UnmappedPlaceholders maps a Freshdesk placeholder with no Colliedesk equivalent to the canned
 	// responses holding it; it stays in the text as written.
 	UnmappedPlaceholders map[string][]string `json:"unmapped_placeholders"`
+}
+
+// KnowledgeBaseCount counts the Freshdesk knowledge base (solutions). It is always imported in full:
+// --since applies to tickets only.
+type KnowledgeBaseCount struct {
+	// NotAvailable is true when the account has no knowledge base (the category list answered 404).
+	NotAvailable bool `json:"not_available"`
+	// Collections are the categories and folders.
+	Collections  EntityCount  `json:"collections"`
+	Articles     EntityCount  `json:"articles"`
+	Translations EntityCount  `json:"translations"`
+	Images       KBImageCount `json:"images"`
+	// Published lists the articles imported as published; Drafts the others, by reason.
+	Published []string            `json:"published"`
+	Drafts    map[string][]string `json:"drafts"`
+	// Languages are the translation languages read from Freshdesk (the primary language excluded).
+	Languages []string `json:"languages"`
+	// Portals are the portal ids the categories name; empty when the account has one portal.
+	Portals []int64 `json:"portals"`
+	// Products is the number of Freshdesk products, nil when they could not be read.
+	Products *int     `json:"products"`
+	Notes    []string `json:"notes"`
+	// ChangedInBoth are articles changed in Freshdesk and in Colliedesk since the import; Colliedesk's version was kept.
+	ChangedInBoth []string `json:"changed_in_both"`
+	// DeletedInColliedesk are imported articles deleted for good in Colliedesk; an import does not bring them back.
+	DeletedInColliedesk []string `json:"deleted_in_colliedesk"`
+	// Refused lists the limits the import would pass; a dry run reports them, a real run stops before writing.
+	Refused []string `json:"refused"`
+}
+
+// KBImageCount counts the Freshdesk-hosted images of articles and translations. Gone images (404, 410)
+// are listed and are not failures; the article keeps their link.
+type KBImageCount struct {
+	EntityCount
+	Gone       int           `json:"gone"`
+	GoneImages []KBGoneImage `json:"gone_images"`
+}
+
+// KBGoneImage is an image Freshdesk answered 404 or 410 for.
+type KBGoneImage struct {
+	ArticleID string `json:"article_id"`
+	Detail    string `json:"detail"`
+}
+
+func (c KBImageCount) recoverable() EntityCount {
+	count := c.EntityCount
+	count.Source -= c.Gone
+	return count
 }
 
 type AttachmentCount struct {
@@ -162,12 +211,14 @@ type Report struct {
 	InlineImages InlineImageCount `json:"inline_images"`
 	TimeEntries  EntityCount      `json:"time_entries"`
 	SavedReplies SavedReplyCount  `json:"saved_replies"`
-	Verification Verifications    `json:"verification"`
-	RateLimit    RateLimitStats   `json:"rate_limit"`
-	Missing      []string         `json:"missing"`
-	Failures     []Failure        `json:"failures"`
-	Warnings     []Warning        `json:"warnings"`
-	NotImported  []string         `json:"not_imported"`
+	// KnowledgeBase is the Freshdesk knowledge base (solutions).
+	KnowledgeBase KnowledgeBaseCount `json:"knowledge_base"`
+	Verification  Verifications      `json:"verification"`
+	RateLimit     RateLimitStats     `json:"rate_limit"`
+	Missing       []string           `json:"missing"`
+	Failures      []Failure          `json:"failures"`
+	Warnings      []Warning          `json:"warnings"`
+	NotImported   []string           `json:"not_imported"`
 	// TrialExtendedTo is the new trial end when this run extended the workspace's trial.
 	TrialExtendedTo *time.Time `json:"trial_extended_to,omitempty"`
 	// TrialExtensionError is set when the import finished but the trial could not be extended;
@@ -200,7 +251,8 @@ var notImported = []string{
 	"Message structured_body, support_email, notified_to and edit history (last_edited_*)",
 	"Satisfaction ratings, SLA policies, automations",
 	"Files attached to canned responses (saved replies hold text only; the report lists the canned responses that had files)",
-	"Solution (knowledge base) articles",
+	"Knowledge base: article translations are stored and exported but not shown in Colliedesk yet; translated category and folder names are not imported; tags, SEO data, views and votes are kept only in the article's source_meta",
+	"Knowledge base markup Markdown cannot hold (embedded video, iframes, forms, scripts): left out of the article and listed; the original HTML is kept with the article and in the export",
 	"Images in message HTML that are not hosted by Freshdesk (other sites, tracking pixels) stay links; the original HTML is kept",
 	"Tickets in Freshdesk Trash or Spam (listed by id in this report)",
 	"Time entries of archived tickets (the Freshdesk API documents no endpoint for them)",

@@ -53,7 +53,13 @@ func undoCommand(ctx context.Context, pool *pgxpool.Pool, args []string, output 
 			verb, result.Source, result.Conversations, result.Contacts, result.Tags, result.Files, kept)
 		return err
 	}
-	_, err = fmt.Fprintf(output, "%s from %s: %d conversations, %d contacts, %d tags, %d saved replies, %d stored files.\nKept because they have messages written after the import (Freshdesk ticket ids): %s\nSaved replies kept because an agent edited them (Freshdesk canned response ids): %s\n",
-		verb, result.Source, result.Conversations, result.Contacts, result.Tags, result.SavedReplies, result.Files, kept, keptReplies)
+	keptArticles := "none"
+	if len(result.KeptKBArticles) > 0 {
+		keptArticles = strings.Join(result.KeptKBArticles, ", ")
+	}
+	_, err = fmt.Fprintf(output, "%s from %s: %d conversations, %d contacts, %d tags, %d saved replies, %d stored files.\nKept because they have messages written after the import (Freshdesk ticket ids): %s\nSaved replies kept because an agent edited them (Freshdesk canned response ids): %s\n"+
+		"Knowledge base: %d articles, %d collections, %d images. Articles kept because they were changed in Colliedesk (Freshdesk ids): %s\n",
+		verb, result.Source, result.Conversations, result.Contacts, result.Tags, result.SavedReplies, result.Files, kept, keptReplies,
+		result.KBArticles, result.KBCollections, result.KBImages, keptArticles)
 	return err
 }

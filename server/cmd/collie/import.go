@@ -29,7 +29,7 @@ var progressOutput io.Writer = os.Stderr
 
 var freshdeskDomain = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.freshdesk\.com$`)
 
-const importUsage = "usage: collie import freshdesk --workspace <slug> --domain <account>.freshdesk.com [--api-key-env FRESHDESK_API_KEY] [--since YYYY-MM-DD] [--last-ticket-id N] [--include-personal-canned-responses] [--dry-run] [--report-dir DIR]"
+const importUsage = "usage: collie import freshdesk --workspace <slug> --domain <account>.freshdesk.com [--api-key-env FRESHDESK_API_KEY] [--since YYYY-MM-DD] [--last-ticket-id N] [--include-personal-canned-responses] [--help-center-portal ID] [--dry-run] [--report-dir DIR]"
 
 func importCommand(ctx context.Context, pool *pgxpool.Pool, args []string, output io.Writer) error {
 	if len(args) > 0 && args[0] == "undo" {
@@ -69,6 +69,11 @@ func importCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 		report.Messages.Imported, report.Messages.Source, report.Attachments.Imported, report.Attachments.Source,
 		report.TimeEntries.Imported, report.TimeEntries.Source, markdownPath, jsonPath); err != nil {
 		return err
+	}
+	if kb := report.KnowledgeBase; !kb.NotAvailable && kb.Articles.Source > 0 {
+		if _, err := fmt.Fprintf(output, "Knowledge base: articles %d/%d, %d published (imported/in Freshdesk)\n", kb.Articles.Imported, kb.Articles.Source, len(kb.Published)); err != nil {
+			return err
+		}
 	}
 	if err := printUnresolved(output, report.Tickets.UnresolvedIDs); err != nil {
 		return err
@@ -112,11 +117,12 @@ func parseImportFlags(args []string) (freshdesk.Options, string, error) {
 	dryRun := flags.Bool("dry-run", false, "count what would be imported without writing anything")
 	reportDir := flags.String("report-dir", ".", "directory for the reconcile report")
 	lastTicket := flags.Int64("last-ticket-id", 0, "highest ticket number shown in Freshdesk; the id check covers at least this far")
+	portal := flags.Int64("help-center-portal", 0, "on a Freshdesk account with several portals, the portal whose published knowledge base articles stay published")
 	includePersonal := flags.Bool("include-personal-canned-responses", false, "also import canned responses from personal folders; they become shared with the whole workspace")
 	if err := flags.Parse(args); err != nil {
 		return freshdesk.Options{}, "", fmt.Errorf("%w\n%s", err, importUsage)
 	}
-	if flags.NArg() != 0 || *workspace == "" || *lastTicket < 0 {
+	if flags.NArg() != 0 || *workspace == "" || *lastTicket < 0 || *portal < 0 {
 		return freshdesk.Options{}, "", errors.New(importUsage)
 	}
 	host := strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(*domain), "https://"), "/"))
@@ -127,7 +133,7 @@ func parseImportFlags(args []string) (freshdesk.Options, string, error) {
 	if apiKey == "" {
 		return freshdesk.Options{}, "", fmt.Errorf("environment variable %s is empty; export your Freshdesk API key there", *keyEnv)
 	}
-	options := freshdesk.Options{WorkspaceSlug: *workspace, BaseURL: freshdeskBaseURL(host), APIKey: apiKey, DryRun: *dryRun, LastTicketID: *lastTicket, Cloud: billingEnabled(), PlansOnSale: plansOnSale(), IncludePersonalCannedResponses: *includePersonal}
+	options := freshdesk.Options{WorkspaceSlug: *workspace, BaseURL: freshdeskBaseURL(host), APIKey: apiKey, DryRun: *dryRun, LastTicketID: *lastTicket, Cloud: billingEnabled(), PlansOnSale: plansOnSale(), IncludePersonalCannedResponses: *includePersonal, HelpCenterPortal: *portal}
 	if *since != "" {
 		parsed, err := parseSince(*since)
 		if err != nil {

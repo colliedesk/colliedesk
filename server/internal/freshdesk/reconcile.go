@@ -25,7 +25,7 @@ func (r *run) reconcile(ctx context.Context, report *Report) (*Report, error) {
 	report.Tickets.HighestID, report.Tickets.HighestProbedID, report.Tickets.ProbedIDs = r.highestExisting, r.highestProbed, r.probed
 	report.Verification = r.verification
 	report.RateLimit = r.client.rateLimitStats()
-	steps := []func(context.Context, *Report, []string, []string) error{r.countTickets, r.countChildren, r.collectFailures, r.collectGoneImages, r.countSavedReplies}
+	steps := []func(context.Context, *Report, []string, []string) error{r.countTickets, r.countChildren, r.collectFailures, r.collectGoneImages, r.countSavedReplies, r.countKnowledgeBase}
 	if !r.opts.DryRun {
 		// Verify first: a damaged file turns its ledger rows back to failed.
 		steps = append([]func(context.Context, *Report, []string, []string) error{r.verifyAttachments}, steps...)
@@ -42,7 +42,8 @@ func (r *run) reconcile(ctx context.Context, report *Report) (*Report, error) {
 		report.Status = StatusDryRun
 	case len(report.Missing) > 0 || len(report.Failures) > 0:
 		report.Status = StatusFailed
-	case !report.Verification.Tickets.Verified || !report.Verification.Contacts.Verified || !report.Verification.SavedReplies.Verified:
+	case !report.Verification.Tickets.Verified || !report.Verification.Contacts.Verified || !report.Verification.SavedReplies.Verified ||
+		!report.Verification.KnowledgeBase.Verified:
 		report.Status = StatusUnverified
 	default:
 		report.Status = StatusOK
@@ -192,7 +193,9 @@ func missing(report *Report) []string {
 		name  string
 		count EntityCount
 	}{{"contacts", report.Contacts}, {"tickets", report.Tickets.EntityCount}, {"messages", report.Messages},
-		{"attachments", report.Attachments.EntityCount}, {"inline images", report.InlineImages.Recoverable()}, {"time entries", report.TimeEntries}, {"saved replies", report.SavedReplies.EntityCount}} {
+		{"attachments", report.Attachments.EntityCount}, {"inline images", report.InlineImages.Recoverable()}, {"time entries", report.TimeEntries}, {"saved replies", report.SavedReplies.EntityCount},
+		{"knowledge base collections", report.KnowledgeBase.Collections}, {"knowledge base articles", report.KnowledgeBase.Articles},
+		{"knowledge base translations", report.KnowledgeBase.Translations}, {"knowledge base images", report.KnowledgeBase.Images.recoverable()}} {
 		if !report.DryRun && row.count.Imported < row.count.Source {
 			out = append(out, fmt.Sprintf("%s: %d of %d not imported", row.name, row.count.Source-row.count.Imported, row.count.Source))
 		}

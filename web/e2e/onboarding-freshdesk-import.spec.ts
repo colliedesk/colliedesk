@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { colliedesk, colliedeskAsync, servers, uniqueSuffix } from './support/cli';
 import { redeemLink } from './support/browser';
-import { FakeFreshdesk, fileBody, fixture } from './support/fake-freshdesk';
+import { FakeFreshdesk, fileBody, fixture, kbImage } from './support/fake-freshdesk';
 import { createWorkspaceWithSlug } from './support/workspace';
 
 // Journey 4: docs/user/import-freshdesk.md against a local Freshdesk API v2 (the only fake).
@@ -176,6 +176,47 @@ test('freshdesk import: an archive refused with 403 is reported UNVERIFIED, neve
     expect(run.report?.status).toBe('UNVERIFIED');
     expect(run.report?.verification.tickets.verified).toBe(false);
     expect(run.report?.verification.tickets.detail).toContain('archived-ticket endpoint was refused');
+  } finally {
+    await fake.stop();
+  }
+});
+
+test('freshdesk import: the knowledge base keeps its timestamps, drafts stay drafts, images are stored, and undo removes it', async ({ page }) => {
+  test.setTimeout(180_000);
+  const suffix = uniqueSuffix();
+  const adminEmail = `alice-${suffix}@acme.example`;
+  const workspace = createWorkspaceWithSlug(`Knowledge ${suffix}`, adminEmail);
+  const fake = new FakeFreshdesk({ apiKey, agentEmail: adminEmail, knowledgeBase: true });
+  await fake.start();
+  try {
+    await redeemLink(page, workspace.url);
+    const run = await importFreshdesk(fake, workspace.slug);
+    expect(run.status, run.stderr).toBe(0);
+    expect(run.stdout).toContain('Knowledge base: articles 2/2, 1 published');
+    expect(run.report).toMatchObject({
+      status: 'OK',
+      knowledge_base: { collections: { source: 2, imported: 2 }, articles: { source: 2, imported: 2 }, translations: { source: 1, imported: 1 },
+        images: { source: 1, imported: 1 }, published: ['7201'], drafts: { draft_in_freshdesk: ['7202'] }, languages: ['es'] },
+      verification: { knowledge_base: { verified: true } },
+    });
+
+    type Summary = { id: string; title: string; status: string; created_at: string; updated_at: string };
+    const list = await (await page.request.get(`${baseURL}/api/v1/kb/articles`)).json() as { items: Summary[] };
+    const byTitle = Object.fromEntries(list.items.map((item) => [item.title, item]));
+    expect(byTitle['Getting started with Acme']).toMatchObject({ status: 'published', created_at: fixture.kbArticleCreatedAt, updated_at: fixture.kbArticleUpdatedAt });
+    expect(byTitle['Coming soon'].status).toBe('draft');
+    const article = await (await page.request.get(`${baseURL}/api/v1/kb/articles/${byTitle['Getting started with Acme'].id}`)).json() as
+      { body_md: string; has_source_html: boolean; translations: Array<{ locale: string; title: string }> };
+    expect(article.has_source_html).toBe(true);
+    expect(article.translations).toMatchObject([{ locale: 'es', title: 'Primeros pasos con Acme' }]);
+    const image = article.body_md.match(/!\[Settings page\]\((\/api\/v1\/kb\/images\/[0-9a-f-]{36})\)/)?.[1];
+    expect(image, article.body_md).toBeTruthy();
+    expect(Buffer.from(await (await page.request.get(`${baseURL}${image}`)).body())).toEqual(kbImage);
+
+    const undo = colliedesk(['import', 'undo', '--workspace', workspace.slug]);
+    expect(undo.status, undo.stderr).toBe(0);
+    expect(undo.stdout).toContain('Knowledge base: 2 articles, 2 collections, 1 images.');
+    expect((await (await page.request.get(`${baseURL}/api/v1/kb/articles`)).json() as { items: unknown[] }).items).toEqual([]);
   } finally {
     await fake.stop();
   }

@@ -69,6 +69,10 @@ type run struct {
 	cannedAttachments  int
 	cannedUnreadable   []string
 	cannedPlaceholders map[string][]string
+
+	kb        *knowledgeBase
+	kbState   *kbState
+	kbRefused []string
 }
 
 // Run imports (or, with DryRun, only counts) a Freshdesk account. Item-level
@@ -90,6 +94,23 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 			return nil, err
 		}
 		defer release()
+	}
+	// The knowledge base is listed in full before anything is written, so its limits and its images'
+	// bytes are checked for the whole import first. --since applies to tickets only.
+	r.progress.phase("listing knowledge base")
+	if err := r.listSolutions(ctx); err != nil {
+		return nil, err
+	}
+	if err := r.kb.checkPortal(options.HelpCenterPortal); err != nil {
+		return nil, err
+	}
+	if r.kbRefused, err = r.kbLimitProblems(ctx); err != nil {
+		return nil, err
+	}
+	if !options.DryRun {
+		if len(r.kbRefused) > 0 {
+			return nil, &KnowledgeBaseLimitError{Problems: r.kbRefused}
+		}
 		if err := r.guardStorage(ctx); err != nil {
 			return nil, err
 		}
@@ -101,7 +122,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 	steps := []step{{"loading agents", r.loadAgents}, {"loading companies", r.loadCompanies}, {"importing contacts", r.importContacts}, {"importing saved replies", r.importSavedReplies},
 		{"listing tickets", r.listTickets}, {"checking ticket ids", r.classifyTickets}, {"verifying totals", r.verifyTotals}}
 	if !options.DryRun {
-		steps = append(steps, step{"importing tickets", r.importTickets})
+		steps = append(steps, step{"importing knowledge base", r.importKnowledgeBase}, step{"importing tickets", r.importTickets})
 	}
 	for _, step := range steps {
 		r.progress.phase(step.name)
