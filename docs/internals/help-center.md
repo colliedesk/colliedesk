@@ -106,6 +106,19 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   open. Without `HELP_CENTER_DOMAIN` it is always 404. It is not rate limited: its only client is
   the proxy, which asks once per name it has no certificate for.
 
+- **An article renders once per text, behind a guard (`render.go`).** goldmark cannot be stopped and
+  has quadratic paths (Traps), so a public page must not parse Markdown on every visit nor let one
+  workspace's texts take the CPU. The page and its meta description are kept in memory, least
+  recently used out first within 64 MiB, under a key of the renderer version, workspace, article
+  number, address and text (so never served to another workspace or for an older text; restart and
+  each replica render again once). At most a quarter of the processors (at least two) render at
+  once, one per workspace (its other first visits wait for it), and visitors of one text share its
+  render. A visitor waits at most 1 s, then gets the text escaped as written with `no-store` and no
+  ETag; the render finishes in the background and its page serves the next visit. Left over: many
+  workspaces with slow texts can hold every slot for as long as one render takes (about 0.7 s now),
+  delaying others' first visits to the 1 s fallback. Chosen over rendering on write, which still
+  needs the same guard for older articles and would add a migration and a render to every write path.
+
 ## Traps
 
 - **goldmark has quadratic paths, and every visit renders.** Measured on 100,000 characters: one line
@@ -114,7 +127,7 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   runs and Linkify on `*a`, `~a` about 0.7 s. `tame` escapes, per line outside fenced code, the 17th
   nested marker and every link start past 16 whose `(` does not close before the next one;
   `headingIDs` gives goldmark's ids (`a`, `a-1`, …) remembering the next free suffix. What is left is
-  bounded by the render guard below. `TestHelpCenterHostileArticlesLatencyBudget` holds them.
+  bounded by the render guard above. `TestHelpCenterHostileArticlesLatencyBudget` holds them.
 
 - **A build without a version still changes its ETag.** Development builds have an empty version;
   the template hash in the ETag keeps an edited page from being revalidated as the old one.

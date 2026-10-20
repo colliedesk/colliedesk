@@ -368,21 +368,22 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 		s.writeError(response, err)
 		return
 	}
-	body, err := renderArticle(article.BodyMD, v.base)
-	if err != nil {
-		s.writeError(response, err)
-		return
-	}
+	rendered := s.renders.article(v.site.WorkspaceID, article.Number, v.base, article.BodyMD)
 	collection := t.byID[article.CollectionID]
 	data := s.page(v, article.Title, v.crumbs(collection))
-	data.Heading, data.Body = article.Title, body
-	data.Description, data.Canonical = excerpt(article.BodyMD, descriptionChars), v.address+articlePath(article.Number, article.Slug)
+	data.Heading, data.Body = article.Title, rendered.body
+	data.Description, data.Canonical = rendered.description, v.address+articlePath(article.Number, article.Slug)
 	updated := article.UpdatedAt
 	data.Updated, data.UpdatedISO = updated.Format("2 Jan 2006"), updated.Format(time.RFC3339)
 	if collection != nil {
 		data.CollectionName, data.Collection = collection.Name, v.collectionURL(collection)
 	}
 	data.Neighbours = v.articleLinks(neighbours, article.Number)
+	if rendered.plain {
+		// The next visit may get the rendered page under the same ETag.
+		response.Header().Del("ETag")
+		response.Header().Set("Cache-Control", "no-store")
+	}
 	s.writePage(response, request, v, http.StatusOK, s.pages.render("article", data))
 }
 

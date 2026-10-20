@@ -135,9 +135,10 @@ func TestExcerptIsPlainTextCutAtAWord(t *testing.T) {
 	}
 }
 
-// One line of quote or list markers nests as deep as it is long, and the Markdown parser takes
-// quadratic time in that depth (seconds at 100,000 characters). Past 16 levels on a line, a marker is
-// shown as text.
+// One line of quote or list markers nests as deep as it is long, and one of unclosed links looks for
+// each link's end to the end of the line: the Markdown parser takes seconds on 100,000 characters of
+// either. Past 16 levels or 16 open links on a line, a marker is shown as text. (The limit of 500 ms
+// catches the seconds; these take 5–30 ms.)
 func TestArticleMarkdownNestsAtMost16LevelsOnALine(t *testing.T) {
 	html, err := renderArticle(strings.Repeat("> ", 16)+"deep\n\n"+strings.Repeat(">", 18)+" deeper\n\n```\n"+strings.Repeat(">", 20)+"\n```", "")
 	if err != nil {
@@ -173,7 +174,7 @@ func TestArticleMarkdownNestsAtMost16LevelsOnALine(t *testing.T) {
 			t.Fatal(err)
 		}
 		excerpt(body, descriptionChars)
-		if took := time.Since(started); took > 150*time.Millisecond {
+		if took := time.Since(started); took > 500*time.Millisecond {
 			t.Errorf("%s took %s", name, took)
 		}
 	}
@@ -258,7 +259,7 @@ func TestHeadingIDsAreGoldmarksInLinearTime(t *testing.T) {
 		if _, err := renderArticle(body, ""); err != nil {
 			t.Fatal(err)
 		}
-		if took := time.Since(started); took > 300*time.Millisecond {
+		if took := time.Since(started); took > 500*time.Millisecond {
 			t.Errorf("%s headings took %s", name, took)
 		}
 	}

@@ -75,6 +75,8 @@ type Site struct {
 	config     Config
 	originHost string
 	pages      pages
+	// renders renders article pages, at most once per text (render.go).
+	renders *renders
 	// notFound and notFoundOnHost are the 404 page of an address that is no open help center.
 	notFound, notFoundOnHost []byte
 }
@@ -84,7 +86,7 @@ type Site struct {
 func New(config Config) *Site {
 	config.Origin = strings.TrimRight(config.Origin, "/")
 	config.Domain = strings.ToLower(strings.TrimSpace(config.Domain))
-	site := &Site{config: config, pages: parsePages()}
+	site := &Site{config: config, pages: parsePages(), renders: defaultRenders()}
 	if parsed, err := url.Parse(config.Origin); err == nil {
 		site.originHost = strings.ToLower(parsed.Hostname())
 	}

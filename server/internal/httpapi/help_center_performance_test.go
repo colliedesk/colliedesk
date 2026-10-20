@@ -43,8 +43,9 @@ func TestHelpCenterPagesLatencyBudget(t *testing.T) {
 }
 
 // TestHelpCenterHostileArticlesLatencyBudget holds an article page to the same budget when its text is
-// built to be slow to parse: one line of 100,000 quote or list markers nests that deep, which the
-// Markdown parser handles in quadratic time (2.7 s for ">" on its own). Its excerpt is parsed too.
+// built to be slow to parse (docs/internals/help-center.md, Traps): deep nesting, open links and
+// same-named headings are tamed; what is left (emphasis runs, about 0.7 s) renders once, and the page
+// is kept for the next visits.
 func TestHelpCenterHostileArticlesLatencyBudget(t *testing.T) {
 	api, service, _, _ := testAPIWithStorage(t)
 	site := helpCenterSite(api)
@@ -59,6 +60,12 @@ func TestHelpCenterHostileArticlesLatencyBudget(t *testing.T) {
 		"bullet lists":   strings.Repeat("+ ", 50000),
 		"mixed":          strings.Repeat("> 1. - ", 14285),
 		"quoted players": strings.Repeat("> <iframe src=\"https://player.vimeo.com/video/1\"></iframe>\n", 1500),
+		"same headings":  strings.Repeat("# a\n", 25000),
+		"setext":         strings.Repeat("a\n---\n", 16666),
+		"open links":     strings.Repeat("[a](", 25000),
+		"open images":    strings.Repeat("![](", 20000),
+		"emphasis":       strings.Repeat("*a", 50000),
+		"strikethrough":  strings.Repeat("~a", 50000),
 	}
 	for name, body := range bodies {
 		article := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": name, "body_md": body, "status": "published"})
@@ -66,6 +73,32 @@ func TestHelpCenterHostileArticlesLatencyBudget(t *testing.T) {
 		t.Logf("help center hostile %s p95=%s", name, p95)
 		if p95 > inboxLatencyBudget {
 			t.Errorf("help center hostile %s p95 %s exceeds %s", name, p95, inboxLatencyBudget)
+		}
+	}
+}
+
+// The rendered pages kept in memory are per workspace: two help centers with the same article text
+// each show their own image addresses.
+func TestHelpCenterRenderedPagesAreNeverSharedAcrossWorkspaces(t *testing.T) {
+	api, service, _, _ := testAPIWithStorage(t)
+	site := helpCenterSite(api)
+	body := "![Screen](/api/v1/kb/images/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b)"
+	slugs := map[string]string{}
+	for _, name := range []string{"Render One", "Render Two"} {
+		admin := createSession(t, api, service, name, "admin@"+strings.ReplaceAll(strings.ToLower(name), " ", "-")+".example.com")
+		slugs[name] = workspaceSlug(t, api, admin)
+		enableHelpCenter(t, api, admin, "", true)
+		collection := kbCollection(t, api, admin, map[string]any{"name": "Guides"})
+		kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Same", "body_md": body, "status": "published"})
+	}
+	for round := range 2 {
+		for name, slug := range slugs {
+			page := visit(site, "/help/"+slug+"/a/1-same", fmt.Sprintf("198.51.100.%d", 200+round)).Body.String()
+			for other, otherSlug := range slugs {
+				if holds := strings.Contains(page, "/help/"+otherSlug+"/images/"); holds != (other == name) {
+					t.Errorf("round %d: %s's page holding %s's image address = %v", round, name, other, holds)
+				}
+			}
 		}
 	}
 }
