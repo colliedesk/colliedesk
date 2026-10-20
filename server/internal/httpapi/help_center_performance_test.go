@@ -1,7 +1,6 @@
 package httpapi_test
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"sort"
@@ -12,26 +11,13 @@ import (
 )
 
 // TestHelpCenterPagesLatencyBudget holds every public help center page to the inbox budget, HTML
-// rendering included, at the article cap: two workspaces of domain.MaxKBArticles articles each (half
-// published, 20 of them 100,000 characters long), all in one collection. It times the home page, the
+// rendering included, at the article cap: the shared fixture of TestKnowledgeBaseSearchLatencyBudget,
+// two workspaces of domain.MaxKBArticles articles each (half published, 20 of them 100,000 characters
+// long), all in one collection, help centers on. It times the home page, the
 // first and last page of that collection, a short and a 100,000-character article, and searches.
 func TestHelpCenterPagesLatencyBudget(t *testing.T) {
-	api, service, pool := testAPIWithPool(t)
+	api, pool, _, slug := sharedKBBudget(t)
 	site := helpCenterSite(api)
-	admin := createSession(t, api, service, "HC Budget A", "admin@hc-budget-a.example.com")
-	_ = createSession(t, api, service, "HC Budget B", "admin@hc-budget-b.example.com")
-	ctx := context.Background()
-	exec := func(sql string, args ...any) error { _, err := pool.Exec(ctx, sql, args...); return err }
-	seedKBBudget(t, ctx, exec, "HC Budget A", domain.MaxKBArticles)
-	seedKBBudget(t, ctx, exec, "HC Budget B", domain.MaxKBArticles)
-	if err := exec(`INSERT INTO help_centers(workspace_id,enabled,title,content_version,last_article_number,updated_at)
-		SELECT id, true, name, 1, $1, now() FROM workspaces WHERE name LIKE 'HC Budget %'`, domain.MaxKBArticles); err != nil {
-		t.Fatal(err)
-	}
-	if err := exec(`ANALYZE kb_articles; ANALYZE kb_collections; ANALYZE help_centers`); err != nil {
-		t.Fatal(err)
-	}
-	slug := workspaceSlug(t, api, admin)
 	word := queryString(t, pool, `SELECT substr(md5('1234'),1,6)`)
 	other := queryString(t, pool, `SELECT substr(md5('777'),1,5)`)
 	base := "/help/" + slug

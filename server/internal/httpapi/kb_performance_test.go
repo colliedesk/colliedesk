@@ -2,9 +2,15 @@ package httpapi_test
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // seedKBBudget gives a workspace a collection and count articles of about 9,000 characters, 20 of
@@ -28,21 +34,81 @@ func seedKBBudget(t *testing.T, ctx context.Context, exec func(sql string, args 
 	}
 }
 
+// kbBudget is the knowledge base at the article cap, seeded once per test binary and shared by the
+// gates that read it: seeding is most of their time in CI, where every second counts against the
+// 120-second budget. TestMain drops its schema.
+var kbBudget struct {
+	once   sync.Once
+	ready  bool
+	pool   *pgxpool.Pool
+	schema string
+	token  string
+	slug   string
+}
+
+// sharedKBBudget returns an API on the shared fixture: workspaces "KB Budget A" and "KB Budget B", each
+// with domain.MaxKBArticles articles (seedKBBudget) and its help center on; the session token and slug
+// are workspace A's.
+func sharedKBBudget(t *testing.T) (http.Handler, *pgxpool.Pool, string, string) {
+	t.Helper()
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is unset; skipping real PostgreSQL API test")
+	}
+	kbBudget.once.Do(func() {
+		ctx := context.Background()
+		config, err := pgxpool.ParseConfig(databaseURL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		kbBudget.schema = fmt.Sprintf("test_kb_budget_%d", time.Now().UnixNano())
+		config.ConnConfig.RuntimeParams["search_path"] = kbBudget.schema
+		pool, err := pgxpool.NewWithConfig(ctx, config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		kbBudget.pool = pool
+		if _, err := pool.Exec(ctx, "CREATE SCHEMA "+kbBudget.schema); err != nil {
+			t.Fatal(err)
+		}
+		api, service, _, _ := testAPIOnPool(t, pool, nil)
+		kbBudget.token = createSession(t, api, service, "KB Budget A", "admin@kb-budget-a.example.com")
+		_ = createSession(t, api, service, "KB Budget B", "admin@kb-budget-b.example.com")
+		kbBudget.slug = workspaceSlug(t, api, kbBudget.token)
+		exec := func(sql string, args ...any) error { _, err := pool.Exec(ctx, sql, args...); return err }
+		seedKBBudget(t, ctx, exec, "KB Budget A", domain.MaxKBArticles)
+		seedKBBudget(t, ctx, exec, "KB Budget B", domain.MaxKBArticles)
+		if err := exec(`INSERT INTO help_centers(workspace_id,enabled,title,content_version,last_article_number,updated_at)
+			SELECT id, true, name, 1, $1, now() FROM workspaces WHERE name LIKE 'KB Budget %'`, domain.MaxKBArticles); err != nil {
+			t.Fatal(err)
+		}
+		if err := exec(`ANALYZE kb_articles; ANALYZE kb_article_versions; ANALYZE kb_collections; ANALYZE help_centers`); err != nil {
+			t.Fatal(err)
+		}
+		kbBudget.ready = true
+	})
+	if !kbBudget.ready {
+		t.Fatal("the shared knowledge base fixture did not seed; see the first test that used it")
+	}
+	api, _, _, _ := testAPIOnPool(t, kbBudget.pool, nil)
+	return api, kbBudget.pool, kbBudget.token, kbBudget.slug
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if kbBudget.pool != nil {
+		_, _ = kbBudget.pool.Exec(context.Background(), "DROP SCHEMA "+kbBudget.schema+" CASCADE")
+		kbBudget.pool.Close()
+	}
+	os.Exit(code)
+}
+
 // TestKnowledgeBaseSearchLatencyBudget holds the article list and search to the inbox budget at the
 // article cap: two workspaces of domain.MaxKBArticles articles each, a search with two words, a
 // short prefix, a search that matches nothing, a title search, and the published articles, each at
 // the largest page.
 func TestKnowledgeBaseSearchLatencyBudget(t *testing.T) {
-	api, service, pool := testAPIWithPool(t)
-	token := createSession(t, api, service, "KB Budget A", "admin@kb-budget-a.example.com")
-	_ = createSession(t, api, service, "KB Budget B", "admin@kb-budget-b.example.com")
-	ctx := context.Background()
-	exec := func(sql string, args ...any) error { _, err := pool.Exec(ctx, sql, args...); return err }
-	seedKBBudget(t, ctx, exec, "KB Budget A", domain.MaxKBArticles)
-	seedKBBudget(t, ctx, exec, "KB Budget B", domain.MaxKBArticles)
-	if err := exec(`ANALYZE kb_articles; ANALYZE kb_article_versions`); err != nil {
-		t.Fatal(err)
-	}
+	api, pool, token, _ := sharedKBBudget(t)
 	word := queryString(t, pool, `SELECT substr(md5('1234'),1,6)`)
 	other := queryString(t, pool, `SELECT substr(md5('777'),1,5)`)
 	paths := map[string]string{

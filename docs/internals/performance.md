@@ -46,8 +46,9 @@ only with this gate, after reading `docs/internals/knowledge-base.md`.
 
 ## Help center pages budget
 
-`TestHelpCenterPagesLatencyBudget` seeds two workspaces like the knowledge base search budget (half of
-the articles published, all in one collection), turns their help centers on, and loads each public
+`TestHelpCenterPagesLatencyBudget` reads the knowledge base search budget's fixture, seeded once per
+test binary for both gates (`sharedKBBudget`; seeding twice cost 33 s of the 120-second CI budget):
+half of the articles published, all in one collection, help centers on. It loads each public
 page 50 times, HTML rendering included: the home page, the first and last page of the collection
 (1,000 published articles, 50 a page), a 9,000- and a 100,000-character article, and searches with two
 words, a short prefix, no match and a title. Each must stay at or below 100 ms p95 (6–16 ms locally).
