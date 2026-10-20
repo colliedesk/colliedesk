@@ -113,8 +113,10 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   number, address and text (so never served to another workspace or for an older text; restart and
   each replica render again once). At most a quarter of the processors (at least two) render at
   once, one per workspace (its other first visits wait for it), and visitors of one text share its
-  render. A visitor waits at most 1 s, then gets the text escaped as written with `no-store` and no
-  ETag; the render finishes in the background and its page serves the next visit. Left over: many
+  render. A visitor waits at most 1 s, then gets the text escaped as written, under a line saying
+  to reload, with `no-store` and no ETag. A render that had started finishes in the background and
+  its page serves the next visit; one still waiting for a slot does not start, and the next visit
+  tries again (no queue of renders builds up). Left over: many
   workspaces with slow texts can hold every slot for as long as one render takes (about 0.7 s now),
   delaying others' first visits to the 1 s fallback. Chosen over rendering on write, which still
   needs the same guard for older articles and would add a migration and a render to every write path.

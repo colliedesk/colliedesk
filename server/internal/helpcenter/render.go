@@ -195,5 +195,6 @@ func plainPage(body string) rendered {
 	if utf8.RuneCountInString(description) > descriptionChars {
 		description = string([]rune(description)[:descriptionChars]) + "…"
 	}
-	return rendered{body: template.HTML(`<pre class="plain-text">` + html.EscapeString(body) + `</pre>`), description: description, plain: true} //nolint:gosec // escaped
+	return rendered{body: template.HTML(`<p class="plain-note" role="status">This article is still being prepared; reload in a moment to see it formatted.</p>` + //nolint:gosec // escaped
+		`<pre class="plain-text">` + html.EscapeString(body) + `</pre>`), description: description, plain: true}
 }

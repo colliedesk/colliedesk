@@ -39,9 +39,7 @@ func (g *gate) render(body, base string) (rendered, error) {
 	return rendered{body: template.HTML("<p>" + base + " " + body + "</p>"), description: body}, nil
 }
 
-func isPlain(page rendered) bool {
-	return strings.HasPrefix(string(page.body), `<pre class="plain-text">`)
-}
+func isPlain(page rendered) bool { return page.plain }
 
 func TestRendersKeepAPagePerWorkspaceAddressAndText(t *testing.T) {
 	g := newGate()
@@ -90,7 +88,7 @@ func TestASlowRenderShowsTheTextThenKeepsThePage(t *testing.T) {
 	r := newRenders(g.render, 2, 50*time.Millisecond, 1<<20)
 	release := g.hold("slow <b>text</b>")
 	page := r.article("workspace-a", 1, "", "slow <b>text</b>")
-	if page.body != `<pre class="plain-text">slow &lt;b&gt;text&lt;/b&gt;</pre>` || page.description != "slow <b>text</b>" {
+	if !strings.HasSuffix(string(page.body), `<pre class="plain-text">slow &lt;b&gt;text&lt;/b&gt;</pre>`) || !strings.Contains(string(page.body), `role="status"`) || page.description != "slow <b>text</b>" {
 		t.Fatalf("page %q %q", page.body, page.description)
 	}
 	close(release)
