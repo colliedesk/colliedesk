@@ -1,0 +1,116 @@
+/* The Markdown editor of an article (codemirror-editor.tsx), loaded with its chunk: CodeMirror and its toolbar on
+   the app's tokens, light and dark. CodeMirror scrolls inside .cm-scroller and the preview inside .cm-preview;
+   their scrollbars follow base.css. The toolbar row on a phone scrolls sideways without a bar and fades at its
+   edges (.scroll-x-fade). */
+
+.kb-editor-card:has(.cm-editor.cm-focused) { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* Toolbar */
+.md-shell { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.md-toolbar {
+  display: flex; align-items: center; gap: 2px; border-bottom: 1px solid var(--line); background: var(--surface-0);
+  padding: var(--space-1) var(--space-2);
+}
+.md-block { --control: 30px; flex: none; width: 8.5rem; font-size: var(--fs-small); }
+.md-sep { flex: none; width: 1px; height: 18px; margin: 0 var(--space-1); background: var(--line); }
+.md-tool { --control: 30px; flex: none; width: 30px; padding: 0; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-2); }
+.md-tool:hover:not(:disabled) { border-color: transparent; color: var(--text-1); }
+.md-tool[aria-pressed="true"] { background: var(--surface-3); color: var(--text-1); }
+.md-tool-text { width: auto; gap: var(--space-1); padding: 0 var(--space-2); }
+.md-tool:focus-visible { outline-offset: -2px; }
+/* Tooltips open below the toolbar; on a phone the row scrolls sideways and would clip them, so they wait for a hover. */
+.md-toolbar [data-tip]::after { display: none; }
+.md-toolbar.scroll-x-fade { overflow-y: visible; }
+
+
+/* Body: CodeMirror with the app's tokens. The editor scrolls inside .cm-scroller, so it has a bounded height; its
+   scrollbars come from the global rules in base.css like every other scrolling area. */
+.md-shell { --select-bg: color-mix(in srgb, var(--accent) 24%, transparent); }
+.cm-area { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.md-shell[data-mode="split"] .cm-area { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.md-shell[data-mode="split"] .cm-preview { border-left: 1px solid var(--line); }
+.cm-host { min-width: 0; }
+/* Text and preview lay out apart: a key typed in a long article does not lay the preview out again. */
+.cm-host, .cm-preview { contain: content; }
+.cm-host[hidden] { display: none; }
+.cm-preview { min-width: 0; height: 70vh; min-height: 26rem; max-height: none; padding: var(--space-5) var(--space-6); }
+.cm-host .cm-editor { height: 70vh; min-height: 26rem; background: var(--surface-1); color: var(--text-1); font-size: var(--fs-small); }
+.cm-host .cm-editor.cm-focused { outline: none; }
+.cm-host .cm-scroller { font-family: var(--font-mono); line-height: 1.7; overscroll-behavior: contain; }
+.cm-host .cm-content { padding: var(--space-4) 0; caret-color: var(--text-1); }
+.cm-host .cm-line { padding: 0 var(--space-5); }
+.cm-host .cm-editor .cm-cursor { border-left: 2px solid var(--text-1); }
+.kb-editor-card .cm-host .cm-editor .cm-selectionLayer .cm-selectionBackground { background: var(--surface-3); }
+.kb-editor-card .cm-host .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground { background: var(--select-bg); }
+.cm-host .cm-content ::selection { background: var(--select-bg); }
+.cm-host .cm-placeholder { color: var(--text-3); }
+.kb-editor-card .cm-host .cm-gutters { border-right: 1px solid var(--line); background: var(--surface-0); color: var(--text-3); }
+.kb-editor-card .cm-host .cm-activeLineGutter { background: var(--surface-2); color: var(--text-1); }
+.cm-host .cm-lineNumbers .cm-gutterElement { padding: 0 var(--space-2) 0 var(--space-3); min-width: 3.5ch; }
+.cm-host .cm-dropCursor { border-left: 2px solid var(--accent); }
+.kb-editor-card .cm-host .cm-searchMatch { background: var(--note-bg); outline: 1px solid var(--note-line); }
+.kb-editor-card .cm-host .cm-searchMatch.cm-searchMatch-selected { background: var(--select-bg); outline: 2px solid var(--focus); }
+.cm-uploading {
+  display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) var(--space-5); border: 1px dashed var(--line-strong);
+  border-radius: var(--radius); background: var(--surface-0); padding: var(--space-2) var(--space-3); color: var(--text-2);
+  font-family: var(--font-sans); font-size: var(--fs-small);
+}
+.cm-uploading::before {
+  content: ''; flex: none; width: 14px; height: 14px; border: 2px solid var(--line-strong); border-top-color: var(--accent); border-radius: 50%;
+  animation: md-spin 0.8s linear infinite;
+}
+@keyframes md-spin { to { rotate: 360deg; } }
+
+/* Find and replace: CodeMirror's panel with the app's controls. */
+.kb-editor-card .cm-host .cm-panels { border-color: var(--line); background: var(--surface-0); color: var(--text-1); }
+.kb-editor-card .cm-host .cm-panels-top { border-bottom: 1px solid var(--line); }
+.kb-editor-card .cm-host .cm-search {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-8) var(--space-2) var(--space-3);
+  font-family: var(--font-sans); font-size: var(--fs-small);
+}
+.kb-editor-card .cm-host .cm-search br { display: none; }
+.kb-editor-card .cm-host .cm-search .cm-textfield {
+  --control: 30px; margin: 0; flex: 1 1 10rem; min-width: 0; border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface-1); color: var(--text-1); padding: 0 var(--space-2); font-size: var(--fs-small);
+}
+.kb-editor-card .cm-host .cm-search .cm-button {
+  --control: 30px; margin: 0; background-image: none; border-radius: var(--radius); font-size: var(--fs-label);
+}
+.kb-editor-card .cm-host .cm-search label { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--text-2); font-size: var(--fs-label); }
+.kb-editor-card .cm-host .cm-search input[type="checkbox"] { margin: 0; }
+.kb-editor-card .cm-host .cm-search [name="close"] {
+  position: absolute; top: var(--space-2); right: var(--space-2); width: 28px; height: 28px; min-height: 0; padding: 0; border: 0;
+  border-radius: var(--radius-sm); background: transparent; box-shadow: none; color: var(--text-3); font-size: 18px; line-height: 1;
+}
+.kb-editor-card .cm-host .cm-search [name="close"]:hover { background: var(--surface-2); color: var(--text-1); }
+
+
+@media (min-width: 761px) {
+  .md-toolbar.scroll-x-fade { flex-wrap: wrap; overflow: visible; mask-image: none; }
+}
+@media (min-width: 761px) and (hover: hover) {
+  .md-toolbar [data-tip]:hover::after { display: block; }
+}
+@media (max-width: 900px) {
+  .md-shell[data-mode="split"] .cm-area { grid-template-columns: minmax(0, 1fr); }
+  .md-shell[data-mode="split"] .cm-host .cm-editor, .md-shell[data-mode="split"] .cm-preview { height: 45dvh; min-height: 16rem; }
+  .md-shell[data-mode="split"] .cm-preview { border-left: 0; border-top: 1px solid var(--line); }
+}
+@media (max-width: 760px) {
+  .cm-host .cm-editor, .cm-preview { height: 60dvh; min-height: 18rem; }
+  .cm-host .cm-line { padding: 0 var(--space-3); }
+  .cm-preview { padding: var(--space-4); }
+}
+@media (pointer: coarse) {
+  .kb-editor-card .cm-host .cm-search .cm-textfield, .kb-editor-card .cm-host .cm-search .cm-button { --control: var(--touch); }
+  .kb-editor-card .cm-host .cm-search [name="close"] { width: var(--touch); height: var(--touch); }
+  .kb-editor-card .cm-host .cm-search label { min-height: var(--touch); padding-right: var(--space-2); }
+  .kb-editor-card .cm-host .cm-search input[type="checkbox"] { width: 20px; height: 20px; }
+  .md-tool, .md-block { --control: var(--touch); }
+  .md-tool { width: var(--touch); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cm-uploading::before { animation: none; }
+}
+@media (forced-colors: active) {
+  .md-tool[aria-pressed="true"] { outline: 2px solid Highlight; }
+}
