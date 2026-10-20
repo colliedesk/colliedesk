@@ -1286,7 +1286,7 @@ export interface paths {
         /** @description Knowledge base articles outside the trash, without their text, in pages. Without `q` the most recently updated come first. With `q` the articles whose title or text hold every word of `q` as a word or the start of a word (or whose title holds `q`) come first by relevance. Words are split the same way in the query and the text, with no language rules, so a word inside another word, and text in scripts written without spaces (Chinese, Japanese, Thai), are found only when they start a word or match the title. */
         get: operations["listKBArticles"];
         put?: never;
-        /** @description Write an article in Markdown. It starts as a draft unless `status` is `published`. It gets the next `number` of the workspace, which never changes and is never reused, so the address `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the title. The text holds at most 100,000 characters and is never cut; a workspace holds at most 10,000 articles, counting the ones in the trash (409 `kb_limit`). A `send` agent token may create one; a lower tier files an agent request (at most 64 KiB of JSON). */
+        /** @description Write an article in Markdown. It starts as a draft unless `status` is `published`. It gets the next `number` of the workspace, which never changes and is never reused, so the address `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the title. The text holds at most 100,000 characters and is never cut; a workspace holds at most 2,000 articles, counting the ones in the trash (409 `kb_limit`). A `send` agent token may create one; a lower tier files an agent request (at most 64 KiB of JSON). */
         post: operations["createKBArticle"];
         delete?: never;
         options?: never;
@@ -1301,7 +1301,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Articles deleted in the last 30 days, most recently deleted first, in pages, without their text. Each can be restored with `POST /api/v1/kb/articles/{id}/restore` until `purges_at`; after that it is deleted for good with its history. Articles in the trash count toward the 10,000 of a workspace. */
+        /** @description Articles deleted in the last 30 days, most recently deleted first, in pages, without their text. Each can be restored with `POST /api/v1/kb/articles/{id}/restore` until `purges_at`; after that it is deleted for good with its history. Articles in the trash count toward the 2,000 of a workspace. */
         get: operations["listTrashedKBArticles"];
         put?: never;
         post?: never;

@@ -52,14 +52,16 @@ CREATE TABLE kb_articles (
     deleted_at timestamptz,
     deleted_by_agent_id uuid,
     -- Words of the title and text with no language rules ('simple'), so no language is the default.
-    search tsvector GENERATED ALWAYS AS (to_tsvector('simple', title || ' ' || body_md)) STORED,
+    -- Positions are stripped: ranking needs only which words occur, and the vector is a third smaller.
+    -- No GIN index: under row-level security Postgres never uses one for @@, which is not leakproof
+    -- (docs/internals/knowledge-base.md), so a search reads the vectors of the workspace.
+    search tsvector GENERATED ALWAYS AS (strip(to_tsvector('simple', title || ' ' || body_md))) STORED,
     UNIQUE (workspace_id, id),
     UNIQUE (workspace_id, number),
     FOREIGN KEY (workspace_id, collection_id) REFERENCES kb_collections(workspace_id, id),
     FOREIGN KEY (workspace_id, author_agent_id) REFERENCES agents(workspace_id, id) ON DELETE SET NULL (author_agent_id),
     FOREIGN KEY (workspace_id, deleted_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE SET NULL (deleted_by_agent_id)
 );
-CREATE INDEX kb_articles_search_idx ON kb_articles USING gin(search);
 CREATE INDEX kb_articles_collection_idx ON kb_articles(workspace_id, collection_id);
 CREATE INDEX kb_articles_updated_idx ON kb_articles(workspace_id, updated_at DESC, id DESC) WHERE deleted_at IS NULL;
 CREATE INDEX kb_articles_trash_idx ON kb_articles(deleted_at) WHERE deleted_at IS NOT NULL;
@@ -121,6 +123,9 @@ CREATE TABLE kb_images (
     counted boolean NOT NULL DEFAULT true,
     created_by_agent_id uuid,
     created_at timestamptz NOT NULL DEFAULT now(),
+    -- The last upload of these bytes. The purge counts 30 days from it, so an image uploaded again for
+    -- an article not saved yet is not deleted under it.
+    last_uploaded_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (workspace_id, id),
     UNIQUE (workspace_id, sha256),
     FOREIGN KEY (workspace_id, created_by_agent_id) REFERENCES agents(workspace_id, id) ON DELETE SET NULL (created_by_agent_id)

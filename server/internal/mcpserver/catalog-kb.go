@@ -280,7 +280,7 @@ func kbImageUploadSpec() Spec {
 		Name:  "colliedesk_kb_image_upload",
 		Title: "Upload an image for knowledge base articles",
 		Description: `Store a PNG, JPEG, GIF or WebP image (at most 5 MiB, given as base64) and get the url to link in an article as ![text](url). The type is judged from the bytes. ` +
-			`The same bytes give the same image. Images count toward the plan's storage. An image no article links is deleted 30 days after it was uploaded. ` +
+			`The same bytes give the same image. Images count toward the plan's storage. An image no article links is deleted 30 days after its last upload. ` +
 			`A read or draft token cannot upload: a file never waits for approval.` + "\n\nTier: send.",
 		Tier: "send", Idempotent: true,
 		REST: []string{"POST /api/v1/kb/images"},

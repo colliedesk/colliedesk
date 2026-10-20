@@ -91,7 +91,9 @@ var likePattern = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 // kbQuery turns text into a tsquery that matches every word as a prefix. The words come from the
 // same parser that made the search column ('simple'), so an address, a hyphenated word or a URL is
 // split the same way on both sides. Text without a word gives NULL, which matches nothing.
-const kbQuery = `(SELECT to_tsquery('simple', string_agg('''' || replace(replace(lexeme, '\', '\\'), '''', '''''') || ''':*', ' & '))
+// The lexemes are cast, not parsed again: to_tsquery would turn sign-on into a phrase, which needs
+// the word positions the search column strips.
+const kbQuery = `(SELECT string_agg('''' || replace(replace(lexeme, '\', '\\'), '''', '''''') || ''':*', ' & ')::tsquery
 	FROM unnest(to_tsvector('simple', $2::text)))`
 
 // ListKBArticles returns one page of the workspace's live articles without their text, and the

@@ -36,11 +36,31 @@ func (s *Store) CheckKBImageAdmission(ctx context.Context, workspaceID string, s
 	return err
 }
 
+// touchKBImage returns the image of the workspace that holds the bytes with sha256 and marks it
+// uploaded now, so the purge of unused images counts its 30 days from this upload.
+func touchKBImage(ctx context.Context, tx pgx.Tx, workspaceID, sha256 string) (StoredKBImage, error) {
+	return scanKBImage(tx.QueryRow(ctx, `UPDATE kb_images SET last_uploaded_at=clock_timestamp() WHERE workspace_id=$1 AND sha256=$2 RETURNING `+kbImageColumns,
+		workspaceID, sha256))
+}
+
+// FindKBImage returns the image that already holds the bytes with sha256, marked uploaded now, and
+// false when there is none. An upload of bytes the workspace has needs no storage room.
+func (s *Store) FindKBImage(ctx context.Context, workspaceID, sha256 string) (domain.KBImage, bool, error) {
+	image, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (StoredKBImage, error) { return touchKBImage(ctx, tx, workspaceID, sha256) })
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.KBImage{}, false, nil
+	}
+	if err != nil {
+		return domain.KBImage{}, false, fmt.Errorf("find knowledge base image: %w", err)
+	}
+	return image.KBImage, true, nil
+}
+
 // CreateKBImage records stored image bytes for the workspace. The same bytes give the image that
 // already holds them. When it fails, the caller owns the stored bytes.
 func (s *Store) CreateKBImage(ctx context.Context, workspaceID string, actor Actor, object attachments.Object, contentType string) (domain.KBImage, error) {
 	image, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (StoredKBImage, error) {
-		existing, err := scanKBImage(tx.QueryRow(ctx, `SELECT `+kbImageColumns+` FROM kb_images WHERE workspace_id=$1 AND sha256=$2`, workspaceID, object.SHA256))
+		existing, err := touchKBImage(ctx, tx, workspaceID, object.SHA256)
 		if err == nil || !errors.Is(err, pgx.ErrNoRows) {
 			return existing, err
 		}
@@ -55,7 +75,7 @@ func (s *Store) CreateKBImage(ctx context.Context, workspaceID string, actor Act
 			workspaceID, object.Key, object.SHA256, object.Size, contentType, optionalID(actor.AgentID)))
 		if errors.Is(err, pgx.ErrNoRows) {
 			// A concurrent upload of the same bytes won; answer its image.
-			return scanKBImage(tx.QueryRow(ctx, `SELECT `+kbImageColumns+` FROM kb_images WHERE workspace_id=$1 AND sha256=$2`, workspaceID, object.SHA256))
+			return touchKBImage(ctx, tx, workspaceID, object.SHA256)
 		}
 		return image, err
 	})
@@ -136,7 +156,7 @@ type KBPurge struct {
 
 // PurgeKBTrash deletes for good, in every workspace, the articles and collections that have been in
 // the trash longer than domain.KBTrashRetention (with the articles' history, translations and image
-// links), then the images no article links that are older than that. Only the image keys leave the
+// links), then the images no article links that were last uploaded before that. Only the image keys leave the
 // privileged transaction; their bytes go through the scoped DiscardObject, which keeps bytes another
 // row still uses. serve runs it at start and daily.
 func (s *Store) PurgeKBTrash(ctx context.Context) (KBPurge, error) {
@@ -160,7 +180,7 @@ func (s *Store) PurgeKBTrash(ctx context.Context) (KBPurge, error) {
 			}
 			purged.Collections += tag.RowsAffected()
 		}
-		rows, err := tx.Query(ctx, `DELETE FROM kb_images i WHERE i.created_at<$1
+		rows, err := tx.Query(ctx, `DELETE FROM kb_images i WHERE i.last_uploaded_at<$1
 			AND NOT EXISTS(SELECT 1 FROM kb_article_images l WHERE l.workspace_id=i.workspace_id AND l.image_id=i.id)
 			RETURNING i.workspace_id::text, i.storage_key`, cutoff)
 		if err != nil {

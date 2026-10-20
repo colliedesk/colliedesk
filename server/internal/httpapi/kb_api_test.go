@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -244,6 +246,9 @@ func TestKnowledgeBaseSearchSplitsWordsLikeTheText(t *testing.T) {
 	if got := kbSearch(t, api, admin, "q=%25"); len(got) != 1 {
 		t.Errorf("a percent sign matches only titles holding one, got %v", got)
 	}
+	for _, odd := range []string{"q=it%27s+o%27reilly", "q=a%5Cb", "q=%27%3A*+%26+%21", "q=%E5%AF%86%E7%A0%81"} {
+		kbSearch(t, api, admin, odd) // quotes, backslashes and tsquery syntax are words, never a query error
+	}
 	if got := kbSearch(t, api, admin, "q=nothing+here"); len(got) != 0 {
 		t.Errorf("unmatched search = %v", got)
 	}
@@ -467,7 +472,7 @@ func TestKnowledgeBaseTrashIsPurgedAfterThirtyDaysWithUnusedImages(t *testing.T)
 	if _, err := pool.Exec(ctx, `UPDATE kb_articles SET deleted_at=now()-interval '31 days' WHERE id=$1`, article.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pool.Exec(ctx, `UPDATE kb_images SET created_at=now()-interval '31 days'`); err != nil {
+	if _, err := pool.Exec(ctx, `UPDATE kb_images SET created_at=now()-interval '31 days', last_uploaded_at=now()-interval '31 days'`); err != nil {
 		t.Fatal(err)
 	}
 	var orphanKey string
@@ -638,5 +643,35 @@ func TestApprovedKnowledgeBaseRequestsRunAndNameTheirToken(t *testing.T) {
 	kbCall(t, api, http.MethodGet, "/api/v1/help-center", nil, admin, http.StatusOK, &center)
 	if !center.Enabled || center.Locale != "de" {
 		t.Fatalf("help center after approval = %+v", center)
+	}
+}
+
+// Uploading bytes the workspace already holds gives the same image, needs no storage room, and starts
+// its 30 days again, so the purge does not delete it under an article about to be saved.
+func TestUploadingAnImageAgainKeepsItAndNeedsNoRoom(t *testing.T) {
+	storage, err := attachments.NewLocalDisk(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := newLimitsFixtureConfigured(t, true, nil, func(config *httpapi.Config) { config.Attachments = storage })
+	api, pool, admin := f.api, f.pool, f.adminA
+	image := uploadKBImage(t, api, admin, tinyPNG, http.StatusCreated)
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `UPDATE kb_images SET created_at=now()-interval '40 days', last_uploaded_at=now()-interval '40 days' WHERE id=$1`, image.ID); err != nil {
+		t.Fatal(err)
+	}
+	// The trial's storage is full.
+	if _, err := pool.Exec(ctx, `UPDATE workspaces SET counted_storage_bytes=2147483648, stored_storage_bytes=2147483648 WHERE id=$1`, f.workspaceA); err != nil {
+		t.Fatal(err)
+	}
+	if again := uploadKBImage(t, api, admin, tinyPNG, http.StatusCreated); again.ID != image.ID {
+		t.Fatalf("the same bytes gave image %s, want %s", again.ID, image.ID)
+	}
+	uploadKBImage(t, api, admin, append(append([]byte{}, tinyPNG...), 'n', 'e', 'w'), http.StatusForbidden)
+	if _, err := store.New(pool).WithObjects(storage).PurgeKBTrash(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if response := request(t, api, http.MethodGet, image.URL, nil, admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("image uploaded again was purged: status=%d", response.Code)
 	}
 }

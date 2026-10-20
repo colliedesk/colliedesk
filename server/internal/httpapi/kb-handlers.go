@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -397,6 +399,15 @@ func (a *API) uploadKBImage(response http.ResponseWriter, request *http.Request)
 	contentType, _, _ := strings.Cut(http.DetectContentType(data), ";")
 	if len(data) == 0 || !kbImageTypes[contentType] {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send the raw bytes of a PNG, JPEG, GIF or WebP image.")
+		return
+	}
+	sum := sha256.Sum256(data)
+	if image, found, err := a.store.FindKBImage(request.Context(), who.Workspace.ID, hex.EncodeToString(sum[:])); err != nil {
+		writeStoreError(response, err)
+		return
+	} else if found {
+		// Bytes the workspace already holds take no room: a full workspace can still use them again.
+		writeJSON(response, http.StatusCreated, image)
 		return
 	}
 	if err := a.store.CheckKBImageAdmission(request.Context(), who.Workspace.ID, int64(len(data))); err != nil {

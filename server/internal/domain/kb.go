@@ -8,12 +8,17 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // Limits of the knowledge base. They count characters, not bytes. An article body is never cut: a
-// longer one is refused, so nothing is lost silently.
+// longer one is refused, so nothing is lost silently. MaxKBArticles is the one place the article cap
+// lives: a search reads every article of the workspace (no index under row-level security), and
+// TestKnowledgeBaseSearchLatencyBudget holds it to 100 ms at this cap. Raise both together, and read
+// docs/internals/knowledge-base.md first.
 const (
-	MaxKBArticles       = 10000
+	MaxKBArticles       = 2000
 	MaxKBCollections    = 1000
 	MaxKBArticleTitle   = 300
 	MaxKBArticleBody    = 100000
@@ -215,17 +220,18 @@ func CheckKBStatus(status string) error {
 	return nil
 }
 
-// Slugify makes a slug from a name: lowercase letters and digits of any script, other runs as one
-// hyphen, at most MaxKBSlug characters. A name with no letter or digit gives fallback.
+// Slugify makes a slug from a name in NFC: lowercase letters, digits and combining marks of any
+// script, other runs as one hyphen, at most MaxKBSlug characters. A name with no letter or digit gives fallback.
 func Slugify(name, fallback string) string {
 	var out strings.Builder
 	hyphen := false
 	count := 0
-	for _, char := range strings.ToLower(name) {
+	for _, char := range strings.ToLower(norm.NFC.String(name)) {
 		if count >= MaxKBSlug {
 			break
 		}
-		if unicode.IsLetter(char) || unicode.IsNumber(char) {
+		// A combining mark (a vowel sign in Hindi or Thai, an accent typed apart) belongs to its word.
+		if unicode.IsLetter(char) || unicode.IsNumber(char) || (unicode.IsMark(char) && out.Len() > 0 && !hyphen) {
 			if hyphen && out.Len() > 0 {
 				out.WriteByte('-')
 				count++
