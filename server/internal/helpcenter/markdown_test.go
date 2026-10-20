@@ -45,7 +45,7 @@ func TestArticleMarkdownNeverRendersScriptOrRawHTML(t *testing.T) {
 
 func TestArticleMarkdownServesKnowledgeBaseImagesFromTheHelpCenter(t *testing.T) {
 	id := "0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b"
-	html, err := renderArticle("![Settings](/api/v1/kb/images/"+strings.ToUpper(id)+")\n\n![Logo](https://cdn.example.com/logo.png)\n\n[download](/api/v1/kb/images/"+id+")", "https://acme.help.example")
+	html, err := renderArticle("![Settings](/api/v1/kb/images/"+id+")\n\n![Logo](https://cdn.example.com/logo.png)\n\n[download](/api/v1/kb/images/"+id+")", "https://acme.help.example")
 	if err != nil {
 		t.Fatal(err)
 	}

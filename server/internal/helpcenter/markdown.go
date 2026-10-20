@@ -35,8 +35,9 @@ var plain = goldmark.New(goldmark.WithExtensions(extension.Strikethrough, extens
 // baseKey carries the help center's base path to publicLinks.
 var baseKey = parser.NewContextKey()
 
-// kbImageID matches the path an article uses for its own images.
-var kbImageID = regexp.MustCompile(`^` + regexp.QuoteMeta(domain.KBImagePath) + `([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$`)
+// kbImageID matches the path an article uses for its own images, as the API writes it (lowercase):
+// the public image route looks for exactly this path in the published text.
+var kbImageID = regexp.MustCompile(`^` + regexp.QuoteMeta(domain.KBImagePath) + `([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$`)
 
 // renderArticle turns an article's Markdown into HTML for a help center at base.
 func renderArticle(body, base string) (template.HTML, error) {
@@ -66,14 +67,14 @@ func (publicLinks) Transform(document *ast.Document, reader text.Reader, context
 		switch node := node.(type) {
 		case *ast.Image:
 			if match := kbImageID.FindSubmatch(node.Destination); match != nil {
-				node.Destination = []byte(base + "/images/" + strings.ToLower(string(match[1])))
+				node.Destination = []byte(base + "/images/" + string(match[1]))
 				node.SetAttributeString("loading", []byte("lazy"))
 				return ast.WalkSkipChildren, nil
 			}
 			replace = append(replace, node)
 		case *ast.Link:
 			if match := kbImageID.FindSubmatch(node.Destination); match != nil {
-				node.Destination = []byte(base + "/images/" + strings.ToLower(string(match[1])))
+				node.Destination = []byte(base + "/images/" + string(match[1]))
 			} else if !safeURL(string(node.Destination)) {
 				replace = append(replace, node)
 			}
