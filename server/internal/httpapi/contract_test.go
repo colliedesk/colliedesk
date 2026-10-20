@@ -2,15 +2,18 @@ package httpapi_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
+	"github.com/getkin/kin-openapi/routers"
 	"github.com/getkin/kin-openapi/routers/legacy"
 )
 
@@ -75,26 +78,49 @@ func init() {
 	}
 }
 
-func loadContract(t *testing.T) *openapi3.T {
-	t.Helper()
+// The contract is parsed and validated once per test binary: every request and response check reads
+// it, and parsing it on each check made the contract tests the slowest of the package.
+var contract = sync.OnceValues(func() (*openapi3.T, error) {
 	path := filepath.Join("..", "..", "..", "contracts", "openapi.yaml")
 	document, err := openapi3.NewLoader().LoadFromFile(path)
 	if err != nil {
-		t.Fatalf("load OpenAPI contract: %v", err)
+		return nil, fmt.Errorf("load OpenAPI contract: %w", err)
 	}
 	if err := document.Validate(context.Background()); err != nil {
-		t.Fatalf("validate OpenAPI contract: %v", err)
+		return nil, fmt.Errorf("validate OpenAPI contract: %w", err)
+	}
+	return document, nil
+})
+
+var router = sync.OnceValues(func() (routers.Router, error) {
+	document, err := contract()
+	if err != nil {
+		return nil, err
+	}
+	return legacy.NewRouter(document)
+})
+
+func contractRouter(t *testing.T) routers.Router {
+	t.Helper()
+	found, err := router()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return found
+}
+
+func loadContract(t *testing.T) *openapi3.T {
+	t.Helper()
+	document, err := contract()
+	if err != nil {
+		t.Fatal(err)
 	}
 	return document
 }
 
 func validateContractResponse(t *testing.T, request *http.Request, response *httptest.ResponseRecorder) {
 	t.Helper()
-	document := loadContract(t)
-	router, err := legacy.NewRouter(document)
-	if err != nil {
-		t.Fatal(err)
-	}
+	router := contractRouter(t)
 	route, params, err := router.FindRoute(request)
 	if err != nil {
 		t.Fatalf("find contract route: %v", err)
@@ -110,11 +136,7 @@ func validateContractResponse(t *testing.T, request *http.Request, response *htt
 
 func validateContractRequest(t *testing.T, request *http.Request) {
 	t.Helper()
-	document := loadContract(t)
-	router, err := legacy.NewRouter(document)
-	if err != nil {
-		t.Fatal(err)
-	}
+	router := contractRouter(t)
 	route, params, err := router.FindRoute(request)
 	if err != nil {
 		t.Fatalf("find contract route: %v", err)

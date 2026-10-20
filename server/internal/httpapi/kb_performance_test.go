@@ -12,14 +12,17 @@ import (
 // about what a help center's articles use.
 func seedKBBudget(t *testing.T, ctx context.Context, exec func(sql string, args ...any) error, workspaceName string, count int) {
 	t.Helper()
+	// 100 distinct texts, each article taking one and a word of its own, keep the seed quick; reading a
+	// vector costs the same whether or not another article has the same words.
 	err := exec(`WITH w AS (SELECT id FROM workspaces WHERE name=$1),
-		c AS (INSERT INTO kb_collections(workspace_id,name,slug) SELECT id,'Budget','budget' FROM w RETURNING id,workspace_id)
+		c AS (INSERT INTO kb_collections(workspace_id,name,slug) SELECT id,'Budget','budget' FROM w RETURNING id,workspace_id),
+		t AS MATERIALIZED (SELECT n, (SELECT string_agg(substr(md5(((n*7919+k*104729) % 20000)::text),1,4+(k%5)),' ') FROM generate_series(1,16000) k) AS words
+			FROM generate_series(0,99) n)
 		INSERT INTO kb_articles(workspace_id,collection_id,number,title,slug,body_md,status,published_at)
 		SELECT c.workspace_id,c.id,g,'Article '||g,'article-'||g,
-			left((SELECT string_agg(substr(md5(((g*7919+k*104729) % 20000)::text),1,4+(k%5)),' ') FROM generate_series(1, CASE WHEN g<=20 THEN 16000 ELSE 1500 END) k),
-				CASE WHEN g<=20 THEN 100000 ELSE 9000 END),
+			left('own'||g||' '||t.words, CASE WHEN g<=20 THEN 100000 ELSE 9000 END),
 			CASE WHEN g%2=0 THEN 'published' ELSE 'draft' END, CASE WHEN g%2=0 THEN now() END
-		FROM c, generate_series(1,$2::int) g`, workspaceName, count)
+		FROM c, generate_series(1,$2::int) g JOIN t ON t.n = g % 100`, workspaceName, count)
 	if err != nil {
 		t.Fatalf("seed knowledge base of %s: %v", workspaceName, err)
 	}
