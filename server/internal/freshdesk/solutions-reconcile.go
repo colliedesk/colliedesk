@@ -167,7 +167,7 @@ func (r *run) sizeKnowledgeBase(ctx context.Context) (int64, error) {
 func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []string) error {
 	kb := r.kb
 	count := KnowledgeBaseCount{Published: []string{}, Drafts: map[string][]string{}, Languages: []string{}, Portals: []int64{}, Notes: []string{},
-		ChangedInBoth: []string{}, DeletedInColliedesk: []string{}, Refused: r.kbRefused}
+		ChangedInBoth: []string{}, Unpublished: []string{}, DeletedInColliedesk: []string{}, Refused: r.kbRefused}
 	if count.Refused == nil {
 		count.Refused = []string{}
 	}
@@ -192,6 +192,7 @@ func (r *run) countKnowledgeBase(ctx context.Context, report *Report, _, _ []str
 	}
 	if state := r.kbState; state != nil {
 		count.ChangedInBoth, count.DeletedInColliedesk = uniqueSorted(state.changedInBoth), uniqueSorted(state.gone)
+		count.Unpublished = uniqueSorted(state.unpublished)
 	}
 	count.Languages = append(count.Languages, kb.languages...)
 	if portals := kb.portals(); portals != nil {

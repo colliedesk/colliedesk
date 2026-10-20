@@ -70,8 +70,14 @@ func articleMarkdown(markup string) (string, []string, error) {
 					note("subscript or superscript (shown as plain text)")
 				case atom.A:
 					child.Attr = safeLink(child.Attr, note)
+				case atom.Details:
+					note("collapsible section (shown open)")
 				}
 				walk(child)
+				if child.DataAtom == atom.Summary || child.DataAtom == atom.A && !hasAttribute(child, "href") {
+					// A summary becomes its own paragraph; an anchor without an address keeps only its text.
+					unwrap(node, child, child.DataAtom == atom.Summary)
+				}
 			}
 			child = next
 		}
@@ -132,4 +138,31 @@ func dropSpace(r rune) rune {
 		return -1
 	}
 	return r
+}
+
+func hasAttribute(node *html.Node, key string) bool {
+	for _, attribute := range node.Attr {
+		if attribute.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+// unwrap replaces child by its children, inside a paragraph when asParagraph is set.
+func unwrap(parent, child *html.Node, asParagraph bool) {
+	target := parent
+	if asParagraph {
+		target = &html.Node{Type: html.ElementNode, Data: "p", DataAtom: atom.P}
+		parent.InsertBefore(target, child)
+	}
+	for grandchild := child.FirstChild; grandchild != nil; grandchild = child.FirstChild {
+		child.RemoveChild(grandchild)
+		if asParagraph {
+			target.AppendChild(grandchild)
+		} else {
+			parent.InsertBefore(grandchild, child)
+		}
+	}
+	parent.RemoveChild(child)
 }

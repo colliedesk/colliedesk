@@ -535,3 +535,44 @@ func TestSolutionsAnArticleDeletedForGoodIsNotBroughtBack(t *testing.T) {
 		t.Fatalf("deleted=%v changed=%v articles=%d", report.KnowledgeBase.DeletedInColliedesk, report.KnowledgeBase.ChangedInBoth, env.count(t, "kb_articles"))
 	}
 }
+
+func TestSolutionsAFolderNoLongerPublicMakesItsArticlesDraftsAgain(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	env.mustRun(t)
+	articles := env.kbArticles(t, env.workspaceID)
+	// An agent edits 104 (still published); 101 and 105 nobody touches.
+	env.editArticle(t, articles["104"].ID, "Edited in Colliedesk.")
+	// Only the folder changes in Freshdesk: Basics is now for agents only. No article's updated_at moves.
+	env.editSolutions(func(fixture map[string]any) {
+		fixture["category_folders"].(map[string]any)["1"].([]any)[0].(map[string]any)["visibility"] = 3.0
+	})
+	report := env.mustRun(t)
+	after := env.kbArticles(t, env.workspaceID)
+	if after["101"].Status != "draft" || after["101"].PublishedAt != nil || after["105"].Status != "draft" || after["106"].Status != "published" {
+		t.Fatalf("statuses: 101=%s 105=%s 106=%s", after["101"].Status, after["105"].Status, after["106"].Status)
+	}
+	if after["104"].Status != "published" || warningIDs(report, "kb_article_published_but_not_public") != "104" {
+		t.Fatalf("104=%s warnings=%+v", after["104"].Status, report.Warnings)
+	}
+	if strings.Join(report.KnowledgeBase.Unpublished, ",") != "101,105" || strings.Join(report.KnowledgeBase.Published, ",") != "106" || report.Status != freshdesk.StatusOK {
+		t.Fatalf("status=%s unpublished=%v published=%v", report.Status, report.KnowledgeBase.Unpublished, report.KnowledgeBase.Published)
+	}
+	// Making it public again in Freshdesk never publishes by itself.
+	env.editSolutions(nil)
+	env.mustRun(t)
+	if again := env.kbArticles(t, env.workspaceID); again["101"].Status != "draft" {
+		t.Fatalf("101 was published again by an import: %s", again["101"].Status)
+	}
+}
+
+func TestSolutionsCollapsibleSectionsAndEmptyAnchorsConvertCleanly(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	env.editSolutions(func(fixture map[string]any) {
+		fixtureArticle(fixture, "11", 101)["description"] = `<p><a name="top"></a>Intro</p><details><summary>More</summary><p>Hidden text</p></details>`
+	})
+	report := env.mustRun(t)
+	body := env.kbArticles(t, env.workspaceID)["101"].Body
+	if body != "Intro\n\nMore\n\nHidden text" || !strings.Contains(warningIDs(report, "kb_article_markup_dropped"), "101") {
+		t.Fatalf("body = %q warnings=%+v", body, report.Warnings)
+	}
+}

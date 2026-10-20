@@ -105,6 +105,8 @@ type KnowledgeBaseCount struct {
 	Notes    []string `json:"notes"`
 	// ChangedInBoth are articles changed in Freshdesk and in Colliedesk since the import; Colliedesk's version was kept.
 	ChangedInBoth []string `json:"changed_in_both"`
+	// Unpublished are imported articles made drafts again because Freshdesk no longer shows them to everyone.
+	Unpublished []string `json:"unpublished"`
 	// DeletedInColliedesk are imported articles deleted for good in Colliedesk; an import does not bring them back.
 	DeletedInColliedesk []string `json:"deleted_in_colliedesk"`
 	// Refused lists the limits the import would pass; a dry run reports them, a real run stops before writing.

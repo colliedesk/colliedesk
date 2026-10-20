@@ -160,6 +160,33 @@ func ReimportKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string, i
 	return KBReimported, addKBArticleVersion(ctx, tx, workspaceID, id, Actor{}, domain.KBArticleImported, nil)
 }
 
+// UnpublishImportedKBArticle turns a published article back into a draft, as a new version of kind
+// import, when the source no longer shows it publicly (a folder or portal changed, not the article)
+// and nobody changed it in Colliedesk since the last import. It returns KBReimported when it did,
+// KBKept when someone changed it, KBGone when it no longer exists, and "" when it was not published.
+func UnpublishImportedKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string) (string, error) {
+	var live bool
+	var status string
+	err := tx.QueryRow(ctx, `SELECT deleted_at IS NULL, status FROM kb_articles WHERE workspace_id=$1 AND id=$2 FOR UPDATE`, workspaceID, id).Scan(&live, &status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return KBGone, nil
+	}
+	if err != nil || !live || status != domain.KBPublished {
+		return "", err
+	}
+	_, imported, err := KBArticleImportedLast(ctx, tx, workspaceID, id)
+	if err != nil {
+		return "", err
+	}
+	if !imported {
+		return KBKept, nil
+	}
+	if _, err := tx.Exec(ctx, `UPDATE kb_articles SET status='draft', published_at=NULL WHERE workspace_id=$1 AND id=$2`, workspaceID, id); err != nil {
+		return "", fmt.Errorf("unpublish imported knowledge base article: %w", err)
+	}
+	return KBReimported, addKBArticleVersion(ctx, tx, workspaceID, id, Actor{}, domain.KBArticleImported, nil)
+}
+
 // KBImportTranslation is one language of an article as an import reads it.
 type KBImportTranslation struct {
 	Locale, Title, BodyMD string

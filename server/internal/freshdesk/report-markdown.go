@@ -97,6 +97,7 @@ func (r *Report) Markdown() string {
 	writeList(&b, "Knowledge base limits this import would pass (nothing is imported until they fit)", r.KnowledgeBase.Refused)
 	writeList(&b, "Knowledge base articles imported as drafts, by reason (Freshdesk ids)", draftLines(r.KnowledgeBase.Drafts))
 	writeList(&b, "Knowledge base articles changed in Freshdesk and in Colliedesk; the Colliedesk version was kept (Freshdesk ids)", r.KnowledgeBase.ChangedInBoth)
+	writeList(&b, "Knowledge base articles made drafts again: Freshdesk no longer shows them to everyone (Freshdesk ids)", r.KnowledgeBase.Unpublished)
 	writeList(&b, "Knowledge base articles deleted for good in Colliedesk, not imported again (Freshdesk ids)", r.KnowledgeBase.DeletedInColliedesk)
 	writeList(&b, "Knowledge base images already gone in Freshdesk (the article keeps the link)", kbGoneLines(r.KnowledgeBase.Images.GoneImages))
 	writeList(&b, "Ticket ids that could not be resolved (archive unavailable)", r.Tickets.UnresolvedIDs)

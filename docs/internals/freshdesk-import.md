@@ -249,7 +249,11 @@ numbering and versions as the API (`docs/internals/knowledge-base.md`).
   ledger's or its last run failed, and only while its newest version is of kind `import`; the row is
   locked (`FOR UPDATE`) before that check. Otherwise Colliedesk's version stays and
   `kb_article_changed_in_both` lists it. An article deleted for good is not brought back. Collections
-  are never renamed by a rerun.
+  are never renamed by a rerun. A folder's visibility or a category's portal can change without
+  touching the article's `updated_at`, so every run judges publication again: an untouched published
+  article Freshdesk no longer shows to everyone becomes a draft (a new import version,
+  `kb_article_unpublished`); one changed in Colliedesk stays published with
+  `kb_article_published_but_not_public`. A folder or portal change the other way never publishes an unchanged article.
 - **Undo** removes imported articles whose newest version is the import (`updated_at > created_at`
   cannot tell: the article carries Freshdesk's timestamps), then imported collections left with no
   article and no collection (deepest first), then images the import added (`meta.created`) that no

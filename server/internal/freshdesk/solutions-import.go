@@ -23,6 +23,7 @@ type kbState struct {
 	// collections maps a category ("c<id>") or folder ("f<id>") to its Colliedesk collection.
 	collections   map[string]string
 	changedInBoth []string
+	unpublished   []string
 	gone          []string
 }
 
@@ -266,6 +267,10 @@ func (r *run) importKBArticle(ctx context.Context, article kbArticle) error {
 	}
 	updated := article.UpdatedAt.UTC()
 	if found && entry.Status == ledgerDone && entry.SourceUpdatedAt != nil && !updated.After(*entry.SourceUpdatedAt) {
+		if reason != "" && entry.TargetID != nil {
+			// A folder's visibility or a category's portal can change without changing the article.
+			return r.unpublishKBArticle(ctx, key, *entry.TargetID, reason)
+		}
 		return nil
 	}
 	collectionID, ok := state.collections["f"+strconv.FormatInt(article.folder.ID, 10)]
@@ -362,6 +367,31 @@ func (r *run) importKBArticle(ctx context.Context, article kbArticle) error {
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit article import: %w", err)
+	}
+	return nil
+}
+
+// unpublishKBArticle makes an imported article a draft again when Freshdesk no longer shows it
+// publicly. Publishing is never done this way: an article that became public in Freshdesk stays a
+// draft until someone publishes it. An article changed in Colliedesk since is left alone, with a warning.
+func (r *run) unpublishKBArticle(ctx context.Context, key, target, reason string) error {
+	state := r.kbWriteState()
+	var outcome string
+	err := r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) (err error) {
+		outcome, err = store.UnpublishImportedKBArticle(ctx, tx, r.workspaceID, target)
+		return err
+	})
+	switch {
+	case err != nil:
+		r.itemFailed(ctx, entityKBArticle, key, "", fmt.Errorf("make the article a draft again (%s): %w", reason, err))
+		return r.internalErr
+	case outcome == store.KBReimported:
+		state.unpublished = append(state.unpublished, key)
+		r.warn("kb_article_unpublished", "This article is no longer public in Freshdesk (its folder's visibility or its category's portal changed), so it is a draft again in Colliedesk.", key)
+	case outcome == store.KBKept:
+		r.warn("kb_article_published_but_not_public", "This article is published in Colliedesk, but Freshdesk no longer shows it to everyone (a folder's visibility or a category's portal changed). Someone changed it in Colliedesk since the import, so it was left published; check whether it should be public.", key)
+	case outcome == store.KBGone:
+		state.gone = append(state.gone, key)
 	}
 	return nil
 }

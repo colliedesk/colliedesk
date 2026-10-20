@@ -102,7 +102,11 @@ articles in the workspace (articles in the trash count) or 1,000 collections, or
 
 Running the import again updates an article that changed in Freshdesk, unless your team changed it in
 Colliedesk since: then your version stays and the report lists the article under
-`kb_article_changed_in_both`. `import undo` removes the imported articles and collections, but keeps an
+`kb_article_changed_in_both`. If an article is no longer public in Freshdesk (its folder became
+private, or its category left the portal), the next run makes it a draft again, unless your team
+changed it since: then it stays published and the report warns (`kb_article_published_but_not_public`).
+When only a folder or a portal changes the other way, the article stays a draft; publish it in
+Colliedesk. `import undo` removes the imported articles and collections, but keeps an
 article your team edited, restored or deleted since, and the collections that hold it or your own
 articles. If Freshdesk has no knowledge base, the report says so. If Freshdesk refuses it (the API key
 may lack the right), the status is `UNVERIFIED`.
