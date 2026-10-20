@@ -8,8 +8,8 @@ COPY web ./
 COPY server/internal/webui/static /src/server/internal/webui/static
 RUN corepack pnpm build
 
-# Alpine only builds the static binary (CGO_ENABLED=0): its 75 MB pull, against 302 MB for bookworm,
-# took about 25 seconds off the build in CI, where the Go stage waited for it.
+# Alpine only builds the static binary (CGO_ENABLED=0). Its pull is 75 MB against 302 MB for
+# bookworm, whose pull took about 25 seconds in CI while the Go stage waited for it.
 FROM golang:1.27-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS go
 WORKDIR /src/server
 COPY server/go.mod server/go.sum ./
