@@ -1,12 +1,15 @@
-import { useId, useMemo, useRef, useState } from 'react';
-import type { ClipboardEvent, DragEvent, KeyboardEvent } from 'react';
+import { useDeferredValue, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import type { KeyboardEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useBlocker, useNavigate } from '@tanstack/react-router';
 import { api, ChangedElsewhereError, InvalidRequestError } from '../../api/client';
 import { messages } from '../../messages';
 import { RouterLink } from '../../ui/router-link';
 import { ChevronLeftIcon } from '../../ui/icons';
+import { Part, PartUnavailable } from '../../ui/lazy-part';
 import { SavedReplyHistory } from '../settings/saved-reply-panels';
+import type { EditorHandle, UploadHooks, ViewMode } from './editor/codemirror-editor';
+import { editorPart } from './editor-part';
 import { kbApi } from './kb-api';
 import type { KBArticle, KBArticleStatus, KBArticleVersion } from './kb-api';
 import { kbMessages } from './kb-messages';
@@ -35,6 +38,8 @@ const draftOf = (article: KBArticle): Draft => ({ title: article.title, slug: ar
 
 // ArticleRoute opens an article in the editor, or a new one (in collectionId when given).
 export function ArticleRoute({ articleId, collectionId }: { articleId?: string; collectionId?: string }) {
+  // The editor's chunk loads alongside the article, not after it.
+  useEffect(editorPart.preload, []);
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const collections = useQuery({ queryKey: ['kb-collections'], queryFn: kbApi.collections });
   const article = useQuery({ queryKey: ['kb-article', articleId], queryFn: () => kbApi.article(articleId ?? ''), enabled: articleId !== undefined, retry: false });
@@ -60,6 +65,15 @@ function BackLink() {
   return <RouterLink className="kb-back" href="/knowledge" onFollow={() => void navigate({ to: '/knowledge' })}><ChevronLeftIcon />{kbMessages.backToList}</RouterLink>;
 }
 
+// Side by side needs a wide window: the text and the preview each get half of the column left of the settings.
+const wideQuery = '(min-width: 1180px)';
+const subscribeWide = (change: () => void) => {
+  const query = window.matchMedia?.(wideQuery);
+  query?.addEventListener('change', change);
+  return () => query?.removeEventListener('change', change);
+};
+const isWide = () => window.matchMedia?.(wideQuery).matches ?? false;
+
 interface ArticleEditorProps {
   article?: KBArticle;
   collections: Parameters<typeof buildTree>[0];
@@ -77,7 +91,11 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   // base is the article as the server last answered; every save and restore sends its updated_at.
   const [base, setBase] = useState(article);
   const [draft, setDraft] = useState<Draft>(() => (article ? draftOf(article) : { title: '', slug: '', body: '', collection_id: defaultCollection }));
-  const [tab, setTab] = useState<'write' | 'preview'>('write');
+  const wide = useSyncExternalStore(subscribeWide, isWide);
+  const [chosen, setMode] = useState<ViewMode>(() => (isWide() ? 'split' : 'edit'));
+  const mode: ViewMode = chosen === 'split' && !wide ? 'edit' : chosen;
+  const modes: ViewMode[] = wide ? ['edit', 'split', 'preview'] : ['edit', 'preview'];
+  const [handle, setHandle] = useState<EditorHandle>();
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
   const [conflict, setConflict] = useState(false);
@@ -86,22 +104,26 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const [historyOpen, setHistoryOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [imageProblems, setImageProblems] = useState<string[]>([]);
-  const body = useRef<HTMLTextAreaElement>(null);
   const historyButton = useRef<HTMLButtonElement>(null);
-  const uploads = useRef(0);
+  // A refused save says why where the person can see it: on a phone the side column is below the text.
+  const conflictNote = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (conflict) conflictNote.current?.scrollIntoView?.({ block: 'nearest' }); }, [conflict]);
   const set = (change: Partial<Draft>) => { setSavedOnce(false); setDraft((current) => ({ ...current, ...change })); };
-  const dirty = base
+  const isDirty = (form: Draft) => (base
     // Compared as save() sends them: title and address name trimmed, and an emptied address name is not
     // a change (the server keeps the old one), so a form is never dirty with nothing to send.
-    ? draft.title.trim() !== base.title || (draft.slug.trim() !== '' && draft.slug.trim() !== base.slug) || draft.body !== base.body_md || draft.collection_id !== base.collection_id
-    : draft.title.trim() !== '' || draft.body.trim() !== '';
+    ? form.title.trim() !== base.title || (form.slug.trim() !== '' && form.slug.trim() !== base.slug) || form.body !== base.body_md || form.collection_id !== base.collection_id
+    : form.title.trim() !== '' || form.body.trim() !== '');
+  const dirty = isDirty(draft);
+  // bodyNow reads the editor at once: it tells the page of typing a moment after it stops.
+  const bodyNow = () => handle?.markdown() ?? draft.body;
   // A person leaving with unsaved text is asked first; a save that moves on (a new article, a delete) is not.
   const leaving = useRef(false);
-  const unsaved = useRef(dirty);
-  unsaved.current = dirty;
+  const unsaved = useRef(() => dirty);
+  unsaved.current = () => isDirty({ ...draft, body: bodyNow() });
   useBlocker({
-    shouldBlockFn: () => unsaved.current && !leaving.current && !window.confirm(kbMessages.leaveUnsaved),
-    enableBeforeUnload: () => unsaved.current && !leaving.current,
+    shouldBlockFn: () => !leaving.current && unsaved.current() && !window.confirm(kbMessages.leaveUnsaved),
+    enableBeforeUnload: () => !leaving.current && unsaved.current(),
   });
   const titleLength = characters(draft.title);
   const bodyLength = characters(draft.body);
@@ -111,11 +133,14 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const invalid = !draft.title.trim() || titleLength > maxTitle || tooLong || !draft.collection_id || uploading > 0;
 
   const save = async (status?: KBArticleStatus, over?: KBArticle) => {
-    if (busy || invalid) return;
+    const body = bodyNow();
     const current = over ?? base;
+    const sent = body === draft.body ? draft : { ...draft, body };
+    // Typing not yet on the counter is now; a text over the limit shows there and is not sent.
+    if (sent !== draft) setDraft(sent);
+    if (busy || invalid || characters(body) > maxBody) return;
     setBusy(true);
     setProblem(undefined);
-    const sent = draft;
     try {
       if (!current) {
         const created = await kbApi.createArticle({ collection_id: sent.collection_id, title: sent.title.trim(), body_md: sent.body, status: status ?? 'draft' });
@@ -137,7 +162,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       const updated = await kbApi.updateArticle(current.id, { updated_at: current.updated_at, ...change });
       setBase(updated);
       // The server may write the title or address name its own way; text typed during the save stays.
-      setDraft((now) => (now === sent ? draftOf(updated) : now));
+      setDraft((now) => (now === sent ? { ...draftOf(updated), body: sent.body } : now));
       client.setQueryData(['kb-article', updated.id], updated);
       setConflict(false);
       setSavedOnce(true);
@@ -163,10 +188,15 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       return undefined;
     }
   };
+  // show puts an article's text on screen, in the form and in the editor.
+  const show = (shown: KBArticle) => {
+    setDraft(draftOf(shown));
+    handle?.load(shown.body_md);
+  };
   const loadTheirs = async () => {
     const fresh = await latest();
     if (!fresh) return;
-    setDraft(draftOf(fresh));
+    show(fresh);
     setConflict(false);
   };
   const keepMine = async () => {
@@ -190,61 +220,37 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     }
   };
 
-  // Images pasted or dropped into the text are uploaded; a placeholder holds their place meanwhile.
-  // Images go in as a paragraph of their own: right after a table row or inside a line, Markdown would
-  // read them as part of the table or the text, and a table swallows them.
-  const insertAtCursor = (text: string) => {
-    const field = body.current;
-    setDraft((current) => {
-      const start = field?.selectionStart ?? current.body.length;
-      const end = field?.selectionEnd ?? start;
-      const before = current.body.slice(0, start);
-      const after = current.body.slice(end);
-      const lead = before === '' || before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
-      const trail = after === '' || after.startsWith('\n\n') ? '' : after.startsWith('\n') ? '\n' : '\n\n';
-      return { ...current, body: before + lead + text + trail + after };
-    });
-    setSavedOnce(false);
-  };
-  const addImages = (files: File[]) => {
-    const problems: string[] = [];
-    const placeholders: string[] = [];
-    const accepted = files.filter((file) => {
-      if (!imageTypes.includes(file.type)) { problems.push(kbMessages.imageType(file.name)); return false; }
-      if (file.size > maxImageBytes) { problems.push(kbMessages.imageTooLarge(file.name)); return false; }
-      return true;
-    });
-    setImageProblems(problems);
-    for (const file of accepted) {
-      uploads.current += 1;
-      const placeholder = `![${kbMessages.uploadingImage(file.name)}](#upload-${uploads.current})`;
-      placeholders.push(placeholder);
-      setUploading((count) => count + 1);
-      void kbApi.uploadImage(file).finally(() => setUploading((count) => count - 1)).then((image) => {
-        replacePlaceholder(placeholder, `![${altText(file.name)}](${image.url})`);
-        setNotice(kbMessages.imageUploaded(file.name));
-      }, (error: unknown) => {
-        replacePlaceholder(placeholder, '');
-        setImageProblems((current) => [...current, reason(error, kbMessages.imageFailed(file.name))]);
+  // Images are checked before any upload: a wrong type or a file over 5 MB is refused with a reason. The editor
+  // holds an uploading image's place on screen only, never in the text, and puts the image in as a paragraph of
+  // its own: right after a table row or inside a line, Markdown would read it as part of the table or the text.
+  const imageHooks = useMemo<UploadHooks>(() => ({
+    accept: (files) => {
+      const problems: string[] = [];
+      const accepted = files.filter((file) => {
+        if (!imageTypes.includes(file.type)) { problems.push(kbMessages.imageType(file.name)); return false; }
+        if (file.size > maxImageBytes) { problems.push(kbMessages.imageTooLarge(file.name)); return false; }
+        return true;
       });
-    }
-    if (placeholders.length > 0) insertAtCursor(placeholders.join('\n'));
+      setImageProblems(problems);
+      return accepted;
+    },
+    upload: async (file) => ({ url: (await kbApi.uploadImage(file)).url, alt: altText(file.name) }),
+    onStart: () => setUploading((count) => count + 1),
+    onDone: (file) => { setUploading((count) => count - 1); setNotice(kbMessages.imageUploaded(file.name)); },
+    onError: (file, error) => { setUploading((count) => count - 1); setImageProblems((current) => [...current, reason(error, kbMessages.imageFailed(file.name))]); },
+  }), []);
+  // onReady: the editor shows the text it was made with; one loaded meanwhile (a restore, theirs) goes in now.
+  const draftNow = useRef(draft);
+  draftNow.current = draft;
+  const madeWith = useRef<string>(undefined);
+  const onReady = (ready: EditorHandle) => {
+    setHandle(ready);
+    if (madeWith.current !== undefined && madeWith.current !== draftNow.current.body) ready.load(draftNow.current.body);
   };
-  const replacePlaceholder = (placeholder: string, text: string) =>
-    setDraft((current) => (current.body.includes(placeholder) ? { ...current, body: current.body.replace(placeholder, () => text) } : current));
-  const imagesIn = (list: FileList | null) => [...(list ?? [])].filter((file) => file.type.startsWith('image/') || file.type === '');
-  const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-    const files = imagesIn(event.clipboardData.files);
-    if (files.length === 0) return;
-    event.preventDefault();
-    addImages(files);
-  };
-  const onDrop = (event: DragEvent<HTMLTextAreaElement>) => {
-    const files = [...(event.dataTransfer.files ?? [])];
-    if (files.length === 0) return;
-    event.preventDefault();
-    addImages(files);
-  };
+  // The preview follows the text at low priority: rendering a long article takes tens of milliseconds, and typing
+  // goes first (the editor tells the page of typing 120 ms after it stops, then this renders). It starts empty
+  // (null) so the first frame shows the editor without waiting for it.
+  const previewText = useDeferredValue<string | null>(draft.body, null);
   const onKeyDown = (event: KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
       event.preventDefault();
@@ -254,10 +260,10 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const restoreVersion = async (version: number) => {
     if (!base) return;
     // Restoring replaces the text on screen, so unsaved edits are saved or dropped first, never lost.
-    if (dirty) throw new InvalidRequestError(kbMessages.restoreNeedsSave);
+    if (unsaved.current()) throw new InvalidRequestError(kbMessages.restoreNeedsSave);
     const restored = await kbApi.restoreVersion(base.id, version, base.updated_at);
     setBase(restored);
-    setDraft(draftOf(restored));
+    show(restored);
     client.setQueryData(['kb-article', restored.id], restored);
     void refresh();
   };
@@ -277,22 +283,25 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           {base?.has_source_html && <p className="muted-copy">{kbMessages.importedNotice}</p>}
           <div className="kb-editor-card">
             <div className="kb-tabs" role="tablist" aria-label={kbMessages.editorTabs}>
-              {(['write', 'preview'] as const).map((name) => (
-                <button key={name} type="button" role="tab" id={`${id}-${name}-tab`} aria-controls={`${id}-${name}`} aria-selected={tab === name}
-                  tabIndex={tab === name ? 0 : -1} onClick={() => setTab(name)}
-                  onKeyDown={(event) => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { const next = name === 'write' ? 'preview' : 'write'; setTab(next); document.getElementById(`${id}-${next}-tab`)?.focus(); } }}>
-                  {name === 'write' ? kbMessages.write : kbMessages.preview}</button>
+              {modes.map((name, at) => (
+                <button key={name} type="button" role="tab" id={`${id}-${name}-tab`} aria-controls={`${id}-panel`} aria-selected={mode === name}
+                  tabIndex={mode === name ? 0 : -1} onClick={() => setMode(name)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+                    const next = modes[(at + (event.key === 'ArrowRight' ? 1 : modes.length - 1)) % modes.length];
+                    setMode(next);
+                    document.getElementById(`${id}-${next}-tab`)?.focus();
+                  }}>
+                  {name === 'edit' ? kbMessages.write : name === 'split' ? kbMessages.split : kbMessages.preview}</button>
               ))}
             </div>
-            <div role="tabpanel" id={`${id}-write`} aria-labelledby={`${id}-write-tab`} hidden={tab !== 'write'}>
-              <label className="sr-only" htmlFor={`${id}-body`}>{kbMessages.body}</label>
-              {/* No maxLength: a browser would cut a long paste silently. The counter refuses it instead. */}
-              <textarea id={`${id}-body`} ref={body} className="kb-body" value={draft.body} aria-describedby={`${id}-help ${id}-count`} aria-invalid={tooLong || undefined}
-                onChange={(event) => set({ body: event.target.value })} onPaste={onPaste} onDrop={onDrop}
-                onDragOver={(event) => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }} />
-            </div>
-            <div role="tabpanel" id={`${id}-preview`} aria-labelledby={`${id}-preview-tab`} hidden={tab !== 'preview'} className="kb-preview-panel" tabIndex={0}>
-              {tab === 'preview' && <MarkdownPreview text={draft.body} />}
+            <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${mode}-tab`}>
+              <Part part={editorPart} failed={<div className="kb-editor-loading"><PartUnavailable /></div>} render={({ default: Editor }) => {
+                madeWith.current ??= draft.body;
+                return <Editor initial={madeWith.current} uploads={imageHooks} label={kbMessages.body} describedBy={`${id}-help ${id}-count`} invalid={tooLong} mode={mode}
+                  preview={mode === 'edit' || previewText === null ? undefined : <MarkdownPreview text={previewText} />} onChange={(text) => set({ body: text })} onReady={onReady} />;
+              }} />
+              {!handle && <p role="status" className="kb-editor-loading kb-hint">{kbMessages.loadingEditor}</p>}
             </div>
             <div className="kb-editor-foot">
               <small id={`${id}-help`} className="kb-hint">{kbMessages.bodyHelp}</small>
@@ -308,7 +317,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
             <span className="badge" data-status={status}>{status === 'published' ? kbMessages.published : kbMessages.draft}</span>
             <span className="muted-copy">{status === 'published' ? kbMessages.statusPublished : kbMessages.statusDraft}</span>
           </div>
-          {conflict && <div role="alert" className="warning-note kb-conflict">
+          {conflict && <div role="alert" ref={conflictNote} className="warning-note kb-conflict">
             <p>{kbMessages.changedElsewhere}</p>
             <div className="button-row">
               <button type="button" disabled={busy} onClick={() => void keepMine()}>{kbMessages.keepMine}</button>
