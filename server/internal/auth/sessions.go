@@ -42,10 +42,14 @@ func (s *Service) Authenticate(ctx context.Context, raw string, viaCookie bool) 
 	var trialEndsAt, createdAt, lastSeenAt time.Time
 	var trialExtended bool
 	var activeAgents int
+	// The active agents are counted only where plan limits apply, for the seat pause below.
+	countAgents := "0"
+	if s.planLimits {
+		countAgents = "(SELECT count(*) FROM agents x WHERE x.workspace_id=s.workspace_id AND x.deactivated_at IS NULL)"
+	}
 	err = s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		err := tx.QueryRow(ctx, `SELECT w.id::text,w.slug,w.name,w.timezone,a.id::text,a.email,a.display_name,
-			CASE WHEN a.role='agent' OR s.role_ceiling='agent' THEN 'agent' ELSE 'admin' END,a.timezone_override,s.id::text,w.trial_ends_at,COALESCE(s.scope,''),w.trial_extended_at IS NOT NULL,s.created_at,s.last_seen_at,
-			(SELECT count(*) FROM agents x WHERE x.workspace_id=s.workspace_id AND x.deactivated_at IS NULL)
+			CASE WHEN a.role='agent' OR s.role_ceiling='agent' THEN 'agent' ELSE 'admin' END,a.timezone_override,s.id::text,w.trial_ends_at,COALESCE(s.scope,''),w.trial_extended_at IS NOT NULL,s.created_at,s.last_seen_at,`+countAgents+`
 			FROM sessions s JOIN agents a ON a.id=s.agent_id AND a.workspace_id=s.workspace_id JOIN workspaces w ON w.id=s.workspace_id
 			WHERE s.workspace_id=$3 AND s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>$2 AND a.deactivated_at IS NULL`, hash, now, workspaceID).
 			Scan(&principal.Workspace.ID, &principal.Workspace.Slug, &principal.Workspace.Name, &principal.Workspace.Timezone,

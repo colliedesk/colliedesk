@@ -24,11 +24,12 @@ func workspaceAccess(ctx context.Context, tx pgx.Tx, workspaceID string, now tim
 }
 
 // pendingSeatEmails counts the people who hold a seat only through an invite: distinct invited
-// addresses that are not agents yet. Two invites to one address are one person, and inviting someone
-// who is already an agent (a role change) takes no seat.
+// addresses that are not active agents. Two invites to one address are one person, and inviting
+// someone who is already an active agent (a role change) takes no seat. An invite to a deactivated
+// agent's address does: redeeming it would bring that person back.
 const pendingSeatEmails = `SELECT count(DISTINCT p.email) FROM pairing_links p
 	WHERE p.workspace_id=$1 AND p.kind='invite' AND p.used_at IS NULL AND p.revoked_at IS NULL AND p.expires_at > $2
-	AND NOT EXISTS (SELECT 1 FROM agents a WHERE a.workspace_id=p.workspace_id AND a.email=p.email)`
+	AND NOT EXISTS (SELECT 1 FROM agents a WHERE a.workspace_id=p.workspace_id AND a.email=p.email AND a.deactivated_at IS NULL)`
 
 // CheckAgentSeat returns a *domain.PlanLimitError when giving email an agent seat would exceed the
 // cap of the workspace's plan. A seat is an agent or a person with a pending invite, so a burst of
@@ -76,14 +77,14 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 }
 
 // AgentSeatRank is the place of agentID among the workspace's active agents when a smaller plan
-// keeps only some of them: the owner (the first admin added) first, then by when each was added,
-// oldest first. Agents ranked beyond the plan's cap are paused, the most recently added first.
+// keeps only some of them: admins before agents, so whoever can fix billing keeps access longest and
+// the owner (the first admin added) comes first; within each role, by when the agent was first added,
+// oldest first. Agents ranked beyond the plan's cap are paused. A reactivated agent keeps its first
+// added time, so it ranks where it did, not as the newest.
 func AgentSeatRank(ctx context.Context, tx pgx.Tx, workspaceID, agentID string) (int, error) {
 	var rank int
-	err := tx.QueryRow(ctx, `WITH active AS (SELECT id, role, created_at FROM agents WHERE workspace_id=$1 AND deactivated_at IS NULL),
-		owner AS (SELECT id FROM active WHERE role='admin' ORDER BY created_at, id LIMIT 1)
-		SELECT r FROM (SELECT id, row_number() OVER (ORDER BY (id = (SELECT id FROM owner)) IS TRUE DESC, created_at, id) AS r FROM active) ranked
-		WHERE id=$2`, workspaceID, agentID).Scan(&rank)
+	err := tx.QueryRow(ctx, `SELECT r FROM (SELECT id, row_number() OVER (ORDER BY role='admin' DESC, created_at, id) AS r
+		FROM agents WHERE workspace_id=$1 AND deactivated_at IS NULL) ranked WHERE id=$2`, workspaceID, agentID).Scan(&rank)
 	return rank, err
 }
 

@@ -55,7 +55,7 @@ function AppLayout() {
   const inSettings = path.startsWith('/settings');
   const inRequests = path.startsWith('/requests');
   return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} appVersion={config.data?.version} signedOut={signedOut} signIn={signIn}
-    notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} /><TrialSurvey me={me.data} analytics={config.data?.product_analytics} /></>} lockedScreen={locked && me.data ? (paused && me.data.plan ? <SeatPausedScreen plan={messages.plans[me.data.plan.plan]} onSignOut={() => signOut.mutate()} /> : <LockedRoute me={me.data} />) : undefined}
+    notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} /><TrialSurvey me={me.data} analytics={config.data?.product_analytics} /></>} lockedScreen={locked && me.data ? (paused && me.data.plan ? <SeatPausedScreen plan={messages.plans[me.data.plan.plan]} isAdmin={me.data.agent.role === 'admin'} onSignOut={() => signOut.mutate()} /> : <LockedRoute me={me.data} />) : undefined}
     onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending}
     brand={<span className="rail-brand" role="img" aria-label={messages.brand}><LogoMark /></span>}
     links={locked ? undefined : <>

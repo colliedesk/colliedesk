@@ -215,3 +215,18 @@ test('a paused agent sees why and can sign out, and nothing else', async () => {
   expect(screen.queryByRole('link', { name: 'Inbox' })).not.toBeInTheDocument();
   expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/inbox/activity'))).toBe(false);
 });
+
+test('a paused admin can still open the billing portal from the paused screen', async () => {
+  const assign = vi.fn();
+  const original = window.location;
+  Object.defineProperty(window, 'location', { configurable: true, value: { ...original, assign } });
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'solo', trial_ends_at: '2026-10-01T09:00:00Z', locked: false, trial_extended: false, agents_over: 1, seat_paused: true })),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/billing/portal': () => json(200, { url: 'https://polar.test/portal' }),
+  });
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'Manage billing' }));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('https://polar.test/portal'));
+  Object.defineProperty(window, 'location', { configurable: true, value: original });
+});

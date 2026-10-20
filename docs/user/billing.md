@@ -60,8 +60,9 @@ more agents and pending invites than the plan allows, or more stored attachments
 included, than its storage limit. Deactivate agents or revoke invites, then choose it.
 
 If you move to a smaller plan under **Manage billing** while you have more agents than it allows,
-nobody is removed. The most recently added agents are paused: they can only sign out and see why.
-The first admin of the workspace is never paused. Admins see a notice on every page. Deactivate agents
+nobody is removed. Agents are paused before admins, the most recently added first: they can only
+sign out and see why. The first admin of the workspace is never paused, and a paused admin can still
+open **Manage billing**. An agent you reactivate keeps the place of when they were first added. Admins see a notice on every page. Deactivate agents
 in **Settings → Team**, or upgrade again, and the paused agents can work again at once.
 
 The plan belongs to the workspace, not to a person. Paid plans have no reply cap and no recipient rule. Every paid plan has an attachment storage cap

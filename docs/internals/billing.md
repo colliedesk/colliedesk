@@ -203,9 +203,17 @@ trial set` / `plan grant` (see the end of this page). Code: `store/plan-limits.g
   disables those plan cards with the reason. Checkout only serves the trial and a locked workspace.
 - A smaller plan chosen in the Polar portal cannot be refused: the webhook stores it. Then the agents beyond
   the cap are paused. Authentication counts the active agents in its existing query; only when they exceed
-  the cap does it rank them (`store.AgentSeatRank`): the owner (the first admin added) first, then by
-  `created_at`, oldest first. An agent ranked beyond the cap gets 402 `seat_paused` on every route except
-  `GET /auth/me`, sign out, the session list and problem reports, and the web app shows a paused screen.
+  the cap does it rank them (`store.AgentSeatRank`): admins before agents, so the owner (the first admin added)
+  comes first and whoever can fix billing keeps access longest; within each role by `created_at`, oldest
+  first. An agent ranked beyond the cap gets 402 `seat_paused` on every route except `GET /auth/me`, sign
+  out, the session list and problem reports, and the web app shows a paused screen. A paused admin also
+  keeps `GET /billing`, the portal and checkout (the billing account may be theirs), and the paused screen
+  offers Manage billing.
+- Trap: the order is by when an agent was first added, not when it was last activated. Reactivating
+  a deactivated agent keeps its old `created_at`, so it ranks where it did before, not as the newest.
+  There is no column for the last activation; add one only if this order proves wrong for customers.
+- An invite to the address of a deactivated agent holds a seat (`pendingSeatEmails` ignores only
+  active agents): redeeming it would bring that person back.
   `plan.agents_over` on `/auth/me` drives an admin banner on every page and an alert on Plan and billing.
   Invites stay refused because the seats are already over the cap. Deactivating agents (or upgrading)
   restores access on the next request; nothing is stored about the pause.

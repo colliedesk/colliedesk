@@ -12,9 +12,10 @@ info:
     workspace on the next request. Self-hosted instances have no trial and no lock.
 
     When a workspace moves to a plan with fewer agents than it has (a change in the billing portal),
-    the agents beyond the cap are paused, the most recently added first and never the owner (the
-    first admin added): their requests answer 402 `seat_paused` except `GET /api/v1/auth/me`, signing
-    out, the session list and problem reports. `plan.agents_over` and `plan.seat_paused` of
+    the agents beyond the cap are paused: agents before admins, the most recently added first, never
+    the owner (the first admin added). Their requests answer 402 `seat_paused` except
+    `GET /api/v1/auth/me`, signing out, the session list and problem reports; a paused admin also keeps
+    `GET /api/v1/billing`, the billing portal and checkout. `plan.agents_over` and `plan.seat_paused` of
     `GET /api/v1/auth/me` show it. Access returns once an admin deactivates agents or upgrades.
 
     An agent token (`POST /api/v1/auth/tokens`) is a bearer credential for an AI agent. It starts with

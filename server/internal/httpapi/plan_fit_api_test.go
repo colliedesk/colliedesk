@@ -210,3 +210,86 @@ func TestStorageUpgradePlanIsTheNextPlanOnSaleWithMoreStorage(t *testing.T) {
 		})
 	}
 }
+
+// joinAs redeems a new invite with the given role ceiling and returns the session token.
+func joinAs(t *testing.T, f limitsFixture, email, role string) string {
+	t.Helper()
+	_, link := createContractInvite(t, f.api, f.adminA, email, role)
+	response := request(t, f.api, http.MethodPost, "/api/v1/auth/redeem", map[string]any{"token": linkToken(t, link)}, "", nil)
+	var session struct {
+		Token string `json:"token"`
+	}
+	decode(t, response, &session)
+	if session.Token == "" {
+		t.Fatalf("redeem %s invite status=%d body=%s", role, response.Code, response.Body.String())
+	}
+	return session.Token
+}
+
+func TestAdminsArePausedAfterEveryAgentWhateverWhenTheyJoined(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	moveTo(t, f, "sub_admins", productMonthly, f.clock.Now())
+	agentC := joinAs(t, f, "c@limits-alpha.example.com", "agent")
+	agentD := joinAs(t, f, "d@limits-alpha.example.com", "agent")
+	adminB := joinAs(t, f, "b@limits-alpha.example.com", "admin")
+	moveTo(t, f, "sub_admins", productSmallMonthly, f.clock.Now().Add(time.Minute))
+	for name, token := range map[string]string{"owner": f.adminA, "admin B (joined last)": adminB, "agent C": agentC} {
+		if view := me(t, f, token); view.Plan.SeatPaused {
+			t.Errorf("%s on Small with 4 people: paused, want kept", name)
+		}
+	}
+	if view := me(t, f, agentD); !view.Plan.SeatPaused {
+		t.Errorf("agent D, the newest non-admin: not paused, want paused")
+	}
+}
+
+func TestAPausedAdminCanStillReachBilling(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	moveTo(t, f, "sub_paused_admin", productMonthly, f.clock.Now())
+	adminB := joinAs(t, f, "b@limits-alpha.example.com", "admin")
+	moveTo(t, f, "sub_paused_admin", productSoloMonthly, f.clock.Now().Add(time.Minute))
+	if view := me(t, f, adminB); !view.Plan.SeatPaused {
+		t.Fatalf("second admin on Solo: plan=%+v, want paused", view.Plan)
+	}
+	if got := request(t, f.api, http.MethodGet, "/api/v1/conversations", nil, adminB, nil).Code; got != http.StatusPaymentRequired {
+		t.Fatalf("paused admin reads the inbox: status=%d, want 402", got)
+	}
+	if got := request(t, f.api, http.MethodGet, "/api/v1/billing", nil, adminB, nil).Code; got != http.StatusOK {
+		t.Fatalf("paused admin reads billing: status=%d, want 200", got)
+	}
+	portal := request(t, f.api, http.MethodPost, "/api/v1/billing/portal", nil, adminB, nil)
+	if portal.Code != http.StatusOK {
+		t.Fatalf("paused admin opens the billing portal: status=%d body=%s, want 200", portal.Code, portal.Body.String())
+	}
+	if got := request(t, f.api, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": "team_monthly"}, adminB, nil); got.Code == http.StatusPaymentRequired {
+		t.Fatalf("paused admin starts a checkout: status=402 body=%s, want the billing answer, not the pause", got.Body.String())
+	}
+}
+
+func TestAnInviteToADeactivatedAgentsAddressHoldsASeat(t *testing.T) {
+	f := newLimitsFixture(t, true)
+	joinAsAgent(t, f.api, f.adminA, "gone@limits-alpha.example.com")
+	// An invite to the same address while the agent is still active (a role change) stays pending.
+	createContractInvite(t, f.api, f.adminA, "gone@limits-alpha.example.com", "admin")
+	var goneID string
+	for _, member := range teamMembers(t, f, f.adminA) {
+		if member.Email == "gone@limits-alpha.example.com" {
+			goneID = member.ID
+		}
+	}
+	if got := request(t, f.api, http.MethodPatch, "/api/v1/agents/"+goneID, map[string]any{"active": false}, f.adminA, nil).Code; got != http.StatusOK {
+		t.Fatalf("deactivate: status=%d", got)
+	}
+	// Deactivation revokes the agent's pending invites; one that outlived it (written before the
+	// deactivation committed) must still hold a seat, as it can still be redeemed.
+	if _, err := f.pool.Exec(context.Background(), `UPDATE pairing_links SET revoked_at=NULL WHERE workspace_id=$1 AND kind='invite' AND email='gone@limits-alpha.example.com'`, f.workspaceA); err != nil {
+		t.Fatal(err)
+	}
+	if usage := f.usage(t, f.adminA).Usage; usage.Agents != 1 || usage.PendingInvites != 1 {
+		t.Fatalf("usage=%+v, want 1 active agent and the pending invite to the deactivated agent's address", usage)
+	}
+	view := planFit(t, f, f.adminA)
+	if refusalFor(view, "solo_monthly") == "" {
+		t.Fatalf("checkout_refusals=%+v, want Solo refused: the admin and the pending invite are 2 seats", view.CheckoutRefusals)
+	}
+}
