@@ -1,0 +1,142 @@
+/* Knowledge base pages. Loaded with their chunk (kb-chunk.ts), so the first bundle does not carry them.
+   Built on the tokens and controls of styles/; scrollbars follow the global style in base.css. */
+
+.kb-page, .kb-editor-page { display: grid; align-content: start; gap: var(--space-5); }
+.kb-header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-4); max-width: 84rem; }
+.kb-header h1 { font: 400 32px/1.1 var(--font-display); letter-spacing: -0.01em; }
+.kb-header p { max-width: 44rem; margin-top: var(--space-1); color: var(--text-2); }
+.kb-hint { color: var(--text-3); font-size: var(--fs-label); }
+
+/* A link that looks like a button (New article). */
+.button-link {
+  display: inline-flex; align-items: center; justify-content: center; min-height: var(--control, 32px); border: 1px solid var(--line-control);
+  border-radius: var(--radius); box-shadow: var(--shadow-1); padding: 0 var(--space-3); font-size: var(--fs-small); font-weight: 500; text-decoration: none;
+  white-space: nowrap; transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.button-link.primary-action { color: var(--on-accent); }
+.button-link.primary-action:hover { color: var(--on-accent); }
+
+.kb-layout { display: grid; grid-template-columns: minmax(14rem, 17rem) minmax(0, 1fr); gap: var(--space-8); align-items: start; max-width: 84rem; }
+.kb-collections { position: sticky; top: 0; display: grid; gap: var(--space-3); max-height: calc(100dvh - var(--space-16)); overflow-y: auto; padding-right: var(--space-1); }
+.kb-collections-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.kb-collections-head h2, .kb-articles-title, .kb-trash h2 { font-size: 14px; font-weight: 600; }
+
+.kb-tree, .kb-tree ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.kb-tree ul { margin-top: 2px; padding-left: var(--space-3); border-left: 1px solid var(--line); margin-left: var(--space-2); }
+.kb-tree-link {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--control, 32px); border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2); color: var(--text-2); font-size: var(--fs-small); text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.kb-tree-link:hover { background: var(--surface-2); color: var(--text-1); }
+.kb-tree-link[aria-current="page"] { background: var(--surface-2); color: var(--text-1); font-weight: 600; box-shadow: inset 2px 0 0 var(--accent); }
+.kb-tree-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-tree-count { flex: none; color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
+
+.kb-collection-form, .kb-collection-head { display: grid; gap: var(--space-3); }
+.kb-collection-form { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1); padding: var(--space-3); }
+.kb-collection-title h2 { font-size: 18px; font-weight: 600; }
+.kb-collection-title p { margin-top: var(--space-1); }
+.kb-confirm { display: grid; gap: var(--space-2); }
+
+.kb-articles { display: grid; align-content: start; gap: var(--space-3); min-width: 0; }
+.kb-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.kb-search { flex: 1 1 16rem; }
+.kb-search input { width: 100%; }
+.kb-filters .segmented legend { padding: 0; }
+
+.kb-article-list { display: grid; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.kb-article-list[aria-busy="true"] { opacity: 0.6; transition: opacity var(--dur) var(--ease); }
+.kb-article-row {
+  display: grid; gap: var(--space-1); border-bottom: 1px solid var(--line); padding: var(--space-3) var(--space-2); color: var(--text-1); text-decoration: none;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+.kb-article-row:hover { background: var(--surface-2); }
+.kb-article-title { font-weight: 500; overflow-wrap: anywhere; }
+.kb-article-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); color: var(--text-3); font-size: var(--fs-small); }
+.kb-more { justify-self: start; }
+
+.badge[data-status="draft"] { background: var(--note-bg); color: var(--note-text); box-shadow: inset 0 0 0 1px var(--note-line); }
+.badge[data-status="published"] { background: var(--ok-soft); color: var(--ok); }
+.kb-article-meta .badge, .kb-status .badge { font-size: var(--fs-label); }
+
+.kb-trash { display: grid; gap: var(--space-3); max-width: 84rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); padding: var(--space-4); }
+
+/* Editor: the text on the left, publishing and placement on the right. */
+.kb-back { display: inline-flex; align-items: center; gap: var(--space-1); justify-self: start; min-height: var(--control, 32px); color: var(--text-2); font-size: var(--fs-small); text-decoration: none; }
+.kb-back:hover { color: var(--text-1); }
+.kb-back svg { width: 14px; height: 14px; }
+.kb-editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(15rem, 19rem); gap: var(--space-8); align-items: start; max-width: 84rem; }
+.kb-editor-main { display: grid; gap: var(--space-3); min-width: 0; }
+.kb-title-field input { --control: 44px; font-size: 18px; font-weight: 500; }
+.kb-editor-card { display: grid; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--surface-1); overflow: hidden; }
+.kb-editor-card:has(.kb-body:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.kb-tabs { display: flex; gap: var(--space-1); border-bottom: 1px solid var(--line); background: var(--surface-0); padding: var(--space-1); }
+.kb-tabs button { --control: 30px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); }
+.kb-tabs button[aria-selected="true"] { background: var(--surface-1); color: var(--text-1); box-shadow: var(--shadow-1); }
+.kb-body {
+  display: block; width: 100%; min-height: 26rem; max-height: 70vh; border: 0; border-radius: 0; padding: var(--space-4); resize: vertical;
+  font-family: var(--font-mono); font-size: var(--fs-small); line-height: 1.6;
+}
+.kb-body:hover:not(:disabled) { border-color: transparent; }
+.kb-body:focus-visible { outline: none; }
+.kb-preview-panel { min-height: 26rem; max-height: 70vh; overflow-y: auto; padding: var(--space-4); }
+.kb-preview-panel:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.kb-editor-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2) var(--space-4); border-top: 1px solid var(--line); padding: var(--space-2) var(--space-4); }
+.kb-count { font-size: var(--fs-label); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kb-count:not(.error-copy) { color: var(--text-3); }
+
+.kb-editor-side { position: sticky; top: 0; display: grid; gap: var(--space-4); }
+.kb-status { display: grid; gap: var(--space-1); justify-items: start; }
+.kb-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.kb-actions .primary-action { flex: 1 1 auto; }
+.kb-editor-side .kb-hint { margin-top: calc(-1 * var(--space-3)); }
+.kb-editor-side .field small { font-size: var(--fs-label); }
+.kb-side-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); border-top: 1px solid var(--line); padding-top: var(--space-4); }
+.kb-conflict { display: grid; gap: var(--space-2); }
+.kb-editor-page > .saved-reply-panel { max-width: 84rem; }
+
+/* The article as it will read: headings, lists, tables and images of the help center. */
+.kb-preview { font-size: var(--fs-body); line-height: var(--lh-body); color: var(--text-1); }
+.kb-preview p { white-space: normal; }
+.kb-preview > * + * { margin-top: var(--space-3); }
+.kb-preview h1, .kb-preview h2, .kb-preview h3, .kb-preview h4 { margin-top: var(--space-6); font-weight: 600; line-height: 1.25; }
+.kb-preview h1 { font-size: 26px; }
+.kb-preview h2 { font-size: 21px; }
+.kb-preview h3 { font-size: 18px; }
+.kb-preview > :first-child { margin-top: 0; }
+.kb-preview ul, .kb-preview ol { padding-left: var(--space-6); }
+.kb-preview li + li { margin-top: var(--space-1); }
+.kb-preview img { max-width: 100%; height: auto; border-radius: var(--radius); }
+.kb-preview blockquote { margin: 0; border-left: 3px solid var(--line-strong); padding-left: var(--space-4); color: var(--text-2); }
+.kb-preview pre { overflow-x: auto; border-radius: var(--radius); background: var(--surface-2); padding: var(--space-3); }
+.kb-preview pre code { background: none; padding: 0; }
+.kb-preview code { background: var(--surface-2); }
+.kb-preview table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: var(--fs-ui); }
+.kb-preview th, .kb-preview td { border: 1px solid var(--line-strong); padding: var(--space-1) var(--space-3); text-align: left; }
+.kb-preview th { background: var(--surface-2); font-weight: 600; }
+.kb-preview hr { border: 0; border-top: 1px solid var(--line); }
+
+@media (max-width: 1024px) {
+  .kb-editor { grid-template-columns: minmax(0, 1fr); }
+  .kb-editor-side { position: static; }
+}
+@media (max-width: 760px) {
+  .kb-layout { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
+  .kb-collections { position: static; max-height: none; overflow: visible; padding-right: 0; }
+  .kb-header .button-row { width: 100%; }
+  .kb-header .button-row > * { flex: 1 1 auto; }
+  .kb-body, .kb-preview-panel { min-height: 18rem; }
+  .kb-filters .segmented { width: 100%; }
+  .kb-filters .segmented label { flex: 1 1 0; justify-content: center; }
+}
+@media (pointer: coarse) {
+  .kb-tree-link, .kb-back { min-height: var(--touch); }
+  .kb-tabs button { --control: var(--touch); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kb-tree-link, .kb-article-row, .button-link, .kb-article-list[aria-busy="true"] { transition: none; }
+}
+@media (forced-colors: active) {
+  .kb-tree-link[aria-current="page"], .kb-tabs button[aria-selected="true"] { outline: 2px solid Highlight; }
+}

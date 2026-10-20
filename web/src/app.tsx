@@ -16,7 +16,8 @@ import { AppShell } from './features/shell/app-shell';
 import { SeatPausedScreen } from './features/shell/seat-paused-screen';
 import { PlanNotices } from './features/shell/plan-notices';
 import { messages } from './messages';
-import { InboxIcon, RequestsIcon, SettingsIcon } from './ui/icons';
+import { BookIcon, InboxIcon, RequestsIcon, SettingsIcon } from './ui/icons';
+import { kbPart } from './features/kb/kb-part';
 import { lazyPart, Part, PartUnavailable } from './ui/lazy-part';
 import { LogoMark } from './ui/logo';
 import { resetProductAnalytics, useProductAnalytics } from './lib/product-analytics';
@@ -58,6 +59,7 @@ function AppLayout() {
   // Plan and billing is a page inside Settings, so Settings stays the current rail destination there.
   const inSettings = path.startsWith('/settings');
   const inRequests = path.startsWith('/requests');
+  const inKnowledge = path.startsWith('/knowledge');
   return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} appVersion={config.data?.version} signedOut={signedOut} signIn={signIn}
     notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} />
       {/* The survey only ever asks a cloud trial admin, so no other session loads its chunk. */}
@@ -66,10 +68,12 @@ function AppLayout() {
     onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending}
     brand={<span className="rail-brand" role="img" aria-label={messages.brand}><LogoMark /></span>}
     links={locked ? undefined : <>
-      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inRequests ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
+      <Link to="/" className="rail-link" data-tip={messages.inbox} aria-label={messages.inbox} aria-current={inSettings || inRequests || inKnowledge ? undefined : 'page'}><InboxIcon /><span className="rail-label" aria-hidden="true">{messages.inbox}</span></Link>
       <Link to="/requests" className="rail-link" data-tip={messages.requests} aria-label={waiting > 0 ? messages.requestsWaiting(waiting) : messages.requests}
         aria-current={inRequests ? 'page' : undefined}><RequestsIcon /><span className="rail-label" aria-hidden="true">{messages.requests}</span>
         {waiting > 0 && <span className="rail-badge" aria-hidden="true">{waiting > 99 ? '99+' : waiting}</span>}</Link>
+      <Link to="/knowledge" className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
+        onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>
       <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}><SettingsIcon /><span className="rail-label" aria-hidden="true">{messages.settings}</span></Link>
     </>}>
     <Outlet />
@@ -90,6 +94,39 @@ const conversationRoute = createRoute({ getParentRoute: () => rootRoute, path: '
 // The customer page is its own chunk (contact-part.tsx), so the inbox bundle does not carry it.
 const contactRoute = createRoute({ getParentRoute: () => rootRoute, path: '/contacts/$contactId',
   component: () => <ContactsPart render={(chunk) => <chunk.ContactRoute />} failed={<main className="settings-page"><PartUnavailable /></main>} /> });
+// The knowledge base is its own chunk (features/kb/kb-chunk.ts); its filters are in the address.
+const kbFailed = <main className="settings-page"><PartUnavailable /></main>;
+const knowledgeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/knowledge',
+  validateSearch: (search: Record<string, unknown>): { collection?: string; q?: string; status?: 'draft' | 'published' } => ({
+    ...(typeof search.collection === 'string' && search.collection !== '' ? { collection: search.collection } : {}),
+    ...(typeof search.q === 'string' && search.q !== '' ? { q: search.q } : {}),
+    ...(search.status === 'draft' || search.status === 'published' ? { status: search.status } : {}),
+  }),
+  component: function Knowledge() {
+    const search = knowledgeRoute.useSearch();
+    return <Part part={kbPart} failed={kbFailed} render={({ KnowledgeRoute }) => <KnowledgeRoute search={search} />} />;
+  },
+});
+const newArticleRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/knowledge/new',
+  validateSearch: (search: Record<string, unknown>): { collection?: string } => (typeof search.collection === 'string' && search.collection !== '' ? { collection: search.collection } : {}),
+  component: function NewArticle() {
+    const { collection } = newArticleRoute.useSearch();
+    return <Part part={kbPart} failed={kbFailed} render={({ ArticleRoute }) => <ArticleRoute collectionId={collection} />} />;
+  },
+});
+const articleRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/knowledge/articles/$articleId',
+  component: function Article() {
+    const { articleId } = articleRoute.useParams();
+    // key: another article starts with its own form, not the last one's edits.
+    return <Part part={kbPart} failed={kbFailed} render={({ ArticleRoute }) => <ArticleRoute key={articleId} articleId={articleId} />} />;
+  },
+});
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsRoute });
 const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: RequestsRoute });
 const billingRoute = createRoute({
@@ -123,7 +160,7 @@ const signInRoute = createRoute({
   component: () => <RedeemRoute token={signInRoute.useSearch().token ?? ''} />,
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, settingsRoute, requestsRoute, billingRoute, signInRoute]);
+export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, signInRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {
