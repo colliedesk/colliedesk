@@ -109,6 +109,9 @@
 .kb-preview ul { list-style: disc; }
 .kb-preview ol { list-style: decimal; }
 .kb-preview ul ul { list-style: circle; }
+/* A checklist reads by its boxes, as on the help center. */
+.kb-preview ul.contains-task-list { list-style: none; padding-left: var(--space-2); }
+.kb-preview .task-list-item input { margin: 0 var(--space-2) 0 0; vertical-align: -2px; }
 .kb-preview li + li { margin-top: var(--space-1); }
 .kb-preview img { max-width: 100%; height: auto; border-radius: var(--radius); }
 .kb-preview blockquote { margin-inline: 0; border-left: 3px solid var(--line-strong); padding-left: var(--space-4); color: var(--text-2); }
