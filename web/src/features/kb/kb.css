@@ -143,3 +143,4 @@
 @media (forced-colors: active) {
   .kb-tree-link[aria-current="page"], .kb-tabs button[aria-selected="true"] { outline: 2px solid Highlight; }
 }
+.kb-external-image { display: inline-block; border: 1px dashed var(--line-strong); border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); color: var(--text-2); font-size: var(--fs-small); }

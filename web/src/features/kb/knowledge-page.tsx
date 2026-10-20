@@ -6,6 +6,7 @@ import { formatDate } from '../../lib/format-date';
 import { savedReplyChangeText } from '../../lib/saved-reply-change';
 import { messages } from '../../messages';
 import { SearchIcon } from '../../ui/icons';
+import { typingDelayMs } from '../inbox/inbox-filters';
 import { RouterLink } from '../../ui/router-link';
 import { SavedReplyTrash } from '../settings/saved-reply-panels';
 import { CollectionForm, CollectionTree } from './collection-panel';
@@ -22,8 +23,6 @@ export interface KnowledgeSearch {
   status?: KBArticleStatus;
 }
 
-// A search waits this long after the last key before it asks the server.
-const searchDelayMs = 250;
 
 // Every write can change the counts in the tree, the list and the trash, so all three are read again.
 export function useRefreshKB() {
@@ -62,7 +61,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   const type = (value: string) => {
     setText(value);
     window.clearTimeout(typed.current);
-    typed.current = window.setTimeout(() => setSearch({ q: value.trim() || undefined }, true), searchDelayMs);
+    typed.current = window.setTimeout(() => setSearch({ q: value.trim() || undefined }, true), typingDelayMs);
   };
   // One form at a time: a new collection (inside the chosen one, or at the top), or editing the chosen one.
   const [form, setForm] = useState<'new' | 'new-inside' | 'edit' | null>(null);

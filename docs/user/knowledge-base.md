@@ -18,7 +18,7 @@ one, for example "Getting started".
   goes under **Inside**, then **Create collection**. To add one inside the collection you are looking
   at, select **Add a collection inside**. A collection on the third level cannot hold another one.
 - **Choose**: select a collection on the left to list only the articles directly in it; **All
-  articles** lists every one. The number next to a collection counts its articles, drafts included.
+  articles** lists every one. The number next to a collection counts the articles directly in it, drafts included, not those of the collections inside it.
 - **Edit**: select the collection, then **Edit**. You can rename it, change its description, move it
   under another collection (or to the top), and change its **Address name**, the part of its help
   center address. Changing the address name changes the help center addresses of the collection and
@@ -54,7 +54,10 @@ two articles.
 Paste an image into the text, or drag it in. Colliedesk uploads it and writes
 `![name](/api/v1/kb/images/…)` where the cursor was; while it uploads, the text says so. PNG, JPEG,
 GIF and WebP up to 5 MB each are accepted. Images count toward your plan's storage. The same image
-uploaded twice is stored once.
+uploaded twice is stored once. Saving waits until every image has finished uploading.
+
+Only uploaded images are shown. An image linked from another site (`![x](https://…)`) is not shown in
+the preview or on the help center; the preview says so. Download it and paste it in instead.
 
 ### Publish, unpublish, edit
 

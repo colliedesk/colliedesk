@@ -91,7 +91,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const uploads = useRef(0);
   const set = (change: Partial<Draft>) => { setSavedOnce(false); setDraft((current) => ({ ...current, ...change })); };
   const dirty = base
-    ? draft.title !== base.title || draft.slug !== base.slug || draft.body !== base.body_md || draft.collection_id !== base.collection_id
+    // An emptied address name is not a change: the server keeps the old one, so nothing would be sent.
+    ? draft.title !== base.title || (draft.slug.trim() !== '' && draft.slug !== base.slug) || draft.body !== base.body_md || draft.collection_id !== base.collection_id
     : draft.title.trim() !== '' || draft.body.trim() !== '';
   // A person leaving with unsaved text is asked first; a save that moves on (a new article, a delete) is not.
   const leaving = useRef(false);
@@ -104,7 +105,9 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const titleLength = characters(draft.title);
   const bodyLength = characters(draft.body);
   const tooLong = bodyLength > maxBody;
-  const invalid = !draft.title.trim() || titleLength > maxTitle || tooLong || !draft.collection_id;
+  // Images still uploading hold a placeholder in the text; saving waits for them so it is never stored.
+  const [uploading, setUploading] = useState(0);
+  const invalid = !draft.title.trim() || titleLength > maxTitle || tooLong || !draft.collection_id || uploading > 0;
 
   const save = async (status?: KBArticleStatus, over?: KBArticle) => {
     if (busy || invalid) return;
@@ -121,14 +124,16 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         await navigate({ to: '/knowledge/articles/$articleId', params: { articleId: created.id }, replace: true });
         return;
       }
-      const updated = await kbApi.updateArticle(current.id, {
-        updated_at: current.updated_at,
+      const change = {
         ...(sent.title.trim() !== current.title ? { title: sent.title.trim() } : {}),
         ...(sent.slug.trim() && sent.slug.trim() !== current.slug ? { slug: sent.slug.trim() } : {}),
         ...(sent.body !== current.body_md ? { body_md: sent.body } : {}),
         ...(sent.collection_id !== current.collection_id ? { collection_id: sent.collection_id } : {}),
         ...(status && status !== current.status ? { status } : {}),
-      });
+      };
+      // Nothing changed (Ctrl+S on a saved article): there is nothing to ask the server.
+      if (Object.keys(change).length === 0) return;
+      const updated = await kbApi.updateArticle(current.id, { updated_at: current.updated_at, ...change });
       setBase(updated);
       // The server may write the title or address name its own way; text typed during the save stays.
       setDraft((now) => (now === sent ? draftOf(updated) : now));
@@ -207,7 +212,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       uploads.current += 1;
       const placeholder = `![${kbMessages.uploadingImage(file.name)}](#upload-${uploads.current})`;
       placeholders.push(placeholder);
-      void kbApi.uploadImage(file).then((image) => {
+      setUploading((count) => count + 1);
+      void kbApi.uploadImage(file).finally(() => setUploading((count) => count - 1)).then((image) => {
         replacePlaceholder(placeholder, `![${altText(file.name)}](${image.url})`);
         setNotice(kbMessages.imageUploaded(file.name));
       }, (error: unknown) => {
@@ -218,7 +224,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     if (placeholders.length > 0) insertAtCursor(placeholders.join('\n'));
   };
   const replacePlaceholder = (placeholder: string, text: string) =>
-    setDraft((current) => (current.body.includes(placeholder) ? { ...current, body: current.body.replace(placeholder, text) } : current));
+    setDraft((current) => (current.body.includes(placeholder) ? { ...current, body: current.body.replace(placeholder, () => text) } : current));
   const imagesIn = (list: FileList | null) => [...(list ?? [])].filter((file) => file.type.startsWith('image/') || file.type === '');
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
     const files = imagesIn(event.clipboardData.files);
@@ -287,6 +293,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
             </div>
           </div>
           {tooLong && <p role="alert" className="error-copy">{kbMessages.tooLong(bodyLength - maxBody)}</p>}
+          {uploading > 0 && <p role="status" className="kb-hint">{kbMessages.waitingForImages}</p>}
           {imageProblems.map((text) => <p key={text} role="alert" className="error-copy">{text}</p>)}
         </div>
         <aside className="kb-editor-side" aria-label={kbMessages.articleSettings}>
@@ -304,12 +311,13 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           </div>}
           {problem && <p role="alert" className="error-copy">{problem}</p>}
           <div className="kb-actions">
-            <button className="primary-action" type="submit" disabled={busy || invalid || (base !== undefined && !dirty)}>
+            <button className="primary-action" type="submit" disabled={busy || invalid || (base !== undefined && !dirty)} aria-describedby={!draft.collection_id ? `${id}-needs-collection` : undefined}>
               {busy ? kbMessages.saving : base ? kbMessages.saveChanges : kbMessages.saveDraft}</button>
             {status === 'published'
               ? <button type="button" disabled={busy || invalid} onClick={() => void save('draft')}>{kbMessages.unpublish}</button>
-              : <button type="button" disabled={busy || invalid} onClick={() => void save('published')}>{dirty || !base ? kbMessages.saveAndPublish : kbMessages.publish}</button>}
+              : <button type="button" disabled={busy || invalid} aria-describedby={!draft.collection_id ? `${id}-needs-collection` : undefined} onClick={() => void save('published')}>{dirty || !base ? kbMessages.saveAndPublish : kbMessages.publish}</button>}
           </div>
+          {!draft.collection_id && <p id={`${id}-needs-collection`} className="kb-hint">{kbMessages.needsCollection}</p>}
           <p className="kb-hint kb-save-state" aria-hidden="true">{dirty ? kbMessages.unsaved : savedOnce ? kbMessages.saved : ' '}</p>
           <div className="field"><label htmlFor={`${id}-collection`}>{kbMessages.articleCollection}</label>
             <select id={`${id}-collection`} value={draft.collection_id} required onChange={(event) => set({ collection_id: event.target.value })}>
@@ -334,7 +342,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           </div>}
         </aside>
       </form>
-      {base && historyOpen && <SavedReplyHistory<KBArticleVersion> title={base.title} timezone={timezone} load={(before) => kbApi.versions(base.id, before)}
+      {/* key: a save or a restore adds a version, so an open history loads again. */}
+      {base && historyOpen && <SavedReplyHistory<KBArticleVersion> key={base.updated_at} title={base.title} timezone={timezone} load={(before) => kbApi.versions(base.id, before)}
         text={(version) => version.body_md} changes={versionChanges} failedMessage={kbMessages.articleActionFailed}
         onRestore={restoreVersion} onClose={() => { setHistoryOpen(false); historyButton.current?.focus(); }} />}
     </main>
