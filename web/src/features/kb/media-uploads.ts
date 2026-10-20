@@ -45,7 +45,8 @@ export const baseName = (name: string) => name.replace(/\.[^.]+$/, '').slice(0, 
 interface Job {
   row: UploadRow;
   file: File;
-  uploadId?: string;
+  // session.id is the server's upload, from its start, so a cancel or leaving the page can end it.
+  session: { id?: string };
   controller?: AbortController;
 }
 
@@ -72,7 +73,7 @@ export class UploadQueue {
     for (const file of files) {
       const kind = kindOf(file);
       if (!kind) { refused.push(file.name); continue; }
-      this.jobs.push({ file, row: { key: this.next++, name: file.name, size: file.size, kind, state: 'waiting', sent: 0, bytesPerSecond: 0, duplicate: false } });
+      this.jobs.push({ file, session: {}, row: { key: this.next++, name: file.name, size: file.size, kind, state: 'waiting', sent: 0, bytesPerSecond: 0, duplicate: false } });
     }
     this.changed();
     void this.run();
@@ -101,7 +102,7 @@ export class UploadQueue {
     if (!job || job.row.state === 'done' || job.row.state === 'cancelled') return;
     job.row.state = 'cancelled';
     job.controller?.abort();
-    if (job.uploadId) void mediaApi.cancelUpload(job.uploadId).catch(() => undefined);
+    if (job.session.id) void mediaApi.cancelUpload(job.session.id).catch(() => undefined);
     this.changed();
   }
 
@@ -117,9 +118,9 @@ export class UploadQueue {
   stop() {
     for (const job of this.jobs) {
       job.controller?.abort();
-      if (job.uploadId && !['done', 'cancelled'].includes(job.row.state)) {
-        void fetch(`/api/v1/kb/media-uploads/${job.uploadId}`, { method: 'DELETE', credentials: 'same-origin', keepalive: true }).catch(() => undefined);
-        job.uploadId = undefined;
+      if (job.session.id && !['done', 'cancelled'].includes(job.row.state)) {
+        void fetch(`/api/v1/kb/media-uploads/${job.session.id}`, { method: 'DELETE', credentials: 'same-origin', keepalive: true }).catch(() => undefined);
+        job.session.id = undefined;
       }
     }
   }
@@ -160,54 +161,73 @@ export class UploadQueue {
     return item;
   }
 
-  // video sends the parts from the offset the server holds, then completes the upload; undefined when
-  // paused or cancelled.
   private async video(job: Job, signal: AbortSignal): Promise<KBMedia | undefined> {
-    const { file, row } = job;
-    if (!job.uploadId) {
-      const started = await mediaApi.startUpload({ size: file.size, name: baseName(file.name), keep: true });
-      job.uploadId = started.id;
-    }
-    const id = job.uploadId;
-    let upload = await mediaApi.upload(id);
-    let busyTries = 0;
-    while (upload.offset < upload.size) {
-      if (signal.aborted) return undefined;
-      const part = file.slice(upload.offset, Math.min(upload.offset + upload.part_size, upload.size));
-      const first = upload.offset;
-      const started = performance.now();
-      const answer = await this.send(id, part, first, upload.size, (bytes) => {
-        row.sent = first + bytes;
-        row.bytesPerSecond = bytes / Math.max(0.001, (performance.now() - started) / 1000);
+    const { row, session } = job;
+    return uploadVideo(job.file, { keep: true, signal, send: this.send, session, onProgress: (sent, bytesPerSecond) => {
+        row.sent = sent;
+        // 0 after a part: keep the speed the part was sent at, for the time left.
+        if (bytesPerSecond > 0) row.bytesPerSecond = bytesPerSecond;
         this.changed();
-      }, signal);
-      if (answer.status === 429 && busyTries < 5) {
-        // The server still finishes the part a pause cut off (one part of an upload at a time): wait, then ask where it stands.
-        await wait(500 * 2 ** busyTries++, signal);
-        upload = await mediaApi.upload(id);
-        continue;
-      }
-      busyTries = 0;
-      if (answer.status === 409 && answer.offset !== null) {
-        // The server holds other bytes than this page thought (another tab, a part that arrived late): go on from there.
-        upload = await mediaApi.upload(id);
-        continue;
-      }
-      if (answer.status !== 200) throw new Error(errorText(answer.body) ?? mediaMessages.uploadFailed);
-      upload = answer.body as typeof upload;
-      row.sent = upload.offset;
-    }
+      }, onDuplicate: () => { row.duplicate = true; } });
+  }
+}
+
+export interface VideoUpload {
+  // keep marks an upload made in the library; one pasted into an article is kept by the article.
+  keep: boolean;
+  signal: AbortSignal;
+  send?: PartSender;
+  // session holds the server's upload id across a pause, so a resume goes on from the bytes it has.
+  session?: { id?: string };
+  onProgress?: (sent: number, bytesPerSecond: number) => void;
+  onDuplicate?: () => void;
+}
+
+// uploadVideo sends a video in the parts the server names, from the offset it holds, then completes the
+// upload; undefined when aborted (a pause or a cancel).
+export async function uploadVideo(file: File, options: VideoUpload): Promise<KBMedia | undefined> {
+  const { signal, send = sendPart, session = {}, onProgress = () => undefined } = options;
+  if (!session.id) {
+    const started = await mediaApi.startUpload({ size: file.size, name: baseName(file.name), keep: options.keep });
+    session.id = started.id;
+  }
+  const id = session.id;
+  let upload = await mediaApi.upload(id);
+  let busyTries = 0;
+  while (upload.offset < upload.size) {
     if (signal.aborted) return undefined;
-    try {
-      const before = Date.now();
-      const item = await mediaApi.completeUpload(id);
-      row.duplicate = Date.parse(item.created_at) < before - 60_000;
-      return item;
-    } catch (error) {
-      // Parts gone from the server: start over with a new upload.
-      if (error instanceof ConflictError && error.detail?.code === 'upload_lost') job.uploadId = undefined;
-      throw error;
+    const part = file.slice(upload.offset, Math.min(upload.offset + upload.part_size, upload.size));
+    const first = upload.offset;
+    const started = performance.now();
+    const answer = await send(id, part, first, upload.size, (bytes) => {
+      onProgress(first + bytes, bytes / Math.max(0.001, (performance.now() - started) / 1000));
+    }, signal);
+    if (answer.status === 429 && busyTries < 5) {
+      // The server still finishes the part a pause cut off (one part of an upload at a time): wait, then ask where it stands.
+      await wait(500 * 2 ** busyTries++, signal);
+      upload = await mediaApi.upload(id);
+      continue;
     }
+    busyTries = 0;
+    if (answer.status === 409 && answer.offset !== null) {
+      // The server holds other bytes than this page thought (another tab, a part that arrived late): go on from there.
+      upload = await mediaApi.upload(id);
+      continue;
+    }
+    if (answer.status !== 200) throw new Error(errorText(answer.body) ?? mediaMessages.uploadFailed);
+    upload = answer.body as typeof upload;
+    onProgress(upload.offset, 0);
+  }
+  if (signal.aborted) return undefined;
+  try {
+    const before = Date.now();
+    const item = await mediaApi.completeUpload(id);
+    if (Date.parse(item.created_at) < before - 60_000) options.onDuplicate?.();
+    return item;
+  } catch (error) {
+    // Parts gone from the server: start over with a new upload.
+    if (error instanceof ConflictError && error.detail?.code === 'upload_lost') session.id = undefined;
+    throw error;
   }
 }
 
