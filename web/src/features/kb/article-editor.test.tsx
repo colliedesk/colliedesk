@@ -368,3 +368,20 @@ test('a pasted video goes up in parts and goes in as the library video HTML, kep
   expect(calls.find((call) => call.path === '/api/v1/kb/media-uploads')?.body).toEqual({ size: 12, name: 'tour', keep: false });
   expect(sentParts.slice(-2)).toEqual(['0+8/12', '8+4/12']);
 });
+
+test('leaving the editor stops the videos waiting their turn, and cancels the one the server was starting', async () => {
+  const upload = { id: '77777777-0000-4000-8000-000000000003', kind: 'video', name: 'one', size: 12, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z',
+    media_id: null, created_by: null, created_at: '2026-10-21T00:00:00Z' };
+  let release: () => void = () => undefined;
+  const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: 'Intro' })),
+    'POST /api/v1/kb/media-uploads': () => new Promise<Response>((resolve) => { release = () => resolve(json(201, upload)); }),
+    [`DELETE /api/v1/kb/media-uploads/${upload.id}`]: () => json(204) });
+  const view = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ArticleRoute articleId={ids.article} /></QueryClientProvider>);
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
+  fireEvent.paste(text, { clipboardData: { files: [new File([new Uint8Array(12)], 'one.webm', { type: 'video/webm' }), new File([new Uint8Array(12)], 'two.webm', { type: 'video/webm' })] } });
+  await waitFor(() => expect(calls.filter((call) => call.path === '/api/v1/kb/media-uploads')).toHaveLength(1));
+  view.unmount();
+  await act(async () => { release(); await new Promise((resolve) => { setTimeout(resolve, 50); }); });
+  expect(calls.filter((call) => call.method === 'POST' && call.path === '/api/v1/kb/media-uploads')).toHaveLength(1);
+  expect(calls.some((call) => call.method === 'DELETE' && call.path === `/api/v1/kb/media-uploads/${upload.id}`)).toBe(true);
+});

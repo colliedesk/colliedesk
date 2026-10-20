@@ -235,13 +235,18 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   // its own: right after a table row or inside a line, Markdown would read it as part of the table or the text.
   // A video goes up in parts (media-uploads.ts); leaving the page cancels the ones still going, so they
   // hold none of the workspace's three uploads in progress.
+  // The videos waiting their turn stop too: one signal for the editor, made by the effect (so a second run of
+  // it, as in development, gets a fresh one) and aborted when it goes.
   const videoUploads = useRef(new Set<{ id?: string }>());
   const videoTurn = useRef<Promise<void>>(Promise.resolve());
+  const videoSignal = useRef(new AbortController().signal);
   useEffect(() => {
     const uploads = videoUploads.current;
+    const controller = new AbortController();
+    videoSignal.current = controller.signal;
     const leave = () => {
-      for (const session of uploads)
-        if (session.id) void fetch(`/api/v1/kb/media-uploads/${session.id}`, { method: 'DELETE', credentials: 'same-origin', keepalive: true }).catch(() => undefined);
+      controller.abort();
+      for (const session of uploads) cancelVideoUpload(session);
       uploads.clear();
     };
     window.addEventListener('pagehide', leave);
@@ -262,15 +267,19 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     upload: async (file, progress) => {
       if (kindOf(file) === 'image') return { snippet: `![${altText(file.name)}](${(await kbApi.uploadImage(file)).url})` };
       const session: { id?: string } = {};
+      const signal = videoSignal.current;
       videoUploads.current.add(session);
       // One video at a time, in the order they came: a workspace has three uploads in progress at most.
-      const turn = videoTurn.current.then(() => uploadVideo(file, { keep: false, signal: new AbortController().signal, session, onProgress: (sent) => progress(sent / file.size) }));
+      const turn = videoTurn.current.then(() => (signal.aborted ? undefined
+        : uploadVideo(file, { keep: false, signal, session, onProgress: (sent) => progress(sent / file.size) })));
       videoTurn.current = turn.then(() => undefined, () => undefined);
       try {
         const item = await turn;
         if (!item) throw new Error(kbMessages.imageFailed(file.name));
         return { snippet: embedFor(item) };
       } finally {
+        // An upload the server started while the editor was going away is cancelled once its id is known.
+        if (signal.aborted) cancelVideoUpload(session);
         videoUploads.current.delete(session);
       }
     },
@@ -437,6 +446,13 @@ function versionChanges(version: KBArticleVersion, previous: KBArticleVersion): 
     ...(version.status !== previous.status ? [version.status === 'published' ? kbMessages.published : kbMessages.draft] : []),
     ...(version.collection_id !== previous.collection_id ? [kbMessages.movedCollection] : []),
   ];
+}
+
+// cancelVideoUpload throws an unfinished video upload away on the server; keepalive outlives a closing page.
+function cancelVideoUpload(session: { id?: string }) {
+  if (!session.id) return;
+  void fetch(`/api/v1/kb/media-uploads/${session.id}`, { method: 'DELETE', credentials: 'same-origin', keepalive: true }).catch(() => undefined);
+  session.id = undefined;
 }
 
 // altText describes an image by its file name, without the characters that would end the Markdown.
