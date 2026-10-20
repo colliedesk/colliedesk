@@ -111,3 +111,38 @@ test('the list is asked for beside the help center, not after it', async () => {
   answer(json(200, center(true)));
   expect(await screen.findByRole('option', { name: 'Reset your password' })).toBeInTheDocument();
 });
+
+test('typing before the help center answered is still the search, and Enter links what it finds', async () => {
+  let answer: (value: Response) => void = () => {};
+  const calls = serve({
+    'GET /api/v1/help-center': () => new Promise<Response>((resolve) => { answer = resolve; }),
+    'GET /api/v1/kb/articles': (call) => json(200, { items: call.search.get('q') === 'refund' ? [refund] : [reset, refund], next_cursor: null }),
+  });
+  const onInsert = open();
+  const search = screen.getByRole('combobox', { name: 'Search published articles' });
+  fireEvent.change(search, { target: { value: 'refund' } });
+  // Enter before anything answered waits for the search too.
+  fireEvent.keyDown(search, { key: 'Enter' });
+  expect(onInsert).not.toHaveBeenCalled();
+  answer(json(200, center(true)));
+  await waitFor(() => expect(calls.some((call) => call.path === '/api/v1/kb/articles' && call.search.get('q') === 'refund')).toBe(true));
+  await waitFor(() => expect(onInsert).toHaveBeenCalledExactlyOnceWith('Refund steps\nhttps://desk.example.com/help/acme/a/8-refund-steps'));
+  expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Refund steps']);
+  expect(onInsert).toHaveBeenCalledExactlyOnceWith('Refund steps\nhttps://desk.example.com/help/acme/a/8-refund-steps');
+});
+
+test('typing while it asks again about a help center it last saw off is still the search', async () => {
+  let answer: (value: Response) => void = () => {};
+  serve({
+    'GET /api/v1/help-center': () => new Promise<Response>((resolve) => { answer = resolve; }),
+    'GET /api/v1/kb/articles': (call) => json(200, { items: call.search.get('q') === 'refund' ? [refund] : [reset, refund], next_cursor: null }),
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 15_000 } } });
+  client.setQueryData(['help-center'], center(false));
+  open({}, client);
+  // Not "off" yet: it is asking again.
+  expect(screen.getByRole('status')).toHaveTextContent('Loading articles…');
+  fireEvent.change(screen.getByRole('combobox', { name: 'Search published articles' }), { target: { value: 'refund' } });
+  answer(json(200, center(true)));
+  await waitFor(() => expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Refund steps']));
+});

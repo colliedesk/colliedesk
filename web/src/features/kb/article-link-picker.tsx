@@ -43,15 +43,18 @@ export function ArticleLinkPicker({ box, onInsert, onClose, canManage = false }:
   // Settings tab the list itself opens, or an article published a moment ago.
   const center = useQuery({ queryKey: ['help-center'], queryFn: kbApi.helpCenter, refetchOnMount: 'always' });
   const enabled = center.data?.enabled === true;
+  // Known to be off, not merely unanswered yet (or last seen off and being asked again): what is typed
+  // meanwhile is the search once it answers.
+  const off = center.data?.enabled === false && !center.isFetching;
   // The list is asked for beside the help center, not after it; only a help center known to be off skips it.
   const list = useQuery({
     queryKey: ['kb-articles', { q: q || undefined, status: 'published', for: 'reply' }],
     queryFn: ({ signal }) => kbApi.articles({ q: q || undefined, status: 'published' }, signal),
-    enabled: center.data?.enabled !== false, placeholderData: keepPreviousData, refetchOnMount: 'always',
+    enabled: !off, placeholderData: keepPreviousData, refetchOnMount: 'always',
   });
   const items = enabled ? list.data?.items ?? [] : [];
   // Until the list answers what is in the search box, it shows the answer to the search before.
-  const pending = enabled && (text.trim() !== q || list.isPending || list.isPlaceholderData);
+  const pending = !off && (center.isPending || text.trim() !== q || list.isPending || list.isPlaceholderData);
   const insert = (article: KBArticleSummary) => {
     const field = box.current;
     const value = field?.value ?? '';
@@ -62,9 +65,9 @@ export function ArticleLinkPicker({ box, onInsert, onClose, canManage = false }:
     setQueued(false);
     if (items[0]) insert(items[0]);
   }, [queued, pending, items, insert]);
-  const state = center.isError || (enabled && list.isError) ? 'failed' : center.isPending || (enabled && list.isPending) ? 'loading' : 'ready';
+  const state = center.isError || (enabled && list.isError) ? 'failed' : (!enabled && !off) || (enabled && list.isPending) ? 'loading' : 'ready';
   // While it is off, the list's empty state says why; an admin's way out is the picker's own button.
-  const texts = center.data && !enabled
+  const texts = off
     ? { ...kbMessages.linkPicker, none: canManage ? kbMessages.linkHelpCenterOff : kbMessages.linkHelpCenterAdmins }
     : kbMessages.linkPicker;
   return (
@@ -76,7 +79,7 @@ export function ArticleLinkPicker({ box, onInsert, onClose, canManage = false }:
       setQueued(true);
     }}>
       <SavedReplyPicker replies={items} onPick={insert} onClose={onClose} state={state} texts={texts}
-        onQueryChange={enabled ? (value) => { setText(value); setQueued(false); } : undefined} onManage={!enabled && canManage ? openHelpCenterSettings : undefined} />
+        onQueryChange={off ? undefined : (value) => { setText(value); setQueued(false); }} onManage={off && canManage ? openHelpCenterSettings : undefined} />
     </div>
   );
 }
