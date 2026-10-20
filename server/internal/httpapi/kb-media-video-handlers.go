@@ -203,10 +203,14 @@ func (a *API) putKBMediaUploadPart(response http.ResponseWriter, request *http.R
 		return
 	}
 	if err := writeKBPart(path, first, http.MaxBytesReader(response, request.Body, length), length); err != nil {
+		a.dropCancelledParts(who.Workspace.ID, upload.ID)
 		writeError(response, http.StatusBadRequest, "invalid_request", "The part did not arrive whole; send it again from byte "+strconv.FormatInt(first, 10)+".")
 		return
 	}
 	recorded, err := a.store.RecordKBMediaUploadPart(request.Context(), who.Workspace.ID, upload.ID, first, last+1)
+	if errors.Is(err, domain.ErrKBMediaUploadNotFound) {
+		a.dropCancelledParts(who.Workspace.ID, upload.ID)
+	}
 	if err != nil {
 		writeKBUploadError(response, err)
 		return
@@ -241,12 +245,8 @@ func writeKBPart(path string, offset int64, body io.Reader, length int64) error 
 func (a *API) cancelKBMediaUpload(response http.ResponseWriter, request *http.Request) {
 	who := principal(request)
 	id := request.PathValue("id")
-	// A part being written would make the file again after it is removed.
-	if !a.kbUploads.enter(who.Workspace.ID, id) {
-		writeError(response, http.StatusTooManyRequests, "too_many_parts", "A part of this upload is being sent; cancel it once that part is done.")
-		return
-	}
-	defer a.kbUploads.leave(who.Workspace.ID, id)
+	// No wait for a part being written (a page that goes away cannot retry): that part finds the upload
+	// gone when it records itself and removes the file it wrote (dropCancelledParts).
 	if err := a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id); err != nil {
 		writeKBUploadError(response, err)
 		return
@@ -257,6 +257,22 @@ func (a *API) cancelKBMediaUpload(response http.ResponseWriter, request *http.Re
 		}
 	}
 	response.WriteHeader(http.StatusNoContent)
+}
+
+// dropCancelledParts removes the file of an upload cancelled while one of its parts was being written:
+// writing the part made the file again after the cancel removed it.
+func (a *API) dropCancelledParts(workspaceID, id string) {
+	staging := a.kbStaging()
+	if staging == nil {
+		return
+	}
+	// A new context: the request's may be over (the client went away), and the check must still run.
+	if _, err := a.store.GetKBMediaUpload(context.Background(), workspaceID, id); !errors.Is(err, domain.ErrKBMediaUploadNotFound) {
+		return
+	}
+	if err := staging.RemoveStaged(id); err != nil {
+		log.Printf("knowledge base upload %s: remove the parts of a cancelled upload: %v", id, err)
+	}
 }
 
 func (a *API) completeKBMediaUpload(response http.ResponseWriter, request *http.Request) {
