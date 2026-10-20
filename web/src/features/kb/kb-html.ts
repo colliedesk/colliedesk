@@ -193,7 +193,10 @@ function parse(raw: string, rules: Rules) {
   const document = parser.parseFromString(raw, 'text/html');
   const result = new Fragment(rules);
   // A fragment that starts with <style>, <script> or <title> puts it in the head.
-  for (const node of [...Array.from(document.head.childNodes), ...Array.from(document.body.childNodes)])
+  for (const node of [...Array.from(document.head.childNodes), ...Array.from(document.body.childNodes)]) {
+    // Words on the lines of an HTML block are part of it, so they go too; say so.
+    if (node.nodeType === Node.TEXT_NODE && /[^\t\n\f\r ]/.test(node.nodeValue ?? '')) result.drop('text in an HTML block');
     result.walk(node);
+  }
   return { nodes: result.nodes, dropped: result.dropped };
 }

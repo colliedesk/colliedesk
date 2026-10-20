@@ -123,6 +123,9 @@ func FrameSources() []string {
 	return origins
 }
 
+// TextInHTMLBlock is what Fragment names when words share the lines of an HTML block.
+const TextInHTMLBlock = "text in an HTML block"
+
 // Fragment is (*Rules).Fragment with allowlist.json.
 func Fragment(raw string) (string, []string) { return rules.Fragment(raw) }
 
@@ -136,6 +139,10 @@ func (r *Rules) Fragment(raw string) (string, []string) {
 	}
 	f := fragment{rules: r}
 	for _, node := range nodes {
+		// Words on the lines of an HTML block are part of it, so they go too; say so.
+		if node.Type == nethtml.TextNode && strings.Trim(node.Data, " \t\n\f\r") != "" {
+			f.drop(TextInHTMLBlock)
+		}
 		f.walk(node)
 	}
 	return f.out.String(), f.dropped

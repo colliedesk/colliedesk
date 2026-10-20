@@ -169,7 +169,8 @@
       "html": "<script>window.__xss = 1</script>after",
       "iframes": [],
       "dropped": [
-        "script"
+        "script",
+        "text in an HTML block"
       ]
     },
     {
@@ -238,6 +239,16 @@
       "html": "<!-- editor note -->",
       "iframes": [],
       "dropped": []
+    },
+    {
+      "name": "words on the lines of a player are left out and named",
+      "html": "<iframe src=\"https://player.vimeo.com/video/1\"></iframe>\nAfter this line",
+      "iframes": [
+        "https://player.vimeo.com/video/1"
+      ],
+      "dropped": [
+        "text in an HTML block"
+      ]
     },
     {
       "name": "text of other HTML is not shown",

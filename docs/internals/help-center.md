@@ -35,7 +35,10 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   - Everything else in a piece is left out, text included, as raw HTML always was, so imported
     articles that still hold HTML read as before; a player nested in another element is still found,
     except inside `dropWithContent` elements (`svg`, `object`, `template`…). Words between inline
-    tags are Markdown, not part of a piece, and stay.
+    tags are Markdown, not part of a piece, and stay. Words on the lines of an HTML block (CommonMark
+    runs one from a line starting with `<iframe` to the next blank line) belong to the piece, so they
+    go too; the preview names them ("text in an HTML block"). The Freshdesk import therefore gives
+    each player a paragraph of its own, except in a table cell.
   - Why so strict: an iframe of any site would let an article frame a phishing page under the help
     center's address, leak readers' addresses to sites nobody chose, and break when that site
     goes away; only these two players have a stable, documented embed address (No lock-in: the
