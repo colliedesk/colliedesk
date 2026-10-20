@@ -152,6 +152,14 @@ func TestKnowledgeBaseSearchVectorCostsLinearTime(t *testing.T) {
 		SELECT id,'Parser','parser' FROM workspaces WHERE name='KB Parser' RETURNING id`).Scan(&collection); err != nil {
 		t.Fatal(err)
 	}
+	// Every ASCII punctuation character but '.' separates words; '.' keeps hosts and versions whole.
+	var words string
+	if err := conn.QueryRow(ctx, `SELECT kb_search_vector($1)::text`, "a!b\"c#d$e%f&g'h(i)j*k+l,m-n/o:p;q<r=s>t?u@v[w\\x]y^z_A`B{C|D}E~F 1.2.3").Scan(&words); err != nil {
+		t.Fatal(err)
+	}
+	if want := `'1.2.3' 'a' 'b' 'c' 'd' 'e' 'f' 'g' 'h' 'i' 'j' 'k' 'l' 'm' 'n' 'o' 'p' 'q' 'r' 's' 't' 'u' 'v' 'w' 'x' 'y' 'z'`; words != want {
+		t.Errorf("words = %s, want %s", words, want)
+	}
 	runs := []string{"_a", "a_", "_1", "~/", "/.", "a1@", "ab1@", "a-1-", "-aa-1", "a-a.", "e:a"}
 	for index, run := range runs {
 		other := runs[(index+1)%len(runs)]

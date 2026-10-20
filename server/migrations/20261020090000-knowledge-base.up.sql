@@ -39,11 +39,13 @@ CREATE INDEX kb_collections_trash_idx ON kb_collections(deleted_at) WHERE delete
 -- ASCII punctuation other than '.' becomes a space first: with it, the default parser costs the square
 -- of a run without whitespace, so 100,000 characters of '_a', '~/', 'a1@' or 'a-1-' took seconds to
 -- tens of seconds of one core (docs/internals/knowledge-base.md). Without it the cost is linear. The article column and the
--- search query both call this, so a text and a query split the same way. The SQL body is parsed now,
--- so 'simple' cannot be changed by a search_path.
+-- search query both call this, so a text and a query split the same way. The characters are listed
+-- one by one: a class such as [[:punct:]] depends on the collation. translate() does the same but
+-- made ordinary text two to three times slower to index. The SQL body is parsed now, so 'simple'
+-- cannot be changed by a search_path.
 CREATE FUNCTION kb_search_vector(content text) RETURNS tsvector LANGUAGE sql IMMUTABLE PARALLEL SAFE
     RETURN strip(to_tsvector('simple'::regconfig,
-        translate(content, '!"#$%&''()*+,-/:;<=>?@[\]^_`{|}~', '                               ')));
+        regexp_replace(content, '[!"#$%&''()*+,/:;<=>?@[\\\]^_`{|}~-]', ' ', 'g')));
 
 CREATE TABLE kb_articles (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
