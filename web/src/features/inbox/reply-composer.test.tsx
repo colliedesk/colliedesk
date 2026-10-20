@@ -1,11 +1,21 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { AttachmentsTooLargeError, AttachmentStorageError } from '../../api/attachments-error';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { json, serve, summary } from '../kb/kb.test.fixture';
-import { ReplyComposer } from './reply-composer';
+import { ReplyComposer, replyPickersPart } from './reply-composer';
+
+// The lists under the box come from their own chunk, which the composer loads when it mounts. These tests
+// start with it there, as a person finds it a moment after opening a conversation; the moment before is in
+// reply-composer-pickers.test.tsx.
+beforeAll(async () => {
+  replyPickersPart.preload();
+  await import('./reply-pickers');
+  // The part takes the module on the next turn of the event loop.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+});
 
 test('N starts a private note and R goes back to a reply, both focusing the message body', () => {
   render(<ReplyComposer />);

@@ -126,7 +126,20 @@ Warm open (a click on a list row, synthetic data, 5 tickets including a 285 KB H
 
 On 2026-10-20 the first bundle was 203,268 bytes of 204,800. Plan and billing, the locked screen, the trial survey and their strings (and those of Report a problem) moved to their own chunks, which brought it to 200,433; the knowledge base then added only its rail link and routes (201,420). Its pages with the preview and `remark-gfm`, and the help center card in Settings are lazy parts; the rail link preloads them on hover and focus. The article editor (CodeMirror 6) is a chunk of its own, 117,572 bytes gzip plus 1,502 bytes of CSS, loaded only by an article page; `kb-chunk` is 20,890 bytes. The first bundle went from 201,430 to 201,440 bytes (+10, the names of React hooks the chunks now import) and its CSS from 14,267 to 14,263.
 
+On 2026-10-21 the reply box got **Articles** (link a help center article in a reply). Its first version kept the button, its strings, the link format and the extended saved reply picker in the first bundle: 201,985 → 202,563 (+578). The saved reply picker and the articles picker then moved together into one lazy part, `reply-pickers` (1.7 KB gzip, plus a 4.0 KB chunk of the API calls and strings it shares with the knowledge base pages), which the composer starts loading when it mounts; the first bundle keeps the two buttons and the part's loading and failure states: 201,760 bytes (−225 against 201,985), CSS 14,267 → 14,317.
+
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
+
+## Reply box lists (saved replies, articles)
+
+Measured on 2026-10-21 against a local `collie serve`, Chromium, a new browser context with the cache disabled for each run, median of 5: open a conversation by its address, wait until the reply box is enabled, then a programmatic click, timed with `performance.now` in the page until the first option shows. The list's box (loading state or list) shows in the same frame as the click in every run (2–10 ms), so nothing moves when the list arrives.
+
+| From the click to the first option | 1×, 0 ms RTT | 4×, 0 ms RTT | 1×, 150 ms RTT | 4×, 150 ms RTT |
+| --- | --- | --- | --- | --- |
+| Insert saved reply | 2 ms | 7 ms | 285 ms | 261 ms |
+| Articles | 8 ms | 21 ms | 443 ms | 408 ms |
+
+At 150 ms RTT the `reply-pickers` chunk was already there (its search box showed 2–11 ms after the click); the wait is data. Saved replies are fetched when the inbox opens, and were still in flight: before the lazy part the same measurement gave 239 ms at 4×, so the chunk's own requests cost about 20 ms there. Articles asks the server for the help center and the published articles, side by side, each time it opens (one round trip, then the search). Over 200 ms at that distance is the round trip, which the infra levers under Ticket open address.
 
 ## Knowledge base editor open and typing
 

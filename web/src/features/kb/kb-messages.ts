@@ -147,9 +147,8 @@ export const kbMessages = {
   // Articles picker in the reply box
   linkPicker: {
     label: 'Articles', search: 'Search published articles', loading: 'Loading articles…', failed: 'Articles could not be loaded. Close this and try again.',
-    none: 'No article is published yet. Publish one in Knowledge, then link it here.', noMatch: 'No published article matches.',
+    none: 'No article is published yet. Publish one in Knowledge, then link it here.', noMatch: 'No published article matches.', manage: 'Open help center settings',
   },
   linkHelpCenterOff: 'The help center is off, so no article has a public page to link to.',
-  linkHelpCenterAdmins: 'An admin can turn it on in Settings.',
-  linkOpenSettings: 'Open help center settings',
+  linkHelpCenterAdmins: 'The help center is off, so no article has a public page to link to. An admin can turn it on in Settings.',
 } as const;

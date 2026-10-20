@@ -236,6 +236,7 @@
 .saved-reply-picker ul { max-height: 14rem; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
 .saved-reply-picker li { cursor: pointer; overflow: hidden; border-radius: var(--radius); padding: var(--space-2) var(--space-3); text-overflow: ellipsis; white-space: nowrap; }
 .saved-reply-picker li[aria-selected="true"] { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--accent); }
+.article-link-picker { display: contents; }
 .saved-reply-empty { margin: 0; padding: var(--space-2) var(--space-3); color: var(--text-3); }
 .saved-reply-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
 .saved-reply-list > li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); border-bottom: 1px solid var(--line); padding: var(--space-3) 0; }
@@ -312,6 +313,7 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   /* Saved replies, Articles, Cc and Send wrap rather than push the card past the screen. */
   .composer-actions { flex-wrap: wrap; row-gap: var(--space-2); }
   .saved-reply-button kbd { display: none; }
+  .saved-reply-picker li { display: flex; align-items: center; min-height: var(--touch); }
   .status-tabs label { min-height: var(--touch); }
   .conversation-row { min-height: var(--touch); }
 }

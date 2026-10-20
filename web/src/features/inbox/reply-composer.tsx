@@ -7,11 +7,9 @@ import { CcField } from './cc-field';
 import type { AttachmentLimits } from './attachment-picker';
 import { replyRefusalText } from './refusal-text';
 import { track } from '../../lib/product-analytics';
-import { SavedReplyPicker } from './saved-reply-picker';
-import { articleLinkPart } from '../kb/kb-part';
 import { messages } from '../../messages';
 import { BookIcon, BookmarkIcon, LockIcon, ReplyIcon } from '../../ui/icons';
-import { Part, PartUnavailable } from '../../ui/lazy-part';
+import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
 
 interface ReplyComposerProps {
   disabled?: boolean;
@@ -29,8 +27,8 @@ interface ReplyComposerProps {
   agentName?: string;
   onManageSavedReplies?: () => void;
   savedRepliesState?: 'loading' | 'failed' | 'ready';
-  // Opens the help center settings from the articles list while the help center is off; admins only.
-  onManageHelpCenter?: () => void;
+  // An admin, who can turn the help center on from the articles list while it is off.
+  canManage?: boolean;
 }
 
 type Kind = 'outgoing' | 'note';
@@ -54,7 +52,11 @@ const composing = (event: KeyboardEvent) => event.isComposing || event.keyCode =
 
 const noAddresses: string[] = [];
 
-export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, onManageHelpCenter, suggestedCc = noAddresses }: ReplyComposerProps) {
+// The lists under the box are a chunk of their own, so the first bundle carries neither. The composer
+// starts loading it when it mounts, which is when a conversation opens: a click a moment later finds it.
+export const replyPickersPart = lazyPart(() => import('./reply-pickers'));
+
+export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses }: ReplyComposerProps) {
   const [kind, setKind] = useState<Kind>('outgoing');
   const [body, setBody] = useState('');
   const [problem, setProblem] = useState<string>();
@@ -76,6 +78,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
   }, [showCc]);
   const field = useRef<HTMLTextAreaElement>(null);
   const [picking, setPicking] = useState<Picker | null>(null);
+  const pickers = replyPickersPart.use();
   const toggle = (picker: Picker) => setPicking((open) => (open === picker ? null : picker));
   // Where the cursor goes once an inserted reply is in the box.
   const caret = useRef<number | null>(null);
@@ -97,14 +100,6 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
   const insertSavedReply = (reply: SavedReply) => {
     track('saved_reply_inserted');
     insertText(renderSavedReply(reply.body, { customerName, agentName }));
-  };
-  // Mail goes out as plain text, so a link is the title and the address on two lines, not Markdown. Both
-  // get lines of their own: text right after the address would become part of it in the customer's mail.
-  const insertArticle = (article: { title: string; url: string }) => {
-    const at = Math.min(field.current?.selectionStart ?? body.length, body.length);
-    const before = at > 0 && body[at - 1] !== '\n' ? '\n' : '';
-    const after = at < body.length && body[at] !== '\n' ? '\n' : '';
-    insertText(`${before}${article.title}\n${article.url}${after}`);
   };
   const closePicker = (restoreFocus: boolean) => {
     setPicking(null);
@@ -175,9 +170,11 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
         </div>
         <textarea ref={field} aria-label={messages.messageBody} value={body} disabled={disabled} onKeyDown={onFieldKey}
           placeholder={kind === 'note' ? messages.notePlaceholder : messages.replyPlaceholder} onChange={(event) => setBody(event.target.value)} />
-        {picking === 'replies' && !disabled && <SavedReplyPicker replies={savedReplies} onPick={insertSavedReply} onClose={closePicker} onManage={onManageSavedReplies} state={savedRepliesState} />}
-        {picking === 'articles' && !disabled && <Part part={articleLinkPart} failed={<PartUnavailable />}
-          render={({ ArticleLinkPicker }) => <ArticleLinkPicker onPick={insertArticle} onClose={closePicker} onManageHelpCenter={onManageHelpCenter} />} />}
+        {picking && !disabled && (pickers.status === 'error' ? <PartUnavailable />
+          // Until the chunk is there, the list's own box says it is loading, where the list will be.
+          : pickers.status === 'loading' ? <div className="saved-reply-picker"><p className="saved-reply-empty" role="status">{messages.loadingList}</p></div>
+          : picking === 'replies' ? <pickers.module.SavedReplyPicker replies={savedReplies} onPick={insertSavedReply} onClose={closePicker} onManage={onManageSavedReplies} state={savedRepliesState} />
+          : <pickers.module.ArticleLinkPicker box={field} onInsert={insertText} onClose={closePicker} canManage={canManage} />)}
         {problem && <p role="alert" className="composer-notice">{problem}</p>}
         {showCc && <CcField value={cc} onChange={setCcEdited} disabled={disabled || sending} onSend={submit} onBlockingChange={setCcBlocking} />}
         <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={disabled || sending} />
@@ -186,9 +183,8 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
           <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'replies'} title={`${messages.insertSavedReply} (/)`}
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('replies')}>
             <BookmarkIcon />{messages.insertSavedReply}<kbd aria-hidden="true">/</kbd></button>
-          {/* The articles list is in the knowledge base chunk; pointing at the button starts loading it. */}
-          <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'articles'} title={messages.linkArticle}
-            onPointerEnter={articleLinkPart.preload} onFocus={articleLinkPart.preload} onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('articles')}>
+          <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'articles'}
+            onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('articles')}>
             <BookIcon />{messages.articles}</button>
           {kind === 'outgoing' && !showCc && (
             <button type="button" className="cc-button" disabled={disabled} aria-expanded={false} title={messages.ccToggleTitle}
