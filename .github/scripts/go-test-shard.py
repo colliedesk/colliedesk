@@ -14,9 +14,12 @@ names = sorted({line.strip() for line in sys.stdin
                 if re.fullmatch(r'(Test|Example|Fuzz)\w*', line.strip())})
 if not names:
     parser.error('no tests discovered; refusing an empty suite')
-# Large latency fixtures seed thousands of rows. Give them one runner so the
-# contract-heavy shards do not also pay that cost. Keep every threshold intact.
-latency = [name for name in names if name.endswith('LatencyBudget')]
+# Large latency fixtures seed thousands of rows and time a request against a budget. Give them one
+# runner so the contract-heavy shards do not also pay that cost, and so the packages those shards run
+# at the same time do not load the shared database while they measure. Keep every threshold intact.
+# They are named ...LatencyBudget or ...StaysFast...; a shard of other tests timed one at 389 ms
+# against its 200 ms budget.
+latency = [name for name in names if name.endswith('LatencyBudget') or 'StaysFast' in name]
 regular = [name for name in names if name not in latency]
 if args.total == 1:
     selected = names
