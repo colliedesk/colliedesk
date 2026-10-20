@@ -91,8 +91,9 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const uploads = useRef(0);
   const set = (change: Partial<Draft>) => { setSavedOnce(false); setDraft((current) => ({ ...current, ...change })); };
   const dirty = base
-    // An emptied address name is not a change: the server keeps the old one, so nothing would be sent.
-    ? draft.title !== base.title || (draft.slug.trim() !== '' && draft.slug !== base.slug) || draft.body !== base.body_md || draft.collection_id !== base.collection_id
+    // Compared as save() sends them: title and address name trimmed, and an emptied address name is not
+    // a change (the server keeps the old one), so a form is never dirty with nothing to send.
+    ? draft.title.trim() !== base.title || (draft.slug.trim() !== '' && draft.slug.trim() !== base.slug) || draft.body !== base.body_md || draft.collection_id !== base.collection_id
     : draft.title.trim() !== '' || draft.body.trim() !== '';
   // A person leaving with unsaved text is asked first; a save that moves on (a new article, a delete) is not.
   const leaving = useRef(false);

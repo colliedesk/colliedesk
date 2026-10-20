@@ -229,3 +229,12 @@ test('an open history loads again after a save adds a version', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(await screen.findByText(/Version 2 ·/)).toBeInTheDocument();
 });
+
+test('spaces around the title or address name are not a change, so the form never stays unsaved with nothing to send', async () => {
+  serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article()) });
+  open({ articleId: ids.article });
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Title' }), { target: { value: 'Reset your password ' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Address name' }), { target: { value: ' reset-your-password' } });
+  expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+});
