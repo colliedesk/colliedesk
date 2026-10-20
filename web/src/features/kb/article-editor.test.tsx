@@ -385,3 +385,21 @@ test('leaving the editor stops the videos waiting their turn, and cancels the on
   expect(calls.filter((call) => call.method === 'POST' && call.path === '/api/v1/kb/media-uploads')).toHaveLength(1);
   expect(calls.some((call) => call.method === 'DELETE' && call.path === `/api/v1/kb/media-uploads/${upload.id}`)).toBe(true);
 });
+
+test('a page the browser kept and shows again from Back uploads videos again', async () => {
+  const upload = { id: '77777777-0000-4000-8000-000000000004', kind: 'video', name: 'tour', size: 12, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z',
+    media_id: null, created_by: null, created_at: '2026-10-21T00:00:00Z' };
+  const media = { id: '77777777-0000-4000-8000-000000000005', kind: 'video', content_type: 'video/webm', size: 12, sha256: 'a'.repeat(64), url: '/api/v1/kb/media/77777777-0000-4000-8000-000000000005',
+    name: 'tour', alt: '', width: 640, height: 360, duration_ms: 3000, codecs: [], thumbnail_url: null, poster_url: null, kept: false, deleted_at: null,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: 'Intro' })),
+    'POST /api/v1/kb/media-uploads': () => json(201, upload), [`GET /api/v1/kb/media-uploads/${upload.id}`]: () => json(200, upload),
+    [`POST /api/v1/kb/media-uploads/${upload.id}/complete`]: () => json(201, media) });
+  open({ articleId: ids.article });
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
+  // The page goes into the back cache and comes out of it.
+  window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+  window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+  fireEvent.paste(text, { clipboardData: { files: [new File([new Uint8Array(12)], 'tour.webm', { type: 'video/webm' })] } });
+  await waitFor(() => expect(text).toHaveValue(`Intro\n\n<video controls preload="metadata" src="${media.url}"></video>`));
+});
