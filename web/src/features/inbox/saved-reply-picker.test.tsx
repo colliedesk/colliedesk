@@ -83,3 +83,26 @@ test('with no saved replies it says so and leads to the place that adds them', (
   fireEvent.click(screen.getByRole('button', { name: 'Manage saved replies' }));
   expect(onManage).toHaveBeenCalledOnce();
 });
+
+const texts = { label: 'Articles', search: 'Search articles', loading: 'Loading articles…', failed: 'Articles could not be loaded.', none: 'No published article yet.', noMatch: 'No published article matches.' };
+
+test('a source that searches by itself gets every search and its answer is shown as it is, under its own names', () => {
+  const onQueryChange = vi.fn();
+  const { rerender } = render(<SavedReplyPicker replies={replies} texts={texts} onQueryChange={onQueryChange} onPick={vi.fn()} onClose={vi.fn()} />);
+  expect(screen.getByRole('dialog', { name: 'Articles' })).toBeInTheDocument();
+  const search = screen.getByRole('combobox', { name: 'Search articles' });
+  fireEvent.change(search, { target: { value: 'zzz' } });
+  expect(onQueryChange).toHaveBeenLastCalledWith('zzz');
+  // The source has not answered yet: its last list stays, unfiltered.
+  expect(screen.getAllByRole('option')).toHaveLength(3);
+  rerender(<SavedReplyPicker replies={[]} texts={texts} onQueryChange={onQueryChange} onPick={vi.fn()} onClose={vi.fn()} />);
+  expect(screen.getByRole('status')).toHaveTextContent('No published article matches.');
+  fireEvent.change(search, { target: { value: '' } });
+  expect(screen.getByRole('status')).toHaveTextContent('No published article yet.');
+});
+
+test('a notice takes the place of the list and says why there is nothing to pick', () => {
+  render(<SavedReplyPicker replies={[]} texts={texts} notice={<p role="status">The help center is off.</p>} onPick={vi.fn()} onClose={vi.fn()} />);
+  expect(screen.getByRole('status')).toHaveTextContent('The help center is off.');
+  expect(screen.queryByText('No published article yet.')).not.toBeInTheDocument();
+});

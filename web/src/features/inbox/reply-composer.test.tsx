@@ -1,7 +1,10 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { AttachmentsTooLargeError, AttachmentStorageError } from '../../api/attachments-error';
 import { OutboundRefusedError } from '../../api/outbound-error';
+import { json, serve, summary } from '../kb/kb.test.fixture';
 import { ReplyComposer } from './reply-composer';
 
 test('N starts a private note and R goes back to a reply, both focusing the message body', () => {
@@ -332,6 +335,7 @@ test('the empty list leads to Manage saved replies', () => {
 afterEach(() => {
   delete (document as { execCommand?: unknown }).execCommand;
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 test('the browser inserts the text, so Ctrl+Z can undo it like typing', () => {
@@ -521,4 +525,61 @@ test('an invalid address typed into Cc blocks Send until it is fixed or cleared'
   expect(screen.getByRole('button', { name: 'Send reply' })).toBeEnabled();
   fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
   expect(onSubmit).toHaveBeenCalledWith('outgoing', 'Hello.', [], ['boss@customer.example']);
+});
+
+function withQueries(node: ReactNode) {
+  return <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{node}</QueryClientProvider>;
+}
+
+test('Articles links a published article at the cursor as its title and address on two lines, plain text for the mail', async () => {
+  serve({
+    'GET /api/v1/help-center': () => json(200, { enabled: true, title: '', locale: 'en', content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' }),
+    'GET /api/v1/kb/articles': () => json(200, { items: [summary(7, 'Reset your password', 'published')], next_cursor: null }),
+  });
+  const onSubmit = vi.fn();
+  render(withQueries(<ReplyComposer onSubmit={onSubmit} />));
+  const body = screen.getByLabelText('Message body') as HTMLTextAreaElement;
+  fireEvent.change(body, { target: { value: 'See:\nThanks' } });
+  body.setSelectionRange(5, 5);
+  const button = screen.getByRole('button', { name: 'Articles' });
+  fireEvent.click(button);
+  expect(button).toHaveAttribute('aria-expanded', 'true');
+  await screen.findByRole('option', { name: 'Reset your password', selected: true });
+  fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search published articles' }), { key: 'Enter' });
+  await waitFor(() => expect(body.value).toBe('See:\nReset your password\nhttps://desk.example.com/help/acme/a/7-reset-your-password\nThanks'));
+  expect(screen.queryByRole('dialog', { name: 'Articles' })).not.toBeInTheDocument();
+  expect(body).toHaveFocus();
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  expect(onSubmit).toHaveBeenCalledWith('outgoing', 'See:\nReset your password\nhttps://desk.example.com/help/acme/a/7-reset-your-password\nThanks');
+});
+
+test('Escape closes the articles, leaves the draft alone and returns to the box; the saved replies take their place', async () => {
+  serve({ 'GET /api/v1/help-center': () => json(200, { enabled: false, title: '', locale: 'en', content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' }) });
+  render(withQueries(<ReplyComposer savedReplies={[refund]} />));
+  const body = screen.getByLabelText('Message body') as HTMLTextAreaElement;
+  fireEvent.change(body, { target: { value: 'My draft' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Articles' }));
+  fireEvent.keyDown(await screen.findByRole('combobox', { name: 'Search published articles' }), { key: 'Escape' });
+  expect(screen.queryByRole('dialog', { name: 'Articles' })).not.toBeInTheDocument();
+  expect(body.value).toBe('My draft');
+  expect(body).toHaveFocus();
+  fireEvent.click(screen.getByRole('button', { name: 'Articles' }));
+  await screen.findByRole('dialog', { name: 'Articles' });
+  fireEvent.click(screen.getByRole('button', { name: 'Insert saved reply' }));
+  expect(screen.getByRole('dialog', { name: 'Saved replies' })).toBeInTheDocument();
+  expect(screen.queryByRole('dialog', { name: 'Articles' })).not.toBeInTheDocument();
+});
+
+test('in the middle of a line the article gets lines of its own, so no word sticks to its address', async () => {
+  serve({
+    'GET /api/v1/help-center': () => json(200, { enabled: true, title: '', locale: 'en', content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' }),
+    'GET /api/v1/kb/articles': () => json(200, { items: [summary(7, 'Reset your password', 'published')], next_cursor: null }),
+  });
+  render(withQueries(<ReplyComposer />));
+  const body = screen.getByLabelText('Message body') as HTMLTextAreaElement;
+  fireEvent.change(body, { target: { value: 'Read this guide today.' } });
+  body.setSelectionRange(15, 15);
+  fireEvent.click(screen.getByRole('button', { name: 'Articles' }));
+  fireEvent.click(await screen.findByRole('option', { name: 'Reset your password' }));
+  await waitFor(() => expect(body.value).toBe('Read this guide\nReset your password\nhttps://desk.example.com/help/acme/a/7-reset-your-password\n today.'));
 });

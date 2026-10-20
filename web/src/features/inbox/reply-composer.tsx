@@ -8,8 +8,10 @@ import type { AttachmentLimits } from './attachment-picker';
 import { replyRefusalText } from './refusal-text';
 import { track } from '../../lib/product-analytics';
 import { SavedReplyPicker } from './saved-reply-picker';
+import { articleLinkPart } from '../kb/kb-part';
 import { messages } from '../../messages';
-import { BookmarkIcon, LockIcon, ReplyIcon } from '../../ui/icons';
+import { BookIcon, BookmarkIcon, LockIcon, ReplyIcon } from '../../ui/icons';
+import { Part, PartUnavailable } from '../../ui/lazy-part';
 
 interface ReplyComposerProps {
   disabled?: boolean;
@@ -27,9 +29,13 @@ interface ReplyComposerProps {
   agentName?: string;
   onManageSavedReplies?: () => void;
   savedRepliesState?: 'loading' | 'failed' | 'ready';
+  // Opens the help center settings from the articles list while the help center is off; admins only.
+  onManageHelpCenter?: () => void;
 }
 
 type Kind = 'outgoing' | 'note';
+// The list open under the box: saved replies or the articles to link; one at a time.
+type Picker = 'replies' | 'articles';
 const shortcuts: Record<string, Kind> = { r: 'outgoing', n: 'note' };
 
 const nonTextInputs = ['radio', 'checkbox', 'button', 'submit', 'reset'];
@@ -48,7 +54,7 @@ const composing = (event: KeyboardEvent) => event.isComposing || event.keyCode =
 
 const noAddresses: string[] = [];
 
-export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, suggestedCc = noAddresses }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, onManageHelpCenter, suggestedCc = noAddresses }: ReplyComposerProps) {
   const [kind, setKind] = useState<Kind>('outgoing');
   const [body, setBody] = useState('');
   const [problem, setProblem] = useState<string>();
@@ -69,16 +75,15 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
     card.current?.querySelector<HTMLInputElement>('.composer-cc input')?.focus();
   }, [showCc]);
   const field = useRef<HTMLTextAreaElement>(null);
-  const [picking, setPicking] = useState(false);
+  const [picking, setPicking] = useState<Picker | null>(null);
+  const toggle = (picker: Picker) => setPicking((open) => (open === picker ? null : picker));
   // Where the cursor goes once an inserted reply is in the box.
   const caret = useRef<number | null>(null);
   // Inserting adds text at the cursor and replaces nothing; the rest of the draft and the files stay.
-  const insertSavedReply = (reply: SavedReply) => {
-    const text = renderSavedReply(reply.body, { customerName, agentName });
+  const insertText = (text: string) => {
     const box = field.current;
     const at = Math.min(box?.selectionStart ?? body.length, body.length);
-    setPicking(false);
-    track('saved_reply_inserted');
+    setPicking(null);
     // The browser inserts the text as if it were typed, so Ctrl+Z takes it out again. It fires the
     // input event that updates the draft. Without it (or when it refuses) the composer writes the text.
     if (box) {
@@ -89,8 +94,20 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
     caret.current = at + text.length;
     setBody(body.slice(0, at) + text + body.slice(at));
   };
+  const insertSavedReply = (reply: SavedReply) => {
+    track('saved_reply_inserted');
+    insertText(renderSavedReply(reply.body, { customerName, agentName }));
+  };
+  // Mail goes out as plain text, so a link is the title and the address on two lines, not Markdown. Both
+  // get lines of their own: text right after the address would become part of it in the customer's mail.
+  const insertArticle = (article: { title: string; url: string }) => {
+    const at = Math.min(field.current?.selectionStart ?? body.length, body.length);
+    const before = at > 0 && body[at - 1] !== '\n' ? '\n' : '';
+    const after = at < body.length && body[at] !== '\n' ? '\n' : '';
+    insertText(`${before}${article.title}\n${article.url}${after}`);
+  };
   const closePicker = (restoreFocus: boolean) => {
-    setPicking(false);
+    setPicking(null);
     if (restoreFocus) field.current?.focus();
   };
   useEffect(() => {
@@ -99,7 +116,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
     field.current?.setSelectionRange(caret.current, caret.current);
     caret.current = null;
   }, [body, picking]);
-  useEffect(() => { if (disabled) setPicking(false); }, [disabled]);
+  useEffect(() => { if (disabled) setPicking(null); }, [disabled]);
   // The text leaves the box only after the server accepted it; a refusal keeps it with the reason.
   // An address typed into Cc that cannot be added would otherwise be dropped from the reply unseen.
   const ccHolds = kind === 'outgoing' && showCc && ccBlocking;
@@ -129,7 +146,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
     if (disabled) return;
     const onKey = (event: KeyboardEvent) => {
       if (composing(event) || event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
-      if (event.key === '/') { event.preventDefault(); setPicking(true); return; }
+      if (event.key === '/') { event.preventDefault(); setPicking('replies'); return; }
       const next = shortcuts[event.key.toLowerCase()];
       if (!next) return;
       event.preventDefault();
@@ -142,7 +159,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
   const onFieldKey = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (composing(event.nativeEvent)) return;
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submit(); }
-    if (event.key === '/' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); setPicking(true); }
+    if (event.key === '/' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); setPicking('replies'); }
   };
   return (
     <div className="composer">
@@ -158,15 +175,21 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
         </div>
         <textarea ref={field} aria-label={messages.messageBody} value={body} disabled={disabled} onKeyDown={onFieldKey}
           placeholder={kind === 'note' ? messages.notePlaceholder : messages.replyPlaceholder} onChange={(event) => setBody(event.target.value)} />
-        {picking && !disabled && <SavedReplyPicker replies={savedReplies} onPick={insertSavedReply} onClose={closePicker} onManage={onManageSavedReplies} state={savedRepliesState} />}
+        {picking === 'replies' && !disabled && <SavedReplyPicker replies={savedReplies} onPick={insertSavedReply} onClose={closePicker} onManage={onManageSavedReplies} state={savedRepliesState} />}
+        {picking === 'articles' && !disabled && <Part part={articleLinkPart} failed={<PartUnavailable />}
+          render={({ ArticleLinkPicker }) => <ArticleLinkPicker onPick={insertArticle} onClose={closePicker} onManageHelpCenter={onManageHelpCenter} />} />}
         {problem && <p role="alert" className="composer-notice">{problem}</p>}
         {showCc && <CcField value={cc} onChange={setCcEdited} disabled={disabled || sending} onSend={submit} onBlockingChange={setCcBlocking} />}
         <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={disabled || sending} />
         <div className="composer-actions">
           {/* Mouse down must not blur the open list, or the click would close it and open it again. */}
-          <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking} title={`${messages.insertSavedReply} (/)`}
-            onMouseDown={(event) => event.preventDefault()} onClick={() => setPicking((open) => !open)}>
+          <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'replies'} title={`${messages.insertSavedReply} (/)`}
+            onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('replies')}>
             <BookmarkIcon />{messages.insertSavedReply}<kbd aria-hidden="true">/</kbd></button>
+          {/* The articles list is in the knowledge base chunk; pointing at the button starts loading it. */}
+          <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'articles'} title={messages.linkArticle}
+            onPointerEnter={articleLinkPart.preload} onFocus={articleLinkPart.preload} onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('articles')}>
+            <BookIcon />{messages.articles}</button>
           {kind === 'outgoing' && !showCc && (
             <button type="button" className="cc-button" disabled={disabled} aria-expanded={false} title={messages.ccToggleTitle}
               onClick={() => { focusCc.current = true; setCcOpen(true); }}>{messages.ccToggle}</button>

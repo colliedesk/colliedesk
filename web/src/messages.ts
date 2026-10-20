@@ -90,6 +90,8 @@ export const messages = {
   savedReplies: 'Saved replies',
   savedRepliesDescription: 'Text your whole team inserts into a reply. Anyone can add, edit or delete them. {{customer.name}} and {{agent.name}} are filled in when a reply is inserted.',
   insertSavedReply: 'Insert saved reply',
+  articles: 'Articles',
+  linkArticle: 'Link a help center article',
   searchSavedReplies: 'Search saved replies',
   loadingSavedReplies: 'Loading saved replies…',
   savedRepliesFailed: 'Saved replies could not be loaded. Close this and try again.',
