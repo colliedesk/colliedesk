@@ -197,16 +197,41 @@ func attributes(node *nethtml.Node) (map[string]string, []string) {
 // iframe writes a player rebuilt from the video id in its src, or nothing.
 func (f *fragment) iframe(node *nethtml.Node) {
 	r := f.rules
+	attributes := r.player(node, f.drop)
+	if attributes == "" {
+		return
+	}
+	forced := ` sandbox="` + html.EscapeString(r.Iframe.Forced.Sandbox) + `" referrerpolicy="` + html.EscapeString(r.Iframe.Forced.ReferrerPolicy) +
+		`" loading="` + html.EscapeString(r.Iframe.Forced.Loading) + `"`
+	f.out.WriteString("<iframe" + attributes + forced + "></iframe>")
+}
+
+// PlayerSnippet is the HTML an article keeps for an iframe of an allowed player, as the editor's
+// Insert video writes it; false for any other iframe. The Freshdesk import uses it.
+func PlayerSnippet(node *nethtml.Node) (string, bool) {
+	if node.Type != nethtml.ElementNode || node.Namespace != "" || node.Data != "iframe" {
+		return "", false
+	}
+	attributes := rules.player(node, func(string) {})
+	if attributes == "" {
+		return "", false
+	}
+	return "<iframe" + attributes + ` loading="lazy"></iframe>`, true
+}
+
+// player returns the attributes of a player rebuilt from the video id in the iframe's src, those the
+// author may choose only, or "" (naming why with drop).
+func (r *Rules) player(node *nethtml.Node, drop func(string)) string {
 	given, order := attributes(node)
 	src, hasSrc := given["src"]
 	site, embed := r.embed(src)
 	if site == nil {
 		if !hasSrc {
-			f.drop("iframe (no src)")
+			drop("iframe (no src)")
 		} else {
-			f.drop("iframe (" + hostOf(src) + ")")
+			drop("iframe (" + hostOf(src) + ")")
 		}
-		return
+		return ""
 	}
 	var tag strings.Builder
 	attr := func(key, value string) {
@@ -223,7 +248,7 @@ func (f *fragment) iframe(node *nethtml.Node) {
 			if r.dimension(value) {
 				attr(key, value)
 			} else {
-				f.drop("iframe " + key)
+				drop("iframe " + key)
 			}
 		}
 	}
@@ -238,7 +263,7 @@ func (f *fragment) iframe(node *nethtml.Node) {
 			feature := strings.ToLower(fields[0])
 			switch {
 			case !slices.Contains(r.Iframe.Allow, feature):
-				f.drop("iframe allow " + feature)
+				drop("iframe allow " + feature)
 			// allowfullscreen and allow="fullscreen" say the same; browsers warn when both are there.
 			case feature == "fullscreen" && fullscreen, slices.Contains(kept, feature):
 			default:
@@ -254,18 +279,15 @@ func (f *fragment) iframe(node *nethtml.Node) {
 	}
 	for _, key := range order {
 		if !slices.Contains(r.Iframe.Attributes, key) || (key == "loading" && given[key] != r.Iframe.Forced.Loading) {
-			f.drop("iframe " + key)
+			drop("iframe " + key)
 		}
 	}
 	candidate := "<iframe" + tag.String() + "></iframe>"
 	if r.policy.Sanitize(candidate) != candidate {
-		f.drop("iframe")
-		return
+		drop("iframe")
+		return ""
 	}
-	attr("sandbox", r.Iframe.Forced.Sandbox)
-	attr("referrerpolicy", r.Iframe.Forced.ReferrerPolicy)
-	attr("loading", r.Iframe.Forced.Loading)
-	f.out.WriteString("<iframe" + tag.String() + "></iframe>")
+	return tag.String()
 }
 
 // video writes a player of a media library file, or nothing; with the library off, nothing.

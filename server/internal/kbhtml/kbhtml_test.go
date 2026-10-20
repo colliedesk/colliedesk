@@ -169,3 +169,27 @@ func TestVideoRuleOnceTheMediaLibraryIsOn(t *testing.T) {
 		t.Errorf("with the library off a video rendered %s", out)
 	}
 }
+
+// The Freshdesk import keeps a player as the editor writes it, and the help center keeps all of it.
+func TestPlayerSnippetKeepsAPlayerTheHelpCenterShowsWhole(t *testing.T) {
+	// YouTube's Share → Embed code.
+	embed := `<iframe width="560" height="315" src="https://www.youtube.com/embed/jNQXAC9IVRw?si=abc&amp;start=7" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>`
+	nodes, err := html.ParseFragment(strings.NewReader(embed), &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snippet, ok := kbhtml.PlayerSnippet(nodes[0])
+	want := `<iframe src="https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=7" title="YouTube video player" width="560" height="315" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen="" loading="lazy"></iframe>`
+	if !ok || snippet != want {
+		t.Fatalf("snippet %q %v\nwant %q", snippet, ok, want)
+	}
+	if _, dropped := kbhtml.Fragment(snippet); len(dropped) != 0 {
+		t.Errorf("the help center leaves out %q of the snippet", dropped)
+	}
+	for _, other := range []string{`<iframe src="https://evil.example/embed/x"></iframe>`, `<iframe srcdoc="x"></iframe>`, `<video src="x"></video>`} {
+		nodes, _ := html.ParseFragment(strings.NewReader(other), &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body})
+		if snippet, ok := kbhtml.PlayerSnippet(nodes[0]); ok {
+			t.Errorf("%s kept as %s", other, snippet)
+		}
+	}
+}

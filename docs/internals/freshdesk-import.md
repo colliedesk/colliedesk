@@ -202,12 +202,18 @@ numbering and versions as the API (`docs/internals/knowledge-base.md`).
   level-3 collections named after the folders from level 3 down (`Advanced / Deep`) next to the level-3
   one, and warn `kb_folder_flattened`. A slug taken by a sibling gets `-<Freshdesk id>`.
 - **HTML to Markdown** with html-to-markdown v2 (MIT; base, commonmark, table, strikethrough). Before
-  converting, iframes, video, audio, embeds, objects, forms, scripts, styles, SVG and MathML are
-  removed and named in `kb_article_markup_dropped`, as are a table cell with `colspan`/`rowspan` (its
+  converting, an iframe of a YouTube or Vimeo player is replaced by a marker word (a random nonce, so
+  no article text can match it) and put back after conversion as the HTML the editor's Insert video
+  writes (`kbhtml.PlayerSnippet`: rebuilt from the video id, `youtube.com` becomes
+  `youtube-nocookie.com`), which the help center shows; it is not a warning. Other iframes, video,
+  audio, embeds, objects, forms, scripts, styles, SVG and MathML are removed and named in
+  `kb_article_markup_dropped`, as are a table cell with `colspan`/`rowspan` (its
   content is repeated in the cells it spans), a table cell holding a line break or a block (a Markdown
   cell is one line, so the converter writes that table as plain text: the words stay, the grid goes),
   subscript and superscript, a link whose scheme is not http, https or mailto (its text stays), and
-  any tag left in the Markdown (raw HTML is never rendered). Files on an article are not in the
+  any tag the converter left in the Markdown (only players' raw HTML is shown). A rerun takes an
+  article again only when Freshdesk changed it, and undo removes it whole, so neither behaves
+  differently. Files on an article are not in the
   documented attributes; if the API sends them they are listed (`kb_article_attachments_not_imported`). `source_html` keeps the original; `source_meta` keeps `tags`, `seo_data`, `hits`,
   `thumbs_*`, `type`, `status`, `hierarchy`, `agent_id` and the draft reason. Timestamps are
   Freshdesk's; `published_at` is `updated_at` (Freshdesk has no publish time). The author is the

@@ -576,3 +576,36 @@ func TestSolutionsCollapsibleSectionsAndEmptyAnchorsConvertCleanly(t *testing.T)
 		t.Fatalf("body = %q warnings=%+v", body, report.Warnings)
 	}
 }
+
+// A YouTube or Vimeo player is kept as the editor's Insert video writes it, so the help center shows it
+// after the import; any other iframe or a video file is left out and named, as before.
+func TestSolutionsKeepYouTubeAndVimeoPlayers(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	env.editSolutions(func(fixture map[string]any) {
+		fixtureArticle(fixture, "11", 101)["description"] = `<p>Intro</p><iframe width="560" height="315" src="https://www.youtube.com/embed/jNQXAC9IVRw?si=x&amp;start=7" title="Tour" frameborder="0" onload="alert(1)" allowfullscreen></iframe>` +
+			`<p>Watch <iframe src="https://player.vimeo.com/video/76979871"></iframe> inline.</p><iframe src="https://evil.example/embed/x"></iframe><video src="https://cdn.example/a.mp4" controls></video>`
+		fixtureArticle(fixture, "11", 102)["description"] = `<p>See</p><div class="video"><iframe src="https://player.vimeo.com/video/1?h=ab12cd34ef"></iframe></div>`
+	})
+	report := env.mustRun(t)
+	if warningIDs(report, "kb_article_markup_dropped") != "101,106" {
+		t.Fatalf("warnings = %+v", report.Warnings)
+	}
+	articles := env.kbArticles(t, env.workspaceID)
+	want := "Intro\n\n" +
+		`<iframe src="https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=7" title="Tour" width="560" height="315" allowfullscreen="" loading="lazy"></iframe>` + "\n\n" +
+		`Watch <iframe src="https://player.vimeo.com/video/76979871" title="Vimeo video" loading="lazy"></iframe> inline.`
+	if body := articles["101"].Body; body != want {
+		t.Fatalf("body =\n%q\nwant\n%q", body, want)
+	}
+	if body := articles["102"].Body; body != "See\n\n"+`<iframe src="https://player.vimeo.com/video/1?h=ab12cd34ef" title="Vimeo video" loading="lazy"></iframe>` {
+		t.Fatalf("102 body = %q", body)
+	}
+	var meta string
+	if err := env.pool.QueryRow(context.Background(), `SELECT source_meta->>'markup_dropped' FROM kb_articles WHERE workspace_id=$1 AND source_meta->>'freshdesk_id'='101'`, env.workspaceID).Scan(&meta); err != nil ||
+		meta != `["iframe", "video"]` {
+		t.Fatalf("markup_dropped = %s, %v", meta, err)
+	}
+	if !strings.Contains(articles["101"].SourceHTML, "evil.example") || !strings.Contains(articles["101"].SourceHTML, "<video") {
+		t.Fatalf("source_html = %q", articles["101"].SourceHTML)
+	}
+}
