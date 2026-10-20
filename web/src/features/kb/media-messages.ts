@@ -92,6 +92,7 @@ export const mediaMessages = {
   uploadPoster: 'Upload poster',
   posterSaved: 'Poster saved.',
   posterFailed: 'The poster could not be saved.',
+  frameNotReady: 'The video has not loaded this frame yet; play it a moment, pause, and try again.',
   frameFailed: 'This browser could not read a frame of the video; upload a poster instead.',
   usedInHeading: 'Used in',
   notUsedAnywhere: 'No article uses it.',
@@ -148,5 +149,6 @@ export const mediaMessages = {
   deleteForeverConfirm: (count: number) => `Delete ${plural(count, 'item', 'items')} forever`,
   deleted: (count: number) => `Deleted ${plural(count, 'item', 'items')} for good.`,
   adminsOnly: 'Only admins can delete forever.',
+  lostIn: (trashed: number, older: number) => `${[trashed ? plural(trashed, 'deleted article', 'deleted articles') : '', older ? `older versions of ${plural(older, 'article', 'articles')}` : ''].filter(Boolean).join(' and ')} show them and will say "Media no longer exists".`,
   trashedOn: (date: string) => `In the trash since ${date}`,
 } as const;

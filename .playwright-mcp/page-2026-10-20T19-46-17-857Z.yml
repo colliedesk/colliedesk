@@ -1,0 +1,9 @@
+- main [ref=e4]:
+  - generic [ref=e5]:
+    - generic [ref=e6]: colliedesk
+    - paragraph [ref=e23]: The open-source helpdesk. One shared inbox for every customer email, reply and private note.
+    - paragraph [ref=e24]: AGPL-3.0 · Self-host or Colliedesk Cloud
+  - generic [ref=e25]:
+    - heading "Open your secure link" [level=1] [ref=e26]
+    - paragraph [ref=e27]: Colliedesk uses one-time links instead of passwords.
+    - button "Continue to Colliedesk" [ref=e28] [cursor=pointer]

@@ -255,13 +255,17 @@ function Unused({ onChanged }: { onChanged: () => void }) {
       if (confirming.all) {
         let batch: string | undefined;
         let moved = 0;
-        for (let more = true; more;) {
-          const answer = await mediaApi.trashUnused({ before: opened, include_kept: includeKept, ...(batch ? { batch_id: batch } : {}) });
-          moved += answer.trashed;
-          batch = answer.batch_id ?? batch;
-          more = answer.more;
+        try {
+          for (let more = true; more;) {
+            const answer = await mediaApi.trashUnused({ before: opened, include_kept: includeKept, ...(batch ? { batch_id: batch } : {}) });
+            moved += answer.trashed;
+            batch = answer.batch_id ?? batch;
+            more = answer.more;
+          }
+        } finally {
+          // A failure halfway still offers Undo for what moved.
+          if (moved > 0) setDone({ text: mediaMessages.moved(moved), batch });
         }
-        setDone({ text: mediaMessages.moved(moved), batch });
       } else {
         let batch: string | undefined;
         let moved = 0;
@@ -365,6 +369,14 @@ function ConfirmDialog({ heading, confirm, danger = false, children, onConfirm, 
   );
 }
 
+// LostIn names what deleting forever leaves without its media: deleted articles and older versions
+// that still show an item then say "Media no longer exists".
+function LostIn({ items }: { items: KBMedia[] }) {
+  const trashed = items.reduce((sum, item) => sum + (item.usage?.trashed_articles ?? 0), 0);
+  const older = items.reduce((sum, item) => sum + (item.usage?.older_versions ?? 0), 0);
+  return trashed + older > 0 ? <p>{mediaMessages.lostIn(trashed, older)}</p> : null;
+}
+
 function Trash({ onChanged }: { onChanged: () => void }) {
   const list = useInfiniteQuery({
     queryKey: ['kb-media-trash'],
@@ -427,6 +439,7 @@ function Trash({ onChanged }: { onChanged: () => void }) {
       {deleting && <ConfirmDialog heading={mediaMessages.deleteForeverHeading} confirm={mediaMessages.deleteForeverConfirm(selection.chosen.length)} danger
         onConfirm={() => run('purge')} onCancel={() => setDeleting(false)}>
         <p>{mediaMessages.deleteForeverBody(selection.chosen.length, bytes)}</p>
+        <LostIn items={selection.chosen} />
         <ul className="media-articles">{selection.chosen.slice(0, 10).map((item) => <li key={item.id}>{mediaName(item)} · {formatBytes(item.size)}</li>)}</ul>
       </ConfirmDialog>}
     </section>

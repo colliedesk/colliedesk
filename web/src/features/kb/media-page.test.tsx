@@ -117,7 +117,7 @@ test('move all unused asks again with batch_id until nothing is left, skipping w
 });
 
 test('only an admin deletes forever, after a second confirmation that names what goes', async () => {
-  const trashed = item(6, { deleted_at: '2026-10-10T00:00:00Z', usage: usage(0) });
+  const trashed = item(6, { deleted_at: '2026-10-10T00:00:00Z', usage: usage(0, 1, 2) });
   const calls = serve({ ...base, 'GET /api/v1/kb/media/trash': () => json(200, { items: [trashed], next_cursor: null }),
     'POST /api/v1/kb/media/purge': () => json(200, { results: [{ id: id(6), status: 'purged' }] }) });
   open('trash');
@@ -125,6 +125,7 @@ test('only an admin deletes forever, after a second confirmation that names what
   fireEvent.click(screen.getByRole('button', { name: 'Delete forever' }));
   const dialog = screen.getByRole('alertdialog', { name: 'Delete forever?' });
   expect(dialog).toHaveTextContent('cannot be undone');
+  expect(dialog).toHaveTextContent('1 deleted article and older versions of 2 articles show them and will say "Media no longer exists".');
   expect(calls.some((call) => call.path === '/api/v1/kb/media/purge')).toBe(false);
   fireEvent.click(within(dialog).getByRole('button', { name: 'Delete 1 item forever' }));
   expect(await screen.findByText('Deleted 1 item for good.')).toBeInTheDocument();
@@ -198,4 +199,38 @@ test('a paused video sends nothing more until it resumes, and a cancelled one is
   queue.cancel(key);
   await waitFor(() => expect(calls.some((call) => call.method === 'DELETE')).toBe(true));
   expect(queue.rows()[0]?.state).toBe('cancelled');
+});
+
+test('leaving the page cancels an unfinished video upload on the server, so it holds no slot for a day', async () => {
+  const upload = { id: id(7), kind: 'video', name: 'tour', size: 16, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z', media_id: null };
+  const calls = serve({
+    'POST /api/v1/kb/media-uploads': () => json(201, upload),
+    [`GET /api/v1/kb/media-uploads/${id(7)}`]: () => json(200, upload),
+    [`DELETE /api/v1/kb/media-uploads/${id(7)}`]: () => json(204),
+  });
+  const send: PartSender = (_id, _part, _from, _size, _onSent, signal) => new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+  });
+  const queue = new UploadQueue(() => undefined, send);
+  queue.add([new File([new Uint8Array(16)], 'tour.webm', { type: 'video/webm' })]);
+  await waitFor(() => expect(calls.some((call) => call.method === 'GET')).toBe(true));
+  queue.stop();
+  await waitFor(() => expect(calls.some((call) => call.method === 'DELETE')).toBe(true));
+});
+
+test('a part refused while the server still finishes the one a pause cut off is sent again after a wait', async () => {
+  const upload = { id: id(7), kind: 'video', name: 'tour', size: 8, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z', media_id: null };
+  serve({
+    'POST /api/v1/kb/media-uploads': () => json(201, upload),
+    [`GET /api/v1/kb/media-uploads/${id(7)}`]: () => json(200, upload),
+    [`POST /api/v1/kb/media-uploads/${id(7)}/complete`]: () => json(201, { ...video, created_at: new Date().toISOString() }),
+  });
+  let tries = 0;
+  const send: PartSender = async (_id, part) => (tries++ === 0
+    ? { status: 429, body: { error: { code: 'too_many_parts', message: 'busy' } }, offset: null }
+    : { status: 200, body: { ...upload, offset: part.size }, offset: String(part.size) });
+  const queue = new UploadQueue(() => undefined, send);
+  queue.add([new File([new Uint8Array(8)], 'tour.webm', { type: 'video/webm' })]);
+  await waitFor(() => expect(queue.rows()[0]?.state).toBe('done'), { timeout: 3000 });
+  expect(tries).toBe(2);
 });

@@ -129,6 +129,8 @@ function Poster({ item, player, onSaved }: { item: KBMediaDetails; player: RefOb
   const useFrame = () => {
     const current = player.current;
     if (!current) return;
+    // A frame is there to draw once the player holds the current one.
+    if (current.readyState < 2) { setState({ problem: mediaMessages.frameNotReady }); return; }
     current.pause();
     void send(posterFrom(current), mediaMessages.frameFailed);
   };

@@ -111,9 +111,17 @@ export class UploadQueue {
     this.changed();
   }
 
-  // stop aborts what is being sent, when the page closes; the server throws an unfinished upload away a day later.
+  // stop aborts what is being sent when the page goes away, and cancels every unfinished video upload on
+  // the server: the file cannot be sent again from another page, and an open upload holds one of the
+  // workspace's three and its room in the plan for a day. keepalive lets the request outlive the page.
   stop() {
-    for (const job of this.jobs) job.controller?.abort();
+    for (const job of this.jobs) {
+      job.controller?.abort();
+      if (job.uploadId && !['done', 'cancelled'].includes(job.row.state)) {
+        void fetch(`/api/v1/kb/media-uploads/${job.uploadId}`, { method: 'DELETE', credentials: 'same-origin', keepalive: true }).catch(() => undefined);
+        job.uploadId = undefined;
+      }
+    }
   }
 
   private find(key: number) { return this.jobs.find((job) => job.row.key === key); }
@@ -162,6 +170,7 @@ export class UploadQueue {
     }
     const id = job.uploadId;
     let upload = await mediaApi.upload(id);
+    let busyTries = 0;
     while (upload.offset < upload.size) {
       if (signal.aborted) return undefined;
       const part = file.slice(upload.offset, Math.min(upload.offset + upload.part_size, upload.size));
@@ -172,6 +181,13 @@ export class UploadQueue {
         row.bytesPerSecond = bytes / Math.max(0.001, (performance.now() - started) / 1000);
         this.changed();
       }, signal);
+      if (answer.status === 429 && busyTries < 5) {
+        // The server still finishes the part a pause cut off (one part of an upload at a time): wait, then ask where it stands.
+        await wait(500 * 2 ** busyTries++, signal);
+        upload = await mediaApi.upload(id);
+        continue;
+      }
+      busyTries = 0;
       if (answer.status === 409 && answer.offset !== null) {
         // The server holds other bytes than this page thought (another tab, a part that arrived late): go on from there.
         upload = await mediaApi.upload(id);
@@ -195,6 +211,13 @@ export class UploadQueue {
   }
 }
 
+function wait(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const timer = window.setTimeout(resolve, ms);
+    signal.addEventListener('abort', () => { window.clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); }, { once: true });
+  });
+}
+
 function errorText(body: unknown): string | undefined {
   const message = (body as { error?: { message?: unknown } } | undefined)?.error?.message;
   return typeof message === 'string' ? message : undefined;
@@ -207,7 +230,12 @@ export function useUploadQueue(onStored: (item: KBMedia) => void) {
   const queue = useRef<UploadQueue | null>(null);
   queue.current ??= new UploadQueue((item) => stored.current(item));
   const current = queue.current;
-  useEffect(() => () => current.stop(), [current]);
+  useEffect(() => {
+    // Closing the tab or leaving the page by its address runs pagehide, not the unmount.
+    const leave = () => current.stop();
+    window.addEventListener('pagehide', leave);
+    return () => { window.removeEventListener('pagehide', leave); current.stop(); };
+  }, [current]);
   const rows = useSyncExternalStore(current.subscribe, current.rows);
   return { queue: current, rows };
 }
