@@ -189,10 +189,11 @@ func attributes(node *nethtml.Node) (map[string]string, []string) {
 		if attr.Namespace != "" {
 			continue
 		}
+		// The first of two same-named attributes counts, as in a browser.
 		if _, seen := values[attr.Key]; !seen {
 			order = append(order, attr.Key)
+			values[attr.Key] = attr.Val
 		}
-		values[attr.Key] = attr.Val
 	}
 	return values, order
 }

@@ -4,126 +4,231 @@
     {
       "name": "youtube no-cookie player",
       "html": "<iframe src=\"https://www.youtube-nocookie.com/embed/jNQXAC9IVRw\" title=\"Me at the zoo\" width=\"560\" height=\"315\" allow=\"encrypted-media; picture-in-picture\" allowfullscreen loading=\"lazy\"></iframe>",
-      "iframes": ["https://www.youtube-nocookie.com/embed/jNQXAC9IVRw"],
+      "iframes": [
+        "https://www.youtube-nocookie.com/embed/jNQXAC9IVRw"
+      ],
+      "text": "",
+      "dropped": []
+    },
+    {
+      "name": "the editor's Insert video snippet keeps every attribute",
+      "html": "<iframe src=\"https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=65\" title=\"YouTube video\" width=\"560\" height=\"315\" allow=\"encrypted-media; picture-in-picture\" allowfullscreen loading=\"lazy\"></iframe>",
+      "iframes": [
+        "https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=65"
+      ],
       "text": "",
       "dropped": []
     },
     {
       "name": "youtube.com embed becomes no-cookie and keeps start",
       "html": "<iframe src=\"https://www.youtube.com/embed/jNQXAC9IVRw?start=65&autoplay=1&list=x\"></iframe>",
-      "iframes": ["https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=65"],
+      "iframes": [
+        "https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=65"
+      ],
       "text": "",
       "dropped": []
     },
     {
       "name": "vimeo player keeps its private hash",
       "html": "<iframe src=\"https://player.vimeo.com/video/76979871?h=8272103f6e&autoplay=1\"></iframe>",
-      "iframes": ["https://player.vimeo.com/video/76979871?h=8272103f6e"],
+      "iframes": [
+        "https://player.vimeo.com/video/76979871?h=8272103f6e"
+      ],
       "text": "",
       "dropped": []
     },
     {
       "name": "author attributes outside the list",
       "html": "<iframe src=\"https://player.vimeo.com/video/1\" sandbox=\"allow-top-navigation\" referrerpolicy=\"unsafe-url\" style=\"position:fixed\" onload=\"alert(1)\" srcdoc=\"<script>alert(1)</script>\" name=\"x\" loading=\"eager\"></iframe>",
-      "iframes": ["https://player.vimeo.com/video/1"],
+      "iframes": [
+        "https://player.vimeo.com/video/1"
+      ],
       "text": "",
-      "dropped": ["iframe sandbox", "iframe referrerpolicy", "iframe style", "iframe onload", "iframe srcdoc", "iframe name", "iframe loading"]
+      "dropped": [
+        "iframe sandbox",
+        "iframe referrerpolicy",
+        "iframe style",
+        "iframe onload",
+        "iframe srcdoc",
+        "iframe name",
+        "iframe loading"
+      ]
     },
     {
       "name": "allow keeps listed features only",
       "html": "<iframe src=\"https://player.vimeo.com/video/1\" allow=\"camera; microphone *; picture-in-picture\"></iframe>",
-      "iframes": ["https://player.vimeo.com/video/1"],
+      "iframes": [
+        "https://player.vimeo.com/video/1"
+      ],
       "text": "",
-      "dropped": ["iframe allow camera", "iframe allow microphone"]
+      "dropped": [
+        "iframe allow camera",
+        "iframe allow microphone"
+      ]
     },
     {
       "name": "size outside 1 to 4096 or not a number",
       "html": "<iframe src=\"https://player.vimeo.com/video/1\" width=\"1e3\" height=\"99999\"></iframe>",
-      "iframes": ["https://player.vimeo.com/video/1"],
+      "iframes": [
+        "https://player.vimeo.com/video/1"
+      ],
       "text": "",
-      "dropped": ["iframe width", "iframe height"]
+      "dropped": [
+        "iframe width",
+        "iframe height"
+      ]
     },
     {
       "name": "iframe from another site",
       "html": "<iframe src=\"https://evil.example/embed/jNQXAC9IVRw\">fallback</iframe>",
       "iframes": [],
       "text": "",
-      "dropped": ["iframe (evil.example)"]
+      "dropped": [
+        "iframe (evil.example)"
+      ]
     },
     {
       "name": "lookalike host",
       "html": "<iframe src=\"https://www.youtube-nocookie.com.evil.example/embed/jNQXAC9IVRw\"></iframe><iframe src=\"https://evil.example/?u=https://player.vimeo.com/video/1\"></iframe>",
       "iframes": [],
       "text": "",
-      "dropped": ["iframe (www.youtube-nocookie.com.evil.example)", "iframe (evil.example)"]
+      "dropped": [
+        "iframe (www.youtube-nocookie.com.evil.example)",
+        "iframe (evil.example)"
+      ]
     },
     {
       "name": "allowed host but another path",
       "html": "<iframe src=\"https://www.youtube.com/watch?v=jNQXAC9IVRw\"></iframe><iframe src=\"https://www.youtube.com/embed/jNQXAC9IVRw/../../redirect\"></iframe>",
       "iframes": [],
       "text": "",
-      "dropped": ["iframe (www.youtube.com)"]
+      "dropped": [
+        "iframe (www.youtube.com)"
+      ]
     },
     {
       "name": "http, port, user, relative, protocol-relative, javascript and data",
       "html": "<iframe src=\"http://player.vimeo.com/video/1\"></iframe><iframe src=\"https://player.vimeo.com:8443/video/1\"></iframe><iframe src=\"https://me@player.vimeo.com/video/1\"></iframe><iframe src=\"/video/1\"></iframe><iframe src=\"//player.vimeo.com/video/1\"></iframe><iframe src=\"javascript:alert(1)\"></iframe><iframe src=\"data:text/html,<script>alert(1)</script>\"></iframe><iframe></iframe>",
       "iframes": [],
       "text": "",
-      "dropped": ["iframe (player.vimeo.com)", "iframe (player.vimeo.com:8443)", "iframe (/video/1)", "iframe (//player.vimeo.com/video/1)", "iframe (javascript:)", "iframe (data:)", "iframe (no src)"]
+      "dropped": [
+        "iframe (player.vimeo.com)",
+        "iframe (player.vimeo.com:8443)",
+        "iframe (/video/1)",
+        "iframe (//player.vimeo.com/video/1)",
+        "iframe (javascript:)",
+        "iframe (data:)",
+        "iframe (no src)"
+      ]
     },
     {
       "name": "tab, newline and backslash tricks in src",
       "html": "<iframe src=\"https://player.vimeo.com/vi&#x0A;deo/1\"></iframe><iframe src=\"https://player.vimeo.com\\video\\1\"></iframe><iframe src=\" https://player.vimeo.com/video/1\"></iframe>",
-      "iframes": ["https://player.vimeo.com/video/1"],
+      "iframes": [
+        "https://player.vimeo.com/video/1"
+      ],
       "text": "",
-      "dropped": ["iframe (https://player.vimeo.com/vi\ndeo/1)", "iframe (https://player.vimeo.com\\video\\1)"]
+      "dropped": [
+        "iframe (https://player.vimeo.com/vi\ndeo/1)",
+        "iframe (https://player.vimeo.com\\video\\1)"
+      ]
+    },
+    {
+      "name": "dot segments in the path",
+      "html": "<iframe src=\"https://www.youtube.com/embed/x/../jNQXAC9IVRw\"></iframe><iframe src=\"https://www.youtube.com/embed/x/%2e%2e/jNQXAC9IVRw\"></iframe>",
+      "iframes": [],
+      "text": "",
+      "dropped": [
+        "iframe (www.youtube.com)"
+      ]
+    },
+    {
+      "name": "the first of two src attributes counts",
+      "html": "<iframe src=\"https://player.vimeo.com/video/1\" src=\"https://evil.example/\"></iframe><iframe src=\"https://evil.example/\" src=\"https://player.vimeo.com/video/2\"></iframe>",
+      "iframes": [
+        "https://player.vimeo.com/video/1"
+      ],
+      "text": "",
+      "dropped": [
+        "iframe (evil.example)"
+      ]
+    },
+    {
+      "name": "upper case scheme and host",
+      "html": "<iframe src=\"HTTPS://Player.Vimeo.COM/video/7\"></iframe>",
+      "iframes": [
+        "https://player.vimeo.com/video/7"
+      ],
+      "text": "",
+      "dropped": []
     },
     {
       "name": "script and its text",
       "html": "<script>window.__xss = 1</script>after",
       "iframes": [],
       "text": "after",
-      "dropped": ["script"]
+      "dropped": [
+        "script"
+      ]
     },
     {
       "name": "event handler on a harmless tag keeps the text only",
       "html": "<div onclick=\"alert(1)\"><b>bold</b> text</div>",
       "iframes": [],
       "text": "bold text",
-      "dropped": ["div", "b"]
+      "dropped": [
+        "div",
+        "b"
+      ]
     },
     {
       "name": "image with onerror",
       "html": "<img src=x onerror=\"alert(1)\">",
       "iframes": [],
       "text": "",
-      "dropped": ["img"]
+      "dropped": [
+        "img"
+      ]
     },
     {
       "name": "javascript link keeps its text",
       "html": "<a href=\"javascript:alert(1)\">click</a>",
       "iframes": [],
       "text": "click",
-      "dropped": ["a"]
+      "dropped": [
+        "a"
+      ]
     },
     {
       "name": "style, object, embed, svg and math",
       "html": "<style>body{display:none}</style><object data=\"x.swf\">o</object><embed src=\"x.swf\"><svg onload=\"alert(1)\"><text>s</text></svg><math><mi>m</mi></math>",
       "iframes": [],
       "text": "",
-      "dropped": ["style", "object", "embed", "svg", "math"]
+      "dropped": [
+        "style",
+        "object",
+        "embed",
+        "svg",
+        "math"
+      ]
     },
     {
       "name": "iframe inside a disallowed element still counts",
       "html": "<div class=\"video\">\n<iframe src=\"https://www.youtube-nocookie.com/embed/jNQXAC9IVRw\"></iframe>\n</div>",
-      "iframes": ["https://www.youtube-nocookie.com/embed/jNQXAC9IVRw"],
+      "iframes": [
+        "https://www.youtube-nocookie.com/embed/jNQXAC9IVRw"
+      ],
       "text": "",
-      "dropped": ["div"]
+      "dropped": [
+        "div"
+      ]
     },
     {
       "name": "markup inside an iframe is not shown",
       "html": "<iframe src=\"https://player.vimeo.com/video/1\"><img src=x onerror=alert(1)><b>x</b></iframe>",
-      "iframes": ["https://player.vimeo.com/video/1"],
+      "iframes": [
+        "https://player.vimeo.com/video/1"
+      ],
       "text": "",
       "dropped": []
     },
@@ -146,21 +251,28 @@
       "html": "<span>&lt;script&gt;alert(1)&lt;/script&gt;</span>",
       "iframes": [],
       "text": "<script>alert(1)</script>",
-      "dropped": ["span"]
+      "dropped": [
+        "span"
+      ]
     },
     {
       "name": "library video waits for the media library",
       "html": "<video src=\"/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b\" controls></video>",
       "iframes": [],
       "text": "",
-      "dropped": ["video (media library)"]
+      "dropped": [
+        "video (media library)"
+      ]
     },
     {
       "name": "video from another site",
       "html": "<video src=\"https://evil.example/a.mp4\" autoplay><source src=\"https://evil.example/b.mp4\"></video><video><source src=\"/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b\"></video>",
       "iframes": [],
       "text": "",
-      "dropped": ["video (evil.example)", "video (no src)"]
+      "dropped": [
+        "video (evil.example)",
+        "video (no src)"
+      ]
     }
   ]
 }
