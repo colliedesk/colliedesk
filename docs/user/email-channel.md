@@ -73,7 +73,8 @@ Disconnecting the whole email channel also disconnects Gmail.
 
 Agents (AI) cannot connect or disconnect Gmail themselves: `colliedesk_gmail_connect_request` and
 `colliedesk_gmail_disconnect_request` file a request, and the admin who approves it gets Google's
-page. See [Agent requests](agent-requests.md).
+page. On Colliedesk Cloud the request card shows the same note on Google data first. See
+[Agent requests](agent-requests.md).
 
 ### Self-hosted: turn on Gmail sending
 

@@ -17,6 +17,18 @@ function returnText(returned: GmailReturn): string {
   return Object.hasOwn(messages.gmailReturnErrors, reason) ? messages.gmailReturnErrors[reason] : messages.gmailConnectFailed;
 }
 
+// GmailDataDisclosure says, before an admin goes to Google's consent page, how Colliedesk Cloud handles Google
+// data. Only on Cloud: the statement binds HC Labs' Google client, not a self-hosted server's. Cloud is told
+// the way the server tells it (realm in problem-report-text.go): the realm analytics name, else cloud sign-in
+// with billing. Read here, in this chunk, so the main bundle does not grow.
+export function GmailDataDisclosure() {
+  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
+  const cloud = (config?.product_analytics.realm ?? (config?.cloud_sign_in.enabled && config.billing.enabled ? 'cloud' : null)) === 'cloud';
+  return cloud && <p className="muted-copy">
+    {messages.gmailGoogleData} <a href={messages.gmailPrivacyURL} target="_blank" rel="noopener noreferrer">{messages.gmailPrivacyPolicy}</a>
+  </p>;
+}
+
 interface GmailConnectionProps {
   gmail: GmailSettings;
   supportAddress: string;
@@ -35,10 +47,6 @@ interface GmailConnectionProps {
 // admin reconnects, and they never leave another way.
 export function GmailConnection({ gmail, supportAddress, timezone, canManage, onConnect, onDisconnect, connectPending, error, returned }: GmailConnectionProps) {
   const connection = gmail.connection;
-  // Cloud the way the server tells it (realm in problem-report-text.go): the realm analytics name, else cloud
-  // sign-in with billing. Read here, in this block's chunk, so the main bundle does not grow.
-  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
-  const cloud = (config?.product_analytics.realm ?? (config?.cloud_sign_in.enabled && config.billing.enabled ? 'cloud' : null)) === 'cloud';
   const [confirming, setConfirming] = useState(false);
   const disconnectButton = useRef<HTMLButtonElement>(null);
   const returnFocus = useRef(false);
@@ -71,9 +79,7 @@ export function GmailConnection({ gmail, supportAddress, timezone, canManage, on
         <p role="note" className="warning-note">{messages.gmailNotAvailable(gmail.missing_settings)}</p>
         {canManage && !connection && <label className="invite-link"><span className="field-label">{messages.gmailRedirectUri}</span><input readOnly value={gmail.redirect_uri} /></label>}
       </>}
-      {cloud && gmail.available && canManage && <p className="muted-copy">
-        {messages.gmailGoogleData} <a href={messages.gmailPrivacyURL} target="_blank" rel="noopener noreferrer">{messages.gmailPrivacyPolicy}</a>
-      </p>}
+      {gmail.available && canManage && <GmailDataDisclosure />}
       {gmail.available && !connection && (canManage
         ? <span className="button-row">{connectButton(messages.connectGmail, true)}</span>
         : <p className="muted-copy">{messages.gmailAdminOnly}</p>)}
