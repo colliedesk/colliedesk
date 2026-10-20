@@ -76,18 +76,17 @@ from Freshdesk, and invite your team.
 
 ## Upgrading
 
-Colliedesk is alpha: releases are `0.0.x` and any release may change the database schema.
+Colliedesk is alpha: releases are `0.0.x` and any release may change the database schema. Every
+release is tested by upgrading the release before it. Follow
+[upgrade, roll back and restore a workspace](upgrade.md):
 
-1. Back up PostgreSQL and the attachment files: [data to back up](database.md#data-to-back-up).
-2. Pull the new image and restart:
-   ```sh
-   docker compose pull && docker compose up -d
-   ```
-   The server applies database migrations when it starts.
-3. Check the version you now run:
-   ```sh
-   docker compose exec server /app/collie version
-   ```
+1. Back up PostgreSQL and the attachment files, and check the backup.
+2. Pull the new image.
+3. Run the migrations, before the server starts.
+4. Start the server and check the version you now run.
+
+If the new release fails, the same page restores the backup and the release you had, or brings back
+one workspace without touching the others.
 
 The installer writes the image to `COLLIE_DESK_IMAGE` in `.env`. Pick one tag:
 
@@ -105,6 +104,7 @@ Security fixes go to the latest release and to `edge` only.
 - [Running behind a proxy](running-behind-proxy.md)
 - [Configuring email](email.md)
 - [Backups and database](database.md)
+- [Upgrade, roll back and restore a workspace](upgrade.md)
 
 ## Troubleshooting and support
 

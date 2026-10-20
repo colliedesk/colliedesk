@@ -5,7 +5,8 @@ backups, database requirements and the database users.
 
 ## Data to back up
 
-Colliedesk keeps data in two places. Back up both:
+Colliedesk keeps data in two places. Back up both (the commands, and how to restore the whole
+install or one workspace, are in [upgrade, roll back and restore](upgrade.md#1-back-up)):
 
 - PostgreSQL (the `postgres-data` volume).
 - Attachment files in `ATTACHMENTS_DIR` (the `attachments-data` volume, mounted at
