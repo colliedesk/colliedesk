@@ -4,6 +4,7 @@ import { ProblemReportRefusedError, ProblemReportsNotConfiguredError, sendProble
 import { collectDiagnostics } from '../../lib/diagnostics';
 import { track } from '../../lib/product-analytics';
 import { messages } from '../../messages';
+import { reportMessages } from './report-messages';
 import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-keys';
 import { issueURL } from './report-issue-url';
 
@@ -17,9 +18,9 @@ interface Props {
 }
 
 function screenshotProblem(files: File[]): string | null {
-  if (files.length > MAX_FILES) return messages.reportScreenshotCount;
-  if (files.some((file) => !ALLOWED.includes(file.type))) return messages.reportScreenshotType;
-  if (files.reduce((total, file) => total + file.size, 0) > MAX_BYTES) return messages.reportScreenshotSize;
+  if (files.length > MAX_FILES) return reportMessages.reportScreenshotCount;
+  if (files.some((file) => !ALLOWED.includes(file.type))) return reportMessages.reportScreenshotType;
+  if (files.reduce((total, file) => total + file.size, 0) > MAX_BYTES) return reportMessages.reportScreenshotSize;
   return null;
 }
 
@@ -55,7 +56,7 @@ export function ReportProblemDialog({ appVersion, onClose }: Props) {
       setOutcome({ reference });
     } catch (error) {
       if (error instanceof ProblemReportsNotConfiguredError) setOutcome({ github: issueURL(text, diagnostics) });
-      else setProblem(error instanceof ProblemReportRefusedError ? error.message : messages.reportFailed);
+      else setProblem(error instanceof ProblemReportRefusedError ? error.message : reportMessages.reportFailed);
     } finally {
       setSending(false);
     }
@@ -68,47 +69,47 @@ export function ReportProblemDialog({ appVersion, onClose }: Props) {
       <div className="dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={root} onKeyDown={keys}>
         <h2 id={titleId}>{messages.reportProblem}</h2>
         {outcome && 'reference' in outcome && <>
-          <p role="status">{messages.reportThanks(outcome.reference)}</p>
+          <p role="status">{reportMessages.reportThanks(outcome.reference)}</p>
           <div className="button-row"><button type="button" className="primary-action" autoFocus onClick={onClose}>{messages.reportClose}</button></div>
         </>}
         {outcome && 'github' in outcome && <>
-          <p>{messages.reportNotConfigured}</p>
+          <p>{reportMessages.reportNotConfigured}</p>
           <div className="button-row">
-            <a className="button primary-action" href={outcome.github} target="_blank" rel="noopener noreferrer">{messages.reportGithubIssue}</a>
+            <a className="button primary-action" href={outcome.github} target="_blank" rel="noopener noreferrer">{reportMessages.reportGithubIssue}</a>
             <button type="button" onClick={onClose}>{messages.reportClose}</button>
           </div>
         </>}
         {!outcome && <>
-          <p className="muted-copy">{messages.reportIntro}</p>
-          <label htmlFor={fieldId}>{messages.reportDescription}</label>
+          <p className="muted-copy">{reportMessages.reportIntro}</p>
+          <label htmlFor={fieldId}>{reportMessages.reportDescription}</label>
           <textarea id={fieldId} autoFocus rows={5} maxLength={5000} value={description} onChange={(event) => setDescription(event.target.value)} />
-          <label htmlFor={fileId}>{messages.reportScreenshots}</label>
+          <label htmlFor={fileId}>{reportMessages.reportScreenshots}</label>
           <input id={fileId} type="file" multiple accept={ALLOWED.join(',')} onChange={choose} aria-describedby={`${fileId}-hint`} />
-          <p id={`${fileId}-hint`} className="muted-copy">{messages.reportScreenshotsHint}</p>
+          <p id={`${fileId}-hint`} className="muted-copy">{reportMessages.reportScreenshotsHint}</p>
           {problem && <p role="alert" className="error-copy">{problem}</p>}
           <details className="report-preview">
-            <summary>{messages.reportPreview}</summary>
+            <summary>{reportMessages.reportPreview}</summary>
             <dl>
-              <dt>{messages.reportYourDescription}</dt><dd>{text || messages.reportNone}</dd>
-              <dt>{messages.reportShots}</dt><dd>{files.map((file) => file.name).join(', ') || messages.reportNone}</dd>
-              <dt>{messages.reportAppVersion}</dt><dd>{diagnostics.app_version}</dd>
-              <dt>{messages.reportBrowser}</dt><dd>{diagnostics.user_agent}</dd>
-              <dt>{messages.reportWindowSize}</dt><dd>{diagnostics.viewport?.width}x{diagnostics.viewport?.height}</dd>
-              <dt>{messages.reportPage}</dt><dd>{diagnostics.page_path}</dd>
-              <dt>{messages.reportErrors(diagnostics.client_errors?.length ?? 0)}</dt>
+              <dt>{reportMessages.reportYourDescription}</dt><dd>{text || reportMessages.reportNone}</dd>
+              <dt>{reportMessages.reportShots}</dt><dd>{files.map((file) => file.name).join(', ') || reportMessages.reportNone}</dd>
+              <dt>{reportMessages.reportAppVersion}</dt><dd>{diagnostics.app_version}</dd>
+              <dt>{reportMessages.reportBrowser}</dt><dd>{diagnostics.user_agent}</dd>
+              <dt>{reportMessages.reportWindowSize}</dt><dd>{diagnostics.viewport?.width}x{diagnostics.viewport?.height}</dd>
+              <dt>{reportMessages.reportPage}</dt><dd>{diagnostics.page_path}</dd>
+              <dt>{reportMessages.reportErrors(diagnostics.client_errors?.length ?? 0)}</dt>
               <dd>{(diagnostics.client_errors ?? []).map((item, index) => <span key={index}>{item.at} {item.source}: {item.message}</span>)}</dd>
-              <dt>{messages.reportFailedCalls(diagnostics.failed_api_calls?.length ?? 0)}</dt>
+              <dt>{reportMessages.reportFailedCalls(diagnostics.failed_api_calls?.length ?? 0)}</dt>
               <dd>{(diagnostics.failed_api_calls ?? []).map((item, index) =>
-                <span key={index}>{item.at} {item.method} {item.route} {item.status}, {messages.reportRequestId(item.request_id ?? '')}</span>)}</dd>
-              <dt>{messages.reportActions}</dt><dd>{diagnostics.product_events?.join(', ') || messages.reportNone}</dd>
+                <span key={index}>{item.at} {item.method} {item.route} {item.status}, {reportMessages.reportRequestId(item.request_id ?? '')}</span>)}</dd>
+              <dt>{reportMessages.reportActions}</dt><dd>{diagnostics.product_events?.join(', ') || reportMessages.reportNone}</dd>
             </dl>
-            <p className="muted-copy">{messages.reportFromServer}</p>
+            <p className="muted-copy">{reportMessages.reportFromServer}</p>
           </details>
           <div className="button-row">
             <button type="button" className="primary-action" disabled={text === '' || sending} onClick={() => void send()}>
-              {sending ? messages.reportSending : messages.reportSend}
+              {sending ? reportMessages.reportSending : reportMessages.reportSend}
             </button>
-            <button type="button" onClick={onClose}>{messages.reportCancel}</button>
+            <button type="button" onClick={onClose}>{reportMessages.reportCancel}</button>
           </div>
         </>}
       </div>

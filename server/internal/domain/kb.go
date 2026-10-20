@@ -143,6 +143,8 @@ type HelpCenter struct {
 	Locale         string     `json:"locale"`
 	ContentVersion int64      `json:"content_version"`
 	UpdatedAt      *time.Time `json:"updated_at"`
+	// URL is the public address; the API sets it, the store leaves it empty.
+	URL string `json:"url"`
 }
 
 // KBImagePath is the API path of an image; articles link images by it.
@@ -284,3 +286,39 @@ func KBImageIDs(body string) []string {
 }
 
 var kbImageLink = regexp.MustCompile(regexp.QuoteMeta(KBImagePath) + `([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})`)
+
+// HelpCenterSite is what every public help center page needs to know about its workspace. Trial is
+// true while the workspace is on a trial: its pages ask search engines not to index them.
+type HelpCenterSite struct {
+	WorkspaceID    string
+	Slug           string
+	Name           string
+	Title          string
+	Locale         string
+	ContentVersion int64
+	Trial          bool
+}
+
+// PublicKBCollection is a live collection as the help center lists it; Published counts its own
+// published articles, not those of the collections inside it.
+type PublicKBCollection struct {
+	ID          string
+	ParentID    string
+	Name        string
+	Slug        string
+	Description string
+	Published   int
+}
+
+// PublicKBArticle is a published article as the help center shows it. BodyMD is empty in lists;
+// Excerpt is the start of the text, set only by a search.
+type PublicKBArticle struct {
+	Number       int64
+	Slug         string
+	Title        string
+	CollectionID string
+	BodyMD       string
+	Excerpt      string
+	PublishedAt  *time.Time
+	UpdatedAt    time.Time
+}

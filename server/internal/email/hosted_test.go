@@ -26,7 +26,11 @@ func TestValidateHostedSlug(t *testing.T) {
 		"reserved mail": "mail",
 		"reserved in":   "in",
 		"reserved help": "help",
-		"punycode":      "xn--acme",
+		// colliedesk.com has its own DNS records for these names (staging app, Clerk).
+		"reserved staging": "staging",
+		"reserved clerk":   "clerk",
+		"reserved clkmail": "clkmail",
+		"punycode":         "xn--acme",
 	} {
 		if err := email.ValidateHostedSlug(slug); err == nil {
 			t.Errorf("%s (%q) accepted", name, slug)

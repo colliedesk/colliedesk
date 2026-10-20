@@ -17,7 +17,7 @@ export function hrefFor(item: NavItem, page: SettingsPath): string {
 const sectionByHash: Record<string, SettingsSection> = {
   'profile-heading': 'profile', 'preferences-heading': 'preferences', 'general-heading': 'general', 'team-heading': 'team',
   'invites-heading': 'invites', 'sessions-heading': 'sessions', 'email-channel-heading': 'email_channel', 'web-form-heading': 'web_form',
-  'saved-replies-heading': 'saved_replies', 'export-heading': 'export',
+  'saved-replies-heading': 'saved_replies', 'help-center-heading': 'help_center', 'export-heading': 'export',
 };
 const sectionOf = (item: NavItem): SettingsSection | undefined => (item.hash ? sectionByHash[item.hash] : item.to === '/settings/billing' ? 'billing' : undefined);
 
@@ -28,7 +28,7 @@ const plainLink: RenderLink = (item, page) =>
 // The app provides router links here; without a router (unit tests) the nav uses plain anchors.
 export const SettingsNavLinkContext = createContext<RenderLink>(plainLink);
 
-interface Shown { general: boolean; team: boolean; email: boolean; webForm: boolean; savedReplies: boolean; exportData: boolean; billing: boolean }
+interface Shown { general: boolean; team: boolean; email: boolean; webForm: boolean; savedReplies: boolean; helpCenter?: boolean; exportData: boolean; billing: boolean }
 
 // settingsNavGroups lists what this person can see: their own account, then the shared workspace.
 export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] {
@@ -43,6 +43,7 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
       ...section(messages.emailChannel, 'email-channel-heading', shown.email),
       ...section(messages.webForm, 'web-form-heading', shown.webForm),
       ...section(messages.savedReplies, 'saved-replies-heading', shown.savedReplies),
+      ...section(messages.helpCenter, 'help-center-heading', shown.helpCenter),
       ...section(messages.exportHeading, 'export-heading', shown.exportData),
       ...(shown.billing ? [{ label: messages.planAndBilling, to: '/settings/billing' as const, current: page === '/settings/billing' }] : []),
     ] },

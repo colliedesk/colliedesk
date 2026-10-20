@@ -1,0 +1,12 @@
+{{define "content"}}
+<section class="notice">
+<p class="notice-code">404</p>
+<h1>This page does not exist</h1>
+{{- if .Home}}
+<p>The article may have moved or been unpublished. Search for it, or <a href="{{.Home}}">go to the start page</a>.</p>
+{{template "heroSearch" .}}
+{{- else}}
+<p>Check the address for typing mistakes, or ask whoever sent you the link for a new one.</p>
+{{- end}}
+</section>
+{{end}}

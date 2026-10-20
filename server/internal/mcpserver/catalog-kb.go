@@ -38,8 +38,8 @@ const (
 
 	kbCollectionOutput = `{"type":"object","required":["collection"],"properties":{"collection":` + kbCollectionSchema + `}}`
 
-	helpCenterSchema = `{"type":"object","required":["enabled","title","locale","content_version"],"properties":{"enabled":{"type":"boolean"},"title":{"type":"string"},` +
-		`"locale":{"type":"string"},"content_version":{"type":"integer"},"updated_at":{"type":["string","null"]}}}`
+	helpCenterSchema = `{"type":"object","required":["enabled","title","locale","content_version","url"],"properties":{"enabled":{"type":"boolean"},"title":{"type":"string"},` +
+		`"locale":{"type":"string"},"content_version":{"type":"integer"},"updated_at":{"type":["string","null"]},"url":{"type":"string"}}}`
 )
 
 func kbCollectionsListSpec() Spec {
@@ -310,8 +310,8 @@ func helpCenterGetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_help_center_get",
 		Title: "Read the help center settings",
-		Description: `Say whether the public help center is on, its title and language, and content_version, which grows with every change to the knowledge base. ` +
-			`While it is off, nothing of the knowledge base is public.` + "\n\nTier: read.",
+		Description: `Say whether the public help center is on, its title and language, its public address (url), and content_version, which grows with every change to the knowledge base. ` +
+			`While it is off, nothing of the knowledge base is public. An article's public address is url + "/a/<number>-<slug>".` + "\n\nTier: read.",
 		Tier: "read", ReadOnly: true,
 		REST:   []string{"GET /api/v1/help-center"},
 		Input:  noArguments,

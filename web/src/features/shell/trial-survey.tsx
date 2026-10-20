@@ -2,7 +2,7 @@ import { useId, useState } from 'react';
 import type { Me } from '../../api/schemas';
 import { track } from '../../lib/product-analytics';
 import { useNow } from '../../lib/use-now';
-import { messages } from '../../messages';
+import { billingMessages } from '../settings/billing-messages';
 
 const storageKey = 'colliedesk-survey-switch-blocker-v1';
 const dayMs = 24 * 60 * 60 * 1000;
@@ -32,7 +32,7 @@ export function TrialSurvey({ me, analytics, now }: TrialSurveyProps) {
   const [failed, setFailed] = useState(false);
   const labelId = useId();
   const plan = me.plan;
-  if (done === 'thanks') return <section className="trial-survey"><p role="status">{messages.surveyThanks}</p></section>;
+  if (done === 'thanks') return <section className="trial-survey"><p role="status">{billingMessages.surveyThanks}</p></section>;
   if (done === 'closed' || skipped) return null;
   if (!analytics?.enabled || analytics.realm !== 'cloud' || me.agent.role !== 'admin' || plan?.plan !== 'trial') return null;
   const msLeft = Date.parse(plan.trial_ends_at) - (now ?? clock).getTime();
@@ -52,12 +52,12 @@ export function TrialSurvey({ me, analytics, now }: TrialSurveyProps) {
   };
   return (
     <section className="trial-survey" aria-labelledby={labelId}>
-      <label id={labelId} htmlFor={`${labelId}-answer`}>{messages.surveyQuestion}</label>
+      <label id={labelId} htmlFor={`${labelId}-answer`}>{billingMessages.surveyQuestion}</label>
       <textarea id={`${labelId}-answer`} maxLength={maxAnswer} value={answer} onChange={(event) => { setAnswer(event.target.value); setFailed(false); }} />
-      {failed && <p role="alert" className="error-copy">{messages.surveyFailed}</p>}
+      {failed && <p role="alert" className="error-copy">{billingMessages.surveyFailed}</p>}
       <div className="button-row">
-        <button type="button" className="primary-action" disabled={answer.trim() === ''} onClick={send}>{messages.surveySend}</button>
-        <button type="button" onClick={dismiss}>{messages.surveyNotNow}</button>
+        <button type="button" className="primary-action" disabled={answer.trim() === ''} onClick={send}>{billingMessages.surveySend}</button>
+        <button type="button" onClick={dismiss}>{billingMessages.surveyNotNow}</button>
       </div>
     </section>
   );

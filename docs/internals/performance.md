@@ -44,6 +44,17 @@ the collections. Each path must stay at or below 100 ms p95 (about 11 ms locally
 vector of the workspace, because row-level security keeps Postgres off the GIN index; raise the cap
 only with this gate, after reading `docs/internals/knowledge-base.md`.
 
+## Help center pages budget
+
+`TestHelpCenterPagesLatencyBudget` reads the knowledge base search budget's fixture, seeded once per
+test binary for both gates (`sharedKBBudget`; seeding twice cost 33 s of the 120-second CI budget):
+half of the articles published, all in one collection, help centers on. It loads each public
+page 50 times, HTML rendering included: the home page, the first and last page of the collection
+(1,000 published articles, 50 a page), a 9,000- and a 100,000-character article, and searches with two
+words, a short prefix, no match and a title. Each must stay at or below 100 ms p95 (6–16 ms locally).
+A page is five short scoped transactions at most (slug lookup, settings and lock, collections,
+articles, neighbours); a 304 stops after the second.
+
 ## Pending agent requests budget
 
 `TestPendingAgentRequestsLatencyBudget` holds the store query behind
@@ -84,6 +95,8 @@ Warm open (a click on a list row, synthetic data, 5 tickets including a 285 KB H
 ## Web bundle budget
 
 `corepack pnpm bundle:check` reads the production Vite output. The largest JavaScript asset must be at most 200 KiB gzip. The largest CSS asset must be at most 30 KiB gzip. `make test` and the web CI job build the bundle before running this gate.
+
+On 2026-10-20 the first bundle was 203,268 bytes of 204,800. Plan and billing, the locked screen, the trial survey and their strings (and those of Report a problem) moved to their own chunks, which brought it to 200,433; the knowledge base then added only its rail link and routes (201,420). Its pages, the Markdown editor with `remark-gfm`, and the help center card in Settings are lazy parts; the rail link preloads them on hover and focus.
 
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
 

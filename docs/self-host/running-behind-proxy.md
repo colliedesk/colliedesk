@@ -22,3 +22,38 @@ in front while the compose default is active. A client inside a trusted range, o
 reaches the server directly through Docker's bridge, could then send a fake `X-Forwarded-For` and
 pick its own address for the limits. The shipped files publish on `127.0.0.1` only. If you
 expose the port directly, set `TRUSTED_PROXIES=` (empty).
+
+## Help center host names
+
+Every workspace's [help center](../user/knowledge-base.md#public-help-center) works at
+`APP_ORIGIN/help/<slug>` with no extra setup. To give each one its own host name instead, for
+example `acme.help.example.com`:
+
+1. Point a wildcard DNS record, `*.help.example.com`, at the proxy.
+2. Set `HELP_CENTER_DOMAIN=help.example.com` and restart the server. The help center then answers
+   on `<slug>.help.example.com` with the scheme and port of `APP_ORIGIN`, and `APP_ORIGIN/help/<slug>`
+   redirects there (301). A slug that cannot be a host name (for example `www`, `mail` or `support`)
+   keeps the path address. On those host names the server answers only help center pages: the
+   app, the API and MCP stay on `APP_ORIGIN`.
+3. Give the proxy certificates for the host names. With Caddy, get each one on demand and let the
+   server say which names it serves; it answers `200` only for a help center that is on, and
+   `404` for everything else:
+
+```caddyfile
+{
+	on_demand_tls {
+		ask http://127.0.0.1:8080/api/v1/public/help-center/tls-ask
+	}
+}
+
+*.help.example.com {
+	tls {
+		on_demand
+	}
+	reverse_proxy 127.0.0.1:8080
+}
+```
+
+Let's Encrypt issues at most 50 certificates per registered domain a week; a wildcard certificate
+(DNS challenge) avoids that limit if you serve many workspaces. Keep `APP_ORIGIN`'s own site block:
+a more specific site wins over the wildcard.

@@ -132,6 +132,7 @@ test('an admin renames the workspace address and warns that the old one stops wo
   const onSaveSlug = vi.fn();
   render(<EmailChannelSection settings={hosted} timezone="UTC" canManage workspaceSlug="acme" onSaveSlug={onSaveSlug} />);
   expect(screen.getByText(/old address stops receiving mail/i)).toBeInTheDocument();
+  expect(screen.getByText(/old help center links stop working/i)).toBeInTheDocument();
   fireEvent.change(screen.getByRole('textbox', { name: /workspace address name/i }), { target: { value: 'acme-support' } });
   fireEvent.click(screen.getByRole('button', { name: /save address name/i }));
   expect(onSaveSlug).toHaveBeenCalledWith('acme-support');

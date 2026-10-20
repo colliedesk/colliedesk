@@ -42,6 +42,8 @@ interface SettingsPageProps {
   // exportSection is the admin's whole-workspace export.
   exportSection?: ReactNode;
   webFormSection?: ReactNode;
+  // helpCenterSection turns the public help center on or off; every agent sees it, admins change it.
+  helpCenterSection?: ReactNode;
   // showBilling adds Plan and billing to the nav; only admins of a billed (cloud) workspace see it.
   showBilling?: boolean;
 }
@@ -51,13 +53,13 @@ interface SettingsPageProps {
 // plus Plan and billing (its own page) for admins of a billed workspace.
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
   workspaceTimezone = 'UTC', timezoneOverride = null, email, displayName = '', onSetDisplayName, displayNameSave, createdInviteUrl, onCreateInvite, onRevokeInvite,
-  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, emailSection, savedRepliesSection, webFormSection, exportSection, showBilling = false }: SettingsPageProps) {
+  onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, emailSection, savedRepliesSection, webFormSection, helpCenterSection, exportSection, showBilling = false }: SettingsPageProps) {
   return (
     <main className="settings-page panel">
       <header><h1>{messages.settings}</h1><p>{messages.settingsDescription}</p></header>
       {loading ? <p role="status" className="empty-copy">{messages.loading}</p> : <div className="settings-layout">
         <SettingsNav page="/settings" shown={{ general: canManageWorkspace, team: Boolean(teamSection), email: Boolean(emailSection), webForm: Boolean(webFormSection),
-          savedReplies: Boolean(savedRepliesSection), exportData: Boolean(exportSection), billing: showBilling }} />
+          savedReplies: Boolean(savedRepliesSection), helpCenter: Boolean(helpCenterSection), exportData: Boolean(exportSection), billing: showBilling }} />
         <div className="settings-sections">
           {error && <p role="alert" className="error-copy">{error}</p>}
           <p className="settings-group-label">{messages.settingsYourAccount}</p>
@@ -84,6 +86,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
           {emailSection}
           {webFormSection}
           {savedRepliesSection}
+          {helpCenterSection}
           {exportSection && <section className="settings-card" aria-labelledby="export-heading">
             <div className="section-heading"><h2 id="export-heading">{messages.exportHeading}</h2><p>{messages.exportDescription}</p></div>
             <div className="settings-body">{exportSection}</div>

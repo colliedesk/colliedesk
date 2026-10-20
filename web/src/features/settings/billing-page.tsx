@@ -2,6 +2,7 @@ import type { Billing, CheckoutPlan } from '../../api/schemas';
 import { formatBytes } from '../../lib/format-bytes';
 import { formatDay } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { billingMessages } from './billing-messages';
 import { PlanPicker } from './plan-picker';
 import { SettingsNav } from './settings-nav';
 
@@ -20,19 +21,19 @@ interface BillingPageProps {
 // periodNote says when the paid plan renews, or when it ends if it was cancelled.
 function periodNote(billing: Billing, timezone: string): string | null {
   if (billing.complimentary) return null;
-  if (billing.plan === 'trial') return messages.trialEndsOn(formatDay(billing.trial_ends_at, timezone));
-  if (billing.plan === 'none') return messages.trialEnded(formatDay(billing.trial_ends_at, timezone));
+  if (billing.plan === 'trial') return billingMessages.trialEndsOn(formatDay(billing.trial_ends_at, timezone));
+  if (billing.plan === 'none') return billingMessages.trialEnded(formatDay(billing.trial_ends_at, timezone));
   if (!billing.current_period_end) return null;
   const when = formatDay(billing.current_period_end, timezone);
-  return billing.cancel_at_period_end || billing.status === 'canceled' ? messages.cancelsOn(when) : messages.renewsOn(when);
+  return billing.cancel_at_period_end || billing.status === 'canceled' ? billingMessages.cancelsOn(when) : billingMessages.renewsOn(when);
 }
 
 const isPaid = (billing: Billing) => billing.plan !== 'trial' && billing.plan !== 'none';
 // The server names the plan with more storage it sells; without one the cap is raised by asking us.
 const paidStorageNext = (billing: Billing) =>
-  billing.storage_upgrade_plan ? messages.storageUpgradeTo(messages.plans[billing.storage_upgrade_plan]) : messages.storageContactUs;
+  billing.storage_upgrade_plan ? billingMessages.storageUpgradeTo(messages.plans[billing.storage_upgrade_plan]) : billingMessages.storageContactUs;
 const paidStorageWarningNext = (billing: Billing) =>
-  billing.storage_upgrade_plan ? messages.storageWarningUpgradeTo(messages.plans[billing.storage_upgrade_plan]) : messages.storageContactUs;
+  billing.storage_upgrade_plan ? billingMessages.storageWarningUpgradeTo(messages.plans[billing.storage_upgrade_plan]) : billingMessages.storageContactUs;
 
 // StorageFull says what the cap does once it is reached, which differs by plan: on a paid plan customer
 // email is always stored, on the trial and when locked it is refused. Below the cap the 80% warning
@@ -41,9 +42,9 @@ function StorageFull({ billing }: { billing: Billing }) {
   const limit = billing.limits.storage_bytes;
   if (limit === null || billing.usage.storage_bytes < limit) return null;
   const paid = isPaid(billing);
-  const upgrade = paid ? paidStorageNext(billing) : messages.storageUpgradeTrial;
+  const upgrade = paid ? paidStorageNext(billing) : billingMessages.storageUpgradeTrial;
   return <p role="alert" aria-label="Attachment storage" className="error-copy">
-    {paid ? messages.storageFullPaid(upgrade) : messages.storageFullTrial(upgrade)}</p>;
+    {paid ? billingMessages.storageFullPaid(upgrade) : billingMessages.storageFullTrial(upgrade)}</p>;
 }
 
 // Usage shows its number and a bar; the bar turns amber from 80% so a nearly full limit stands out.
@@ -66,26 +67,26 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
   const manage = billing.status !== 'none' && !billing.complimentary;
   return (
     <main className="settings-page panel billing-page">
-      <header><h1>{messages.billingHeading}</h1><p>{messages.billingDescription}</p></header>
+      <header><h1>{billingMessages.billingHeading}</h1><p>{billingMessages.billingDescription}</p></header>
       <div className="settings-layout">
         {/* Only admins reach this page, and an admin sees every settings section. */}
         <SettingsNav page="/settings/billing" shown={{ general: true, team: true, email: true, webForm: true, savedReplies: true, exportData: true, billing: true }} />
         <div className="settings-sections">
           {failed && <p role="alert" className="error-copy">{messages.billingActionFailed}</p>}
-          {checkoutReturned && <p role="status">{messages.checkoutReturned}</p>}
-          {billing.active_subscriptions > 1 && <p role="alert" className="error-copy">{messages.duplicateSubscriptions}</p>}
-          {billing.status === 'past_due' && <p role="alert" className="error-copy">{messages.pastDueNotice}</p>}
-          {isPaid(billing) && billing.usage.agents > billing.limits.agents && <p role="alert" aria-label={messages.usageAgents} className="error-copy">
+          {checkoutReturned && <p role="status">{billingMessages.checkoutReturned}</p>}
+          {billing.active_subscriptions > 1 && <p role="alert" className="error-copy">{billingMessages.duplicateSubscriptions}</p>}
+          {billing.status === 'past_due' && <p role="alert" className="error-copy">{billingMessages.pastDueNotice}</p>}
+          {isPaid(billing) && billing.usage.agents > billing.limits.agents && <p role="alert" aria-label={billingMessages.usageAgents} className="error-copy">
             {messages.agentsOverPlan(billing.usage.agents - billing.limits.agents, messages.plans[billing.plan])}</p>}
           <section className="current-plan-card" aria-labelledby="current-plan-heading">
             <div className="current-plan">
-              <h2 className="settings-group-label" id="current-plan-heading">{messages.currentPlan}</h2>
+              <h2 className="settings-group-label" id="current-plan-heading">{billingMessages.currentPlan}</h2>
               <p className="current-plan-name">{billing.complimentary
-                ? messages.complimentaryPlan(messages.plans[billing.plan], billing.complimentary_until ? formatDay(billing.complimentary_until, timezone) : null)
+                ? billingMessages.complimentaryPlan(messages.plans[billing.plan], billing.complimentary_until ? formatDay(billing.complimentary_until, timezone) : null)
                 : messages.plans[billing.plan]}</p>
               {note && <p className="muted-copy">{note}</p>}
               {manage && <div className="button-row"><button type="button" onClick={onManage}>{messages.manageBilling}</button></div>}
-              {manage && <small className="muted-copy">{messages.manageBillingHelp}</small>}
+              {manage && <small className="muted-copy">{billingMessages.manageBillingHelp}</small>}
             </div>
             <div className="usage-list">
               {storageNearlyFull && storageLimit !== null && <p role="status" className="warning-note">
@@ -93,20 +94,20 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
                   const percent = Math.floor((billing.usage.storage_bytes / storageLimit) * 100);
                   const used = formatBytes(billing.usage.storage_bytes);
                   return isPaid(billing)
-                    ? messages.storageWarningPaid(percent, used, formatBytes(storageLimit), paidStorageWarningNext(billing))
+                    ? billingMessages.storageWarningPaid(percent, used, formatBytes(storageLimit), paidStorageWarningNext(billing))
                     : messages.storageWarning(percent, used, formatBytes(storageLimit));
                 })()}</p>}
               <StorageFull billing={billing} />
-              <Usage label={messages.usageAgents} text={messages.agentsUsage(billing.usage.agents, billing.limits.agents, billing.usage.pending_invites)}
+              <Usage label={billingMessages.usageAgents} text={billingMessages.agentsUsage(billing.usage.agents, billing.limits.agents, billing.usage.pending_invites)}
                 used={billing.usage.agents + billing.usage.pending_invites} limit={billing.limits.agents} />
-              {storageLimit !== null && <Usage label={messages.usageStorage} text={messages.storageUsage(formatBytes(billing.usage.storage_bytes, 'down'), formatBytes(storageLimit))}
+              {storageLimit !== null && <Usage label={billingMessages.usageStorage} text={billingMessages.storageUsage(formatBytes(billing.usage.storage_bytes, 'down'), formatBytes(storageLimit))}
                 used={billing.usage.storage_bytes} limit={storageLimit} />}
-              {billing.limits.replies_per_24h !== null && <Usage label={messages.usageReplies} text={messages.repliesUsage(billing.usage.replies_last_24h, billing.limits.replies_per_24h)}
+              {billing.limits.replies_per_24h !== null && <Usage label={billingMessages.usageReplies} text={billingMessages.repliesUsage(billing.usage.replies_last_24h, billing.limits.replies_per_24h)}
                 used={billing.usage.replies_last_24h} limit={billing.limits.replies_per_24h} />}
             </div>
           </section>
           {(billing.plan === 'trial' || billing.plan === 'none') && <section className="settings-card" aria-labelledby="upgrade-heading">
-            <div className="section-heading"><h2 id="upgrade-heading">{messages.upgradeHeading}</h2><p>{messages.upgradeHelp}</p></div>
+            <div className="section-heading"><h2 id="upgrade-heading">{billingMessages.upgradeHeading}</h2><p>{billingMessages.upgradeHelp}</p></div>
             <div className="settings-body"><PlanPicker sellable={billing.checkout_plans} refusals={billing.checkout_refusals} busy={busy} onChoose={onCheckout} /></div>
           </section>}
         </div>

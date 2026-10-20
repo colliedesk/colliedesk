@@ -20,6 +20,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
 	"github.com/colliedesk/colliedesk/server/internal/google"
+	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
@@ -91,6 +92,10 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err != nil {
 		return err
 	}
+	helpCenterDomain, err := helpcenter.DomainFromEnv(os.Getenv)
+	if err != nil {
+		return err
+	}
 	googleConfig.Base = googleBaseURL
 	if emailConfig.SMTP.Configured() || googleConfig.Enabled() {
 		// A server with Gmail and no relay still runs the worker; replies that need SMTP fail with the reason.
@@ -126,7 +131,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 			go sweepRetention(ctx, retentionService)
 		}
 	}
-	apiConfig := httpapi.Config{Origin: origin, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", Funnel: telemetry.NewFunnel(telemetryConfig, nil),
+	apiConfig := httpapi.Config{Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", Funnel: telemetry.NewFunnel(telemetryConfig, nil),
 		ProblemReportWorkspace: strings.TrimSpace(os.Getenv("PROBLEM_REPORT_WORKSPACE"))}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
 	// usage report (DISABLE_TELEMETRY / DO_NOT_TRACK) turns it off.
@@ -142,8 +147,9 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		go refreshFoundingAtStart(ctx, api)
 	}
 	server := &http.Server{
-		Addr:              *address,
-		Handler:           mcpserver.Mount(mcpserver.Config{API: api, Auth: auth.NewWithDB(db, origin), Version: version}, webui.Handler(api)),
+		Addr: *address,
+		// The help center is outermost: a request to a help center host never reaches the app, the API or MCP.
+		Handler:           api.WrapHelpCenter(mcpserver.Mount(mcpserver.Config{API: api, Auth: auth.NewWithDB(db, origin), Version: version}, webui.Handler(api))),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	done := make(chan error, 1)

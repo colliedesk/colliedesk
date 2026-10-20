@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { Billing, CheckoutPlan } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
+import { billingMessages } from '../settings/billing-messages';
 import { PlanPicker } from '../settings/plan-picker';
 
 interface LockedScreenProps {
@@ -22,8 +23,8 @@ interface LockedScreenProps {
 }
 
 function heading(billing?: Billing) {
-  if (!billing) return messages.lockedTitleGeneric;
-  return billing.status === 'none' ? messages.lockedTitleTrial : messages.lockedTitleSubscription;
+  if (!billing) return billingMessages.lockedTitleGeneric;
+  return billing.status === 'none' ? billingMessages.lockedTitleTrial : billingMessages.lockedTitleSubscription;
 }
 
 // LockedScreen replaces the whole workspace once the trial or subscription ended. It names what
@@ -38,7 +39,7 @@ export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = fals
     <main className="settings-page panel locked-screen">
       <header>
         <h1 ref={title} tabIndex={-1}>{heading(billing)}</h1>
-        <p>{endedAt && `${messages.lockedSince(formatDate(endedAt, timezone))} `}{isAdmin ? messages.lockedAdminExplain : messages.lockedAgentExplain}</p>
+        <p>{endedAt && `${billingMessages.lockedSince(formatDate(endedAt, timezone))} `}{isAdmin ? billingMessages.lockedAdminExplain : billingMessages.lockedAgentExplain}</p>
       </header>
       {checkoutFailed && <p role="alert" className="error-copy">{messages.billingActionFailed}</p>}
       {signOutFailed && <p role="alert" className="error-copy">{messages.signOutFailed}</p>}
@@ -48,7 +49,7 @@ export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = fals
           {isAdmin
             ? <><PlanPicker sellable={billing?.checkout_plans ?? []} refusals={billing?.checkout_refusals} busy={checkoutBusy} onChoose={onCheckout} />
               {hasSubscription && onManage && <div className="button-row"><button type="button" onClick={onManage}>{messages.manageBilling}</button></div>}</>
-            : <p>{messages.askWorkspaceAdmin}</p>}
+            : <p>{billingMessages.askWorkspaceAdmin}</p>}
         </div>
       </section>
       {isAdmin && exportAction && <section className="settings-card" aria-labelledby="locked-export-heading">
@@ -56,7 +57,7 @@ export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = fals
         <div className="settings-body">{exportAction}</div>
       </section>}
       <section className="settings-card" aria-labelledby="locked-leave-heading">
-        <div className="section-heading"><h2 id="locked-leave-heading">{messages.signOut}</h2><p className="muted-copy">{messages.lockedRetention}</p></div>
+        <div className="section-heading"><h2 id="locked-leave-heading">{messages.signOut}</h2><p className="muted-copy">{billingMessages.lockedRetention}</p></div>
         <div className="settings-body"><div className="button-row"><button type="button" onClick={onSignOut}>{messages.signOut}</button></div></div>
       </section>
     </main>
