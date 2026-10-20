@@ -393,3 +393,25 @@ func TestHelpCenterSearchIsLimitedPerAddress(t *testing.T) {
 		t.Fatalf("a page after the search limit status=%d", response.Code)
 	}
 }
+
+func TestHelpCenterSearchTakesAnyTextAndPagesDescribeThemselves(t *testing.T) {
+	api, service := testAPI(t)
+	site := helpCenterSite(api)
+	admin := createSession(t, api, service, "Help Meta", "admin@help-meta.example.com")
+	slug := workspaceSlug(t, api, admin)
+	enableHelpCenter(t, api, admin, "Meta help", true)
+	collection := kbCollection(t, api, admin, map[string]any{"name": "Guides", "description": "How to start"})
+	article := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Start here", "status": "published", "body_md": "Sign in as an **admin**.\n\nThen open it."})
+	base := "/help/" + slug
+	// Postgres refuses NUL and invalid UTF-8; the visitor gets a page, never a 500.
+	for _, query := range []string{"%00", "a%00b", "%ff", "start%ff%00"} {
+		wantPage(t, visit(site, base+"/search?q="+query, "192.0.2.70"), http.StatusOK, nil, []string{"Something went wrong"})
+	}
+	wantPage(t, visit(site, base+"/search?q=start%00", "192.0.2.70"), http.StatusOK, []string{"Start here", "Sign in as an admin. Then open it.", `<meta name="robots" content="noindex">`}, nil)
+	articleAddress := fmt.Sprintf("%s%s/a/%d-%s", testOrigin, base, article.Number, article.Slug)
+	wantPage(t, visit(site, fmt.Sprintf("%s/a/%d-%s", base, article.Number, article.Slug), "192.0.2.70"), http.StatusOK,
+		[]string{`<link rel="canonical" href="` + articleAddress + `">`, `<meta name="description" content="Sign in as an admin. Then open it.">`}, []string{"noindex"})
+	wantPage(t, visit(site, base+"/c/guides", "192.0.2.70"), http.StatusOK,
+		[]string{`<link rel="canonical" href="` + testOrigin + base + `/c/guides">`, `<meta name="description" content="How to start">`}, nil)
+	wantPage(t, visit(site, base, "192.0.2.70"), http.StatusOK, []string{`<link rel="canonical" href="` + testOrigin + base + `">`}, nil)
+}

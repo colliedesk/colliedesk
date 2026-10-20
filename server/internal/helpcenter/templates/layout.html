@@ -8,6 +8,19 @@
 <meta name="robots" content="noindex">
 {{- end}}
 <title>{{.Title}}</title>
+{{- with .Description}}
+<meta name="description" content="{{.}}">
+<meta property="og:description" content="{{.}}">
+{{- end}}
+{{- with .Canonical}}
+<link rel="canonical" href="{{.}}">
+<meta property="og:url" content="{{.}}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{$.Title}}">
+{{- if $.SiteTitle}}
+<meta property="og:site_name" content="{{$.SiteTitle}}">
+{{- end}}
+{{- end}}
 {{- if .Style}}
 <link rel="stylesheet" href="{{.Style}}">
 {{- end}}

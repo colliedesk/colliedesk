@@ -39,6 +39,8 @@ const (
 	searchResults  = 25
 	maxSearchChars = 200
 	excerptChars   = 220
+	// descriptionChars bounds an article page's meta description.
+	descriptionChars = 160
 )
 
 // contentSecurityPolicy lets a page load its own style sheet and images and nothing else; no script
@@ -180,6 +182,8 @@ type view struct {
 	base string
 	home string
 	etag string
+	// address is the help center's public address, for canonical links.
+	address string
 }
 
 func (s *Site) newView(site domain.HelpCenterSite, base string) view {
@@ -191,7 +195,7 @@ func (s *Site) newView(site domain.HelpCenterSite, base string) view {
 	// title, language and name the header uses, and the address.
 	sum := sha256.Sum256([]byte(strings.Join([]string{site.Slug, strconv.FormatInt(site.ContentVersion, 10), strconv.FormatBool(site.Trial),
 		site.Title, site.Locale, site.Name, base, s.config.Version, s.pages.fingerprint}, "\x00")))
-	return view{site: site, base: base, home: home, etag: `"` + hex.EncodeToString(sum[:12]) + `"`}
+	return view{site: site, base: base, home: home, etag: `"` + hex.EncodeToString(sum[:12]) + `"`, address: URL(s.config.Origin, s.config.Domain, site.Slug)}
 }
 
 func (v view) title() string {

@@ -88,9 +88,12 @@ type searchResult struct {
 // page is what a template shows; each page fills its own part.
 type page struct {
 	Lang, Title, SiteTitle, Home, SearchURL, Style string
-	NoIndex, HeroSearch                            bool
-	Query                                          string
-	Crumbs                                         []link
+	// Canonical (and Description, which a collection also shows) describe the page to search engines
+	// and link previews.
+	Canonical string
+	NoIndex, HeroSearch    bool
+	Query                  string
+	Crumbs                 []link
 
 	Collections []collectionCard
 
@@ -259,7 +262,7 @@ func (s *Site) home(response http.ResponseWriter, request *http.Request, v view)
 		}
 	}
 	data := s.page(v, "", nil)
-	data.HeroSearch = true
+	data.HeroSearch, data.Canonical = true, v.address
 	for _, root := range roots {
 		data.Collections = append(data.Collections, v.card(root, byCollection[root.ID]))
 	}
@@ -303,6 +306,10 @@ func (s *Site) collection(response http.ResponseWriter, request *http.Request, v
 	crumbs := v.crumbs(current)
 	data := s.page(v, current.Name, crumbs[:len(crumbs)-1])
 	data.Heading, data.Description = current.Name, current.Description
+	data.Canonical = v.address + strings.TrimPrefix(v.collectionURL(current), v.base)
+	if pageNumber > 1 {
+		data.Canonical += "?page=" + strconv.Itoa(pageNumber)
+	}
 	for _, child := range visible(current.children) {
 		data.Children = append(data.Children, v.card(child, nil))
 	}
@@ -369,6 +376,7 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 	collection := t.byID[article.CollectionID]
 	data := s.page(v, article.Title, v.crumbs(collection))
 	data.Heading, data.Body = article.Title, body
+	data.Description, data.Canonical = excerpt(article.BodyMD, descriptionChars), v.address+articlePath(article.Number, article.Slug)
 	updated := article.UpdatedAt
 	data.Updated, data.UpdatedISO = updated.Format("2 Jan 2006"), updated.Format(time.RFC3339)
 	if collection != nil {
@@ -379,7 +387,9 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 }
 
 func (s *Site) search(response http.ResponseWriter, request *http.Request, v view) {
-	query := strings.Join(strings.Fields(request.URL.Query().Get("q")), " ")
+	// Postgres refuses NUL and invalid UTF-8 in text; neither can be part of a word anyway.
+	query := strings.ReplaceAll(strings.ToValidUTF8(request.URL.Query().Get("q"), ""), "\x00", "")
+	query = strings.Join(strings.Fields(query), " ")
 	if utf8.RuneCountInString(query) > maxSearchChars {
 		query = string([]rune(query)[:maxSearchChars])
 	}
@@ -391,7 +401,8 @@ func (s *Site) search(response http.ResponseWriter, request *http.Request, v vie
 		title = "Search: " + query
 	}
 	data := s.page(v, title, []link{{Name: "Home", URL: v.home}})
-	data.Query, data.Searched, data.HeroSearch = query, query != "", true
+	// Result pages are for visitors, not for search engines.
+	data.Query, data.Searched, data.HeroSearch, data.NoIndex = query, query != "", true, true
 	if query != "" {
 		articles, err := s.config.Store.SearchHelpCenter(request.Context(), v.site.WorkspaceID, query, searchResults)
 		if err != nil {

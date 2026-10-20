@@ -142,13 +142,20 @@ func excerpt(body string, limit int) string {
 	source := []byte(body)
 	var words strings.Builder
 	_ = ast.Walk(plain.Parser().Parse(text.NewReader(source)), func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		// Words of one line join as written ("an **admin**." stays "an admin."); blocks and line
+		// breaks part with a space.
 		if !entering {
+			if node.Type() == ast.TypeBlock {
+				words.WriteByte(' ')
+			}
 			return ast.WalkContinue, nil
 		}
 		switch node := node.(type) {
 		case *ast.Text:
 			words.Write(node.Segment.Value(source))
-			words.WriteByte(' ')
+			if node.SoftLineBreak() || node.HardLineBreak() {
+				words.WriteByte(' ')
+			}
 		case *ast.CodeBlock, *ast.FencedCodeBlock, *ast.HTMLBlock, *ast.RawHTML:
 			return ast.WalkSkipChildren, nil
 		}

@@ -83,6 +83,9 @@ func TestExcerptIsPlainTextCutAtAWord(t *testing.T) {
 	if got != "Title Open Settings and choose the plan…" {
 		t.Fatalf("excerpt=%q", got)
 	}
+	if got := excerpt("Sign in as an **admin**.\nThen `open` it.", 80); got != "Sign in as an admin. Then open it." {
+		t.Fatalf("inline excerpt=%q", got)
+	}
 	if got := excerpt("Short text.", 40); got != "Short text." {
 		t.Fatalf("short excerpt=%q", got)
 	}

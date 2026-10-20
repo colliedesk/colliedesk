@@ -72,4 +72,13 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
 - **A build without a version still changes its ETag.** Development builds have an empty version;
   the template hash in the ETag keeps an edited page from being revalidated as the old one.
 - **The labels are English.** `locale` sets `<html lang>`; translating the page chrome is not done.
-- **The limiter is per process**, like the web form's.
+- **The limiter is per process**, like the web form's. It counts per client address, so a scraper
+  slows only itself; behind a proxy that address comes from `TRUSTED_PROXIES`, without it every
+  visitor shares the proxy's address and one budget.
+- **The server does not compress.** The proxy in front does (Caddy `encode zstd gzip`); pages are
+  small (about 4 KB, the style sheet 13 KB, 3.6 KB compressed).
+- **Search text is cleaned first.** Postgres refuses NUL and invalid UTF-8 in text, which would turn
+  a crafted query into a 500; both are dropped before the query runs.
+- **Image sizes are unknown** (not stored), so an article image can shift the text below it as it
+  loads. Search and result pages carry `noindex`; other pages a canonical link and, for articles and
+  collections, a description.
