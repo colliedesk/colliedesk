@@ -170,8 +170,11 @@ The public help center is in `help-center.md`.
   (not `alt`: 500 four-byte characters with the name could pass the 2,704 bytes a btree entry holds),
   and a page selects its ids from it before reading the rows, so the unused page and its summary read
   the index alone once the visibility map is current. Until autovacuum has run after a large import
-  they read a heap page per row (32 ms on CI; 7–14 ms locally after the vacuum; inside the 100 ms
-  list budget).
+  they read a heap page per row (32 ms on CI; the gate holds that case to the 100 ms list budget).
+- **A filter not given is left out of the SQL.** `($5='' OR m.alt ILIKE …)` folds away in a custom
+  plan, but after five runs of a prepared statement Postgres may keep a generic plan, which cannot drop
+  the branch and reads every row's alt text from the table: the unused page took 17 ms through the API
+  against 5 ms for the same query run once. `ListKBMedia` writes only the conditions a request has.
 - **An agent request holds at most 64 KiB of JSON.** A read or draft token proposing a long article gets
   413; a send token writes it directly.
 - **Row-level security turns GIN off for `@@`.** Postgres uses a condition as an index condition on a

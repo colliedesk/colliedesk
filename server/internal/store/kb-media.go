@@ -58,9 +58,16 @@ func (s *Store) ListKBMedia(ctx context.Context, workspaceID string, filter doma
 			return nil, "", nil, &domain.InvalidKBError{Message: "The cursor is not one this list gave."}
 		}
 	}
-	// $1 workspace, $2 and $3 the cursor, $4 kind, $5 the search pattern.
-	where := `m.workspace_id=$1 AND m.deleted_at IS NULL AND ($4='' OR m.kind=$4)
-		AND ($5='' OR m.name ILIKE '%'||$5||'%' ESCAPE '\' OR m.alt ILIKE '%'||$5||'%' ESCAPE '\')`
+	// $1 workspace, $2 and $3 the cursor, $4 kind, $5 the search pattern. A filter not given is left out
+	// of the text rather than written as ($4='' OR …): after five runs Postgres may keep a generic plan,
+	// which must then read the alt text of every row from the table instead of the library index alone.
+	where := `m.workspace_id=$1 AND m.deleted_at IS NULL AND $4::text IS NOT NULL AND $5::text IS NOT NULL`
+	if filter.Kind != "" {
+		where += ` AND m.kind=$4`
+	}
+	if strings.TrimSpace(filter.Query) != "" {
+		where += ` AND (m.name ILIKE '%'||$5||'%' ESCAPE '\' OR m.alt ILIKE '%'||$5||'%' ESCAPE '\')`
+	}
 	switch filter.Usage {
 	case "in_use":
 		where += ` AND ` + kbMediaInUse
