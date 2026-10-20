@@ -34,6 +34,17 @@ CREATE INDEX kb_collections_parent_idx ON kb_collections(workspace_id, parent_id
 -- The daily purge finds rows deleted more than 30 days ago in every workspace.
 CREATE INDEX kb_collections_trash_idx ON kb_collections(deleted_at) WHERE deleted_at IS NOT NULL;
 
+-- The words of a text for search, with no language rules ('simple'), so no language is the default.
+-- Positions are stripped: ranking needs only which words occur, and the vector is a third smaller.
+-- ASCII punctuation other than '.' becomes a space first: with it, the default parser costs the square
+-- of a run without whitespace, so 100,000 characters of '_a', '~/', 'a1@' or 'a-1-' took seconds to
+-- tens of seconds of one core (docs/internals/knowledge-base.md). Without it the cost is linear. The article column and the
+-- search query both call this, so a text and a query split the same way. The SQL body is parsed now,
+-- so 'simple' cannot be changed by a search_path.
+CREATE FUNCTION kb_search_vector(content text) RETURNS tsvector LANGUAGE sql IMMUTABLE PARALLEL SAFE
+    RETURN strip(to_tsvector('simple'::regconfig,
+        translate(content, '!"#$%&''()*+,-/:;<=>?@[\]^_`{|}~', '                               ')));
+
 CREATE TABLE kb_articles (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -51,11 +62,9 @@ CREATE TABLE kb_articles (
     updated_at timestamptz NOT NULL DEFAULT now(),
     deleted_at timestamptz,
     deleted_by_agent_id uuid,
-    -- Words of the title and text with no language rules ('simple'), so no language is the default.
-    -- Positions are stripped: ranking needs only which words occur, and the vector is a third smaller.
     -- No GIN index: under row-level security Postgres never uses one for @@, which is not leakproof
     -- (docs/internals/knowledge-base.md), so a search reads the vectors of the workspace.
-    search tsvector GENERATED ALWAYS AS (strip(to_tsvector('simple', title || ' ' || body_md))) STORED,
+    search tsvector GENERATED ALWAYS AS (kb_search_vector(title || ' ' || body_md)) STORED,
     UNIQUE (workspace_id, id),
     UNIQUE (workspace_id, number),
     FOREIGN KEY (workspace_id, collection_id) REFERENCES kb_collections(workspace_id, id),

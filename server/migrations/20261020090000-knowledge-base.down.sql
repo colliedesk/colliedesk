@@ -17,4 +17,5 @@ DROP FUNCTION IF EXISTS kb_images_count_deleted();
 DROP TABLE IF EXISTS kb_article_translations;
 DROP TABLE IF EXISTS kb_article_versions;
 DROP TABLE IF EXISTS kb_articles;
+DROP FUNCTION IF EXISTS kb_search_vector(text);
 DROP TABLE IF EXISTS kb_collections;
