@@ -335,6 +335,21 @@ func TestHelpCenterOnItsOwnHostAndTheCertificateQuestion(t *testing.T) {
 			t.Errorf("tls-ask %q = %d, want %d", domain, got, want)
 		}
 	}
+	// A workspace whose slug is now reserved (here: an own DNS record) keeps signing in and keeps its
+	// help center on the path address; it never gets a host name or a certificate.
+	staging := createSession(t, f.api, f.billing.service, "Staging", "admin@staging-team.example.com")
+	if slug := workspaceSlug(t, f.api, staging); slug != "staging" {
+		t.Fatalf("slug=%q, want staging", slug)
+	}
+	enableHelpCenter(t, f.api, staging, "Staging help", true)
+	kbCall(t, f.api, http.MethodGet, "/api/v1/help-center", nil, staging, http.StatusOK, &center)
+	if center.URL != testOrigin+"/help/staging" {
+		t.Fatalf("reserved slug help center url=%q", center.URL)
+	}
+	wantPage(t, visit(site, "/help/staging", "192.0.2.52"), http.StatusOK, []string{"Staging help"}, nil)
+	if got := ask("staging.help.example.net"); got != http.StatusNotFound {
+		t.Fatalf("tls-ask for a reserved slug = %d", got)
+	}
 	f.clock.set(trialEnd)
 	if got := ask(host); got != http.StatusNotFound {
 		t.Fatalf("tls-ask for a locked workspace = %d, want 404", got)
