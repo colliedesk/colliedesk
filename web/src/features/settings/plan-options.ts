@@ -23,7 +23,7 @@ const allPlans: { name: string; includes: string[]; prices: (Omit<PlanPrice, 'la
     { plan: 'team25_monthly', interval: 'monthly', amount: '$149', charge: '$149 per month' },
     { plan: 'team25_yearly', interval: 'yearly', amount: '$124.17', billed: messages.billedYearly('$1,490'), charge: '$1,490 per year' }] },
   { name: messages.plans.founding, includes: [messages.planAgents(10), messages.planStorage('20 GiB'), messages.foundingLimited], prices: [
-    { plan: 'founding', interval: 'yearly', amount: '$8.33', billed: messages.billedFounding, charge: '$100 per year for life' }] },
+    { plan: 'founding', interval: 'yearly', amount: '$33', billed: messages.billedFounding, charge: '$99 per quarter for life' }] },
 ];
 
 // The plans a workspace can buy, in the order they are offered: only the prices the server says it
@@ -36,7 +36,7 @@ export function planCardsFor(sellable: readonly CheckoutPlan[], refusals: readon
     .filter((card) => card.prices.length > 0);
 }
 
-// priceFor is the card's price for the chosen interval, or its only price (Founding is yearly only).
+// priceFor is the card's price for the chosen interval, or its only price (Founding has one price, billed every 3 months).
 export function priceFor(card: PlanCard, interval: Interval): PlanPrice {
   return card.prices.find((price) => price.interval === interval) ?? card.prices[0];
 }
