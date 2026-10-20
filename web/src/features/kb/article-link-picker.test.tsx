@@ -146,3 +146,34 @@ test('typing while it asks again about a help center it last saw off is still th
   answer(json(200, center(true)));
   await waitFor(() => expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Refund steps']));
 });
+
+test('Enter that commits an input method (Safari sends keyCode 229) while the search runs links nothing', async () => {
+  serve({
+    'GET /api/v1/help-center': () => json(200, center(true)),
+    'GET /api/v1/kb/articles': (call) => json(200, { items: call.search.get('q') ? [refund] : [reset, refund], next_cursor: null }),
+  });
+  const onInsert = open();
+  await screen.findByRole('option', { name: 'Reset your password' });
+  const search = screen.getByRole('combobox', { name: 'Search published articles' });
+  fireEvent.change(search, { target: { value: 'refu' } });
+  fireEvent.keyDown(search, { key: 'Enter', keyCode: 229 });
+  await waitFor(() => expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Refund steps']));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(onInsert).not.toHaveBeenCalled();
+});
+
+test('Enter while it asks again about a help center it last saw off waits, and links once it is on', async () => {
+  let answer: (value: Response) => void = () => {};
+  serve({
+    'GET /api/v1/help-center': () => new Promise<Response>((resolve) => { answer = resolve; }),
+    'GET /api/v1/kb/articles': () => json(200, { items: [reset], next_cursor: null }),
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 15_000 } } });
+  client.setQueryData(['help-center'], center(false));
+  client.setQueryData(['kb-articles', { q: undefined, status: 'published', for: 'reply' }], { items: [reset], next_cursor: null });
+  const onInsert = open({}, client);
+  fireEvent.keyDown(screen.getByRole('combobox', { name: 'Search published articles' }), { key: 'Enter' });
+  expect(onInsert).not.toHaveBeenCalled();
+  answer(json(200, center(true)));
+  await waitFor(() => expect(onInsert).toHaveBeenCalledExactlyOnceWith('Reset your password\nhttps://desk.example.com/help/acme/a/7-reset-your-password'));
+});

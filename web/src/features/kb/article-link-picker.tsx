@@ -54,7 +54,8 @@ export function ArticleLinkPicker({ box, onInsert, onClose, canManage = false }:
   });
   const items = enabled ? list.data?.items ?? [] : [];
   // Until the list answers what is in the search box, it shows the answer to the search before.
-  const pending = !off && (center.isPending || text.trim() !== q || list.isPending || list.isPlaceholderData);
+  // Until the help center answered (or answered again) nothing is offered yet, so Enter waits for that too.
+  const pending = !off && (!enabled || text.trim() !== q || list.isPending || list.isPlaceholderData);
   const insert = (article: KBArticleSummary) => {
     const field = box.current;
     const value = field?.value ?? '';
@@ -73,7 +74,8 @@ export function ArticleLinkPicker({ box, onInsert, onClose, canManage = false }:
   return (
     // Enter on the list from before would link an article nobody searched for: it waits for the answer.
     <div className="article-link-picker" onKeyDownCapture={(event) => {
-      if (event.key !== 'Enter' || !pending || event.nativeEvent.isComposing) return;
+      // The Enter that commits an input method's text (Safari: keyCode 229) is the picker's to ignore.
+      if (event.key !== 'Enter' || !pending || event.nativeEvent.isComposing || event.keyCode === 229) return;
       event.preventDefault();
       event.stopPropagation();
       setQueued(true);
