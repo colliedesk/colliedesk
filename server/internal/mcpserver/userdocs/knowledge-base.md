@@ -69,12 +69,16 @@ two articles.
 
 ### Images
 
-Paste an image into the text, drag it in, or select **Insert image**. Colliedesk uploads it and writes
+Paste an image into the text, drag it in, or select **Upload**. Colliedesk uploads it and writes
 `![name](/api/v1/kb/images/…)` on a line of its own after the paragraph, list or table you are in;
-while it uploads, a box says so and nothing is added to the text. PNG, JPEG, GIF and WebP up to 5 MB
+while it uploads, a box says so and nothing is added to the text. A video pasted, dropped or chosen
+the same way goes up in parts, the box shows how much has gone, and it goes in as
+`<video controls preload="metadata" src="/api/v1/kb/media/…"></video>`; leaving the page cancels a
+video still uploading. **Media** opens the library: search it, pick an image or a video, and it goes
+in the same way, with its alt text (an image) or title (a video). PNG, JPEG, GIF and WebP up to 5 MB
 each are accepted, at most 8,192 pixels on a side and 40 megapixels. Images count toward your plan's
-storage. The same image uploaded twice is stored once. Saving waits until every image has finished
-uploading.
+storage. The same image uploaded twice is stored once. Saving waits until every image and video has
+finished uploading.
 
 Location, camera details, dates and comments that a phone or editor leaves in an image are removed
 before it is stored, without changing the picture: a photo keeps the way it should be turned. Images
@@ -176,7 +180,8 @@ shows from its own address, with seeking, and shows its poster; a video in the t
 published article shows, is not public. Browsers and proxies may keep a copy of a video once
 it was public, as with images: unpublishing or moving it to the trash stops new readers, not copies
 already made, so keep a video that must stay private out of published articles. Upload videos in the [media
-library](#media-library); the editor's button to insert one comes next.
+library](#media-library) or from the editor (above). **Preview** shows a video with its poster, as
+the help center does, and leaves out (and names) one the library does not have.
 
 ### Publish, unpublish, edit
 
