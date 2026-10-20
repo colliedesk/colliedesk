@@ -1202,6 +1202,248 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/collections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The knowledge base collections of the workspace that are not in the trash, as a flat list ordered by parent, position and name. A collection sits at most three levels deep (category, folder, subfolder). `article_count` counts its articles outside the trash, drafts included. */
+        get: operations["listKBCollections"];
+        put?: never;
+        /** @description Any agent may create one, and a `send` agent token; a lower tier files an agent request a person approves. Without `slug` one is made from the name. The slug is unique among the collections of the same parent outside the trash (409 `duplicate_slug`). A parent in the trash, or one already three levels deep, is 400. A workspace holds at most 1,000 collections, counting the ones in the trash (409 `kb_limit`). */
+        post: operations["createKBCollection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/collections/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Collections deleted in the last 30 days, most recently deleted first. Each can be restored with `POST /api/v1/kb/collections/{id}/restore` until `purges_at`; after that it is deleted for good. */
+        get: operations["listTrashedKBCollections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/collections/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Move an empty collection to the trash: restorable for 30 days, then deleted for good. A collection that still holds articles or collections outside the trash is 409 `collection_not_empty` (move or delete them first). Send the `updated_at` you read (409 `changed_elsewhere`). */
+        delete: operations["deleteKBCollection"];
+        options?: never;
+        head?: never;
+        /** @description Rename a collection, change its slug, description or position, or move it under another parent (`parent_id`; null moves it to the top). Send back the `updated_at` you read (409 `changed_elsewhere` when it was saved since). A move that would put a collection under itself or more than three levels deep is 400. Changing the slug changes the addresses of the help center pages under it; old addresses are not redirected. A collection in the trash is 404. */
+        patch: operations["updateKBCollection"];
+        trace?: never;
+    };
+    "/api/v1/kb/collections/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Take a collection out of the trash. Send its `updated_at` as the trash shows it (409 `changed_elsewhere`). 409 `parent_in_trash` when its parent is in the trash (restore that first), 409 `duplicate_slug` when a sibling took its slug meanwhile. 404 when it is not in the trash. */
+        post: operations["restoreKBCollection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/articles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Knowledge base articles outside the trash, without their text, in pages. Without `q` the most recently updated come first. With `q` the articles whose title or text hold every word of `q` as a word or the start of a word (or whose title holds `q`) come first by relevance. Words are split the same way in the query and the text, with no language rules, so a word inside another word, and text in scripts written without spaces (Chinese, Japanese, Thai), are found only when they start a word or match the title. */
+        get: operations["listKBArticles"];
+        put?: never;
+        /** @description Write an article in Markdown. It starts as a draft unless `status` is `published`. It gets the next `number` of the workspace, which never changes and is never reused, so the address `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the title. The text holds at most 100,000 characters and is never cut; a workspace holds at most 10,000 articles, counting the ones in the trash (409 `kb_limit`). A `send` agent token may create one; a lower tier files an agent request (at most 64 KiB of JSON). */
+        post: operations["createKBArticle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/articles/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Articles deleted in the last 30 days, most recently deleted first, in pages, without their text. Each can be restored with `POST /api/v1/kb/articles/{id}/restore` until `purges_at`; after that it is deleted for good with its history. Articles in the trash count toward the 10,000 of a workspace. */
+        get: operations["listTrashedKBArticles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/articles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description One article with its Markdown text and its stored translations. It also finds an article in the trash (`deleted_at` is then set). */
+        get: operations["getKBArticle"];
+        put?: never;
+        post?: never;
+        /** @description Move the article to the trash: it leaves the list and the help center, and can be restored for 30 days. Send the `updated_at` you read (409 `changed_elsewhere`). A `send` agent token may delete; a lower tier files an agent request. */
+        delete: operations["deleteKBArticle"];
+        options?: never;
+        head?: never;
+        /** @description Change the title, slug, text, collection or status (publish or unpublish). Send back the `updated_at` you read; when the article was saved since, nothing changes and the answer is 409 `changed_elsewhere`. Every change adds a version to the history. An article in the trash is 404. A `send` agent token may edit; a lower tier files an agent request (at most 64 KiB of JSON). */
+        patch: operations["updateKBArticle"];
+        trace?: never;
+    };
+    "/api/v1/kb/articles/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Take an article out of the trash, as it was when deleted (a published article is published again). Send its `updated_at` as the trash shows it (409 `changed_elsewhere`). 409 `collection_in_trash` when its collection is in the trash (restore that first). 404 when it is not in the trash. */
+        post: operations["restoreKBArticle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/articles/{id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The versions of an article, newest first, in pages: who made each, through which agent token or approved agent request, and the title, slug, text, collection and status it had. An article in the trash keeps its history. Versions are never changed or removed while the article exists. */
+        get: operations["listKBArticleVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/articles/{id}/versions/{version}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                version: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Make the title, slug and text of an earlier version current again, as a new version; the status and collection stay as they are now, and nothing in the history is rewritten. Send back the `updated_at` you read (409 `changed_elsewhere`). An article in the trash is 404. */
+        post: operations["restoreKBArticleVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Store an image for articles. The body is the raw image, at most 5 MiB; only PNG, JPEG, GIF and WebP are accepted, judged from the bytes, not from the declared type (400 otherwise). The same bytes uploaded twice give the same image. Images count toward the plan's storage cap (403 `storage_limit_reached` when it is full). Put it in an article as `![text](url)`. A `send` agent token may upload; a lower tier gets 403 `files_need_approval`. */
+        post: operations["uploadKBImage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/images/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The bytes of one image of the workspace's knowledge base, with `nosniff` and a sandboxing Content-Security-Policy so nothing in it can run. */
+        get: operations["getKBImage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/help-center": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Whether the public help center is on, its title and language. `content_version` grows with every change to the knowledge base, so a cached page can tell it is stale. Until an admin turns it on, it is off and nothing of the knowledge base is public. */
+        get: operations["getHelpCenter"];
+        /** @description Turn the public help center on or off, and set its title and language (a BCP 47 tag such as `en` or `pt-BR`). Admins only, and an `admin` agent token. Turning it off takes every page off line at once; turning it on again publishes the articles marked published. */
+        put: operations["putHelpCenter"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1775,6 +2017,240 @@ export interface components {
             title: string;
             /** @description The text after this change. */
             body: string;
+        };
+        KBCollectionInput: {
+            name: string;
+            /** @description Lowercase letters, digits and hyphens in any script; made from the name when left out. */
+            slug?: string;
+            description?: string;
+            /** Format: uuid */
+            parent_id?: string | null;
+            position?: number;
+        };
+        KBCollection: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            parent_id: string | null;
+            name: string;
+            slug: string;
+            description: string;
+            position: number;
+            /** @description Articles directly in this collection and outside the trash, drafts included. */
+            article_count: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        TrashedKBCollection: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            parent_id: string | null;
+            name: string;
+            slug: string;
+            description: string;
+            position: number;
+            article_count: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            deleted_at: string;
+            deleted_by: null | components["schemas"]["SavedReplyPerson"];
+            /**
+             * Format: date-time
+             * @description When it is deleted for good (30 days after deleted_at).
+             */
+            purges_at: string;
+        };
+        KBArticleInput: {
+            /** Format: uuid */
+            collection_id: string;
+            title: string;
+            /** @description Lowercase letters, digits and hyphens in any script; made from the title when left out. */
+            slug?: string;
+            /** @description The text in Markdown. Raw HTML in it is never rendered on the help center. */
+            body_md: string;
+            /**
+             * @default draft
+             * @enum {string}
+             */
+            status: "draft" | "published";
+        };
+        /**
+         * @description published: on the public help center while it is on. draft: only agents see it.
+         * @enum {string}
+         */
+        KBArticleStatus: "draft" | "published";
+        KBArticleChange: {
+            version: number;
+            /**
+             * @description restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk.
+             * @enum {string}
+             */
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import";
+            /** @description The version a restore copied. */
+            restored_from_version: number | null;
+            /** @description The person who made the change (or approved the agent request that made it); null for an import or a removed person. */
+            changed_by: null | components["schemas"]["SavedReplyPerson"];
+            /** @description The agent token that made or asked for the change; null when a person made it in the web app. */
+            token: null | {
+                /** Format: uuid */
+                id: string | null;
+                label: string;
+            };
+            /**
+             * Format: uuid
+             * @description The approved agent request that made the change.
+             */
+            agent_request_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        KBArticleSummary: {
+            /** Format: uuid */
+            id: string;
+            /** @description Never changes and is never reused in the workspace; the help center address is /a/<number>-<slug>. */
+            number: number;
+            /** Format: uuid */
+            collection_id: string;
+            title: string;
+            slug: string;
+            status: components["schemas"]["KBArticleStatus"];
+            /**
+             * Format: date-time
+             * @description When it was last published; null for a draft.
+             */
+            published_at: string | null;
+            /** Format: uuid */
+            author_agent_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            last_change: null | components["schemas"]["KBArticleChange"];
+        };
+        KBArticleTranslation: {
+            locale: string;
+            title: string;
+            body_md: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        KBArticle: {
+            /** Format: uuid */
+            id: string;
+            number: number;
+            /** Format: uuid */
+            collection_id: string;
+            title: string;
+            slug: string;
+            status: components["schemas"]["KBArticleStatus"];
+            /** Format: date-time */
+            published_at: string | null;
+            /** Format: uuid */
+            author_agent_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            last_change: null | components["schemas"]["KBArticleChange"];
+            body_md: string;
+            /** @description An import kept the original HTML; it is in the workspace export and is never shown on the help center. */
+            has_source_html: boolean;
+            /** @description Translations an import brought in. They are kept and exported; the help center does not show them yet. */
+            translations: components["schemas"]["KBArticleTranslation"][];
+            /**
+             * Format: date-time
+             * @description Set while the article is in the trash.
+             */
+            deleted_at: string | null;
+        };
+        TrashedKBArticle: {
+            /** Format: uuid */
+            id: string;
+            number: number;
+            /** Format: uuid */
+            collection_id: string;
+            title: string;
+            slug: string;
+            status: components["schemas"]["KBArticleStatus"];
+            /** Format: date-time */
+            published_at: string | null;
+            /** Format: uuid */
+            author_agent_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            last_change: null | components["schemas"]["KBArticleChange"];
+            /** Format: date-time */
+            deleted_at: string;
+            deleted_by: null | components["schemas"]["SavedReplyPerson"];
+            /**
+             * Format: date-time
+             * @description When the article and its history are deleted for good (30 days after deleted_at).
+             */
+            purges_at: string;
+        };
+        KBArticleVersion: {
+            version: number;
+            /** @enum {string} */
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import";
+            restored_from_version: number | null;
+            changed_by: null | components["schemas"]["SavedReplyPerson"];
+            token: null | {
+                /** Format: uuid */
+                id: string | null;
+                label: string;
+            };
+            /** Format: uuid */
+            agent_request_id: string | null;
+            /** Format: date-time */
+            created_at: string;
+            title: string;
+            slug: string;
+            body_md: string;
+            status: components["schemas"]["KBArticleStatus"];
+            /**
+             * Format: uuid
+             * @description Null once that collection was deleted for good.
+             */
+            collection_id: string | null;
+        };
+        KBImage: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            content_type: "image/png" | "image/jpeg" | "image/gif" | "image/webp";
+            /** @description Bytes. */
+            size: number;
+            sha256: string;
+            /** @description The path to put in an article: /api/v1/kb/images/<id>. */
+            url: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        HelpCenterInput: {
+            enabled: boolean;
+            /** @description Shown at the top of every page; empty uses the workspace name. */
+            title: string;
+            /** @description BCP 47 language tag of the pages, such as en or pt-BR. */
+            locale: string;
+        };
+        HelpCenter: {
+            enabled: boolean;
+            title: string;
+            locale: string;
+            content_version: number;
+            /**
+             * Format: date-time
+             * @description Null until the knowledge base or its settings were first changed.
+             */
+            updated_at: string | null;
         };
         SavedReplyText: {
             title: string;
@@ -5028,6 +5504,594 @@ export interface operations {
                 };
             };
             500: components["responses"]["InternalError"];
+        };
+    };
+    listKBCollections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Knowledge base collections */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["KBCollection"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createKBCollection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KBCollectionInput"];
+            };
+        };
+        responses: {
+            /** @description Created collection */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBCollection"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listTrashedKBCollections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Collections in the trash */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["TrashedKBCollection"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    deleteKBCollection: {
+        parameters: {
+            query: {
+                updated_at: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["AgentRequestAccepted"];
+            /** @description Collection moved to the trash */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateKBCollection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    updated_at: string;
+                    name?: string;
+                    slug?: string;
+                    description?: string;
+                    /** Format: uuid */
+                    parent_id?: string | null;
+                    position?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Updated collection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBCollection"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    restoreKBCollection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Restored collection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBCollection"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listKBArticles: {
+        parameters: {
+            query?: {
+                q?: string;
+                status?: "draft" | "published";
+                /** @description Only the articles directly in this collection. */
+                collection_id?: string;
+                limit?: number;
+                /** @description The next_cursor of the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Knowledge base articles */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["KBArticleSummary"][];
+                        /** @description Null on the last page. */
+                        next_cursor: string | null;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    createKBArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KBArticleInput"];
+            };
+        };
+        responses: {
+            /** @description Created article */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listTrashedKBArticles: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description The next_cursor of the previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Articles in the trash */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["TrashedKBArticle"][];
+                        /** @description Null on the last page. */
+                        next_cursor: string | null;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getKBArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The article */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteKBArticle: {
+        parameters: {
+            query: {
+                updated_at: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: components["responses"]["AgentRequestAccepted"];
+            /** @description Article moved to the trash */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    updateKBArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    updated_at: string;
+                    title?: string;
+                    slug?: string;
+                    body_md?: string;
+                    /** Format: uuid */
+                    collection_id?: string;
+                    /** @enum {string} */
+                    status?: "draft" | "published";
+                };
+            };
+        };
+        responses: {
+            /** @description Updated article */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    restoreKBArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Restored article */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listKBArticleVersions: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description Only versions older than this one (the next_before_version of the previous page). */
+                before_version?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Versions of the article */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["KBArticleVersion"][];
+                        /** @description Null on the last page. */
+                        next_before_version: number | null;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    restoreKBArticleVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    updated_at: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Article with the restored text */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    uploadKBImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "image/png": string;
+                "image/jpeg": string;
+                "image/gif": string;
+                "image/webp": string;
+            };
+        };
+        responses: {
+            /** @description The stored image */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBImage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The image is over 5 MiB; nothing was stored. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getKBImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The image */
+            200: {
+                headers: {
+                    /** @description private, max-age=31536000, immutable */
+                    "Cache-Control"?: string;
+                    "X-Content-SHA256"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/jpeg": string;
+                    "image/gif": string;
+                    "image/webp": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getHelpCenter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Help center settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenter"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    putHelpCenter: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HelpCenterInput"];
+            };
+        };
+        responses: {
+            /** @description Help center settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenter"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
 }
