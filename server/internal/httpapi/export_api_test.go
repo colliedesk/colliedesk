@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
@@ -91,6 +92,10 @@ func newExportFixture(t *testing.T) exportFixture {
 	otherMessage := create(t, api, other, "/api/v1/conversations/"+otherConversation+"/messages", map[string]any{"kind": "note", "body": "rival-only body"})
 	seedAttachment(t, pool, storage, other, api, otherMessage, "rival.txt", "rival bytes")
 	create(t, api, other, "/api/v1/saved-replies", map[string]any{"title": "Rival template", "body": "rival-only reply text"})
+	create(t, api, other, "/api/v1/saved-views", map[string]any{"name": "rival-only view", "scope": "shared", "filters": map[string]any{}})
+	create(t, api, agent.Token, "/api/v1/saved-views", map[string]any{"name": "Agent urgent", "scope": "personal", "filters": map[string]any{"priority": []string{"urgent"}}})
+	retired := create(t, api, admin, "/api/v1/saved-views", map[string]any{"name": "Retired view", "scope": "shared", "filters": map[string]any{}})
+	request(t, api, http.MethodDelete, "/api/v1/saved-views/"+retired, nil, admin, nil)
 	return exportFixture{api: api, pool: pool, storage: storage, adminToken: admin, agentToken: agent.Token,
 		workspaceID: workspace, attachmentID: attachmentID, otherToken: other, otherWorkspace: workspaceID(t, api, other), inboundSecret: secret}
 }
@@ -146,6 +151,26 @@ func TestExportStreamsTheWholeWorkspaceAsZip(t *testing.T) {
 		t.Fatalf("Content-Disposition=%q", got)
 	}
 	entries := unzip(t, response.Body.Bytes())
+	defer func() {
+		// Saved views come along, every person's and the trash too; an admin downloads the whole record.
+		views := ndjsonLines(t, entries["saved-views.ndjson"])
+		if len(views) != 2 {
+			t.Fatalf("saved-views.ndjson has %d lines, want the personal and the trashed shared view", len(views))
+		}
+		for _, line := range views {
+			if line["scope"] == "personal" && (line["owner_agent_id"] == nil || fmt.Sprint(line["filters"]) != "map[priority:[urgent]]" || line["deleted_at"] != nil) {
+				t.Errorf("personal view record = %v", line)
+			}
+			if line["scope"] == "shared" && (line["owner_agent_id"] != nil || line["deleted_at"] == nil) {
+				t.Errorf("trashed shared view record = %v", line)
+			}
+		}
+		for _, conversation := range ndjsonLines(t, entries["conversations.ndjson"]) {
+			if conversation["channel"] != "agent" {
+				t.Errorf("conversation channel = %v, want agent", conversation["channel"])
+			}
+		}
+	}()
 
 	var manifest struct {
 		Format    string         `json:"format"`
@@ -263,7 +288,7 @@ func TestExportNeverContainsAnotherWorkspace(t *testing.T) {
 		all.WriteString(name + "\n")
 		all.Write(content)
 	}
-	for _, foreign := range []string{"b-only@example.com", "Bea Only", "Rival secret plans", "rival-only body", "rival.txt", "rival bytes", "Rival template", "rival-only reply text", f.otherWorkspace, "export-rival", "admin@export-rival.example.com"} {
+	for _, foreign := range []string{"b-only@example.com", "Bea Only", "Rival secret plans", "rival-only body", "rival.txt", "rival bytes", "Rival template", "rival-only reply text", "rival-only view", f.otherWorkspace, "export-rival", "admin@export-rival.example.com"} {
 		if strings.Contains(all.String(), foreign) {
 			t.Errorf("workspace A export contains %q of workspace B", foreign)
 		}

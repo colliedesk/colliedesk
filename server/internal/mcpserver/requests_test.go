@@ -98,6 +98,8 @@ func TestApprovalToolsFileARequestForEveryTier(t *testing.T) {
 		{"colliedesk_workspace_export_request", map[string]any{"delivery": "download"}, "GET /api/v1/export"},
 		{"colliedesk_email_channel_disconnect_request", nil, "DELETE /api/v1/channels/email"},
 		{"colliedesk_email_secret_rotate_request", nil, "POST /api/v1/channels/email/secret"},
+		{"colliedesk_gmail_connect_request", nil, "POST /api/v1/channels/email/gmail"},
+		{"colliedesk_gmail_disconnect_request", nil, "DELETE /api/v1/channels/email/gmail"},
 		{"colliedesk_workspace_slug_change_request", map[string]any{"slug": "renamed-desk"}, "PATCH /api/v1/workspace/slug"},
 	}
 	for _, token := range []string{f.w.read, f.w.send} {

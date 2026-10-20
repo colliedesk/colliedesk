@@ -262,6 +262,14 @@ func emailSecretRotateRequest(c *call, _ map[string]any) (any, error) {
 	return ask(c, http.MethodPost, "/api/v1/channels/email/secret", nil)
 }
 
+func gmailConnectRequest(c *call, _ map[string]any) (any, error) {
+	return ask(c, http.MethodPost, "/api/v1/channels/email/gmail", nil)
+}
+
+func gmailDisconnectRequest(c *call, _ map[string]any) (any, error) {
+	return ask(c, http.MethodDelete, "/api/v1/channels/email/gmail", nil)
+}
+
 func workspaceSlugRequest(c *call, arguments map[string]any) (any, error) {
 	return ask(c, http.MethodPatch, "/api/v1/workspace/slug", arguments)
 }

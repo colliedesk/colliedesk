@@ -58,6 +58,21 @@ func writeStoreError(response http.ResponseWriter, err error) {
 	case errors.Is(err, domain.ErrAgentDeactivated):
 		writeError(response, http.StatusConflict, "agent_deactivated", domain.ErrAgentDeactivated.Error()+".")
 		return
+	case errors.As(err, new(*domain.ContactExistsError)):
+		var exists *domain.ContactExistsError
+		errors.As(err, &exists)
+		writeJSON(response, http.StatusConflict, map[string]any{"error": errorBody(response, map[string]any{
+			"code": "contact_exists", "message": exists.Error(), "contact": exists.Use})})
+		return
+	case errors.As(err, new(*domain.ContactMergeError)):
+		writeError(response, http.StatusConflict, "contact_merged", err.Error())
+		return
+	case errors.Is(err, domain.ErrMergeUndone):
+		writeError(response, http.StatusConflict, "merge_undone", "This merge was undone already. Nothing was changed.")
+		return
+	case errors.Is(err, domain.ErrEmailChannelMissing):
+		writeError(response, http.StatusConflict, "email_channel_missing", "Connect the email channel in Settings before starting a conversation by email. Nothing was stored.")
+		return
 	case errors.Is(err, domain.ErrInvalidReassignTarget):
 		writeError(response, http.StatusBadRequest, "invalid_reassign_target", domain.ErrInvalidReassignTarget.Error()+".")
 		return
@@ -97,6 +112,10 @@ func writeTrialOutbound(response http.ResponseWriter, refusal *domain.TrialOutbo
 		body := map[string]any{"code": "trial_outbound_restricted", "message": refusal.Error()}
 		if len(refusal.RefusedCC) > 0 {
 			body["refused_cc"] = refusal.RefusedCC
+		}
+		if refusal.ReplyTo != "" {
+			body["reason"] = domain.ReasonContactAddressDiffers
+			body["reply_to"] = refusal.ReplyTo
 		}
 		writeJSON(response, http.StatusForbidden, map[string]any{"error": errorBody(response, body)})
 		return

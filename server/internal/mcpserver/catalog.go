@@ -29,13 +29,15 @@ func Catalog() []Spec {
 	return []Spec{
 		whoamiSpec(), inboxSearchSpec(), inboxActivitySpec(), conversationGetSpec(), timeEntriesListSpec(), attachmentGetSpec(),
 		conversationUpdateSpec(), conversationsBulkUpdateSpec(), noteAddSpec(), replySendSpec(), replyRetrySpec(), conversationCreateSpec(),
-		contactsFindSpec(), contactGetSpec(), contactCreateSpec(), tagsListSpec(), tagRenameSpec(), tagDeleteSpec(), agentsListSpec(),
+		conversationStartSpec(),
+		contactsFindSpec(), contactGetSpec(), contactCreateSpec(), contactUpdateSpec(), contactMergeSpec(), contactUnmergeSpec(), tagsListSpec(), tagRenameSpec(), tagDeleteSpec(), agentsListSpec(),
 		savedRepliesListSpec(), savedReplyGetSpec(), savedReplyCreateSpec(), savedReplyUpdateSpec(), savedReplyDeleteSpec(),
 		savedReplyHistorySpec(), savedReplyVersionRestoreSpec(), savedRepliesTrashSpec(), savedReplyUndeleteSpec(),
+		savedViewsListSpec(), savedViewCreateSpec(), savedViewUpdateSpec(), savedViewDeleteSpec(), savedViewRestoreSpec(),
 		tokenRevokeSpec(), docsSearchSpec(),
 		replyDraftSpec(), requestsListSpec(), requestGetSpec(), requestCancelSpec(),
 		tokenCreateRequestSpec(), workspaceExportRequestSpec(), billingRequestSpec(), emailChannelDisconnectRequestSpec(),
-		emailSecretRotateRequestSpec(), workspaceSlugRequestSpec(), problemReportSpec(),
+		emailSecretRotateRequestSpec(), gmailConnectRequestSpec(), gmailDisconnectRequestSpec(), workspaceSlugRequestSpec(), problemReportSpec(),
 		workspaceSettingsGetSpec(), workspaceSettingsUpdateSpec(), myTimezoneSetSpec(), myDisplayNameSetSpec(), teamMemberUpdateSpec(),
 		invitesListSpec(), inviteCreateSpec(), inviteRevokeSpec(), sessionsListSpec(), sessionRevokeSpec(),
 		webFormGetSpec(), webFormUpdateSpec(), emailChannelGetSpec(), emailChannelUpdateSpec(), emailDomainVerifySpec(), billingGetSpec(),
@@ -59,7 +61,9 @@ const (
 	conversationRowSchema = `{"type":"object","required":["id","status","priority","assignee","tags","updated_at","untrusted_customer_content"],"properties":{` +
 		`"id":{"type":"string"},"status":{"type":"string","enum":["open","pending","resolved","closed"]},` +
 		`"priority":{"type":"string","enum":["low","normal","high","urgent"]},"assignee":` + personSchema + `,` +
-		`"tags":{"type":"array","items":{"type":"string"}},"created_at":{"type":"string"},"updated_at":{"type":"string","description":"UTC, to the second"},` +
+		`"tags":{"type":"array","items":{"type":"string"}},` +
+		`"channel":{"type":"string","enum":["email","web_form","imported","agent","problem_report"],"description":"How it started: a customer's mail, the web form, an import from another helpdesk, a team member, or Report a problem."},` +
+		`"created_at":{"type":"string"},"updated_at":{"type":"string","description":"UTC, to the second"},` +
 		`"contact_id":{"type":"string"},` +
 		`"untrusted_customer_content":{"type":"object","required":["subject","contact"],"properties":{"subject":{"type":"string"},` +
 		`"contact":{"type":["object","null"],"properties":{"name":{"type":"string"},"email":{"type":"string"},"organization":{"type":["string","null"]}}}}}}}`

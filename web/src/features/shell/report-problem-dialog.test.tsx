@@ -184,3 +184,13 @@ test('Tab wraps inside the dialog so the page behind it is not reached', async (
   fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
   await waitFor(() => expect(cancel).toHaveFocus());
 });
+
+test('a click on the backdrop keeps the focus in the dialog, so Escape still closes it', () => {
+  const onClose = vi.fn();
+  render(<ReportProblemDialog appVersion="0.0.41" onClose={onClose} />);
+  const dialog = screen.getByRole('dialog');
+  expect(fireEvent.mouseDown(dialog.parentElement!)).toBe(false);
+  expect(fireEvent.mouseDown(screen.getByLabelText('What went wrong?'))).toBe(true);
+  fireEvent.keyDown(dialog, { key: 'Escape' });
+  expect(onClose).toHaveBeenCalled();
+});

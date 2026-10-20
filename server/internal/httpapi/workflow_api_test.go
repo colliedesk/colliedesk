@@ -16,19 +16,18 @@ func TestAgentWorkflowAndWorkspaceIsolation(t *testing.T) {
 	conversationA := create(t, api, tokenA, "/api/v1/conversations", map[string]any{"contact_id": contactA, "subject": "Cannot sign in"})
 	conversationB := create(t, api, tokenB, "/api/v1/conversations", map[string]any{"contact_id": contactB, "subject": "Billing question"})
 
-	contactHistory := request(t, api, http.MethodGet, "/api/v1/contacts/"+contactA, nil, tokenA, nil)
+	contactResponse := request(t, api, http.MethodGet, "/api/v1/contacts/"+contactA, nil, tokenA, nil)
+	var contactDetail struct {
+		CreatedAt         string `json:"created_at"`
+		ConversationCount int    `json:"conversation_count"`
+	}
+	decode(t, contactResponse, &contactDetail)
+	if contactResponse.Code != http.StatusOK || !strings.HasSuffix(contactDetail.CreatedAt, "Z") || contactDetail.ConversationCount != 1 {
+		t.Fatalf("contact detail is not UTC or lacks history: %+v", contactDetail)
+	}
+	contactHistory := request(t, api, http.MethodGet, "/api/v1/conversations?contact="+contactA, nil, tokenA, nil)
 	if contactHistory.Code != http.StatusOK || !strings.Contains(contactHistory.Body.String(), conversationA) {
 		t.Fatalf("contact history status=%d body=%s", contactHistory.Code, contactHistory.Body.String())
-	}
-	var contactDetail struct {
-		CreatedAt     string `json:"created_at"`
-		Conversations []struct {
-			ID string `json:"id"`
-		} `json:"conversations"`
-	}
-	decode(t, contactHistory, &contactDetail)
-	if !strings.HasSuffix(contactDetail.CreatedAt, "Z") || len(contactDetail.Conversations) != 1 {
-		t.Fatalf("contact detail is not UTC or lacks history: %+v", contactDetail)
 	}
 
 	contacts := request(t, api, http.MethodGet, "/api/v1/contacts?search=alex", nil, tokenA, nil)

@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   saveEmailChannel: vi.fn(), updateWorkspaceSlug: vi.fn(), rotateEmailSecret: vi.fn(), verifyEmailDomain: vi.fn(), disconnectEmailChannel: vi.fn(),
   exportWorkspace: vi.fn(), config: vi.fn(), webForm: vi.fn(), saveWebForm: vi.fn(),
   savedReplies: vi.fn(), createSavedReply: vi.fn(), updateSavedReply: vi.fn(), deleteSavedReply: vi.fn(),
+  connectGmail: vi.fn(), disconnectGmail: vi.fn(),
 }));
 vi.mock('../../api/client', () => ({ api, PlanLimitError: class extends Error {}, InvalidRequestError: class extends Error {} }));
 
@@ -24,7 +25,7 @@ const teammate = (id: string, email: string, overrides = {}) => ({
 const SAM = '11111111-1111-4111-8111-111111111111';
 const ANN = '33333333-3333-4333-8333-333333333333';
 
-function show(role: 'admin' | 'agent', sessions: unknown[] = []) {
+function show(role: 'admin' | 'agent', sessions: unknown[] = [], emailChannel?: unknown) {
   api.me.mockResolvedValue(me(role));
   api.config.mockResolvedValue({ billing: { enabled: false } });
   api.agents.mockResolvedValue({ items: [teammate(SAM, 'sam@example.com', { role }), teammate(ANN, 'ann@example.com', { open_conversations: 1 })] });
@@ -33,7 +34,7 @@ function show(role: 'admin' | 'agent', sessions: unknown[] = []) {
   api.savedReplies.mockResolvedValue({ items: [] });
   api.invites.mockResolvedValue({ items: [] });
   api.webForm.mockResolvedValue({ enabled: false, allowed_origins: [], submit_path: '/api/v1/public/forms/beta-desk' });
-  api.emailChannel.mockResolvedValue({ channel: null, inbound_url: 'https://desk.example.com/x', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null });
+  api.emailChannel.mockResolvedValue(emailChannel ?? { channel: null, inbound_url: 'https://desk.example.com/x', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null });
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><SettingsRoute /></QueryClientProvider>);
 }
 
@@ -133,4 +134,31 @@ test('signing out this device from Sessions reloads who is signed in, so the sig
   const before = api.me.mock.calls.length;
   fireEvent.click(signOut);
   await waitFor(() => expect(api.me.mock.calls.length).toBeGreaterThan(before));
+});
+
+const withChannel = {
+  channel: {
+    support_address: 'support@example.com', secret_set: true, secret_rotated_at: '2026-10-14T09:00:00Z', domain: 'example.com', domain_verified_at: null,
+    dns_record_name: '_colliedesk.example.com', dns_record_value: 'colliedesk-verification=abc', dns_records: [], dns_records_expired_at: null,
+    created_at: '2026-10-14T08:00:00Z', updated_at: '2026-10-14T09:00:00Z',
+  },
+  inbound_url: 'https://desk.example.com/x', smtp: { configured: true, host: 'smtp.example.net', port: 587, starttls: true, authenticated: true },
+  from_policy: 'any', sending_from: 'support@example.com', hosted_address: null, domain_verification: 'txt', sending_pause: null,
+  gmail: { available: true, missing_settings: [], redirect_uri: 'https://desk.example.com/api/v1/channels/email/gmail/callback', connection: null },
+};
+
+test('Connect Gmail sends the browser to Google, and the outcome it comes back with is shown once', async () => {
+  const assign = vi.fn();
+  const original = window.location;
+  window.history.replaceState(null, '', '/settings?gmail_error=denied');
+  Object.defineProperty(window, 'location', { configurable: true, value: { ...original, assign, search: '?gmail_error=denied', pathname: '/settings', hash: '' } });
+  try {
+    api.connectGmail.mockResolvedValue({ url: 'https://accounts.google.com/o/oauth2/v2/auth?state=x' });
+    show('admin', [], withChannel);
+    expect(await screen.findByText('Gmail was not connected: access was cancelled at Google.')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect Gmail' }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('https://accounts.google.com/o/oauth2/v2/auth?state=x'));
+  } finally {
+    Object.defineProperty(window, 'location', { configurable: true, value: original });
+  }
 });

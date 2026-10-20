@@ -133,10 +133,9 @@ func (s *Store) SubmitWebForm(ctx context.Context, workspaceID string, in WebFor
 		return ErrRateLimited
 	}
 	var contactID, tagID, conversationID string
-	if err := tx.QueryRow(ctx, `INSERT INTO contacts(workspace_id,name,email) VALUES($1,$2,$3)
-		ON CONFLICT(workspace_id,email) DO UPDATE SET email=contacts.email RETURNING id::text`,
-		workspaceID, in.Email[:strings.LastIndex(in.Email, "@")], in.Email).Scan(&contactID); err != nil {
-		return fmt.Errorf("find or create contact: %w", err)
+	contactID, err = contactForEmail(ctx, tx, workspaceID, in.Email[:strings.LastIndex(in.Email, "@")], in.Email)
+	if err != nil {
+		return err
 	}
 	if err := tx.QueryRow(ctx, `INSERT INTO tags(workspace_id,name) VALUES($1,$2)
 		ON CONFLICT(workspace_id,name) DO UPDATE SET name=tags.name RETURNING id::text`, workspaceID, WebFormTag).Scan(&tagID); err != nil {
@@ -146,8 +145,8 @@ func (s *Store) SubmitWebForm(ctx context.Context, workspaceID string, in WebFor
 	if in.Source != "" {
 		subject += ": " + in.Source
 	}
-	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at) VALUES($1,$2,$3,$4,$4) RETURNING id::text`,
-		workspaceID, contactID, subject, now).Scan(&conversationID); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO conversations(workspace_id,contact_id,subject,created_at,updated_at,channel) VALUES($1,$2,$3,$4,$4,$5) RETURNING id::text`,
+		workspaceID, contactID, subject, now, domain.ChannelWebForm).Scan(&conversationID); err != nil {
 		return fmt.Errorf("create conversation: %w", err)
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO conversation_tags(workspace_id,conversation_id,tag_id) VALUES($1,$2,$3)`, workspaceID, conversationID, tagID); err != nil {

@@ -17,6 +17,8 @@ database schema.
 - **Freshdesk importer**: tickets (including archived), replies, notes, attachments
   (checksummed), tags, contacts, companies, time entries and canned responses, with a reconcile
   report.
+- **Help Scout importer**: conversations of one inbox, replies, notes, attachments (checksummed),
+  inline images, tags and customers, with a reconcile report and undo.
 - Team settings: invite, deactivate and reactivate agents.
 - **MCP server** so your AI agent (Claude, Codex, Cursor) can work the queue: search, read and
   triage conversations and add private notes, with read, draft-only, send and admin agent tokens; an
@@ -30,8 +32,6 @@ database schema.
 
 Beta starts when HC Labs announces it. Before that:
 
-- Contact history: every conversation of a customer in one place, and starting a new conversation
-  from the inbox ([#92](https://github.com/colliedesk/colliedesk/issues/92)).
 - Connect a Gmail / Google Workspace or Microsoft 365 mailbox with one click (OAuth); replies
   leave from your own address. Forwarding keeps working ([#95](https://github.com/colliedesk/colliedesk/issues/95)).
 - An upgrade guide, and upgrades tested from the previous release on real data ([#91](https://github.com/colliedesk/colliedesk/issues/91)).
@@ -65,7 +65,7 @@ Beta starts when HC Labs announces it. Before that:
 - Log time on conversations and export it per company ([#119](https://github.com/colliedesk/colliedesk/issues/119)).
 - Customer satisfaction rating after a conversation is resolved ([#120](https://github.com/colliedesk/colliedesk/issues/120)).
 - Reports: volume, first response and resolution time per agent and tag ([#121](https://github.com/colliedesk/colliedesk/issues/121)).
-- Importers for Zendesk ([#122](https://github.com/colliedesk/colliedesk/issues/122)) and Help Scout ([#123](https://github.com/colliedesk/colliedesk/issues/123)).
+- Importer for Zendesk ([#122](https://github.com/colliedesk/colliedesk/issues/122)).
 - Live chat widget into the same inbox ([#124](https://github.com/colliedesk/colliedesk/issues/124)).
 - A sandbox workspace for testing an AI agent safely ([#116](https://github.com/colliedesk/colliedesk/issues/116)).
 - No Colliedesk branding on anything your customers see ([#125](https://github.com/colliedesk/colliedesk/issues/125)).

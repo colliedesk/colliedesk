@@ -113,7 +113,7 @@ function DeliveryStatus({ item, onRetry }: { item: Message; onRetry?: (messageId
     <div className="message-envelope">
       <span className={`badge badge-delivery-${status}`} title={lastError ?? undefined}>{messages.deliveryStatuses[status]}</span>
       {status === 'failed' && <button type="button" className="link-action" onClick={() => onRetry?.(item.id)}>{messages.retryDelivery}</button>}
-      {status === 'sent' && lastError && <span>{lastError}</span>}
+      {(status === 'sent' || status === 'failed') && lastError && <span className="delivery-reason">{lastError}</span>}
     </div>
   );
 }

@@ -87,6 +87,9 @@ func TestTrialRefusesRepliesInAgentStartedConversations(t *testing.T) {
 	if !strings.Contains(got.Body, "wrote to you first") {
 		t.Fatalf("message must say why and how out: %s", got.Body)
 	}
+	if strings.Contains(got.Body, "contact_address_differs") || strings.Contains(got.Body, "reply_to") {
+		t.Fatalf("an agent-started conversation is not a customer who wrote from another address: %s", got.Body)
+	}
 	if f.messageCount(t, f.workspaceA) != messages || f.outboxCount(t, f.workspaceA) != outbox {
 		t.Fatal("a refused reply must leave no message and no outbox row")
 	}

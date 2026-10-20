@@ -36,6 +36,7 @@ var privilegedCallSites = []string{
 	"internal/store/email-provider-domains.go: PrivilegeProviderDomainSweep",
 	"internal/store/email-relay-bounce.go: PrivilegeVerifiedSender",
 	"internal/store/mail-image-cache.go: PrivilegeMailImageSweep",
+	"internal/store/mailbox-connections.go: PrivilegeMailboxGrantShared",
 	"internal/store/saved-reply-history.go: PrivilegeSavedReplyPurge",
 	"internal/store/server-secrets.go: PrivilegeServerSecret",
 	"internal/telemetry/usage.go: PrivilegeTelemetry",
@@ -48,6 +49,7 @@ var poolFiles = []string{
 	"cmd/collie/commands.go",
 	"cmd/collie/email.go",
 	"cmd/collie/import.go",
+	"cmd/collie/import_helpscout.go",
 	"cmd/collie/plan.go",
 	"cmd/collie/retention.go",
 	"cmd/collie/serve.go",
@@ -58,6 +60,7 @@ var poolFiles = []string{
 	"internal/database/scope.go",
 	"internal/freshdesk/importer.go",
 	"internal/freshdesk/undo.go",
+	"internal/helpscout/importer.go",
 	"internal/httpapi/api.go",
 	"internal/store/store.go",
 }

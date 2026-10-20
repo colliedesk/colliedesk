@@ -1,7 +1,7 @@
 #!/bin/sh
 # Fails when a job that needs ci-ok can be skipped by a skipped job further up. GitHub skips a
 # job whose ancestor was skipped unless its `if:` uses a status function, and osv-scan is
-# skipped on every push to main, so publish-edge must test ci-ok's result itself.
+# skipped on every push to main, so such a job must test ci-ok's result itself.
 # Usage: tests/after-ci-ok-runs-test.sh [path/to/ci.yml]
 set -eu
 

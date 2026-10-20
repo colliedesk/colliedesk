@@ -33,5 +33,5 @@ inbound secret. On the Cloud workspace:
 
 ## Coming from another helpdesk
 
-To move from Freshdesk, see [import from Freshdesk](../user/import-freshdesk.md). It works on
-Cloud and on your own server.
+To move from Freshdesk or Help Scout, see [import from Freshdesk](../user/import-freshdesk.md)
+and [import from Help Scout](../user/import-helpscout.md). Both work on Cloud and on your own server.

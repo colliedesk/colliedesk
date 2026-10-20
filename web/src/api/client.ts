@@ -6,8 +6,8 @@ import { requestExportLink } from './workspace-export';
 import { recordFailedCall } from '../lib/diagnostics';
 import type { operations } from './generated';
 import {
-  agentListSchema, agentSchema, contactDetailSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
-  cloudWorkspaceChoicesSchema, emailChannelSettingsSchema, inboundSecretSchema, webFormSettingsSchema,
+  agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
+  cloudWorkspaceChoicesSchema, consentLinkSchema, emailChannelSettingsSchema, inboundSecretSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, messageListSchema, messageSchema, timeEntryListSchema,
   agentRequestListSchema, agentRequestSchema, approvedAgentRequestSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, publicConfigSchema, redeemedSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
@@ -49,10 +49,15 @@ export class InvalidRequestError extends Error {
 
 // ConflictError is the same refusal for a resource whose state does not allow the action (HTTP 409),
 // for example removing the last admin.
+// detail (the whole error object, with its code) lets a caller read a conflict of its own, such as
+// contact_exists with the contact to use.
 export class ConflictError extends InvalidRequestError {
-  constructor(message: string) {
+  readonly detail?: { code?: unknown; [field: string]: unknown };
+
+  constructor(message: string, detail?: { code?: unknown; [field: string]: unknown }) {
     super(message);
     this.name = 'ConflictError';
+    this.detail = detail;
   }
 }
 
@@ -69,7 +74,8 @@ async function invalidRequest(response: Response): Promise<Error> {
     const body = await response.json() as { error?: { code?: unknown; message?: unknown } };
     if (typeof body.error?.message === 'string' && body.error.message) {
       if (response.status === 409 && body.error.code === 'changed_elsewhere') return new ChangedElsewhereError(body.error.message);
-      return response.status === 409 ? new ConflictError(body.error.message) : new InvalidRequestError(body.error.message);
+      return response.status === 409 ? new ConflictError(body.error.message, body.error)
+        : new InvalidRequestError(body.error.message);
     }
   } catch {
     // An unreadable body is an ordinary failure.
@@ -96,12 +102,13 @@ async function planLimitFailure(response: Response): Promise<PlanLimitError> {
 
 async function outboundRefusal(response: Response): Promise<Error> {
   try {
-    const body = await response.json() as { error?: { code?: unknown; message?: unknown; retry_after_seconds?: unknown; refused_cc?: unknown } };
-    const { code, message, retry_after_seconds: retry, refused_cc: refused } = body.error ?? {};
+    const body = await response.json() as { error?: { code?: unknown; message?: unknown; retry_after_seconds?: unknown; refused_cc?: unknown; reply_to?: unknown } };
+    const { code, message, retry_after_seconds: retry, refused_cc: refused, reply_to: replyTo } = body.error ?? {};
     if (code === 'storage_limit_reached' && typeof message === 'string' && message) return new AttachmentStorageError(message);
     if (code === 'trial_outbound_restricted' || code === 'trial_outbound_limit') {
       const refusedCc = Array.isArray(refused) ? refused.filter((item): item is string => typeof item === 'string') : [];
-      return new OutboundRefusedError(code, typeof message === 'string' ? message : '', typeof retry === 'number' ? retry : undefined, refusedCc);
+      return new OutboundRefusedError(code, typeof message === 'string' ? message : '', typeof retry === 'number' ? retry : undefined, refusedCc,
+        typeof replyTo === 'string' && replyTo ? replyTo : undefined);
     }
   } catch {
     // An unreadable body is an ordinary failure.
@@ -124,7 +131,8 @@ function noteFailure(path: string, init: RequestInit | undefined, response: Resp
   recordFailedCall(init?.method ?? 'GET', path, response.status, response.headers.get('X-Request-Id') ?? '');
 }
 
-async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
+// request is exported for the API calls that live in a lazy part of the app (features/contacts/contact-api.ts, saved-views.ts).
+export async function request<T>(path: string, schema: z.ZodType<T>, init?: RequestInit): Promise<T> {
   // A FormData body sets its own multipart Content-Type, with the boundary.
   const headers = init?.body instanceof FormData ? init.headers : { 'Content-Type': 'application/json', ...init?.headers };
   const response = await fetch(path, { credentials: 'same-origin', ...init, headers });
@@ -149,7 +157,7 @@ export type RequestBody<Operation extends keyof operations> =
 export type UpdateConversationRequest = RequestBody<'updateConversation'>;
 export type BulkConversationChanges = RequestBody<'bulkUpdateConversations'>['changes'];
 
-const json = <Operation extends keyof operations>(value: RequestBody<Operation>): string => JSON.stringify(value);
+export const json = <Operation extends keyof operations>(value: RequestBody<Operation>): string => JSON.stringify(value);
 
 // The JSON body of an operation whose body is optional.
 type OptionalBody<Operation extends keyof operations> =
@@ -208,6 +216,8 @@ export const api = {
   saveWebForm: (enabled: boolean, allowed_origins: string[]) => request('/api/v1/channels/web-form', webFormSettingsSchema, { method: 'PUT', body: json<'putWebForm'>({ enabled, allowed_origins }) }),
   verifyEmailDomain: () => request('/api/v1/channels/email/domain-verification', emailChannelSettingsSchema, { method: 'POST' }),
   rotateEmailSecret: () => request('/api/v1/channels/email/secret', inboundSecretSchema, { method: 'POST' }),
+  connectGmail: () => request('/api/v1/channels/email/gmail', consentLinkSchema, { method: 'POST' }),
+  disconnectGmail: () => requestNoContent('/api/v1/channels/email/gmail', { method: 'DELETE' }),
   retryDelivery: (conversationId: string, messageId: string) => request(`/api/v1/conversations/${conversationId}/messages/${messageId}/retry`, messageSchema, { method: 'POST' }),
   config: () => request('/api/v1/config', publicConfigSchema),
   billing: () => request('/api/v1/billing', billingSchema),
@@ -231,7 +241,8 @@ export const api = {
   invites: () => request('/api/v1/auth/invites', inviteListSchema),
   createInvite: (email: string, role_ceiling: RequestBody<'createInvite'>['role_ceiling']) => request('/api/v1/auth/invites', inviteCreatedSchema, { method: 'POST', body: json<'createInvite'>({ email, role_ceiling }) }),
   revokeInvite: (id: string) => requestNoContent(`/api/v1/auth/invites/${id}`, { method: 'DELETE' }),
-  conversations: (query: string) => request(`/api/v1/conversations?${query}`, conversationPageSchema),
+  // signal lets a newer search cancel the request of the one it replaced.
+  conversations: (query: string, signal?: AbortSignal) => request(`/api/v1/conversations?${query}`, conversationPageSchema, { signal }),
   inboxActivity: (since?: string) => request(`/api/v1/inbox/activity${since ? `?since=${encodeURIComponent(since)}` : ''}`, inboxActivitySchema),
   createConversation: (contact_id: string, subject: string) => request('/api/v1/conversations', conversationSchema, { method: 'POST', body: json<'createConversation'>({ contact_id, subject }) }),
   conversation: (id: string) => request(`/api/v1/conversations/${id}`, conversationSchema),
@@ -245,7 +256,6 @@ export const api = {
     request(`/api/v1/conversations/${id}/messages`, messageSchema, { method: 'POST',
       body: files.length > 0 ? messageForm(kind, body, files, cc) : json<'createMessage'>(cc.length > 0 ? { kind, body, cc } : { kind, body }) }),
   contacts: (search = '') => request(`/api/v1/contacts?search=${encodeURIComponent(search)}`, contactListSchema),
-  contact: (id: string) => request(`/api/v1/contacts/${id}`, contactDetailSchema),
   createContact: (name: string, email: string) => request('/api/v1/contacts', contactSchema, { method: 'POST', body: json<'createContact'>({ name, email }) }),
   agents: () => request('/api/v1/agents', agentListSchema),
   tags: () => request('/api/v1/tags', tagListSchema),

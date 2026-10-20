@@ -1,4 +1,5 @@
 import { AttachmentsTooLargeError, AttachmentStorageError } from '../../api/attachments-error';
+import { InvalidRequestError } from '../../api/client';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { formatWait } from '../../lib/format-wait';
 import { messages } from '../../messages';
@@ -9,7 +10,9 @@ const defaultWaitSeconds = 3600;
 export function replyRefusalText(error: unknown): string {
   if (error instanceof OutboundRefusedError) {
     if (error.code === 'trial_outbound_limit') return messages.trialReplyLimit(formatWait(error.retryAfterSeconds ?? defaultWaitSeconds));
-    return error.refusedCc.length > 0 ? messages.trialCcRestricted(error.refusedCc) : messages.trialReplyRestricted;
+    if (error.refusedCc.length > 0) return messages.trialCcRestricted(error.refusedCc);
+    // A customer who wrote from a merged address: the server's words name the address the reply would go to.
+    return error.replyTo && error.message ? `${error.message} ${messages.textStillHere}` : messages.trialReplyRestricted;
   }
   if (error instanceof AttachmentsTooLargeError || error instanceof AttachmentStorageError) return error.message;
   return messages.replyNotSent;
@@ -20,5 +23,7 @@ export function retryRefusalText(error: unknown): string {
   if (error instanceof OutboundRefusedError) {
     return error.code === 'trial_outbound_limit' ? messages.trialRetryLimit(formatWait(error.retryAfterSeconds ?? defaultWaitSeconds)) : messages.trialRetryRestricted;
   }
+  // A refusal with a reason (no SMTP relay, Gmail broken or not set up) will not pass by trying again.
+  if (error instanceof InvalidRequestError) return error.message;
   return messages.retryNotSent;
 }

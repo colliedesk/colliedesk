@@ -1,6 +1,6 @@
 #!/bin/sh
 # Fails when a job in ci.yml is missing from ci-ok's needs, so a new job can never fail on main
-# while edge is still published. Jobs that themselves need ci-ok (publish-edge) are exempt.
+# while edge is still published. Jobs that themselves need ci-ok are exempt (edge is published by publish-edge.yml after CI).
 # Usage: tests/ci-ok-needs-test.sh [path/to/ci.yml]
 set -eu
 

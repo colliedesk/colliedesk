@@ -1,15 +1,15 @@
 import { useId, useRef, useState } from 'react';
-import type { ChangeEvent, KeyboardEvent } from 'react';
+import type { ChangeEvent } from 'react';
 import { ProblemReportRefusedError, ProblemReportsNotConfiguredError, sendProblemReport } from '../../api/problem-report';
 import { collectDiagnostics } from '../../lib/diagnostics';
 import { track } from '../../lib/product-analytics';
 import { messages } from '../../messages';
+import { dialogKeys, keepDialogFocus, useReturnFocus } from '../../ui/dialog-keys';
 import { issueURL } from './report-issue-url';
 
 const ALLOWED = ['image/png', 'image/jpeg', 'image/webp'];
 const MAX_FILES = 3;
 const MAX_BYTES = 5 << 20;
-const FOCUSABLE = 'button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), summary';
 
 interface Props {
   appVersion?: string;
@@ -26,6 +26,7 @@ function screenshotProblem(files: File[]): string | null {
 // ReportProblemDialog lets a person send what went wrong with the diagnostics listed under "What will be
 // sent". The diagnostics are read once when the dialog opens, so the preview is exactly what is sent.
 export function ReportProblemDialog({ appVersion, onClose }: Props) {
+  useReturnFocus();
   const [diagnostics] = useState(() => collectDiagnostics(appVersion));
   const [description, setDescription] = useState('');
   const [files, setFiles] = useState<File[]>([]);
@@ -60,20 +61,10 @@ export function ReportProblemDialog({ appVersion, onClose }: Props) {
     }
   };
   // Escape closes; Tab wraps, so the page behind the dialog is not reached from the keyboard.
-  const keys = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') { onClose(); return; }
-    if (event.key !== 'Tab') return;
-    const items = Array.from(root.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])
-      .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
-    const first = items[0];
-    const last = items[items.length - 1];
-    if (!first || !last) return;
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-  };
+  const keys = dialogKeys(root, onClose);
 
   return (
-    <div className="dialog-backdrop">
+    <div className="dialog-backdrop" onMouseDown={keepDialogFocus}>
       <div className="dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={root} onKeyDown={keys}>
         <h2 id={titleId}>{messages.reportProblem}</h2>
         {outcome && 'reference' in outcome && <>

@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Reject a CI phase older than 120 seconds, including queue and setup time."""
+"""Reject a CI phase older than 120 seconds, or a CD phase older than 60, including queue and setup time."""
 import argparse
 from datetime import datetime, timezone
 import sys
 
 parser = argparse.ArgumentParser(description=__doc__)
+BUDGETS = {'ci': 120, 'cd': 60}
+parser.add_argument('--phase', choices=sorted(BUDGETS), default='ci')
 parser.add_argument('--started-at', required=True)
 parser.add_argument('--now', default=None)
 args = parser.parse_args()
@@ -18,5 +20,6 @@ try:
         raise ValueError('trigger cannot be in the future')
 except ValueError as error:
     parser.error(str(error))
-print(f'CI elapsed: {elapsed:.1f}s / 120s (from workflow trigger)')
-sys.exit(0 if elapsed <= 120 else 1)
+budget = BUDGETS[args.phase]
+print(f'{args.phase.upper()} elapsed: {elapsed:.1f}s / {budget}s (from phase trigger)')
+sys.exit(0 if elapsed <= budget else 1)

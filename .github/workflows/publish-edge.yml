@@ -1,0 +1,57 @@
+name: Publish edge
+
+# The deploy step of main: Colliedesk Cloud and self-hosters on the edge channel pull edge. It moves
+# only after CI passed on a push to this repository's main, to that run's tested sha-<commit>
+# digest, and only while that commit is still main's head, so a late run never moves edge
+# backwards. A separate CD phase with its own 60-second clock from the CI run's completion.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-edge
+  cancel-in-progress: false
+
+jobs:
+  publish-edge:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    permissions:
+      contents: read
+      packages: write
+    env:
+      TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - id: head
+        run: |
+          head=$(git ls-remote "https://github.com/$GITHUB_REPOSITORY" refs/heads/main | cut -f1)
+          if [ "$head" = "$TESTED_SHA" ]; then echo "current=true" >> "$GITHUB_OUTPUT"; else
+            echo "::notice::main moved to $head; edge stays on the newer commit."
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.head.outputs.current == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # imagetools works on the registry alone, so the runner's bundled buildx needs no builder.
+      - if: steps.head.outputs.current == 'true'
+        name: Point edge at the tested digest
+        run: docker buildx imagetools create -t ghcr.io/colliedesk/colliedesk:edge "ghcr.io/colliedesk/colliedesk:sha-$TESTED_SHA"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+      - name: CD phase stays within 60 seconds
+        env:
+          CI_FINISHED: ${{ github.event.workflow_run.updated_at }}
+        run: python3 .github/scripts/ci-budget.py --phase cd --started-at "$CI_FINISHED"

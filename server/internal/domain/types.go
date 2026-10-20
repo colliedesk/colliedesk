@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"errors"
+	"time"
+)
 
 type Workspace struct {
 	ID       string `json:"id"`
@@ -45,18 +48,56 @@ type Invite struct {
 }
 
 type Contact struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	Email        string    `json:"email"`
-	Organization *string   `json:"organization"`
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Email        string  `json:"email"`
+	Organization *string `json:"organization"`
+	// MergedIntoID is the contact this one was merged into; its conversations and new mail are there.
+	MergedIntoID *string   `json:"merged_into_id"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type ContactDetail struct {
 	Contact
-	Conversations []Conversation `json:"conversations"`
+	// ConversationCount counts the contact's history, which is read a page at a time from the
+	// conversation list (an unpaged list cost one query per conversation).
+	ConversationCount int      `json:"conversation_count"`
+	MergedInto        *Contact `json:"merged_into"`
+	// Merges are the contacts merged into this one and not undone, newest first.
+	Merges []ContactMerge `json:"merges"`
 }
+
+// ContactMerge records one duplicate merged into a contact and exactly which conversations moved.
+type ContactMerge struct {
+	ID              string     `json:"id"`
+	ContactID       string     `json:"contact_id"`
+	MergedContact   Contact    `json:"merged_contact"`
+	ConversationIDs []string   `json:"conversation_ids"`
+	MergedByAgentID *string    `json:"merged_by_agent_id"`
+	MergedAt        time.Time  `json:"merged_at"`
+	UndoneAt        *time.Time `json:"undone_at"`
+}
+
+// ContactMergeError refuses a merge, or a new conversation, that the merge rules do not allow; the
+// text says which rule.
+type ContactMergeError struct{ Reason string }
+
+func (e *ContactMergeError) Error() string { return e.Reason }
+
+// ContactExistsError refuses a new contact whose address is already a contact of the workspace. Use is
+// the contact to work with: the one that address belongs to, or the one it was merged into.
+type ContactExistsError struct{ Use Contact }
+
+func (e *ContactExistsError) Error() string {
+	return e.Use.Name + " (" + e.Use.Email + ") is already a customer with this address. Find them by name or email instead."
+}
+
+// ErrMergeUndone means the merge was undone already.
+var ErrMergeUndone = errors.New("this merge was undone already")
+
+// ErrEmailChannelMissing means a new conversation would be stored but never emailed.
+var ErrEmailChannelMissing = errors.New("connect the email channel in Settings before starting a conversation by email")
 
 type Tag struct {
 	ID    string `json:"id"`
@@ -68,16 +109,29 @@ type Conversation struct {
 	ID        string `json:"id"`
 	ContactID string `json:"contact_id"`
 	// ContactName saves the reply box a second request for the customer's name.
-	ContactName string              `json:"contact_name"`
-	Subject     string              `json:"subject"`
-	Status      string              `json:"status"`
-	Priority    string              `json:"priority"`
-	AssigneeID  *string             `json:"assignee_id"`
-	Tags        []Tag               `json:"tags"`
-	Origin      *ConversationOrigin `json:"origin"`
-	CreatedAt   time.Time           `json:"created_at"`
-	UpdatedAt   time.Time           `json:"updated_at"`
+	ContactName string  `json:"contact_name"`
+	Subject     string  `json:"subject"`
+	Status      string  `json:"status"`
+	Priority    string  `json:"priority"`
+	AssigneeID  *string `json:"assignee_id"`
+	Tags        []Tag   `json:"tags"`
+	// Channel is how the conversation started: one of the Channel* values.
+	Channel   string              `json:"channel"`
+	Origin    *ConversationOrigin `json:"origin"`
+	CreatedAt time.Time           `json:"created_at"`
+	UpdatedAt time.Time           `json:"updated_at"`
 }
+
+// How a conversation started (conversations.channel).
+const (
+	ChannelEmail   = "email"
+	ChannelWebForm = "web_form"
+	// ChannelImported marks a conversation brought over from another helpdesk; Origin.Source keeps its own channel.
+	ChannelImported = "imported"
+	// ChannelAgent marks a conversation a team member started. An older image that does not know the column also writes it.
+	ChannelAgent         = "agent"
+	ChannelProblemReport = "problem_report"
+)
 
 // ConversationOrigin records where an imported conversation came from.
 type ConversationOrigin struct {

@@ -1,0 +1,10 @@
+{
+  "_embedded": {
+    "users": [
+      {"id": 7001, "firstName": "Alice", "lastName": "Admin", "email": "Alice@Acme.example", "role": "owner", "type": "user", "createdAt": "2025-01-10T08:00:00Z", "updatedAt": "2026-01-10T08:00:00Z"},
+      {"id": 7002, "firstName": "Bob", "lastName": "Builder", "email": "bob@acme.example", "role": "user", "type": "user", "createdAt": "2025-01-11T08:00:00Z", "updatedAt": "2026-01-11T08:00:00Z"}
+    ]
+  },
+  "_links": {"next": {"href": "https://api.helpscout.net/v2/users?page=2"}},
+  "page": {"size": 2, "totalElements": 3, "totalPages": 2, "number": 1}
+}

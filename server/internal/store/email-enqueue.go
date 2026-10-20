@@ -21,6 +21,9 @@ type OutboundPolicy struct {
 	Enabled               bool
 	RequireVerifiedDomain bool
 	FallbackDomain        string
+	// GmailEnabled is whether this server has its Google settings; without them a stored Gmail connection
+	// cannot send, and its replies fail at once instead of waiting.
+	GmailEnabled bool
 }
 
 // WithOutbound returns a store that queues replies according to the policy.
@@ -30,9 +33,17 @@ func (s *Store) WithOutbound(policy OutboundPolicy) *Store {
 	return &copy
 }
 
-// notReadyReason explains why a reply cannot be emailed, or returns "" when it can.
-func (p OutboundPolicy) notReadyReason(domainVerified bool) string {
+// notReadyReason explains why a reply cannot be emailed, or returns "" when it can. A connected Gmail
+// account sends by itself: it needs no relay and no verified domain, and a broken one never hands its
+// replies to the relay instead.
+func (p OutboundPolicy) notReadyReason(domainVerified bool, mailbox *mailboxState) string {
 	switch {
+	case mailbox != nil && mailbox.status == domain.MailboxFailed:
+		return domain.MailboxFailureText(mailbox.errorCode)
+	case mailbox != nil && !p.GmailEnabled:
+		return domain.MailboxNotConfiguredNote
+	case mailbox != nil:
+		return ""
 	case !p.Enabled:
 		return "Outgoing email is not configured on this server. Ask the administrator to set SMTP_HOST."
 	case p.RequireVerifiedDomain && !domainVerified && p.FallbackDomain == "":
@@ -48,8 +59,12 @@ func (p OutboundPolicy) notReadyReason(domainVerified bool) string {
 func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID string, cc []string) error {
 	var supportAddress string
 	var verified bool
+	var mailbox *mailboxState
 	err := tx.QueryRow(ctx, `SELECT support_address,domain_verified_at IS NOT NULL FROM email_channels WHERE workspace_id=$1`, workspaceID).
 		Scan(&supportAddress, &verified)
+	if err == nil {
+		mailbox, err = loadMailboxState(ctx, tx, workspaceID)
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
@@ -78,12 +93,12 @@ func (s *Store) enqueueReply(ctx context.Context, tx pgx.Tx, workspaceID, conver
 		workspaceID, conversationID, token); err != nil {
 		return fmt.Errorf("assign reply token: %w", err)
 	}
-	status, reason := "queued", s.outbound.notReadyReason(verified)
+	status, reason := "queued", s.outbound.notReadyReason(verified, mailbox)
 	if reason != "" {
 		status = "failed"
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO email_outbox(workspace_id,message_id,status,last_error,created_at,recipients) VALUES($1,$2,$3,NULLIF($4,''),$5,$6)`,
-		workspaceID, messageID, status, reason, s.now(), recipients); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO email_outbox(workspace_id,message_id,status,last_error,created_at,recipients,transport) VALUES($1,$2,$3,NULLIF($4,''),$5,$6,$7)`,
+		workspaceID, messageID, status, reason, s.now(), recipients, mailbox.transport()); err != nil {
 		return fmt.Errorf("queue reply: %w", err)
 	}
 	return nil
@@ -113,7 +128,11 @@ func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("load email channel: %w", err)
 	}
-	if reason := s.outbound.notReadyReason(verified); reason != "" {
+	mailbox, err := loadMailboxState(ctx, tx, workspaceID)
+	if err != nil {
+		return domain.Message{}, err
+	}
+	if reason := s.outbound.notReadyReason(verified, mailbox); reason != "" {
 		return domain.Message{}, fmt.Errorf("%w: %s", ErrOutboundNotReady, reason)
 	}
 	now := s.now()
@@ -130,9 +149,9 @@ func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conve
 	// the resend, which errs on counting too much, never too little.
 	result, err := tx.Exec(ctx, `UPDATE email_outbox SET status='queued',attempts=0,next_attempt_at=now(),locked_until=NULL,
 		claim_token=NULL,last_error=NULL,updated_at=now(),
-		recipients=CASE WHEN sent_at IS NOT NULL AND created_at > $4 THEN recipients + $5 ELSE $5 END, created_at=$3
+		recipients=CASE WHEN sent_at IS NOT NULL AND created_at > $4 THEN recipients + $5 ELSE $5 END, created_at=$3, transport=$6
 		WHERE workspace_id=$1 AND message_id=$2 AND status='failed'`,
-		workspaceID, messageID, now, now.Add(-domain.TrialReplyWindow), recipients)
+		workspaceID, messageID, now, now.Add(-domain.TrialReplyWindow), recipients, mailbox.transport())
 	if err != nil {
 		return domain.Message{}, fmt.Errorf("retry delivery: %w", err)
 	}
@@ -140,4 +159,29 @@ func (s *Store) retryDelivery(ctx context.Context, tx pgx.Tx, workspaceID, conve
 		return domain.Message{}, ErrDeliveryNotFailed
 	}
 	return getMessage(ctx, tx, workspaceID, messageID)
+}
+
+// mailboxState is the workspace's connected Gmail account as the outbound rules see it.
+type mailboxState struct {
+	status, errorCode string
+}
+
+// transport is what a reply queued now is sent through.
+func (m *mailboxState) transport() string {
+	if m == nil {
+		return "smtp"
+	}
+	return "gmail"
+}
+
+func loadMailboxState(ctx context.Context, tx pgx.Tx, workspaceID string) (*mailboxState, error) {
+	var state mailboxState
+	err := tx.QueryRow(ctx, `SELECT status,COALESCE(error_code,'') FROM mailbox_connections WHERE workspace_id=$1`, workspaceID).Scan(&state.status, &state.errorCode)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load mailbox connection: %w", err)
+	}
+	return &state, nil
 }

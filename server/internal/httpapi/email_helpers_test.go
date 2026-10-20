@@ -112,6 +112,7 @@ type conversationSummary struct {
 	ID      string `json:"id"`
 	Subject string `json:"subject"`
 	Status  string `json:"status"`
+	Channel string `json:"channel"`
 }
 
 func conversationList(t *testing.T, api http.Handler, token string) []conversationSummary {

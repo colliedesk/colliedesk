@@ -222,3 +222,34 @@ for a workspace with too many spam complaints. The operator:
   ```
   Replies held by the pause then go out at once. Counting starts again from that moment, so earlier
   complaints do not pause the workspace a second time.
+
+## Send replies through Gmail
+
+An admin connects a Gmail or Google Workspace mailbox as described in
+[send replies from Gmail](../user/email-channel.md#send-replies-from-gmail). Gmail sending uses your own Google OAuth client. Without these settings **Send from Gmail** names
+what is missing and Colliedesk keeps sending through SMTP.
+
+1. In [Google Cloud console](https://console.cloud.google.com/), create a project, enable the
+   **Gmail API**, and set up the consent screen (Google Auth Platform). Add the scopes `openid`,
+   `.../auth/userinfo.email` and `.../auth/gmail.send`. `gmail.send` is a sensitive scope: an
+   **External** app needs Google's verification before people outside your test users can connect;
+   an **Internal** app (Google Workspace) does not.
+2. Create a client of type **Web application**. Add the **Redirect URI** that **Send from Gmail**
+   shows, which is your `APP_ORIGIN` followed by `/api/v1/channels/email/gmail/callback`, for example
+   `https://desk.example.com/api/v1/channels/email/gmail/callback`.
+3. Set these variables on the server and restart it:
+
+| Variable | Meaning |
+|---|---|
+| `GOOGLE_OAUTH_CLIENT_ID` | Client ID of the Web application client. |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | Its client secret. |
+| `MAILBOX_TOKEN_KEYS` | Key that encrypts the stored Google access: `k1:` followed by 32 random bytes in base64, for example `k1:$(openssl rand -base64 32)`. Keep it secret and keep a copy: without it the server cannot read the connections and every admin must connect Gmail again. |
+
+To change the key, put the new one first and keep the old one after a comma
+(`k2:<new>,k1:<old>`): new connections use the first key, old ones keep working, and each is moved to
+the new key the next time it sends a reply. Remove the old key only after every workspace that connected
+Gmail has sent a reply since, or connected again. If the keys are wrong, replies wait and retry with a note
+naming `MAILBOX_TOKEN_KEYS`; the connection is kept, so fixing the keys is enough.
+
+A server with Gmail and no SMTP relay works for workspaces that connected Gmail; for the others,
+replies are marked **Delivery failed** until a relay is set.

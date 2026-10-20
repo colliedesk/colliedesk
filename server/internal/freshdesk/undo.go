@@ -14,8 +14,8 @@ import (
 
 type UndoOptions struct {
 	WorkspaceSlug string
-	// Source is the ledger source, for example freshdesk:account:777; empty
-	// selects the only Freshdesk import in the workspace.
+	// Source is the ledger source, for example freshdesk:account:777 or helpscout:mailbox:501;
+	// empty selects the only import in the workspace.
 	Source string
 	DryRun bool
 }
@@ -37,6 +37,7 @@ const targetExists = `CASE i.entity
 	WHEN 'ticket' THEN EXISTS(SELECT 1 FROM conversations x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'description' THEN EXISTS(SELECT 1 FROM messages x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'conversation' THEN EXISTS(SELECT 1 FROM messages x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
+	WHEN 'thread' THEN EXISTS(SELECT 1 FROM messages x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'attachment' THEN EXISTS(SELECT 1 FROM attachments x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'inline_image' THEN EXISTS(SELECT 1 FROM attachments x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	WHEN 'time_entry' THEN EXISTS(SELECT 1 FROM time_entries x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
@@ -45,7 +46,8 @@ const targetExists = `CASE i.entity
 	WHEN 'saved_reply' THEN EXISTS(SELECT 1 FROM saved_replies x WHERE x.workspace_id=i.workspace_id AND x.id=i.target_id)
 	ELSE false END`
 
-// Undo removes what one import created in a workspace: its conversations
+// Undo removes what one import (Freshdesk or Help Scout: both write the same ledger entities, a
+// Help Scout thread being "thread") created in a workspace: its conversations
 // (with their messages, attachments and time entries), and the contacts and
 // tags it created that nothing else uses. A conversation that gained a
 // message after the import is kept with its ledger rows, so work done in
@@ -95,7 +97,7 @@ func Undo(ctx context.Context, pool *pgxpool.Pool, storage attachments.Storage, 
 }
 
 func undoSource(ctx context.Context, tx pgx.Tx, workspaceID, requested string) (string, error) {
-	rows, err := tx.Query(ctx, `SELECT DISTINCT source FROM import_items WHERE workspace_id=$1 AND source LIKE 'freshdesk:%' ORDER BY 1`, workspaceID)
+	rows, err := tx.Query(ctx, `SELECT DISTINCT source FROM import_items WHERE workspace_id=$1 AND (source LIKE 'freshdesk:%' OR source LIKE 'helpscout:%') ORDER BY 1`, workspaceID)
 	if err != nil {
 		return "", fmt.Errorf("list imports: %w", err)
 	}
@@ -124,7 +126,7 @@ func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoR
 	rows, err := tx.Query(ctx, `SELECT i.source_id FROM import_items i JOIN conversations c ON c.workspace_id=i.workspace_id AND c.id=i.target_id
 		WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='ticket' AND EXISTS (
 			SELECT 1 FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND NOT EXISTS (
-				SELECT 1 FROM import_items j WHERE j.workspace_id=$1 AND j.source=$2 AND j.entity IN ('description','conversation') AND j.target_id=m.id))
+				SELECT 1 FROM import_items j WHERE j.workspace_id=$1 AND j.source=$2 AND j.entity IN ('description','conversation','thread') AND j.target_id=m.id))
 		ORDER BY length(i.source_id),i.source_id`, workspaceID, source)
 	if err != nil {
 		return result, nil, fmt.Errorf("find conversations to keep: %w", err)
@@ -149,7 +151,7 @@ func undoRows(ctx context.Context, tx pgx.Tx, workspaceID, source string) (UndoR
 		{&result.Conversations, `DELETE FROM conversations c USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='ticket'
 			AND c.workspace_id=i.workspace_id AND c.id=i.target_id AND i.source_id <> ALL($3)`, []any{workspaceID, source, result.KeptConversationTickets}},
 		{&result.Contacts, `DELETE FROM contacts c USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='contact'
-			AND (i.meta->>'created')::boolean AND c.workspace_id=i.workspace_id AND c.id=i.target_id
+			AND (i.meta->>'created')::boolean AND c.workspace_id=i.workspace_id AND c.id=i.target_id AND c.merged_into_id IS NULL
 			AND NOT EXISTS (SELECT 1 FROM conversations v WHERE v.workspace_id=c.workspace_id AND v.contact_id=c.id)`, []any{workspaceID, source}},
 		{&result.SavedReplies, `DELETE FROM saved_replies s USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='saved_reply'
 			AND s.workspace_id=i.workspace_id AND s.id=i.target_id AND i.source_id <> ALL($3)`, []any{workspaceID, source, result.KeptSavedReplies}},

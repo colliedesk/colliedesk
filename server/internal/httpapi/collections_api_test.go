@@ -27,8 +27,8 @@ func TestEmptyCollectionsEncodeAsArrays(t *testing.T) {
 		"name": "Empty Example", "email": "empty@example.com",
 	})
 	contact := request(t, api, http.MethodGet, "/api/v1/contacts/"+contactID, nil, token, nil)
-	if !strings.Contains(contact.Body.String(), `"conversations":[]`) {
-		t.Errorf("contact body=%s, want empty conversations array", contact.Body.String())
+	if !strings.Contains(contact.Body.String(), `"merges":[]`) {
+		t.Errorf("contact body=%s, want empty merges array", contact.Body.String())
 	}
 
 	conversationID := create(t, api, token, "/api/v1/conversations", map[string]any{

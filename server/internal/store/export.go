@@ -70,6 +70,9 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string, sink ex
 	if err := exportContacts(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
+	if err := exportContactMerges(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
 	if err := exportTags(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
@@ -114,7 +117,7 @@ func exportAgents(ctx context.Context, tx pgx.Tx, workspaceID string, sink expor
 }
 
 func exportContacts(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
-	rows, err := tx.Query(ctx, `SELECT id::text,name,email,organization,created_at,updated_at
+	rows, err := tx.Query(ctx, `SELECT id::text,name,email,organization,merged_into_id::text,created_at,updated_at
 		FROM contacts WHERE workspace_id=$1 ORDER BY id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export contacts: %w", err)
@@ -122,7 +125,7 @@ func exportContacts(ctx context.Context, tx pgx.Tx, workspaceID string, sink exp
 	defer rows.Close()
 	for rows.Next() {
 		var record export.Contact
-		if err := rows.Scan(&record.ID, &record.Name, &record.Email, &record.Organization, &record.CreatedAt, &record.UpdatedAt); err != nil {
+		if err := rows.Scan(&record.ID, &record.Name, &record.Email, &record.Organization, &record.MergedIntoID, &record.CreatedAt, &record.UpdatedAt); err != nil {
 			return fmt.Errorf("export contacts: %w", err)
 		}
 		record.CreatedAt, record.UpdatedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt)
@@ -131,6 +134,27 @@ func exportContacts(ctx context.Context, tx pgx.Tx, workspaceID string, sink exp
 		}
 	}
 	return rowsError("export contacts", rows)
+}
+
+func exportContactMerges(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	rows, err := tx.Query(ctx, `SELECT id::text,contact_id::text,merged_contact_id::text,conversation_ids::text[],merged_by_agent_id::text,
+		token_id::text,created_at,undone_at,undone_by_agent_id::text FROM contact_merges WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export contact merges: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var record export.ContactMerge
+		if err := rows.Scan(&record.ID, &record.ContactID, &record.MergedContactID, &record.ConversationIDs, &record.MergedByAgentID,
+			&record.TokenID, &record.CreatedAt, &record.UndoneAt, &record.UndoneByAgentID); err != nil {
+			return fmt.Errorf("export contact merges: %w", err)
+		}
+		record.CreatedAt, record.UndoneAt = domain.UTC(record.CreatedAt), domain.UTCOptional(record.UndoneAt)
+		if err := sink.ContactMerge(record); err != nil {
+			return err
+		}
+	}
+	return rowsError("export contact merges", rows)
 }
 
 func exportTags(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
@@ -172,7 +196,35 @@ func exportSavedReplies(ctx context.Context, tx pgx.Tx, workspaceID string, sink
 	if err := rowsError("export saved replies", rows); err != nil {
 		return err
 	}
-	return exportSavedReplyVersions(ctx, tx, workspaceID, sink)
+	if err := exportSavedReplyVersions(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
+	return exportSavedViews(ctx, tx, workspaceID, sink)
+}
+
+// exportSavedViews writes every view of the workspace, every person's personal views and the trash
+// included: the export is the workspace's whole record, and only an admin downloads it.
+func exportSavedViews(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	rows, err := tx.Query(ctx, `SELECT id::text,name,scope,owner_agent_id::text,filters,created_by_agent_id::text,created_at,updated_at,deleted_at
+		FROM saved_views WHERE workspace_id=$1 ORDER BY id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export saved views: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var record export.SavedView
+		var filters []byte
+		if err := rows.Scan(&record.ID, &record.Name, &record.Scope, &record.OwnerAgentID, &filters, &record.CreatedByAgentID,
+			&record.CreatedAt, &record.UpdatedAt, &record.DeletedAt); err != nil {
+			return fmt.Errorf("export saved views: %w", err)
+		}
+		record.Filters = filters
+		record.CreatedAt, record.UpdatedAt, record.DeletedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt), domain.UTCOptional(record.DeletedAt)
+		if err := sink.SavedView(record); err != nil {
+			return err
+		}
+	}
+	return rowsError("export saved views", rows)
 }
 
 func exportSavedReplyVersions(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
@@ -265,7 +317,7 @@ type conversationPage struct {
 
 func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after string) (conversationPage, error) {
 	page := conversationPage{tags: map[string][]string{}, files: map[string][]export.Attachment{}, timeEntries: map[string][]domain.TimeEntry{}}
-	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,c.assignee_id::text,c.origin,c.created_at,c.updated_at,
+	rows, err := tx.Query(ctx, `SELECT c.id::text,c.contact_id::text,c.subject,c.status,c.priority,c.assignee_id::text,c.channel,c.origin,c.created_at,c.updated_at,
 		(SELECT count(*) FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id)
 		FROM conversations c WHERE c.workspace_id=$1 AND c.id>$2::uuid ORDER BY c.id LIMIT $3`, workspaceID, after, exportPageConversations)
 	if err != nil {
@@ -276,7 +328,7 @@ func exportConversationPage(ctx context.Context, tx pgx.Tx, workspaceID, after s
 		var head export.ConversationHead
 		var messages int
 		if err := rows.Scan(&head.ID, &head.ContactID, &head.Subject, &head.Status, &head.Priority, &head.AssigneeID,
-			&head.Origin, &head.CreatedAt, &head.UpdatedAt, &messages); err != nil {
+			&head.Channel, &head.Origin, &head.CreatedAt, &head.UpdatedAt, &messages); err != nil {
 			rows.Close()
 			return page, fmt.Errorf("export conversations: %w", err)
 		}

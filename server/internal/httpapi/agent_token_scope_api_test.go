@@ -35,6 +35,12 @@ var routeTiers = map[string]string{
 	"GET /api/v1/saved-replies/{id}/versions":                    "read",
 	"POST /api/v1/saved-replies/{id}/versions/{version}/restore": "send",
 	"POST /api/v1/saved-replies/{id}/restore":                    "send",
+	"GET /api/v1/saved-views":                                    "read",
+	"GET /api/v1/saved-views/trash":                              "read",
+	"POST /api/v1/saved-views":                                   "draft",
+	"PATCH /api/v1/saved-views/{id}":                             "draft",
+	"DELETE /api/v1/saved-views/{id}":                            "draft",
+	"POST /api/v1/saved-views/{id}/restore":                      "draft",
 	"POST /api/v1/conversations":                                 "send",
 	"GET /api/v1/conversations/{id}":                             "read",
 	"PATCH /api/v1/conversations/{id}":                           "draft",
@@ -48,6 +54,9 @@ var routeTiers = map[string]string{
 	"GET /api/v1/contacts":                                       "read",
 	"POST /api/v1/contacts":                                      "send",
 	"GET /api/v1/contacts/{id}":                                  "read",
+	"PATCH /api/v1/contacts/{id}":                                "send",
+	"POST /api/v1/contacts/{id}/merges":                          "send",
+	"DELETE /api/v1/contacts/{id}/merges/{mergeId}":              "send",
 	"GET /api/v1/agents":                                         "read",
 	"PATCH /api/v1/workspace/timezone":                           "admin",
 	"PATCH /api/v1/workspace/slug":                               "approval",
@@ -62,6 +71,8 @@ var routeTiers = map[string]string{
 	"DELETE /api/v1/channels/email":                              "approval",
 	"POST /api/v1/channels/email/domain-verification":            "admin",
 	"POST /api/v1/channels/email/secret":                         "approval",
+	"POST /api/v1/channels/email/gmail":                          "approval",
+	"DELETE /api/v1/channels/email/gmail":                        "approval",
 	"GET /api/v1/billing":                                        "admin",
 	"POST /api/v1/billing/checkout":                              "approval",
 	"POST /api/v1/billing/portal":                                "approval",
@@ -97,6 +108,12 @@ func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
 			body := item.body
 			if key == "POST /api/v1/tags" { // two tiers may create, and a tag name is unique
 				body = map[string]any{"name": "matrix tag " + tier}
+			}
+			if key == "PATCH /api/v1/saved-views/{id}" { // each change sends the version it read
+				body = map[string]any{"name": "matrix rename " + tier, "updated_at": viewSeen(t, fixture.api, fixture.adminToken, fixture.updateViewID)}
+			}
+			if key == "POST /api/v1/saved-views" { // likewise for a view name
+				body = map[string]any{"name": "matrix view " + tier, "scope": "shared", "filters": map[string]any{}}
 			}
 			response := request(t, fixture.api, route.Method, item.path, body, token, nil)
 			switch {

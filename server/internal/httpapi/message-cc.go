@@ -34,6 +34,10 @@ func (a *API) cleanCC(ctx context.Context, workspaceID, kind string, raw []strin
 	if err != nil {
 		return nil, &uploadError{http.StatusInternalServerError, "internal_error", "The reply could not be checked. Nothing was sent."}
 	}
+	mailbox, err := a.store.GetMailboxConnection(ctx, workspaceID)
+	if err != nil {
+		return nil, &uploadError{http.StatusInternalServerError, "internal_error", "The reply could not be checked. Nothing was sent."}
+	}
 	seen := map[string]bool{}
 	clean := make([]string, 0, len(raw))
 	for _, value := range raw {
@@ -43,6 +47,9 @@ func (a *API) cleanCC(ctx context.Context, workspaceID, kind string, raw []strin
 		address := strings.ToLower(value)
 		if a.isOwnAddress(address, channel) {
 			return nil, a.invalidCC("A reply cannot be copied to this workspace's own support or forwarding address.")
+		}
+		if mailbox != nil && email.SameMailbox(address, mailbox.Address) {
+			return nil, a.invalidCC("A reply cannot be copied to the Gmail address it is sent from.")
 		}
 		if !seen[address] {
 			seen[address] = true

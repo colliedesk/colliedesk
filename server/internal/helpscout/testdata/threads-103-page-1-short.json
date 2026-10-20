@@ -1,0 +1,34 @@
+{
+ "_embedded": {
+  "threads": [
+   {
+    "id": 2008,
+    "type": "customer",
+    "status": "active",
+    "state": "published",
+    "body": "<p>Which invoices are open?</p>",
+    "source": {
+     "type": "phone",
+     "via": "customer"
+    },
+    "createdBy": {
+     "id": 9101,
+     "type": "customer",
+     "first": "Dana",
+     "last": "Lee",
+     "email": "dana@customer.example"
+    },
+    "createdAt": "2026-03-06T14:30:00Z",
+    "_embedded": {
+     "attachments": []
+    }
+   }
+  ]
+ },
+ "page": {
+  "size": 50,
+  "totalElements": 1,
+  "totalPages": 1,
+  "number": 1
+ }
+}

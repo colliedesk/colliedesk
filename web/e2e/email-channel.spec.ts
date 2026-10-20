@@ -72,6 +72,8 @@ test('connects email, receives a customer email and shows why the reply is not e
   await page.getByLabel('Message body').last().fill('We are on it.');
   await page.getByRole('button', { name: 'Send reply' }).click();
   await expect(page.getByText('We are on it.')).toBeVisible();
-  await expect(page.getByText('Delivery failed')).toBeVisible();
-  await expect(page.getByText('Delivery failed')).toHaveAttribute('title', /not configured/);
+  // exact: the closed Filter menu holds a hidden "Reply delivery failed" option.
+  const failed = page.getByText('Delivery failed', { exact: true });
+  await expect(failed).toBeVisible();
+  await expect(failed).toHaveAttribute('title', /not configured/);
 });

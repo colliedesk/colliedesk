@@ -101,7 +101,7 @@ Each is sent only after the action succeeded.
 | Event | Properties |
 |---|---|
 | `conversation_opened` | `source`: `list` or `link` |
-| `inbox_filtered` | `filter`: `status`, `assignee` or `tag` |
+| `inbox_filtered` | `filter`: the kind of filter changed: `status`, `priority`, `assignee`, `tag`, `contact`, `organization`, `awaiting`, `draft`, `delivery`, `source`, `channel`, `created`, `updated` or `sort`; never its value |
 | `inbox_searched` | `has_results` (the search words are never sent) |
 | `saved_reply_inserted` | none |
 | `conversation_status_changed` | `to`: the new status |

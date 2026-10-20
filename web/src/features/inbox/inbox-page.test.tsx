@@ -1,5 +1,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
+import { useState } from 'react';
+import type { InboxQuery } from '../../lib/inbox-query';
 import { InboxPage } from './inbox-page';
 
 const conversation = {
@@ -11,18 +13,24 @@ const conversation = {
   priority: 'normal' as const,
   assignee_id: null,
   tags: [],
+  channel: 'email' as const,
   origin: null,
   created_at: '2026-10-14T00:00:00Z',
   updated_at: '2026-10-14T00:00:00Z',
 };
 
-test('shows the dense inbox filters and three-pane conversation workspace', () => {
+test('shows the dense inbox filters and three-pane conversation workspace', async () => {
   render(<InboxPage />);
-  const filters = screen.getByRole('form', { name: /inbox/i });
+  const filters = screen.getByRole('search', { name: /inbox/i });
   expect(screen.getByRole('searchbox', { name: /search conversations/i })).toBeInTheDocument();
-  expect(within(filters).getByLabelText(/status/i)).toBeInTheDocument();
-  expect(within(filters).getByLabelText(/assignee/i)).toBeInTheDocument();
-  expect(within(filters).getByLabelText(/tag/i)).toBeInTheDocument();
+  expect(within(filters).getByRole('radiogroup', { name: 'Status' })).toBeInTheDocument();
+  fireEvent.click(within(filters).getByText('Filter'));
+  await screen.findByRole('checkbox', { name: 'Urgent' });
+  const menu = within(filters).getByRole('group', { name: 'Filter' });
+  for (const name of ['Priority', 'Assignee', 'Tags', 'Who replies next', 'Needs attention', 'Channel', 'Source', 'Created', 'Last activity']) {
+    expect(within(menu).getByRole('group', { name })).toBeInTheDocument();
+  }
+  expect(within(filters).getByRole('combobox', { name: 'Sort' })).toBeInTheDocument();
   expect(screen.getByRole('region', { name: /conversation list/i })).toBeInTheDocument();
   expect(screen.getByRole('region', { name: /timeline/i })).toBeInTheDocument();
   expect(screen.getByRole('complementary', { name: /conversation details/i })).toBeInTheDocument();
@@ -36,10 +44,12 @@ test('adds and removes tags through atomic conversation tag callbacks', () => {
   const onRemoveTag = vi.fn();
   const tag = { id: '33333333-3333-4333-8333-333333333333', name: 'Billing', color: '#64748b' };
   const { rerender } = render(<InboxPage selected={conversation} conversations={[conversation]} tags={[tag]} onAddTag={onAddTag} onRemoveTag={onRemoveTag} />);
-  fireEvent.click(screen.getByRole('checkbox', { name: /billing/i }));
+  // The Filter menu lists the tag too; the one that changes the conversation is in its details.
+  const details = () => screen.getByRole('complementary', { name: /conversation details/i });
+  fireEvent.click(within(details()).getByRole('checkbox', { name: /billing/i }));
   expect(onAddTag).toHaveBeenCalledWith(conversation.id, tag.id);
   rerender(<InboxPage selected={{ ...conversation, tags: [tag] }} conversations={[conversation]} tags={[tag]} onAddTag={onAddTag} onRemoveTag={onRemoveTag} />);
-  fireEvent.click(screen.getByRole('checkbox', { name: /billing/i }));
+  fireEvent.click(within(details()).getByRole('checkbox', { name: /billing/i }));
   expect(onRemoveTag).toHaveBeenLastCalledWith(conversation.id, tag.id);
 });
 
@@ -83,6 +93,14 @@ test('renders message Markdown in the timeline', () => {
 test('tells the agent when replies will not be emailed', () => {
   render(<InboxPage selected={conversation} conversations={[conversation]} outboundNotice="Outgoing email is not configured on this server." />);
   expect(screen.getByText('Outgoing email is not configured on this server.')).toHaveAttribute('role', 'status');
+  expect(screen.queryByRole('button', { name: 'Open Settings' })).not.toBeInTheDocument();
+});
+
+test('an admin can go straight to Settings from the notice that replies are not emailed', () => {
+  const onOpenSettings = vi.fn();
+  render(<InboxPage selected={conversation} conversations={[conversation]} outboundNotice="Gmail stopped sending." canManage onOpenSettings={onOpenSettings} />);
+  fireEvent.click(within(screen.getByRole('status')).getByRole('button', { name: 'Open Settings' }));
+  expect(onOpenSettings).toHaveBeenCalled();
 });
 
 test('shows the author name and attachment download links on a timeline message', () => {
@@ -192,12 +210,17 @@ test('an empty filtered list says no conversation matches', () => {
 });
 
 test('an empty filtered list offers a way out that clears every filter back to the Open view', () => {
-  const onFilters = vi.fn();
-  render(<InboxPage conversations={[]} filtered onFilters={onFilters} />);
+  const onQuery = vi.fn();
+  // The inbox follows the filters in the address; this stands in for it.
+  function Routed() {
+    const [query, setQuery] = useState<InboxQuery>({});
+    return <InboxPage conversations={[]} filtered query={query} onQuery={(next) => { setQuery(next); onQuery(next); }} />;
+  }
+  render(<Routed />);
   fireEvent.change(screen.getByRole('searchbox', { name: /search conversations/i }), { target: { value: 'refund' } });
   fireEvent.click(screen.getByRole('radio', { name: 'Pending' }));
   fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
-  expect(onFilters).toHaveBeenLastCalledWith({ status: 'open' });
+  expect(onQuery).toHaveBeenLastCalledWith({});
   expect(screen.getByRole('searchbox', { name: /search conversations/i })).toHaveValue('');
   expect(screen.getByRole('radio', { name: 'Open' })).toBeChecked();
   expect(screen.getByRole('searchbox', { name: /search conversations/i })).toHaveFocus();

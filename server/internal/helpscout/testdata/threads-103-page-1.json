@@ -1,0 +1,17 @@
+{
+  "_embedded": {
+    "threads": [
+      {"id": 2009, "type": "phone", "status": "pending", "state": "published",
+       "body": "<p>Called Dana back, she will send the invoice numbers.</p>",
+       "source": {"type": "phone", "via": "user"},
+       "createdBy": {"id": 7003, "type": "user", "first": "Carol", "last": "Chen", "email": "carol@acme.example"},
+       "createdAt": "2026-03-06T15:00:00Z", "_embedded": {"attachments": []}},
+      {"id": 2008, "type": "customer", "status": "active", "state": "published",
+       "body": "<p>Which invoices are open?</p>",
+       "source": {"type": "phone", "via": "customer"},
+       "createdBy": {"id": 9101, "type": "customer", "first": "Dana", "last": "Lee", "email": "dana@customer.example"},
+       "createdAt": "2026-03-06T14:30:00Z", "_embedded": {"attachments": []}}
+    ]
+  },
+  "page": {"size": 50, "totalElements": 2, "totalPages": 1, "number": 1}
+}

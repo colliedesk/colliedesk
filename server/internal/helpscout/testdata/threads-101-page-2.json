@@ -1,0 +1,17 @@
+{
+  "_embedded": {
+    "threads": [
+      {"id": 2004, "type": "lineitem", "status": "active", "state": "published",
+       "action": {"type": "manual-workflow", "text": "Assigned to Alice"},
+       "createdBy": {"id": 7001, "type": "user", "first": "Alice", "last": "Admin", "email": "alice@acme.example"},
+       "createdAt": "2026-03-02T09:20:00Z"},
+      {"id": 2003, "type": "note", "status": "active", "state": "published",
+       "body": "<p>Internal: check the warranty first.</p>",
+       "source": {"type": "web", "via": "user"},
+       "createdBy": {"id": 7002, "type": "user", "first": "Bob", "last": "Builder", "email": "bob@acme.example"},
+       "to": [], "cc": [], "bcc": [],
+       "createdAt": "2026-03-02T09:30:00Z", "_embedded": {"attachments": []}}
+    ]
+  },
+  "page": {"size": 2, "totalElements": 4, "totalPages": 2, "number": 2}
+}

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { Link, Outlet, createRootRoute, redirect, createRoute, createRouter, useRouterState } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
+import { ContactsPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
 import { useInboxActivity } from './features/inbox/use-inbox-activity';
 import { RequestsRoute } from './features/requests/requests-route';
@@ -18,8 +19,10 @@ import { PlanNotices } from './features/shell/plan-notices';
 import { TrialSurvey } from './features/shell/trial-survey';
 import { messages } from './messages';
 import { InboxIcon, RequestsIcon, SettingsIcon } from './ui/icons';
+import { PartUnavailable } from './ui/lazy-part';
 import { LogoMark } from './ui/logo';
 import { resetProductAnalytics, useProductAnalytics } from './lib/product-analytics';
+import { inboxQueryFromSearch } from './lib/inbox-query';
 
 function AppLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
@@ -71,8 +74,12 @@ function settingsRouterLink(item: NavItem) {
 }
 
 const rootRoute = createRootRoute({ component: AppLayout });
-const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: InboxRoute });
-const conversationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/conversations/$conversationId', component: InboxRoute });
+// The inbox filters are in the address, so a link opens the same list (src/lib/inbox-query.ts).
+const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', validateSearch: inboxQueryFromSearch, component: InboxRoute });
+const conversationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/conversations/$conversationId', validateSearch: inboxQueryFromSearch, component: InboxRoute });
+// The customer page is its own chunk (contact-part.tsx), so the inbox bundle does not carry it.
+const contactRoute = createRoute({ getParentRoute: () => rootRoute, path: '/contacts/$contactId',
+  component: () => <ContactsPart render={(chunk) => <chunk.ContactRoute />} failed={<main className="settings-page"><PartUnavailable /></main>} /> });
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsRoute });
 const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: RequestsRoute });
 const billingRoute = createRoute({
@@ -99,7 +106,7 @@ const signInRoute = createRoute({
   component: () => <RedeemRoute token={signInRoute.useSearch().token ?? ''} />,
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, settingsRoute, requestsRoute, billingRoute, signInRoute]);
+export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, settingsRoute, requestsRoute, billingRoute, signInRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {
