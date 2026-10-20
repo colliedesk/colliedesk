@@ -16,12 +16,13 @@ import { kbMessages } from './kb-messages';
 import { buildTree, flatten, indent, reason } from './kb-tree';
 import { useRefreshKB } from './knowledge-page';
 import { MarkdownPreview } from './markdown-preview';
+import { embedFor } from './media-grid';
+import { kindOf, uploadVideo } from './media-uploads';
 
 // The limits the server checks (server/internal/domain/kb.go), counted in characters like the server.
 export const maxTitle = 300;
 export const maxBody = 100000;
 const maxImageBytes = 5 * 1024 * 1024;
-const imageTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
 // characters counts what a person sees as characters (Unicode code points), as the server does; a
 // string's length counts UTF-16 units, so an emoji would count twice.
@@ -229,18 +230,43 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   // Images are checked before any upload: a wrong type or a file over 5 MB is refused with a reason. The editor
   // holds an uploading image's place on screen only, never in the text, and puts the image in as a paragraph of
   // its own: right after a table row or inside a line, Markdown would read it as part of the table or the text.
+  // A video goes up in parts (media-uploads.ts); leaving the page cancels the ones still going, so they
+  // hold none of the workspace's three uploads in progress.
+  const videoUploads = useRef(new Map<File, { id?: string }>());
+  useEffect(() => {
+    const uploads = videoUploads.current;
+    const leave = () => {
+      for (const session of uploads.values())
+        if (session.id) void fetch(`/api/v1/kb/media-uploads/${session.id}`, { method: 'DELETE', credentials: 'same-origin', keepalive: true }).catch(() => undefined);
+      uploads.clear();
+    };
+    window.addEventListener('pagehide', leave);
+    return () => { window.removeEventListener('pagehide', leave); leave(); };
+  }, []);
   const imageHooks = useMemo<UploadHooks>(() => ({
     accept: (files) => {
       const problems: string[] = [];
       const accepted = files.filter((file) => {
-        if (!imageTypes.includes(file.type)) { problems.push(kbMessages.imageType(file.name)); return false; }
-        if (file.size > maxImageBytes) { problems.push(kbMessages.imageTooLarge(file.name)); return false; }
+        const kind = kindOf(file);
+        if (!kind) { problems.push(kbMessages.imageType(file.name)); return false; }
+        if (kind === 'image' && file.size > maxImageBytes) { problems.push(kbMessages.imageTooLarge(file.name)); return false; }
         return true;
       });
       setImageProblems(problems);
       return accepted;
     },
-    upload: async (file) => ({ url: (await kbApi.uploadImage(file)).url, alt: altText(file.name) }),
+    upload: async (file, progress) => {
+      if (kindOf(file) === 'image') return { snippet: `![${altText(file.name)}](${(await kbApi.uploadImage(file)).url})` };
+      const session: { id?: string } = {};
+      videoUploads.current.set(file, session);
+      try {
+        const item = await uploadVideo(file, { keep: false, signal: new AbortController().signal, session, onProgress: (sent) => progress(sent / file.size) });
+        if (!item) throw new Error(kbMessages.imageFailed(file.name));
+        return { snippet: embedFor(item) };
+      } finally {
+        videoUploads.current.delete(file);
+      }
+    },
     onStart: () => setUploading((count) => count + 1),
     onDone: (file) => { setUploading((count) => count - 1); setNotice(kbMessages.imageUploaded(file.name)); },
     onError: (file, error) => { setUploading((count) => count - 1); setImageProblems((current) => [...current, reason(error, kbMessages.imageFailed(file.name))]); },

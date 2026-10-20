@@ -37,9 +37,9 @@ export default function FakeEditor({ initial, uploads, label, describedBy, inval
     for (const file of props.current.uploads.accept(files)) {
       pending.current += 1;
       props.current.uploads.onStart(file);
-      props.current.uploads.upload(file).then(({ url, alt }) => {
+      props.current.uploads.upload(file, () => undefined).then(({ snippet }) => {
         pending.current -= 1;
-        put(`${text.current}${text.current ? '\n\n' : ''}![${alt}](${url})`);
+        put(`${text.current}${text.current ? '\n\n' : ''}${snippet}`);
         timer.current = window.setTimeout(emit, 120);
         props.current.uploads.onDone(file);
       }, (error: unknown) => { pending.current -= 1; props.current.uploads.onError(file, error); });

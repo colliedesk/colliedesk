@@ -237,7 +237,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
           </small>
         </div>
       )}
-      <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden tabIndex={-1} aria-hidden="true"
+      <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime,.mov" multiple hidden tabIndex={-1} aria-hidden="true"
         onChange={(event) => {
           const files = [...(event.target.files ?? [])];
           event.target.value = '';

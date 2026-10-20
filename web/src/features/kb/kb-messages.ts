@@ -117,9 +117,10 @@ export const kbMessages = {
   importedNotice: 'Imported from another help desk. The original HTML is kept in the workspace export.',
   // Images
   uploadingImage: (name: string) => `Uploading ${name}…`,
+  uploadingPercent: (name: string, percent: number) => `Uploading ${name}: ${percent}%`,
   imageAlt: 'image',
-  waitingForImages: 'Saving waits until the images finish uploading.',
-  imageType: (name: string) => `${name} is not a PNG, JPEG, GIF or WebP image.`,
+  waitingForImages: 'Saving waits until the images and videos finish uploading.',
+  imageType: (name: string) => `${name} is not a PNG, JPEG, GIF or WebP image, nor an MP4 or WebM video.`,
   imageTooLarge: (name: string) => `${name} is over 5 MB.`,
   imageFailed: (name: string) => `${name} could not be uploaded. Try again.`,
   imageUploaded: (name: string) => `${name} added.`,

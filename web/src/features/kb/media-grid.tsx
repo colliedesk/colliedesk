@@ -70,3 +70,11 @@ export function SelectCard({ item, checked, extra, onToggle }: { item: KBMedia; 
     </li>
   );
 }
+
+// embedFor is what an article holds to show the item: Markdown for an image, the allowed <video> HTML
+// for a video, as a block of its own.
+export function embedFor(item: KBMedia) {
+  if (item.kind === 'image') return `![${item.alt.replace(/[[\]]/g, '')}](${item.url})`;
+  const title = item.alt ? ` title="${item.alt.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"` : '';
+  return `<video controls preload="metadata" src="${item.url}"${title}></video>`;
+}

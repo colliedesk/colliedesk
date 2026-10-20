@@ -8,24 +8,26 @@ import { blockAt, blockChange } from './commands';
 // reason), how one is sent and how it is described, and what the page shows meanwhile.
 export interface UploadHooks {
   accept(files: File[]): File[];
-  upload(file: File): Promise<{ url: string; alt: string }>;
+  // upload sends a file and gives what the article holds for it (an image's Markdown, a video's HTML);
+  // progress (0 to 1) shows in its place while a large file goes.
+  upload(file: File, progress: (done: number) => void): Promise<{ snippet: string }>;
   onStart(file: File): void;
   onDone(file: File): void;
   onError(file: File, error: unknown): void;
 }
 
 class UploadingWidget extends WidgetType {
-  constructor(readonly name: string) {
+  constructor(readonly name: string, readonly percent?: number) {
     super();
   }
   eq(other: UploadingWidget) {
-    return other.name === this.name;
+    return other.name === this.name && other.percent === this.percent;
   }
   toDOM() {
     const box = document.createElement('div');
     box.className = 'cm-uploading';
     box.setAttribute('role', 'status');
-    box.textContent = kbMessages.uploadingImage(this.name);
+    box.textContent = this.percent === undefined ? kbMessages.uploadingImage(this.name) : kbMessages.uploadingPercent(this.name, this.percent);
     return box;
   }
   ignoreEvent() {
@@ -37,6 +39,7 @@ const add = StateEffect.define<{ id: object; pos: number; name: string }>({
   map: (value, change) => ({ ...value, pos: change.mapPos(value.pos, 1) }),
 });
 const remove = StateEffect.define<object>();
+const progress = StateEffect.define<{ id: object; percent: number }>();
 
 // The upload's place is a widget decoration, not text: the document (what is saved) never carries a placeholder,
 // and the widget moves with the edits made while the image is on its way.
@@ -57,6 +60,19 @@ export const uploads = StateField.define<DecorationSet>({
           ],
         });
       if (effect.is(remove)) next = next.update({ filter: (_from, _to, deco) => deco.spec.id !== effect.value });
+      if (effect.is(progress)) {
+        // The widget is made again with the new percent, at the place it has now.
+        let at: number | undefined;
+        let name = '';
+        next.between(0, tr.state.doc.length, (from, _to, deco) => {
+          if (deco.spec.id === effect.value.id) { at = from; name = (deco.spec.widget as UploadingWidget).name; }
+        });
+        if (at !== undefined)
+          next = next.update({
+            filter: (_from, _to, deco) => deco.spec.id !== effect.value.id,
+            add: [Decoration.widget({ widget: new UploadingWidget(name, effect.value.percent), block: true, side: 1, id: effect.value.id }).range(at)],
+          });
+      }
     }
     return next;
   },
@@ -73,20 +89,27 @@ const where = (view: EditorView, id: object) => {
   return found;
 };
 
-// startUpload sends each accepted file and puts the image at the end of the line pos is on, as a paragraph of its
-// own, once its address is known; a refused upload only takes its widget away.
+// startUpload sends each accepted file and puts the image (or the video) after the block pos is in, as a block of
+// its own, once its address is known; a refused upload only takes its widget away.
 export function startUpload(view: EditorView, files: File[], pos: number, hooks: UploadHooks) {
   const accepted = hooks.accept(files);
   for (const file of accepted) {
     const id = {};
     view.dispatch({ effects: add.of({ id, pos: blockAt(view.state.doc, pos), name: file.name }) });
     hooks.onStart(file);
-    hooks.upload(file).then(
-      ({ url, alt }) => {
+    let shown = -1;
+    const onProgress = (done: number) => {
+      const percent = Math.min(99, Math.floor(done * 100));
+      if (percent === shown || where(view, id) === undefined) return;
+      shown = percent;
+      view.dispatch({ effects: progress.of({ id, percent }) });
+    };
+    hooks.upload(file, onProgress).then(
+      ({ snippet }) => {
         // The place is gone when the text was replaced meanwhile (a restore, their version): the upload still ends.
         const at = where(view, id);
         if (at !== undefined) {
-          const change = blockChange(view.state.doc, at, `![${alt}](${url})`);
+          const change = blockChange(view.state.doc, at, snippet);
           view.dispatch({ changes: { from: change.from, insert: change.insert }, effects: remove.of(id), userEvent: 'input.upload' });
         }
         hooks.onDone(file);

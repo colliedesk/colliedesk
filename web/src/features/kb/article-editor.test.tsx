@@ -10,6 +10,17 @@ vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate, useBlock
 // The editor is a field with its contract here (editor/fake-editor.test.fixture.tsx); codemirror-editor.test.tsx
 // runs the real one.
 vi.mock('./editor/codemirror-editor', () => import('./editor/fake-editor.test.fixture'));
+// A video's parts go through XMLHttpRequest (for the progress); here they land at once.
+const sentParts = vi.hoisted(() => [] as string[]);
+vi.mock('./media-api', async (original) => ({
+  ...(await original<typeof import('./media-api')>()),
+  sendPart: async (_id: string, part: Blob, first: number, size: number, onSent: (bytes: number) => void) => {
+    sentParts.push(`${first}+${part.size}/${size}`);
+    onSent(part.size);
+    return { status: 200, body: { id: '77777777-0000-4000-8000-000000000001', kind: 'video', name: 'tour', size, offset: first + part.size, part_size: 8,
+      expires_at: '2026-10-22T00:00:00Z', media_id: null, created_by: null, created_at: '2026-10-21T00:00:00Z' }, offset: String(first + part.size) };
+  },
+}));
 afterEach(() => { navigate.mockReset(); blocker.mockReset(); vi.unstubAllGlobals(); });
 
 // settle waits for the editor to tell the page of what was typed, as it does a moment after typing stops.
@@ -123,7 +134,7 @@ test('an image the server refuses leaves no placeholder and says why; a wrong ty
   open({ articleId: ids.article });
   const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
   fireEvent.paste(text, { clipboardData: { files: [new File(['x'], 'shot.png', { type: 'image/png' }), new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' })] } });
-  expect(await screen.findByText('logo.svg is not a PNG, JPEG, GIF or WebP image.')).toBeInTheDocument();
+  expect(await screen.findByText('logo.svg is not a PNG, JPEG, GIF or WebP image, nor an MP4 or WebM video.')).toBeInTheDocument();
   expect(await screen.findByText('Storage is full.')).toBeInTheDocument();
   expect(text).toHaveValue('');
   expect(calls.filter((call) => call.path === '/api/v1/kb/images')).toHaveLength(1);
@@ -302,7 +313,7 @@ test('a wrong type or a file over 5 MB is refused before any upload', async () =
   const big = new File(['x'], 'huge.png', { type: 'image/png' });
   Object.defineProperty(big, 'size', { value: 6 * 1024 * 1024 });
   fireEvent.paste(await screen.findByRole('textbox', { name: 'Text (Markdown)' }), { clipboardData: { files: [new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' }), big] } });
-  expect(await screen.findByText('logo.svg is not a PNG, JPEG, GIF or WebP image.')).toBeInTheDocument();
+  expect(await screen.findByText('logo.svg is not a PNG, JPEG, GIF or WebP image, nor an MP4 or WebM video.')).toBeInTheDocument();
   expect(screen.getByText('huge.png is over 5 MB.')).toBeInTheDocument();
   expect(calls.some((call) => call.path === '/api/v1/kb/images')).toBe(false);
 });
@@ -331,4 +342,21 @@ test('an article with Windows line endings opened untouched is no change: nothin
   fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
   await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1));
   expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ updated_at: '2026-10-02T00:00:00Z', status: 'published' });
+});
+
+test('a pasted video goes up in parts and goes in as the library video HTML, kept out of the library\'s keep', async () => {
+  const upload = { id: '77777777-0000-4000-8000-000000000001', kind: 'video', name: 'tour', size: 12, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z',
+    media_id: null, created_by: null, created_at: '2026-10-21T00:00:00Z' };
+  const media = { id: '77777777-0000-4000-8000-000000000002', kind: 'video', content_type: 'video/webm', size: 12, sha256: 'a'.repeat(64), url: '/api/v1/kb/media/77777777-0000-4000-8000-000000000002',
+    name: 'tour', alt: '', width: 640, height: 360, duration_ms: 3000, codecs: ['V_VP9'], thumbnail_url: null, poster_url: null, kept: false, deleted_at: null,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: 'Intro' })),
+    'POST /api/v1/kb/media-uploads': () => json(201, upload), [`GET /api/v1/kb/media-uploads/${upload.id}`]: () => json(200, upload),
+    [`POST /api/v1/kb/media-uploads/${upload.id}/complete`]: () => json(201, media) });
+  open({ articleId: ids.article });
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
+  fireEvent.paste(text, { clipboardData: { files: [new File([new Uint8Array(12)], 'tour.webm', { type: 'video/webm' })] } });
+  await waitFor(() => expect(text).toHaveValue(`Intro\n\n<video controls preload="metadata" src="${media.url}"></video>`));
+  expect(calls.find((call) => call.path === '/api/v1/kb/media-uploads')?.body).toEqual({ size: 12, name: 'tour', keep: false });
+  expect(sentParts.slice(-2)).toEqual(['0+8/12', '8+4/12']);
 });
