@@ -73,3 +73,6 @@ func ForDomain(address, domain string) bool {
 	at := strings.LastIndex(address, "@")
 	return at > 0 && domain != "" && strings.EqualFold(address[at+1:], domain)
 }
+
+// ValidHostname reports whether name is a domain name the server can be configured with.
+func ValidHostname(name string) bool { return hostnamePattern.MatchString(name) }

@@ -19,7 +19,7 @@ func (a *API) routeSpecs() []routeSpec {
 		a.listSavedViews, a.createSavedView, a.listDeletedSavedViews, a.updateSavedView, a.deleteSavedView, a.restoreSavedView,
 		a.listKBCollections, a.createKBCollection, a.listTrashedKBCollections, a.updateKBCollection, a.deleteKBCollection, a.restoreKBCollection,
 		a.listKBArticles, a.createKBArticle, a.listTrashedKBArticles, a.getKBArticle, a.updateKBArticle, a.deleteKBArticle, a.restoreKBArticle,
-		a.listKBArticleVersions, a.restoreKBArticleVersion, a.uploadKBImage, a.getKBImage, a.getHelpCenter, a.putHelpCenter,
+		a.listKBArticleVersions, a.restoreKBArticleVersion, a.uploadKBImage, a.getKBImage, a.getHelpCenter, a.putHelpCenter, a.askHelpCenterCertificate,
 		a.retryMessageDelivery,
 		a.getEmailChannel, a.putEmailChannel, a.deleteEmailChannel, a.verifyEmailDomain, a.receiveInboundEmail, a.checkInboundRecipient, a.rotateEmailSecret,
 		a.connectGmail, a.disconnectGmail, a.finishGmailConnect,

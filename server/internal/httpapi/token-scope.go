@@ -182,6 +182,7 @@ var tokenTiers = map[string]TokenAccess{
 	"POST " + polarWebhookPath:                      notForPeople,
 	"POST " + resendWebhookPath:                     notForPeople,
 	"GET " + foundingPath:                           notForPeople,
+	"GET " + helpCenterTLSAskPath:                   notForPeople,
 	"POST " + webFormSubmitPattern:                  notForPeople,
 	"GET " + exportLinkPath + "{token}":             notForPeople,
 }

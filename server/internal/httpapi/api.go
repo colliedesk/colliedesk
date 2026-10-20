@@ -16,6 +16,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/google"
+	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
@@ -32,6 +33,9 @@ type Mailer interface {
 
 type Config struct {
 	Origin string
+	// HelpCenterDomain (HELP_CENTER_DOMAIN) serves each workspace's help center on <slug>.<domain>;
+	// empty serves it on <Origin>/help/<slug> only.
+	HelpCenterDomain string
 	// Version is the build stamped into the binary, reported by GET /api/v1/config; empty reports "dev".
 	Version   string
 	CloudAuth cloudauth.Config
@@ -139,6 +143,9 @@ type API struct {
 	// webForms limits the public web form per client address and workspace.
 	webForms       *webFormLimiter
 	webFormClients *webFormLimiter
+	// helpCenterPages and helpCenterSearches count each client address's help center pages and searches.
+	helpCenterPages, helpCenterSearches *webFormLimiter
+	helpCenter                          *helpcenter.Site
 	// domainChecks limits how often agent tokens make the server look up DNS for one workspace.
 	domainChecks *webFormLimiter
 	// providerChecks limits the domain checks of one workspace that reach the email provider.
@@ -194,11 +201,12 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	}
 	limits := config.Billing.Enabled()
 	api := &API{config: config, now: clock, limits: limits, exports: newExportLimiter(config.MaxConcurrentExports), exportLinks: newExportLinks(), webForms: newWebFormLimiter(webFormMaxPerWorkspace, webFormMaxKeys), webFormClients: newWebFormLimiter(webFormMaxPerAddress, webFormMaxKeys),
-		domainChecks:   newWindowLimiter(tokenDomainChecksPerHour, webFormMaxKeys, time.Hour),
-		providerChecks: newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
-		problemReports: newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
-		auth:           auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
-		store:          store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale())}
+		domainChecks:    newWindowLimiter(tokenDomainChecksPerHour, webFormMaxKeys, time.Hour),
+		providerChecks:  newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
+		problemReports:  newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
+		helpCenterPages: newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
+		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
+		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale())}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
 	api.mailImageSigner = mailimage.NewSigner(api.mailImageKey())
 	api.mailImageFetcher = config.MailImages
@@ -218,6 +226,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 	if config.Billing.Enabled() {
 		api.polar = polar.NewClient(config.Billing)
 	}
+	api.helpCenter = api.newHelpCenter()
 	mux := http.NewServeMux()
 	api.mux = mux
 	for _, route := range api.routeSpecs() {
@@ -310,6 +319,7 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/kb/images/{id}", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/help-center", auth.PermissionConversationsRead},
 		{http.MethodPut, "/api/v1/help-center", auth.PermissionAccessWrite},
+		{http.MethodGet, helpCenterTLSAskPath, auth.PermissionPublic},
 		{http.MethodPost, "/api/v1/conversations/{id}/messages/{messageId}/retry", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/channels/email", auth.PermissionAccessRead},
 		{http.MethodPut, "/api/v1/channels/email", auth.PermissionAccessWrite},

@@ -92,6 +92,8 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/kb/images/{id}":                               {path: "/api/v1/kb/images/" + kb.imageID, token: admin, status: 200},
 		"GET /api/v1/help-center":                                  {"/api/v1/help-center", nil, admin, 200, ""},
 		"PUT /api/v1/help-center":                                  {"/api/v1/help-center", map[string]any{"enabled": true, "title": "Contract help", "locale": "en"}, admin, 200, ""},
+		// The contract server has no HELP_CENTER_DOMAIN, so every host name is refused.
+		"GET /api/v1/public/help-center/tls-ask": {"/api/v1/public/help-center/tls-ask?domain=acme.help.example.net", nil, "", 404, ""},
 	}
 }
 

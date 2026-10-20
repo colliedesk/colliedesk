@@ -997,6 +997,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/public/help-center/tls-ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description For the reverse proxy, not for people: Caddy's `on_demand_tls` asks it before getting a certificate for a host name it has never seen. It answers 200 only when `domain` is exactly one label below `HELP_CENTER_DOMAIN`, that label is a workspace slug that can be a host name, the workspace's help center is on and the workspace is not locked. Every other case, and a server without `HELP_CENTER_DOMAIN`, is the same 404. */
+        get: operations["askHelpCenterCertificate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/export": {
         parameters: {
             query?: never;
@@ -2251,6 +2268,11 @@ export interface components {
              * @description Null until the knowledge base or its settings were first changed.
              */
             updated_at: string | null;
+            /**
+             * Format: uri
+             * @description The public address of the help center, also while it is off: `<APP_ORIGIN>/help/<slug>` on a self-hosted server, `https://<slug>.<HELP_CENTER_DOMAIN>` when the server sets that variable and the slug can be a host name. Changing the workspace slug changes it, and links to the old address stop working.
+             */
+            url: string;
         };
         SavedReplyText: {
             title: string;
@@ -5031,6 +5053,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["FoundingSlots"];
                 };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    askHelpCenterCertificate: {
+        parameters: {
+            query: {
+                domain: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The proxy may get a certificate for this host name */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             404: components["responses"]["NotFound"];
         };
