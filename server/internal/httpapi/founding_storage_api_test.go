@@ -45,7 +45,8 @@ func (f limitsFixture) checkUpload(t *testing.T, workspace string, addBytes int6
 		t.Fatal(err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
-	return store.New(f.pool).WithPlanLimits(true).WithClock(f.clock.Now).CheckStorage(ctx, tx, workspace, addBytes, f.clock.Now())
+	// The server sells Team and Team 25, so a refusal can name an upgrade.
+	return store.New(f.pool).WithPlanLimits(true).WithPlansOnSale([]string{domain.PlanTeam, domain.PlanTeam25}).WithClock(f.clock.Now).CheckStorage(ctx, tx, workspace, addBytes, f.clock.Now())
 }
 
 func TestCheckStorageFoundingBoundaryIsExact(t *testing.T) {

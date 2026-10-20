@@ -36,6 +36,8 @@ func (e *importEnv) runCapped(t *testing.T, cap int64) (*freshdesk.Report, error
 	return e.run(t, context.Background(), func(o *freshdesk.Options) {
 		o.Cloud = true
 		o.PaidStorageBytes = cap
+		// The CLI passes the plans the Polar configuration sells; refusals name an upgrade from them.
+		o.PlansOnSale = []string{"team", "team25", "founding"}
 	})
 }
 
