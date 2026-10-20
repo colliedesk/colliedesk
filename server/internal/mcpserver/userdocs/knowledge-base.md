@@ -40,10 +40,25 @@ link opens the same list.
 
 1. Select **New article** (inside a collection, it starts there).
 2. Type a **Title** and the **Text** in Markdown: `**bold**`, `_italic_`, `#` headings, `-` and `1.`
-   lists, `[links](https://example.com)`, tables, `> quotes` and code. **Preview** shows how it reads.
-   Raw HTML in the text is never shown.
+   lists, `- [ ]` checklists, `[links](https://example.com)`, tables, `> quotes` and code. The Markdown
+   is colored as you type, and what you type is exactly what is stored.
+   - The toolbar sets the block (**Text**, **Heading 1** to **3**) and adds bold, italic,
+     strikethrough, code, a link, bulleted and numbered lists, a checklist, a quote, a code block, a
+     table, a divider and an image. With the keyboard, Tab reaches the toolbar and the arrow keys move
+     along it.
+   - Shortcuts: `Ctrl+B` bold, `Ctrl+I` italic, `Ctrl+E` code, `Ctrl+K` link, `Ctrl+Z` undo,
+     `Ctrl+F` find and replace (`Cmd` on a Mac).
 3. Choose the **Collection**.
 4. Select **Save draft** to keep it for agents only, or **Save and publish**.
+
+**Write** shows the Markdown, **Preview** shows how the article reads, and **Side by side** (in a wide
+window) shows both. A wide window opens an article side by side, unless it is longer than 20,000
+characters: then it opens in **Write**, which stays fast at any length. Raw HTML in the text never runs:
+the preview shows it as text, and the help center leaves it out.
+
+Enter starts a plain new line (type `- ` or `> ` again to go on with a list or quote), and Tab moves on
+to the next control instead of indenting, so the keyboard never gets stuck in the text; indent with
+spaces.
 
 `Ctrl+S` (`Cmd+S` on a Mac) saves. The text holds at most 100,000 characters and a title 300. A longer
 text is never cut: the counter turns red and saving waits until you shorten it, or split it into
@@ -51,10 +66,11 @@ two articles.
 
 ### Images
 
-Paste an image into the text, or drag it in. Colliedesk uploads it and writes
-`![name](/api/v1/kb/images/…)` where the cursor was; while it uploads, the text says so. PNG, JPEG,
-GIF and WebP up to 5 MB each are accepted. Images count toward your plan's storage. The same image
-uploaded twice is stored once. Saving waits until every image has finished uploading.
+Paste an image into the text, drag it in, or select **Insert image**. Colliedesk uploads it and writes
+`![name](/api/v1/kb/images/…)` on a line of its own after the paragraph, list or table you are in;
+while it uploads, a box says so and nothing is added to the text. PNG, JPEG, GIF and WebP up to 5 MB
+each are accepted. Images count toward your plan's storage. The same image uploaded twice is stored
+once. Saving waits until every image has finished uploading.
 
 Only uploaded images are shown. An image linked from another site (`![x](https://…)`) is not shown in
 the preview or on the help center; the preview says so. Download it and paste it in instead.
