@@ -255,7 +255,7 @@ func TestHelpCenterPagesForbidScriptsFramingAndBranding(t *testing.T) {
 				t.Errorf("%s holds %q:\n%s", path, bad, body)
 			}
 		}
-		if strings.Contains(path, "/a/") && !strings.Contains(body, `<iframe src="https://www.youtube-nocookie.com/embed/jnqxac9ivrw" title="youtube video" sandbox="allow-scripts allow-same-origin allow-presentation allow-popups" referrerpolicy="strict-origin-when-cross-origin" loading="lazy"></iframe>`) {
+		if strings.Contains(path, "/a/") && !strings.Contains(body, `<iframe src="https://www.youtube-nocookie.com/embed/jnqxac9ivrw" title="youtube video" allow="encrypted-media; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-presentation allow-popups" referrerpolicy="strict-origin-when-cross-origin" loading="lazy"></iframe>`) {
 			t.Errorf("%s shows no sandboxed player:\n%s", path, body)
 		}
 		if start := strings.Index(body, `<link rel="stylesheet" href="`); start >= 0 {

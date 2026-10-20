@@ -1,20 +1,45 @@
 import Markdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { fragment } from './kb-html';
+import { closes, fragment, hidesWhatFollows } from './kb-html';
 import type { HtmlNode } from './kb-html';
 import { kbMessages } from './kb-messages';
 
-const plugins = [remarkGfm];
+// Blocks whose raw HTML is an HTML block of its own; anywhere else it is inline.
+const blockParents = ['root', 'listItem', 'blockquote', 'footnoteDefinition'];
+
+// hiddenText removes what inline raw HTML hides, as the help center does: the words between an inline
+// <script>, <style>, <iframe>… and its closing tag (or the end of the paragraph).
+function hiddenText() {
+  const visit = (parent: Tree) => {
+    if (!parent.children) return;
+    if (!blockParents.includes(parent.type)) {
+      let hidden = '';
+      parent.children = parent.children.filter((child) => {
+        if (hidden) {
+          if (child.type === 'html' && closes(child.value ?? '', hidden)) hidden = '';
+          return false;
+        }
+        if (child.type === 'html') hidden = hidesWhatFollows(child.value ?? '');
+        return true;
+      });
+    }
+    for (const child of parent.children) visit(child);
+  };
+  return (tree: Tree) => visit(tree);
+}
+
+const plugins = [remarkGfm, hiddenText];
 
 interface Tree {
   type: string;
+  tagName?: string;
   value?: string;
   children?: Tree[];
 }
 
-// articleHtml replaces each piece of raw HTML with what the help center shows of it (kb-html.ts) and puts a
-// line on top that names what was left out.
+// articleHtml replaces each piece of raw HTML with what the help center shows of it (kb-html.ts), drops a
+// paragraph left empty and puts a line on top that names what was left out.
 function articleHtml() {
   return (tree: Tree) => {
     const dropped: string[] = [];
@@ -29,6 +54,10 @@ function articleHtml() {
         for (const what of shown.dropped) if (!dropped.includes(what)) dropped.push(what);
         return shown.nodes satisfies HtmlNode[];
       });
+      // A paragraph left with nothing to show goes, as on the help center.
+      parent.children = parent.children.filter(
+        (child) => child.tagName !== 'p' || (child.children ?? []).some((inline) => inline.type !== 'text' || (inline.value ?? '').trim() !== ''),
+      );
     };
     visit(tree);
     const waiting = dropped.includes('video (media library)');

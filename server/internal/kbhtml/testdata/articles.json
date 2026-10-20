@@ -1,0 +1,54 @@
+{
+  "about": "Whole articles, rendered by the help center (server/internal/helpcenter/markdown_test.go) and by the editor preview (web/src/features/kb/markdown-preview.test.tsx). text is the visible text with whitespace collapsed (without the preview's warning line); paragraphs and iframes count those elements.",
+  "cases": [
+    {
+      "name": "words inside an inline script or style are not shown",
+      "markdown": "A <b>bold</b> and <script>alert(1)</script> word and <style>p{display:none}</style> end",
+      "text": "A bold and word and end",
+      "paragraphs": 1,
+      "iframes": 0
+    },
+    {
+      "name": "an unclosed inline script hides the rest of its paragraph only",
+      "markdown": "Before <script>alert(1) and more\n\nNext paragraph",
+      "text": "Before Next paragraph",
+      "paragraphs": 2,
+      "iframes": 0
+    },
+    {
+      "name": "upper case and spaced closing tags",
+      "markdown": "A <SCRIPT type=\"x\">hidden</SCRIPT > B <textarea>t</textarea> C <noscript>n</noscript> D",
+      "text": "A B C D",
+      "paragraphs": 1,
+      "iframes": 0
+    },
+    {
+      "name": "a fallback inside an allowed player is not shown",
+      "markdown": "Watch <iframe src=\"https://player.vimeo.com/video/1\">fallback words</iframe> now",
+      "text": "Watch now",
+      "paragraphs": 1,
+      "iframes": 1
+    },
+    {
+      "name": "a paragraph of left-out HTML leaves no empty paragraph",
+      "markdown": "Intro\n\n<img src=x onerror=\"alert(1)\">\n\n<video src=\"/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b\" controls></video>\n\n<b></b> <i></i>\n\nEnd",
+      "text": "Intro End",
+      "paragraphs": 2,
+      "iframes": 0
+    },
+    {
+      "name": "a paragraph with only a player keeps it",
+      "markdown": "<b>x</b><iframe src=\"https://player.vimeo.com/video/1\"></iframe>",
+      "text": "x",
+      "paragraphs": 1,
+      "iframes": 1
+    },
+    {
+      "name": "a script tag inside code is code",
+      "markdown": "Use `<script>alert(1)</script>` carefully",
+      "text": "Use <script>alert(1)</script> carefully",
+      "paragraphs": 1,
+      "iframes": 0
+    }
+  ]
+}

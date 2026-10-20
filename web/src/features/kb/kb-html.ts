@@ -125,7 +125,7 @@ class Fragment {
         else if (!(feature === 'fullscreen' && fullscreen) && !kept.includes(feature)) kept.push(feature);
       }
       if (kept.length) properties.allow = kept.join('; ');
-    }
+    } else properties.allow = iframe.defaultAllow;
     if (fullscreen) properties.allowFullScreen = true;
     for (const { name, value } of Array.from(element.attributes))
       if (!iframe.attributes.includes(name) || (name === 'loading' && value !== iframe.forced.loading))
@@ -200,3 +200,16 @@ function parse(raw: string, rules: Rules) {
   }
   return { nodes: result.nodes, dropped: result.dropped };
 }
+
+// hidesWhatFollows returns the name of the element whose content must not be shown when raw, a piece of
+// inline raw HTML, opens it and leaves it open (<script>, <style>, <iframe>…: the words up to its closing
+// tag are part of it), or ''. The help center's kbhtml.HidesWhatFollows does the same.
+export function hidesWhatFollows(raw: string) {
+  const name = /^<([A-Za-z][A-Za-z0-9-]*)/.exec(raw)?.[1]?.toLowerCase();
+  if (!name || !allowlist.dropWithContent.includes(name) || closes(raw, name)) return '';
+  if ((name === 'svg' || name === 'math') && raw.trim().endsWith('/>')) return '';
+  return name;
+}
+
+// closes reports whether raw holds the closing tag of name.
+export const closes = (raw: string, name: string) => new RegExp(`</${name}(?:$|[ \\t\\n\\f\\r/>])`, 'i').test(raw);

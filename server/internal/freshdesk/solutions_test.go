@@ -594,15 +594,15 @@ func TestSolutionsKeepYouTubeAndVimeoPlayers(t *testing.T) {
 	}
 	articles := env.kbArticles(t, env.workspaceID)
 	want := "Intro\n\n" +
-		`<iframe src="https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=7" title="Tour" width="560" height="315" allowfullscreen="" loading="lazy"></iframe>` + "\n\n" +
-		"Watch\n\n" + `<iframe src="https://player.vimeo.com/video/76979871" title="Vimeo video" loading="lazy"></iframe>` + "\n\ninline."
+		`<iframe src="https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=7" title="Tour" width="560" height="315" allow="encrypted-media; picture-in-picture" allowfullscreen="" loading="lazy"></iframe>` + "\n\n" +
+		"Watch\n\n" + `<iframe src="https://player.vimeo.com/video/76979871" title="Vimeo video" allow="encrypted-media; picture-in-picture" loading="lazy"></iframe>` + "\n\ninline."
 	if body := articles["101"].Body; body != want {
 		t.Fatalf("body =\n%q\nwant\n%q", body, want)
 	}
 	for _, want := range []string{
-		"See\n\n" + `<iframe src="https://player.vimeo.com/video/1?h=ab12cd34ef" title="Vimeo video" loading="lazy"></iframe>` + "\n\nStep 1: press play",
-		"- " + `<iframe src="https://player.vimeo.com/video/2" title="Vimeo video" loading="lazy"></iframe>` + "\n  \n  item text",
-		"| " + `<iframe src="https://player.vimeo.com/video/3" title="Vimeo video" loading="lazy"></iframe>` + " cell |",
+		"See\n\n" + `<iframe src="https://player.vimeo.com/video/1?h=ab12cd34ef" title="Vimeo video" allow="encrypted-media; picture-in-picture" loading="lazy"></iframe>` + "\n\nStep 1: press play",
+		"- " + `<iframe src="https://player.vimeo.com/video/2" title="Vimeo video" allow="encrypted-media; picture-in-picture" loading="lazy"></iframe>` + "\n  \n  item text",
+		"| " + `<iframe src="https://player.vimeo.com/video/3" title="Vimeo video" allow="encrypted-media; picture-in-picture" loading="lazy"></iframe>` + " cell |",
 	} {
 		if body := articles["102"].Body; !strings.Contains(body, want) {
 			t.Fatalf("102 body = %q\nwant it to hold %q", body, want)

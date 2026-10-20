@@ -135,10 +135,10 @@ func TestFragmentRebuildsAPlayerWithOnlyItsAllowedAttributes(t *testing.T) {
 	}
 }
 
-func TestFragmentGivesAPlayerWithoutATitleOneByItsSite(t *testing.T) {
+func TestFragmentGivesAPlayerWithoutATitleOrAllowTheSiteDefaults(t *testing.T) {
 	out, _ := kbhtml.Fragment(`<iframe src="https://player.vimeo.com/video/1"></iframe>`)
-	if !strings.Contains(out, ` title="Vimeo video"`) {
-		t.Errorf("out %s has no title", out)
+	if !strings.Contains(out, ` title="Vimeo video" allow="encrypted-media; picture-in-picture"`) {
+		t.Errorf("out %s has no title or allow", out)
 	}
 }
 

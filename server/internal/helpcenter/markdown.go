@@ -28,7 +28,7 @@ var markdown = goldmark.New(
 		// Alignment as an attribute: a style attribute would be refused by the page's CSP.
 		extension.NewTable(extension.WithTableCellAlignMethod(extension.TableCellAlignAttribute)),
 		extension.Strikethrough, extension.Linkify, extension.TaskList, extension.Footnote),
-	goldmark.WithParserOptions(parser.WithAutoHeadingID(), parser.WithASTTransformers(util.Prioritized(publicLinks{}, 100))),
+	goldmark.WithParserOptions(parser.WithAutoHeadingID(), parser.WithASTTransformers(util.Prioritized(publicLinks{}, 100), util.Prioritized(hiddenText{}, 200))),
 	// Below the default renderers' 1000, so these functions replace theirs.
 	goldmark.WithRendererOptions(renderer.WithNodeRenderers(util.Prioritized(rawHTML{}, 100))),
 )
@@ -86,6 +86,62 @@ func (rawHTML) RegisterFuncs(registerer renderer.NodeRendererFuncRegisterer) {
 		_, _ = writer.WriteString(shown)
 		return ast.WalkSkipChildren, nil
 	})
+}
+
+// hiddenText removes what inline raw HTML hides, as the editor preview does: the words between an
+// inline <script>, <style>, <iframe>… and its closing tag (or the end of the paragraph), and then a
+// paragraph left with nothing to show.
+type hiddenText struct{}
+
+func (hiddenText) Transform(document *ast.Document, reader text.Reader, _ parser.Context) {
+	source := reader.Source()
+	var empty []ast.Node
+	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering || !hasInline(node) {
+			return ast.WalkContinue, nil
+		}
+		hidden := ""
+		shown := false
+		for child := node.FirstChild(); child != nil; {
+			next := child.NextSibling()
+			raw, isRaw := child.(*ast.RawHTML)
+			var value string
+			if isRaw {
+				value = string(raw.Segments.Value(source))
+			}
+			switch {
+			case hidden != "":
+				if isRaw && kbhtml.Closes(value, hidden) {
+					hidden = ""
+				}
+				node.RemoveChild(node, child)
+			case isRaw:
+				hidden = kbhtml.HidesWhatFollows(value)
+				if out, _ := kbhtml.Fragment(value); out != "" {
+					shown = true
+				}
+			default:
+				if text, ok := child.(*ast.Text); !ok || strings.TrimSpace(string(text.Segment.Value(source))) != "" {
+					shown = true
+				}
+			}
+			child = next
+		}
+		if !shown && node.Kind() == ast.KindParagraph {
+			empty = append(empty, node)
+		}
+		return ast.WalkContinue, nil
+	})
+	for _, node := range empty {
+		node.Parent().RemoveChild(node.Parent(), node)
+	}
+}
+
+// hasInline reports whether a node holds inline content (a paragraph, a heading, a table cell, a
+// link, an emphasis…).
+func hasInline(node ast.Node) bool {
+	child := node.FirstChild()
+	return child != nil && child.Type() == ast.TypeInline
 }
 
 // publicLinks rewrites the links of a text before it is rendered:

@@ -74,12 +74,13 @@ with a blank line before and after it, for example the code from YouTube's **Sha
   or `https://player.vimeo.com/video/<id>`. YouTube videos play from `youtube-nocookie.com`, YouTube's
   privacy-enhanced mode. Of the address only the video id, YouTube's `start=`
   (seconds) and Vimeo's `h=` (the key of an unlisted video) are kept.
-- `title`, `width`, `height`, `allow` and `allowfullscreen` are kept. The video fills the width of the
+- `title`, `width`, `height`, `allow` and `allowfullscreen` are kept; a player without `allow` gets
+  `encrypted-media; picture-in-picture`. The video fills the width of the
   page at 16:9 whatever size you give, and loads only when a reader scrolls to it.
 - Any other HTML is not shown, text included: an iframe from another site, a `<video>` or `<audio>`
   file, a script, a `style`, a form. Words on the same lines as the HTML count as part of it and go
   too, so start your text after a blank line. Inside a paragraph only the tags are left out and the
-  words between them stay. **Preview** names what it left out on a line above the article; the saved text
+  words between them stay, except the content of a `<script>`, `<style>` or similar element. **Preview** names what it left out on a line above the article; the saved text
   keeps the HTML as you wrote it.
 - Uploading a video file to the knowledge base is not available yet.
 

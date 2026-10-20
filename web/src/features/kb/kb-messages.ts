@@ -65,7 +65,7 @@ export const kbMessages = {
   body: 'Text',
   bodyHelp: 'Markdown: **bold**, _italic_, # headings, - lists, [links](https://example.com), tables. Paste or drop an image to add it.',
   nothingToPreview: 'Nothing to preview yet.',
-  htmlLeftOut: (what: string) => `Left out of the article: ${what}. Articles show YouTube and Vimeo players and no other HTML; the text keeps it as written.`,
+  htmlLeftOut: (what: string) => `Left out of the article: ${what}. Articles show YouTube and Vimeo players and no other HTML; your saved text keeps it as written.`,
   libraryVideoLater: 'Videos from the media library are not shown yet.',
   videoLinkNotHttps: 'Paste the whole link, starting with https://.',
   videoLinkOtherSite: (host: string) => `${host} is not a video site articles can show: paste a YouTube or Vimeo link.`,

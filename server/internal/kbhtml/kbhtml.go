@@ -43,7 +43,9 @@ type Rules struct {
 		Embeds     []*Embed `json:"embeds"`
 		Attributes []string `json:"attributes"`
 		Allow      []string `json:"allow"`
-		Forced     struct {
+		// DefaultAllow is the allow of an iframe that has none: players ask for these features.
+		DefaultAllow string `json:"defaultAllow"`
+		Forced       struct {
 			Sandbox        string `json:"sandbox"`
 			ReferrerPolicy string `json:"referrerpolicy"`
 			Loading        string `json:"loading"`
@@ -121,6 +123,41 @@ func FrameSources() []string {
 		}
 	}
 	return origins
+}
+
+var openingTag = regexp.MustCompile(`^<([A-Za-z][A-Za-z0-9-]*)`)
+
+// HidesWhatFollows returns the name of the element whose content must not be shown when raw, a piece
+// of inline raw HTML, opens it and leaves it open (<script>, <style>, <iframe>…: the words up to its
+// closing tag are part of it), or "".
+func HidesWhatFollows(raw string) string {
+	match := openingTag.FindStringSubmatch(raw)
+	if match == nil {
+		return ""
+	}
+	name := strings.ToLower(match[1])
+	if !slices.Contains(rules.DropWithContent, name) || Closes(raw, name) ||
+		((name == "svg" || name == "math") && strings.HasSuffix(strings.TrimSpace(raw), "/>")) {
+		return ""
+	}
+	return name
+}
+
+// Closes reports whether raw holds the closing tag of name.
+func Closes(raw, name string) bool {
+	lower := strings.ToLower(raw)
+	for at := strings.Index(lower, "</"+name); at >= 0; {
+		rest := lower[at+2+len(name):]
+		if rest == "" || strings.IndexAny(rest[:1], " \t\n\f\r/>") == 0 {
+			return true
+		}
+		next := strings.Index(rest, "</"+name)
+		if next < 0 {
+			return false
+		}
+		at += 2 + len(name) + next
+	}
+	return false
 }
 
 // TextInHTMLBlock is what Fragment names when words share the lines of an HTML block.
@@ -280,6 +317,8 @@ func (r *Rules) player(node *nethtml.Node, drop func(string)) string {
 		if len(kept) > 0 {
 			attr("allow", strings.Join(kept, "; "))
 		}
+	} else {
+		attr("allow", r.Iframe.DefaultAllow)
 	}
 	if fullscreen {
 		attr("allowfullscreen", "")

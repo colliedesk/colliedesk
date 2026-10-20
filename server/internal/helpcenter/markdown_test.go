@@ -1,9 +1,14 @@
 package helpcenter
 
 import (
+	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 func TestArticleMarkdownNeverRendersScriptOrUnsafeHTML(t *testing.T) {
@@ -62,8 +67,8 @@ func TestArticleMarkdownShowsAllowedPlayersAndNoOtherHTML(t *testing.T) {
 	got := string(html)
 	forced := ` sandbox="allow-scripts allow-same-origin allow-presentation allow-popups" referrerpolicy="strict-origin-when-cross-origin" loading="lazy"></iframe>`
 	for _, want := range []string{
-		`<iframe src="https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=65" title="Tour" allowfullscreen=""` + forced,
-		`<p>Watch <iframe src="https://player.vimeo.com/video/76979871" title="Vimeo video"` + forced + ` inline, bold stays text.</p>`,
+		`<iframe src="https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=65" title="Tour" allow="encrypted-media; picture-in-picture" allowfullscreen=""` + forced,
+		`<p>Watch <iframe src="https://player.vimeo.com/video/76979871" title="Vimeo video" allow="encrypted-media; picture-in-picture"` + forced + ` inline, bold stays text.</p>`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("rendered %s\nwant it to hold %s", got, want)
@@ -159,5 +164,61 @@ func TestArticleMarkdownNestsAtMost16LevelsOnALine(t *testing.T) {
 		if took := time.Since(started); took > 150*time.Millisecond {
 			t.Errorf("%s took %s", name, took)
 		}
+	}
+}
+
+// TestArticlesRenderAsThePreviewDoes runs kbhtml/testdata/articles.json, which the editor preview runs too.
+func TestArticlesRenderAsThePreviewDoes(t *testing.T) {
+	raw, err := os.ReadFile("../kbhtml/testdata/articles.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var shared struct {
+		Cases []struct {
+			Name, Markdown, Text string
+			Paragraphs, Iframes  int
+		}
+	}
+	if err := json.Unmarshal(raw, &shared); err != nil || len(shared.Cases) == 0 {
+		t.Fatalf("read the cases: %v", err)
+	}
+	for _, c := range shared.Cases {
+		t.Run(c.Name, func(t *testing.T) {
+			out, err := renderArticle(c.Markdown, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			nodes, err := html.ParseFragment(strings.NewReader(string(out)), &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var text strings.Builder
+			counts := map[string]int{}
+			var walk func(*html.Node)
+			walk = func(node *html.Node) {
+				if node.Type == html.TextNode {
+					text.WriteString(node.Data)
+				}
+				if node.Type == html.ElementNode {
+					counts[node.Data]++
+					// Text inside an iframe is its fallback, which a browser never shows.
+					if node.Data == "iframe" {
+						return
+					}
+				}
+				for child := node.FirstChild; child != nil; child = child.NextSibling {
+					walk(child)
+				}
+			}
+			for _, node := range nodes {
+				walk(node)
+			}
+			if got := strings.Join(strings.Fields(text.String()), " "); got != c.Text {
+				t.Errorf("text %q, want %q\n%s", got, c.Text, out)
+			}
+			if counts["p"] != c.Paragraphs || counts["iframe"] != c.Iframes {
+				t.Errorf("%d paragraphs and %d iframes, want %d and %d\n%s", counts["p"], counts["iframe"], c.Paragraphs, c.Iframes, out)
+			}
+		})
 	}
 }
