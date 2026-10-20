@@ -35,7 +35,9 @@ You need to:
 - keep the server upgraded; Colliedesk is alpha and releases often;
 - back up PostgreSQL and the attachment files;
 - connect a mail forwarder and an SMTP relay before customers can email you;
-- put the server behind your own domain and reverse proxy.
+- put the server behind your own domain and reverse proxy;
+- solve problems yourself: HC Labs does not offer support for self-hosted servers. See
+  [support](support.md).
 
 ## Requirements
 
@@ -108,3 +110,9 @@ Security fixes go to the latest release and to `edge` only.
 
 - [Troubleshooting and FAQs](troubleshooting.md)
 - [Support](support.md)
+
+## Migrate
+
+- [Migrate to Colliedesk Cloud](migrate-to-cloud.md)
+
+To move from Freshdesk, see [import from Freshdesk](../user/import-freshdesk.md).
