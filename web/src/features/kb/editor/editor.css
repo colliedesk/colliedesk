@@ -129,3 +129,4 @@
 .media-picker-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .media-picker-head h3 { font-size: 14px; font-weight: 600; }
 .media-picker-grid { grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); }
+.cm-uploading .link-action { margin-left: auto; min-height: 0; }

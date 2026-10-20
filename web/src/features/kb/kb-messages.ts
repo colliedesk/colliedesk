@@ -118,6 +118,7 @@ export const kbMessages = {
   // Images
   uploadingImage: (name: string) => `Uploading ${name}…`,
   uploadingPercent: (name: string, percent: number) => `Uploading ${name}: ${percent}%`,
+  cancelUpload: (name: string) => `Cancel the upload of ${name}`,
   imageAlt: 'image',
   waitingForImages: 'Saving waits until the images and videos finish uploading.',
   imageType: (name: string) => `${name} is not a PNG, JPEG, GIF or WebP image, nor an MP4 or WebM video.`,

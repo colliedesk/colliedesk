@@ -25,7 +25,8 @@ afterEach(() => { navigate.mockReset(); blocker.mockReset(); vi.unstubAllGlobals
 
 // settle waits for the editor to tell the page of what was typed, as it does a moment after typing stops.
 const settle = () => act(() => new Promise((resolve) => { setTimeout(resolve, 150); }));
-const uploaded = { id: ids.image, content_type: 'image/png', size: 4, sha256: 'ab', url: `/api/v1/kb/images/${ids.image}`, created_at: '2026-10-02T00:00:00Z' };
+const uploaded = { id: ids.image, kind: 'image', content_type: 'image/png', size: 4, sha256: 'ab', url: `/api/v1/kb/images/${ids.image}`, name: 'login screen', alt: '', width: 1, height: 1,
+  duration_ms: null, codecs: [], thumbnail_url: null, poster_url: null, kept: false, deleted_at: null, created_at: '2026-10-02T00:00:00Z', updated_at: '2026-10-02T00:00:00Z' };
 
 function open(props: { articleId?: string; collectionId?: string }) {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ArticleRoute {...props} /></QueryClientProvider>);
@@ -250,7 +251,7 @@ test('saving waits while an image uploads, so a placeholder is never stored; a $
   expect(screen.getByRole('button', { name: 'Publish' })).toBeDisabled();
   fireEvent.keyDown(text, { key: 's', ctrlKey: true });
   expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(0);
-  await act(async () => { finish(json(201, { id: ids.image, content_type: 'image/png', size: 1, sha256: 'ab', url: `/api/v1/kb/images/${ids.image}`, created_at: '2026-10-02T00:00:00Z' })); });
+  await act(async () => { finish(json(201, uploaded)); });
   await waitFor(() => expect(text).toHaveValue(`![cost$$ $&](/api/v1/kb/images/${ids.image})`));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
 });
@@ -364,7 +365,7 @@ test('a pasted video goes up in parts and goes in as the library video HTML, kep
   open({ articleId: ids.article });
   const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
   fireEvent.paste(text, { clipboardData: { files: [new File([new Uint8Array(12)], 'tour.webm', { type: 'video/webm' })] } });
-  await waitFor(() => expect(text).toHaveValue(`Intro\n\n<video controls preload="metadata" src="${media.url}"></video>`));
+  await waitFor(() => expect(text).toHaveValue(`Intro\n\n<video controls preload="metadata" src="${media.url}" title="tour"></video>`));
   expect(calls.find((call) => call.path === '/api/v1/kb/media-uploads')?.body).toEqual({ size: 12, name: 'tour', keep: false });
   expect(sentParts.slice(-2)).toEqual(['0+8/12', '8+4/12']);
 });
@@ -401,5 +402,20 @@ test('a page the browser kept and shows again from Back uploads videos again', a
   window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
   window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
   fireEvent.paste(text, { clipboardData: { files: [new File([new Uint8Array(12)], 'tour.webm', { type: 'video/webm' })] } });
-  await waitFor(() => expect(text).toHaveValue(`Intro\n\n<video controls preload="metadata" src="${media.url}"></video>`));
+  await waitFor(() => expect(text).toHaveValue(`Intro\n\n<video controls preload="metadata" src="${media.url}" title="tour"></video>`));
+});
+
+test('Cancel in an upload\'s place stops a video, and a video that fails is thrown away on the server', async () => {
+  const upload = { id: '77777777-0000-4000-8000-000000000006', kind: 'video', name: 'tour', size: 12, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z',
+    media_id: null, created_by: null, created_at: '2026-10-21T00:00:00Z' };
+  const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: 'Intro' })),
+    'POST /api/v1/kb/media-uploads': () => json(201, upload), [`GET /api/v1/kb/media-uploads/${upload.id}`]: () => json(200, upload),
+    [`POST /api/v1/kb/media-uploads/${upload.id}/complete`]: () => refusal(400, 'unsupported_codec', 'This video is H.265.'),
+    [`DELETE /api/v1/kb/media-uploads/${upload.id}`]: () => json(204) });
+  open({ articleId: ids.article });
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
+  fireEvent.paste(text, { clipboardData: { files: [new File([new Uint8Array(12)], 'tour.webm', { type: 'video/webm' })] } });
+  expect(await screen.findByText('This video is H.265.')).toBeInTheDocument();
+  await waitFor(() => expect(calls.some((call) => call.method === 'DELETE' && call.path === `/api/v1/kb/media-uploads/${upload.id}`)).toBe(true));
+  expect(text).toHaveValue('Intro');
 });

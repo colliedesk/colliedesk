@@ -10,24 +10,35 @@ export interface UploadHooks {
   accept(files: File[]): File[];
   // upload sends a file and gives what the article holds for it (an image's Markdown, a video's HTML);
   // progress (0 to 1) shows in its place while a large file goes.
-  upload(file: File, progress: (done: number) => void): Promise<{ snippet: string }>;
+  // signal aborts when the person cancels the upload from its place in the text.
+  upload(file: File, progress: (done: number) => void, signal: AbortSignal): Promise<{ snippet: string }>;
   onStart(file: File): void;
   onDone(file: File): void;
   onError(file: File, error: unknown): void;
 }
 
 class UploadingWidget extends WidgetType {
-  constructor(readonly name: string, readonly percent?: number) {
+  constructor(readonly name: string, readonly cancel: () => void, readonly percent?: number) {
     super();
   }
   eq(other: UploadingWidget) {
-    return other.name === this.name && other.percent === this.percent;
+    return other.name === this.name && other.percent === this.percent && other.cancel === this.cancel;
   }
   toDOM() {
     const box = document.createElement('div');
     box.className = 'cm-uploading';
-    box.setAttribute('role', 'status');
-    box.textContent = this.percent === undefined ? kbMessages.uploadingImage(this.name) : kbMessages.uploadingPercent(this.name, this.percent);
+    const status = document.createElement('span');
+    status.setAttribute('role', 'status');
+    status.textContent = this.percent === undefined ? kbMessages.uploadingImage(this.name) : kbMessages.uploadingPercent(this.name, this.percent);
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'link-action';
+    cancel.textContent = kbMessages.cancel;
+    cancel.setAttribute('aria-label', kbMessages.cancelUpload(this.name));
+    // The editor keeps the focus and the caret; the press only cancels.
+    cancel.addEventListener('mousedown', (event) => event.preventDefault());
+    cancel.addEventListener('click', () => this.cancel());
+    box.append(status, ' ', cancel);
     return box;
   }
   ignoreEvent() {
@@ -35,7 +46,7 @@ class UploadingWidget extends WidgetType {
   }
 }
 
-const add = StateEffect.define<{ id: object; pos: number; name: string }>({
+const add = StateEffect.define<{ id: object; pos: number; name: string; cancel: () => void }>({
   map: (value, change) => ({ ...value, pos: change.mapPos(value.pos, 1) }),
 });
 const remove = StateEffect.define<object>();
@@ -52,7 +63,7 @@ export const uploads = StateField.define<DecorationSet>({
         next = next.update({
           add: [
             Decoration.widget({
-              widget: new UploadingWidget(effect.value.name),
+              widget: new UploadingWidget(effect.value.name, effect.value.cancel),
               block: true,
               side: 1,
               id: effect.value.id,
@@ -63,14 +74,14 @@ export const uploads = StateField.define<DecorationSet>({
       if (effect.is(progress)) {
         // The widget is made again with the new percent, at the place it has now.
         let at: number | undefined;
-        let name = '';
+        let old: UploadingWidget | undefined;
         next.between(0, tr.state.doc.length, (from, _to, deco) => {
-          if (deco.spec.id === effect.value.id) { at = from; name = (deco.spec.widget as UploadingWidget).name; }
+          if (deco.spec.id === effect.value.id) { at = from; old = deco.spec.widget as UploadingWidget; }
         });
-        if (at !== undefined)
+        if (at !== undefined && old)
           next = next.update({
             filter: (_from, _to, deco) => deco.spec.id !== effect.value.id,
-            add: [Decoration.widget({ widget: new UploadingWidget(name, effect.value.percent), block: true, side: 1, id: effect.value.id }).range(at)],
+            add: [Decoration.widget({ widget: new UploadingWidget(old.name, old.cancel, effect.value.percent), block: true, side: 1, id: effect.value.id }).range(at)],
           });
       }
     }
@@ -95,7 +106,18 @@ export function startUpload(view: EditorView, files: File[], pos: number, hooks:
   const accepted = hooks.accept(files);
   for (const file of accepted) {
     const id = {};
-    view.dispatch({ effects: add.of({ id, pos: blockAt(view.state.doc, pos), name: file.name }) });
+    const controller = new AbortController();
+    // Cancel takes the place away at once; the upload's answer, if it still comes, is dropped.
+    // settled: the page hears of each upload once, done, failed or cancelled.
+    let settled = false;
+    const cancel = () => {
+      if (settled) return;
+      settled = true;
+      controller.abort();
+      if (where(view, id) !== undefined) view.dispatch({ effects: remove.of(id) });
+      hooks.onError(file, new DOMException('Cancelled', 'AbortError'));
+    };
+    view.dispatch({ effects: add.of({ id, pos: blockAt(view.state.doc, pos), name: file.name, cancel }) });
     hooks.onStart(file);
     let shown = -1;
     const onProgress = (done: number) => {
@@ -104,8 +126,10 @@ export function startUpload(view: EditorView, files: File[], pos: number, hooks:
       shown = percent;
       view.dispatch({ effects: progress.of({ id, percent }) });
     };
-    hooks.upload(file, onProgress).then(
+    hooks.upload(file, onProgress, controller.signal).then(
       ({ snippet }) => {
+        if (settled) return;
+        settled = true;
         // The place is gone when the text was replaced meanwhile (a restore, their version): the upload still ends.
         const at = where(view, id);
         if (at !== undefined) {
@@ -115,6 +139,8 @@ export function startUpload(view: EditorView, files: File[], pos: number, hooks:
         hooks.onDone(file);
       },
       (error: unknown) => {
+        if (settled) return;
+        settled = true;
         if (where(view, id) !== undefined) view.dispatch({ effects: remove.of(id) });
         hooks.onError(file, error);
       },

@@ -20,7 +20,7 @@ import type { PreviewVideo } from './markdown-preview';
 import { mediaApi } from './media-api';
 import type { KBMediaDetails } from './media-api';
 import { embedFor } from './media-grid';
-import { kindOf, uploadVideo } from './media-uploads';
+import { baseName, kindOf, uploadVideo } from './media-uploads';
 
 // The limits the server checks (server/internal/domain/kb.go), counted in characters like the server.
 export const maxTitle = 300;
@@ -271,10 +271,17 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       setImageProblems(problems);
       return accepted;
     },
-    upload: async (file, progress) => {
-      if (kindOf(file) === 'image') return { snippet: `![${altText(file.name)}](${(await kbApi.uploadImage(file)).url})` };
+    upload: async (file, progress, cancelled) => {
+      // The name the library shows is the file's; a pasted image without one is "image".
+      if (kindOf(file) === 'image') return { snippet: `![${altText(file.name)}](${(await mediaApi.uploadImage(file, baseName(file.name) || 'image', false)).url})` };
       const session: { id?: string } = {};
-      const signal = videoSignal.current;
+      // Either the editor going away or the person's Cancel stops it.
+      const both = new AbortController();
+      for (const signal of [videoSignal.current, cancelled]) {
+        if (signal.aborted) both.abort();
+        else signal.addEventListener('abort', () => both.abort(), { once: true });
+      }
+      const signal = both.signal;
       videoUploads.current.add(session);
       // One video at a time, in the order they came: a workspace has three uploads in progress at most.
       const turn = videoTurn.current.then(() => (signal.aborted ? undefined
@@ -282,17 +289,25 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       videoTurn.current = turn.then(() => undefined, () => undefined);
       try {
         const item = await turn;
-        if (!item) throw new Error(kbMessages.imageFailed(file.name));
+        if (!item) throw new DOMException('Cancelled', 'AbortError');
         return { snippet: embedFor(item) };
+      } catch (error) {
+        // The editor cannot resume an upload: a failed or cancelled one is thrown away, so it holds none of the
+        // workspace's three.
+        cancelVideoUpload(session);
+        throw error;
       } finally {
-        // An upload the server started while the editor was going away is cancelled once its id is known.
-        if (signal.aborted) cancelVideoUpload(session);
         videoUploads.current.delete(session);
       }
     },
     onStart: () => setUploading((count) => count + 1),
     onDone: (file) => { setUploading((count) => count - 1); setNotice(kbMessages.imageUploaded(file.name)); },
-    onError: (file, error) => { setUploading((count) => count - 1); setImageProblems((current) => [...current, reason(error, kbMessages.imageFailed(file.name))]); },
+    onError: (file, error) => {
+      setUploading((count) => count - 1);
+      // A cancel is no problem to report.
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setImageProblems((current) => [...current, reason(error, kbMessages.imageFailed(file.name))]);
+    },
   }), []);
   // onReady: the editor shows the text it was made with; one loaded meanwhile (a restore, theirs) goes in now.
   const draftNow = useRef(draft);

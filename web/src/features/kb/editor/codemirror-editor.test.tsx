@@ -160,3 +160,16 @@ test('Media opens the library; a chosen image goes in as Markdown and a video as
   expect(handle!.markdown().trimEnd()).toBe(`Intro\n\n![The inbox](/api/v1/kb/images/${id(1)})\n\n<video controls preload="metadata" src="/api/v1/kb/media/${id(2)}" title="Product &quot;tour&quot;"></video>`);
   vi.unstubAllGlobals();
 });
+
+test('Cancel in an upload\'s place takes it away and aborts the upload', async () => {
+  let signal: AbortSignal | undefined;
+  const error = vi.fn();
+  const uploads: UploadHooks = { ...never, onError: error, upload: (_file, _progress, given) => { signal = given; return new Promise(() => {}); } };
+  const { handle, text } = await make('Text', uploads);
+  fireEvent.paste(text, { clipboardData: { files: [new File(['x'], 'tour.webm', { type: 'video/webm' })] } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Cancel the upload of tour.webm' }));
+  expect(signal?.aborted).toBe(true);
+  expect(error).toHaveBeenCalledTimes(1);
+  expect(handle.uploading()).toBe(false);
+  expect(handle.markdown()).toBe('Text');
+});

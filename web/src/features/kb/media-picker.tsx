@@ -45,7 +45,7 @@ export function MediaPicker({ onPick, onClose }: { onPick: (item: KBMedia) => vo
       </div>
       {list.isError && <p role="alert" className="error-copy">{mediaMessages.listFailed}</p>}
       {list.isPending && <p role="status" className="empty-copy">{mediaMessages.loading}</p>}
-      {list.isSuccess && items.length === 0 && <p className="empty-copy">{q || kind ? mediaMessages.noMatches : mediaMessages.pickerEmpty}</p>}
+      {list.isSuccess && items.length === 0 && <p role="status" className="empty-copy">{q || kind ? mediaMessages.noMatches : mediaMessages.pickerEmpty}</p>}
       {items.length > 0 && <ul className="media-grid media-picker-grid" aria-label={mediaMessages.heading}>
         {items.map((item) => <MediaCard key={item.id} item={item} open={false} onOpen={onPick} />)}
       </ul>}

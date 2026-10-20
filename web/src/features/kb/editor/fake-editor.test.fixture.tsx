@@ -37,7 +37,7 @@ export default function FakeEditor({ initial, uploads, label, describedBy, inval
     for (const file of props.current.uploads.accept(files)) {
       pending.current += 1;
       props.current.uploads.onStart(file);
-      props.current.uploads.upload(file, () => undefined).then(({ snippet }) => {
+      props.current.uploads.upload(file, () => undefined, new AbortController().signal).then(({ snippet }) => {
         pending.current -= 1;
         put(`${text.current}${text.current ? '\n\n' : ''}${snippet}`);
         timer.current = window.setTimeout(emit, 120);
