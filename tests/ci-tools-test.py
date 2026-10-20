@@ -47,6 +47,21 @@ class Shards(unittest.TestCase):
             self.assertRegex(name, patterns[-1])
         self.assertNotRegex('TestAlpha', patterns[-1])
 
+    def test_parts_split_a_regular_shard_and_never_the_latency_one(self):
+        listing = self.listing + 'TestDelta\nTestEpsilon\nTestZeta\nTestInboxListLatencyBudget\nTestTrialCapStaysFast\n'
+        whole = run('go-test-shard.py', '1', '2', stdin=listing).stdout.strip()
+        parted = run('go-test-shard.py', '1', '2', '--parts', '2', stdin=listing)
+        self.assertEqual(parted.returncode, 0, parted.stderr)
+        parts = parted.stdout.split()
+        self.assertEqual(len(parts), 2)
+        for name in ['TestAlpha', 'TestBeta', 'TestGamma', 'TestDelta', 'TestEpsilon', 'TestZeta',
+                     'FuzzBytes', 'ExampleClient']:
+            self.assertEqual(sum(bool(re.search(p, name)) for p in parts), int(bool(re.search(whole, name))), name)
+        latency = run('go-test-shard.py', '2', '2', '--parts', '2', stdin=listing).stdout.split()
+        self.assertEqual(latency, [run('go-test-shard.py', '2', '2', stdin=listing).stdout.strip()])
+        self.assertEqual(run('go-test-shard.py', '1', '2', '--parts', '1', stdin=listing).stdout.strip(), whole)
+        self.assertNotEqual(run('go-test-shard.py', '1', '2', '--parts', '0', stdin=listing).returncode, 0)
+
     def test_empty_inventory_and_invalid_shards_fail_closed(self):
         for args, listing in [(('0', '3'), self.listing), (('4', '3'), self.listing),
                               (('1', '0'), self.listing), (('1', '3'), '? pkg [no test files]')]:

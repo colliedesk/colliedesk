@@ -74,8 +74,16 @@ jobs:
         run: |
           if [ -n "$(gofmt -l .)" ]; then gofmt -l .; echo 'gofmt: format the files above' >&2; exit 1; fi
           go test -list . ./... > "$RUNNER_TEMP/go-test-list.txt"
-          pattern=$(python3 ../.github/scripts/go-test-shard.py "$SHARD" "$SHARDS" < "$RUNNER_TEMP/go-test-list.txt")
-          go test -count=1 -run "$pattern" ./...
+          # Two go test processes per regular shard (go-test-shard.py says why); one on the latency shard.
+          python3 ../.github/scripts/go-test-shard.py "$SHARD" "$SHARDS" --parts 2 < "$RUNNER_TEMP/go-test-list.txt" > "$RUNNER_TEMP/go-test-patterns.txt"
+          pids=()
+          while IFS= read -r pattern; do
+            go test -count=1 -run "$pattern" ./... &
+            pids+=($!)
+          done < "$RUNNER_TEMP/go-test-patterns.txt"
+          status=0
+          for pid in "${pids[@]}"; do wait "$pid" || status=1; done
+          exit "$status"
       - if: github.event_name == 'push' && matrix.shard == 1
         name: Save the Go build cache for later runs
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
