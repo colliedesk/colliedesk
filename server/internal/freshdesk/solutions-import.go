@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -164,6 +166,44 @@ func (r *run) ensureCollection(ctx context.Context, entity, key string, parentID
 type kbPendingImage struct {
 	ledgerID, key, contentType string
 	object                     attachments.Object
+	// name and alt go to the media library: the file name in the URL and the alt of its first <img>.
+	name, alt string
+}
+
+// kbImageNames gives each Freshdesk-hosted image of an HTML, by key, the name the media library shows
+// (the file name of its URL, without the extension) and the alt text of its first <img>.
+func (r *run) kbImageNames(markup string) map[string][2]string {
+	names := map[string][2]string{}
+	for src, alt := range mailimage.ImageAlts(markup) {
+		u, ok := r.hostedImageURL(src)
+		if !ok {
+			continue
+		}
+		key := imageKey(u)
+		if _, seen := names[key]; seen {
+			continue
+		}
+		name := path.Base(u.Path)
+		if unescaped, err := url.PathUnescape(name); err == nil {
+			name = unescaped
+		}
+		name = strings.TrimSuffix(name, path.Ext(name))
+		if name == "." || name == "/" {
+			name = ""
+		}
+		names[key] = [2]string{fitText(name, domain.MaxKBMediaName), fitText(alt, domain.MaxKBMediaAlt)}
+	}
+	return names
+}
+
+// fitText makes text one line of at most limit characters, as the media library takes it.
+func fitText(text string, limit int) string {
+	text = strings.Join(strings.FieldsFunc(text, func(r rune) bool { return r == '\n' || r == '\r' || r == 0 }), " ")
+	text = strings.TrimSpace(text)
+	if runes := []rune(text); len(runes) > limit {
+		text = strings.TrimSpace(string(runes[:limit]))
+	}
+	return text
 }
 
 // fetchKBImages brings the Freshdesk-hosted images of one HTML over: those the ledger already holds
@@ -172,6 +212,7 @@ type kbPendingImage struct {
 func (r *run) fetchKBImages(ctx context.Context, prefix, markup string) (map[string]string, []kbPendingImage, int, error) {
 	done, failed := map[string]string{}, 0
 	var pending []kbPendingImage
+	names := r.kbImageNames(markup)
 	for _, ref := range r.inlineImages(markup) {
 		ledgerID := prefix + ":" + ref.key
 		entry, found, err := r.ledger.get(ctx, entityKBImage, ledgerID)
@@ -209,7 +250,7 @@ func (r *run) fetchKBImages(ctx context.Context, prefix, markup string) (map[str
 			failed++
 			continue
 		}
-		pending = append(pending, kbPendingImage{ledgerID: ledgerID, key: ref.key, contentType: contentType, object: object})
+		pending = append(pending, kbPendingImage{ledgerID: ledgerID, key: ref.key, contentType: contentType, object: object, name: names[ref.key][0], alt: names[ref.key][1]})
 	}
 	return done, pending, failed, r.internalErr
 }
@@ -217,7 +258,7 @@ func (r *run) fetchKBImages(ctx context.Context, prefix, markup string) (map[str
 // saveKBImages writes the rows of the images stored for one HTML in tx and adds them to done.
 func (r *run) saveKBImages(ctx context.Context, tx pgx.Tx, pending []kbPendingImage, done map[string]string) error {
 	for _, image := range pending {
-		id, created, err := store.ImportKBImage(ctx, tx, r.opts.Storage, r.workspaceID, image.object, image.contentType)
+		id, created, err := store.ImportKBImage(ctx, tx, r.opts.Storage, r.workspaceID, image.object, image.contentType, domain.KBImageUpload{Name: image.name, Alt: image.alt})
 		if err != nil {
 			return err
 		}

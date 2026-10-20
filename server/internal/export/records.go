@@ -187,6 +187,23 @@ type KBImage struct {
 	StorageKey       string     `json:"-"`
 }
 
+// KBMediaReplacement is one replacement of a library item in the articles that showed it: the articles
+// that got a version naming ToMediaID instead of FromMediaID (and the number of that version), the
+// translations rewritten with their text before and after, and when it was undone, if it was.
+type KBMediaReplacement struct {
+	ID                string          `json:"id"`
+	FromMediaID       string          `json:"from_media_id"`
+	ToMediaID         string          `json:"to_media_id"`
+	ArticleIDs        []string        `json:"article_ids"`
+	ArticleVersions   []int           `json:"article_versions"`
+	Translations      json.RawMessage `json:"translations"`
+	SkippedArticleIDs []string        `json:"skipped_article_ids"`
+	ReplacedByAgentID *string         `json:"replaced_by_agent_id"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UndoneAt          *time.Time      `json:"undone_at"`
+	UndoneByAgentID   *string         `json:"undone_by_agent_id"`
+}
+
 // HelpCenter is the public help center's settings and the knowledge base counters.
 type HelpCenter struct {
 	Enabled           bool      `json:"enabled"`
@@ -300,6 +317,7 @@ type Sink interface {
 	KBArticleVersion(KBArticleVersion) error
 	KBArticleTranslation(KBArticleTranslation) error
 	KBImage(KBImage) error
+	KBMediaReplacement(KBMediaReplacement) error
 	HelpCenter(HelpCenter) error
 	AgentRequest(AgentRequest) error
 	BeginConversation(ConversationHead) error

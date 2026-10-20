@@ -9,7 +9,7 @@ const nullableDate = z.string().datetime().nullable();
 const personSchema = z.object({ agent_id: z.string().uuid().nullable(), name: z.string() }) satisfies z.ZodType<Generated<'SavedReplyPerson'>>;
 const statusSchema = z.enum(['draft', 'published']) satisfies z.ZodType<Generated<'KBArticleStatus'>>;
 const changeFields = {
-  version: z.number().int(), kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import']), restored_from_version: z.number().int().nullable(),
+  version: z.number().int(), kind: z.enum(['create', 'edit', 'delete', 'restore', 'undelete', 'import', 'media_replace']), restored_from_version: z.number().int().nullable(),
   changed_by: personSchema.nullable(), token: z.object({ id: z.string().uuid().nullable(), label: z.string() }).nullable(),
   agent_request_id: z.string().uuid().nullable(), created_at: z.string().datetime(),
 };

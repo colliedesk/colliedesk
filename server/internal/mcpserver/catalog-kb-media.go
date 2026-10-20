@@ -75,3 +75,101 @@ func kbMediaUpdateSpec() Spec {
 		run:    kbMediaUpdate,
 	}
 }
+
+const kbMediaResultsSchema = `{"type":"array","items":{"type":"object","required":["id","status"],"properties":{"id":{"type":"string"},` +
+	`"status":{"type":"string","enum":["trashed","already_in_trash","in_use","not_found","restored","not_in_trash","purged"]}}}}`
+
+func kbMediaTrashSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_kb_media_trash",
+		Title: "Move knowledge base media to the library's trash",
+		Description: `Move up to 100 library items to the trash by id, each only while no live article's current text names it; each id answers trashed, already_in_trash, in_use or not_found. ` +
+			`all_unused with before (when you listed them) instead moves up to 500 unused items a call (kept ones only with include_kept); call again with the batch_id while more is true. ` +
+			`Pass the batch_id of an earlier call to add to its batch; colliedesk_kb_media_undelete with it restores the whole batch. Items stay 30 days in the trash, still counting toward storage, and saving an article that names one takes it out. ` +
+			`With a send token it happens now; with a read or draft token Colliedesk files an agent request that names the ids (at most 100, never "all unused"), which a person approves in Colliedesk (Requests).` + "\n\nTier: send.",
+		Tier: "send", Idempotent: true,
+		REST: []string{"POST /api/v1/kb/media/trash", "DELETE /api/v1/kb/media/{id}", "POST /api/v1/kb/media/trash-unused"},
+		Input: `{"type":"object","additionalProperties":false,"properties":{"media_ids":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"string",` + uuid + `}},` +
+			`"all_unused":{"type":"boolean","description":"Move the unused items instead of media_ids."},"before":{"type":"string","format":"date-time","maxLength":40,"description":"With all_unused: only items added before this, such as when you listed them."},` +
+			`"include_kept":{"type":"boolean"},"batch_id":{"type":"string",` + uuid + `}}}`,
+		Output: `{"type":"object","properties":{"results":` + kbMediaResultsSchema + `,"trashed":{"type":"integer"},"more":{"type":"boolean"},"batch_id":{"type":["string","null"]}}}`,
+		run:    kbMediaTrash,
+	}
+}
+
+func kbMediaTrashListSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_kb_media_trash_list",
+		Title: "List the knowledge base media library's trash",
+		Description: `List the items in the library's trash, last moved first, each with purge_at, when the daily purge deletes it for good, and how many articles still name it. ` +
+			`Bring one back with colliedesk_kb_media_undelete. ` + kbMediaTextNotice + "\n\nTier: read.",
+		Tier: "read", ReadOnly: true,
+		REST:   []string{"GET /api/v1/kb/media/trash"},
+		Input:  `{"type":"object","additionalProperties":false,"properties":{"limit":{"type":"integer","minimum":1,"maximum":100},"cursor":{"type":"string"}}}`,
+		Output: `{"type":"object","required":["media","next_cursor"],"properties":{"media":{"type":"array","items":` + kbMediaSchema + `},"next_cursor":{"type":["string","null"]}}}`,
+		run:    kbMediaTrashList,
+	}
+}
+
+func kbMediaUndeleteSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_kb_media_undelete",
+		Title: "Take knowledge base media out of the library's trash",
+		Description: `Take up to 100 items out of the library's trash by id, or every item of a batch_id from colliedesk_kb_media_trash (its Undo). Each id answers restored, not_in_trash or not_found. ` +
+			kbProposeBelowSend + "\n\nTier: send.",
+		Tier: "send", Idempotent: true,
+		REST: []string{"POST /api/v1/kb/media/restore", "POST /api/v1/kb/media/{id}/restore"},
+		Input: `{"type":"object","additionalProperties":false,"properties":{"media_ids":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"string",` + uuid + `}},` +
+			`"batch_id":{"type":"string",` + uuid + `}}}`,
+		Output: `{"type":"object","properties":{"results":` + kbMediaResultsSchema + `}}`,
+		run:    kbMediaUndelete,
+	}
+}
+
+func kbMediaPurgeSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_kb_media_purge",
+		Title: "Delete knowledge base media in the trash for good",
+		Description: `Delete for good up to 100 items that are in the library's trash, with their files, freeing their storage now instead of after 30 days. Each id answers purged, not_in_trash or not_found. ` +
+			`This cannot be undone: articles in the trash and older versions that named one show "Media no longer exists". ` + belowAdmin + "\n\nTier: admin.",
+		Tier: "admin", Destructive: true, Idempotent: true,
+		REST:   []string{"POST /api/v1/kb/media/purge"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["media_ids"],"properties":{"media_ids":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"string",` + uuid + `}}}}`,
+		Output: `{"type":"object","properties":{"results":` + kbMediaResultsSchema + `}}`,
+		run:    kbMediaPurge,
+	}
+}
+
+const kbMediaReplacementSchema = `{"type":"object","required":["replacement_id","from_media_id","to_media_id","article_ids","undone"],"properties":{"replacement_id":{"type":"string"},` +
+	`"from_media_id":{"type":"string"},"to_media_id":{"type":"string"},"article_ids":{"type":"array","items":{"type":"string"}},` +
+	`"translations":{"type":"array","items":{"type":"object","properties":{"article_id":{"type":"string"},"locale":{"type":"string"}}}},"undone":{"type":"boolean"}}}`
+
+func kbMediaReplaceSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_kb_media_replace",
+		Title: "Replace an image or video in every article that shows it",
+		Description: `Put another library item (with_media_id: an image for an image, a video for a video) in the place of media_id in every live article whose current text or a translation shows it. ` +
+			`Each such article gets a new version; published ones change on the help center at once. Undo it with colliedesk_kb_media_replace_undo and the replacement_id. ` +
+			kbProposeBelowSend + "\n\nTier: send.",
+		Tier: "send",
+		REST: []string{"POST /api/v1/kb/media/{id}/replace"},
+		Input: `{"type":"object","additionalProperties":false,"required":["media_id","with_media_id"],"properties":{` + kbMediaIDProperty + `,` +
+			`"with_media_id":{"type":"string",` + uuid + `,"description":"The item to show instead, from colliedesk_kb_media_list or colliedesk_kb_image_upload."}}}`,
+		Output: kbMediaReplacementSchema,
+		run:    kbMediaReplace,
+	}
+}
+
+func kbMediaReplaceUndoSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_kb_media_replace_undo",
+		Title: "Undo a replacement of an image or video",
+		Description: `Put the replaced item back in the articles a replacement changed, where they still show its replacement, as new versions. Undoing twice changes nothing more; ` +
+			`it is refused when the replaced item was deleted for good. ` + kbProposeBelowSend + "\n\nTier: send.",
+		Tier: "send", Idempotent: true,
+		REST:   []string{"POST /api/v1/kb/media-replacements/{id}/undo"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["replacement_id"],"properties":{"replacement_id":{"type":"string",` + uuid + `}}}`,
+		Output: kbMediaReplacementSchema,
+		run:    kbMediaReplaceUndo,
+	}
+}

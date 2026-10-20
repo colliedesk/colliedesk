@@ -19,6 +19,11 @@ const (
 	MaxKBMediaAlt = 500
 	// MaxKBMediaPage is the most library items one page lists.
 	MaxKBMediaPage = 100
+	// MaxKBMediaBatch is the most ids one trash, restore or purge call names; an agent request names
+	// them all, so a person approves exactly what will move (100 ids are about 4 KB of JSON).
+	MaxKBMediaBatch = 100
+	// MaxKBMediaUnusedBatch is the most unused items one "move all unused to the trash" call moves.
+	MaxKBMediaUnusedBatch = 500
 )
 
 // Kinds of media.
@@ -118,9 +123,27 @@ type KBImageUpload struct {
 	Keep      bool
 }
 
+// What a trash, restore or purge call did to each id.
+const (
+	KBMediaTrashed        = "trashed"
+	KBMediaAlreadyInTrash = "already_in_trash"
+	KBMediaInUse          = "in_use"
+	KBMediaNotFound       = "not_found"
+	KBMediaRestored       = "restored"
+	KBMediaNotInTrash     = "not_in_trash"
+	KBMediaPurged         = "purged"
+)
+
+// KBMediaResult is what a call on several items did to one of them.
+type KBMediaResult struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+}
+
 var (
-	ErrKBMediaNotFound = errors.New("knowledge base media not found")
-	ErrKBMediaLimit    = fmt.Errorf("a workspace holds at most %d images and videos in its media library, counting the trash; delete some first", MaxKBMedia)
+	ErrKBMediaNotFound      = errors.New("knowledge base media not found")
+	ErrKBMediaBatchNotFound = errors.New("knowledge base media batch not found")
+	ErrKBMediaLimit         = fmt.Errorf("a workspace holds at most %d images and videos in its media library, counting the trash; delete some first", MaxKBMedia)
 )
 
 // CheckKBMediaFilter refuses an unknown kind, usage or sort.
@@ -164,3 +187,44 @@ func KBMediaIDs(body string) []string {
 }
 
 var kbMediaLink = regexp.MustCompile(`/api/v1/kb/(?:images|media)/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})`)
+
+// KBMediaReplacement is one replacement of a library item in the articles that showed it: the
+// articles that got a version naming To instead of From, and the translations rewritten, so it can be
+// undone.
+type KBMediaReplacement struct {
+	ID           string                       `json:"id"`
+	From         string                       `json:"from_media_id"`
+	To           string                       `json:"to_media_id"`
+	ArticleIDs   []string                     `json:"article_ids"`
+	Translations []KBMediaReplacedTranslation `json:"translations"`
+	// SkippedArticleIDs are the articles an undo left alone because they changed since the replacement.
+	SkippedArticleIDs []string   `json:"skipped_article_ids"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UndoneAt          *time.Time `json:"undone_at"`
+}
+
+// KBMediaReplacedTranslation is a translation a replacement rewrote.
+type KBMediaReplacedTranslation struct {
+	ArticleID string `json:"article_id"`
+	Locale    string `json:"locale"`
+}
+
+var (
+	ErrKBMediaReplacementNotFound = errors.New("knowledge base media replacement not found")
+	// ErrKBMediaKindMismatch means a replacement of an image by a video or the other way.
+	ErrKBMediaKindMismatch = errors.New("an image is replaced by an image, a video by a video")
+	// ErrKBMediaGone means the item a replacement would bring back was deleted for good.
+	ErrKBMediaGone = errors.New("the replaced item was deleted for good, so the replacement cannot be undone")
+)
+
+// ReplaceKBMediaIDs rewrites every link of the item from in text to the item to: image and media paths,
+// and a video's poster path, matching the id in any letter case.
+func ReplaceKBMediaIDs(text, from, to string) string {
+	return kbMediaLink.ReplaceAllStringFunc(text, func(link string) string {
+		match := kbMediaLink.FindStringSubmatch(link)
+		if strings.EqualFold(match[1], from) {
+			return link[:len(link)-len(match[1])] + to
+		}
+		return link
+	})
+}

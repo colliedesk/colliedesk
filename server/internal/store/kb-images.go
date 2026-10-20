@@ -283,6 +283,9 @@ func (s *Store) PurgeKBTrash(ctx context.Context) (KBPurge, error) {
 			}
 			purged.Collections += tag.RowsAffected()
 		}
+		if err := purgeKBMediaBatches(ctx, tx, cutoff); err != nil {
+			return fmt.Errorf("purge knowledge base media batches: %w", err)
+		}
 		rows, err := tx.Query(ctx, `SELECT m.id::text FROM kb_media m WHERE `+kbMediaPurgeable+` FOR UPDATE OF m SKIP LOCKED`, cutoff)
 		if err != nil {
 			return fmt.Errorf("lock purged knowledge base media: %w", err)

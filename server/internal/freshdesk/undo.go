@@ -38,6 +38,9 @@ type UndoResult struct {
 	KBCollections  int      `json:"kb_collections"`
 	KBImages       int      `json:"kb_images"`
 	KeptKBArticles []string `json:"kept_kb_articles"`
+	// KeptKBImages counts imported images no article shows any more that stay because a person kept
+	// them in the media library.
+	KeptKBImages int `json:"kept_kb_images"`
 }
 
 // targetExists tells whether the Colliedesk row a ledger row points at still exists.
@@ -245,6 +248,11 @@ func undoKnowledgeBase(ctx context.Context, tx pgx.Tx, workspaceID, source strin
 			return nil, fmt.Errorf("undo knowledge base collections: %w", err)
 		}
 		result.KBCollections += int(tag.RowsAffected())
+	}
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM kb_media k JOIN import_items i ON i.workspace_id=k.workspace_id AND i.target_id=k.id
+		WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_image' AND (i.meta->>'created')::boolean AND k.kept
+		AND NOT EXISTS (SELECT 1 FROM kb_article_media l WHERE l.workspace_id=k.workspace_id AND l.media_id=k.id)`, workspaceID, source).Scan(&result.KeptKBImages); err != nil {
+		return nil, fmt.Errorf("count kept knowledge base images: %w", err)
 	}
 	rows, err = tx.Query(ctx, `DELETE FROM kb_media k USING import_items i WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_image'
 		AND (i.meta->>'created')::boolean AND k.workspace_id=i.workspace_id AND k.id=i.target_id AND NOT k.kept

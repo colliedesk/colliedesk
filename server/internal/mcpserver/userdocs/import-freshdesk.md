@@ -76,7 +76,7 @@ The whole knowledge base is imported on every run, whatever `--since` says:
 | Folder, subfolder | Collection inside it, then a collection inside that one |
 | A folder nested deeper | A third-level collection named after its folders, for example `Advanced / Deep`, listed under the warning `kb_folder_flattened` |
 | Article | Article in Markdown with its title, original created and updated dates, and the author when a Colliedesk agent has the same email |
-| Article images hosted by Freshdesk | Stored by Colliedesk; the article points at the stored copy |
+| Article images hosted by Freshdesk | Stored by Colliedesk in the knowledge base media library, named after the file in the image address, with the alt text of the image (at most 500 characters); the article points at the stored copy. Their bytes stay as Freshdesk served them |
 | Translations | Kept with the article and in the [export](export.md); not shown in Colliedesk yet |
 
 An article is **published** only when it is published in Freshdesk, every folder above it is
@@ -98,7 +98,8 @@ An image Freshdesk no longer has stays a link and is listed. An image that fails
 another reason makes the status `FAILED`; run the import again.
 
 The import refuses, before it writes anything, a knowledge base that does not fit: more than 2,000
-articles in the workspace (articles in the trash count) or 1,000 collections, or an article longer than
+articles in the workspace (articles in the trash count), 1,000 collections or 10,000 images in the media
+library (counting its trash and every image the import would bring in), or an article longer than
 100,000 characters once converted. A text is never cut. `--dry-run` lists what does not fit.
 
 Running the import again updates an article that changed in Freshdesk, unless your team changed it in
@@ -109,7 +110,7 @@ changed it since: then it stays published and the report warns (`kb_article_publ
 When only a folder or a portal changes the other way, the article stays a draft; publish it in
 Colliedesk. `import undo` removes the imported articles and collections, but keeps an
 article your team edited, restored or deleted since, and the collections that hold it or your own
-articles. If Freshdesk has no knowledge base, the report says so. If Freshdesk refuses it (the API key
+articles. An imported image someone kept in the media library stays too, and undo says how many. If Freshdesk has no knowledge base, the report says so. If Freshdesk refuses it (the API key
 may lack the right), the status is `UNVERIFIED`.
 
 ## Before you start

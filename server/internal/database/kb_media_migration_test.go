@@ -65,13 +65,13 @@ func TestKBMediaMigrationMarksCurrentLinksAndRollsBackOnlyWhatItCan(t *testing.T
 	if _, err := pool.Exec(ctx, `UPDATE kb_media SET name='Logo' WHERE id=$1`, image("1")); err != nil {
 		t.Fatal(err)
 	}
-	if err := rollbackLatest(ctx, pool); err == nil || !strings.Contains(err.Error(), "rollback refused") {
+	if err := rollbackThrough(ctx, pool, "20261020180000-kb-media-library.up.sql"); err == nil || !strings.Contains(err.Error(), "rollback refused") {
 		t.Fatalf("rollback with a named image = %v, want refused", err)
 	}
 	if _, err := pool.Exec(ctx, `UPDATE kb_media SET name='' WHERE id=$1`, image("1")); err != nil {
 		t.Fatal(err)
 	}
-	if err := rollbackLatest(ctx, pool); err != nil {
+	if err := rollbackThrough(ctx, pool, "20261020180000-kb-media-library.up.sql"); err != nil {
 		t.Fatalf("rollback: %v", err)
 	}
 	var images int

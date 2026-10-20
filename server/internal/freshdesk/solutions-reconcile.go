@@ -96,15 +96,42 @@ func (r *run) kbLimitProblems(ctx context.Context) ([]string, error) {
 			add("translation %s: %s", key, err.Error())
 		}
 	}
-	var articles, collections int
+	// Images the ledger does not hold yet, at most one item each in the media library (the same bytes
+	// give one item, so the import may take fewer).
+	newImages := 0
+	countImages := func(prefix, markup string) error {
+		for _, ref := range r.inlineImages(markup) {
+			if entry, found, err := r.ledger.get(ctx, entityKBImage, prefix+":"+ref.key); err != nil {
+				return err
+			} else if !found || entry.Status != ledgerDone {
+				newImages++
+			}
+		}
+		return nil
+	}
+	for _, article := range kb.articles {
+		if err := countImages(strconv.FormatInt(article.ID, 10), article.Description); err != nil {
+			return nil, err
+		}
+	}
+	for _, translation := range kb.translations {
+		if err := countImages(strconv.FormatInt(translation.ID, 10)+":"+translation.language, translation.Description); err != nil {
+			return nil, err
+		}
+	}
+	var articles, collections, media int
 	if err := r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM kb_articles WHERE workspace_id=$1), (SELECT count(*) FROM kb_collections WHERE workspace_id=$1)`,
-			r.workspaceID).Scan(&articles, &collections)
+		return tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM kb_articles WHERE workspace_id=$1), (SELECT count(*) FROM kb_collections WHERE workspace_id=$1),
+			(SELECT count(*) FROM kb_media WHERE workspace_id=$1)`,
+			r.workspaceID).Scan(&articles, &collections, &media)
 	}); err != nil {
 		return nil, fmt.Errorf("count knowledge base: %w", err)
 	}
 	if articles+newArticles > domain.MaxKBArticles {
 		add("the workspace holds %d knowledge base articles (the trash counts) and the import adds %d, over the limit of %d", articles, newArticles, domain.MaxKBArticles)
+	}
+	if media+newImages > domain.MaxKBMedia {
+		add("the workspace holds %d images and videos in its knowledge base media library (the trash counts) and the import may add %d, over the limit of %d", media, newImages, domain.MaxKBMedia)
 	}
 	if collections+newCollections > domain.MaxKBCollections {
 		add("the workspace holds %d knowledge base collections (the trash counts) and the import adds %d, over the limit of %d", collections, newCollections, domain.MaxKBCollections)

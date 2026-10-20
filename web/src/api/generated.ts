@@ -1460,6 +1460,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/media/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The library's trash, last moved there first, 60 items a page unless `limit` says otherwise, each with `purge_at`, when the daily purge deletes it (30 days after it was moved), and its usage. An item in the trash still counts toward the plan's storage until it is purged. */
+        get: operations["listTrashedKBMedia"];
+        put?: never;
+        /** @description Move up to 100 library items to the trash, each only while no live article's current text names it, and answer each id: `trashed`, `already_in_trash`, `in_use` or `not_found`. Send the `batch_id` of an earlier call to add to its batch; `POST /api/v1/kb/media/restore` with that `batch_id` brings back the whole batch. Saving an article that names an item in the trash takes it out again. Calling it twice changes nothing more. */
+        post: operations["trashKBMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/media/trash-unused": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Move to the trash up to 500 items no live article uses, added before `before` (when the person opened the page, so nothing uploaded since is swept along), leaving kept items unless `include_kept`. Call again with the answer's `batch_id` while `more` is true; one Undo (`POST /api/v1/kb/media/restore` with that `batch_id`) restores everything moved. A token below `send` gets an agent request naming the ids (at most 100 a request), so a person approves exactly what will move. */
+        post: operations["trashUnusedKBMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/media/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Take items out of the library's trash: up to 100 `ids`, or every item of a trash `batch_id` (the Undo of a move to the trash). Answers each id: `restored`, `not_in_trash` or `not_found`. */
+        post: operations["restoreKBMediaBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/media/purge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Delete for good up to 100 items that are in the library's trash, with their files, freeing their storage now instead of after 30 days. Answers each id: `purged`, `not_in_trash` (only items in the trash can be purged) or `not_found`. Articles in the trash and older versions that named one then show "Media no longer exists". This cannot be undone. Admins only; a lower agent token gets an agent request. */
+        post: operations["purgeKBMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/media/{id}": {
         parameters: {
             query?: never;
@@ -1472,11 +1541,69 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /** @description Move one library item to the trash. 409 `media_in_use`, with the articles, while a live article's current text names it: change those articles first. The answer's `batch_id` undoes it (`POST /api/v1/kb/media/restore`), as does `POST /api/v1/kb/media/{id}/restore`. */
+        delete: operations["trashOneKBMedia"];
         options?: never;
         head?: never;
         /** @description Change the name, alt text (a video's title) or kept mark of a library item outside the trash. A new name or alt text keeps the item unless `kept` is sent too. The alt text is what the editor offers next time; articles keep the text they have. Send back the `updated_at` you read (409 `changed_elsewhere`). */
         patch: operations["updateKBMedia"];
+        trace?: never;
+    };
+    "/api/v1/kb/media/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Take one item out of the library's trash. 404 when it is not in the trash or does not exist. */
+        post: operations["restoreKBMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/media/{id}/replace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Put another library item (`with_media_id`, an image for an image, a video for a video) in the place of this one in every live article whose current text or a translation shows it. Each such article gets a new version of kind `media_replace`, and published ones change on the help center at once. Ids never change their bytes, so the new item keeps its own id and caches stay right. The answer is the replacement; `POST /api/v1/kb/media-replacements/{id}/undo` reverses it. 400 when the kinds differ. */
+        post: operations["replaceKBMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/media-replacements/{id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Put back the text each article and translation had before the replacement, where nothing changed since (an article whose newest version is still the replacement's, a translation that still holds the replaced text), as new versions. Anything changed since keeps its text and is listed in `skipped_article_ids`. Undoing twice changes nothing more. 409 `media_gone` when the replaced item was deleted for good. */
+        post: operations["undoKBMediaReplacement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/kb/media/{id}/details": {
@@ -2179,10 +2306,10 @@ export interface components {
         KBArticleChange: {
             version: number;
             /**
-             * @description restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk.
+             * @description restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone.
              * @enum {string}
              */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import";
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace";
             /** @description The version a restore copied. */
             restored_from_version: number | null;
             /** @description The person who made the change (or approved the agent request that made it); null for an import or a removed person. */
@@ -2259,6 +2386,8 @@ export interface components {
              * @description Set while the article is in the trash.
              */
             deleted_at: string | null;
+            /** @description Only in the answer to a save: ids the text names that no item of the media library has (it was purged, or never existed), shown as "Media no longer exists". The save went through. */
+            missing_media?: string[];
         };
         TrashedKBArticle: {
             /** Format: uuid */
@@ -2290,7 +2419,7 @@ export interface components {
         KBArticleVersion: {
             version: number;
             /** @enum {string} */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import";
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace";
             restored_from_version: number | null;
             changed_by: null | components["schemas"]["SavedReplyPerson"];
             token: null | {
@@ -2375,6 +2504,41 @@ export interface components {
                 /** @description False when only an older version names the item. */
                 current: boolean;
             }[];
+        };
+        KBMediaResult: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "trashed" | "already_in_trash" | "in_use" | "not_found" | "restored" | "not_in_trash" | "purged";
+        };
+        KBMediaBatchResult: {
+            results: components["schemas"]["KBMediaResult"][];
+            /**
+             * Format: uuid
+             * @description The trash batch the moved items joined, for Undo; null when nothing moved.
+             */
+            batch_id: string | null;
+        };
+        KBMediaReplacement: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            from_media_id: string;
+            /** Format: uuid */
+            to_media_id: string;
+            /** @description The articles that got a new version. */
+            article_ids: string[];
+            translations: {
+                /** Format: uuid */
+                article_id: string;
+                locale: string;
+            }[];
+            /** @description After an undo: the articles (or their translations) that changed since the replacement and kept their text. */
+            skipped_article_ids: string[];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            undone_at: string | null;
         };
         /** @description Every unused item the filter selects, not only the page; kept items apart. Bytes count the original and a video's poster. */
         KBMediaUnusedSummary: {
@@ -2793,6 +2957,15 @@ export interface components {
                 };
                 /** @description Only on trial_outbound_limit: seconds until a reply can be sent. */
                 retry_after_seconds?: number;
+                /** @description Only on media_in_use: the live articles whose current text names the item. */
+                articles?: {
+                    /** Format: uuid */
+                    id: string;
+                    number: number;
+                    title: string;
+                    /** @enum {string} */
+                    status: "draft" | "published";
+                }[];
                 /** @description Only on trial_outbound_restricted caused by Cc: exactly the addresses the trial refused to copy. */
                 refused_cc?: string[];
                 /**
@@ -6263,6 +6436,208 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
+    listTrashedKBMedia: {
+        parameters: {
+            query?: {
+                /** @description The next_cursor of the previous page. */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the trash */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["KBMedia"][];
+                        /** @description Null on the last page. */
+                        next_cursor: string | null;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    trashKBMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    ids: string[];
+                    /** Format: uuid */
+                    batch_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description What happened to each item */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBMediaBatchResult"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    trashUnusedKBMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    before: string;
+                    /** @default false */
+                    include_kept?: boolean;
+                    /** Format: uuid */
+                    batch_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description How many moved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        trashed: number;
+                        /** @description True while more unused items are left; call again with batch_id. */
+                        more: boolean;
+                        /**
+                         * Format: uuid
+                         * @description Null when nothing moved and no batch_id was sent.
+                         */
+                        batch_id: string | null;
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    restoreKBMediaBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    ids?: string[];
+                    /** Format: uuid */
+                    batch_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description What happened to each item */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        results: components["schemas"]["KBMediaResult"][];
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    purgeKBMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    ids: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description What happened to each item */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        results: components["schemas"]["KBMediaResult"][];
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    trashOneKBMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Moved to the trash, or already there */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBMediaBatchResult"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     updateKBMedia: {
         parameters: {
             query?: never;
@@ -6295,6 +6670,93 @@ export interface operations {
             };
             202: components["responses"]["AgentRequestAccepted"];
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    restoreKBMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The item */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBMedia"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    replaceKBMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    with_media_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The replacement */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBMediaReplacement"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    undoKBMediaReplacement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The replacement, with undone_at */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBMediaReplacement"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

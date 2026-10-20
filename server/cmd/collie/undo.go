@@ -61,5 +61,8 @@ func undoCommand(ctx context.Context, pool *pgxpool.Pool, args []string, output 
 		"Knowledge base: %d articles, %d collections, %d images. Articles kept because they were changed in Colliedesk (Freshdesk ids): %s\n",
 		verb, result.Source, result.Conversations, result.Contacts, result.Tags, result.SavedReplies, result.Files, kept, keptReplies,
 		result.KBArticles, result.KBCollections, result.KBImages, keptArticles)
+	if err == nil && result.KeptKBImages > 0 {
+		_, err = fmt.Fprintf(output, "Images kept because a person kept them in the media library: %d\n", result.KeptKBImages)
+	}
 	return err
 }

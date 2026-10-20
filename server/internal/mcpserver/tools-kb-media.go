@@ -159,3 +159,165 @@ func kbMediaUpdate(c *call, arguments map[string]any) (any, error) {
 	}
 	return map[string]any{"media": kbMediaView(updated)}, nil
 }
+
+type restKBMediaResults struct {
+	Results []map[string]any `json:"results"`
+	BatchID *string          `json:"batch_id"`
+}
+
+func kbMediaTrash(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[struct {
+		IDs         []string `json:"media_ids"`
+		AllUnused   bool     `json:"all_unused"`
+		Before      string   `json:"before"`
+		IncludeKept bool     `json:"include_kept"`
+		BatchID     string   `json:"batch_id"`
+	}](arguments)
+	if err != nil {
+		return nil, err
+	}
+	if args.AllUnused == (len(args.IDs) > 0) {
+		return nil, &toolError{"Give media_ids, or all_unused with before, not both."}
+	}
+	if args.AllUnused {
+		if args.Before == "" {
+			return nil, &toolError{"With all_unused, give before: when you listed the items (RFC 3339), so nothing added since is moved."}
+		}
+		body := map[string]any{"before": args.Before, "include_kept": args.IncludeKept}
+		if args.BatchID != "" {
+			body["batch_id"] = args.BatchID
+		}
+		var moved struct {
+			Trashed int     `json:"trashed"`
+			More    bool    `json:"more"`
+			BatchID *string `json:"batch_id"`
+		}
+		if err := c.send(http.MethodPost, "/api/v1/kb/media/trash-unused", body, &moved); err != nil {
+			return nil, err
+		}
+		return map[string]any{"trashed": moved.Trashed, "more": moved.More, "batch_id": moved.BatchID}, nil
+	}
+	c.notFound = "No knowledge base media trash batch " + args.BatchID + " in this workspace."
+	body := map[string]any{"ids": args.IDs}
+	if args.BatchID != "" {
+		body["batch_id"] = args.BatchID
+	}
+	var out restKBMediaResults
+	if err := c.send(http.MethodPost, "/api/v1/kb/media/trash", body, &out); err != nil {
+		return nil, err
+	}
+	return map[string]any{"results": out.Results, "batch_id": out.BatchID}, nil
+}
+
+func kbMediaTrashList(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[struct {
+		Limit  int    `json:"limit"`
+		Cursor string `json:"cursor"`
+	}](arguments)
+	if err != nil {
+		return nil, err
+	}
+	query := url.Values{}
+	if args.Cursor != "" {
+		query.Set("cursor", args.Cursor)
+	}
+	if args.Limit > 0 {
+		query.Set("limit", strconv.Itoa(args.Limit))
+	}
+	var page struct {
+		Items      []restKBMedia `json:"items"`
+		NextCursor *string       `json:"next_cursor"`
+	}
+	if err := c.get("/api/v1/kb/media/trash", query, &page); err != nil {
+		return nil, err
+	}
+	media := make([]map[string]any, 0, len(page.Items))
+	for _, item := range page.Items {
+		media = append(media, kbMediaView(item))
+	}
+	return map[string]any{"media": media, "next_cursor": page.NextCursor}, nil
+}
+
+func kbMediaUndelete(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[struct {
+		IDs     []string `json:"media_ids"`
+		BatchID string   `json:"batch_id"`
+	}](arguments)
+	if err != nil {
+		return nil, err
+	}
+	if (args.BatchID == "") == (len(args.IDs) == 0) {
+		return nil, &toolError{"Give media_ids or batch_id, not both."}
+	}
+	body := map[string]any{}
+	if args.BatchID != "" {
+		body["batch_id"] = args.BatchID
+		c.notFound = "No knowledge base media trash batch " + args.BatchID + " in this workspace. Use the batch_id colliedesk_kb_media_trash gave."
+	} else {
+		body["ids"] = args.IDs
+	}
+	var out restKBMediaResults
+	if err := c.send(http.MethodPost, "/api/v1/kb/media/restore", body, &out); err != nil {
+		return nil, err
+	}
+	return map[string]any{"results": out.Results}, nil
+}
+
+func kbMediaPurge(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[struct {
+		IDs []string `json:"media_ids"`
+	}](arguments)
+	if err != nil {
+		return nil, err
+	}
+	var out restKBMediaResults
+	if err := c.send(http.MethodPost, "/api/v1/kb/media/purge", map[string]any{"ids": args.IDs}, &out); err != nil {
+		return nil, err
+	}
+	return map[string]any{"results": out.Results}, nil
+}
+
+type restKBMediaReplacement struct {
+	ID           string           `json:"id"`
+	From         string           `json:"from_media_id"`
+	To           string           `json:"to_media_id"`
+	ArticleIDs   []string         `json:"article_ids"`
+	Translations []map[string]any `json:"translations"`
+	UndoneAt     *string          `json:"undone_at"`
+}
+
+func kbMediaReplacementView(replacement restKBMediaReplacement) map[string]any {
+	return map[string]any{"replacement_id": replacement.ID, "from_media_id": replacement.From, "to_media_id": replacement.To,
+		"article_ids": replacement.ArticleIDs, "translations": replacement.Translations, "undone": replacement.UndoneAt != nil}
+}
+
+func kbMediaReplace(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[struct {
+		ID   string `json:"media_id"`
+		With string `json:"with_media_id"`
+	}](arguments)
+	if err != nil {
+		return nil, err
+	}
+	c.notFound = "No knowledge base media " + args.ID + " or " + args.With + " in this workspace. Use ids from colliedesk_kb_media_list."
+	var replacement restKBMediaReplacement
+	if err := c.send(http.MethodPost, kbMediaPath(args.ID, "replace"), map[string]any{"with_media_id": args.With}, &replacement); err != nil {
+		return nil, err
+	}
+	return kbMediaReplacementView(replacement), nil
+}
+
+func kbMediaReplaceUndo(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[struct {
+		ID string `json:"replacement_id"`
+	}](arguments)
+	if err != nil {
+		return nil, err
+	}
+	c.notFound = "No knowledge base media replacement " + args.ID + " in this workspace. Use the replacement_id colliedesk_kb_media_replace gave."
+	var replacement restKBMediaReplacement
+	if err := c.send(http.MethodPost, "/api/v1/kb/media-replacements/"+url.PathEscape(args.ID)+"/undo", nil, &replacement); err != nil {
+		return nil, err
+	}
+	return kbMediaReplacementView(replacement), nil
+}

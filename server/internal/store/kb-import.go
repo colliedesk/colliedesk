@@ -221,11 +221,16 @@ func PutKBArticleTranslation(ctx context.Context, tx pgx.Tx, workspaceID, articl
 	return bumpKB(ctx, tx, workspaceID)
 }
 
-// ImportKBImage records stored image bytes an import brought in. It does not count toward the cap
+// ImportKBImage records stored image bytes an import brought in, with the name and alt text the import
+// found (an import never keeps an item: an image no article links goes with the purge). It does not count toward the cap
 // (counted false, like imported attachments; a plan that counts imports counts stored bytes). The same
 // bytes give the image that already holds them, and created false.
-func ImportKBImage(ctx context.Context, tx pgx.Tx, storage attachments.Storage, workspaceID string, object attachments.Object, contentType string) (string, bool, error) {
-	existing, err := touchKBImage(ctx, tx, workspaceID, object.SHA256, domain.KBImageUpload{})
+func ImportKBImage(ctx context.Context, tx pgx.Tx, storage attachments.Storage, workspaceID string, object attachments.Object, contentType string, upload domain.KBImageUpload) (string, bool, error) {
+	upload, err := cleanKBImageUpload(domain.KBImageUpload{Name: upload.Name, Alt: upload.Alt})
+	if err != nil {
+		return "", false, err
+	}
+	existing, err := touchKBImage(ctx, tx, workspaceID, object.SHA256, upload)
 	if err == nil {
 		return existing.ID, false, nil
 	}
@@ -236,8 +241,8 @@ func ImportKBImage(ctx context.Context, tx pgx.Tx, storage attachments.Storage, 
 		return "", false, err
 	}
 	var id string
-	if err := tx.QueryRow(ctx, `INSERT INTO kb_media(workspace_id,storage_key,sha256,size,content_type,counted)
-		VALUES($1,$2,$3,$4,$5,false) RETURNING id::text`, workspaceID, object.Key, object.SHA256, object.Size, contentType).Scan(&id); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO kb_media(workspace_id,storage_key,sha256,size,content_type,counted,name,alt)
+		VALUES($1,$2,$3,$4,$5,false,$6,$7) RETURNING id::text`, workspaceID, object.Key, object.SHA256, object.Size, contentType, upload.Name, upload.Alt).Scan(&id); err != nil {
 		return "", false, fmt.Errorf("import knowledge base image: %w", err)
 	}
 	return id, true, nil
