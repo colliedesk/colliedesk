@@ -4,6 +4,10 @@ export const gmailMessages = {
   gmailHeading: 'Send from Gmail',
   gmailDescription: 'Connect the Gmail account of your support address: replies are sent through Gmail from that address, and a copy stays in its Sent folder. Incoming mail still arrives by forwarding. Colliedesk can only send; it cannot read the mailbox.',
   gmailConnectedDescription: 'Replies go out through Gmail and stay in its Sent folder; incoming mail still arrives by forwarding. Colliedesk can only send; it cannot read the mailbox.',
+  // Shown only on Colliedesk Cloud: the statement binds HC Labs' Google client, not a self-hosted server's.
+  gmailGoogleData: 'Colliedesk’s use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements. How we handle Google data:',
+  gmailPrivacyPolicy: 'Privacy policy',
+  gmailPrivacyURL: 'https://colliedesk.com/privacy#google-user-data',
   gmailAdminOnly: 'Only an admin can connect Gmail.',
   gmailFailureReasons: {
     revoked: 'Google no longer accepts the connection: access was removed or expired.',

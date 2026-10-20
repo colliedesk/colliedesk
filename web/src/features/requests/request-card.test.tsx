@@ -1,7 +1,9 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { expect, test, vi } from 'vitest';
 import { track } from '../../lib/product-analytics';
-import { InvalidRequestError } from '../../api/client';
+import { type api, InvalidRequestError } from '../../api/client';
 import { agentRequest } from './request.test.fixture';
 import { RequestCard } from './request-card';
 import { canApproveRequest } from './request-call';
@@ -146,4 +148,39 @@ test('a decision reports approved or rejected only after the server accepted it'
   expect(analytics.track).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
   await waitFor(() => expect(analytics.track).toHaveBeenCalledWith('agent_request_decided', { decision: 'rejected' }));
+});
+
+type PublicConfig = Awaited<ReturnType<typeof api.config>>;
+const selfHosted: PublicConfig = {
+  cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false }, signup: { enabled: false },
+  limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 },
+  product_analytics: { enabled: false, key: null, host: null, realm: null },
+};
+const cloud: PublicConfig = { ...selfHosted, cloud_sign_in: { enabled: true, publishable_key: 'pk_test' }, billing: { enabled: true }, signup: { enabled: true } };
+const gmailConnect = agentRequest({ summary: 'Connect Gmail for sending', method: 'POST', route: '/api/v1/channels/email/gmail', path: '/api/v1/channels/email/gmail', body: null, approvable_by: 'admin' });
+const consent = { request: { ...gmailConnect, status: 'approved' as const, result_status: 200 }, result: { url: 'https://accounts.google.com/o/oauth2/v2/auth?state=s' } };
+
+function renderWithConfig(ui: ReactElement, config: PublicConfig) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  client.setQueryData(['public-config'], config);
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
+
+test('on Colliedesk Cloud, approving a Gmail connection says how Google data is handled before the link to Google', async () => {
+  renderWithConfig(<RequestCard item={gmailConnect} initialOutcome={consent} timezone="UTC" {...actions()} />, cloud);
+  const privacy = await screen.findByRole('link', { name: 'Privacy policy' });
+  expect(privacy).toHaveAttribute('href', 'https://colliedesk.com/privacy#google-user-data');
+  expect(screen.getByText(/including the Limited Use requirements/)).toBeInTheDocument();
+  const google = screen.getByRole('link', { name: /accounts\.google\.com/ });
+  expect(privacy.compareDocumentPosition(google) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test('a self-hosted server approving a Gmail connection does not point to the privacy policy of Colliedesk Cloud', async () => {
+  // Loaded first, so the absence below is the decision and not a chunk still on its way.
+  await import('../settings/gmail-connection');
+  renderWithConfig(<RequestCard item={gmailConnect} initialOutcome={consent} timezone="UTC" {...actions()} />, selfHosted);
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+  expect(screen.getByRole('link', { name: /accounts\.google\.com/ })).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Privacy policy' })).not.toBeInTheDocument();
+  expect(screen.queryByText(/Limited Use/)).not.toBeInTheDocument();
 });

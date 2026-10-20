@@ -4,6 +4,8 @@ import type { AgentRequest } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { track } from '../../lib/product-analytics';
 import { messages } from '../../messages';
+import { PartUnavailable } from '../../ui/lazy-part';
+import { gmailPart } from '../settings/email-channel-section';
 import { replyCall } from './request-call';
 import { isSavedReplyRequest, SavedReplyProposal } from './saved-reply-proposal';
 
@@ -23,6 +25,13 @@ interface RequestCardProps {
 
 const resultURL = (result: unknown) =>
   typeof result === 'object' && result !== null && 'url' in result && typeof result.url === 'string' ? result.url : undefined;
+
+// Approving a Gmail connection answers Google's consent link, so the Gmail block's disclosure comes first. It
+// lives in that block's chunk; the card for such a request loads it while the request is still pending.
+function GmailDisclosure() {
+  const gmail = gmailPart.use();
+  return gmail.status === 'ready' ? <gmail.module.GmailDataDisclosure /> : gmail.status === 'error' && <PartUnavailable />;
+}
 
 // RequestCard is one agent request: what it does, who asked, the exact call and, while it waits,
 // Approve and Reject. A credential or link the approved call answered is shown here once.
@@ -72,6 +81,7 @@ export function RequestCard({ item, timezone, onApprove, onReject, canApprove = 
       </>}
       <p className="muted-copy"><time dateTime={current.created_at}>{formatDate(current.created_at, timezone)}</time>
         {current.status === 'pending' && <> · {messages.requestExpires(formatDate(current.expires_at, timezone))}</>}</p>
+      {current.method === 'POST' && current.route === '/api/v1/channels/email/gmail' && <GmailDisclosure />}
       {current.status !== 'pending' && current.decided_by && <p>{messages.requestOutcome(messages.requestDecisionVerb[current.status], current.decided_by.name, current.result_status)}</p>}
       {current.reason && <p className="muted-copy">{current.reason}</p>}
       {current.result_note && !outcome && <p className="muted-copy">{current.result_note}</p>}

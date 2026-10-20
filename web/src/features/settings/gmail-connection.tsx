@@ -1,4 +1,6 @@
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
+import { api } from '../../api/client';
 import type { GmailSettings } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { messages as shared } from '../../messages';
@@ -13,6 +15,18 @@ function returnText(returned: GmailReturn): string {
   if (returned.kind === 'connected') return messages.gmailJustConnected;
   const reason = returned.reason ?? '';
   return Object.hasOwn(messages.gmailReturnErrors, reason) ? messages.gmailReturnErrors[reason] : messages.gmailConnectFailed;
+}
+
+// GmailDataDisclosure says, before an admin goes to Google's consent page, how Colliedesk Cloud handles Google
+// data. Only on Cloud: the statement binds HC Labs' Google client, not a self-hosted server's. Cloud is told
+// the way the server tells it (realm in problem-report-text.go): the realm analytics name, else cloud sign-in
+// with billing. Read here, in this chunk, so the main bundle does not grow.
+export function GmailDataDisclosure() {
+  const config = useQuery({ queryKey: ['public-config'], queryFn: api.config }).data;
+  const cloud = (config?.product_analytics.realm ?? (config?.cloud_sign_in.enabled && config.billing.enabled ? 'cloud' : null)) === 'cloud';
+  return cloud && <p className="muted-copy">
+    {messages.gmailGoogleData} <a href={messages.gmailPrivacyURL} target="_blank" rel="noopener noreferrer">{messages.gmailPrivacyPolicy}</a>
+  </p>;
 }
 
 interface GmailConnectionProps {
@@ -65,6 +79,7 @@ export function GmailConnection({ gmail, supportAddress, timezone, canManage, on
         <p role="note" className="warning-note">{messages.gmailNotAvailable(gmail.missing_settings)}</p>
         {canManage && !connection && <label className="invite-link"><span className="field-label">{messages.gmailRedirectUri}</span><input readOnly value={gmail.redirect_uri} /></label>}
       </>}
+      {gmail.available && canManage && <GmailDataDisclosure />}
       {gmail.available && !connection && (canManage
         ? <span className="button-row">{connectButton(messages.connectGmail, true)}</span>
         : <p className="muted-copy">{messages.gmailAdminOnly}</p>)}
