@@ -129,11 +129,12 @@ damaged on disk after the import is detected by the next run and downloaded agai
 On Colliedesk Cloud, the first import into a workspace that is still in its trial extends the trial
 to 30 days in total from when it started.
 
-On a Colliedesk Cloud workspace on a paid plan (Founding, Team or Team 25), imported attachments
-count toward the storage limit of the plan (20, 100 or 250 GiB). Before it writes anything, the import adds up the size of the attachments and the message images it would bring in
+On a Colliedesk Cloud workspace on a paid plan (Solo, Small, Founding, Team or Team 25), imported attachments
+count toward the storage limit of the plan (10, 30, 20, 100 or 250 GiB). Before it writes anything, the import adds up the size of the attachments and the message images it would bring in
 (it reads each image once to know its size) and compares it with the room left. If they do not fit, it stops with a message that gives the bytes
-needed, the bytes free and the limit, and nothing is imported: no contact, ticket or file. Contact us for more storage (on Founding, switch to
-the Team plan under **Billing > Manage billing**) and run it again, or import a smaller slice with
+needed, the bytes free and the limit, and nothing is imported: no contact, ticket or file. Switch to a larger plan under
+**Billing > Manage billing** (Solo to Small, Small or Founding to Team; on Team or Team 25, contact us
+for more storage) and run it again, or import a smaller slice with
 `--since`.
 
 The check is the only place the limit applies to an import. An import that passes it is admitted and

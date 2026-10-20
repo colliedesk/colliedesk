@@ -47,7 +47,7 @@ them; `DISABLE_TELEMETRY` and `DO_NOT_TRACK` turn them off too.
 | `email_channel_saved` | An admin saves the workspace's support address | `distinct_id` = the workspace id, `realm`, `version` (never the address) |
 | `reply_sent` | A reply to a customer is sent from Colliedesk; a note is not a reply | `distinct_id` = the workspace id, `by` (`person`, or `ai_agent` for an agent token), `realm`, `version` (never the text or the recipient) |
 | `teammate_invited` | An admin invites a teammate | `distinct_id` = the workspace id, `realm`, `version` (never the invited address) |
-| `subscription_activated` | A workspace becomes a paying customer for the first time (its first `subscription.active` from Polar). A redelivered webhook, a past_due subscription paid again and a later plan change are not counted again | `distinct_id` = the workspace id, `plan` (`team`, `team25` or `founding`), `realm`, `version` |
+| `subscription_activated` | A workspace becomes a paying customer for the first time (its first `subscription.active` from Polar). A redelivered webhook, a past_due subscription paid again and a later plan change are not counted again | `distinct_id` = the workspace id, `plan` (`solo`, `small`, `team`, `team25` or `founding`), `realm`, `version` |
 
 Once a day, with the instance heartbeat, Colliedesk Cloud also sends one `workspace_snapshot` event
 per workspace, so the team can see how each customer is doing: `distinct_id` = the workspace id,
@@ -57,7 +57,7 @@ anything written in a conversation):
 | Field | Example | Meaning |
 |---|---|---|
 | `workspace_name`, `workspace_slug` | `Acme Support`, `acme-support` | The workspace's name and address slug, so the team knows which customer it is |
-| `plan` | `trial` | `trial`, `team`, `team25`, `founding` or `none` (trial over, no paid plan), the same plan the billing page shows |
+| `plan` | `trial` | `trial`, `solo`, `small`, `team`, `team25`, `founding` or `none` (trial over, no paid plan), the same plan the billing page shows |
 | `trial_days_left` | `6` | Days left of the trial, rounded up; empty unless `plan` is `trial` |
 | `days_since_created` | `10` | Whole days since the workspace was created |
 | `agents_total` | `2` | Agents that are not deactivated |

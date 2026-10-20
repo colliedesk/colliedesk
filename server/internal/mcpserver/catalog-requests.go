@@ -122,7 +122,7 @@ func billingRequestSpec() Spec {
 		`Ask for a plan checkout (action checkout, with a plan) or the billing portal (action portal) on the hosted cloud. The person who approves gets the payment page; nothing is paid by you.`,
 		[]string{"POST /api/v1/billing/checkout", "POST /api/v1/billing/portal"},
 		`{"type":"object","additionalProperties":false,"required":["action"],"properties":{"action":{"type":"string","enum":["checkout","portal"]},`+
-			`"plan":{"type":"string","enum":["team_monthly","team_yearly","team25_monthly","team25_yearly","founding"],"description":"For checkout: the plan to buy."}}}`, billingRequest)
+			`"plan":{"type":"string","enum":["solo_monthly","solo_yearly","small_monthly","small_yearly","team_monthly","team_yearly","team25_monthly","team25_yearly","founding"],"description":"For checkout: the plan to buy."}}}`, billingRequest)
 }
 
 func emailChannelDisconnectRequestSpec() Spec {

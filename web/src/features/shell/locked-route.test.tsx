@@ -33,7 +33,7 @@ function renderLocked() {
 
 test('a locked workspace buys in the overlay, without leaving the app', async () => {
   renderLocked();
-  fireEvent.click(await screen.findByRole('button', { name: /team, \$49 per month/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /team, \$69 per month/i }));
   await waitFor(() => expect(embed.create).toHaveBeenCalledWith('https://polar.example/checkout/9', expect.anything()));
   expect(assign).not.toHaveBeenCalled();
 });
@@ -41,14 +41,14 @@ test('a locked workspace buys in the overlay, without leaving the app', async ()
 test('a locked workspace still reaches the hosted checkout when the overlay cannot open', async () => {
   embed.create.mockRejectedValue(new Error('script blocked'));
   renderLocked();
-  fireEvent.click(await screen.findByRole('button', { name: /team, \$49 per month/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /team, \$69 per month/i }));
   await waitFor(() => expect(assign).toHaveBeenCalledWith('https://polar.example/checkout/9'));
 });
 
 test('a second click while the checkout is starting does not start another', async () => {
   embed.create.mockReturnValue(new Promise(() => {}));
   renderLocked();
-  const button = await screen.findByRole('button', { name: /team, \$49 per month/i });
+  const button = await screen.findByRole('button', { name: /team, \$69 per month/i });
   fireEvent.click(button);
   await waitFor(() => expect(embed.create).toHaveBeenCalledTimes(1));
   expect(button).toBeDisabled();

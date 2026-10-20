@@ -9,12 +9,18 @@ export interface PlanCard { name: string; includes: string[]; prices: PlanPrice[
 // What each plan includes; the numbers match docs/user/billing.md and the server's plan limits.
 // charge is what one payment costs; it names the button for screen readers.
 const allPlans: { name: string; includes: string[]; prices: (Omit<PlanPrice, 'label'> & { charge: string })[] }[] = [
+  { name: messages.plans.solo, includes: [messages.planAgents(1), messages.planStorage('10 GiB')], prices: [
+    { plan: 'solo_monthly', interval: 'monthly', amount: '$19', charge: '$19 per month' },
+    { plan: 'solo_yearly', interval: 'yearly', amount: '$15.83', billed: messages.billedYearly('$190'), charge: '$190 per year' }] },
+  { name: messages.plans.small, includes: [messages.planAgents(3), messages.planStorage('30 GiB')], prices: [
+    { plan: 'small_monthly', interval: 'monthly', amount: '$39', charge: '$39 per month' },
+    { plan: 'small_yearly', interval: 'yearly', amount: '$32.50', billed: messages.billedYearly('$390'), charge: '$390 per year' }] },
   { name: messages.plans.team, includes: [messages.planAgents(10), messages.planStorage('100 GiB')], prices: [
-    { plan: 'team_monthly', interval: 'monthly', amount: '$49', charge: '$49 per month' },
-    { plan: 'team_yearly', interval: 'yearly', amount: '$40.83', billed: messages.billedYearly('$490'), charge: '$490 per year' }] },
+    { plan: 'team_monthly', interval: 'monthly', amount: '$69', charge: '$69 per month' },
+    { plan: 'team_yearly', interval: 'yearly', amount: '$57.50', billed: messages.billedYearly('$690'), charge: '$690 per year' }] },
   { name: messages.plans.team25, includes: [messages.planAgents(25), messages.planStorage('250 GiB')], prices: [
-    { plan: 'team25_monthly', interval: 'monthly', amount: '$99', charge: '$99 per month' },
-    { plan: 'team25_yearly', interval: 'yearly', amount: '$82.50', billed: messages.billedYearly('$990'), charge: '$990 per year' }] },
+    { plan: 'team25_monthly', interval: 'monthly', amount: '$149', charge: '$149 per month' },
+    { plan: 'team25_yearly', interval: 'yearly', amount: '$124.17', billed: messages.billedYearly('$1,490'), charge: '$1,490 per year' }] },
   { name: messages.plans.founding, includes: [messages.planAgents(10), messages.planStorage('20 GiB'), messages.foundingLimited], prices: [
     { plan: 'founding', interval: 'yearly', amount: '$8.33', billed: messages.billedFounding, charge: '$100 per year for life' }] },
 ];

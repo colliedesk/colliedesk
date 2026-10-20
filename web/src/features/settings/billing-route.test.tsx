@@ -16,7 +16,7 @@ const me = (role: 'admin' | 'agent') => ({
   timezone: 'UTC',
 });
 const free = {
-  plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
+  plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, checkout_plans: ['solo_monthly', 'solo_yearly', 'small_monthly', 'small_yearly', 'team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
   limits: { agents: 10, replies_per_24h: 200, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 1, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 const assign = vi.fn();
@@ -40,7 +40,7 @@ test('an admin upgrades: the server-made checkout URL is opened in the overlay a
   api.startCheckout.mockResolvedValue({ url: 'https://polar.example/checkout/1' });
   renderRoute();
   fireEvent.click(await screen.findByRole('radio', { name: /yearly/i }));
-  fireEvent.click(screen.getByRole('button', { name: /team, \$490 per year/i }));
+  fireEvent.click(screen.getByRole('button', { name: /team, \$690 per year/i }));
   await waitFor(() => expect(embed.create).toHaveBeenCalledWith('https://polar.example/checkout/1', expect.anything()));
   expect(assign).not.toHaveBeenCalled();
   expect(api.startCheckout).toHaveBeenCalledWith('team_yearly');
@@ -52,7 +52,7 @@ test('when the overlay cannot open, the hosted checkout is used so the purchase 
   api.billing.mockResolvedValue(free);
   api.startCheckout.mockResolvedValue({ url: 'https://polar.example/checkout/1' });
   renderRoute();
-  fireEvent.click(await screen.findByRole('button', { name: /team, \$49 per month/i }));
+  fireEvent.click(await screen.findByRole('button', { name: /team, \$69 per month/i }));
   await waitFor(() => expect(assign).toHaveBeenCalledWith('https://polar.example/checkout/1'));
 });
 
@@ -62,7 +62,7 @@ test('a second click while the checkout is starting does not start another', asy
   api.billing.mockResolvedValue(free);
   api.startCheckout.mockResolvedValue({ url: 'https://polar.example/checkout/1' });
   renderRoute();
-  const button = await screen.findByRole('button', { name: /team, \$49 per month/i });
+  const button = await screen.findByRole('button', { name: /team, \$69 per month/i });
   fireEvent.click(button);
   await waitFor(() => expect(embed.create).toHaveBeenCalledTimes(1));
   expect(button).toBeDisabled();
@@ -129,7 +129,7 @@ test('an intent for a plan the server does not offer is dropped and the billing 
   api.me.mockResolvedValue(me('admin'));
   api.billing.mockResolvedValue({ ...free, checkout_plans: ['team_monthly', 'team_yearly'] });
   renderRoute();
-  expect(await screen.findByRole('button', { name: /team, \$49 per month/i })).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: /team, \$69 per month/i })).toBeInTheDocument();
   expect(api.startCheckout).not.toHaveBeenCalled();
   expect(readCheckoutIntent()).toBeUndefined();
 });

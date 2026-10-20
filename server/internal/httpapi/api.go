@@ -197,8 +197,8 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		domainChecks:   newWindowLimiter(tokenDomainChecksPerHour, webFormMaxKeys, time.Hour),
 		providerChecks: newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
 		problemReports: newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
-		auth:           auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25()),
-		store:          store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithTeam25Offered(config.Billing.SellsTeam25())}
+		auth:           auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
+		store:          store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale())}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
 	api.mailImageSigner = mailimage.NewSigner(api.mailImageKey())
 	api.mailImageFetcher = config.MailImages

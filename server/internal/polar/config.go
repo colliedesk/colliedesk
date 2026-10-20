@@ -16,9 +16,13 @@ type Products struct {
 	TeamMonthly string
 	TeamYearly  string
 	Founding    string
-	// Team25Monthly and Team25Yearly are optional; empty means the plan is not sold here.
+	// The Team 25, Solo and Small products are optional; empty means the plan is not sold here.
 	Team25Monthly string
 	Team25Yearly  string
+	SoloMonthly   string
+	SoloYearly    string
+	SmallMonthly  string
+	SmallYearly   string
 }
 
 // PlanOf is the plan a Polar product buys, or "" when the product is not sold here. An unset
@@ -28,6 +32,10 @@ func (p Products) PlanOf(productID string) string {
 		return ""
 	}
 	switch productID {
+	case p.SoloMonthly, p.SoloYearly:
+		return domain.PlanSolo
+	case p.SmallMonthly, p.SmallYearly:
+		return domain.PlanSmall
 	case p.TeamMonthly, p.TeamYearly:
 		return domain.PlanTeam
 	case p.Team25Monthly, p.Team25Yearly:
@@ -50,8 +58,8 @@ type Config struct {
 func (c Config) Enabled() bool { return c.AccessToken != "" }
 
 // ConfigFromEnv reads POLAR_ACCESS_TOKEN, POLAR_WEBHOOK_SECRET, POLAR_PRODUCT_TEAM_MONTHLY,
-// POLAR_PRODUCT_TEAM_YEARLY, POLAR_PRODUCT_FOUNDING and the optional POLAR_API_URL,
-// POLAR_PRODUCT_TEAM25_MONTHLY and POLAR_PRODUCT_TEAM25_YEARLY. Without the Team 25 products that plan cannot be bought. None set means
+// POLAR_PRODUCT_TEAM_YEARLY, POLAR_PRODUCT_FOUNDING and the optional POLAR_API_URL and
+// POLAR_PRODUCT_{SOLO,SMALL,TEAM25}_{MONTHLY,YEARLY}. An optional plan without its products cannot be bought. None set means
 // billing is off. Setting some but not all is an error that names the missing keys (never values),
 // so a half-configured instance never starts.
 func ConfigFromEnv(getenv func(string) string) (Config, error) {
@@ -69,6 +77,8 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 		{"POLAR_PRODUCT_FOUNDING", &config.Products.Founding},
 	}
 	config.Products.Team25Monthly, config.Products.Team25Yearly = value("POLAR_PRODUCT_TEAM25_MONTHLY"), value("POLAR_PRODUCT_TEAM25_YEARLY")
+	config.Products.SoloMonthly, config.Products.SoloYearly = value("POLAR_PRODUCT_SOLO_MONTHLY"), value("POLAR_PRODUCT_SOLO_YEARLY")
+	config.Products.SmallMonthly, config.Products.SmallYearly = value("POLAR_PRODUCT_SMALL_MONTHLY"), value("POLAR_PRODUCT_SMALL_YEARLY")
 	apiURL := value("POLAR_API_URL")
 	var missing []string
 	for _, item := range required {
@@ -94,19 +104,37 @@ func ConfigFromEnv(getenv func(string) string) (Config, error) {
 }
 
 // CheckoutPlans lists the checkout plan names this configuration can sell, in the order they are
-// offered. Team 25 is listed only when both of its products are set.
+// offered: from the smallest plan up, Founding last. An optional plan is listed per configured product.
 func (c Config) CheckoutPlans() []string {
-	plans := []string{"team_monthly", "team_yearly"}
-	if c.Products.Team25Monthly != "" {
-		plans = append(plans, "team25_monthly")
-	}
-	if c.Products.Team25Yearly != "" {
-		plans = append(plans, "team25_yearly")
+	p := c.Products
+	var plans []string
+	for _, offer := range []struct{ name, product string }{
+		{"solo_monthly", p.SoloMonthly}, {"solo_yearly", p.SoloYearly},
+		{"small_monthly", p.SmallMonthly}, {"small_yearly", p.SmallYearly},
+		{"team_monthly", p.TeamMonthly}, {"team_yearly", p.TeamYearly},
+		{"team25_monthly", p.Team25Monthly}, {"team25_yearly", p.Team25Yearly},
+	} {
+		if offer.product != "" {
+			plans = append(plans, offer.name)
+		}
 	}
 	return append(plans, "founding")
 }
 
-// SellsTeam25 reports whether both Team 25 products are configured.
-func (c Config) SellsTeam25() bool {
-	return c.Products.Team25Monthly != "" && c.Products.Team25Yearly != ""
+// PlansOnSale lists the plans a workspace can move to here: a plan with a monthly and a yearly
+// product counts, and so does Founding. A seat refusal offers only these.
+func (c Config) PlansOnSale() []string {
+	p := c.Products
+	var plans []string
+	for _, plan := range []struct{ id, monthly, yearly string }{
+		{domain.PlanSolo, p.SoloMonthly, p.SoloYearly},
+		{domain.PlanSmall, p.SmallMonthly, p.SmallYearly},
+		{domain.PlanTeam, p.TeamMonthly, p.TeamYearly},
+		{domain.PlanTeam25, p.Team25Monthly, p.Team25Yearly},
+	} {
+		if plan.monthly != "" && plan.yearly != "" {
+			plans = append(plans, plan.id)
+		}
+	}
+	return append(plans, domain.PlanFounding)
 }

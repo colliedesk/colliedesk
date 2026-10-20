@@ -4,7 +4,7 @@ import type { Billing } from '../../api/schemas';
 import { BillingPage } from './billing-page';
 
 const free: Billing = {
-  plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
+  plan: 'trial', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false, active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_plans: ['solo_monthly', 'solo_yearly', 'small_monthly', 'small_yearly', 'team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
   limits: { agents: 10, replies_per_24h: 200, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 2, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 const team: Billing = {
@@ -12,7 +12,7 @@ const team: Billing = {
   limits: { agents: 10, replies_per_24h: null, storage_bytes: 107374182400, storage_warn_bytes: 85899345920 }, usage: { agents: 6, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 
-test('a trial workspace sees when the trial ends, its usage and five ways to subscribe', () => {
+test('a trial workspace sees when the trial ends, its usage and every way to subscribe, smallest plan first', () => {
   const onCheckout = vi.fn();
   render(<BillingPage billing={free} timezone="UTC" onCheckout={onCheckout} onManage={vi.fn()} />);
   expect(screen.getByRole('heading', { name: /plan and billing/i })).toBeInTheDocument();
@@ -20,19 +20,25 @@ test('a trial workspace sees when the trial ends, its usage and five ways to sub
   expect(screen.getByText(/trial ends oct 15/i)).toBeInTheDocument();
   expect(screen.getByText(/2 of 10 agents/i)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /manage billing/i })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Choose Team, $49 per month' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Choose Team 25, $99 per month' }));
+  expect(screen.getAllByRole('article').map((card) => card.getAttribute('aria-label'))).toEqual(['Solo', 'Small', 'Team', 'Team 25', 'Founding']);
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Solo, $19 per month' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Small, $39 per month' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Team, $69 per month' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Team 25, $149 per month' }));
   fireEvent.click(screen.getByRole('radio', { name: /yearly/i }));
-  fireEvent.click(screen.getByRole('button', { name: 'Choose Team, $490 per year' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Choose Team 25, $990 per year' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Solo, $190 per year' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Small, $390 per year' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Team, $690 per year' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Choose Team 25, $1,490 per year' }));
   fireEvent.click(screen.getByRole('button', { name: /founding.*\$100.*year/i }));
-  expect(onCheckout.mock.calls).toEqual([['team_monthly'], ['team25_monthly'], ['team_yearly'], ['team25_yearly'], ['founding']]);
+  expect(onCheckout.mock.calls).toEqual([['solo_monthly'], ['small_monthly'], ['team_monthly'], ['team25_monthly'],
+    ['solo_yearly'], ['small_yearly'], ['team_yearly'], ['team25_yearly'], ['founding']]);
 });
 
-test('a server without the Team 25 products offers only the plans it can sell', () => {
+test('a server without the optional products offers only the plans it can sell', () => {
   render(<BillingPage billing={{ ...free, checkout_plans: ['team_monthly', 'team_yearly', 'founding'] }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
-  expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Choose Team, $49 per month', 'Choose Founding, $100 per year for life']);
-  expect(screen.queryByRole('article', { name: 'Team 25' })).not.toBeInTheDocument();
+  expect(screen.getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['Choose Team, $69 per month', 'Choose Founding, $100 per year for life']);
+  for (const name of ['Solo', 'Small', 'Team 25']) expect(screen.queryByRole('article', { name })).not.toBeInTheDocument();
 });
 
 test('a paying workspace sees renewal, no upgrade buttons and a way to manage billing', () => {
@@ -41,7 +47,7 @@ test('a paying workspace sees renewal, no upgrade buttons and a way to manage bi
   expect(within(screen.getByRole('region', { name: 'Current plan' })).getByText('Team')).toBeInTheDocument();
   expect(screen.getByText(/renews nov 15/i)).toBeInTheDocument();
   expect(screen.getByText(/6 of 10 agents/i)).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /\$49/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /\$69/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: /manage billing/i }));
   expect(onManage).toHaveBeenCalled();
 });
@@ -51,7 +57,14 @@ test('a Team 25 workspace is named, shows 25 agents and its 250 GiB cap, and has
   expect(within(screen.getByRole('region', { name: 'Current plan' })).getByText('Team 25')).toBeInTheDocument();
   expect(screen.getByText(/6 of 25 agents/i)).toBeInTheDocument();
   expect(screen.getByText('Attachment storage: 0 B of 250.0 GiB')).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /\$99/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /\$149/ })).not.toBeInTheDocument();
+});
+
+test('a Solo workspace is named and shows its 1 agent and 10 GiB cap', () => {
+  render(<BillingPage billing={{ ...team, plan: 'solo', usage: { ...team.usage, agents: 1 }, limits: { agents: 1, replies_per_24h: null, storage_bytes: 10737418240, storage_warn_bytes: 8589934592 } }} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(within(screen.getByRole('region', { name: 'Current plan' })).getByText('Solo')).toBeInTheDocument();
+  expect(screen.getByText(/1 of 1 agents/i)).toBeInTheDocument();
+  expect(screen.getByText('Attachment storage: 0 B of 10.0 GiB')).toBeInTheDocument();
 });
 
 test('a cancelled plan says when access ends', () => {
@@ -71,7 +84,7 @@ test('after the trial or a subscription ended the workspace is locked but can st
   expect(screen.getByText('Trial ended')).toBeInTheDocument();
   expect(screen.getByText(/trial ended oct 15/i)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /manage billing/i })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /team, \$49 per month/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /team, \$69 per month/i })).toBeInTheDocument();
 });
 
 test('shows a message after returning from checkout and an error when an action fails', () => {
@@ -101,7 +114,7 @@ test('a complimentary workspace says so, shows its end and offers no billing por
   expect(screen.getByText(/complimentary team plan \(until jan 1, 2027/i)).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /manage billing/i })).not.toBeInTheDocument();
   expect(screen.queryByText(/cancels|renews/i)).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: /\$49/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /\$69/ })).not.toBeInTheDocument();
 });
 
 test('a complimentary plan with no end says it has none', () => {
@@ -133,22 +146,31 @@ test('a paid plan shows its storage cap and no reply cap', () => {
 test('each plan is a card with its price, what it includes and one clear Choose button; Yearly switches the prices', () => {
   render(<BillingPage billing={free} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
   const card = (name: string) => screen.getByRole('article', { name });
-  expect(card('Team')).toHaveTextContent('$49per monthBilled monthly');
+  expect(card('Solo')).toHaveTextContent('$19per monthBilled monthly');
+  expect(card('Solo')).toHaveTextContent('1 agent');
+  expect(card('Solo')).not.toHaveTextContent('Up to');
+  expect(card('Solo')).toHaveTextContent('10 GiB attachment storage');
+  expect(card('Small')).toHaveTextContent('$39per month');
+  expect(card('Small')).toHaveTextContent('Up to 3 agents');
+  expect(card('Small')).toHaveTextContent('30 GiB attachment storage');
+  expect(card('Team')).toHaveTextContent('$69per monthBilled monthly');
   expect(card('Team')).toHaveTextContent('Up to 10 agents');
   expect(card('Team')).toHaveTextContent('100 GiB attachment storage');
   expect(card('Team 25')).toHaveTextContent('Up to 25 agents');
   expect(card('Team 25')).toHaveTextContent('250 GiB attachment storage');
   expect(card('Founding')).toHaveTextContent('10 workspaces only');
   // One solid button per plan, so buying is the obvious action on the page.
-  for (const name of ['Team', 'Team 25', 'Founding']) {
+  for (const name of ['Solo', 'Small', 'Team', 'Team 25', 'Founding']) {
     const buttons = within(card(name)).getAllByRole('button');
     expect(buttons.map((button) => button.textContent)).toEqual([`Choose ${name}`]);
     expect(buttons[0]).toHaveClass('primary-action');
   }
   expect(screen.getByRole('radio', { name: 'Monthly' })).toBeChecked();
   fireEvent.click(screen.getByRole('radio', { name: /yearly/i }));
-  expect(card('Team')).toHaveTextContent('Billed $490 yearly');
-  expect(card('Team 25')).toHaveTextContent('Billed $990 yearly');
+  expect(card('Solo')).toHaveTextContent('Billed $190 yearly');
+  expect(card('Small')).toHaveTextContent('Billed $390 yearly');
+  expect(card('Team')).toHaveTextContent('Billed $690 yearly');
+  expect(card('Team 25')).toHaveTextContent('Billed $1,490 yearly');
   expect(card('Founding')).toHaveTextContent('Billed $100 yearly');
 });
 
@@ -180,10 +202,12 @@ test('yearly prices read per month with what is billed, so plans compare at a gl
   expect(card('Founding')).toHaveTextContent('$8.33per month');
   expect(card('Founding')).toHaveTextContent('Billed $100 yearly, the price never changes');
   fireEvent.click(screen.getByRole('radio', { name: /yearly/i }));
-  expect(card('Team')).toHaveTextContent('$40.83per month');
-  expect(card('Team')).toHaveTextContent('Billed $490 yearly');
-  expect(card('Team 25')).toHaveTextContent('$82.50per month');
-  expect(card('Team 25')).toHaveTextContent('Billed $990 yearly');
+  expect(card('Solo')).toHaveTextContent('$15.83per month');
+  expect(card('Small')).toHaveTextContent('$32.50per month');
+  expect(card('Team')).toHaveTextContent('$57.50per month');
+  expect(card('Team')).toHaveTextContent('Billed $690 yearly');
+  expect(card('Team 25')).toHaveTextContent('$124.17per month');
+  expect(card('Team 25')).toHaveTextContent('Billed $1,490 yearly');
 });
 
 test('the current plan, its usage and Manage billing sit together at the top', () => {

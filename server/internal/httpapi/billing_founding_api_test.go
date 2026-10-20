@@ -130,7 +130,7 @@ func TestTenthFoundingSlotArchivesTheProductAndClosesFounding(t *testing.T) {
 	if f.offersFounding(t) {
 		t.Fatal("billing still offers founding after it closed")
 	}
-	if got := strings.Join(getBilling(t, f.api, f.adminA).CheckoutPlans, ","); got != "team_monthly,team_yearly,team25_monthly,team25_yearly" {
+	if got := strings.Join(getBilling(t, f.api, f.adminA).CheckoutPlans, ","); got != "solo_monthly,solo_yearly,small_monthly,small_yearly,team_monthly,team_yearly,team25_monthly,team25_yearly" {
 		t.Fatalf("checkout_plans=%s", got)
 	}
 }

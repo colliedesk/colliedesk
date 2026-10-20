@@ -270,6 +270,14 @@ func TestFoundingDryRunSaysWhetherTheImportWouldBeRefused(t *testing.T) {
 	}
 }
 
+func TestStorageCapErrorOnSoloAndSmallPointsToTheNextPlan(t *testing.T) {
+	for plan, want := range map[string]string{"solo": "of the Solo plan. Nothing was imported. Upgrade to the Small plan", "small": "of the Small plan. Nothing was imported. Upgrade to the Team plan"} {
+		if message := (&freshdesk.StorageCapError{Plan: plan, Needed: 2 << 30, Used: 9 << 30, Limit: 10 << 30}).Error(); !strings.Contains(message, want) {
+			t.Errorf("%s: %q, want %q", plan, message, want)
+		}
+	}
+}
+
 func TestStorageCapErrorUsesReadableSizes(t *testing.T) {
 	message := (&freshdesk.StorageCapError{Needed: 3 << 30, Used: 19 << 30, Limit: 20 << 30}).Error()
 	for _, want := range []string{"3 GiB", "1 GiB", "20 GiB"} {

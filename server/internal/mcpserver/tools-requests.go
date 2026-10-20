@@ -249,7 +249,7 @@ func billingRequest(c *call, arguments map[string]any) (any, error) {
 		return ask(c, http.MethodPost, "/api/v1/billing/portal", nil)
 	}
 	if args.Plan == "" {
-		return nil, &toolError{"A checkout needs a plan: team_monthly, team_yearly, team25_monthly, team25_yearly or founding."}
+		return nil, &toolError{"A checkout needs a plan: solo_monthly, solo_yearly, small_monthly, small_yearly, team_monthly, team_yearly, team25_monthly, team25_yearly or founding."}
 	}
 	return ask(c, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": args.Plan})
 }

@@ -19,7 +19,7 @@ off and logs why, so an image older than its configuration never stops the inbox
 | `POLAR_WEBHOOK_SECRET` | The `whsec_...` secret of the webhook endpoint. |
 | `POLAR_API_URL` | Optional. Default `https://api.polar.sh`; sandbox `https://sandbox-api.polar.sh`. |
 | `POLAR_PRODUCT_TEAM_MONTHLY`, `POLAR_PRODUCT_TEAM_YEARLY`, `POLAR_PRODUCT_FOUNDING` | Polar product ids. |
-| `POLAR_PRODUCT_TEAM25_MONTHLY`, `POLAR_PRODUCT_TEAM25_YEARLY` | Optional. Polar product ids of Team 25. Unset: checkout for `team25_*` answers 400 like an unknown plan (the message lists only the plans the server sells), no event maps to the plan, `GET /billing` leaves `team25_*` out of `checkout_plans` so the web app shows no Team 25 button, and the Team seat error does not mention Team 25. Existing deployments keep starting. |
+| `POLAR_PRODUCT_TEAM25_MONTHLY`, `POLAR_PRODUCT_TEAM25_YEARLY`, `POLAR_PRODUCT_SOLO_MONTHLY`, `POLAR_PRODUCT_SOLO_YEARLY`, `POLAR_PRODUCT_SMALL_MONTHLY`, `POLAR_PRODUCT_SMALL_YEARLY` | Optional. Polar product ids of Team 25, Solo and Small. Unset: checkout for that price answers 400 like an unknown plan (the message lists only the plans the server sells), no event maps to it, `GET /billing` leaves it out of `checkout_plans` so the web app shows no button for it, and a seat refusal never points to a plan without both its products (`Config.PlansOnSale`, `domain.UpgradeFor`). Existing deployments keep starting. |
 | `BILLING_ALERT_EMAIL` | Optional. Operator address told about a paid subscription that matches no workspace, and the summary of `collie billing reconcile`. Needs `SMTP_HOST` and `MAIL_FROM_DOMAIN`. |
 
 Webhook URL to register in Polar: `https://<host>/api/v1/webhooks/polar`, event types
@@ -307,11 +307,12 @@ holds 300k files under the 200 ms budget. Code: `Store.CheckStorage` in `store/p
   $100 once a year for life and attachments are the one cost that grows without bound (break-even is
   roughly 41-56 GB), so it has a cap. Unlike the trial, imported files count: the number is
   `workspaces.stored_storage_bytes`, the sum of every attachment, kept by the same triggers (migration
-  `founding-storage-counter`, additive; the three trigger functions now update both counters). Team
-  (100 GiB, `domain.TeamStorageBytes`) and Team 25 (250 GiB, `domain.Team25StorageBytes`, 25 agents,
-  $99 or $990) have the same shape: imports count, warn at 80%, same inbound exemption. The rule is
+  `founding-storage-counter`, additive; the three trigger functions now update both counters). Solo
+  (10 GiB, 1 agent, $19 or $190), Small (30 GiB, 3 agents, $39 or $390), Team
+  (100 GiB, `domain.TeamStorageBytes`, $69 or $690) and Team 25 (250 GiB, `domain.Team25StorageBytes`, 25 agents,
+  $149 or $1,490) have the same shape: imports count, warn at 80%, same inbound exemption. The rule is
   `domain.StorageCountsImports`: every capped plan except the trial and a locked workspace. When one
-  workspace holds several paid subscriptions, Team 25 outranks Founding, which outranks Team (`planRank`: Team 25 > Team > Founding, by agents then storage). The migration `allow-team25-plan` cannot be rolled back while a subscription row is on `team25` (it raises, naming the count; deleting or downgrading the row would lock or shrink a paying workspace, and Polar does not redeliver an event it already delivered). Move those subscriptions to another plan in Polar first. A Team workspace at its 10th seat is told to upgrade to Team 25 under Manage billing when Team 25 is on sale; the switch itself happens in the Polar portal, there is no in-app flow. Over the cap nothing is deleted. Inbound customer mail is exempt (`Store.CheckInboundStorage` lets a paid plan
+  workspace holds several paid subscriptions, the better plan wins (`planRank`: Team 25 > Team > Founding > Small > Solo, by agents then storage). The migration `allow-team25-plan` cannot be rolled back while a subscription row is on `team25` (it raises, naming the count; deleting or downgrading the row would lock or shrink a paying workspace, and Polar does not redeliver an event it already delivered). Move those subscriptions to another plan in Polar first; `allow-solo-and-small-plans` refuses the same way while a row is on `solo` or `small`. A workspace at its last seat is told to upgrade to the next plan up the ladder Solo, Small, Team, Team 25 that is on sale (`domain.UpgradeFor`); Founding and Team 25 are told to contact us; the switch itself happens in the Polar portal, there is no in-app flow. Over the cap nothing is deleted. Inbound customer mail is exempt (`Store.CheckInboundStorage` lets a paid plan
   through, so it is stored in full and its bytes still count: a bounced customer email hurts the paying
   team's own customers and looks like an outage; the cost is bounded by real mail). The cap still refuses
   what an agent or an import supplies (`Store.CheckStorage`, the importer's guard). There is no agent

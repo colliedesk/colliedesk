@@ -149,7 +149,7 @@ func (s *Store) UpdateAgent(ctx context.Context, workspaceID, agentID string, up
 		}
 		if !wasActive && nowActive {
 			if s.limits {
-				if err := CheckAgentSeat(ctx, tx, workspaceID, s.now(), email, "", s.team25Offered); err != nil {
+				if err := CheckAgentSeat(ctx, tx, workspaceID, s.now(), email, "", s.plansOnSale); err != nil {
 					return domain.TeamMember{}, err
 				}
 			}

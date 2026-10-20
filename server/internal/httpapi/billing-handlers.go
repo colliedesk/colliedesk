@@ -39,6 +39,14 @@ func (a *API) checkoutProduct(plan string) (string, bool) {
 		return products.Team25Monthly, products.Team25Monthly != ""
 	case "team25_yearly":
 		return products.Team25Yearly, products.Team25Yearly != ""
+	case "solo_monthly":
+		return products.SoloMonthly, products.SoloMonthly != ""
+	case "solo_yearly":
+		return products.SoloYearly, products.SoloYearly != ""
+	case "small_monthly":
+		return products.SmallMonthly, products.SmallMonthly != ""
+	case "small_yearly":
+		return products.SmallYearly, products.SmallYearly != ""
 	}
 	return "", false
 }

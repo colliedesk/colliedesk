@@ -18,8 +18,11 @@ type StorageCapError struct {
 
 func (e *StorageCapError) Error() string {
 	remedy := "Contact us for more storage"
-	if e.Plan == domain.PlanFounding {
+	switch e.Plan {
+	case domain.PlanFounding:
 		remedy = "Upgrade to the Team plan (Billing > Manage billing) for a higher cap"
+	case domain.PlanSolo, domain.PlanSmall:
+		remedy = "Upgrade to the " + domain.PlanName(domain.NextPlan(e.Plan)) + " plan (Billing > Manage billing) for a higher cap"
 	}
 	name := domain.PlanName(e.Plan)
 	return fmt.Sprintf("this import needs %s of attachments, but only %s is free under the %s attachment cap of the %s plan. "+

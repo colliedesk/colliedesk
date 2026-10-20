@@ -63,8 +63,9 @@ func TestPolarWebhookActivatesTheWorkspaceNamedByExternalID(t *testing.T) {
 }
 
 func TestPolarWebhookMapsProductsToPlans(t *testing.T) {
-	agents := map[string]int{"team": 10, "founding": 10, "team25": 25}
-	for product, plan := range map[string]string{productMonthly: "team", productYearly: "team", productFounding: "founding", productTeam25Monthly: "team25", productTeam25Yearly: "team25"} {
+	agents := map[string]int{"solo": 1, "small": 3, "team": 10, "founding": 10, "team25": 25}
+	for product, plan := range map[string]string{productMonthly: "team", productYearly: "team", productFounding: "founding", productTeam25Monthly: "team25", productTeam25Yearly: "team25",
+		productSoloMonthly: "solo", productSoloYearly: "solo", productSmallMonthly: "small", productSmallYearly: "small"} {
 		t.Run(plan+" "+product, func(t *testing.T) {
 			f := newBillingFixture(t)
 			now := time.Now()

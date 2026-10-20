@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -10,6 +11,8 @@ import (
 // subscription it is on PlanNone and locked.
 const (
 	PlanTrial    = "trial"
+	PlanSolo     = "solo"
+	PlanSmall    = "small"
 	PlanTeam     = "team"
 	PlanTeam25   = "team25"
 	PlanFounding = "founding"
@@ -23,10 +26,12 @@ const BillingStatusNone = "none"
 const FoundingSlots = 10
 
 // Storage caps. The trial (and a locked workspace) gets 2 GiB of attachment bytes, imported files
-// excluded. Paid plans count imported files too: Founding gets 20 GiB, Team 100 GiB, Team 25 250 GiB.
-// StorageWarnPercent is where the web app starts to warn.
+// excluded. Paid plans count imported files too: Solo gets 10 GiB, Small 30 GiB, Founding 20 GiB,
+// Team 100 GiB, Team 25 250 GiB. StorageWarnPercent is where the web app starts to warn.
 const (
 	TrialStorageBytes    int64 = 2 << 30
+	SoloStorageBytes     int64 = 10 << 30
+	SmallStorageBytes    int64 = 30 << 30
 	FoundingStorageBytes int64 = 20 << 30
 	TeamStorageBytes     int64 = 100 << 30
 	Team25StorageBytes   int64 = 250 << 30
@@ -48,6 +53,10 @@ type PlanLimits struct {
 // PlanName is the plan as a person reads it: "Team 25", not the stored id "team25".
 func PlanName(plan string) string {
 	switch plan {
+	case PlanSolo:
+		return "Solo"
+	case PlanSmall:
+		return "Small"
 	case PlanTeam:
 		return "Team"
 	case PlanTeam25:
@@ -65,6 +74,10 @@ func StorageCap(plan string) int64 {
 	switch plan {
 	case PlanTrial, PlanNone:
 		return TrialStorageBytes
+	case PlanSolo:
+		return SoloStorageBytes
+	case PlanSmall:
+		return SmallStorageBytes
 	case PlanFounding:
 		return FoundingStorageBytes
 	case PlanTeam:
@@ -94,6 +107,10 @@ func LimitsFor(plan string) PlanLimits {
 func LimitsForStorage(plan string, storageCap int64) PlanLimits {
 	var limits PlanLimits
 	switch plan {
+	case PlanSolo:
+		limits.Agents = 1
+	case PlanSmall:
+		limits.Agents = 3
 	case PlanTrial, PlanTeam, PlanFounding:
 		limits.Agents = 10
 	case PlanTeam25:
@@ -112,7 +129,7 @@ func LimitsForStorage(plan string, storageCap int64) PlanLimits {
 
 // Subscription mirrors the latest Polar subscription event of a workspace.
 type Subscription struct {
-	Plan              string // team, team25 or founding: what the product bought
+	Plan              string // solo, small, team, team25 or founding: what the product bought
 	SubscriptionID    string
 	CustomerID        string
 	Status            string // the Polar status
@@ -172,6 +189,8 @@ type StorageLimitError struct {
 func (e *StorageLimitError) Error() string {
 	limit := FormatBytes(e.Limit)
 	switch e.Plan {
+	case PlanSolo, PlanSmall:
+		return fmt.Sprintf("This workspace has reached the %s attachment storage limit of the %s plan. Nothing is deleted, customer email is still stored, and you can still read, reply and export. Uploads and imports are refused. Upgrade to the %s plan under Billing > Manage billing for a higher limit, or export your data.", limit, PlanName(e.Plan), PlanName(NextPlan(e.Plan)))
 	case PlanFounding:
 		return fmt.Sprintf("This workspace has reached the %s attachment storage limit of the Founding plan. Nothing is deleted, customer email is still stored, and you can still read, reply and export. Uploads and imports are refused. Upgrade to the Team plan under Billing > Manage billing for a higher limit, or export your data.", limit)
 	case PlanTeam, PlanTeam25:
@@ -196,31 +215,52 @@ func FormatBytes(n int64) string {
 	return fmt.Sprintf("%d bytes", n)
 }
 
+// upgradeLadder is the order a growing team moves through the plans; each step gives more agents.
+// Founding is a one-off offer outside it.
+var upgradeLadder = []string{PlanSolo, PlanSmall, PlanTeam, PlanTeam25}
+
+// NextPlan is the step after plan on the upgrade ladder (Solo, Small, Team, Team 25), or "" for the
+// top step or a plan outside the ladder.
+func NextPlan(plan string) string {
+	for index, step := range upgradeLadder[:len(upgradeLadder)-1] {
+		if step == plan {
+			return upgradeLadder[index+1]
+		}
+	}
+	return ""
+}
+
+// UpgradeFor is the first plan above plan on the ladder that onSale lists, or "" when there is none,
+// so a refusal never offers a plan the server cannot sell.
+func UpgradeFor(plan string, onSale []string) string {
+	for next := NextPlan(plan); next != ""; next = NextPlan(next) {
+		if slices.Contains(onSale, next) {
+			return next
+		}
+	}
+	return ""
+}
+
 // PlanLimitError means an action would exceed a limit of the workspace's plan.
 type PlanLimitError struct {
 	Plan   string
 	Agents int // the agent cap of the plan
-	// Team25Offered is true when this server can sell Team 25, so a Team workspace can be told to upgrade.
-	Team25Offered bool
+	// Upgrade is the plan the refusal points to (see UpgradeFor), "" when the server sells none above.
+	Upgrade string
 }
 
 func (e *PlanLimitError) Error() string {
-	name := "Team"
-	switch e.Plan {
-	case PlanFounding:
-		name = "Founding"
-	case PlanTeam25:
-		name = "Team 25"
-	case PlanTrial:
-		name = "trial"
-	}
-	if e.Plan == PlanTeam && e.Team25Offered {
-		return fmt.Sprintf("The Team plan allows %d agents, pending invites included. Revoke a pending invite to free a seat, or upgrade to Team 25 (up to %d agents) under Manage billing.", e.Agents, LimitsFor(PlanTeam25).Agents)
+	allows := fmt.Sprintf("%d agents", e.Agents)
+	if e.Agents == 1 {
+		allows = "1 agent"
 	}
 	if e.Plan == PlanTrial {
-		return fmt.Sprintf("The trial allows %d agents, pending invites included. Revoke a pending invite to free a seat, or subscribe and contact us for more than %d agents.", e.Agents, e.Agents)
+		return fmt.Sprintf("The trial allows %s, pending invites included. Revoke a pending invite to free a seat, or subscribe and contact us for more than %d agents.", allows, e.Agents)
 	}
-	return fmt.Sprintf("The %s plan allows %d agents, pending invites included. Revoke a pending invite to free a seat, or contact us for more than %d agents.", name, e.Agents, e.Agents)
+	if e.Upgrade != "" {
+		return fmt.Sprintf("The %s plan allows %s, pending invites included. Revoke a pending invite to free a seat, or upgrade to %s (up to %d agents) under Manage billing.", PlanName(e.Plan), allows, PlanName(e.Upgrade), LimitsFor(e.Upgrade).Agents)
+	}
+	return fmt.Sprintf("The %s plan allows %s, pending invites included. Revoke a pending invite to free a seat, or contact us for more than %d agents.", PlanName(e.Plan), allows, e.Agents)
 }
 
 // Trial outbound controls: during the trial email goes only to customers who wrote first (unless
@@ -328,15 +368,19 @@ func NewBilling(subscriptions []Subscription, trialEndsAt time.Time, usage Billi
 }
 
 // planRank orders the paid plans by what they give, so a workspace that holds two gets the better
-// one: Team 25 has the most agents; Team and Founding have the same agents but Team has the larger
-// storage cap.
+// one: agents first, then storage. Team 25 has the most agents; Team and Founding have the same
+// agents but Team has the larger storage cap; Small and Solo have fewer agents than Founding.
 func planRank(plan string) int {
 	switch plan {
 	case PlanTeam25:
-		return 3
+		return 5
 	case PlanTeam:
-		return 2
+		return 4
 	case PlanFounding:
+		return 3
+	case PlanSmall:
+		return 2
+	case PlanSolo:
 		return 1
 	}
 	return 0

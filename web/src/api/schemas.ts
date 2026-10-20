@@ -25,8 +25,8 @@ export const publicConfigSchema = z.object({
   limits: z.object({ outgoing_attachments_bytes: z.number().int(), outgoing_attachments_files: z.number().int() }),
   product_analytics: z.object({ enabled: z.boolean(), key: z.string().nullable(), host: z.string().nullable(), realm: z.enum(['cloud', 'self-hosted']).nullable() }),
 }) satisfies z.ZodType<Generated<'PublicConfig'>>;
-export const checkoutPlanSchema = z.enum(['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding']);
-export const planSchema = z.enum(['trial', 'team', 'team25', 'founding', 'none']);
+export const checkoutPlanSchema = z.enum(['solo_monthly', 'solo_yearly', 'small_monthly', 'small_yearly', 'team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding']);
+export const planSchema = z.enum(['trial', 'solo', 'small', 'team', 'team25', 'founding', 'none']);
 export const billingSchema = z.object({
   plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(),
   status: z.enum(['none', 'incomplete', 'incomplete_expired', 'trialing', 'active', 'past_due', 'canceled', 'unpaid', 'paused', 'unknown']),

@@ -41,11 +41,19 @@ Nothing else is limited. Conversations, contacts, tags, notes and search work as
 
 | Plan | Price | Agents |
 |---|---|---|
-| Team | $49 per month or $490 per year, per workspace | up to 10 (contact us for more) |
-| Team 25 | $99 per month or $990 per year, per workspace | up to 25 |
+| Solo | $19 per month or $190 per year, per workspace | 1 |
+| Small | $39 per month or $390 per year, per workspace | up to 3 |
+| Team | $69 per month or $690 per year, per workspace | up to 10 |
+| Team 25 | $149 per month or $1,490 per year, per workspace | up to 25 (contact us for more) |
 | Founding | $100 per year, for life | up to 10 |
 
-Founding is limited to 10 subscriptions. When all 10 are taken it is closed for good and the billing page offers Team and Team 25 only.
+There is no free plan; every workspace starts with the free trial. Unlimited, for teams with more
+than 25 agents at $349 per month billed yearly, is coming soon.
+
+Founding is limited to 10 subscriptions. When all 10 are taken it is closed for good and the billing page offers the other plans only.
+
+When all seats of a plan are taken, the refusal names the next plan up (Solo, then Small, then
+Team, then Team 25). Switch plans under **Manage billing**.
 
 The plan belongs to the workspace, not to a person. Paid plans have no reply cap and no recipient rule. Every paid plan has an attachment storage cap
 (see "Attachment storage" below). Prices are in US dollars.
@@ -55,6 +63,8 @@ The plan belongs to the workspace, not to a person. Paid plans have no reply cap
 | Plan | Attachment storage |
 |---|---|
 | Free trial | 2 GiB. Files brought in by an import do not count. |
+| Solo | 10 GiB. Files brought in by an import count. |
+| Small | 30 GiB. Files brought in by an import count. |
 | Team | 100 GiB. Files brought in by an import count. |
 | Team 25 | 250 GiB. Files brought in by an import count. |
 | Founding | 20 GiB. Files brought in by an import count. |
@@ -69,7 +79,7 @@ upload, an attachment on a reply, and a Freshdesk import that would pass it (the
 start; see [Import from Freshdesk](import-freshdesk.md)). Colliedesk has no screen yet for uploading a
 file or attaching one to a reply; the limit applies to those the day they exist. Each refusal names
 the limit. To raise the
-limit, contact us (on Founding, switch to the Team plan under **Manage billing**), or export your data. The trial is
+limit, switch to a larger plan under **Manage billing** (Solo to Small, Small or Founding to Team), contact us on Team or Team 25, or export your data. The trial is
 different: at its 2 GiB limit **all** incoming email is refused, because the size of the whole
 message counts, not only its attachments. There is no way to delete an attachment, so the way to
 keep receiving email is to upgrade. Files brought in by an import do not count on the trial. A file counts each time it is attached, so the same file on two messages counts twice.
@@ -92,7 +102,7 @@ trial (or the subscription) has ended, instead of the inbox.
 1. Open **Settings → Plan and billing** (or select **Choose a plan** in the banner or on the locked page).
 2. Under **Choose a plan**, pick **Monthly** or **Yearly, 2 months free**. Each plan is a card with its
    price per month (a yearly plan also shows what is billed once a year), its agents and attachment
-   storage. Select **Choose Team**, **Choose Team 25** or **Choose Founding**.
+   storage. Select **Choose Solo**, **Choose Small**, **Choose Team**, **Choose Team 25** or **Choose Founding**.
 3. Pay in the window that opens on top of Colliedesk. It is run by our payment provider, Polar;
    Colliedesk never sees your card. Pay by card. Apple Pay and Google Pay come later. If you
    close the window, you stay on the page and can start again.

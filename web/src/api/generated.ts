@@ -1344,10 +1344,10 @@ export interface components {
             expires_in_seconds: number;
         };
         /**
-         * @description `team25_*` is refused with 400 on a server that has no Polar product for it.
+         * @description `solo_*`, `small_*` and `team25_*` are refused with 400 on a server that has no Polar product for them.
          * @enum {string}
          */
-        CheckoutPlan: "team_monthly" | "team_yearly" | "team25_monthly" | "team25_yearly" | "founding";
+        CheckoutPlan: "solo_monthly" | "solo_yearly" | "small_monthly" | "small_yearly" | "team_monthly" | "team_yearly" | "team25_monthly" | "team25_yearly" | "founding";
         FoundingSlots: {
             /** @description Founding slots in total */
             slots: number;
@@ -1365,7 +1365,7 @@ export interface components {
              * @description The plan in effect now. `trial` is the free trial; `none` means the trial is over and nothing is paid.
              * @enum {string}
              */
-            plan: "trial" | "team" | "team25" | "founding" | "none";
+            plan: "trial" | "solo" | "small" | "team" | "team25" | "founding" | "none";
             /**
              * Format: date-time
              * @description When the free trial ends or ended, whatever the plan.
@@ -1390,7 +1390,7 @@ export interface components {
              * @description When a complimentary plan ends; null when it has no end or the plan is not complimentary.
              */
             complimentary_until: string | null;
-            /** @description The plans this server can sell, in the order to offer them. `team25_*` appear only when both Team 25 products are configured; the web app shows a purchase button for each plan listed and for no other. `founding` is dropped once Founding is closed. */
+            /** @description The plans this server can sell, in the order to offer them. `solo_*`, `small_*` and `team25_*` appear only for the Polar products this server has configured; the web app shows a purchase button for each plan listed and for no other. `founding` is dropped once Founding is closed. */
             checkout_plans: components["schemas"]["CheckoutPlan"][];
             limits: {
                 /** @description Seats of the plan; 0 when locked. */
@@ -1399,7 +1399,7 @@ export interface components {
                 replies_per_24h: number | null;
                 /**
                  * Format: int64
-                 * @description Attachment storage cap in bytes: 2 GiB on the trial and when locked (imported files do not count); 20 GiB on Founding, 100 GiB on Team and 250 GiB on Team 25 (imported files count); null on self-hosted, which has none.
+                 * @description Attachment storage cap in bytes: 2 GiB on the trial and when locked (imported files do not count); 10 GiB on Solo, 30 GiB on Small, 20 GiB on Founding, 100 GiB on Team and 250 GiB on Team 25 (imported files count); null on self-hosted, which has none.
                  */
                 storage_bytes: number | null;
                 /**
@@ -1412,7 +1412,7 @@ export interface components {
                 agents: number;
                 /**
                  * Format: int64
-                 * @description Attachment bytes counted against `limits.storage_bytes`. On the trial files of imported messages are not counted; on the Founding plan every file is, imported ones included.
+                 * @description Attachment bytes counted against `limits.storage_bytes`. On the trial files of imported messages are not counted; on a paid plan every file is, imported ones included.
                  */
                 storage_bytes: number;
                 /** @description People reached by the emailed replies of the last 24 hours (the contact plus every Cc address of each reply), which count against the trial cap of 200; 0 on other plans. */
@@ -1567,7 +1567,7 @@ export interface components {
             /** @description The trial and lock state, so every agent sees it. Null on self-hosted instances. */
             plan: null | {
                 /** @enum {string} */
-                plan: "trial" | "team" | "team25" | "founding" | "none";
+                plan: "trial" | "solo" | "small" | "team" | "team25" | "founding" | "none";
                 /** Format: date-time */
                 trial_ends_at: string;
                 locked: boolean;
