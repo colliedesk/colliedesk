@@ -21,6 +21,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
+	"github.com/colliedesk/colliedesk/server/internal/kbhtml"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
@@ -43,10 +44,12 @@ const (
 	descriptionChars = 160
 )
 
-// contentSecurityPolicy lets a page load its own style sheet and images and nothing else; no script
-// may run, and no other site may frame it. A help center on the app's own origin therefore cannot
-// reach a signed-in person's session.
-const contentSecurityPolicy = "default-src 'none'; img-src 'self'; style-src 'self'; script-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+// contentSecurityPolicy lets a page load its own style sheet, images and media, and frame the video
+// players of kbhtml's allowlist, and nothing else; no script of the page may run, and no other site
+// may frame it. A help center on the app's own origin therefore cannot reach a signed-in person's
+// session.
+var contentSecurityPolicy = "default-src 'none'; img-src 'self'; style-src 'self'; frame-src " + strings.Join(kbhtml.FrameSources(), " ") +
+	"; media-src 'self'; script-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
 
 // slugShape is the shape the workspaces table enforces; anything else cannot be a workspace.
 var slugShape = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)

@@ -10,23 +10,27 @@ import (
 	"unicode/utf8"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
+	"github.com/colliedesk/colliedesk/server/internal/kbhtml"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 )
 
-// markdown renders article text the way the editor previews it (GitHub Flavored Markdown). It never
-// sets html.WithUnsafe: raw HTML in a text is left out, never passed through. Links and images go
-// through publicLinks first.
+// markdown renders article text the way the editor previews it (GitHub Flavored Markdown). Raw HTML
+// in a text goes through rawHTML, which shows allowed video players and the text of anything else.
+// Links and images go through publicLinks first.
 var markdown = goldmark.New(
 	goldmark.WithExtensions(
 		// Alignment as an attribute: a style attribute would be refused by the page's CSP.
 		extension.NewTable(extension.WithTableCellAlignMethod(extension.TableCellAlignAttribute)),
 		extension.Strikethrough, extension.Linkify, extension.TaskList, extension.Footnote),
 	goldmark.WithParserOptions(parser.WithAutoHeadingID(), parser.WithASTTransformers(util.Prioritized(publicLinks{}, 100))),
+	// Below the default renderers' 1000, so these functions replace theirs.
+	goldmark.WithRendererOptions(renderer.WithNodeRenderers(util.Prioritized(rawHTML{}, 100))),
 )
 
 // plain parses text without changing it, for excerpts.
@@ -47,7 +51,41 @@ func renderArticle(body, base string) (template.HTML, error) {
 	if err := markdown.Convert([]byte(body), &out, parser.WithContext(context)); err != nil {
 		return "", err
 	}
-	return template.HTML(out.String()), nil //nolint:gosec // goldmark escapes text and omits raw HTML
+	return template.HTML(out.String()), nil //nolint:gosec // goldmark escapes text; rawHTML keeps only kbhtml's output
+}
+
+// rawHTML renders each piece of raw HTML through kbhtml, the allowlist the editor preview shares:
+// a YouTube or Vimeo player is rebuilt, any other element is left out with its text kept. What is
+// stored stays as written.
+type rawHTML struct{}
+
+func (rawHTML) RegisterFuncs(registerer renderer.NodeRendererFuncRegisterer) {
+	registerer.Register(ast.KindHTMLBlock, func(writer util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		block := node.(*ast.HTMLBlock)
+		var raw bytes.Buffer
+		lines := block.Lines()
+		for i := 0; i < lines.Len(); i++ {
+			segment := lines.At(i)
+			raw.Write(segment.Value(source))
+		}
+		if block.HasClosure() {
+			raw.Write(block.ClosureLine.Value(source))
+		}
+		shown, _ := kbhtml.Fragment(raw.String())
+		_, _ = writer.WriteString(shown)
+		return ast.WalkContinue, nil
+	})
+	registerer.Register(ast.KindRawHTML, func(writer util.BufWriter, source []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkSkipChildren, nil
+		}
+		shown, _ := kbhtml.Fragment(string(node.(*ast.RawHTML).Segments.Value(source)))
+		_, _ = writer.WriteString(shown)
+		return ast.WalkSkipChildren, nil
+	})
 }
 
 // publicLinks rewrites the links of a text before it is rendered:

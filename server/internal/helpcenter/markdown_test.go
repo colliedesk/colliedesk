@@ -7,18 +7,28 @@ import (
 
 func TestArticleMarkdownNeverRendersScriptOrRawHTML(t *testing.T) {
 	cases := map[string]string{
-		"raw script":            "Hello <script>alert(1)</script>",
-		"raw block":             "<div onclick=\"alert(1)\">x</div>",
-		"javascript link":       "[click](javascript:alert(1))",
-		"mixed case scheme":     "[click](JaVaScRiPt:alert(1))",
-		"scheme with tab":       "[click](java\tscript:alert(1))",
-		"entity in scheme":      "[click](java&#x09;script:alert(1))",
-		"data link":             "[click](data:text/html;base64,PHNjcmlwdD4=)",
-		"vbscript autolink":     "<vbscript:msgbox(1)>",
-		"unknown autolink":      "<intent:evil>",
-		"javascript image":      "![x](javascript:alert(1))",
-		"onerror in alt":        "![\" onerror=\"alert(1)](https://example.com/a.png)",
-		"style attribute table": "| a |\n|:-:|\n| b |",
+		"raw script":             "Hello <script>alert(1)</script>",
+		"raw block":              "<div onclick=\"alert(1)\">x</div>",
+		"javascript link":        "[click](javascript:alert(1))",
+		"mixed case scheme":      "[click](JaVaScRiPt:alert(1))",
+		"scheme with tab":        "[click](java\tscript:alert(1))",
+		"entity in scheme":       "[click](java&#x09;script:alert(1))",
+		"data link":              "[click](data:text/html;base64,PHNjcmlwdD4=)",
+		"vbscript autolink":      "<vbscript:msgbox(1)>",
+		"unknown autolink":       "<intent:evil>",
+		"javascript image":       "![x](javascript:alert(1))",
+		"onerror in alt":         "![\" onerror=\"alert(1)](https://example.com/a.png)",
+		"style attribute table":  "| a |\n|:-:|\n| b |",
+		"iframe of another site": "<iframe src=\"https://evil.example/embed/x\"></iframe>",
+		"iframe javascript":      "<iframe src=\"javascript:alert(1)\"></iframe>",
+		"iframe data":            "<iframe src=\"data:text/html,<script>alert(1)</script>\"></iframe>",
+		"iframe srcdoc":          "<iframe srcdoc=\"<script>alert(1)</script>\"></iframe>",
+		"svg onload":             "<svg onload=\"alert(1)\"><script>alert(1)</script></svg>",
+		"object and embed":       "<object data=\"x.swf\"></object>\n\n<embed src=\"x.swf\">",
+		"style element":          "<style>body{display:none}</style>",
+		"inline image onerror":   "Hi <img src=x onerror=\"alert(1)\"> there",
+		"outside video":          "<video src=\"https://evil.example/a.mp4\" autoplay controls></video>",
+		"inline html link":       "See <a href=\"javascript:alert(1)\">this</a>.",
 	}
 	for name, body := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -27,7 +37,7 @@ func TestArticleMarkdownNeverRendersScriptOrRawHTML(t *testing.T) {
 				t.Fatal(err)
 			}
 			lower := strings.ToLower(string(html))
-			for _, bad := range []string{"<script", "onclick", "onerror=\"", "style=", "<div"} {
+			for _, bad := range []string{"<script", "onclick", "onerror=\"", "onload=\"", "style", "<div", "<svg", "<object", "<embed", "<img src=\"x", "<video", "evil.example", "srcdoc", "<a href=\"javascript"} {
 				if strings.Contains(lower, bad) {
 					t.Errorf("%q rendered %q, which holds %q", body, html, bad)
 				}
@@ -40,6 +50,30 @@ func TestArticleMarkdownNeverRendersScriptOrRawHTML(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestArticleMarkdownShowsAllowedPlayersAndTheTextOfOtherHTML(t *testing.T) {
+	html, err := renderArticle("Intro\n\n<iframe src=\"https://www.youtube.com/embed/jNQXAC9IVRw?start=65\" title=\"Tour\" allowfullscreen></iframe>\n\nWatch <iframe src=\"https://player.vimeo.com/video/76979871\"></iframe> inline, <b>bold</b> stays text.\n\n<div class=\"note\">\nNote <span>here</span>\n</div>\n\n<video src=\"/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b\" controls></video>", "/help/acme")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(html)
+	forced := ` sandbox="allow-scripts allow-same-origin allow-presentation allow-popups" referrerpolicy="strict-origin-when-cross-origin" loading="lazy"></iframe>`
+	for _, want := range []string{
+		`<iframe src="https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=65" title="Tour" allowfullscreen=""` + forced,
+		`<p>Watch <iframe src="https://player.vimeo.com/video/76979871" title="Vimeo video"` + forced + ` inline, bold stays text.</p>`,
+		"Note here",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rendered %s\nwant it to hold %s", got, want)
+		}
+	}
+	// A library video waits for the media library: until then the page shows no broken player.
+	for _, bad := range []string{"<b>", "<div", "<span", "<video", "/api/v1/", "youtube.com/"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("rendered %s, which holds %s", got, bad)
+		}
 	}
 }
 
