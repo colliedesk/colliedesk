@@ -5,6 +5,8 @@ import (
 	"html"
 	"html/template"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -46,9 +48,9 @@ var kbImageID = regexp.MustCompile(`^` + regexp.QuoteMeta(domain.KBImagePath) + 
 // renderArticle turns an article's Markdown into HTML for a help center at base.
 func renderArticle(body, base string) (template.HTML, error) {
 	var out bytes.Buffer
-	context := parser.NewContext()
+	context := parser.NewContext(parser.WithIDs(&headingIDs{used: map[string]bool{}, next: map[string]int{}}))
 	context.Set(baseKey, base)
-	if err := markdown.Convert(capNesting([]byte(body)), &out, parser.WithContext(context)); err != nil {
+	if err := markdown.Convert(tame([]byte(body)), &out, parser.WithContext(context)); err != nil {
 		return "", err
 	}
 	return template.HTML(out.String()), nil //nolint:gosec // goldmark escapes text; rawHTML keeps only kbhtml's output
@@ -233,7 +235,7 @@ func safeURL(value string) bool {
 
 // excerpt is the start of an article's text as plain words, at most limit characters, cut at a word.
 func excerpt(body string, limit int) string {
-	source := capNesting([]byte(body))
+	source := tame([]byte(body))
 	var words strings.Builder
 	_ = ast.Walk(plain.Parser().Parse(text.NewReader(source)), func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		// Words of one line join as written ("an **admin**." stays "an admin."); blocks and line
@@ -270,13 +272,21 @@ func excerpt(body string, limit int) string {
 	return strings.TrimRightFunc(string(runes[:cut]), func(char rune) bool { return unicode.IsSpace(char) || unicode.IsPunct(char) }) + "…"
 }
 
-// maxNesting is how many quote and list markers a line may open. The parser takes time quadratic in
-// the depth a single line opens (100,000 ">" took 2.7 s), and a public page renders on every visit.
-const maxNesting = 16
+// The parser takes time quadratic in two things a single line can hold: the depth of quotes and lists
+// it opens (100,000 ">" took 2.7 s) and the links it starts without closing (25,000 "[a](" took
+// 3.6 s). A public page renders on every visit, so tame caps both.
+const (
+	// maxNesting is how many quote and list markers a line may open.
+	maxNesting = 16
+	// maxOpenLinks is how many link starts ("](") a line may hold whose "(" is not closed before the
+	// next one.
+	maxOpenLinks = 16
+)
 
-// capNesting shows the markers of a line past maxNesting as text, by escaping the first of them.
-// Fenced code is left alone. It returns source itself when nothing changes.
-func capNesting(source []byte) []byte {
+// tame shows what a line holds past maxNesting and maxOpenLinks as text, by escaping the first
+// marker past the cap and the "]" of every open link start past it. Fenced code is left alone. It returns
+// source itself when nothing changes.
+func tame(source []byte) []byte {
 	var out []byte
 	var fence []byte
 	for start := 0; start <= len(source); {
@@ -287,7 +297,7 @@ func capNesting(source []byte) []byte {
 			end += start
 		}
 		line := source[start:end]
-		at := -1
+		var escapes []int
 		if marker := fenceOf(line); fence == nil && marker != nil {
 			fence = marker
 		} else if fence != nil {
@@ -295,17 +305,18 @@ func capNesting(source []byte) []byte {
 				fence = nil
 			}
 		} else {
-			at = deepMarker(line)
+			escapes = lineEscapes(line)
 		}
-		if at >= 0 && out == nil {
+		if escapes != nil && out == nil {
 			out = append(make([]byte, 0, len(source)+64), source[:start]...)
 		}
 		if out != nil {
-			if at >= 0 {
-				out = append(append(append(out, line[:at]...), '\\'), line[at:]...)
-			} else {
-				out = append(out, line...)
+			from := 0
+			for _, at := range escapes {
+				out = append(append(out, line[from:at]...), '\\')
+				from = at
 			}
+			out = append(out, line[from:]...)
 			if end < len(source) {
 				out = append(out, '\n')
 			}
@@ -316,6 +327,59 @@ func capNesting(source []byte) []byte {
 		return source
 	}
 	return out
+}
+
+// lineEscapes returns where on line a backslash goes, in order, or nil.
+func lineEscapes(line []byte) []int {
+	var escapes []int
+	deep := deepMarker(line)
+	if deep >= 0 {
+		escapes = append(escapes, deep)
+	}
+	// A link start whose parentheses do not close before the next one cannot end there, yet the parser
+	// looks for its end up to the end of the line each time.
+	if bytes.Count(line, []byte("](")) > maxOpenLinks {
+		var starts []int
+		for at := 0; at+1 < len(line); at++ {
+			if line[at] == ']' && line[at+1] == '(' {
+				starts = append(starts, at)
+			}
+		}
+		seen := 0
+		for index, at := range starts {
+			end := len(line)
+			if index+1 < len(starts) {
+				end = starts[index+1]
+			}
+			if closes(line[at+2 : end]) {
+				continue
+			}
+			if seen++; seen > maxOpenLinks && at != deep {
+				escapes = append(escapes, at)
+			}
+		}
+		slices.Sort(escapes)
+	}
+	return escapes
+}
+
+// closes reports whether the "(" just before destination is closed in it, counting nested
+// parentheses and skipping escaped ones, as a link destination is read.
+func closes(destination []byte) bool {
+	depth := 1
+	for at := 0; at < len(destination); at++ {
+		switch destination[at] {
+		case '\\':
+			at++
+		case '(':
+			depth++
+		case ')':
+			if depth--; depth == 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // fenceOf returns the ``` or ~~~ run that opens or closes a code fence on line, or nil.
@@ -368,4 +432,53 @@ func deepMarker(line []byte) int {
 		}
 		i = marker + 1
 	}
+}
+
+// headingIDs names headings as goldmark does ("Reset password" is reset-password, the next one
+// reset-password-1, …) so anchors keep working, but remembers the next free suffix of each name:
+// goldmark tries every suffix from 1 again, which took 24 s for 25,000 headings of one name.
+type headingIDs struct {
+	used map[string]bool
+	next map[string]int
+}
+
+func (ids *headingIDs) Generate(value []byte, kind ast.NodeKind) []byte {
+	value = util.TrimRightSpace(util.TrimLeftSpace(value))
+	var name []byte
+	for i := 0; i < len(value); {
+		char := value[i]
+		size := util.UTF8Len(char)
+		i += int(size)
+		switch {
+		case size != 1:
+		case util.IsAlphaNumeric(char):
+			if 'A' <= char && char <= 'Z' {
+				char += 'a' - 'A'
+			}
+			name = append(name, char)
+		case util.IsSpace(char) || char == '-' || char == '_':
+			name = append(name, '-')
+		}
+	}
+	if len(name) == 0 {
+		name = []byte("id")
+		if kind == ast.KindHeading {
+			name = []byte("heading")
+		}
+	}
+	base := string(name)
+	if !ids.used[base] {
+		ids.used[base] = true
+		return name
+	}
+	for suffix := max(ids.next[base], 1); ; suffix++ {
+		if id := base + "-" + strconv.Itoa(suffix); !ids.used[id] {
+			ids.used[id], ids.next[base] = true, suffix+1
+			return []byte(id)
+		}
+	}
+}
+
+func (ids *headingIDs) Put(value []byte) {
+	ids.used[string(value)] = true
 }

@@ -108,10 +108,13 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
 
 ## Traps
 
-- **A line nests at most 16 quotes or lists.** goldmark parses one line of `>` (or `1. `, `+ `)
-  markers in time quadratic in its length: 100,000 characters took 2.7 s, on every visit, since
-  pages are not cached. `capNesting` escapes the 17th marker of a line (fenced code is left alone)
-  before rendering and before the excerpt; `TestHelpCenterHostileArticlesLatencyBudget` holds it.
+- **goldmark has quadratic paths, and every visit renders.** Measured on 100,000 characters: one line
+  of `>` (or `1. `, `+ `) markers 2.7 s; one line of `[a](` or `![](` (links that never close) 3.6 s;
+  25,000 headings of one name 24 s (goldmark looks for a free id suffix from 1 each time); emphasis
+  runs and Linkify on `*a`, `~a` about 0.7 s. `tame` escapes, per line outside fenced code, the 17th
+  nested marker and every link start past 16 whose `(` does not close before the next one;
+  `headingIDs` gives goldmark's ids (`a`, `a-1`, …) remembering the next free suffix. What is left is
+  bounded by the render guard below. `TestHelpCenterHostileArticlesLatencyBudget` holds them.
 
 - **A build without a version still changes its ETag.** Development builds have an empty version;
   the template hash in the ETag keeps an edited page from being revalidated as the old one.

@@ -1,12 +1,16 @@
 package helpcenter
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/parser"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )
@@ -146,6 +150,10 @@ func TestArticleMarkdownNestsAtMost16LevelsOnALine(t *testing.T) {
 	if !strings.Contains(got, "<p>&gt;&gt; deeper</p>") || !strings.Contains(got, "<code>"+strings.Repeat("&gt;", 20)+"\n</code>") {
 		t.Errorf("rendered %s", got)
 	}
+	links := strings.Repeat("[a](b) ", 2000) + strings.Repeat("[c](", 17) + "[d](e"
+	if html, _ := renderArticle(links, ""); strings.Count(string(html), "<a href") != 2000 || !strings.Contains(string(html), strings.Repeat("[c](", 17)+"[d](e") {
+		t.Errorf("links rendered %s", html)
+	}
 	if html, _ := renderArticle(strings.Repeat("1. ", 17)+"x", ""); strings.Count(string(html), "<ol>") != 16 || !strings.Contains(string(html), "1. x") {
 		t.Errorf("ordered lists rendered %s", html)
 	}
@@ -155,6 +163,10 @@ func TestArticleMarkdownNestsAtMost16LevelsOnALine(t *testing.T) {
 		"ordered lists": strings.Repeat("1. ", 33333),
 		"bullet lists":  strings.Repeat("+ ", 50000),
 		"mixed":         strings.Repeat("> 1) - ", 14285),
+		"links":         strings.Repeat("[a](", 25000),
+		"images":        strings.Repeat("![](", 25000),
+		"closed links":  strings.Repeat("[a](", 25000) + ")",
+		"nested links":  strings.Repeat("[a](()", 16666) + ")",
 	} {
 		started := time.Now()
 		if _, err := renderArticle(body, ""); err != nil {
@@ -220,5 +232,34 @@ func TestArticlesRenderAsThePreviewDoes(t *testing.T) {
 				t.Errorf("%d paragraphs and %d iframes, want %d and %d\n%s", counts["p"], counts["iframe"], c.Paragraphs, c.Iframes, out)
 			}
 		})
+	}
+}
+
+// Heading ids are goldmark's (a, a-1, a-2…), so an anchor link keeps working, without its quadratic
+// search for a free suffix: 25,000 headings of one name took 24 s.
+func TestHeadingIDsAreGoldmarksInLinearTime(t *testing.T) {
+	headings := "# a\n# a\n# a-1\n# A\n# a\n# \n# !!\n# a 1\n## a-1\nb\n===\n# b\n# heading\n# Ünïcode é\n# a_b\n"
+	want := regexp.MustCompile(` id="[^"]*"`).FindAllString(func() string {
+		var out bytes.Buffer
+		if err := goldmark.New(goldmark.WithParserOptions(parser.WithAutoHeadingID())).Convert([]byte(headings), &out); err != nil {
+			t.Fatal(err)
+		}
+		return out.String()
+	}(), -1)
+	html, err := renderArticle(headings, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := regexp.MustCompile(` id="[^"]*"`).FindAllString(string(html), -1); strings.Join(got, "") != strings.Join(want, "") {
+		t.Errorf("ids %q\nwant %q", got, want)
+	}
+	for name, body := range map[string]string{"atx": strings.Repeat("# a\n", 25000), "setext": strings.Repeat("a\n---\n", 16000)} {
+		started := time.Now()
+		if _, err := renderArticle(body, ""); err != nil {
+			t.Fatal(err)
+		}
+		if took := time.Since(started); took > 300*time.Millisecond {
+			t.Errorf("%s headings took %s", name, took)
+		}
 	}
 }
