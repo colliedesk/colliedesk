@@ -25,6 +25,8 @@ database schema.
   admin token runs workspace settings, the team and channels, and risky actions wait for a person.
 - Workspace isolation, per-workspace timezone with per-agent override, full workspace export.
 - **One-command install** and a signed container image.
+- **Tested upgrades**: every release is upgraded from the previous one on real-shaped data before it
+  ships, with an upgrade guide, rollback from a backup and a one-workspace restore.
 - **Colliedesk Cloud**: 14-day free trial, then Team or Founding; a workspace whose trial ended is
   locked and can still export everything.
 
@@ -34,7 +36,6 @@ Beta starts when HC Labs announces it. Before that:
 
 - Connect a Gmail / Google Workspace or Microsoft 365 mailbox with one click (OAuth); replies
   leave from your own address. Forwarding keeps working ([#95](https://github.com/colliedesk/colliedesk/issues/95)).
-- An upgrade guide, and upgrades tested from the previous release on real data ([#91](https://github.com/colliedesk/colliedesk/issues/91)).
 - Import from Freshdesk inside the app, recent tickets first, with the reconcile report on screen
   ([#97](https://github.com/colliedesk/colliedesk/issues/97)).
 - See who is viewing or replying to a conversation ([#101](https://github.com/colliedesk/colliedesk/issues/101)).
