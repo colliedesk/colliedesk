@@ -5,9 +5,9 @@ wrong, restore the backup and run the release you had. Colliedesk never undoes a
 undoing one could drop data the new release wrote, so a backup is the way back.
 
 Every release is tested this way before it is published. An install of the previous release, filled
-with data shaped like real use (imported Freshdesk and Help Scout tickets, attachments, tags,
-contacts, saved replies and views, several agents, a locked workspace, three workspaces), is upgraded
-to the new release. The release is refused if any row, column or file is lost or changed, if a row
+with data shaped like real use of everything that release can hold (for example imported tickets,
+attachments, tags, contacts, saved replies, several agents, a locked workspace, three workspaces),
+is upgraded to the new release. The release is refused if any row, column or file is lost or changed, if a row
 ends up linked to another workspace, or if the upgraded server does not serve each inbox. The backup
 and both restores below are part of the same test. Details:
 [upgrade testing](../internals/upgrades.md).
@@ -78,7 +78,8 @@ docker compose exec server /app/collie version
 ```
 
 `docker compose ps` shows the server `healthy` within a minute, and `collie version` prints the new
-release. Sign in, open the inbox, and open a conversation that has an attachment.
+release. If it prints the old one, `COLLIE_DESK_IMAGE` is set in your shell and wins over `.env`:
+`unset COLLIE_DESK_IMAGE` and start again from step 3. Sign in, open the inbox, and open a conversation that has an attachment.
 
 ## Roll back
 
@@ -125,8 +126,8 @@ sh restore-workspace.sh --workspace acme --database colliedesk-20261020T090000Z.
 docker compose up -d
 ```
 
-Replace `acme` with the workspace slug. The script works with every release and is tested with the
-current one and the one before it. It:
+Replace `acme` with the workspace slug. The script is tested with each release and the one before
+it. It:
 
 - loads the backup into a scratch database beside yours and brings it to the schema of the release
   you run, so the backup may come from an older release;
