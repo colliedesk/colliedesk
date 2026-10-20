@@ -154,7 +154,11 @@ test('the preview shows YouTube and Vimeo players and library videos as the help
   const body = 'Watch:\n\n<iframe src="https://www.youtube.com/embed/jNQXAC9IVRw?start=65" onload="alert(1)"></iframe>\n\n'
     + 'Inline <iframe src="https://evil.example/embed/x"></iframe> and <b>bold</b>.\n\n<script>window.__xss = 1</script>\n\n'
     + '<video src="/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b" autoplay controls></video>';
-  serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: body })) });
+  const libraryVideo = { id: '0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b', kind: 'video', content_type: 'video/mp4', size: 10, sha256: 'a'.repeat(64),
+    url: '/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b', name: 'Tour', alt: '', width: 1280, height: 720, duration_ms: 1000, codecs: [], thumbnail_url: null,
+    poster_url: '/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b/poster/abcdef12', kept: false, deleted_at: null, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', articles: [] };
+  serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: body + '\n\n<video src="/api/v1/kb/media/1b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b"></video>' })),
+    'GET /api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b/details': () => json(200, libraryVideo) });
   open({ articleId: ids.article });
   fireEvent.click(await screen.findByRole('tab', { name: 'Preview' }));
   const panel = screen.getByRole('tabpanel', { name: 'Preview' });
@@ -172,8 +176,12 @@ test('the preview shows YouTube and Vimeo players and library videos as the help
   expect(video).toHaveAttribute('src', '/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b');
   expect(video).toHaveAttribute('controls');
   expect(video).not.toHaveAttribute('autoplay');
+  // The library gives the poster and the size; a video it does not have is left out and named.
+  await waitFor(() => expect(video).toHaveAttribute('poster', libraryVideo.poster_url));
+  expect(video).toHaveAttribute('width', '1280');
+  await waitFor(() => expect(panel.querySelectorAll('video')).toHaveLength(1));
   expect(panel).toHaveTextContent('Inline and bold.');
-  expect(warning).toHaveTextContent('Left out of the article: iframe onload, iframe (evil.example), b, script, video autoplay.');
+  await waitFor(() => expect(within(panel).getByRole('status')).toHaveTextContent('Left out of the article: iframe onload, iframe (evil.example), b, script, video autoplay, video (not in the library).'));
   expect(panel).not.toHaveTextContent('__xss');
   expect((window as { __xss?: number }).__xss).toBeUndefined();
 });

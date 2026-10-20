@@ -123,3 +123,9 @@
 @media (forced-colors: active) {
   .md-tool[aria-pressed="true"] { outline: 2px solid Highlight; }
 }
+
+/* The media library picker, below the toolbar: the library's own cards, a little smaller. */
+.media-picker { display: grid; gap: var(--space-2); max-height: 26rem; overflow-y: auto; border-bottom: 1px solid var(--line); background: var(--surface-0); padding: var(--space-3); }
+.media-picker-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.media-picker-head h3 { font-size: 14px; font-weight: 600; }
+.media-picker-grid { grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); }

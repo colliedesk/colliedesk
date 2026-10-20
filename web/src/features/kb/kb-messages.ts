@@ -72,7 +72,7 @@ export const kbMessages = {
   tools: {
     paragraph: 'Text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', bold: 'Bold', italic: 'Italic', strike: 'Strikethrough', code: 'Code',
     link: 'Link', bullet: 'Bulleted list', ordered: 'Numbered list', task: 'Checklist', quote: 'Quote', codeBlock: 'Code block', table: 'Table',
-    hr: 'Divider', insertImage: 'Insert image', insertVideo: 'Insert video', search: 'Find and replace', undo: 'Undo', redo: 'Redo',
+    hr: 'Divider', insertImage: 'Upload', insertMedia: 'Media', insertVideo: 'Insert video', search: 'Find and replace', undo: 'Undo', redo: 'Redo',
   },
   videoLink: 'YouTube or Vimeo link',
   videoLinkHelp: 'A watch page, a short link or a Share link. YouTube videos play from youtube-nocookie.com.',

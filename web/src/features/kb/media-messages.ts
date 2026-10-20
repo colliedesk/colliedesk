@@ -50,6 +50,8 @@ export const mediaMessages = {
   kept: 'Kept',
   unusedSummary: (count: number, bytes: number) => `${plural(count, 'item', 'items')} not used in any article · ${formatBytes(bytes)}`,
   review: 'Review',
+  pickerHeading: 'Insert from the media library',
+  pickerEmpty: 'The library is empty: paste or drop an image or a video into the text, or upload on the Media page.',
   // Uploads
   uploads: 'Uploads',
   sending: (sent: number, size: number) => `${formatBytes(sent)} of ${formatBytes(size)}`,

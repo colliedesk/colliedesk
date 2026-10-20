@@ -138,3 +138,25 @@ test('Insert video takes a YouTube or Vimeo link and puts its player in a block 
   expect(screen.queryByRole('group', { name: 'Insert video' })).not.toBeInTheDocument();
   await waitFor(() => expect(text).toHaveFocus());
 });
+
+test('Media opens the library; a chosen image goes in as Markdown and a video as its HTML, each a block of its own', async () => {
+  const id = (n: number) => `aaaaaaaa-aaaa-4aaa-8aaa-${String(n).padStart(12, '0')}`;
+  const item = (n: number, fields: Record<string, unknown>) => ({ id: id(n), kind: 'image', content_type: 'image/png', size: 10, sha256: 'a'.repeat(64), url: `/api/v1/kb/images/${id(n)}`,
+    name: `Shot ${n}`, alt: 'The inbox', width: 10, height: 10, duration_ms: null, codecs: [], thumbnail_url: null, poster_url: null, kept: true, deleted_at: null,
+    created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', ...fields });
+  const items = [item(1, {}), item(2, { kind: 'video', content_type: 'video/mp4', url: `/api/v1/kb/media/${id(2)}`, name: 'Tour', alt: 'Product "tour"', duration_ms: 5000 })];
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ items, next_cursor: null }), { status: 200 })));
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  let handle: EditorHandle | undefined;
+  render(<QueryClientProvider client={new QueryClient()}><CodeMirrorEditor initial="Intro" uploads={never} label="Text" describedBy="help" invalid={false} mode="edit"
+    onChange={() => undefined} onReady={(ready) => { handle = ready; }} /></QueryClientProvider>);
+  await waitFor(() => expect(handle).toBeDefined());
+  fireEvent.click(screen.getByRole('button', { name: 'Media' }));
+  const picker = screen.getByRole('group', { name: 'Insert from the media library' });
+  fireEvent.click(await within(picker).findByRole('button', { name: /^Shot 1, image/ }));
+  expect(handle!.markdown().trimEnd()).toBe(`Intro\n\n![The inbox](/api/v1/kb/images/${id(1)})`);
+  fireEvent.click(screen.getByRole('button', { name: 'Media' }));
+  fireEvent.click(await screen.findByRole('button', { name: /^Tour, video/ }));
+  expect(handle!.markdown().trimEnd()).toBe(`Intro\n\n![The inbox](/api/v1/kb/images/${id(1)})\n\n<video controls preload="metadata" src="/api/v1/kb/media/${id(2)}" title="Product &quot;tour&quot;"></video>`);
+  vi.unstubAllGlobals();
+});

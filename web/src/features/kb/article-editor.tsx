@@ -1,6 +1,6 @@
-import { useDeferredValue, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { KeyboardEvent } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useBlocker, useNavigate } from '@tanstack/react-router';
 import { api, ChangedElsewhereError, InvalidRequestError } from '../../api/client';
 import { messages } from '../../messages';
@@ -15,7 +15,10 @@ import type { KBArticle, KBArticleStatus, KBArticleVersion } from './kb-api';
 import { kbMessages } from './kb-messages';
 import { buildTree, flatten, indent, reason } from './kb-tree';
 import { useRefreshKB } from './knowledge-page';
-import { MarkdownPreview } from './markdown-preview';
+import { MarkdownPreview, videoIds } from './markdown-preview';
+import type { PreviewVideo } from './markdown-preview';
+import { mediaApi } from './media-api';
+import type { KBMediaDetails } from './media-api';
 import { embedFor } from './media-grid';
 import { kindOf, uploadVideo } from './media-uploads';
 
@@ -286,6 +289,25 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   // goes first (the editor tells the page of typing 120 ms after it stops, then this renders). It starts empty
   // (null) so the first frame shows the editor without waiting for it.
   const previewText = useDeferredValue<string | null>(draft.body, null);
+  // The library videos the text names, for their poster and size in the preview; a 404 is a video the
+  // library does not have, which the preview leaves out and names, as the help center does.
+  const ids = useMemo(() => (previewText === null ? [] : videoIds(previewText)), [previewText]);
+  // combine runs again only when an answer changes (it is stable for the same ids), so the preview gets the
+  // same map until then and does not render again on every keystroke.
+  const combineVideos = useCallback((answers: { data?: KBMediaDetails; isError: boolean }[]) => {
+    const known = new Map<string, PreviewVideo>();
+    answers.forEach((answer, index) => {
+      const videoId = ids[index]!;
+      if (answer.data) known.set(videoId, answer.data.kind === 'video' && !answer.data.deleted_at
+        ? { poster: answer.data.poster_url, width: answer.data.width, height: answer.data.height } : null);
+      else if (answer.isError) known.set(videoId, null);
+    });
+    return known;
+  }, [ids]);
+  const library = useQueries({
+    queries: ids.map((videoId) => ({ queryKey: ['kb-media-details', videoId], queryFn: () => mediaApi.details(videoId), retry: false, staleTime: 60_000 })),
+    combine: combineVideos,
+  });
   const onKeyDown = (event: KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
       event.preventDefault();
@@ -334,7 +356,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
               <Part part={editorPart} failed={<div className="kb-editor-loading"><PartUnavailable /></div>} render={({ default: Editor }) => {
                 madeWith.current ??= draft.body;
                 return <Editor initial={madeWith.current} uploads={imageHooks} label={kbMessages.body} describedBy={`${id}-help ${id}-count`} invalid={tooLong} mode={mode}
-                  preview={mode === 'edit' || !previewReady || previewText === null ? undefined : <MarkdownPreview text={previewText} />} onChange={(text) => set({ body: text })} onReady={onReady} />;
+                  preview={mode === 'edit' || !previewReady || previewText === null ? undefined : <MarkdownPreview text={previewText} library={library} />} onChange={(text) => set({ body: text })} onReady={onReady} />;
               }} />
               {!handle && <p role="status" className="kb-editor-loading kb-hint">{kbMessages.loadingEditor}</p>}
             </div>
