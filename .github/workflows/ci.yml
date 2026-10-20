@@ -29,10 +29,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Start test services in the background
         run: sh .github/scripts/ci-services.sh start postgres
+      # setup-go downloads its toolchain on every job (7 to 19 seconds, measured 2026-10-20) unless the
+      # tool cache already holds it. Given the exact newest release, it never settles for an older
+      # cached patch.
+      - id: go-release
+        name: Find the newest Go 1.27 release
+        run: curl -fsSL --retry 3 https://raw.githubusercontent.com/actions/go-versions/main/versions-manifest.json | python3 .github/scripts/go-release.py 1.27 >> "$GITHUB_OUTPUT"
+      - name: Restore the Go toolchain
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.tool_cache }}/go/${{ steps.go-release.outputs.version }}
+          key: go-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-release.outputs.version }}
       - id: go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
-          go-version: '1.27.x'
+          go-version: ${{ steps.go-release.outputs.version }}
           cache: false
       # setup-go's own cache is keyed on go.sum alone: saved once, never refreshed while the code
       # moves, and empty after a go.sum change. Each main run saves under its commit instead, and a
@@ -50,8 +61,10 @@ jobs:
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
             setup-go-${{ runner.os }}-
+      # Vet and migration validation run on the first regular shard, not the latency one: the latency
+      # shard was the last Go job in most runs, and vet added 6 to 8 seconds to it.
       - name: Validate migrations
-        if: matrix.shard == strategy.job-total
+        if: matrix.shard == 1
         working-directory: server
         run: go run ./cmd/migration-check --repo=..
       - name: Wait for test services
@@ -63,10 +76,18 @@ jobs:
           SHARDS: ${{ strategy.job-total }}
         run: |
           if [ -n "$(gofmt -l .)" ]; then gofmt -l .; echo 'gofmt: format the files above' >&2; exit 1; fi
-          if [ "$SHARD" = "$SHARDS" ]; then go vet ./...; fi
+          # Vet runs beside the tests; its output follows theirs.
+          vet=
+          if [ "$SHARD" = 1 ]; then go vet ./... > "$RUNNER_TEMP/vet.log" 2>&1 & vet=$!; fi
           go test -list . ./... > "$RUNNER_TEMP/go-test-list.txt"
           pattern=$(python3 ../.github/scripts/go-test-shard.py "$SHARD" "$SHARDS" < "$RUNNER_TEMP/go-test-list.txt")
-          go test -count=1 -run "$pattern" ./...
+          if go test -count=1 -run "$pattern" ./...; then tested=0; else tested=1; fi
+          vetted=0
+          if [ -n "$vet" ]; then
+            if ! wait "$vet"; then vetted=1; fi
+            cat "$RUNNER_TEMP/vet.log"
+          fi
+          [ "$tested$vetted" = 00 ]
       - if: github.event_name == 'push' && matrix.shard == 1
         name: Save the Go build cache for later runs
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -89,7 +110,16 @@ jobs:
         run: corepack pnpm install --frozen-lockfile
       - name: Typecheck, test, and build
         working-directory: web
-        run: corepack pnpm typecheck && corepack pnpm test && corepack pnpm exec vite build && corepack pnpm bundle:check
+        # The type check runs beside the unit tests instead of before them: it took 12 of the step's 77
+        # seconds on 2026-10-20 and uses one core while Vitest's workers use the others.
+        run: |
+          corepack pnpm typecheck > "$RUNNER_TEMP/typecheck.log" 2>&1 &
+          typecheck=$!
+          if corepack pnpm test; then tests=0; else tests=1; fi
+          if wait "$typecheck"; then checked=0; else checked=1; fi
+          cat "$RUNNER_TEMP/typecheck.log"
+          [ "$tests$checked" = 00 ]
+          corepack pnpm exec vite build && corepack pnpm bundle:check
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -99,10 +129,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Start test services in the background
         run: sh .github/scripts/ci-services.sh start postgres
+      # setup-go downloads its toolchain on every job (7 to 19 seconds, measured 2026-10-20) unless the
+      # tool cache already holds it. Given the exact newest release, it never settles for an older
+      # cached patch.
+      - id: go-release
+        name: Find the newest Go 1.27 release
+        run: curl -fsSL --retry 3 https://raw.githubusercontent.com/actions/go-versions/main/versions-manifest.json | python3 .github/scripts/go-release.py 1.27 >> "$GITHUB_OUTPUT"
+      - name: Restore the Go toolchain
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.tool_cache }}/go/${{ steps.go-release.outputs.version }}
+          key: go-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-release.outputs.version }}
       - id: go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
-          go-version: '1.27.x'
+          go-version: ${{ steps.go-release.outputs.version }}
           cache: false
       # setup-go's own cache is keyed on go.sum alone: saved once, never refreshed while the code
       # moves, and empty after a go.sum change. Each main run saves under its commit instead, and a
@@ -160,10 +201,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Start test services in the background
         run: sh .github/scripts/ci-services.sh start postgres mailpit
+      # setup-go downloads its toolchain on every job (7 to 19 seconds, measured 2026-10-20) unless the
+      # tool cache already holds it. Given the exact newest release, it never settles for an older
+      # cached patch.
+      - id: go-release
+        name: Find the newest Go 1.27 release
+        run: curl -fsSL --retry 3 https://raw.githubusercontent.com/actions/go-versions/main/versions-manifest.json | python3 .github/scripts/go-release.py 1.27 >> "$GITHUB_OUTPUT"
+      - name: Restore the Go toolchain
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.tool_cache }}/go/${{ steps.go-release.outputs.version }}
+          key: go-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-release.outputs.version }}
       - id: go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
-          go-version: '1.27.x'
+          go-version: ${{ steps.go-release.outputs.version }}
           cache: false
       # setup-go's own cache is keyed on go.sum alone: saved once, never refreshed while the code
       # moves, and empty after a go.sum change. Each main run saves under its commit instead, and a

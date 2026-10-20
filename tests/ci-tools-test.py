@@ -1,4 +1,5 @@
 """Public CLI contracts for CI partitioning and its whole-phase clock."""
+import json
 import pathlib
 import re
 import subprocess
@@ -55,6 +56,35 @@ class Shards(unittest.TestCase):
         result = run('go-test-shard.py', '3', '3', stdin='TestOnly\n')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIsNone(re.search(result.stdout.strip(), 'TestOnly'))
+
+
+class GoRelease(unittest.TestCase):
+    """go-release.py names the Go release setup-go would install for a minor line, so the toolchain
+    cache is keyed on it and setup-go is told that exact version."""
+    manifest = json.dumps([
+        {'version': '1.28.0-rc1', 'stable': False, 'files': [{'platform': 'linux', 'arch': 'x64'}]},
+        {'version': '1.27.10', 'stable': True, 'files': [{'platform': 'darwin', 'arch': 'arm64'}]},
+        {'version': '1.27.3', 'stable': True, 'files': [{'platform': 'linux', 'arch': 'x64'}]},
+        {'version': '1.27.20', 'stable': False, 'files': [{'platform': 'linux', 'arch': 'x64'}]},
+        {'version': '1.27.2', 'stable': True, 'files': [{'platform': 'linux', 'arch': 'x64'}]},
+        {'version': '1.270.1', 'stable': True, 'files': [{'platform': 'linux', 'arch': 'x64'}]},
+    ])
+
+    def test_newest_stable_linux_release_of_the_minor_line(self):
+        result = run('go-release.py', '1.27', stdin=self.manifest)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, 'version=1.27.3\n')
+
+    def test_patch_numbers_compare_as_numbers(self):
+        manifest = json.dumps([{'version': v, 'stable': True, 'files': [{'platform': 'linux', 'arch': 'x64'}]}
+                               for v in ['1.27.9', '1.27.10', '1.27.0']])
+        self.assertEqual(run('go-release.py', '1.27', stdin=manifest).stdout, 'version=1.27.10\n')
+
+    def test_no_release_or_a_broken_manifest_fails_closed(self):
+        for line, manifest in [('1.29', self.manifest), ('1.27', 'not json'), ('1.27', ''), ('1.27.x', self.manifest)]:
+            result = run('go-release.py', line, stdin=manifest)
+            self.assertNotEqual(result.returncode, 0, line)
+            self.assertEqual(result.stdout, '')
 
 
 class Onboarding(unittest.TestCase):
