@@ -34,13 +34,16 @@ func Catalog() []Spec {
 		savedRepliesListSpec(), savedReplyGetSpec(), savedReplyCreateSpec(), savedReplyUpdateSpec(), savedReplyDeleteSpec(),
 		savedReplyHistorySpec(), savedReplyVersionRestoreSpec(), savedRepliesTrashSpec(), savedReplyUndeleteSpec(),
 		savedViewsListSpec(), savedViewCreateSpec(), savedViewUpdateSpec(), savedViewDeleteSpec(), savedViewRestoreSpec(),
+		kbCollectionsListSpec(), kbCollectionCreateSpec(), kbCollectionUpdateSpec(), kbCollectionDeleteSpec(), kbCollectionsTrashSpec(), kbCollectionUndeleteSpec(),
+		kbArticlesSearchSpec(), kbArticleGetSpec(), kbArticleCreateSpec(), kbArticleUpdateSpec(), kbArticleDeleteSpec(), kbArticlesTrashSpec(), kbArticleUndeleteSpec(),
+		kbArticleHistorySpec(), kbArticleVersionRestoreSpec(), kbImageUploadSpec(), kbImageGetSpec(), helpCenterGetSpec(),
 		tokenRevokeSpec(), docsSearchSpec(),
 		replyDraftSpec(), requestsListSpec(), requestGetSpec(), requestCancelSpec(),
 		tokenCreateRequestSpec(), workspaceExportRequestSpec(), billingRequestSpec(), emailChannelDisconnectRequestSpec(),
 		emailSecretRotateRequestSpec(), gmailConnectRequestSpec(), gmailDisconnectRequestSpec(), workspaceSlugRequestSpec(), problemReportSpec(),
 		workspaceSettingsGetSpec(), workspaceSettingsUpdateSpec(), myTimezoneSetSpec(), myDisplayNameSetSpec(), teamMemberUpdateSpec(),
 		invitesListSpec(), inviteCreateSpec(), inviteRevokeSpec(), sessionsListSpec(), sessionRevokeSpec(),
-		webFormGetSpec(), webFormUpdateSpec(), emailChannelGetSpec(), emailChannelUpdateSpec(), emailDomainVerifySpec(), billingGetSpec(),
+		helpCenterUpdateSpec(), webFormGetSpec(), webFormUpdateSpec(), emailChannelGetSpec(), emailChannelUpdateSpec(), emailDomainVerifySpec(), billingGetSpec(),
 	}
 }
 

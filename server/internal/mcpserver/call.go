@@ -48,6 +48,15 @@ func (c *call) send(method, path string, body, into any) error {
 	return c.refuse(err, c.notFound)
 }
 
+// upload posts raw bytes as the caller; a failure comes back worded for a model, and a success is remembered.
+func (c *call) upload(path, contentType string, data []byte, into any) error {
+	err := c.rest.upload(c.ctx, c.token, path, contentType, data, into)
+	if err == nil {
+		c.wrote = true
+	}
+	return c.refuse(err, c.notFound)
+}
+
 // me is the caller's identity, workspace and tier.
 func (c *call) me() (*restMe, error) {
 	if c.session == nil {
