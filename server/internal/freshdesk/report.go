@@ -179,7 +179,7 @@ type Report struct {
 
 // StorageCapCheck compares the attachment bytes an import needs with the room the workspace has under its plan.
 type StorageCapCheck struct {
-	// Plan is the plan whose cap is checked: founding, team or team25.
+	// Plan is the plan whose cap is checked: solo, small, founding, team or team25.
 	Plan        string `json:"plan"`
 	LimitBytes  int64  `json:"limit_bytes"`
 	UsedBytes   int64  `json:"used_bytes"`

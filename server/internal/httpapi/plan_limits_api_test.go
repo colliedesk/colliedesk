@@ -179,11 +179,37 @@ func TestReinvitingAnExistingAgentOrResendingAPendingInviteTakesNoSeat(t *testin
 
 func fillTeamSeats(t *testing.T, f limitsFixture) responseView {
 	t.Helper()
-	f.upgrade(t, f.workspaceA, "sub_message")
-	for number := 1; number <= 9; number++ {
-		invite(t, f, f.adminA, number)
+	return fillSeats(t, f, productMonthly, 10)
+}
+
+// fillSeats moves workspace A to the plan product buys, fills its agents seats (the admin holds
+// one) with pending invites, and returns the refusal of one more invite.
+func fillSeats(t *testing.T, f limitsFixture, product string, agents int) responseView {
+	t.Helper()
+	sub := activeTeam(f.workspaceA, "sub_"+product, f.clock.Now())
+	sub.Product = product
+	f.billing.mustDeliver(t, "evt_"+product, sub.event("subscription.active"))
+	for number := 1; number < agents; number++ {
+		if got := invite(t, f, f.adminA, number); got.Code != http.StatusCreated {
+			t.Fatalf("invite %d status=%d body=%s, want 201 under the cap of %d", number, got.Code, got.Body, agents)
+		}
 	}
-	return *invite(t, f, f.adminA, 10)
+	return *invite(t, f, f.adminA, agents)
+}
+
+func TestSoloSeatLimitPointsToSmall(t *testing.T) {
+	refused := fillSeats(t, newLimitsFixture(t, true), productSoloMonthly, 1)
+	want := "The Solo plan allows 1 agent, pending invites included. Revoke a pending invite to free a seat, or upgrade to Small (up to 3 agents) under Manage billing."
+	if refused.Code != http.StatusPaymentRequired || !strings.Contains(refused.Body, want) {
+		t.Fatalf("status=%d body=%s, want 402 with %q", refused.Code, refused.Body, want)
+	}
+}
+
+func TestSmallSeatLimitPointsToTeam(t *testing.T) {
+	refused := fillSeats(t, newLimitsFixture(t, true), productSmallYearly, 3)
+	if refused.Code != http.StatusPaymentRequired || !strings.Contains(refused.Body, "upgrade to Team (up to 10 agents)") {
+		t.Fatalf("status=%d body=%s, want a pointer to Team", refused.Code, refused.Body)
+	}
 }
 
 func TestTeamSeatLimitPointsToTeam25WhenItIsOnSale(t *testing.T) {

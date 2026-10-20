@@ -17,9 +17,9 @@ type Store struct {
 	outbound OutboundPolicy
 	// limits turns on the trial, lock and agent cap of the hosted cloud; the zero value (self-hosted) has none.
 	limits bool
-	// team25Offered is true when this server sells Team 25; a seat refusal on Team then points to it.
-	team25Offered bool
-	clock         func() time.Time
+	// plansOnSale are the plans this server sells; a seat refusal points to the next one up.
+	plansOnSale []string
+	clock       func() time.Time
 	// paidStorage replaces the storage cap of plans that count imported files when above zero; tests use a small one.
 	paidStorage int64
 	// objects is attachment storage, used to verify and discard objects; nil skips both.
@@ -66,10 +66,10 @@ func (s *Store) WithPaidStorageBytes(cap int64) *Store {
 	return &copy
 }
 
-// WithTeam25Offered returns a store whose seat refusals on Team point to Team 25.
-func (s *Store) WithTeam25Offered(offered bool) *Store {
+// WithPlansOnSale returns a store whose seat refusals point to the next plan up among plans.
+func (s *Store) WithPlansOnSale(plans []string) *Store {
 	copy := *s
-	copy.team25Offered = offered
+	copy.plansOnSale = plans
 	return &copy
 }
 

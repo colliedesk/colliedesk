@@ -50,7 +50,7 @@ test('a locked workspace sees the locked screen with the identity bar and an adm
   open();
   expect(await screen.findByRole('heading', { level: 1, name: 'Your free trial has ended' })).toBeInTheDocument();
   expect(screen.getByRole('region', { name: 'Signed in as' })).toHaveTextContent('Beta Desk');
-  expect(screen.getByRole('button', { name: /team, \$49 per month/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /team, \$69 per month/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Export all data' })).toBeInTheDocument();
 });
 
@@ -163,7 +163,7 @@ test('going back to the billing page after the checkout was started does not sta
   expect(router.state.location.search).not.toHaveProperty('buy');
   view.unmount();
   render(<QueryClientProvider client={createQueryClient()}><RouterProvider router={createRouter({ routeTree, history })} /></QueryClientProvider>);
-  await screen.findByRole('button', { name: /team, \$49 per month/i });
+  await screen.findByRole('button', { name: /team, \$69 per month/i });
   expect(checkouts()).toBe(1);
 });
 

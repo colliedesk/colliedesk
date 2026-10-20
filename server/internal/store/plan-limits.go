@@ -36,10 +36,10 @@ const pendingSeatEmails = `SELECT count(DISTINCT p.email) FROM pairing_links p
 // through another pending invite, needs no new seat; a deactivated agent holds none, so reactivating
 // one takes a seat like a new invite does. A workspace-wide advisory lock makes two concurrent
 // invites see each other. The caller runs it only where plan limits apply (the hosted cloud).
-// team25Offered lets the refusal of a Team workspace point to Team 25.
+// plansOnSale lets the refusal point to the next plan up that the server sells.
 // ignoreInvite names an invite that is being redeemed, which is about to become the agent it
 // already reserved.
-func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time, email, ignoreInvite string, team25Offered bool) error {
+func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time.Time, email, ignoreInvite string, plansOnSale []string) error {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "agent-seats:"+workspaceID); err != nil {
 		return fmt.Errorf("lock agent seats: %w", err)
 	}
@@ -70,7 +70,7 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 		return fmt.Errorf("count agent seats: %w", err)
 	}
 	if seats+1 > limit {
-		return &domain.PlanLimitError{Plan: plan, Agents: limit, Team25Offered: team25Offered}
+		return &domain.PlanLimitError{Plan: plan, Agents: limit, Upgrade: domain.UpgradeFor(plan, plansOnSale)}
 	}
 	return nil
 }

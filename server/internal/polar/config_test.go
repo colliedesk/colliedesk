@@ -96,3 +96,55 @@ func TestConfigFromEnvRejectsBadAPIURL(t *testing.T) {
 		t.Fatal("want an error for a malformed POLAR_API_URL")
 	}
 }
+
+func TestConfigFromEnvSoloAndSmallProductsAreOptional(t *testing.T) {
+	values := fullEnv()
+	values["POLAR_PRODUCT_SOLO_MONTHLY"], values["POLAR_PRODUCT_SOLO_YEARLY"] = " prod-solo-m ", "prod-solo-y"
+	values["POLAR_PRODUCT_SMALL_MONTHLY"], values["POLAR_PRODUCT_SMALL_YEARLY"] = "prod-small-m", "prod-small-y"
+	config, err := polar.ConfigFromEnv(env(values))
+	if err != nil {
+		t.Fatal(err)
+	}
+	products := config.Products
+	if products.SoloMonthly != "prod-solo-m" || products.SoloYearly != "prod-solo-y" || products.SmallMonthly != "prod-small-m" || products.SmallYearly != "prod-small-y" {
+		t.Fatalf("products=%+v", products)
+	}
+	for product, want := range map[string]string{"prod-solo-m": "solo", "prod-solo-y": "solo", "prod-small-m": "small", "prod-small-y": "small", "prod-monthly": "team", "": ""} {
+		if got := products.PlanOf(product); got != want {
+			t.Errorf("PlanOf(%q)=%q, want %q", product, got, want)
+		}
+	}
+}
+
+func TestCheckoutPlansAndPlansOnSaleFollowTheConfiguredProducts(t *testing.T) {
+	config, err := polar.ConfigFromEnv(env(fullEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(config.CheckoutPlans(), ","); got != "team_monthly,team_yearly,founding" {
+		t.Errorf("only the required products: checkout plans %s", got)
+	}
+	if got := strings.Join(config.PlansOnSale(), ","); got != "team,founding" {
+		t.Errorf("only the required products: plans on sale %s", got)
+	}
+	values := fullEnv()
+	for _, key := range []string{"SOLO_MONTHLY", "SOLO_YEARLY", "SMALL_MONTHLY", "SMALL_YEARLY", "TEAM25_MONTHLY", "TEAM25_YEARLY"} {
+		values["POLAR_PRODUCT_"+key] = "prod-" + key
+	}
+	config, err = polar.ConfigFromEnv(env(values))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "solo_monthly,solo_yearly,small_monthly,small_yearly,team_monthly,team_yearly,team25_monthly,team25_yearly,founding"
+	if got := strings.Join(config.CheckoutPlans(), ","); got != want {
+		t.Errorf("every product: checkout plans %s, want %s", got, want)
+	}
+	if got := strings.Join(config.PlansOnSale(), ","); got != "solo,small,team,team25,founding" {
+		t.Errorf("every product: plans on sale %s", got)
+	}
+	delete(values, "POLAR_PRODUCT_SMALL_YEARLY")
+	config, _ = polar.ConfigFromEnv(env(values))
+	if got := strings.Join(config.PlansOnSale(), ","); got != "solo,team,team25,founding" {
+		t.Errorf("Small with one product: plans on sale %s, want Small left out", got)
+	}
+}

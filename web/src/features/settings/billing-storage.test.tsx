@@ -6,7 +6,7 @@ import { BillingPage } from './billing-page';
 const GiB = 1024 ** 3;
 const founding = (used: number): Billing => ({
   plan: 'founding', trial_ends_at: '2026-10-15T09:00:00Z', locked: false, status: 'active', current_period_end: '2027-10-01T00:00:00Z',
-  cancel_at_period_end: false, active_subscriptions: 1, complimentary: false, complimentary_until: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
+  cancel_at_period_end: false, active_subscriptions: 1, complimentary: false, complimentary_until: null, checkout_plans: ['solo_monthly', 'solo_yearly', 'small_monthly', 'small_yearly', 'team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
   limits: { agents: 10, replies_per_24h: null, storage_bytes: 20 * GiB, storage_warn_bytes: 16 * GiB },
   usage: { agents: 2, pending_invites: 0, replies_last_24h: 0, storage_bytes: used },
 });
@@ -40,6 +40,16 @@ test('over the cap the page says uploads and imports are refused, mail is still 
   expect(warning).toHaveTextContent(/customer email is still stored/i);
   expect(warning).toHaveTextContent(/nothing is deleted/i);
   expect(warning).toHaveTextContent(/team/i);
+});
+
+test('Solo and Small at or over the cap are pointed to the next plan up', () => {
+  const small = (plan: 'solo' | 'small', limit: number, used: number): Billing => ({ ...founding(used), plan,
+    limits: { agents: plan === 'solo' ? 1 : 3, replies_per_24h: null, storage_bytes: limit, storage_warn_bytes: limit * 0.8 } });
+  const { unmount } = render(<BillingPage billing={small('solo', 10 * GiB, 10 * GiB)} timezone="UTC" onCheckout={vi.fn()} onManage={vi.fn()} />);
+  expect(screen.getByRole('alert', { name: /storage/i })).toHaveTextContent('Upgrade to the Small plan under Manage billing for a higher limit.');
+  unmount();
+  show(small('small', 30 * GiB, 24 * GiB));
+  expect(screen.getByRole('status')).toHaveTextContent('To raise the limit, upgrade to Team under Manage billing.');
 });
 
 test('a trial workspace is warned at 80% of its 2 GiB too', () => {

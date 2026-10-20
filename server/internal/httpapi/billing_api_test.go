@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/polar"
 )
 
 func TestBillingIsAdminOnly(t *testing.T) {
@@ -58,7 +59,8 @@ func TestBillingFromOneWorkspaceNeverShowsAnothers(t *testing.T) {
 }
 
 func TestCheckoutUsesTheSessionsWorkspaceCustomerAndThePlansProduct(t *testing.T) {
-	for plan, product := range map[string]string{"team_monthly": productMonthly, "team_yearly": productYearly, "founding": productFounding, "team25_monthly": productTeam25Monthly, "team25_yearly": productTeam25Yearly} {
+	for plan, product := range map[string]string{"team_monthly": productMonthly, "team_yearly": productYearly, "founding": productFounding, "team25_monthly": productTeam25Monthly, "team25_yearly": productTeam25Yearly,
+		"solo_monthly": productSoloMonthly, "solo_yearly": productSoloYearly, "small_monthly": productSmallMonthly, "small_yearly": productSmallYearly} {
 		t.Run(plan, func(t *testing.T) {
 			f := newBillingFixture(t)
 			response := request(t, f.api, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": plan}, f.adminA, nil)
@@ -166,21 +168,21 @@ func TestCheckoutRejectsUnknownPlans(t *testing.T) {
 	}
 }
 
-func TestCheckoutTeam25NeedsItsProductsConfigured(t *testing.T) {
+func TestCheckoutOfAnOptionalPlanNeedsItsProductsConfigured(t *testing.T) {
 	fake := newFakePolarAPI(t)
 	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
 		config.Billing = fake.config()
-		config.Billing.Products.Team25Monthly, config.Billing.Products.Team25Yearly = "", ""
+		config.Billing.Products = polar.Products{TeamMonthly: productMonthly, TeamYearly: productYearly, Founding: productFounding}
 	})
 	admin := createSession(t, api, service, "Billing Alpha", "admin@billing-alpha.example.com")
-	for _, plan := range []string{"team25_monthly", "team25_yearly"} {
+	for _, plan := range []string{"team25_monthly", "team25_yearly", "solo_monthly", "solo_yearly", "small_monthly", "small_yearly"} {
 		response := request(t, api, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": plan}, admin, nil)
 		if response.Code != http.StatusBadRequest {
 			t.Errorf("%s without a Polar product: status=%d body=%s, want 400 as for an unknown plan", plan, response.Code, response.Body.String())
 		}
 	}
 	response := request(t, api, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": "team25_monthly"}, admin, nil)
-	if strings.Contains(response.Body.String(), "team25") {
+	if body := response.Body.String(); strings.Contains(body, "team25") || strings.Contains(body, "solo") || strings.Contains(body, "small") {
 		t.Errorf("error %s lists a plan this server cannot sell", response.Body.String())
 	}
 	var offered billingView
@@ -196,7 +198,7 @@ func TestCheckoutTeam25NeedsItsProductsConfigured(t *testing.T) {
 func TestBillingListsEveryPlanTheServerCanSell(t *testing.T) {
 	f := newBillingFixture(t)
 	got := getBilling(t, f.api, f.adminA).CheckoutPlans
-	if strings.Join(got, ",") != "team_monthly,team_yearly,team25_monthly,team25_yearly,founding" {
+	if strings.Join(got, ",") != "solo_monthly,solo_yearly,small_monthly,small_yearly,team_monthly,team_yearly,team25_monthly,team25_yearly,founding" {
 		t.Fatalf("checkout_plans=%v", got)
 	}
 }

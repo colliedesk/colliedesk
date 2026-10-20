@@ -13,7 +13,7 @@ const exportSlot = <button type="button">Export all data</button>;
 test('the locked screen offers only the plans the server can sell', () => {
   render(<LockedScreen isAdmin billing={{ ...ended, checkout_plans: ['team_monthly', 'team_yearly', 'founding'] }} timezone="UTC" onCheckout={vi.fn()} onSignOut={vi.fn()} />);
   expect(screen.queryByRole('button', { name: /team 25/i })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /team, \$49 per month/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /team, \$69 per month/i })).toBeInTheDocument();
 });
 
 test('an admin whose trial ended can choose each plan, export and sign out', () => {
@@ -23,9 +23,9 @@ test('an admin whose trial ended can choose each plan, export and sign out', () 
   expect(screen.getByRole('heading', { level: 1, name: 'Your free trial has ended' })).toBeInTheDocument();
   expect(screen.getByText(/ended oct 15/i)).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Choose a plan' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /team, \$49 per month/i }));
+  fireEvent.click(screen.getByRole('button', { name: /team, \$69 per month/i }));
   fireEvent.click(screen.getByRole('radio', { name: /yearly/i }));
-  fireEvent.click(screen.getByRole('button', { name: /team, \$490 per year/i }));
+  fireEvent.click(screen.getByRole('button', { name: /team, \$690 per year/i }));
   fireEvent.click(screen.getByRole('button', { name: /founding/i }));
   expect(onCheckout.mock.calls).toEqual([['team_monthly'], ['team_yearly'], ['founding']]);
   expect(screen.getByRole('button', { name: 'Export all data' })).toBeInTheDocument();

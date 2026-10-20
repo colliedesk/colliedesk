@@ -28,8 +28,16 @@ function periodNote(billing: Billing, timezone: string): string | null {
 }
 
 const isPaid = (billing: Billing) => billing.plan !== 'trial' && billing.plan !== 'none';
-// Founding can move up to Team; Team and Team 25 raise the cap by asking us.
-const paidStorageNext = (billing: Billing) => billing.plan === 'founding' ? messages.storageUpgradeFounding : messages.storageContactUs;
+// The plan with more storage a workspace can move to; Team and Team 25 raise the cap by asking us.
+const storageUpgradePlan: Partial<Record<Billing['plan'], string>> = { solo: messages.plans.small, small: messages.plans.team, founding: messages.plans.team };
+const paidStorageNext = (billing: Billing) => {
+  const next = storageUpgradePlan[billing.plan];
+  return next ? messages.storageUpgradeTo(next) : messages.storageContactUs;
+};
+const paidStorageWarningNext = (billing: Billing) => {
+  const next = storageUpgradePlan[billing.plan];
+  return next ? messages.storageWarningUpgradeTo(next) : messages.storageContactUs;
+};
 
 // StorageFull says what the cap does once it is reached, which differs by plan: on a paid plan customer
 // email is always stored, on the trial and when locked it is refused. Below the cap the 80% warning
@@ -88,7 +96,7 @@ export function BillingPage({ billing, timezone, checkoutReturned = false, faile
                   const percent = Math.floor((billing.usage.storage_bytes / storageLimit) * 100);
                   const used = formatBytes(billing.usage.storage_bytes);
                   return isPaid(billing)
-                    ? messages.storageWarningPaid(percent, used, formatBytes(storageLimit), billing.plan === 'founding' ? messages.storageWarningUpgradeToTeam : messages.storageContactUs)
+                    ? messages.storageWarningPaid(percent, used, formatBytes(storageLimit), paidStorageWarningNext(billing))
                     : messages.storageWarning(percent, used, formatBytes(storageLimit));
                 })()}</p>}
               <StorageFull billing={billing} />

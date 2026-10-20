@@ -80,7 +80,7 @@ func (s *Service) Redeem(ctx context.Context, token, requestedRole, label string
 	}
 	if kind == "invite" {
 		if s.planLimits {
-			if err := store.CheckAgentSeat(ctx, tx, workspaceID, now, email, linkID, s.team25Offered); err != nil {
+			if err := store.CheckAgentSeat(ctx, tx, workspaceID, now, email, linkID, s.plansOnSale); err != nil {
 				return Redeemed{}, err
 			}
 		}
