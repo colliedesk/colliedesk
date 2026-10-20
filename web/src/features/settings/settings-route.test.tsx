@@ -27,7 +27,7 @@ const ANN = '33333333-3333-4333-8333-333333333333';
 
 function show(role: 'admin' | 'agent', sessions: unknown[] = [], emailChannel?: unknown) {
   api.me.mockResolvedValue(me(role));
-  api.config.mockResolvedValue({ billing: { enabled: false } });
+  api.config.mockResolvedValue({ billing: { enabled: false }, cloud_sign_in: { enabled: false, publishable_key: null }, product_analytics: { enabled: false, key: null, host: null, realm: null } });
   api.agents.mockResolvedValue({ items: [teammate(SAM, 'sam@example.com', { role }), teammate(ANN, 'ann@example.com', { open_conversations: 1 })] });
   api.updateAgent.mockResolvedValue(teammate(ANN, 'ann@example.com', { deactivated_at: '2026-10-15T10:00:00Z' }));
   api.sessions.mockResolvedValue({ items: sessions });

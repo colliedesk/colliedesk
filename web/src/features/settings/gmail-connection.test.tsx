@@ -1,5 +1,8 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render as renderInPage, screen, within } from '@testing-library/react';
+import type { ReactElement, ReactNode } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
+import type { api } from '../../api/client';
 import type { GmailSettings } from '../../api/schemas';
 import { GmailConnection } from './gmail-connection';
 import { gmailReturn } from './gmail-return';
@@ -19,7 +22,48 @@ const failed: GmailSettings = {
   },
 };
 
+type PublicConfig = Awaited<ReturnType<typeof api.config>>;
+const selfHosted: PublicConfig = {
+  cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false }, signup: { enabled: false },
+  limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 },
+  product_analytics: { enabled: false, key: null, host: null, realm: null },
+};
+const cloud: PublicConfig = {
+  ...selfHosted, cloud_sign_in: { enabled: true, publishable_key: 'pk_test' }, billing: { enabled: true }, signup: { enabled: true },
+};
+
+// The block reads the server's public config to know whether it runs on Colliedesk Cloud.
+function render(ui: ReactElement, config: PublicConfig = selfHosted) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  client.setQueryData(['public-config'], config);
+  return renderInPage(ui, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+}
+
 afterEach(() => window.history.replaceState(null, '', '/'));
+
+test('on Colliedesk Cloud the Connect button comes with the Limited Use statement and a link to how Google data is handled', () => {
+  render(<GmailConnection gmail={available} supportAddress="support@example.com" timezone="UTC" canManage />, cloud);
+  expect(screen.getByText(/adheres to the Google API Services User Data Policy, including the Limited Use requirements/)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Privacy policy' })).toHaveAttribute('href', 'https://colliedesk.com/privacy#google-user-data');
+});
+
+test('on Colliedesk Cloud the statement also comes before a reconnect sends the admin back to Google', () => {
+  render(<GmailConnection gmail={failed} supportAddress="support@example.com" timezone="UTC" canManage />, cloud);
+  expect(screen.getByRole('link', { name: 'Privacy policy' })).toBeInTheDocument();
+});
+
+test('a self-hosted server does not point to the privacy policy of Colliedesk Cloud', () => {
+  render(<GmailConnection gmail={available} supportAddress="support@example.com" timezone="UTC" canManage />);
+  expect(screen.getByText(/cannot read the mailbox/)).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Privacy policy' })).not.toBeInTheDocument();
+  expect(screen.queryByText(/Limited Use/)).not.toBeInTheDocument();
+});
+
+test('analytics that name the realm decide, like the server does', () => {
+  render(<GmailConnection gmail={available} supportAddress="support@example.com" timezone="UTC" canManage />,
+    { ...cloud, product_analytics: { enabled: true, key: 'k', host: 'https://h', realm: 'self-hosted' } });
+  expect(screen.queryByRole('link', { name: 'Privacy policy' })).not.toBeInTheDocument();
+});
 
 test('an admin connects Gmail from the email channel', () => {
   const onConnect = vi.fn();

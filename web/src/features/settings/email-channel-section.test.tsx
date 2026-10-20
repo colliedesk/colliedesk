@@ -1,4 +1,6 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render as renderInPage, screen, within } from '@testing-library/react';
+import type { ReactElement, ReactNode } from 'react';
 import { expect, test, vi } from 'vitest';
 import type { EmailChannelSettings } from '../../api/schemas';
 import { EmailChannelSection } from './email-channel-section';
@@ -24,6 +26,13 @@ const connected: EmailChannelSettings = {
   sending_from: 'reply+…@mail.colliedesk.example',
   smtp: { configured: true, host: 'smtp.example.net', port: 587, starttls: true, authenticated: true },
 };
+
+// The Gmail block reads the public config to know whether it runs on Colliedesk Cloud; here it is self-hosted.
+function render(ui: ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  client.setQueryData(['public-config'], { cloud_sign_in: { enabled: false, publishable_key: null }, billing: { enabled: false }, product_analytics: { enabled: false, key: null, host: null, realm: null } });
+  return renderInPage(ui, { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+}
 
 test('connects a support address and shows the inbound URL', () => {
   const onSave = vi.fn();
