@@ -159,15 +159,18 @@ func (s *Store) ListKBMediaUploads(ctx context.Context, workspaceID string) ([]d
 	return uploads, nil
 }
 
-// CancelKBMediaUpload forgets an upload in progress; the caller removes its file. With startedBy set,
-// only an upload that person started goes (domain.ErrKBMediaUploadNotYours otherwise).
-func (s *Store) CancelKBMediaUpload(ctx context.Context, workspaceID, id, startedBy string) error {
+// CancelKBMediaUpload forgets an upload in progress; the caller removes its file. Unless anyone, only an
+// upload startedBy started goes (domain.ErrKBMediaUploadNotYours otherwise).
+func (s *Store) CancelKBMediaUpload(ctx context.Context, workspaceID, id, startedBy string, anyone bool) error {
 	if !savedReplyID.MatchString(id) {
 		return domain.ErrKBMediaUploadNotFound
 	}
+	if !anyone && startedBy == "" {
+		return domain.ErrKBMediaUploadNotYours
+	}
 	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
 		tag, err := tx.Exec(ctx, `DELETE FROM kb_media_uploads WHERE workspace_id=$1 AND id=$2 AND completed_at IS NULL
-			AND ($3::uuid IS NULL OR created_by_agent_id=$3)`, workspaceID, id, optionalID(startedBy))
+			AND ($4 OR created_by_agent_id=$3::uuid)`, workspaceID, id, optionalID(startedBy), anyone)
 		if err != nil || tag.RowsAffected() == 1 {
 			return struct{}{}, err
 		}
