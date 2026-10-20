@@ -2,11 +2,13 @@ package media
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // The files in testdata/video were made with ffmpeg: one second of a 64 × 48 test picture with a tone,
@@ -157,4 +159,67 @@ func FuzzVideoWalk(f *testing.F) {
 			t.Fatal("the size changed")
 		}
 	})
+}
+
+func mp4Box(kind string, payload []byte) []byte {
+	out := make([]byte, 8, 8+len(payload))
+	binary.BigEndian.PutUint32(out, uint32(8+len(payload)))
+	copy(out[4:], kind)
+	return append(out, payload...)
+}
+
+// Every box a player does not need goes, whatever its name: a dashcam's gps box, and what a free or
+// skip box still holds, at the top level as anywhere else.
+func TestNeutraliseVideoKeepsOnlyTheBoxesAPlayerNeeds(t *testing.T) {
+	secret := []byte("GPS:10.7769N,106.7009E-SECRET")
+	data := testVideo(t, "h264.mp4")
+	for _, kind := range []string{"gps ", "free", "skip", "wide", "XYZW"} {
+		data = append(data, mp4Box(kind, secret)...)
+	}
+	file := &writable{data: data}
+	if _, err := InspectVideo(file, int64(len(data))); err != nil {
+		t.Fatal(err)
+	}
+	if err := NeutraliseVideo(file, int64(len(data))); err != nil {
+		t.Fatal(err)
+	}
+	if n := bytes.Count(file.data, secret); n > 0 {
+		t.Fatalf("the secret is still in the file %d times", n)
+	}
+	decodes(t, file.data)
+}
+
+// Reading the sample tables takes one pass: 200,000 chunks of one sample each, each with its own
+// entry, took minutes when every chunk read every entry.
+func TestVideoSampleTablesReadInLinearTime(t *testing.T) {
+	const n = 200_000
+	track := &mp4Track{haveSizes: true, haveChunks: true, haveSampleToCh: true, sampleSize: 1, sampleCount: n}
+	for i := range n {
+		track.chunks = append(track.chunks, uint64(i*2))
+		track.perChunk = append(track.perChunk, [2]uint32{uint32(i + 1), 1})
+	}
+	started := time.Now()
+	ranges, err := track.samples()
+	if err != nil || len(ranges) != n {
+		t.Fatalf("samples = %d (%v)", len(ranges), err)
+	}
+	if took := time.Since(started); took > time.Second {
+		t.Fatalf("%d chunks took %s", n, took)
+	}
+}
+
+func ebml(id []byte, payload []byte) []byte {
+	return append(append(append([]byte{}, id...), 0x80|byte(len(payload))), payload...)
+}
+
+// A picture wider than MaxVideoSide is refused, as the library stores at most 65,535 pixels a side.
+func TestInspectVideoRefusesAPictureTooWide(t *testing.T) {
+	header := ebml([]byte{0x1A, 0x45, 0xDF, 0xA3}, ebml([]byte{0x42, 0x82}, []byte("webm")))
+	video := ebml([]byte{0xE0}, append(ebml([]byte{0xB0}, []byte{0x01, 0x11, 0x70}), ebml([]byte{0xBA}, []byte{0x64})...)) // 70,000 × 100
+	entry := ebml([]byte{0xAE}, append(append(ebml([]byte{0x83}, []byte{1}), ebml([]byte{0x86}, []byte("V_VP9"))...), video...))
+	segment := append([]byte{0x18, 0x53, 0x80, 0x67, 0x01, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}, ebml([]byte{0x16, 0x54, 0xAE, 0x6B}, entry)...)
+	data := append(header, segment...)
+	if _, err := InspectVideo(bytes.NewReader(data), int64(len(data))); !errors.Is(err, ErrVideoTooLarge) {
+		t.Fatalf("70,000 pixels wide = %v", err)
+	}
 }

@@ -142,6 +142,22 @@ func (s *Store) CancelKBMediaUpload(ctx context.Context, workspaceID, id string)
 	return nil
 }
 
+// CheckKBVideoAdmission refuses, before a completed upload's file is moved into storage, a video the
+// library or the plan has no room for; CompleteKBMediaUpload checks again.
+func (s *Store) CheckKBVideoAdmission(ctx context.Context, workspaceID string, size int64) error {
+	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
+		var count int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM kb_media WHERE workspace_id=$1`, workspaceID).Scan(&count); err != nil {
+			return struct{}{}, err
+		}
+		if count >= domain.MaxKBMedia {
+			return struct{}{}, domain.ErrKBMediaLimit
+		}
+		return struct{}{}, s.CheckStorage(ctx, tx, workspaceID, size, s.now())
+	})
+	return kbError("check knowledge base video", err)
+}
+
 // NewKBVideo is a completed upload's video: its stored bytes and what the server read from them.
 type NewKBVideo struct {
 	Object      attachments.Object
@@ -202,10 +218,15 @@ func (s *Store) CompleteKBMediaUpload(ctx context.Context, workspaceID string, a
 			}
 			media, err = scanKBMedia(tx.QueryRow(ctx, `INSERT INTO kb_media AS m(workspace_id,kind,storage_key,sha256,size,content_type,created_by_agent_id,
 					name,alt,width,height,duration_ms,codecs,inspected_at,kept,updated_by_agent_id)
-				VALUES($1,'video',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,clock_timestamp(),$13,$6) RETURNING `+kbMediaColumns,
+				VALUES($1,'video',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,clock_timestamp(),$13,$6) ON CONFLICT (workspace_id, sha256) DO NOTHING RETURNING `+kbMediaColumns,
 				workspaceID, video.Object.Key, video.Object.SHA256, video.Object.Size, video.ContentType, optionalID(actor.AgentID),
 				name, alt, video.Width, video.Height, video.DurationMS, codecs, keep))
-			created = err == nil
+			if errors.Is(err, pgx.ErrNoRows) {
+				// Another upload of the same bytes completed first; answer its item.
+				media, err = touchKBImage(ctx, tx, workspaceID, video.Object.SHA256, upload)
+			} else {
+				created = err == nil
+			}
 		}
 		if err != nil {
 			return StoredKBMedia{}, err
@@ -221,13 +242,24 @@ func (s *Store) CompleteKBMediaUpload(ctx context.Context, workspaceID string, a
 }
 
 // expireKBMediaUploads deletes, in every workspace, the uploads past their time inside PurgeKBTrash's
-// privileged transaction and returns their ids, whose staged files the caller removes.
-func expireKBMediaUploads(ctx context.Context, tx pgx.Tx, now time.Time) ([]string, error) {
+// privileged transaction and returns their ids, whose staged files the caller removes, with the ids of
+// staged that no upload in progress names any more (a part written while its upload was cancelled).
+func expireKBMediaUploads(ctx context.Context, tx pgx.Tx, now time.Time, staged []string) ([]string, error) {
 	rows, err := tx.Query(ctx, `DELETE FROM kb_media_uploads WHERE expires_at<$1 RETURNING id::text`, now)
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, pgx.RowTo[string])
+	expired, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil || len(staged) == 0 {
+		return expired, err
+	}
+	rows, err = tx.Query(ctx, `SELECT s.id FROM unnest($1::text[]) s(id)
+		WHERE NOT EXISTS (SELECT 1 FROM kb_media_uploads u WHERE u.id::text=s.id AND u.completed_at IS NULL)`, staged)
+	if err != nil {
+		return nil, err
+	}
+	orphans, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	return append(expired, orphans...), err
 }
 
 // SetKBVideoPoster gives a video of the library its poster (stored image bytes, metadata removed) and

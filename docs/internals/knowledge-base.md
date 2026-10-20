@@ -129,7 +129,17 @@ The public help center is in `help-center.md`.
   address (`attachments.Staging.Adopt`), so a video never needs twice its size on disk. One part of an
   upload at a time and six of a workspace, held in memory: the server runs as one process (like
   `billing.md`'s single replica). Each part must arrive within 120 s (`SetReadDeadline`), against a
-  client sending a byte now and then. Expired uploads go with the daily purge, their files too.
+  client sending a byte now and then. Expired uploads go with the daily purge, their files too, and
+  so does a staged file older than an hour that no open upload names (a part written while its
+  upload was cancelled; cancel also waits for a part in flight). No server-wide count of uploads:
+  counting staged files let seven trial workspaces block every other one; the disk check is the
+  server's limit. Complete checks the cap and the plan before it renames the file, so a refusal
+  keeps the parts for a retry, and a lost file is 409 `upload_lost`.
+- **Neutralising MP4 is an allowlist.** Each container keeps only the boxes a player reads
+  (`keptBoxes` in `media/video.go`); any other box, a dashcam's `gps ` included, becomes `free` with
+  its content zeroed, as does what `free`, `skip` and `wide` hold. The creation and modification
+  times of `mvhd`, `tkhd` and `mdhd` and WebM's `DateUTC` are zeroed. The sample tables are read in
+  one pass over `stsc` (one per chunk was quadratic: 20 minutes of CPU for a 32 MB file).
 - **Video bytes seek.** `GET /kb/media/{id}` serves through `http.ServeContent` when storage hands back
   a seeker (local disk): ranges, `If-Range`, `ETag` = SHA-256, `immutable`. A poster has its own
   address `/poster/<last 8 hex of its content address>`, so a new poster is a new URL and an old one

@@ -240,8 +240,6 @@ const (
 	KBMediaPartSize = 8 << 20
 	// MaxKBMediaUploadsOpen is the most uploads a workspace has in progress at once.
 	MaxKBMediaUploadsOpen = 3
-	// MaxKBMediaUploadsServer is the most uploads in progress on a server.
-	MaxKBMediaUploadsServer = 20
 	// MaxKBMediaUploadsPerHour is the most uploads one person or token starts in an hour.
 	MaxKBMediaUploadsPerHour = 10
 	// KBMediaUploadTTL is how long an upload may take before its parts are thrown away.

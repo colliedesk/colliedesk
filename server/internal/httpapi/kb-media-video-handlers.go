@@ -91,7 +91,7 @@ func writeKBUploadError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusConflict, "upload_incomplete", sentence(err)+".")
 	case errors.Is(err, media.ErrHEVC), errors.As(err, &codec):
 		writeError(response, http.StatusBadRequest, "unsupported_codec", sentence(err)+".")
-	case errors.Is(err, media.ErrNotVideo), errors.Is(err, media.ErrVideoDamaged), errors.Is(err, media.ErrVideoUnsafeTrack):
+	case errors.Is(err, media.ErrNotVideo), errors.Is(err, media.ErrVideoDamaged), errors.Is(err, media.ErrVideoUnsafeTrack), errors.Is(err, media.ErrVideoTooLarge):
 		writeError(response, http.StatusBadRequest, "invalid_request", sentence(err)+"; nothing was stored.")
 	default:
 		writeKBError(response, err)
@@ -116,13 +116,6 @@ func (a *API) createKBMediaUpload(response http.ResponseWriter, request *http.Re
 	}
 	if max := a.kbVideoMaxBytes(); *input.Size > max {
 		writeError(response, http.StatusRequestEntityTooLarge, "too_large", fmt.Sprintf("A video holds at most %d MiB on this server; nothing was stored.", max>>20))
-		return
-	}
-	if staged, err := staging.Staged(); err != nil {
-		writeInternalError(response, err)
-		return
-	} else if staged >= domain.MaxKBMediaUploadsServer {
-		writeError(response, http.StatusTooManyRequests, "too_many_uploads", "This server is taking as many uploads as it can; try again in a few minutes.")
 		return
 	}
 	who := principal(request)
@@ -238,6 +231,12 @@ func writeKBPart(path string, offset int64, body io.Reader, length int64) error 
 func (a *API) cancelKBMediaUpload(response http.ResponseWriter, request *http.Request) {
 	who := principal(request)
 	id := request.PathValue("id")
+	// A part being written would make the file again after it is removed.
+	if !a.kbUploads.enter(who.Workspace.ID, id) {
+		writeError(response, http.StatusTooManyRequests, "too_many_parts", "A part of this upload is being sent; cancel it once that part is done.")
+		return
+	}
+	defer a.kbUploads.leave(who.Workspace.ID, id)
 	if err := a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id); err != nil {
 		writeKBUploadError(response, err)
 		return
@@ -284,11 +283,22 @@ func (a *API) completeKBMediaUpload(response http.ResponseWriter, request *http.
 		writeInternalError(response, err)
 		return
 	}
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		_ = a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id)
+		writeError(response, http.StatusConflict, "upload_lost", "The parts of this upload are gone from the server; start the upload again.")
+		return
+	}
 	video, err := checkKBVideo(path, upload.Size)
 	if err != nil {
 		// The bytes cannot become a library item; the upload goes with them.
 		_ = a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, id)
 		_ = staging.RemoveStaged(id)
+		writeKBUploadError(response, err)
+		return
+	}
+	// Whatever the database can refuse is checked before the file is renamed into storage, so a refusal
+	// keeps the parts for a retry (the check at completion stays authoritative).
+	if err := a.store.CheckKBVideoAdmission(request.Context(), who.Workspace.ID, upload.Size); err != nil {
 		writeKBUploadError(response, err)
 		return
 	}

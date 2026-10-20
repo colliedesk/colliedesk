@@ -3,13 +3,17 @@ package httpapi_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
@@ -244,5 +248,92 @@ func TestKBVideoUploadExpiresWithTheDailyPurge(t *testing.T) {
 	var left int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM kb_media_uploads WHERE id=$1`, upload.ID).Scan(&left); err != nil || left != 0 {
 		t.Fatalf("upload rows left = %d (%v)", left, err)
+	}
+}
+
+// A completion the library refuses keeps the parts, so the same upload completes once there is room.
+func TestKBVideoCompletionRefusedKeepsTheParts(t *testing.T) {
+	api, service, pool, storage := testAPIWithStorage(t)
+	admin := createSession(t, api, service, "KB Video Retry", "admin@kb-video-retry.example.com")
+	data := mediaVideo(t, "h264.mp4")
+	upload := startKBUpload(t, api, admin, len(data), nil)
+	if response := serve(api, kbPartRequest(upload.ID, admin, data, 0, len(data)-1, len(data))); response.Code != http.StatusOK {
+		t.Fatalf("part status=%d", response.Code)
+	}
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `INSERT INTO kb_media(workspace_id,storage_key,sha256,size,content_type)
+		SELECT w.id, w.id::text||'/00/'||lpad(to_hex(n),64,'0'), lpad(to_hex(n),64,'0'), 10, 'image/png'
+		FROM workspaces w, generate_series(1,$1::int) n WHERE w.name='KB Video Retry'`, domain.MaxKBMedia); err != nil {
+		t.Fatal(err)
+	}
+	full := kbCall(t, api, http.MethodPost, "/api/v1/kb/media-uploads/"+upload.ID+"/complete", nil, admin, http.StatusConflict, nil)
+	if errorCode(t, full) != "kb_limit" {
+		t.Fatalf("full library = %s", full.Body.String())
+	}
+	staged, _ := storage.(interface{ StagingFile(string) (string, error) }).StagingFile(upload.ID)
+	if _, err := os.Stat(staged); err != nil {
+		t.Fatalf("the parts went with the refusal: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM kb_media WHERE content_type='image/png' AND size=10`); err != nil {
+		t.Fatal(err)
+	}
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/media-uploads/"+upload.ID+"/complete", nil, admin, http.StatusCreated, nil)
+}
+
+// Two uploads of the same bytes completed at the same moment give one item.
+func TestKBVideoSameBytesCompletedTogetherGiveOneItem(t *testing.T) {
+	api, service, _, _ := testAPIWithStorage(t)
+	admin := createSession(t, api, service, "KB Video Twins", "admin@kb-video-twins.example.com")
+	data := mediaVideo(t, "vp9.webm")
+	var ids [2]string
+	for i := range ids {
+		upload := startKBUpload(t, api, admin, len(data), nil)
+		if response := serve(api, kbPartRequest(upload.ID, admin, data, 0, len(data)-1, len(data))); response.Code != http.StatusOK {
+			t.Fatalf("part status=%d", response.Code)
+		}
+		ids[i] = upload.ID
+	}
+	var wait sync.WaitGroup
+	results := make([]*httpResult, 2)
+	for i, id := range ids {
+		req := newRequest(t, http.MethodPost, "/api/v1/kb/media-uploads/"+id+"/complete", nil, admin, nil)
+		wait.Add(1)
+		go func() { defer wait.Done(); results[i] = serveResult(api, req) }()
+	}
+	wait.Wait()
+	var first, second kbMediaView
+	for i, into := range []*kbMediaView{&first, &second} {
+		if results[i].code != http.StatusCreated {
+			t.Fatalf("complete %d: %d %s", i, results[i].code, results[i].body)
+		}
+		if err := json.Unmarshal(results[i].body, into); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if first.ID != second.ID {
+		t.Fatalf("two items for the same bytes: %s and %s", first.ID, second.ID)
+	}
+}
+
+// A staged file no upload names any more (a part written while its upload was cancelled) goes with
+// the daily purge.
+func TestKBVideoOrphanPartsGoWithTheDailyPurge(t *testing.T) {
+	_, _, pool, storage := testAPIWithStorage(t)
+	staging := storage.(interface {
+		StagingFile(string) (string, error)
+	})
+	orphan, _ := staging.StagingFile("00000000-0000-4000-8000-0000000000ff")
+	if err := os.WriteFile(orphan, []byte("part"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(orphan, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.New(pool).WithObjects(storage).PurgeKBTrash(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(orphan); !os.IsNotExist(err) {
+		t.Fatalf("the orphan part is still on disk: %v", err)
 	}
 }

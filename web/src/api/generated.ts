@@ -1656,7 +1656,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Check and store the video once every part arrived. The server reads its length, size and codecs from the file, and removes in place what a camera or phone leaves in it (location, titles, XMP, tracks of data such as GPS or subtitles) without changing a frame. A video it refuses (400 `unsupported_codec`, `invalid_request`) is thrown away with the upload. The same bytes give the item that holds them, and a repeated complete answers the same item. Put it in an article as `<video controls src="/api/v1/kb/media/<id>"></video>`. */
+        /** @description Check and store the video once every part arrived. The server reads its length, size and codecs from the file, and removes in place what a camera or phone leaves in it (location, titles, XMP, tracks of data such as GPS or subtitles) without changing a frame. A video it refuses (400 `unsupported_codec`, `invalid_request`; more than 8,192 pixels on a side) is thrown away with the upload. A full library or plan (409) keeps the parts, so the same upload completes once there is room; parts gone from the server are 409 `upload_lost` and the upload is cancelled. Location, titles and recording dates are removed. The same bytes give the item that holds them, and a repeated complete answers the same item. Put it in an article as `<video controls src="/api/v1/kb/media/<id>"></video>`. */
         post: operations["completeKBMediaUpload"];
         delete?: never;
         options?: never;
@@ -7108,6 +7108,15 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description A part of this upload is being sent; cancel once it is done. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     completeKBMediaUpload: {

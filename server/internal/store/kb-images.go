@@ -271,7 +271,13 @@ func (s *Store) PurgeKBTrash(ctx context.Context) (KBPurge, error) {
 	var purged KBPurge
 	type orphan struct{ workspaceID, key string }
 	var orphans []orphan
-	var expiredUploads []string
+	var expiredUploads, staged []string
+	if staging, ok := s.objects.(attachments.Staging); ok {
+		// Files staged for an hour at least: a newer one may belong to an upload being started.
+		if ids, err := staging.StagedIDs(time.Hour); err == nil {
+			staged = ids
+		}
+	}
 	cutoff := s.now().Add(-domain.KBTrashRetention)
 	err := s.db.Privileged(ctx, database.PrivilegeKBPurge, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `DELETE FROM kb_articles WHERE deleted_at IS NOT NULL AND deleted_at<$1`, cutoff)
@@ -292,7 +298,7 @@ func (s *Store) PurgeKBTrash(ctx context.Context) (KBPurge, error) {
 		if err := purgeKBMediaBatches(ctx, tx, cutoff); err != nil {
 			return fmt.Errorf("purge knowledge base media batches: %w", err)
 		}
-		if expiredUploads, err = expireKBMediaUploads(ctx, tx, s.now()); err != nil {
+		if expiredUploads, err = expireKBMediaUploads(ctx, tx, s.now(), staged); err != nil {
 			return fmt.Errorf("purge expired knowledge base media uploads: %w", err)
 		}
 		rows, err := tx.Query(ctx, `SELECT m.id::text FROM kb_media m WHERE `+kbMediaPurgeable+` FOR UPDATE OF m SKIP LOCKED`, cutoff)

@@ -137,8 +137,9 @@ up to 200 MiB (about ten minutes of a 1080p screen recording; a self-hosted serv
 limit). Nothing is converted, so the video must be one every browser plays: a video recorded in H.265
 (HEVC), the default of iPhones, is refused with how to export it as H.264 (on an iPhone: **Settings →
 Camera → Formats → Most Compatible**). A video goes up in parts, so a lost connection resumes where it
-stopped; it counts toward your plan's storage. Location, titles and tracks of data a camera or phone
-writes (GPS, subtitles) are removed from the file without changing a frame. A video can have a
+stopped; it counts toward your plan's storage. Location, titles, recording dates and tracks of data a
+camera or phone writes (GPS, subtitles) are removed from the file without changing a frame; the
+name of the app that wrote a WebM stays. A video can be at most 8,192 pixels on a side. A video can have a
 poster, the still picture shown before it plays. For now videos are uploaded through the API and AI
 agents; the library page and the editor's button come next, and the help center shows them then.
 
@@ -258,7 +259,7 @@ a video in parts (`colliedesk_kb_video_upload_start`, `_part`, `_complete`) and 
 - 100,000 characters per article text, 300 per title; never cut.
 - Images: PNG, JPEG, GIF and WebP, 5 MB each, at most 8,192 pixels on a side and 40 megapixels.
 - 10,000 images and videos in the media library per workspace, counting its trash; videos up to
-  200 MiB, three uploads in progress at a time.
+  200 MiB and 8,192 pixels on a side, three uploads in progress at a time.
 - Collections go three levels deep.
 - Search does not find a part in the middle of a word, nor words in text written without spaces.
 - Translations an import brings in are kept and exported, but not shown or edited yet.

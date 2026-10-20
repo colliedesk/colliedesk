@@ -16,6 +16,7 @@ const (
 	ebmlScale     = 0x2AD7B1
 	ebmlDuration  = 0x4489
 	ebmlTitle     = 0x7BA9
+	ebmlDateUTC   = 0x4461
 	ebmlTracks    = 0x1654AE6B
 	ebmlEntry     = 0xAE
 	ebmlTrackType = 0x83
@@ -173,7 +174,7 @@ func walkWebM(file io.ReaderAt, size int64) (Video, []ebmlElement, error) {
 		case ebmlInfo:
 			return true, r.children(e.body, e.end, func(child ebmlElement) (bool, error) {
 				switch child.id {
-				case ebmlTitle:
+				case ebmlTitle, ebmlDateUTC:
 					voids = append(voids, child)
 				case ebmlScale:
 					value, err := r.uint(child)
@@ -261,6 +262,9 @@ func walkWebM(file io.ReaderAt, size int64) (Video, []ebmlElement, error) {
 	}
 	if !video || info.Width < 1 || info.Height < 1 {
 		return Video{}, nil, ErrNotVideo
+	}
+	if info.Width > MaxVideoSide || info.Height > MaxVideoSide {
+		return Video{}, nil, ErrVideoTooLarge
 	}
 	if duration > 0 && scale > 0 {
 		if ms := duration * float64(scale) / 1e6; ms < math.MaxInt64/2 {

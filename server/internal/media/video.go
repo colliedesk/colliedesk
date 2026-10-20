@@ -35,6 +35,8 @@ var (
 	ErrUnsupportedCodec = errors.New("this video's codec is not one every browser plays")
 	// ErrVideoDamaged means the structure ended early, contradicts itself or goes past the limits.
 	ErrVideoDamaged = errors.New("the video file is damaged or too complex to check")
+	// ErrVideoTooLarge means a picture wider or taller than MaxVideoSide.
+	ErrVideoTooLarge = fmt.Errorf("a video is at most %d pixels on a side", MaxVideoSide)
 	// ErrVideoUnsafeTrack means a track of data (location, subtitles) the server cannot blank safely.
 	ErrVideoUnsafeTrack = errors.New("the video carries a data track (location or text) that cannot be removed from this file; export it again without it")
 )
@@ -48,8 +50,10 @@ func (e *UnsupportedCodecError) Error() string {
 func (e *UnsupportedCodecError) Unwrap() error { return ErrUnsupportedCodec }
 
 const (
-	maxBoxDepth = 8
-	maxBoxes    = 10000
+	// MaxVideoSide is the most pixels a video may have on a side (8K is 7680).
+	MaxVideoSide = 8192
+	maxBoxDepth  = 8
+	maxBoxes     = 10000
 	// maxSamples bounds the sample tables read: ten minutes at 60 frames a second is 36,000.
 	maxSamples = 2_000_000
 )
@@ -230,8 +234,50 @@ func (r *mp4Reader) children(start, end int64) ([]box, error) {
 	return boxes, nil
 }
 
-// metadataBoxes are the boxes a camera or editor writes its tags, location and XMP in.
-var metadataBoxes = map[string]bool{"udta": true, "meta": true, "uuid": true}
+// keptBoxes are, for each container, the boxes a player needs; every other box (udta, meta, XMP in
+// uuid, a dashcam's gps, whatever a camera adds next) becomes a free box with its content zeroed, and
+// the content of free, skip and wide boxes is zeroed too: an allowlist, not a list of what to remove.
+var keptBoxes = map[string]map[string]bool{
+	"":     {"ftyp": true, "moov": true, "mdat": true, "moof": true, "mfra": true, "sidx": true, "styp": true},
+	"moov": {"mvhd": true, "trak": true, "mvex": true, "iods": true},
+	"trak": {"tkhd": true, "edts": true, "mdia": true, "tref": true},
+	"mdia": {"mdhd": true, "hdlr": true, "minf": true, "elng": true},
+	"minf": {"vmhd": true, "smhd": true, "nmhd": true, "gmhd": true, "hmhd": true, "sthd": true, "dinf": true, "stbl": true, "hdlr": true},
+	"dinf": {"dref": true},
+	"edts": {"elst": true},
+	"stbl": {"stsd": true, "stts": true, "ctts": true, "cslg": true, "stss": true, "stps": true, "stsz": true, "stz2": true, "stsc": true, "stco": true,
+		"co64": true, "sdtp": true, "sbgp": true, "sgpd": true, "subs": true, "saiz": true, "saio": true, "padb": true, "stdp": true},
+}
+
+// timedBoxes hold a creation and a modification time after their version and flags, which
+// NeutraliseVideo zeroes: 4 bytes each in version 0, 8 in version 1.
+var timedBoxes = map[string]bool{"mvhd": true, "tkhd": true, "mdhd": true}
+
+// keep reports whether a box stays as it is, and otherwise adds it to the boxes freed.
+func (walk *mp4Walk) keep(parent string, b box) bool {
+	if keptBoxes[parent][b.kind] {
+		return true
+	}
+	walk.freed = append(walk.freed, b)
+	return false
+}
+
+// zeroTimes adds the creation and modification times of a timed box to the ranges zeroed.
+func (r *mp4Reader) zeroTimes(walk *mp4Walk, b box) error {
+	head, err := r.read(b.body, 1)
+	if err != nil {
+		return err
+	}
+	width := int64(8)
+	if head[0] == 1 {
+		width = 16
+	}
+	if b.body+4+width > b.end {
+		return ErrVideoDamaged
+	}
+	walk.blanked = append(walk.blanked, [2]int64{b.body + 4, b.body + 4 + width})
+	return nil
+}
 
 func walkMP4(file io.ReaderAt, size int64) (mp4Walk, error) {
 	r := &mp4Reader{file: file}
@@ -259,26 +305,28 @@ func walkMP4(file io.ReaderAt, size int64) (mp4Walk, error) {
 	var timescale, duration uint64
 	moovs := 0
 	for _, b := range top {
-		switch {
-		case metadataBoxes[b.kind]:
-			walk.freed = append(walk.freed, b)
-		case b.kind == "mdat":
+		if !walk.keep("", b) {
+			continue
+		}
+		switch b.kind {
+		case "mdat":
 			walk.mdat = append(walk.mdat, [2]int64{b.body, b.end})
-		case b.kind == "moof":
+		case "moof":
 			walk.fragments = true
-		case b.kind == "moov":
+		case "moov":
 			moovs++
 			inner, err := r.children(b.body, b.end)
 			if err != nil {
 				return walk, err
 			}
 			for _, child := range inner {
-				switch {
-				case metadataBoxes[child.kind]:
-					walk.freed = append(walk.freed, child)
-				case child.kind == "mvex":
+				if !walk.keep("moov", child) {
+					continue
+				}
+				switch child.kind {
+				case "mvex":
 					walk.fragments = true
-				case child.kind == "mvhd":
+				case "mvhd":
 					payload, err := r.read(child.body, int(min(child.end-child.body, 40)))
 					if err != nil || len(payload) < 20 {
 						return walk, ErrVideoDamaged
@@ -291,7 +339,10 @@ func walkMP4(file io.ReaderAt, size int64) (mp4Walk, error) {
 					} else {
 						timescale, duration = uint64(binary.BigEndian.Uint32(payload[12:])), uint64(binary.BigEndian.Uint32(payload[16:]))
 					}
-				case child.kind == "trak":
+					if err := r.zeroTimes(&walk, child); err != nil {
+						return walk, err
+					}
+				case "trak":
 					track, err := r.track(child, &walk, 2)
 					if err != nil {
 						return walk, err
@@ -323,11 +374,15 @@ func (r *mp4Reader) track(trak box, walk *mp4Walk, depth int) (*mp4Track, error)
 			return err
 		}
 		for _, child := range inner {
-			switch child.kind {
-			case "udta", "meta", "uuid":
-				if b.kind == "trak" {
-					walk.freed = append(walk.freed, child)
+			if !walk.keep(b.kind, child) {
+				continue
+			}
+			if timedBoxes[child.kind] {
+				if err := r.zeroTimes(walk, child); err != nil {
+					return err
 				}
+			}
+			switch child.kind {
 			case "mdia", "minf", "stbl", "dinf", "edts":
 				if err := visit(child, depth+1); err != nil {
 					return err
@@ -501,13 +556,22 @@ func (t *mp4Track) samples() ([][2]int64, error) {
 	}
 	var ranges [][2]int64
 	sample := uint32(0)
+	entry := -1
 	for i, offset := range t.chunks {
 		chunk := uint32(i + 1)
-		perChunk := uint32(0)
-		for _, entry := range t.perChunk {
-			if entry[0] <= chunk {
-				perChunk = entry[1]
+		// The entries name the first chunk of each run, in increasing order: one pass reads them.
+		for entry+1 < len(t.perChunk) && t.perChunk[entry+1][0] <= chunk {
+			if entry >= 0 && t.perChunk[entry+1][0] <= t.perChunk[entry][0] {
+				return nil, ErrVideoDamaged
 			}
+			entry++
+		}
+		if entry < 0 {
+			return nil, ErrVideoDamaged
+		}
+		perChunk := t.perChunk[entry][1]
+		if perChunk > maxSamples {
+			return nil, ErrVideoDamaged
 		}
 		at := int64(offset)
 		for range perChunk {
@@ -521,9 +585,6 @@ func (t *mp4Track) samples() ([][2]int64, error) {
 			ranges = append(ranges, [2]int64{at, at + int64(size)})
 			at += int64(size)
 			sample++
-			if len(ranges) > maxSamples {
-				return nil, ErrVideoDamaged
-			}
 		}
 	}
 	return ranges, nil
@@ -574,6 +635,9 @@ func (r *mp4Reader) judge(walk *mp4Walk, tracks []*mp4Track, size int64) error {
 	}
 	if !video || walk.video.Width < 1 || walk.video.Height < 1 {
 		return ErrNotVideo
+	}
+	if walk.video.Width > MaxVideoSide || walk.video.Height > MaxVideoSide {
+		return ErrVideoTooLarge
 	}
 	if len(data) == 0 {
 		return nil

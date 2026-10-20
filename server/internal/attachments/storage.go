@@ -310,11 +310,11 @@ func (d *LocalDisk) RemoveTrash(_ context.Context, entry TrashEntry) error {
 
 // Staging is implemented by backends that keep an upload in parts on their own disk: StagingFile is
 // the file the parts are written into, Adopt stores it under its content address by renaming it (no
-// second copy, so a 200 MiB upload never needs twice the room) and Staged counts the files staged now.
+// second copy, so a 200 MiB upload never needs twice the room), StagedIDs lists the staged files.
 type Staging interface {
 	StagingFile(uploadID string) (string, error)
 	Adopt(ctx context.Context, workspaceID, path string) (Object, error)
-	Staged() (int, error)
+	StagedIDs(olderThan time.Duration) ([]string, error)
 	RemoveStaged(uploadID string) error
 }
 
@@ -344,19 +344,23 @@ func (d *LocalDisk) RemoveStaged(uploadID string) error {
 	return nil
 }
 
-// Staged counts the uploads in parts on this disk.
-func (d *LocalDisk) Staged() (int, error) {
+// StagedIDs lists the uploads in parts on this disk whose file last changed longer than olderThan ago.
+func (d *LocalDisk) StagedIDs(olderThan time.Duration) ([]string, error) {
 	entries, err := os.ReadDir(filepath.Join(d.root, ".incoming"))
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	count := 0
+	var ids []string
 	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), stagedPrefix) {
-			count++
+		id, ok := strings.CutPrefix(entry.Name(), stagedPrefix)
+		if !ok || !uploadPattern.MatchString(id) {
+			continue
+		}
+		if info, err := entry.Info(); err == nil && time.Since(info.ModTime()) > olderThan {
+			ids = append(ids, id)
 		}
 	}
-	return count, nil
+	return ids, nil
 }
 
 // Adopt hashes the staged file at path and renames it to its content address in the workspace; the
