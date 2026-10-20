@@ -24,6 +24,8 @@ describe('a pasted video link becomes a player address', () => {
     ['https://evil.example/watch?v=jNQXAC9IVRw', 'evil.example is not a video site articles can show: paste a YouTube or Vimeo link.'],
     ['https://cdn.example.com/tour.mp4', 'A link to a video file cannot be shown: paste a YouTube or Vimeo link.'],
     ['https://www.youtube.com/watch?v=short', 'This YouTube or Vimeo link names no video: copy the link from the video\'s Share button.'],
+    ['https://www.youtube.com/embed/videoseries?list=PLx12345', 'This YouTube or Vimeo link names no video: copy the link from the video\'s Share button.'],
+    ['https://www.youtube.com/watch?v=videoseries', 'This YouTube or Vimeo link names no video: copy the link from the video\'s Share button.'],
   ])('%s is refused and says why', (link, error) => {
     expect(parseVideoLink(link)).toEqual({ error });
   });

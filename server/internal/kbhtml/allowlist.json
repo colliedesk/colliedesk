@@ -8,7 +8,9 @@
         "hosts": ["www.youtube-nocookie.com", "youtube-nocookie.com", "www.youtube.com", "youtube.com", "m.youtube.com"],
         "path": "^/embed/([A-Za-z0-9_-]{11})$",
         "src": "https://www.youtube-nocookie.com/embed/",
-        "query": { "start": "^[0-9]{1,6}$" }
+        "query": { "start": "^[0-9]{1,6}$" },
+        "notVideos": ["videoseries", "live_stream"],
+        "notVideoReason": "YouTube playlist or live stream"
       },
       {
         "name": "vimeo",
@@ -16,7 +18,9 @@
         "hosts": ["player.vimeo.com"],
         "path": "^/video/([0-9]{1,12})$",
         "src": "https://player.vimeo.com/video/",
-        "query": { "h": "^[0-9a-f]{6,20}$" }
+        "query": { "h": "^[0-9a-f]{6,20}$" },
+        "notVideos": [],
+        "notVideoReason": ""
       }
     ],
     "attributes": ["src", "title", "width", "height", "allow", "allowfullscreen", "loading"],

@@ -35,8 +35,9 @@ var markdown = goldmark.New(
 	goldmark.WithRendererOptions(renderer.WithNodeRenderers(util.Prioritized(rawHTML{}, 100))),
 )
 
-// plain parses text without changing it, for excerpts.
-var plain = goldmark.New(goldmark.WithExtensions(extension.Strikethrough, extension.Table))
+// plain parses text for excerpts, leaving out what the page hides (hiddenText).
+var plain = goldmark.New(goldmark.WithExtensions(extension.Strikethrough, extension.Table),
+	goldmark.WithParserOptions(parser.WithASTTransformers(util.Prioritized(hiddenText{}, 200))))
 
 // baseKey carries the help center's base path to publicLinks.
 var baseKey = parser.NewContextKey()

@@ -130,6 +130,10 @@ func TestExcerptIsPlainTextCutAtAWord(t *testing.T) {
 	if got := excerpt("Sign in as an **admin**.\nThen `open` it.", 80); got != "Sign in as an admin. Then open it." {
 		t.Fatalf("inline excerpt=%q", got)
 	}
+	// Words the page hides are not in its description either.
+	if got := excerpt("inline <style>x</style> tail and <iframe src=\"https://evil.test/\">hidden</iframe> end", 80); got != "inline tail and end" {
+		t.Fatalf("hidden excerpt=%q", got)
+	}
 	if got := excerpt("Short text.", 40); got != "Short text." {
 		t.Fatalf("short excerpt=%q", got)
 	}

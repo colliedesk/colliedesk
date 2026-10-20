@@ -96,7 +96,8 @@ after it, for example the code from YouTube's **Share → Embed**:
 - The address must be `https://www.youtube.com/embed/<id>`, `https://www.youtube-nocookie.com/embed/<id>`
   or `https://player.vimeo.com/video/<id>`. YouTube videos play from `youtube-nocookie.com`, YouTube's
   privacy-enhanced mode. Of the address only the video id, YouTube's `start=`
-  (seconds) and Vimeo's `h=` (the key of an unlisted video) are kept.
+  (seconds) and Vimeo's `h=` (the key of an unlisted video) are kept. A YouTube playlist or live
+  stream (`embed/videoseries`, `embed/live_stream`) is not shown: embed one video of it.
 - `title`, `width`, `height`, `allow` and `allowfullscreen` are kept; a player without `allow` gets
   `encrypted-media; picture-in-picture`. The video fills the width of the
   page at 16:9 whatever size you give, and loads only when a reader scrolls to it.

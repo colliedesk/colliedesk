@@ -114,6 +114,14 @@
       ]
     },
     {
+      "name": "a playlist or live stream names no single video",
+      "html": "<iframe src=\"https://www.youtube.com/embed/videoseries?list=PLx1234567890\"></iframe><iframe src=\"https://www.youtube-nocookie.com/embed/live_stream?channel=UCx\"></iframe>",
+      "iframes": [],
+      "dropped": [
+        "iframe (YouTube playlist or live stream)"
+      ]
+    },
+    {
       "name": "http, port, user, relative, protocol-relative, javascript and data",
       "html": "<iframe src=\"http://player.vimeo.com/video/1\"></iframe><iframe src=\"https://player.vimeo.com:8443/video/1\"></iframe><iframe src=\"https://me@player.vimeo.com/video/1\"></iframe><iframe src=\"/video/1\"></iframe><iframe src=\"//player.vimeo.com/video/1\"></iframe><iframe src=\"javascript:alert(1)\"></iframe><iframe src=\"data:text/html,<script>alert(1)</script>\"></iframe><iframe></iframe>",
       "iframes": [],

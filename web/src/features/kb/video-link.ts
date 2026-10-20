@@ -40,7 +40,7 @@ export function parseVideoLink(raw: string): VideoEmbed | { error: string } {
     if (match) candidate = `https://player.vimeo.com/video/${match[1]}${match[2] ? `?h=${match[2]}` : ''}`;
   }
   const embed = embedSrc(candidate);
-  if (embed) return { src: embed.src, title: embed.site.title };
+  if (embed?.src) return { src: embed.src, title: embed.site.title };
   if (['youtube.com', 'youtube-nocookie.com', 'youtu.be', 'vimeo.com', 'player.vimeo.com'].includes(host))
     return { error: kbMessages.videoLinkNoVideo };
   if (/\.(mp4|webm|mov|m4v|ogv)$/i.test(url.pathname)) return { error: kbMessages.videoLinkFile };

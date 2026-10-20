@@ -39,7 +39,8 @@ export function hostOf(raw: string) {
 }
 
 // embedSrc is the player address an iframe may load, built again from the video id in raw, so no path,
-// query or host of the author's comes through; undefined when raw is no player of the list.
+// query or host of the author's comes through; undefined when raw is no player of the list, and src '' when it
+// names no single video (a playlist, a live stream: site.notVideos).
 export function embedSrc(raw: string, rules: Rules = allowlist): { site: Embed; src: string } | undefined {
   const value = trim(raw);
   if (unsafeAddress.test(value)) return undefined;
@@ -59,6 +60,7 @@ export function embedSrc(raw: string, rules: Rules = allowlist): { site: Embed; 
   if (!site) return undefined;
   const id = new RegExp(site.path).exec(url.pathname)?.[1];
   if (!id) return undefined;
+  if ((site.notVideos as string[]).includes(id)) return { site, src: '' };
   const query = new URLSearchParams();
   for (const [key, pattern] of Object.entries(site.query)) {
     const given = url.searchParams.get(key);
@@ -100,6 +102,10 @@ class Fragment {
     const { iframe } = this.rules;
     const src = element.getAttribute('src');
     const embed = src === null ? undefined : embedSrc(src, this.rules);
+    if (embed && !embed.src) {
+      this.drop(`iframe (${embed.site.notVideoReason})`);
+      return;
+    }
     if (!embed) {
       this.drop(src === null ? 'iframe (no src)' : `iframe (${hostOf(src)})`);
       return;

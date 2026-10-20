@@ -32,6 +32,10 @@ type Embed struct {
 	Path  string            `json:"path"`
 	Src   string            `json:"src"`
 	Query map[string]string `json:"query"`
+	// NotVideos are ids of the path that name no single video (a playlist, a live stream), which the
+	// player would show as unavailable without the query this list does not keep.
+	NotVideos      []string `json:"notVideos"`
+	NotVideoReason string   `json:"notVideoReason"`
 
 	path  *regexp.Regexp
 	query map[string]*regexp.Regexp
@@ -269,6 +273,10 @@ func (r *Rules) player(node *nethtml.Node, drop func(string)) string {
 	given, order := attributes(node)
 	src, hasSrc := given["src"]
 	site, embed := r.embed(src)
+	if site != nil && embed == "" {
+		drop("iframe (" + site.NotVideoReason + ")")
+		return ""
+	}
 	if site == nil {
 		if !hasSrc {
 			drop("iframe (no src)")
@@ -421,7 +429,7 @@ func trim(raw string) string {
 
 // embed returns the player address an iframe may load, built again from the video id in raw, so no
 // path, query or host of the author's comes through, and the site it plays from; nil when raw is no
-// player of the list. An address with a space, control character or backslash inside is refused:
+// player of the list, and the site with "" when it names no single video (embed.NotVideos). An address with a space, control character or backslash inside is refused:
 // browsers read those in ways a server parser does not.
 func (r *Rules) embed(raw string) (*Embed, string) {
 	raw = trim(raw)
@@ -440,6 +448,9 @@ func (r *Rules) embed(raw string) (*Embed, string) {
 		match := embed.path.FindStringSubmatch(address.EscapedPath())
 		if match == nil {
 			return nil, ""
+		}
+		if slices.Contains(embed.NotVideos, match[1]) {
+			return embed, ""
 		}
 		query := url.Values{}
 		given := address.Query()
