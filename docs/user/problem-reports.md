@@ -33,9 +33,9 @@ forgets it.
   which opens `github.com/colliedesk/colliedesk/issues/new` with the description and a summary of
   the diagnostics already filled in. The summary has no email addresses. You read it and press
   *Submit* on GitHub yourself, or you do not.
-- **Your own support desk (self-hosted):** set `PROBLEM_REPORT_WORKSPACE` to the address (slug) of a
-  workspace on the same server and restart. Reports from every other workspace on that server then
-  arrive there as conversations tagged `problem-report`.
+- **Your own support desk (self-hosted):** the server operator can send reports from every other
+  workspace to one workspace on the same server, as conversations tagged `problem-report`; see
+  [problem reports](../self-host/environment-variables.md#problem-reports).
 
 An agent may send 5 reports an hour. The 6th is refused until an hour has passed.
 

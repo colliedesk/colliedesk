@@ -1,0 +1,55 @@
+# Environment variables
+
+The server reads its settings from environment variables. With the installer, add a variable to
+`.env` next to `compose.yaml`, then run `docker compose up -d`. From a clone, set it in the `server`
+service of `compose.yaml`.
+
+## Variables
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `APP_ORIGIN` | `http://localhost:8080` | Public address of the server, with scheme. Sign-in links and email use it. |
+| `DATABASE_URL` | set by the installer | PostgreSQL connection that owns the data and runs migrations. See [backups and database](database.md). |
+| `DATABASE_REQUEST_URL` | set by the installer | PostgreSQL connection that serves requests. See [backups and database](database.md#database-requirements-and-hardening). |
+| `ATTACHMENTS_DIR` | `/data/attachments` in the compose files | Where attachment files are stored. Keep it on a volume. |
+| `TRUSTED_PROXIES` | loopback and the Docker bridge range | Proxies whose `X-Forwarded-For` the server trusts. See [running behind a proxy](running-behind-proxy.md). |
+| `DISABLE_TELEMETRY`, `DO_NOT_TRACK` | empty | Turn off the usage report and product analytics. See [usage report](#usage-report). |
+| `COLLIE_DESK_IMAGE` | set by the installer | Image the installer's `compose.yaml` runs. See [upgrading](README.md#upgrading). |
+| `PROBLEM_REPORT_WORKSPACE` | empty | Send problem reports to a workspace on this server. See [problem reports](#problem-reports). |
+| `SMTP_*`, `EMAIL_FROM_POLICY`, `MAIL_FROM_*`, `EMAIL_TRUSTED_AUTHSERV_ID` | | Outgoing and incoming email. See [configuring email](email.md). |
+| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `MAILBOX_TOKEN_KEYS` | empty | Replies sent through a connected Gmail mailbox. See [send replies through Gmail](email.md#send-replies-through-gmail). |
+
+## Usage report
+
+Once a day the server sends a small usage report with counts and its public host name. What it
+contains is listed in [usage report](../user/telemetry.md). To turn it off, set:
+
+```sh
+DISABLE_TELEMETRY=true
+```
+
+`DO_NOT_TRACK=1` works too. Any value other than empty, `0`, `false`, `no` or `off` turns the
+report off. At start the server logs `usage report is off` with the reason, or `usage report is
+on` with a link to the usage report page.
+
+An install made before this setting existed has a `compose.yaml` that does not pass it to the
+server: run `install.sh` again with the same `--dir` first (it keeps your `.env` and data).
+
+Development builds (version `dev`, for example `go run` or a local `docker compose up --build`)
+never send the report.
+
+To have the reports of your install deleted, send its id to support@colliedesk.com with "Usage
+report" in the subject. The id is in the `install_id` of the `usage report sent` log line:
+
+```sh
+docker compose logs server | grep 'usage report sent'
+```
+
+## Problem reports
+
+By default a [problem report](../user/problem-reports.md) on a self-hosted server sends nothing to
+HC Labs; the dialog offers to open a GitHub issue. To receive the reports in your own support desk,
+set `PROBLEM_REPORT_WORKSPACE` to the address (slug) of a workspace on the same server and restart.
+Reports from every other workspace on that server then arrive there as conversations tagged
+`problem-report`. The installer's `compose.yaml` does not pass this variable: add it to the
+`environment` of the `server` service.

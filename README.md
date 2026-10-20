@@ -40,7 +40,7 @@ curl -fsSL https://raw.githubusercontent.com/colliedesk/colliedesk/main/install.
 ```
 
 The installer starts Colliedesk and PostgreSQL, keeps your secrets in a local `.env`, and prints a
-one-time sign-in URL. Colliedesk does not use passwords. Details: [docs/user/install.md](docs/user/install.md).
+one-time sign-in URL. Colliedesk does not use passwords. Details: [docs/self-host](docs/self-host/README.md).
 
 ## What works today
 
@@ -49,7 +49,7 @@ one-time sign-in URL. Colliedesk does not use passwords. Details: [docs/user/ins
 - Workspaces fully isolated from each other.
 - Per-workspace timezone with per-agent override.
 
-User guides: [docs/user](docs/user/README.md). They are also published at [colliedesk.com/docs](https://colliedesk.com/docs) by [colliedesk/colliedesk.com](https://github.com/colliedesk/colliedesk.com).
+User guides: [docs/user](docs/user/README.md). Running your own server: [docs/self-host](docs/self-host/README.md). Both are also published at [colliedesk.com/docs](https://colliedesk.com/docs) by [colliedesk/colliedesk.com](https://github.com/colliedesk/colliedesk.com).
 
 ## Development
 

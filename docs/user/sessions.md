@@ -24,15 +24,10 @@ with a limit you choose. It is a session with a label and a **scope**. It appear
 stops working. **Revoke** ends it at once, as for any session. Admins see and revoke the tokens of
 every agent.
 
-Create a token with the command line on your own server:
-
-```sh
-docker compose exec server /app/collie token create \
-  --workspace <slug> --email you@example.com --scope draft --label "Claude Code"
-```
-
-or with `POST /api/v1/auth/tokens` and a body such as `{"label": "Claude Code", "scope": "draft"}`.
-Settings has no button for it yet: create tokens with the command line or the API. The token is shown once and cannot be recovered. If you lose
+Create a token with `POST /api/v1/auth/tokens` and a body such as
+`{"label": "Claude Code", "scope": "draft"}`. On your own server you can also use the
+[command line](../self-host/troubleshooting.md#create-an-agent-token-from-the-command-line). Settings has no
+button for it yet. The token is shown once and cannot be recovered. If you lose
 it, create a new token and revoke the old one. The agent sends it as `Authorization: Bearer <token>`.
 
 | Scope | The agent can |
