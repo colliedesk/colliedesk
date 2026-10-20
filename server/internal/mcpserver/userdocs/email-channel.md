@@ -43,6 +43,11 @@ then sent through Gmail from that address, and a copy of each reply stays in the
 folder. Incoming mail still arrives by forwarding, as set up above. Colliedesk asks Google only for
 permission to send email and to see the account's address; it cannot read the mailbox.
 
+On Colliedesk Cloud, next to **Connect Gmail** an admin also sees that Colliedesk's use of data from
+Google APIs adheres to the Google API Services User Data Policy, including the Limited Use
+requirements, with a link to the [privacy policy](https://colliedesk.com/privacy).
+A self-hosted server shows no such link: it sends through your own Google OAuth client (see below).
+
 1. Connect the email channel first (a saved Support address).
 2. Open **Settings → Email channel → Send from Gmail** and select **Connect Gmail**.
 3. Google asks you to choose the account and allow **Send email on your behalf**. Leave that box
@@ -68,7 +73,8 @@ Disconnecting the whole email channel also disconnects Gmail.
 
 Agents (AI) cannot connect or disconnect Gmail themselves: `colliedesk_gmail_connect_request` and
 `colliedesk_gmail_disconnect_request` file a request, and the admin who approves it gets Google's
-page. See [Agent requests](agent-requests.md).
+page. On Colliedesk Cloud the request card shows the same note on Google data first. See
+[Agent requests](agent-requests.md).
 
 ### Self-hosted: turn on Gmail sending
 
