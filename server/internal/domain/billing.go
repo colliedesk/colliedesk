@@ -184,17 +184,18 @@ type BillingUsage struct {
 type StorageLimitError struct {
 	Plan                string
 	Used, Adding, Limit int64
+	// Upgrade is the plan with more storage this server sells (see StorageUpgradeFor), "" when none.
+	Upgrade string
 }
 
 func (e *StorageLimitError) Error() string {
 	limit := FormatBytes(e.Limit)
-	switch e.Plan {
-	case PlanSolo, PlanSmall:
-		return fmt.Sprintf("This workspace has reached the %s attachment storage limit of the %s plan. Nothing is deleted, customer email is still stored, and you can still read, reply and export. Uploads and imports are refused. Upgrade to the %s plan under Billing > Manage billing for a higher limit, or export your data.", limit, PlanName(e.Plan), PlanName(NextPlan(e.Plan)))
-	case PlanFounding:
-		return fmt.Sprintf("This workspace has reached the %s attachment storage limit of the Founding plan. Nothing is deleted, customer email is still stored, and you can still read, reply and export. Uploads and imports are refused. Upgrade to the Team plan under Billing > Manage billing for a higher limit, or export your data.", limit)
-	case PlanTeam, PlanTeam25:
-		return fmt.Sprintf("This workspace has reached the %s attachment storage limit of its plan. Nothing is deleted, customer email is still stored, and you can still read, reply and export. Uploads and imports are refused. Contact us for more storage, or export your data.", limit)
+	if StorageCountsImports(e.Plan) {
+		remedy := "Contact us for more storage"
+		if e.Upgrade != "" {
+			remedy = "Upgrade to the " + PlanName(e.Upgrade) + " plan under Billing > Manage billing for a higher limit"
+		}
+		return fmt.Sprintf("This workspace has reached the %s attachment storage limit of the %s plan. Nothing is deleted, customer email is still stored, and you can still read, reply and export. Uploads and imports are refused. %s, or export your data.", limit, PlanName(e.Plan), remedy)
 	}
 	return fmt.Sprintf("This workspace has reached its %s attachment storage limit. Subscribe to remove the limit, or export your data.", limit)
 }
@@ -241,6 +242,45 @@ func UpgradeFor(plan string, onSale []string) string {
 	return ""
 }
 
+// StorageUpgradeFor is the first plan on the ladder that onSale lists and that gives more storage
+// and at least as many agents as plan, or "" when there is none. Founding moves up to Team.
+func StorageUpgradeFor(plan string, onSale []string) string {
+	agents, storage := LimitsFor(plan).Agents, StorageCap(plan)
+	for _, step := range upgradeLadder {
+		if StorageCap(step) > storage && LimitsFor(step).Agents >= agents && slices.Contains(onSale, step) {
+			return step
+		}
+	}
+	return ""
+}
+
+// agentCount writes "1 agent" or "N agents".
+func agentCount(n int) string {
+	if n == 1 {
+		return "1 agent"
+	}
+	return fmt.Sprintf("%d agents", n)
+}
+
+// PlanFitRefusal says why a workspace cannot move to plan, or "" when it fits: seats (agents and
+// pending invites) above the plan's agent cap, or stored attachment bytes, imported files included,
+// above storageCap (0 for none). Moving to a plan the workspace does not fit would pause agents or
+// refuse every upload, so checkout refuses it and names what to remove.
+func PlanFitRefusal(plan string, seats int, storedBytes, storageCap int64) string {
+	name := PlanName(plan)
+	if agents := LimitsFor(plan).Agents; seats > agents {
+		free := "1 seat"
+		if seats-agents > 1 {
+			free = fmt.Sprintf("%d seats", seats-agents)
+		}
+		return fmt.Sprintf("The %s plan allows %s and this workspace uses %d seats (agents and pending invites). Deactivate agents or revoke invites to free %s, then choose %s.", name, agentCount(agents), seats, free, name)
+	}
+	if storageCap > 0 && storedBytes > storageCap {
+		return fmt.Sprintf("The %s plan stores up to %s of attachments and this workspace stores %s, imported files included. Choose a plan with more storage.", name, FormatBytes(storageCap), FormatBytes(storedBytes))
+	}
+	return ""
+}
+
 // PlanLimitError means an action would exceed a limit of the workspace's plan.
 type PlanLimitError struct {
 	Plan   string
@@ -250,10 +290,7 @@ type PlanLimitError struct {
 }
 
 func (e *PlanLimitError) Error() string {
-	allows := fmt.Sprintf("%d agents", e.Agents)
-	if e.Agents == 1 {
-		allows = "1 agent"
-	}
+	allows := agentCount(e.Agents)
 	if e.Plan == PlanTrial {
 		return fmt.Sprintf("The trial allows %s, pending invites included. Revoke a pending invite to free a seat, or subscribe and contact us for more than %d agents.", allows, e.Agents)
 	}
@@ -326,6 +363,19 @@ type Billing struct {
 	// CheckoutPlans are the plans this server can sell, in the order they are offered. The web app
 	// shows a purchase button for each and no other.
 	CheckoutPlans []string `json:"checkout_plans"`
+	// CheckoutRefusals are the checkout plans the workspace does not fit, with the reason; the web
+	// app disables their buttons and checkout refuses them.
+	CheckoutRefusals []CheckoutRefusal `json:"checkout_refusals"`
+	// StorageUpgradePlan is the plan to move to for more storage, nil when none is on sale.
+	StorageUpgradePlan *string `json:"storage_upgrade_plan"`
+	// PlanRefusals maps each plan id the workspace does not fit to the reason (see PlanFitRefusal).
+	PlanRefusals map[string]string `json:"-"`
+}
+
+// CheckoutRefusal is a checkout plan the workspace cannot buy now, and why.
+type CheckoutRefusal struct {
+	Plan   string `json:"plan"`
+	Reason string `json:"reason"`
 }
 
 // NewBilling derives the plan in effect from every subscription of the workspace. The best
@@ -363,13 +413,14 @@ func NewBilling(subscriptions []Subscription, trialEndsAt time.Time, usage Billi
 	if best != nil && best.Complimentary() {
 		billing.Complimentary, billing.ComplimentaryUntil = true, UTCOptional(best.CurrentPeriodEnd)
 	}
-	billing.Limits = LimitsFor(billing.Plan)
+	billing.Limits = LimitsForStorage(billing.Plan, access.StorageLimit())
 	return billing
 }
 
 // planRank orders the paid plans by what they give, so a workspace that holds two gets the better
 // one: agents first, then storage. Team 25 has the most agents; Team and Founding have the same
-// agents but Team has the larger storage cap; Small and Solo have fewer agents than Founding.
+// agents but Team has the larger storage cap; Small and Solo have fewer agents than Founding. Small
+// stores more than Founding, so NewAccess keeps the largest storage cap of the plans held as well.
 func planRank(plan string) int {
 	switch plan {
 	case PlanTeam25:

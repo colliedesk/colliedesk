@@ -63,6 +63,18 @@ func TestCheckoutUsesTheSessionsWorkspaceCustomerAndThePlansProduct(t *testing.T
 		"solo_monthly": productSoloMonthly, "solo_yearly": productSoloYearly, "small_monthly": productSmallMonthly, "small_yearly": productSmallYearly} {
 		t.Run(plan, func(t *testing.T) {
 			f := newBillingFixture(t)
+			if strings.HasPrefix(plan, "solo") {
+				// Solo holds one agent, so the fixture's second agent leaves first; otherwise checkout refuses the plan.
+				var me struct {
+					Agent struct {
+						ID string `json:"id"`
+					} `json:"agent"`
+				}
+				decode(t, request(t, f.api, http.MethodGet, "/api/v1/auth/me", nil, f.agentTokenA, nil), &me)
+				if got := request(t, f.api, http.MethodPatch, "/api/v1/agents/"+me.Agent.ID, map[string]any{"active": false}, f.adminA, nil).Code; got != http.StatusOK {
+					t.Fatalf("deactivate the second agent: status=%d", got)
+				}
+			}
 			response := request(t, f.api, http.MethodPost, "/api/v1/billing/checkout", map[string]any{"plan": plan}, f.adminA, nil)
 			if response.Code != http.StatusOK {
 				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())

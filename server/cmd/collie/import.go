@@ -127,7 +127,7 @@ func parseImportFlags(args []string) (freshdesk.Options, string, error) {
 	if apiKey == "" {
 		return freshdesk.Options{}, "", fmt.Errorf("environment variable %s is empty; export your Freshdesk API key there", *keyEnv)
 	}
-	options := freshdesk.Options{WorkspaceSlug: *workspace, BaseURL: freshdeskBaseURL(host), APIKey: apiKey, DryRun: *dryRun, LastTicketID: *lastTicket, Cloud: billingEnabled(), IncludePersonalCannedResponses: *includePersonal}
+	options := freshdesk.Options{WorkspaceSlug: *workspace, BaseURL: freshdeskBaseURL(host), APIKey: apiKey, DryRun: *dryRun, LastTicketID: *lastTicket, Cloud: billingEnabled(), PlansOnSale: plansOnSale(), IncludePersonalCannedResponses: *includePersonal}
 	if *since != "" {
 		parsed, err := parseSince(*since)
 		if err != nil {
@@ -150,6 +150,15 @@ func parseSince(value string) (time.Time, error) {
 
 // billingEnabled is true where the trial exists: the instance has the hosted billing configured and
 // this build serves it (the same decision serve makes at start).
+// plansOnSale lists the plans the configured Polar products sell, for import refusals to name an upgrade.
+func plansOnSale() []string {
+	config, err := polar.ConfigFromEnv(os.Getenv)
+	if err != nil || !config.Enabled() {
+		return nil
+	}
+	return config.PlansOnSale()
+}
+
 func billingEnabled() bool {
 	config, err := polar.ConfigFromEnv(os.Getenv)
 	if err != nil {

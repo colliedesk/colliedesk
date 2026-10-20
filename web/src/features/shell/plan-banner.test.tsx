@@ -4,12 +4,12 @@ import type { Billing } from '../../api/schemas';
 import { PlanBanner } from './plan-banner';
 
 const trialEnd = '2026-10-15T09:00:00Z';
-const trial = { plan: 'trial' as const, trial_ends_at: trialEnd, locked: false, trial_extended: false };
+const trial = { plan: 'trial' as const, trial_ends_at: trialEnd, locked: false, trial_extended: false, agents_over: 0, seat_paused: false };
 const at = (iso: string) => new Date(iso);
 const GiB = 1024 ** 3;
 const billing = (storageBytes: number): Billing => ({
   plan: 'trial', trial_ends_at: trialEnd, locked: false, status: 'none', current_period_end: null, cancel_at_period_end: false,
-  active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
+  active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_refusals: [], storage_upgrade_plan: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
   limits: { agents: 10, replies_per_24h: 200, storage_bytes: 2 * GiB, storage_warn_bytes: Math.floor(1.6 * GiB) },
   usage: { agents: 1, pending_invites: 0, replies_last_24h: 0, storage_bytes: storageBytes },
 });
@@ -34,7 +34,7 @@ test('an agent sees the days but has no plan button', () => {
 });
 
 test('an extended trial says so, however many days are left', () => {
-  const { rerender } = render(<PlanBanner plan={{ ...trial, trial_ends_at: '2026-10-20T09:00:00Z', trial_extended: true }} isAdmin now={at('2026-10-15T09:00:00Z')} onChoosePlan={vi.fn()} />);
+  const { rerender } = render(<PlanBanner plan={{ ...trial, trial_ends_at: '2026-10-20T09:00:00Z', trial_extended: true, agents_over: 0, seat_paused: false }} isAdmin now={at('2026-10-15T09:00:00Z')} onChoosePlan={vi.fn()} />);
   expect(screen.getByText('Trial: 5 days left')).toBeInTheDocument();
   expect(screen.getByText(/was extended/i)).toBeInTheDocument();
   rerender(<PlanBanner plan={{ ...trial, trial_ends_at: '2026-11-14T09:00:00Z' }} isAdmin now={at('2026-10-15T09:00:00Z')} onChoosePlan={vi.fn()} />);
@@ -55,8 +55,16 @@ test('storage at 85 percent warns the admin; 75 percent does not', () => {
 });
 
 test('a paid or self-hosted workspace shows nothing', () => {
-  const { container, rerender } = render(<PlanBanner plan={{ plan: 'team', trial_ends_at: trialEnd, locked: false, trial_extended: false }} isAdmin onChoosePlan={vi.fn()} />);
+  const { container, rerender } = render(<PlanBanner plan={{ plan: 'team', trial_ends_at: trialEnd, locked: false, trial_extended: false, agents_over: 0, seat_paused: false }} isAdmin onChoosePlan={vi.fn()} />);
   expect(container).toBeEmptyDOMElement();
   rerender(<PlanBanner plan={null} isAdmin onChoosePlan={vi.fn()} />);
+  expect(container).toBeEmptyDOMElement();
+});
+
+test('an admin of a workspace over its agent cap is told on every page; an agent is not', () => {
+  const over = { plan: 'small' as const, trial_ends_at: trialEnd, locked: false, trial_extended: false, agents_over: 2, seat_paused: false };
+  const { container, rerender } = render(<PlanBanner plan={over} isAdmin />);
+  expect(screen.getByRole('alert')).toHaveTextContent('This workspace has 2 agents more than the Small plan allows. The 2 most recently added cannot work until you deactivate agents in Settings > Team or upgrade under Manage billing.');
+  rerender(<PlanBanner plan={over} isAdmin={false} />);
   expect(container).toBeEmptyDOMElement();
 });

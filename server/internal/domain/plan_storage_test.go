@@ -168,11 +168,89 @@ func TestPlanLimitErrorWithoutAnUpgradeSaysContactUs(t *testing.T) {
 	}
 }
 
-func TestStorageLimitErrorOnSmallPlansPointsToTheNextTier(t *testing.T) {
-	for plan, next := range map[string]string{domain.PlanSolo: "Small", domain.PlanSmall: "Team"} {
-		message := (&domain.StorageLimitError{Plan: plan, Limit: domain.StorageCap(plan)}).Error()
-		if !strings.Contains(message, "Upgrade to the "+next+" plan") {
-			t.Errorf("%s: %q, want a pointer to %s", plan, message, next)
+func TestStorageUpgradeIsTheNextPlanOnSaleWithMoreStorageAndAsManyAgents(t *testing.T) {
+	everything := []string{domain.PlanSolo, domain.PlanSmall, domain.PlanTeam, domain.PlanTeam25, domain.PlanFounding}
+	cases := []struct {
+		plan   string
+		onSale []string
+		want   string
+	}{
+		{domain.PlanSolo, everything, domain.PlanSmall},
+		{domain.PlanSmall, everything, domain.PlanTeam},
+		{domain.PlanFounding, everything, domain.PlanTeam},
+		{domain.PlanTeam, everything, domain.PlanTeam25},
+		{domain.PlanTeam25, everything, ""},
+		{domain.PlanSmall, []string{domain.PlanTeam25}, domain.PlanTeam25},
+		{domain.PlanFounding, []string{domain.PlanSmall, domain.PlanFounding}, ""},
+		{domain.PlanSolo, nil, ""},
+	}
+	for _, c := range cases {
+		if got := domain.StorageUpgradeFor(c.plan, c.onSale); got != c.want {
+			t.Errorf("StorageUpgradeFor(%s, %v)=%q, want %q", c.plan, c.onSale, got, c.want)
+		}
+	}
+}
+
+func TestStorageLimitErrorNamesTheUpgradeItIsGiven(t *testing.T) {
+	message := (&domain.StorageLimitError{Plan: domain.PlanSolo, Limit: 10 << 30, Upgrade: domain.PlanSmall}).Error()
+	if !strings.Contains(message, "limit of the Solo plan") || !strings.Contains(message, "Upgrade to the Small plan under Billing > Manage billing") {
+		t.Errorf("Solo with Small on sale: %q", message)
+	}
+	for _, e := range []*domain.StorageLimitError{
+		{Plan: domain.PlanSolo, Limit: 10 << 30},
+		{Plan: domain.PlanTeam25, Limit: 250 << 30},
+	} {
+		if message := e.Error(); strings.Contains(message, "Upgrade to") || !strings.Contains(message, "Contact us for more storage") {
+			t.Errorf("%+v without an upgrade on sale: %q, want the contact-us wording", e, message)
+		}
+	}
+}
+
+func TestPlanFitRefusalNamesWhatToRemove(t *testing.T) {
+	cases := []struct {
+		plan        string
+		seats       int
+		storedBytes int64
+		want        string
+	}{
+		{domain.PlanSolo, 1, 10 << 30, ""},
+		{domain.PlanSolo, 3, 0, "The Solo plan allows 1 agent and this workspace uses 3 seats (agents and pending invites). Deactivate agents or revoke invites to free 2 seats, then choose Solo."},
+		{domain.PlanSmall, 4, 0, "The Small plan allows 3 agents and this workspace uses 4 seats (agents and pending invites). Deactivate agents or revoke invites to free 1 seat, then choose Small."},
+		{domain.PlanSolo, 1, 12 << 30, "The Solo plan stores up to 10 GiB of attachments and this workspace stores 12 GiB, imported files included. Choose a plan with more storage."},
+		{domain.PlanTeam25, 25, 250 << 30, ""},
+	}
+	for _, c := range cases {
+		if got := domain.PlanFitRefusal(c.plan, c.seats, c.storedBytes, domain.StorageCap(c.plan)); got != c.want {
+			t.Errorf("PlanFitRefusal(%s, %d seats, %d bytes):\n got %q\nwant %q", c.plan, c.seats, c.storedBytes, got, c.want)
+		}
+	}
+}
+
+func TestHoldingFoundingAndSmallKeepsTheLargerOfEachLimit(t *testing.T) {
+	future := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	subs := []domain.Subscription{
+		{Plan: domain.PlanFounding, SubscriptionID: "sub_f", Status: "active", CurrentPeriodEnd: &future},
+		{Plan: domain.PlanSmall, SubscriptionID: "sub_s", Status: "active", CurrentPeriodEnd: &future},
+	}
+	access := domain.NewAccess(subs, now.Add(-time.Hour), now)
+	if access.Plan != domain.PlanFounding || access.StorageLimit() != 32212254720 {
+		t.Fatalf("plan=%s storage=%d, want founding (10 agents) with Small's 30 GiB (32212254720)", access.Plan, access.StorageLimit())
+	}
+	limits := domain.NewBilling(subs, now.Add(-time.Hour), domain.BillingUsage{}, now).Limits
+	if limits.Agents != 10 || limits.StorageBytes == nil || *limits.StorageBytes != 32212254720 {
+		t.Fatalf("billing limits=%+v, want 10 agents and 30 GiB", limits)
+	}
+	if single := domain.NewAccess(subs[:1], now.Add(-time.Hour), now); single.StorageLimit() != 21474836480 {
+		t.Fatalf("Founding alone: storage=%d, want 20 GiB", single.StorageLimit())
+	}
+}
+
+func TestSeatPausedErrorSaysWhyAndWhoCanFixIt(t *testing.T) {
+	message := (&domain.SeatPausedError{Plan: domain.PlanSmall, Agents: 3}).Error()
+	for _, want := range []string{"The Small plan allows 3 agents", "workspace admin", "deactivates agents or upgrades"} {
+		if !strings.Contains(message, want) {
+			t.Errorf("%q lacks %q", message, want)
 		}
 	}
 }

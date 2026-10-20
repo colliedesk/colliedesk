@@ -24,7 +24,7 @@ const meBody = (role: 'admin' | 'agent', plan: unknown) => ({
 const config = { cloud_sign_in: { enabled: true, publishable_key: 'pk' }, billing: { enabled: true }, signup: { enabled: true }, limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 } };
 const billing = {
   plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, status: 'none', current_period_end: null, cancel_at_period_end: false,
-  active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
+  active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_refusals: [], storage_upgrade_plan: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
   limits: { agents: 0, replies_per_24h: null, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 1, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 
@@ -42,7 +42,7 @@ function open(path = '/') {
 
 test('a locked workspace sees the locked screen with the identity bar and an admin\'s plan choices', async () => {
   serve({
-    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false })),
+    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false, agents_over: 0, seat_paused: false })),
     '/api/v1/config': () => json(200, config),
     '/api/v1/billing': () => json(200, billing),
     '/api/v1/conversations': () => json(402, locked),
@@ -56,7 +56,7 @@ test('a locked workspace sees the locked screen with the identity bar and an adm
 
 test('a 402 workspace_locked from the inbox replaces the inbox with the locked screen', async () => {
   serve({
-    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false })),
+    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false })),
     '/api/v1/config': () => json(200, config),
     '/api/v1/conversations': () => json(402, locked),
     '/api/v1/agents': () => json(402, locked),
@@ -72,7 +72,7 @@ test('a 402 workspace_locked from the inbox replaces the inbox with the locked s
 
 test('the inbox activity poll runs on every signed-in page, not only in the inbox', async () => {
   serve({
-    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false })),
+    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false })),
     '/api/v1/config': () => json(200, config),
     '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
   });
@@ -82,7 +82,7 @@ test('the inbox activity poll runs on every signed-in page, not only in the inbo
 
 test('a locked workspace does not poll for inbox activity', async () => {
   serve({
-    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false })),
+    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false, agents_over: 0, seat_paused: false })),
     '/api/v1/config': () => json(200, config),
     '/api/v1/billing': () => json(200, billing),
   });
@@ -91,7 +91,7 @@ test('a locked workspace does not poll for inbox activity', async () => {
   expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/inbox/activity'))).toBe(false);
 });
 
-const trialPlan = { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false };
+const trialPlan = { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false };
 const trialBilling = { ...billing, plan: 'trial', locked: false };
 
 test('the billing link with buy=founding remembers the intent for a visitor who is signed out', async () => {
@@ -137,7 +137,7 @@ test('after signing in with a pairing link the remembered intent leads to the bi
 test('a locked workspace drops the remembered plan and shows its own plan choices', async () => {
   rememberCheckoutIntent('founding');
   serve({
-    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false })),
+    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, trial_extended: false, agents_over: 0, seat_paused: false })),
     '/api/v1/config': () => json(200, config),
     '/api/v1/billing': () => json(200, billing),
   });
@@ -201,4 +201,32 @@ test('signing out forgets the agent for analytics only after the server ended th
   expect(resetProductAnalytics).not.toHaveBeenCalled();
   fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
   await waitFor(() => expect(resetProductAnalytics).toHaveBeenCalledTimes(1));
+});
+
+test('a paused agent sees why and can sign out, and nothing else', async () => {
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('agent', { plan: 'small', trial_ends_at: '2026-10-01T09:00:00Z', locked: false, trial_extended: false, agents_over: 1, seat_paused: true })),
+    '/api/v1/config': () => json(200, config),
+  });
+  open();
+  expect(await screen.findByRole('heading', { level: 1, name: 'Your access is paused' })).toBeInTheDocument();
+  expect(screen.getByText(/small plan has more agents than it allows/i)).toBeInTheDocument();
+  expect(screen.getAllByRole('button', { name: 'Sign out' }).length).toBeGreaterThan(0);
+  expect(screen.queryByRole('link', { name: 'Inbox' })).not.toBeInTheDocument();
+  expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/v1/inbox/activity'))).toBe(false);
+});
+
+test('a paused admin can still open the billing portal from the paused screen', async () => {
+  const assign = vi.fn();
+  const original = window.location;
+  Object.defineProperty(window, 'location', { configurable: true, value: { ...original, assign } });
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('admin', { plan: 'solo', trial_ends_at: '2026-10-01T09:00:00Z', locked: false, trial_extended: false, agents_over: 1, seat_paused: true })),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/billing/portal': () => json(200, { url: 'https://polar.test/portal' }),
+  });
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'Manage billing' }));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('https://polar.test/portal'));
+  Object.defineProperty(window, 'location', { configurable: true, value: original });
 });

@@ -921,7 +921,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Start a hosted checkout for the signed-in workspace. The workspace is taken from the session, never from the body. A workspace that already has a paid plan gets 409; it changes or cancels its plan in the portal. The `founding` plan gets 409 `founding_closed` once its slots are used up. */
+        /** @description Start a hosted checkout for the signed-in workspace. The workspace is taken from the session, never from the body. A workspace that already has a paid plan gets 409; it changes or cancels its plan in the portal. The `founding` plan gets 409 `founding_closed` once its slots are used up. A plan the workspace does not fit gets 409 `plan_does_not_fit` with what to remove: more seats (agents and pending invites) than the plan allows, or more stored attachment bytes, imported files included, than its storage cap. `checkout_refusals` of `GET /api/v1/billing` lists them. */
         post: operations["createBillingCheckout"];
         delete?: never;
         options?: never;
@@ -1390,6 +1390,16 @@ export interface components {
              * @description When a complimentary plan ends; null when it has no end or the plan is not complimentary.
              */
             complimentary_until: string | null;
+            /** @description The checkout plans this workspace does not fit now, each with the reason checkout would give. The web app disables their buttons. */
+            checkout_refusals: {
+                plan: components["schemas"]["CheckoutPlan"];
+                reason: string;
+            }[];
+            /**
+             * @description The plan this server sells with more storage and as many agents as the plan in effect, for the storage notice; null on the trial and when none is on sale.
+             * @enum {string|null}
+             */
+            storage_upgrade_plan: "solo" | "small" | "team" | "team25" | "founding" | null;
             /** @description The plans this server can sell, in the order to offer them. `solo_*`, `small_*` and `team25_*` appear only for the Polar products this server has configured; the web app shows a purchase button for each plan listed and for no other. `founding` is dropped once Founding is closed. */
             checkout_plans: components["schemas"]["CheckoutPlan"][];
             limits: {
@@ -1568,6 +1578,10 @@ export interface components {
             plan: null | {
                 /** @enum {string} */
                 plan: "trial" | "solo" | "small" | "team" | "team25" | "founding" | "none";
+                /** @description How many active agents the workspace has beyond its plan's agent cap; 0 when it fits. */
+                agents_over: number;
+                /** @description True when this agent is beyond the cap and paused (requests answer 402 `seat_paused`). */
+                seat_paused: boolean;
                 /** Format: date-time */
                 trial_ends_at: string;
                 locked: boolean;

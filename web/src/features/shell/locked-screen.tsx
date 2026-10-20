@@ -46,7 +46,7 @@ export function LockedScreen({ isAdmin, billing, timezone, checkoutFailed = fals
         <div className="section-heading"><h2 id="locked-plan-heading">{messages.choosePlan}</h2></div>
         <div className="settings-body">
           {isAdmin
-            ? <><PlanPicker sellable={billing?.checkout_plans ?? []} busy={checkoutBusy} onChoose={onCheckout} />
+            ? <><PlanPicker sellable={billing?.checkout_plans ?? []} refusals={billing?.checkout_refusals} busy={checkoutBusy} onChoose={onCheckout} />
               {hasSubscription && onManage && <div className="button-row"><button type="button" onClick={onManage}>{messages.manageBilling}</button></div>}</>
             : <p>{messages.askWorkspaceAdmin}</p>}
         </div>

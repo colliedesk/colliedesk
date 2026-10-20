@@ -24,11 +24,12 @@ func workspaceAccess(ctx context.Context, tx pgx.Tx, workspaceID string, now tim
 }
 
 // pendingSeatEmails counts the people who hold a seat only through an invite: distinct invited
-// addresses that are not agents yet. Two invites to one address are one person, and inviting someone
-// who is already an agent (a role change) takes no seat.
+// addresses that are not active agents. Two invites to one address are one person, and inviting
+// someone who is already an active agent (a role change) takes no seat. An invite to a deactivated
+// agent's address does: redeeming it would bring that person back.
 const pendingSeatEmails = `SELECT count(DISTINCT p.email) FROM pairing_links p
 	WHERE p.workspace_id=$1 AND p.kind='invite' AND p.used_at IS NULL AND p.revoked_at IS NULL AND p.expires_at > $2
-	AND NOT EXISTS (SELECT 1 FROM agents a WHERE a.workspace_id=p.workspace_id AND a.email=p.email)`
+	AND NOT EXISTS (SELECT 1 FROM agents a WHERE a.workspace_id=p.workspace_id AND a.email=p.email AND a.deactivated_at IS NULL)`
 
 // CheckAgentSeat returns a *domain.PlanLimitError when giving email an agent seat would exceed the
 // cap of the workspace's plan. A seat is an agent or a person with a pending invite, so a burst of
@@ -73,6 +74,18 @@ func CheckAgentSeat(ctx context.Context, tx pgx.Tx, workspaceID string, now time
 		return &domain.PlanLimitError{Plan: plan, Agents: limit, Upgrade: domain.UpgradeFor(plan, plansOnSale)}
 	}
 	return nil
+}
+
+// AgentSeatRank is the place of agentID among the workspace's active agents when a smaller plan
+// keeps only some of them: admins before agents, so whoever can fix billing keeps access longest and
+// the owner (the first admin added) comes first; within each role, by when the agent was first added,
+// oldest first. Agents ranked beyond the plan's cap are paused. A reactivated agent keeps its first
+// added time, so it ranks where it did, not as the newest.
+func AgentSeatRank(ctx context.Context, tx pgx.Tx, workspaceID, agentID string) (int, error) {
+	var rank int
+	err := tx.QueryRow(ctx, `SELECT r FROM (SELECT id, row_number() OVER (ORDER BY role='admin' DESC, created_at, id) AS r
+		FROM agents WHERE workspace_id=$1 AND deactivated_at IS NULL) ranked WHERE id=$2`, workspaceID, agentID).Scan(&rank)
+	return rank, err
 }
 
 // countedDelivery is a delivery that uses up the trial's daily cap: queued, sent, or failed after it
@@ -217,6 +230,15 @@ func (s *Store) storageCap(plan string) int64 {
 	return domain.StorageCap(plan)
 }
 
+// accessStorageCap is the cap in effect for access: the largest cap of the paid plans it holds
+// (Access.StorageLimit), or the test override of WithPaidStorageBytes.
+func (s *Store) accessStorageCap(access domain.Access) int64 {
+	if domain.StorageCountsImports(access.Plan) && s.paidStorage > 0 {
+		return s.paidStorage
+	}
+	return access.StorageLimit()
+}
+
 // storageUsed reads the bytes plan's cap counts for the workspace.
 func storageUsed(ctx context.Context, tx pgx.Tx, workspaceID, plan string) (int64, error) {
 	query := ownStorageBytes
@@ -236,6 +258,8 @@ type StorageRoom struct {
 	// Capped is false for plans and installs without a cap; Limit and Used are then zero.
 	Capped      bool
 	Limit, Used int64
+	// Upgrade is the plan with more storage this server sells, "" when none (domain.StorageUpgradeFor).
+	Upgrade string
 }
 
 // GetStorageRoom reads the plan's storage cap and the bytes it counts, for the importer to check
@@ -249,7 +273,7 @@ func (s *Store) GetStorageRoom(ctx context.Context, workspaceID string) (Storage
 		if err != nil {
 			return StorageRoom{}, err
 		}
-		room := StorageRoom{Plan: access.Plan, Limit: s.storageCap(access.Plan)}
+		room := StorageRoom{Plan: access.Plan, Limit: s.accessStorageCap(access), Upgrade: domain.StorageUpgradeFor(access.Plan, s.plansOnSale)}
 		if room.Limit == 0 {
 			return room, nil
 		}
@@ -294,7 +318,7 @@ func (s *Store) CheckStorage(ctx context.Context, tx pgx.Tx, workspaceID string,
 	if err != nil {
 		return err
 	}
-	limit := s.storageCap(access.Plan)
+	limit := s.accessStorageCap(access)
 	if limit == 0 {
 		return nil
 	}
@@ -303,7 +327,7 @@ func (s *Store) CheckStorage(ctx context.Context, tx pgx.Tx, workspaceID string,
 		return err
 	}
 	if used+addBytes > limit {
-		return &domain.StorageLimitError{Plan: access.Plan, Used: used, Adding: addBytes, Limit: limit}
+		return &domain.StorageLimitError{Plan: access.Plan, Used: used, Adding: addBytes, Limit: limit, Upgrade: domain.StorageUpgradeFor(access.Plan, s.plansOnSale)}
 	}
 	return nil
 }

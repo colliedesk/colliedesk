@@ -36,6 +36,8 @@ func (e *importEnv) runCapped(t *testing.T, cap int64) (*freshdesk.Report, error
 	return e.run(t, context.Background(), func(o *freshdesk.Options) {
 		o.Cloud = true
 		o.PaidStorageBytes = cap
+		// The CLI passes the plans the Polar configuration sells; refusals name an upgrade from them.
+		o.PlansOnSale = []string{"team", "team25", "founding"}
 	})
 }
 
@@ -270,10 +272,18 @@ func TestFoundingDryRunSaysWhetherTheImportWouldBeRefused(t *testing.T) {
 	}
 }
 
-func TestStorageCapErrorOnSoloAndSmallPointsToTheNextPlan(t *testing.T) {
-	for plan, want := range map[string]string{"solo": "of the Solo plan. Nothing was imported. Upgrade to the Small plan", "small": "of the Small plan. Nothing was imported. Upgrade to the Team plan"} {
-		if message := (&freshdesk.StorageCapError{Plan: plan, Needed: 2 << 30, Used: 9 << 30, Limit: 10 << 30}).Error(); !strings.Contains(message, want) {
-			t.Errorf("%s: %q, want %q", plan, message, want)
+func TestStorageCapErrorPointsToTheUpgradeOnSale(t *testing.T) {
+	cases := []struct {
+		plan, upgrade, want string
+	}{
+		{"solo", "small", "of the Solo plan. Nothing was imported. Upgrade to the Small plan (Billing > Manage billing)"},
+		{"small", "team25", "of the Small plan. Nothing was imported. Upgrade to the Team 25 plan (Billing > Manage billing)"},
+		{"founding", "team", "of the Founding plan. Nothing was imported. Upgrade to the Team plan (Billing > Manage billing)"},
+		{"solo", "", "of the Solo plan. Nothing was imported. Contact us for more storage"},
+	}
+	for _, c := range cases {
+		if message := (&freshdesk.StorageCapError{Plan: c.plan, Upgrade: c.upgrade, Needed: 2 << 30, Used: 9 << 30, Limit: 10 << 30}).Error(); !strings.Contains(message, c.want) {
+			t.Errorf("%s with %q on sale: %q, want %q", c.plan, c.upgrade, message, c.want)
 		}
 	}
 }

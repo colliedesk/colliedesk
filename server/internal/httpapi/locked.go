@@ -53,6 +53,36 @@ func (a *API) refuseIfLocked(response http.ResponseWriter, route Route, who auth
 	return true
 }
 
+// seatPausedAllowed are the only routes an agent paused by a smaller plan (see
+// domain.Access.SeatPaused) can use: see why, list and end its sign-ins, and report a problem.
+var seatPausedAllowed = map[string]bool{
+	"GET /api/v1/auth/me":                  true,
+	"POST /api/v1/auth/logout":             true,
+	"GET /api/v1/auth/sessions":            true,
+	"DELETE /api/v1/auth/sessions/{id}":    true,
+	"POST /api/v1/support/problem-reports": true,
+}
+
+// seatPausedAdminAllowed are the billing routes a paused admin keeps: the admin who holds the billing
+// account may be the one paused, and upgrading is a way out of the pause.
+var seatPausedAdminAllowed = map[string]bool{
+	"GET /api/v1/billing":           true,
+	"POST /api/v1/billing/portal":   true,
+	"POST /api/v1/billing/checkout": true,
+}
+
+// refuseIfSeatPaused answers 402 seat_paused and reports true when the agent is beyond its
+// workspace's agent cap and the route is not on seatPausedAllowed.
+func (a *API) refuseIfSeatPaused(response http.ResponseWriter, route Route, who auth.Principal) bool {
+	key := route.Method + " " + route.Pattern
+	if !a.limits || !who.Access.SeatPaused || seatPausedAllowed[key] || (who.Agent.Role == "admin" && seatPausedAdminAllowed[key]) {
+		return false
+	}
+	paused := &domain.SeatPausedError{Plan: who.Access.Plan, Agents: domain.LimitsFor(who.Access.Plan).Agents}
+	writeError(response, http.StatusPaymentRequired, "seat_paused", paused.Error())
+	return true
+}
+
 func writeLocked(response http.ResponseWriter) {
 	writeError(response, http.StatusPaymentRequired, "workspace_locked", (&domain.LockedError{}).Error())
 }

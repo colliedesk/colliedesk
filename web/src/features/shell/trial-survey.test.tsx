@@ -15,7 +15,7 @@ function meWith(overrides: { role?: 'admin' | 'agent'; plan?: string; endsIn?: n
     agent: { id: '11111111-1111-4111-8111-111111111111', email: 'ada@example.com', display_name: '', role: overrides.role ?? 'admin', timezone_override: null },
     workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
     timezone: 'UTC', scope: null,
-    plan: { plan: overrides.plan ?? 'trial', trial_ends_at: inDays(overrides.endsIn ?? 5), locked: false, trial_extended: false },
+    plan: { plan: overrides.plan ?? 'trial', trial_ends_at: inDays(overrides.endsIn ?? 5), locked: false, trial_extended: false, agents_over: 0, seat_paused: false },
   } as never;
 }
 const cloud = { enabled: true, realm: 'cloud' };
