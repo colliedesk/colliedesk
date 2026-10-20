@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { CheckoutPlan } from '../../api/schemas';
-import { messages } from '../../messages';
+import { billingMessages } from './billing-messages';
 import { planCardsFor, priceFor } from './plan-options';
 import type { Interval } from './plan-options';
 
@@ -21,10 +21,10 @@ export function PlanPicker({ sellable, refusals = [], busy = false, onChoose }: 
   const bothIntervals = cards.some((card) => card.prices.some((price) => price.interval === 'monthly') && card.prices.some((price) => price.interval === 'yearly'));
   return (
     <div className="plan-picker">
-      {bothIntervals && <fieldset className="segmented" aria-label={messages.billingInterval}>
+      {bothIntervals && <fieldset className="segmented" aria-label={billingMessages.billingInterval}>
         {(['monthly', 'yearly'] as const).map((value) => (
           <label key={value}><input type="radio" name="billing-interval" value={value} checked={interval === value} onChange={() => setInterval(value)} />
-            <span>{value === 'monthly' ? messages.monthly : messages.yearlyTwoMonthsFree}</span></label>
+            <span>{value === 'monthly' ? billingMessages.monthly : billingMessages.yearlyTwoMonthsFree}</span></label>
         ))}
       </fieldset>}
       <div className="plan-cards">{cards.map((card) => {
@@ -33,10 +33,10 @@ export function PlanPicker({ sellable, refusals = [], busy = false, onChoose }: 
         return (
           <article key={card.name} className="plan-card" aria-label={card.name}>
             <h3>{card.name}</h3>
-            <div className="plan-price"><p><strong>{price.amount}</strong><span>{messages.perMonth}</span></p>
-              <small>{price.billed ?? messages.billedMonthly}</small></div>
+            <div className="plan-price"><p><strong>{price.amount}</strong><span>{billingMessages.perMonth}</span></p>
+              <small>{price.billed ?? billingMessages.billedMonthly}</small></div>
             <button type="button" className="primary-action" aria-label={price.label} disabled={busy || price.refusal !== undefined} aria-busy={busy}
-              aria-describedby={price.refusal ? refusalId : undefined} onClick={() => onChoose(price.plan)}>{messages.choosePlanName(card.name)}</button>
+              aria-describedby={price.refusal ? refusalId : undefined} onClick={() => onChoose(price.plan)}>{billingMessages.choosePlanName(card.name)}</button>
             {price.refusal && <p id={refusalId} className="muted-copy">{price.refusal}</p>}
             <ul>{card.includes.map((line) => <li key={line}>{line}</li>)}</ul>
           </article>

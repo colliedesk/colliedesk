@@ -8,22 +8,32 @@ import { useInboxActivity } from './features/inbox/use-inbox-activity';
 import { RequestsRoute } from './features/requests/requests-route';
 import { usePendingRequests } from './features/requests/use-pending-requests';
 import { RedeemRoute } from './features/auth/redeem-route';
-import { BillingRoute } from './features/settings/billing-route';
 import { clearCheckoutIntent, rememberCheckoutIntent } from './features/settings/checkout-intent';
 import { SettingsRoute } from './features/settings/settings-route';
 import { SettingsNavLinkContext } from './features/settings/settings-nav';
 import type { NavItem } from './features/settings/settings-nav';
 import { AppShell } from './features/shell/app-shell';
-import { LockedRoute } from './features/shell/locked-route';
 import { SeatPausedScreen } from './features/shell/seat-paused-screen';
 import { PlanNotices } from './features/shell/plan-notices';
-import { TrialSurvey } from './features/shell/trial-survey';
 import { messages } from './messages';
 import { InboxIcon, RequestsIcon, SettingsIcon } from './ui/icons';
-import { PartUnavailable } from './ui/lazy-part';
+import { lazyPart, PartUnavailable } from './ui/lazy-part';
+import type { LazyPart } from './ui/lazy-part';
+import type { ReactNode } from 'react';
 import { LogoMark } from './ui/logo';
 import { resetProductAnalytics, useProductAnalytics } from './lib/product-analytics';
 import { inboxQueryFromSearch } from './lib/inbox-query';
+
+// Billing, the locked screen and the trial survey are seen by few sessions, so they load from their own chunks.
+const billingRoutePart = lazyPart(() => import('./features/settings/billing-route'));
+const lockedRoutePart = lazyPart(() => import('./features/shell/locked-route'));
+const trialSurveyPart = lazyPart(() => import('./features/shell/trial-survey'));
+
+// Part renders a piece of a lazy part once its chunk is there; failed stands in when it cannot load.
+function Part<T>({ part, render, failed = null }: { part: LazyPart<T>; render: (module: T) => ReactNode; failed?: ReactNode }) {
+  const state = part.use();
+  return state.status === 'ready' ? render(state.module) : state.status === 'error' ? failed : null;
+}
 
 function AppLayout() {
   const path = useRouterState({ select: (state) => state.location.pathname });
@@ -55,7 +65,10 @@ function AppLayout() {
   const inSettings = path.startsWith('/settings');
   const inRequests = path.startsWith('/requests');
   return <SettingsNavLinkContext.Provider value={settingsRouterLink}><AppShell me={me.data} appVersion={config.data?.version} signedOut={signedOut} signIn={signIn}
-    notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} /><TrialSurvey me={me.data} analytics={config.data?.product_analytics} /></>} lockedScreen={locked && me.data ? (paused && me.data.plan ? <SeatPausedScreen plan={messages.plans[me.data.plan.plan]} isAdmin={me.data.agent.role === 'admin'} onSignOut={() => signOut.mutate()} /> : <LockedRoute me={me.data} />) : undefined}
+    notice={me.data && <><PlanNotices me={me.data} onBillingPage={inBilling} />
+      {/* The survey only ever asks a cloud trial admin, so no other session loads its chunk. */}
+      {config.data?.product_analytics.realm === 'cloud' && me.data.agent.role === 'admin' && me.data.plan?.plan === 'trial'
+        && <Part part={trialSurveyPart} render={({ TrialSurvey }) => <TrialSurvey me={me.data} analytics={config.data?.product_analytics} />} />}</>} lockedScreen={locked && me.data ? (paused && me.data.plan ? <SeatPausedScreen plan={messages.plans[me.data.plan.plan]} isAdmin={me.data.agent.role === 'admin'} onSignOut={() => signOut.mutate()} /> : <Part part={lockedRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ LockedRoute }) => <LockedRoute me={me.data} />} />) : undefined}
     onSignOut={() => signOut.mutate()} signOutFailed={signOut.isError} signingOut={signOut.isPending}
     brand={<span className="rail-brand" role="img" aria-label={messages.brand}><LogoMark /></span>}
     links={locked ? undefined : <>
@@ -100,7 +113,10 @@ const billingRoute = createRoute({
     rememberCheckoutIntent(search.buy);
     throw redirect({ to: '/settings/billing', search: { checkout: search.checkout }, replace: true });
   },
-  component: () => <BillingRoute checkoutReturned={billingRoute.useSearch().checkout === 'success'} />,
+  component: function Billing() {
+    const checkoutReturned = billingRoute.useSearch().checkout === 'success';
+    return <Part part={billingRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ BillingRoute }) => <BillingRoute checkoutReturned={checkoutReturned} />} />;
+  },
 });
 const signInRoute = createRoute({
   getParentRoute: () => rootRoute,

@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import type { CheckoutPlan } from '../../api/schemas';
 import { api } from '../../api/client';
 import { messages } from '../../messages';
+import { billingMessages } from './billing-messages';
 import { openCheckout } from '../billing/open-checkout';
 import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
 import { clearCheckoutIntent, readCheckoutIntent } from './checkout-intent';
@@ -45,8 +46,8 @@ export function BillingRoute({ checkoutReturned = false }: BillingRouteProps) {
     const offered = billing.data?.checkout_plans.find((plan) => plan === wanted);
     if (offered && unpaid && !checkoutReturned) startCheckout(offered);
   }, [billing.data, cannotBuy, checkoutReturned, startCheckout, unpaid]);
-  if (config.data && !enabled) return <main className="settings-page"><p className="muted-copy">{messages.billingNotEnabled}</p></main>;
-  if (me.data && !isAdmin) return <main className="settings-page"><p className="muted-copy">{messages.billingAdminsOnly}</p></main>;
+  if (config.data && !enabled) return <main className="settings-page"><p className="muted-copy">{billingMessages.billingNotEnabled}</p></main>;
+  if (me.data && !isAdmin) return <main className="settings-page"><p className="muted-copy">{billingMessages.billingAdminsOnly}</p></main>;
   if (!billing.data) return <main className="settings-page">{billing.isError && <p role="alert" className="error-copy">{messages.billingActionFailed}</p>}</main>;
   if (page.status === 'error') return <main className="settings-page"><PartUnavailable /></main>;
   if (page.status === 'loading') return <main className="settings-page" />;
