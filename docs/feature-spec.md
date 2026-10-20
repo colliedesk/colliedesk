@@ -83,7 +83,7 @@ it must keep its MIT notice in `THIRD-PARTY-NOTICES.md`.
 | Email channel | Inbound via provider webhook, outbound SMTP/API, Message-ID threading, spoof and loop protection | alpha |
 | Freshdesk import | Tickets, replies, notes, attachments (checksummed), tags, contacts, reconcile report | alpha |
 | AI included | Draft reply and triage from past replies and knowledge base; auto-answer repetitive tickets; usage metering | AI included |
-| Knowledge base | Articles, collections, public help center | AI included |
+| Knowledge base | Articles, collections, media library, public help center, Freshdesk solutions import, article links in replies | alpha |
 | Automation | Rules on conversation events (assign, tag, set status), macros (saved replies + actions) | later |
 | SLA | First-response and resolution targets, business hours, breach alerts | later |
 | Time tracking | Time entries per conversation, CSV export (MSP need) | later |

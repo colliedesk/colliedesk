@@ -273,11 +273,40 @@ marks your articles' language for browsers and search engines.
 - Browsers may keep a page but check with the server before showing it again, so an article you
   unpublish disappears on the next visit.
 
+## Link an article in a reply
+
+Point a customer to an article from the reply box of a conversation:
+
+1. Select **Articles** under the message box (or move to it with `Tab` and press `Enter`).
+2. Type to search the published articles. The search is the one of the knowledge base page: whole
+   words and the start of words in titles and text, and any part of a title. Accents count, so
+   `mat` does not find `mật`.
+3. Press the arrow keys to move, then `Enter` (or click) to insert. `Esc` closes the list and puts
+   you back in the box.
+
+The article goes in where the cursor is, as its title on one line and its
+[address](#its-address) on the next, each on a line of its own. Mail goes out as plain text, so
+the customer sees exactly these two lines, and their mail app makes the address a link. You can
+edit both before you send. `Ctrl+Z` (`Cmd+Z`) takes the link back out.
+
+The list shows only published articles, and only while the help center is on: while it is off no
+article has a public page, so the list says so instead. An admin gets **Open help center
+settings**, which opens Settings in a new tab, so your draft stays; an agent asks an admin. The list
+asks again each time it opens, so an article published or a help center turned on a moment ago
+shows up.
+
+An address you sent keeps working when the article's address name changes, but not when the
+**workspace address name** changes (see [Its address](#its-address)), when the article is
+unpublished or deleted, or while the help center is off.
+
 ## AI agents
 
 An AI agent connected through [MCP](mcp.md), or the API with an agent token, can search and read
 articles (`colliedesk_kb_articles_search`, `colliedesk_kb_article_get`), write, publish, delete and
-restore them, manage collections, upload and read images, and read the help center settings. In
+restore them, manage collections, upload and read images, and read the help center settings.
+Every article an agent reads or finds carries its public address in `url` (also in the API), so an
+agent links an article in a reply the same way a person does: the title and the address on two
+lines, from a search with `status` published while the help center is on. In
 the media library (`colliedesk_kb_media_list`, `colliedesk_kb_media_get`) an agent sees which images
 no article uses and which have no alt text, and can name, describe or keep them
 (`colliedesk_kb_media_update`), move them to the trash or back (`colliedesk_kb_media_trash`,
