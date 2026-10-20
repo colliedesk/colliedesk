@@ -119,19 +119,29 @@ func (a *API) createKBMediaUpload(response http.ResponseWriter, request *http.Re
 		return
 	}
 	who := principal(request)
-	upload, reserved, err := a.store.CreateKBMediaUpload(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who),
-		domain.NewKBMediaUpload{Size: *input.Size, KBImageUpload: domain.KBImageUpload{Name: input.Name, Alt: input.Alt, Keep: input.Keep}})
+	a.kbUploadStart.Lock()
+	defer a.kbUploadStart.Unlock()
+	open, reserved, err := a.store.KBMediaUploadsInProgress(request.Context())
 	if err != nil {
 		writeKBUploadError(response, err)
 		return
 	}
-	// The disk keeps room for this video, the uploads already in progress and a margin.
+	if open >= domain.MaxKBMediaUploadsServer {
+		writeError(response, http.StatusServiceUnavailable, "server_busy", "This server has too many videos uploading; try again in a few minutes. Nothing was stored.")
+		return
+	}
+	// The disk keeps room for this video, every upload in progress on the server and a margin.
 	if space, ok := a.config.Attachments.(attachments.SpaceReporter); ok {
 		if available, err := space.Available(); err == nil && available < *input.Size+reserved+domain.KBMediaDiskMargin {
-			_ = a.store.CancelKBMediaUpload(request.Context(), who.Workspace.ID, upload.ID)
 			writeError(response, http.StatusInsufficientStorage, "insufficient_disk", "The server's disk has no room for this video; nothing was stored.")
 			return
 		}
+	}
+	upload, _, err := a.store.CreateKBMediaUpload(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who),
+		domain.NewKBMediaUpload{Size: *input.Size, KBImageUpload: domain.KBImageUpload{Name: input.Name, Alt: input.Alt, Keep: input.Keep}})
+	if err != nil {
+		writeKBUploadError(response, err)
+		return
 	}
 	writeJSON(response, http.StatusCreated, upload)
 }

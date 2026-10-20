@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/colliedesk/colliedesk/server/internal/database"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
@@ -28,6 +29,18 @@ func kbMediaUploadReserved(ctx context.Context, tx pgx.Tx, workspaceID string) (
 	err := tx.QueryRow(ctx, `SELECT COALESCE(sum(size-received),0) FROM kb_media_uploads
 		WHERE workspace_id=$1 AND completed_at IS NULL AND expires_at>clock_timestamp()`, workspaceID).Scan(&reserved)
 	return reserved, err
+}
+
+// KBMediaUploadsInProgress counts, over every workspace, the uploads in progress and the bytes they
+// still need: the server's disk check is for all of them, not one workspace's.
+func (s *Store) KBMediaUploadsInProgress(ctx context.Context) (int, int64, error) {
+	var open int
+	var reserved int64
+	err := s.db.Privileged(ctx, database.PrivilegeKBUploadDisk, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT count(*), COALESCE(sum(size-received),0) FROM kb_media_uploads
+			WHERE completed_at IS NULL AND expires_at>clock_timestamp()`).Scan(&open, &reserved)
+	})
+	return open, reserved, err
 }
 
 // CreateKBMediaUpload starts an upload in parts of a video of input.Size bytes. It refuses, before any

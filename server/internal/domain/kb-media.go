@@ -244,6 +244,9 @@ const (
 	MaxKBMediaUploadsPerHour = 10
 	// KBMediaUploadTTL is how long an upload may take before its parts are thrown away.
 	KBMediaUploadTTL = 24 * time.Hour
+	// MaxKBMediaUploadsServer is a safety valve, not a share: past this many uploads in progress on a
+	// server, a new one waits (503) whatever the disk holds.
+	MaxKBMediaUploadsServer = 200
 	// KBMediaDiskMargin is the room a disk keeps free besides the uploads in progress.
 	KBMediaDiskMargin = 1 << 30
 )

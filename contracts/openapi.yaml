@@ -3019,8 +3019,9 @@ paths:
         otherwise. Nothing is converted, so the video must be one every browser plays: an H.265
         (HEVC) video, the default of iPhones, is refused when the upload completes. Send the parts with
         `PUT /api/v1/kb/media-uploads/{id}`, then complete it. The plan's storage (counting the uploads
-        in progress) and the server's disk must have room before any byte is sent: 403
-        `storage_limit_reached`, 507 `insufficient_disk`. At most 3 uploads are in progress in a
+        in progress) and the server's disk (counting every upload in progress on the server) must have
+        room before any byte is sent: 403 `storage_limit_reached`, 507 `insufficient_disk`; past 200
+        uploads in progress on the server a new one is 503 `server_busy`. At most 3 uploads are in progress in a
         workspace and 10 are started by one person in an hour (429 `too_many_uploads`). The parts are
         thrown away after 24 hours. A token below `send` gets 403 `files_need_approval`.
       requestBody:
@@ -3048,6 +3049,9 @@ paths:
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '429':
           description: Too many uploads in progress or started this hour.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '503':
+          description: The server has too many uploads in progress; try again later.
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '507':
           description: The server's disk has no room for the video.

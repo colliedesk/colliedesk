@@ -131,9 +131,12 @@ The public help center is in `help-center.md`.
   `billing.md`'s single replica). Each part must arrive within 120 s (`SetReadDeadline`), against a
   client sending a byte now and then. Expired uploads go with the daily purge, their files too, and
   so does a staged file older than an hour that no open upload names (a part written while its
-  upload was cancelled; cancel also waits for a part in flight). No server-wide count of uploads:
-  counting staged files let seven trial workspaces block every other one; the disk check is the
-  server's limit. Complete checks the cap and the plan before it renames the file, so a refusal
+  upload was cancelled; cancel also waits for a part in flight). The disk check counts what every
+  workspace's open uploads still need (`PrivilegeKBUploadDisk`), one start at a time under a mutex
+  (one process), so workspaces starting together never promise the same room twice; counting the
+  database rather than memory survives a restart. Past 200 uploads in progress on the server a new
+  one is 503 `server_busy`: a safety valve, not a share (counting staged files instead let seven
+  trial workspaces block every other one). Complete checks the cap and the plan before it renames the file, so a refusal
   keeps the parts for a retry, and a lost file is 409 `upload_lost`.
 - **Neutralising MP4 is an allowlist.** Each container keeps only the boxes a player reads
   (`keptBoxes` in `media/video.go`); any other box, a dashcam's `gps ` included, becomes `free` with

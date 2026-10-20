@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/netip"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
@@ -162,6 +163,9 @@ type API struct {
 	now      func() time.Time
 	// kbUploads serializes the parts of one video upload and bounds the parts a workspace sends at once.
 	kbUploads kbUploadGate
+	// kbUploadStart lets one upload start at a time, so each disk check counts the uploads started
+	// before it (the server runs as one process).
+	kbUploadStart sync.Mutex
 	// mux serves every route; an approved agent request is replayed through it as the approver.
 	mux *http.ServeMux
 }

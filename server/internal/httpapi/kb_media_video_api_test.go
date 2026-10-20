@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"net/http"
 	"os"
 	"runtime"
@@ -335,5 +337,62 @@ func TestKBVideoOrphanPartsGoWithTheDailyPurge(t *testing.T) {
 	}
 	if _, err := os.Stat(orphan); !os.IsNotExist(err) {
 		t.Fatalf("the orphan part is still on disk: %v", err)
+	}
+}
+
+// smallDisk reports a fixed room on its disk.
+type smallDisk struct {
+	*attachments.LocalDisk
+	available int64
+}
+
+func (d smallDisk) Available() (int64, error) { return d.available, nil }
+
+// The disk check counts what every workspace's uploads still need: workspaces starting together
+// never promise the same room twice, and past a server-wide number a new upload waits.
+func TestKBVideoUploadsOfManyWorkspacesShareTheDisk(t *testing.T) {
+	disk, err := attachments.NewLocalDisk(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const size = 100 << 20
+	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) {
+		config.Attachments = smallDisk{LocalDisk: disk, available: domain.KBMediaDiskMargin + 3*size + size/2}
+	})
+	var admins []string
+	for i := range 6 {
+		admins = append(admins, createSession(t, api, service, fmt.Sprintf("KB Disk %d", i), fmt.Sprintf("admin@kb-disk-%d.example.com", i)))
+	}
+	codes := make([]int, len(admins))
+	var wait sync.WaitGroup
+	for i, admin := range admins {
+		req := newRequest(t, http.MethodPost, "/api/v1/kb/media-uploads", map[string]any{"size": size}, admin, nil)
+		wait.Add(1)
+		go func() { defer wait.Done(); codes[i] = serveResult(api, req).code }()
+	}
+	wait.Wait()
+	created, refused := 0, 0
+	for _, code := range codes {
+		switch code {
+		case http.StatusCreated:
+			created++
+		case http.StatusInsufficientStorage:
+			refused++
+		default:
+			t.Fatalf("codes = %v", codes)
+		}
+	}
+	if created != 3 || refused != 3 {
+		t.Fatalf("room for 3 uploads: %d started, %d refused (%v)", created, refused, codes)
+	}
+
+	if _, err := pool.Exec(context.Background(), `INSERT INTO kb_media_uploads(workspace_id,size,expires_at)
+		SELECT w.id, 1, now()+interval '1 hour' FROM workspaces w, generate_series(1,$1::int) WHERE w.name='KB Disk 0'`,
+		domain.MaxKBMediaUploadsServer); err != nil {
+		t.Fatal(err)
+	}
+	busy := kbCall(t, api, http.MethodPost, "/api/v1/kb/media-uploads", map[string]any{"size": 10}, admins[5], http.StatusServiceUnavailable, nil)
+	if errorCode(t, busy) != "server_busy" {
+		t.Fatalf("busy server = %s", busy.Body.String())
 	}
 }
