@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { servers } from './support/cli';
 import { createWorkspaceWithSlug } from './support/workspace';
@@ -151,4 +152,44 @@ test('knowledge base: Insert video puts a YouTube player in the article, which t
   await expect(player).toHaveAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
   await expect(player).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
   expect(players.every((address) => address.startsWith('https://www.youtube-nocookie.com/embed/'))).toBe(true);
+});
+
+test('knowledge base: a WebM uploaded in the media library plays in a published article on the help center, with seeking', async ({ page }) => {
+  const suffix = `${Date.now()}-${process.pid}`;
+  const { url, slug } = createWorkspaceWithSlug(`KB Media ${suffix}`, `admin-${suffix}@example.com`);
+  await page.goto(url);
+  await page.getByRole('button', { name: 'Continue to Colliedesk' }).click();
+  await expect(page).toHaveURL(`${servers.main}/`);
+
+  await page.goto(`${servers.main}/knowledge/media`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Media' })).toBeVisible();
+  await page.locator('input[type="file"]').setInputFiles(path.resolve(import.meta.dirname, '../../server/internal/media/testdata/video/vp9.webm'));
+  await expect(page.getByRole('region', { name: 'Uploads' })).toContainText('Uploaded');
+  const card = page.getByRole('button', { name: /^vp9, video,/ });
+  await card.click();
+  const panel = page.getByRole('complementary', { name: 'vp9' });
+  await panel.getByRole('textbox', { name: 'Name' }).fill('Product tour');
+  await panel.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByRole('button', { name: /^Product tour, video,/ })).toBeVisible();
+  const id = new URL(page.url()).searchParams.get('item')!;
+
+  const headers = { Origin: servers.main };
+  expect((await page.request.put(`${servers.main}/api/v1/help-center`, { headers, data: { enabled: true, title: 'Video help', locale: 'en' } })).status()).toBe(200);
+  const { id: collection } = await (await page.request.post(`${servers.main}/api/v1/kb/collections`, { headers, data: { name: 'Guides' } })).json() as { id: string };
+  expect((await page.request.post(`${servers.main}/api/v1/kb/articles`, { headers,
+    data: { collection_id: collection, title: 'Tour', status: 'published', body_md: `<video controls src="/api/v1/kb/media/${id}"></video>` } })).status()).toBe(201);
+
+  await page.goto(`${servers.main}/help/${slug}/a/1-tour`);
+  const player = page.locator('video');
+  await expect(player).toHaveAttribute('src', `/help/${slug}/media/${id}`);
+  // Chromium of Playwright plays WebM (it has no H.264): the video reaches its end after a seek.
+  await player.evaluate(async (video: HTMLVideoElement) => {
+    video.muted = true;
+    await new Promise((resolve) => { if (video.readyState >= 1) resolve(null); else video.addEventListener('loadedmetadata', resolve, { once: true }); });
+    video.currentTime = video.duration / 2;
+    await new Promise((resolve) => video.addEventListener('seeked', resolve, { once: true }));
+  });
+  const range = await page.request.get(`${servers.main}/help/${slug}/media/${id}`, { headers: { Range: 'bytes=0-99' } });
+  expect(range.status()).toBe(206);
+  expect(range.headers()['content-type']).toBe('video/webm');
 });

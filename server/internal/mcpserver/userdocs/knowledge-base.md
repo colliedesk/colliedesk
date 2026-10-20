@@ -82,8 +82,29 @@ an import brings in keep their bytes as the other helpdesk served them.
 
 Every uploaded image goes into the workspace's media library, with a name, alt text and a small
 preview. An image no article ever saved is deleted 30 days after it was uploaded, unless it is kept;
-naming it or writing its alt text keeps it. For now the library is reached through the API and AI
-agents (below); its page in the web app comes next.
+naming it or writing its alt text keeps it.
+
+### Media library
+
+**Knowledge → Media** shows every image and video of the workspace, newest first, with a search by
+name or alt text, a choice of images or videos, of what is in use, not used or missing alt text,
+and a sort (newest, oldest, name, largest). **Upload** takes several files at once, or drop them
+anywhere on the page; an upload made here is kept. Each file shows its progress; a video shows its
+speed and the time left, and can be paused, resumed (also after a lost connection: it goes on from
+the bytes the server already has) or cancelled. The same file uploaded twice says **Already in the
+library**.
+
+Choose an item to see it in a panel: its type, size, length and where it is used, with a link to
+each article. There you rename it, write its alt text (a video's title for screen readers), keep it,
+copy what to put in an article (**Copy embed**), download it, **Replace…** it, or move it to the
+trash. A video's **Poster** is the frame the player shows when you press **Use this frame** (pause
+it where you want), or an image you upload.
+
+A line above the library says how many items no article uses and how much space they take;
+**Review** opens **Not used**. There, tick items (Shift picks a range) and **Move selected to trash**,
+or **Move all unused to trash**. A confirmation says how many and how large; kept items are skipped
+unless you include them, and Undo puts the whole batch back. **Trash** lists what is there; restore
+items, or, as an admin, **Delete forever** after a second confirmation.
 
 Items no article uses can go to the library's **trash**: one at a time, a chosen set, or all unused
 items at once (kept ones only when you say so). An image a published or draft article still shows
@@ -148,8 +169,8 @@ poster, the still picture shown before it plays. The help center plays a video a
 shows from its own address, with seeking, and shows its poster; a video in the trash, or that no
 published article shows, is not public. Browsers and proxies may keep a copy of a video once
 it was public, as with images: unpublishing or moving it to the trash stops new readers, not copies
-already made, so keep a video that must stay private out of published articles. For now videos are uploaded through the API and AI agents;
-the library page and the editor's button come next.
+already made, so keep a video that must stay private out of published articles. Upload videos in the [media
+library](#media-library); the editor's button to insert one comes next.
 
 ### Publish, unpublish, edit
 
