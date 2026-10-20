@@ -17,9 +17,10 @@ if not names:
 # Large latency fixtures seed thousands of rows and time a request against a budget. Give them one
 # runner so the contract-heavy shards do not also pay that cost, and so the packages those shards run
 # at the same time do not load the shared database while they measure. Keep every threshold intact.
-# They are named ...LatencyBudget or ...StaysFast...; a shard of other tests timed one at 389 ms
-# against its 200 ms budget.
-latency = [name for name in names if name.endswith('LatencyBudget') or 'StaysFast' in name]
+# They are named ...LatencyBudget, ...StaysInBudget or ...StaysFast...; beside other packages'
+# tests one measured 389 ms against 200 ms, another a 266 ms p95 against 100 ms.
+TIMED = ('LatencyBudget', 'StaysInBudget', 'StaysFast')
+latency = [name for name in names if any(marker in name for marker in TIMED)]
 regular = [name for name in names if name not in latency]
 if args.total == 1:
     selected = names

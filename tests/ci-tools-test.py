@@ -35,11 +35,13 @@ class Shards(unittest.TestCase):
 
     def test_large_latency_fixtures_have_a_separate_runner(self):
         listing = self.listing + ('TestInboxListLatencyBudget\nTestPendingAgentRequestsLatencyBudget\n'
-                                  'TestStorageUsageStaysFastWithAHugeAttachmentTable\n')
+                                  'TestStorageUsageStaysFastWithAHugeAttachmentTable\n'
+                                  'TestTimelineReadWithHeavyHTMLMailStaysInBudget\n')
         patterns = [run('go-test-shard.py', str(i), '3', stdin=listing).stdout.strip()
                     for i in range(1, 4)]
         for name in ['TestInboxListLatencyBudget', 'TestPendingAgentRequestsLatencyBudget',
-                     'TestStorageUsageStaysFastWithAHugeAttachmentTable']:
+                     'TestStorageUsageStaysFastWithAHugeAttachmentTable',
+                     'TestTimelineReadWithHeavyHTMLMailStaysInBudget']:
             self.assertFalse(any(re.search(p, name) for p in patterns[:-1]))
             self.assertRegex(name, patterns[-1])
         self.assertNotRegex('TestAlpha', patterns[-1])
@@ -158,6 +160,18 @@ class PublishEdge(unittest.TestCase):
         self.assertIn('ci-budget.py --phase cd', workflow)
         ci = (ROOT / '.github/workflows/ci.yml').read_text()
         self.assertIsNone(re.search(r'^  publish-edge:', ci, re.M), 'ci.yml still defines publish-edge')
+
+class PackageManager(unittest.TestCase):
+    def test_workflows_run_pnpm_through_corepack_only(self):
+        # corepack reads packageManager; pnpm/action-setup installed a second pnpm from npm on
+        # every job and once hung 84 seconds on a registry reset.
+        for path in sorted((ROOT / '.github/workflows').glob('*.yml')):
+            text = path.read_text()
+            self.assertFalse('pnpm/action-setup' in text, f'{path.name} uses pnpm/action-setup')
+            for line in text.splitlines():
+                for match in re.finditer(r'(\S*)\s+pnpm\s', ' ' + line + ' '):
+                    if match.group(1) in ('run:', '&&', '||', ';', ''):
+                        self.fail(f'{path.name}: pnpm without corepack: {line.strip()}')
 
 
 if __name__ == '__main__':
