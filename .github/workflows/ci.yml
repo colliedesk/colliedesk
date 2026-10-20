@@ -212,6 +212,16 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Until its migrate step the upgrade test needs only the previous release, so it starts now:
+      # it fills that release with the upgrade fixture and tests the backup restores while the image
+      # builds, then waits for colliedesk:ci (docs/internals/upgrades.md).
+      - name: Start the upgrade test from the previous release in the background
+        env:
+          UPGRADE_TEST_RESTORE: before
+          UPGRADE_TEST_WAIT: '100'
+        run: |
+          previous=$(sh .github/scripts/previous-release.sh)
+          sh .github/scripts/ci-background.sh start upgrade sh tests/upgrade-test.sh "$previous" colliedesk:ci
       - id: version
         run: echo "value=edge-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
       # A PR loads the image through the runner's own Docker driver: no builder container to start
@@ -269,6 +279,8 @@ jobs:
           push-to-registry: true
       - name: Image boots against Postgres and install.sh signs in with the printed link
         run: sh .github/scripts/ci-background.sh wait image-checks
+      - name: The previous release upgrades to this image without losing a row or a file
+        run: sh .github/scripts/ci-background.sh wait upgrade
 
   # The one check to watch: adding or splitting jobs above never renames it.
   # Fails a PR that brings in a dependency version with a known vulnerability (OSV database).
@@ -314,6 +326,8 @@ jobs:
         run: sh tests/release-tag-test.sh
       - name: Release button picks the Cloud commit and the next tag
         run: sh tests/release-next-test.sh
+      - name: Upgrade test starts from the release before the candidate
+        run: sh tests/previous-release-test.sh
       - name: Roadmap gate rules (stubbed issue lookup)
         run: python3 -I tests/roadmap-check-test.py
       - name: Mail pipe wrapper exit codes

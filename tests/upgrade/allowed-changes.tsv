@@ -1,0 +1,7 @@
+# Changes a migration makes to existing data on purpose. tests/upgrade-test.sh fails on any other
+# change to a row, a column or a table the previous release had. One line per change, tab-separated:
+#   table	column (or * for the whole table)	migration file	reason
+# An entry counts only in an upgrade that runs its migration; keep it until that migration is in a
+# release, then it may go. Never add one to make a failing upgrade pass without reading the migration:
+# a dropped column with data in it is lost data. Example:
+#   conversations	held_at	20261101000000-drop-conversation-holds.up.sql	holds were never used; the column was always NULL

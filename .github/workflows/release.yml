@@ -113,6 +113,21 @@ jobs:
         env:
           TAG: ${{ steps.target.outputs.tag }}
         run: sh tests/image-boot-test.sh colliedesk:release "$TAG"
+      # No release that loses data on upgrade: an install of the previous release, filled with the
+      # upgrade fixture, must upgrade to this image keeping every row and file, and the rollback and
+      # one-workspace restore of docs/user/upgrade.md must work (docs/internals/upgrades.md). The test
+      # and fixture come from main, so a release of an older commit meets the current test.
+      - name: Upgrade from the previous release
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/upgrade-test" origin/main
+          previous=$(sh "$RUNNER_TEMP/upgrade-test/.github/scripts/previous-release.sh" "$TAG")
+          if [ -z "$previous" ]; then
+            echo "No release before $TAG: nothing to upgrade from."
+            exit 0
+          fi
+          sh "$RUNNER_TEMP/upgrade-test/tests/upgrade-test.sh" "$previous" colliedesk:release
       # Another release may have taken this number while the image built.
       - name: Require the tag to be free or already this commit
         env:
@@ -180,4 +195,5 @@ jobs:
           prerelease=
           case "$TAG" in *-*) prerelease=--prerelease ;; esac
           if gh release view "$TAG" >/dev/null 2>&1; then echo "$TAG is already released"; exit 0; fi
-          gh release create "$TAG" --verify-tag --generate-notes $prerelease
+          gh release create "$TAG" --verify-tag --generate-notes $prerelease \
+            --notes 'Self-hosted? Back up first, then follow the [upgrade guide](https://github.com/colliedesk/colliedesk/blob/main/docs/user/upgrade.md); it also says how to roll back.'

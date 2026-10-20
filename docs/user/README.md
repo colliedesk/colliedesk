@@ -3,6 +3,7 @@
 One page per feature. Each page says what the feature does, how to use it, and its limits.
 
 - [Install and create a workspace](install.md)
+- [Upgrade, roll back and restore a workspace](upgrade.md) (self-hosted)
 - [Sign in without passwords](sign-in.md)
 - [Invite your team](invites.md)
 - [Manage your team](team.md)

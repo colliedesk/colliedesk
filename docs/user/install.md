@@ -46,8 +46,8 @@ The installer writes `COLLIE_DESK_IMAGE` to `.env`. Pick one tag:
   PostgreSQL. Newer, less tested.
 
 Colliedesk is alpha: releases are `0.0.x` and any release may change the database schema. Back up
-before you upgrade (see below). Changes per release are in the
-[releases page](https://github.com/colliedesk/colliedesk/releases).
+before you upgrade: [Upgrade a self-hosted install](upgrade.md) has every step, and how to roll back.
+Changes per release are in the [releases page](https://github.com/colliedesk/colliedesk/releases).
 
 To check which build you run:
 
@@ -57,7 +57,8 @@ docker compose exec server /app/collie version
 
 ## Data to back up
 
-Colliedesk keeps data in two places. Back up both:
+Colliedesk keeps data in two places. Back up both (the commands are in
+[Upgrade a self-hosted install](upgrade.md#1-back-up)):
 
 - PostgreSQL (the `postgres-data` volume).
 - Attachment files in `ATTACHMENTS_DIR` (the `attachments-data` volume, mounted at
