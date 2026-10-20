@@ -185,7 +185,7 @@ test('knowledge base: a WebM uploaded in the media library plays in a published 
   await page.keyboard.press('ControlOrMeta+End');
   await page.getByRole('button', { name: 'Media' }).click();
   await page.getByRole('group', { name: 'Insert from the media library' }).getByRole('button', { name: /^Product tour, video,/ }).click();
-  await expect(page.getByRole('textbox', { name: 'Text (Markdown)' })).toContainText(`<video controls preload="metadata" src="/api/v1/kb/media/${id}"></video>`);
+  await expect(page.getByRole('textbox', { name: 'Text (Markdown)' })).toContainText(`<video controls preload="metadata" src="/api/v1/kb/media/${id}" title="Product tour"></video>`);
   await page.getByRole('tab', { name: 'Preview' }).click();
   await expect(page.getByRole('region', { name: 'Preview' }).locator('video')).toHaveAttribute('src', `/api/v1/kb/media/${id}`);
   await page.getByRole('button', { name: 'Save and publish' }).click();
