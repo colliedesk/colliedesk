@@ -39,9 +39,11 @@ The public help center is in `help-center.md`.
   budget (below); support teams of 1–10 agents rarely pass it, and an import over it is refused before
   it writes.
 - **Search reads every article of the workspace.** A generated, position-stripped `tsvector` with the
-  `simple` configuration (no language is the default). The query is built in SQL from
-  `to_tsvector('simple', q)`, so an address, a hyphenated word or a URL splits the same way on both
-  sides; every word matches as a prefix. A title `ILIKE` with `%`, `_` and `\` escaped catches the rest.
+  `simple` configuration (no language is the default), made by `kb_search_vector`, which first turns
+  ASCII punctuation other than `.` into spaces (see the trap on the parser). The query is built in SQL
+  from `kb_search_vector(q)`, so both sides split the same way: `help@acme.example` is `help` and
+  `acme.example`, `sign-on` is `sign` and `on`, a URL is its scheme, host and path words; every word
+  matches as a prefix. A title `ILIKE` with `%`, `_` and `\` escaped catches the rest.
   A word inside another word, and text in scripts written without spaces, are found only at a word
   start or in a title. There is no GIN index: see the trap on row-level security.
 - **Images are their own table.** `attachments` needs a message, and its download is `no-store`.
@@ -147,5 +149,27 @@ The public help center is in `help-center.md`.
 - **No object literal inside an API path in the web app.** `TestEveryAPIPathTheWebAppCallsIsARoute`
   reads a path literal up to its first `}`, so `` `/kb/articles${query({ cursor })}` `` reads as a path
   that is not a route. `kb-api.ts` builds queries through small helpers called with variables.
+- **The default text search parser is quadratic in a run without whitespace.** The triggers are the
+  characters of an email, a host, a URL, a file path or a hyphenated word, so the parser most likely
+  reads ahead for one of those at every character and fails at the end of the run (the cause is
+  inferred from the measurements, not read in its source). Measured on Postgres 17.11 on 2026-10-20,
+  `to_tsvector('simple', repeat('_a', n))`: 0.34 s at 10,000 characters, 1.4 s at 20,000, 5.6 s at
+  40,000, 34 s at 100,000 (the longest text), each holding one database core on every create, edit,
+  import or approved request. Runs of 200 characters separated by spaces cost the same per character
+  whatever the total, so the cost is the square of one run, not of the text. Fuzzing every pair of ASCII
+  punctuation, letters, digits, non-ASCII letters, combining marks and spaces, triples and quintuples
+  found these triggers: `_` next to a letter or digit, `/` with `.` or `~`, `@` after a word with
+  digits (`a1@`), `-` between words with digits (`a-1-`), `-` with `.` (`a-a.`). `.` alone, letters,
+  digits, non-ASCII text and controls stayed linear. `kb_search_vector` turns the 31 ASCII punctuation
+  characters other than `.` into spaces before parsing (`regexp_replace` with the characters listed one
+  by one: a class such as `[[:punct:]]` depends on the collation; `translate` gives the same text but
+  made indexing ordinary text two to three times slower, 3.4 s instead of 1.2 s for the 2,000 articles
+  of the search budget), so the parser sees words, numbers, hosts and versions only: every pattern
+  above then costs 10–40 ms at 100,000 characters, prose 7 ms. `_` was already a separator; what changes is that an email, a URL, a
+  file path and a hyphenated word are indexed as their words, not as one more lexeme. Keeping `.` keeps
+  hosts and versions (`status.acme.example`, `1.2.3`) whole. `q` holds at most 200 characters, so the
+  query side was never slow. `TestKnowledgeBaseSearchVectorCostsLinearTime` holds every write of these
+  runs to 200 ms. Any new text search over customer text (the help center, conversations) must go
+  through `kb_search_vector` or the same normalization.
 - **`ListKBArticles` pages by offset** (an opaque cursor) because search orders by rank. A workspace holds
   at most 2,000 articles, so the offset stays small.

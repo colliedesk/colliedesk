@@ -88,13 +88,12 @@ type KBArticleFilter struct {
 // likePattern escapes the wildcards of ILIKE so the text matches as typed.
 var likePattern = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
-// kbQuery turns text into a tsquery that matches every word as a prefix. The words come from the
-// same parser that made the search column ('simple'), so an address, a hyphenated word or a URL is
-// split the same way on both sides. Text without a word gives NULL, which matches nothing.
-// The lexemes are cast, not parsed again: to_tsquery would turn sign-on into a phrase, which needs
-// the word positions the search column strips.
+// kbQuery turns text into a tsquery that matches every word as a prefix. The words come from
+// kb_search_vector, the function that made the search column, so an address, a hyphenated word or
+// a URL is split the same way on both sides. Text without a word gives NULL, which matches nothing.
+// The lexemes are cast, not parsed again, so nothing in them is read as tsquery syntax.
 const kbQuery = `(SELECT string_agg('''' || replace(replace(lexeme, '\', '\\'), '''', '''''') || ''':*', ' & ')::tsquery
-	FROM unnest(to_tsvector('simple', $2::text)))`
+	FROM unnest(kb_search_vector($2::text)))`
 
 // ListKBArticles returns one page of the workspace's live articles without their text, and the
 // cursor of the next page ("" on the last one).
