@@ -8,6 +8,7 @@ import type { KBMedia, KBMediaDetails } from './media-api';
 import { embedFor, mediaName } from './media-grid';
 import { mediaMessages } from './media-messages';
 import { reason } from './kb-tree';
+import { posterFrom } from './video-poster';
 
 // MediaDetail is the panel of one library item: what it is, where it is used, its name and alt text
 // (a video's title), a video's poster, and what can be done to it.
@@ -108,18 +109,6 @@ function MetaForm({ item, onSaved }: { item: KBMediaDetails; onSaved: () => void
       {state.problem && <p role="alert" className="error-copy">{state.problem}</p>}
     </form>
   );
-}
-
-// posterFrom draws the frame the player shows into a JPEG of at most 1280 pixels on a side.
-async function posterFrom(player: HTMLVideoElement): Promise<Blob> {
-  const scale = Math.min(1, 1280 / Math.max(player.videoWidth, player.videoHeight));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(player.videoWidth * scale));
-  canvas.height = Math.max(1, Math.round(player.videoHeight * scale));
-  const context = canvas.getContext('2d');
-  if (!context || player.videoWidth === 0) throw new Error('no frame');
-  context.drawImage(player, 0, 0, canvas.width, canvas.height);
-  return new Promise((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('no frame'))), 'image/jpeg', 0.82));
 }
 
 function Poster({ item, player, onSaved }: { item: KBMediaDetails; player: RefObject<HTMLVideoElement | null>; onSaved: () => void }) {

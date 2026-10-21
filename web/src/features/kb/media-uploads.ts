@@ -5,6 +5,8 @@ import { mediaApi, sendPart } from './media-api';
 import type { KBMedia, PartSender } from './media-api';
 import { mediaMessages } from './media-messages';
 import { reason } from './kb-tree';
+import { addPoster, framePoster } from './video-poster';
+import type { PosterCapture } from './video-poster';
 
 // The uploads a library page sends: each file a row with its progress. An image goes in one request; a
 // video in parts of the size the server names, so a lost connection or a pause resumes from the bytes
@@ -16,7 +18,8 @@ export interface UploadRow {
   key: number;
   name: string;
   size: number;
-  kind: 'image' | 'video';
+  // file: neither an image nor a video, refused before anything is sent.
+  kind: 'image' | 'video' | 'file';
   state: UploadState;
   sent: number;
   // bytesPerSecond is measured over the current part, for the time left.
@@ -42,6 +45,17 @@ export function kindOf(file: File): 'image' | 'video' | undefined {
   return undefined;
 }
 
+// The limits the server checks (server/internal/domain: MaxKBImageBytes, MaxKBVideoBytes).
+export const maxImageBytes = 5 << 20;
+export const maxVideoBytes = 200 << 20;
+
+// fileProblem says what about a file the server would refuse, before a byte is sent: its type or its size.
+export function fileProblem(file: File): 'type' | 'size' | undefined {
+  const kind = kindOf(file);
+  if (!kind) return 'type';
+  return file.size > (kind === 'image' ? maxImageBytes : maxVideoBytes) ? 'size' : undefined;
+}
+
 // The name the library shows: the file name without its extension.
 export const baseName = (name: string) => name.replace(/\.[^.]+$/, '').slice(0, 200);
 
@@ -60,7 +74,8 @@ export class UploadQueue {
   private next = 1;
   private running = false;
 
-  constructor(private readonly onStored: (item: KBMedia) => void, private readonly send: PartSender = sendPart) {}
+  // capture draws a stored video's poster from its file (video-poster.ts); a test passes its own.
+  constructor(private readonly onStored: (item: KBMedia) => void, private readonly send: PartSender = sendPart, private readonly capture: PosterCapture = framePoster) {}
 
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   rows = () => this.snapshot;
@@ -70,13 +85,18 @@ export class UploadQueue {
     for (const listener of this.listeners) listener();
   }
 
-  // add queues files and reports the names it refused (not an image or a video).
+  // add queues files and reports the names it refused (not an image or a video). A refused file, or one over
+  // its limit, is a failed row that says why: it is in the list with the others, and nothing is sent for it.
   add(files: File[]): string[] {
     const refused: string[] = [];
     for (const file of files) {
       const kind = kindOf(file);
-      if (!kind) { refused.push(file.name); continue; }
-      this.jobs.push({ file, session: {}, row: { key: this.next++, name: file.name, size: file.size, kind, state: 'waiting', sent: 0, bytesPerSecond: 0, duplicate: false } });
+      const problem = fileProblem(file);
+      if (!kind) refused.push(file.name);
+      const row: UploadRow = { key: this.next++, name: file.name, size: file.size, kind: kind ?? 'file', state: 'waiting', sent: 0, bytesPerSecond: 0, duplicate: false };
+      if (problem) Object.assign(row, { state: 'failed', permanent: true, problem: problem === 'type' ? mediaMessages.notMediaRow
+        : mediaMessages.overLimit(file.size, kind === 'image' ? maxImageBytes : maxVideoBytes, kind ?? 'image') });
+      this.jobs.push({ file, session: {}, row });
     }
     this.changed();
     void this.run();
@@ -120,6 +140,14 @@ export class UploadQueue {
     this.changed();
   }
 
+  // dismiss forgets one row that is over: failed, done or cancelled.
+  dismiss(key: number) {
+    const job = this.find(key);
+    if (!job || ['waiting', 'sending', 'paused'].includes(job.row.state)) return;
+    this.jobs = this.jobs.filter((each) => each !== job);
+    this.changed();
+  }
+
   // clear forgets the rows that are finished.
   clear() {
     this.jobs = this.jobs.filter((job) => !['done', 'cancelled'].includes(job.row.state));
@@ -155,6 +183,8 @@ export class UploadQueue {
           if (!item) continue;
           job.row = { ...job.row, state: 'done', sent: job.row.size, item };
           this.onStored(item);
+          // The poster comes after: the video is in the library already, and a frame that cannot be drawn changes nothing.
+          if (job.row.kind === 'video') void addPoster(job.file, item, this.capture).then((posted) => { if (posted) this.onStored(posted); });
         } catch (error) {
           if ((job.row.state as UploadState) === 'paused' || (job.row.state as UploadState) === 'cancelled') continue;
           job.row.state = 'failed';

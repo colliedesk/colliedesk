@@ -15,8 +15,9 @@ import type { CollectionValues } from './collection-panel';
 import { kbApi } from './kb-api';
 import type { KBArticleStatus, KBArticleSummary, KBCollection } from './kb-api';
 import { kbMessages } from './kb-messages';
-import { KBSections } from './media-page';
-import { buildTree, flatten, maxDepth, reason } from './kb-tree';
+import { KBDialog, KBHead } from './kb-ui';
+import { Icon } from './editor/icons';
+import { buildTree, flatten, indent, maxDepth, reason } from './kb-tree';
 import type { TreeNode } from './kb-tree';
 
 export interface KnowledgeSearch {
@@ -70,8 +71,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   const [confirming, setConfirming] = useState(false);
   const [problem, setProblem] = useState<string>();
   const [trashOpen, setTrashOpen] = useState(false);
-  const trashButton = useRef<HTMLButtonElement>(null);
-  const closeTrash = () => { setTrashOpen(false); trashButton.current?.focus(); };
+  const closeTrash = () => setTrashOpen(false);
   useEffect(() => { setForm(null); setConfirming(false); setProblem(undefined); }, [search.collection]);
   const save = async (values: CollectionValues) => {
     if (form === 'edit' && selected) {
@@ -107,65 +107,79 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
   const items = articles.data?.pages.flatMap((page) => page.items) ?? [];
   const names = new Map(nodes.map((node) => [node.collection.id, node.collection.name]));
   const noCollections = collections.isSuccess && nodes.length === 0;
+  const total = nodes.reduce((sum, node) => sum + node.collection.article_count, 0);
+  // Published is not public while the help center is off: the page says so, and how to turn it on.
+  const center = useQuery({ queryKey: ['help-center'], queryFn: kbApi.helpCenter });
+  const publicNow = center.data?.enabled;
+  const newCollection = () => { setProblem(undefined); setForm(form === 'new' ? null : 'new'); };
+  const newArticle = `/knowledge/new${selected ? `?${new URLSearchParams({ collection: selected.collection.id })}` : ''}`;
   return (
-    <main className="settings-page kb-page" aria-labelledby="kb-heading">
-      <header className="kb-header">
-        <div>
-          <KBSections current="articles" />
-          <h1 id="kb-heading">{kbMessages.heading}</h1>
-          <p>{kbMessages.description}</p>
-        </div>
-        {/* A pointer or the focus on these links loads the editor's chunk ahead of the click (editor-part.ts). */}
-        <div className="button-row" onPointerOver={editorPart.preload} onFocus={editorPart.preload}>
-          <button type="button" ref={trashButton} aria-expanded={trashOpen} onClick={() => (trashOpen ? closeTrash() : setTrashOpen(true))}>{kbMessages.trash}</button>
-          {!noCollections && <RouterLink className="button-link primary-action" href={`/knowledge/new${selected ? `?${new URLSearchParams({ collection: selected.collection.id })}` : ''}`}
-            onFollow={() => void navigate({ to: '/knowledge/new', search: selected ? { collection: selected.collection.id } : {} })}>{kbMessages.newArticle}</RouterLink>}
-        </div>
-      </header>
+    <main className="kb-frame kb-articles-page" aria-labelledby="kb-heading">
+      <KBHead current="articles" heading={kbMessages.heading} articles={collections.isSuccess ? total : undefined} actions={<>
+        <button type="button" aria-haspopup="dialog" aria-label={kbMessages.trash} onClick={() => setTrashOpen(true)}><Icon name="trash" /><span className="kb-label">{kbMessages.trash}</span></button>
+        {/* A pointer or the focus on New article loads the editor's chunk ahead of the click (editor-part.ts). */}
+        {!noCollections && <span onPointerOver={editorPart.preload} onFocus={editorPart.preload}><RouterLink className="button-link primary-action" href={newArticle}
+          onFollow={() => void navigate({ to: '/knowledge/new', search: selected ? { collection: selected.collection.id } : {} })}><Icon name="plus" />{kbMessages.newArticle}</RouterLink></span>}
+      </>} />
+      {publicNow === false && <div className="kb-notice" role="status">
+        <Icon name="globe" />
+        <span><strong>{kbMessages.helpCenterIsOff}</strong> {kbMessages.helpCenterIsOffDetail}</span>
+        <RouterLink className="button-link" href="/settings#help-center-heading" onFollow={() => void navigate({ to: '/settings', hash: 'help-center-heading' })}>{kbMessages.turnOnInSettings}</RouterLink>
+      </div>}
       {trashOpen && <KBTrash timezone={timezone} onChanged={() => void refresh()} onClose={closeTrash} />}
-      <div className="kb-layout">
-        <nav className="kb-collections" aria-labelledby="kb-collections-heading">
+      <div className="kb-art-layout">
+        <nav className="kb-collections" aria-labelledby="kb-collections-heading" data-form={form === 'new' || noCollections ? 'true' : undefined}>
           <div className="kb-collections-head">
             <h2 id="kb-collections-heading">{kbMessages.collections}</h2>
-            <button type="button" aria-expanded={form === 'new'} onClick={() => { setProblem(undefined); setForm(form === 'new' ? null : 'new'); }}>{kbMessages.newCollection}</button>
+            <button type="button" className="icon-button" aria-label={kbMessages.newCollection} data-tip={kbMessages.newCollection} aria-expanded={form === 'new'} onClick={newCollection}><Icon name="plus" /></button>
           </div>
           {collections.isError && <p role="alert" className="error-copy">{kbMessages.collectionsFailed}{' '}
             <button type="button" className="link-action" onClick={() => void collections.refetch()}>{kbMessages.retry}</button></p>}
           {(form === 'new' || (noCollections && form === null)) && <CollectionForm tree={tree} onSubmit={save} onCancel={() => setForm(null)} />}
           {noCollections && <p className="muted-copy">{kbMessages.noCollections}</p>}
-          {nodes.length > 0 && <CollectionTree tree={tree} selected={search.collection} onSelect={(collection) => setSearch({ collection: collection?.id })} />}
+          {nodes.length > 0 && <div className="kb-tree-scroll"><CollectionTree tree={tree} total={total} selected={search.collection} onSelect={(collection) => setSearch({ collection: collection?.id })} /></div>}
         </nav>
-        <section className="kb-articles" aria-labelledby="kb-articles-heading">
+        <section className="kb-list" aria-labelledby="kb-articles-heading">
           {selected && <CollectionHead node={selected} tree={tree} form={form} confirming={confirming} problem={problem}
             onForm={(next) => { setProblem(undefined); setConfirming(false); setForm(next); }} onSave={save}
             onConfirm={setConfirming} onDelete={() => void remove(selected.collection)} />}
-          {!selected && <h2 id="kb-articles-heading" className="kb-articles-title">{kbMessages.allArticles}</h2>}
-          <div className="kb-filters" role="search">
+          {!selected && <h2 id="kb-articles-heading" className="sr-only">{kbMessages.allArticles}</h2>}
+          <div className="kb-list-tools" role="search">
+            {nodes.length > 0 && <span className="kb-phone-collections">
+              <select aria-label={kbMessages.collection} value={search.collection ?? ''} onChange={(event) => setSearch({ collection: event.target.value || undefined })}>
+                <option value="">{`${kbMessages.allArticles} (${total})`}</option>
+                {nodes.map((node) => <option key={node.collection.id} value={node.collection.id}>{`${indent(node)} (${node.collection.article_count})`}</option>)}
+              </select>
+              <button type="button" className="icon-button" aria-label={kbMessages.newCollection} aria-expanded={form === 'new'} onClick={newCollection}><Icon name="plus" /></button>
+            </span>}
             <label className="search-field kb-search">
               <SearchIcon />
               <span className="sr-only">{kbMessages.searchArticles}</span>
-              <input type="search" value={text} placeholder={kbMessages.searchArticles} maxLength={200} aria-describedby="kb-search-hint"
+              <input type="search" value={text} placeholder={kbMessages.searchPlaceholder} maxLength={200} aria-describedby="kb-search-hint"
                 onChange={(event) => type(event.target.value)} />
             </label>
+            <span id="kb-search-hint" className="sr-only">{kbMessages.searchHint}</span>
             <fieldset className="segmented">
               <legend className="sr-only">{kbMessages.statusFilter}</legend>
-              {([[undefined, kbMessages.anyStatus], ['draft', kbMessages.draft], ['published', kbMessages.published]] as const).map(([value, label]) => (
+              {([[undefined, kbMessages.anyStatus], ['published', kbMessages.publishedFilter], ['draft', kbMessages.drafts]] as const).map(([value, label]) => (
                 <label key={label}><input type="radio" name="kb-status" checked={search.status === value} onChange={() => setSearch({ status: value })} />{label}</label>
               ))}
             </fieldset>
           </div>
-          <p id="kb-search-hint" className="kb-hint">{kbMessages.searchHint}</p>
-          {articles.isError && <p role="alert" className="error-copy">{kbMessages.listFailed}{' '}
-            <button type="button" className="link-action" onClick={() => void articles.refetch()}>{kbMessages.retry}</button></p>}
-          {articles.isPending && <p role="status" className="empty-copy">{messages.loading}</p>}
-          {articles.isSuccess && items.length === 0 && <p className="empty-copy">{search.q ? kbMessages.noMatches : kbMessages.noArticles}</p>}
-          {items.length > 0 && <ul className="kb-article-list" aria-busy={articles.isFetching && !articles.isFetchingNextPage} onPointerOver={editorPart.preload} onFocus={editorPart.preload}>
-            {items.map((article) => <ArticleRow key={article.id} article={article} timezone={timezone}
-              collection={selected ? undefined : names.get(article.collection_id)}
-              onOpen={() => void navigate({ to: '/knowledge/articles/$articleId', params: { articleId: article.id } })} />)}
-          </ul>}
-          {articles.hasNextPage && <button type="button" className="kb-more" disabled={articles.isFetchingNextPage} onClick={() => void articles.fetchNextPage()}>
-            {articles.isFetchingNextPage ? messages.loading : kbMessages.loadMore}</button>}
+          <div className="kb-cols-head" aria-hidden="true"><span>{kbMessages.articleColumn}</span><span>{kbMessages.statusFilter}</span><span>{kbMessages.updatedColumn}</span><span /></div>
+          <div className="kb-list-scroll">
+            {articles.isError && <p role="alert" className="error-copy kb-list-note">{kbMessages.listFailed}{' '}
+              <button type="button" className="link-action" onClick={() => void articles.refetch()}>{kbMessages.retry}</button></p>}
+            {articles.isPending && <p role="status" className="empty-copy kb-list-note">{messages.loading}</p>}
+            {articles.isSuccess && items.length === 0 && <p className="empty-copy kb-list-note">{search.q ? kbMessages.noMatches : kbMessages.noArticles}</p>}
+            {items.length > 0 && <ul className="kb-article-list" aria-busy={articles.isFetching && !articles.isFetchingNextPage} onPointerOver={editorPart.preload} onFocus={editorPart.preload}>
+              {items.map((article) => <ArticleRow key={article.id} article={article} timezone={timezone} isPublic={publicNow}
+                collection={names.get(article.collection_id)}
+                onOpen={() => void navigate({ to: '/knowledge/articles/$articleId', params: { articleId: article.id } })} />)}
+              {articles.hasNextPage && <li className="kb-more-row"><button type="button" className="kb-more" disabled={articles.isFetchingNextPage} onClick={() => void articles.fetchNextPage()}>
+                {articles.isFetchingNextPage ? messages.loading : kbMessages.loadMore}</button></li>}
+            </ul>}
+          </div>
         </section>
       </div>
     </main>
@@ -215,19 +229,28 @@ function CollectionHead({ node, tree, form, confirming, problem, onForm, onSave,
   );
 }
 
-function ArticleRow({ article, collection, timezone, onOpen }: { article: KBArticleSummary; collection?: string; timezone: string; onOpen: () => void }) {
+function ArticleRow({ article, collection, timezone, isPublic, onOpen }: { article: KBArticleSummary; collection?: string; timezone: string; isPublic?: boolean; onOpen: () => void }) {
   const change = article.last_change;
+  const published = article.status === 'published';
+  // Readers can open it only while it is published and the help center is on.
+  const open = published && isPublic === true;
   return (
-    <li>
+    <li className="kb-article-item">
       <RouterLink className="kb-article-row" href={`/knowledge/articles/${article.id}`} onFollow={onOpen}>
-        <span className="kb-article-title">{article.title}</span>
-        <span className="kb-article-meta">
-          <span className="badge" data-status={article.status}>{article.status === 'published' ? kbMessages.published : kbMessages.draft}</span>
-          <span>{kbMessages.articleNumber(article.number)}</span>
-          {collection && <span>{kbMessages.inCollection(collection)}</span>}
-          <span>{change ? `${savedReplyChangeText(change)} · ` : ''}<time dateTime={article.updated_at}>{formatDate(article.updated_at, timezone)}</time></span>
+        <span className="kb-article-main">
+          <span className="kb-article-title">{article.title}</span>
+          <span className="kb-article-meta">{[collection, kbMessages.articleNumber(article.number)].filter(Boolean).join(' · ')}</span>
         </span>
+        <span className="kb-article-status">
+          <span className="kb-dot-status" data-status={article.status}>{published ? kbMessages.published : kbMessages.draft}</span>
+          <small>{published ? (isPublic === false ? kbMessages.notPublic : isPublic ? kbMessages.public : '') : kbMessages.agentsOnly}</small>
+        </span>
+        <span className="kb-article-when"><time dateTime={article.updated_at}>{formatDate(article.updated_at, timezone)}</time>
+          {change && <small>{savedReplyChangeText(change)}</small>}</span>
       </RouterLink>
+      {open
+        ? <a className="kb-article-open icon-button" href={article.url} target="_blank" rel="noreferrer" aria-label={kbMessages.openPublic(article.title)} data-tip={kbMessages.openOnHelpCenter}><Icon name="external" /></a>
+        : <span className="kb-article-open" aria-hidden="true" title={published ? kbMessages.turnOnToOpen : undefined}><Icon name="external" /></span>}
     </li>
   );
 }
@@ -236,11 +259,7 @@ function ArticleRow({ article, collection, timezone, onOpen }: { article: KBArti
 function KBTrash({ timezone, onChanged, onClose }: { timezone: string; onChanged: () => void; onClose: () => void }) {
   const [now] = useState(() => new Date());
   return (
-    <section className="kb-trash" aria-label={kbMessages.trash}>
-      <div className="saved-reply-panel-head">
-        <h2>{kbMessages.trash}</h2>
-        <button type="button" onClick={onClose}>{kbMessages.closeTrash}</button>
-      </div>
+    <KBDialog title={kbMessages.trash} className="kb-trash" phone="full" closeLabel={kbMessages.closeTrash} onClose={onClose}>
       <SavedReplyTrash timezone={timezone} now={now} heading={kbMessages.articleTrash} description={kbMessages.articleTrashDescription}
         empty={kbMessages.articleTrashEmpty} failedMessage={kbMessages.articleActionFailed} text={() => ''}
         load={(cursor) => kbApi.trashedArticles(cursor)}
@@ -249,6 +268,6 @@ function KBTrash({ timezone, onChanged, onClose }: { timezone: string; onChanged
         empty={kbMessages.collectionTrashEmpty} failedMessage={kbMessages.collectionActionFailed} text={(item) => item.description}
         load={async () => ({ items: (await kbApi.trashedCollections()).items.map((item) => ({ ...item, title: item.name })) })}
         onUndelete={async (id, updatedAt) => { await kbApi.restoreCollection(id, updatedAt); onChanged(); }} />
-    </section>
+    </KBDialog>
   );
 }

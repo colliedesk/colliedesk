@@ -20,12 +20,12 @@ import type { PreviewVideo } from './markdown-preview';
 import { mediaApi } from './media-api';
 import type { KBMediaDetails } from './media-api';
 import { embedFor } from './media-grid';
-import { baseName, kindOf, uploadVideo } from './media-uploads';
+import { baseName, fileProblem, kindOf, uploadVideo } from './media-uploads';
+import { addPoster } from './video-poster';
 
 // The limits the server checks (server/internal/domain/kb.go), counted in characters like the server.
 export const maxTitle = 300;
 export const maxBody = 100000;
-const maxImageBytes = 5 * 1024 * 1024;
 
 // characters counts what a person sees as characters (Unicode code points), as the server does; a
 // string's length counts UTF-16 units, so an emoji would count twice.
@@ -263,10 +263,10 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     accept: (files) => {
       const problems: string[] = [];
       const accepted = files.filter((file) => {
-        const kind = kindOf(file);
-        if (!kind) { problems.push(kbMessages.imageType(file.name)); return false; }
-        if (kind === 'image' && file.size > maxImageBytes) { problems.push(kbMessages.imageTooLarge(file.name)); return false; }
-        return true;
+        const problem = fileProblem(file);
+        if (problem === 'type') problems.push(kbMessages.imageType(file.name));
+        if (problem === 'size') problems.push(kindOf(file) === 'video' ? kbMessages.videoTooLarge(file.name) : kbMessages.imageTooLarge(file.name));
+        return !problem;
       });
       setImageProblems(problems);
       return accepted;
@@ -290,6 +290,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       try {
         const item = await turn;
         if (!item) throw new DOMException('Cancelled', 'AbortError');
+        // The text gets the video at once; its poster, drawn from the file, follows on its own (video-poster.ts).
+        void addPoster(file, item);
         return { snippet: embedFor(item) };
       } catch (error) {
         // The editor cannot resume an upload: a failed or cancelled one is thrown away, so it holds none of the

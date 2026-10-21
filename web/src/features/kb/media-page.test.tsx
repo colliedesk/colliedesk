@@ -166,13 +166,15 @@ test('a video goes up in the parts the server asks for, resumes from the offset 
   const queue = new UploadQueue((stored_) => stored.push(stored_.id), send);
   const refused = queue.add([new File([new Uint8Array(20)], 'tour.mp4', { type: 'video/mp4' }), new File([new Uint8Array(4)], 'shot.png', { type: 'image/png' }), new File(['x'], 'notes.txt', { type: 'text/plain' })]);
   expect(refused).toEqual(['notes.txt']);
-  await waitFor(() => expect(queue.rows().every((row) => row.state === 'done')).toBe(true));
+  // The text file is a failed row of its own; nothing is sent for it.
+  await waitFor(() => expect(queue.rows().filter((row) => row.kind !== 'file').every((row) => row.state === 'done')).toBe(true));
+  expect(queue.rows()[2]).toMatchObject({ name: 'notes.txt', state: 'failed', permanent: true });
   expect(parts).toEqual(['0+8/20', '8+8/20', '16+4/20']);
   expect(calls.find((call) => call.path === '/api/v1/kb/media-uploads')?.body).toEqual({ size: 20, name: 'tour', keep: true });
   const image = calls.find((call) => call.path === '/api/v1/kb/images');
   expect(image?.search.get('keep')).toBe('true');
   expect(image?.search.get('name')).toBe('shot');
-  expect(queue.rows().map((row) => row.duplicate)).toEqual([false, true]);
+  expect(queue.rows().map((row) => row.duplicate)).toEqual([false, true, false]);
   expect(stored).toEqual([id(2), id(8)]);
 });
 
