@@ -30,13 +30,13 @@ const (
 // Record files in archive order. A record of an earlier file after a later one is a programming
 // error, because a ZIP entry is written in one piece.
 var recordFiles = []string{"agents.ndjson", "contacts.ndjson", "contact-merges.ndjson", "tags.ndjson", "saved-replies.ndjson", "saved-reply-versions.ndjson", "saved-views.ndjson",
-	"kb-collections.ndjson", "kb-articles.ndjson", "kb-article-versions.ndjson", "kb-article-translations.ndjson", "kb-images.ndjson", "help-center.ndjson",
+	"kb-collections.ndjson", "kb-articles.ndjson", "kb-article-versions.ndjson", "kb-article-translations.ndjson", "kb-images.ndjson", "kb-media-replacements.ndjson", "help-center.ndjson",
 	"agent-requests.ndjson", "conversations.ndjson"}
 
 var countKeys = map[string]string{
 	"agents.ndjson": "agents", "contacts.ndjson": "contacts", "contact-merges.ndjson": "contact_merges", "tags.ndjson": "tags", "saved-replies.ndjson": "saved_replies", "saved-reply-versions.ndjson": "saved_reply_versions", "saved-views.ndjson": "saved_views",
 	"kb-collections.ndjson": "kb_collections", "kb-articles.ndjson": "kb_articles", "kb-article-versions.ndjson": "kb_article_versions",
-	"kb-article-translations.ndjson": "kb_article_translations", "kb-images.ndjson": "kb_images", "help-center.ndjson": "help_center", "agent-requests.ndjson": "agent_requests", "conversations.ndjson": "conversations",
+	"kb-article-translations.ndjson": "kb_article_translations", "kb-images.ndjson": "kb_images", "kb-media-replacements.ndjson": "kb_media_replacements", "help-center.ndjson": "help_center", "agent-requests.ndjson": "agent_requests", "conversations.ndjson": "conversations",
 }
 
 // Opener reads stored attachment bytes; attachments.Storage satisfies it.
@@ -81,7 +81,7 @@ func NewWriter(out io.Writer, opener Opener, workspaceID string, exportedAt time
 		zip: zip.NewWriter(out), out: out, opener: opener, workspaceID: workspaceID,
 		exportedAt: exportedAt.UTC(), current: -1,
 		counts: map[string]int{"agents": 0, "contacts": 0, "tags": 0, "saved_replies": 0, "saved_reply_versions": 0, "saved_views": 0,
-			"kb_collections": 0, "kb_articles": 0, "kb_article_versions": 0, "kb_article_translations": 0, "kb_images": 0, "help_center": 0, "agent_requests": 0, "conversations": 0, "messages": 0, "attachments": 0, "time_entries": 0},
+			"kb_collections": 0, "kb_articles": 0, "kb_article_versions": 0, "kb_article_translations": 0, "kb_images": 0, "kb_media_replacements": 0, "help_center": 0, "agent_requests": 0, "conversations": 0, "messages": 0, "attachments": 0, "time_entries": 0},
 	}
 }
 
@@ -119,6 +119,9 @@ func (w *Writer) KBArticleVersion(record KBArticleVersion) error {
 }
 func (w *Writer) KBArticleTranslation(record KBArticleTranslation) error {
 	return w.record("kb-article-translations.ndjson", record)
+}
+func (w *Writer) KBMediaReplacement(record KBMediaReplacement) error {
+	return w.record("kb-media-replacements.ndjson", record)
 }
 func (w *Writer) HelpCenter(record HelpCenter) error {
 	return w.record("help-center.ndjson", record)

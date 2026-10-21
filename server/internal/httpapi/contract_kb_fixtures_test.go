@@ -22,6 +22,12 @@ type contractKB struct {
 	versionArticleID                 string
 	versionArticleSeen               string
 	imageID, imageSeen               string
+	// Library items: one to move to the trash, one to delete, two already in the trash.
+	trashMediaID, deleteMediaID  string
+	restoreMediaID, purgeMediaID string
+	// replaceMediaID is shown by an article; replacementID is a replacement made at seeding to undo.
+	replaceMediaID, replaceWithID string
+	replacementID                 string
 }
 
 func seedContractKB(t *testing.T, api http.Handler, admin string) contractKB {
@@ -41,7 +47,21 @@ func seedContractKB(t *testing.T, api http.Handler, admin string) contractKB {
 
 	image := uploadKBImage(t, api, admin, kbPNG, http.StatusCreated)
 	kb.imageID, kb.imageSeen = image.ID, image.UpdatedAt
+	kb.trashMediaID = uploadKBImage(t, api, admin, pngImage(201), http.StatusCreated).ID
+	kb.deleteMediaID = uploadKBImage(t, api, admin, pngImage(202), http.StatusCreated).ID
+	kb.restoreMediaID = uploadKBImage(t, api, admin, pngImage(203), http.StatusCreated).ID
+	kb.purgeMediaID = uploadKBImage(t, api, admin, pngImage(204), http.StatusCreated).ID
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/media/trash", map[string]any{"ids": []string{kb.restoreMediaID, kb.purgeMediaID}}, admin, http.StatusOK, nil)
+	kb.replaceMediaID = uploadKBImage(t, api, admin, pngImage(205), http.StatusCreated).ID
+	kb.replaceWithID = uploadKBImage(t, api, admin, pngImage(206), http.StatusCreated).ID
+	undone := uploadKBImage(t, api, admin, pngImage(207), http.StatusCreated).ID
+	var replacement struct {
+		ID string `json:"id"`
+	}
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/media/"+undone+"/replace", map[string]any{"with_media_id": kb.replaceWithID}, admin, http.StatusOK, &replacement)
+	kb.replacementID = replacement.ID
 	article := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Contract article", "body_md": "![Screen](" + image.URL + ")"})
+	kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Contract article to replace in", "body_md": "![Old](/api/v1/kb/images/" + kb.replaceMediaID + ")"})
 	kb.articleID, kb.articleSeen = article.ID, article.UpdatedAt
 	deleteArticle := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Contract article to delete", "body_md": "x"})
 	kb.deleteArticleID, kb.deleteArticleSeen = deleteArticle.ID, deleteArticle.UpdatedAt
@@ -92,6 +112,15 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"GET /api/v1/kb/images/{id}":                               {path: "/api/v1/kb/images/" + kb.imageID, token: admin, status: 200},
 		"GET /api/v1/kb/media":                                     {path: "/api/v1/kb/media?usage=unused&sort=largest", token: admin, status: 200},
 		"PATCH /api/v1/kb/media/{id}":                              {"/api/v1/kb/media/" + kb.imageID, map[string]any{"updated_at": kb.imageSeen, "alt": "The settings screen"}, admin, 200, ""},
+		"GET /api/v1/kb/media/trash":                               {path: "/api/v1/kb/media/trash", token: admin, status: 200},
+		"POST /api/v1/kb/media/trash":                              {"/api/v1/kb/media/trash", map[string]any{"ids": []string{kb.trashMediaID}}, admin, 200, ""},
+		"POST /api/v1/kb/media/trash-unused":                       {"/api/v1/kb/media/trash-unused", map[string]any{"before": "2100-01-01T00:00:00Z"}, admin, 200, ""},
+		"POST /api/v1/kb/media/restore":                            {"/api/v1/kb/media/restore", map[string]any{"ids": []string{kb.trashMediaID}}, admin, 200, ""},
+		"POST /api/v1/kb/media/purge":                              {"/api/v1/kb/media/purge", map[string]any{"ids": []string{kb.purgeMediaID}}, admin, 200, ""},
+		"DELETE /api/v1/kb/media/{id}":                             {path: "/api/v1/kb/media/" + kb.deleteMediaID, token: admin, status: 200},
+		"POST /api/v1/kb/media/{id}/restore":                       {path: "/api/v1/kb/media/" + kb.restoreMediaID + "/restore", token: admin, status: 200},
+		"POST /api/v1/kb/media/{id}/replace":                       {"/api/v1/kb/media/" + kb.replaceMediaID + "/replace", map[string]any{"with_media_id": kb.replaceWithID}, admin, 200, ""},
+		"POST /api/v1/kb/media-replacements/{id}/undo":             {path: "/api/v1/kb/media-replacements/" + kb.replacementID + "/undo", token: admin, status: 200},
 		"GET /api/v1/kb/media/{id}/details":                        {path: "/api/v1/kb/media/" + kb.imageID + "/details", token: admin, status: 200},
 		"GET /api/v1/kb/media/{id}/thumbnail":                      {path: "/api/v1/kb/media/" + kb.imageID + "/thumbnail", token: admin, status: 200},
 		"GET /api/v1/help-center":                                  {"/api/v1/help-center", nil, admin, 200, ""},

@@ -85,6 +85,19 @@ preview. An image no article ever saved is deleted 30 days after it was uploaded
 naming it or writing its alt text keeps it. For now the library is reached through the API and AI
 agents (below); its page in the web app comes next.
 
+Items no article uses can go to the library's **trash**: one at a time, a chosen set, or all unused
+items at once (kept ones only when you say so). An image a published or draft article still shows
+cannot go to the trash; change the article first. Saving an article that names an item in the trash
+takes it out again, and one Undo brings back everything a "move to trash" moved. Items stay 30 days
+in the trash and still count toward your storage until then; an admin can **delete them forever**
+earlier to free the space, which cannot be undone (articles in the trash and older versions that
+showed one then say "Media no longer exists").
+
+**Replacing** an item puts another image (or video, for a video) in its place in every article that
+shows it, as a new version of each article; published ones change on the help center at once. Undo
+the replacement to put the first one back. An article saved with an image that no longer exists is
+saved all the same, and the answer names the missing image.
+
 Only uploaded images are shown. An image linked from another site (`![x](https://…)`) is not shown in
 the preview or on the help center; the preview says so. Download it and paste it in instead.
 
@@ -215,7 +228,10 @@ articles (`colliedesk_kb_articles_search`, `colliedesk_kb_article_get`), write, 
 restore them, manage collections, upload and read images, and read the help center settings. In
 the media library (`colliedesk_kb_media_list`, `colliedesk_kb_media_get`) an agent sees which images
 no article uses and which have no alt text, and can name, describe or keep them
-(`colliedesk_kb_media_update`, the same tiers as writing an article).
+(`colliedesk_kb_media_update`), move them to the trash or back (`colliedesk_kb_media_trash`,
+`colliedesk_kb_media_undelete`) and replace one in every article (`colliedesk_kb_media_replace`), with
+the same tiers as writing an article. A request from a lower tier always names the images it would
+move. Deleting forever (`colliedesk_kb_media_purge`) is an admin's.
 
 | Token tier | Read, search, history, trash | Write, publish, delete, restore, upload images | Turn the help center on or off |
 |---|---|---|---|

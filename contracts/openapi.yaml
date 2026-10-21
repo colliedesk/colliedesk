@@ -2706,6 +2706,161 @@ paths:
                   summary: {$ref: '#/components/schemas/KBMediaUnusedSummary'}
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/kb/media/trash:
+    get:
+      operationId: listTrashedKBMedia
+      x-permission: conversations:read
+      description: >
+        The library's trash, last moved there first, 60 items a page unless `limit` says otherwise,
+        each with `purge_at`, when the daily purge deletes it (30 days after it was moved), and its
+        usage. An item in the trash still counts toward the plan's storage until it is purged.
+      parameters:
+        - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 60}}
+      responses:
+        '200':
+          description: A page of the trash
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/KBMedia'}}
+                  next_cursor: {type: [string, 'null'], description: Null on the last page.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: trashKBMedia
+      x-permission: conversations:write
+      description: >
+        Move up to 100 library items to the trash, each only while no live article's current text names
+        it, and answer each id: `trashed`, `already_in_trash`, `in_use` or `not_found`. Send the
+        `batch_id` of an earlier call to add to its batch; `POST /api/v1/kb/media/restore` with that
+        `batch_id` brings back the whole batch. Saving an article that names an item in the trash takes
+        it out again. Calling it twice changes nothing more.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids: {type: array, minItems: 1, maxItems: 100, items: {type: string, format: uuid}}
+                batch_id: {type: string, format: uuid}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: What happened to each item
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBMediaBatchResult'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/media/trash-unused:
+    post:
+      operationId: trashUnusedKBMedia
+      x-permission: conversations:write
+      description: >
+        Move to the trash up to 500 items no live article uses, added before `before` (when the person
+        opened the page, so nothing uploaded since is swept along), leaving kept items unless
+        `include_kept`. Call again with the answer's `batch_id` while `more` is true; one Undo
+        (`POST /api/v1/kb/media/restore` with that `batch_id`) restores everything moved. A token below
+        `send` gets an agent request naming the ids (at most 100 a request), so a person approves
+        exactly what will move.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [before]
+              properties:
+                before: {type: string, format: date-time}
+                include_kept: {type: boolean, default: false}
+                batch_id: {type: string, format: uuid}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: How many moved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [trashed, more, batch_id]
+                properties:
+                  trashed: {type: integer}
+                  more: {type: boolean, description: True while more unused items are left; call again with batch_id.}
+                  batch_id: {type: [string, 'null'], format: uuid, description: Null when nothing moved and no batch_id was sent.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/media/restore:
+    post:
+      operationId: restoreKBMediaBatch
+      x-permission: conversations:write
+      description: >
+        Take items out of the library's trash: up to 100 `ids`, or every item of a trash `batch_id`
+        (the Undo of a move to the trash). Answers each id: `restored`, `not_in_trash` or `not_found`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids: {type: array, minItems: 1, maxItems: 100, items: {type: string, format: uuid}}
+                batch_id: {type: string, format: uuid}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: What happened to each item
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results: {type: array, items: {$ref: '#/components/schemas/KBMediaResult'}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/media/purge:
+    post:
+      operationId: purgeKBMedia
+      x-permission: access:write
+      description: >
+        Delete for good up to 100 items that are in the library's trash, with their files, freeing their
+        storage now instead of after 30 days. Answers each id: `purged`, `not_in_trash` (only items in
+        the trash can be purged) or `not_found`. Articles in the trash and older versions that named one
+        then show "Media no longer exists". This cannot be undone. Admins only; a lower agent token gets
+        an agent request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids: {type: array, minItems: 1, maxItems: 100, items: {type: string, format: uuid}}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: What happened to each item
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results: {type: array, items: {$ref: '#/components/schemas/KBMediaResult'}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/kb/media/{id}:
     parameters: [{$ref: '#/components/parameters/ID'}]
     patch:
@@ -2734,6 +2889,86 @@ paths:
           description: The changed item
           content: {application/json: {schema: {$ref: '#/components/schemas/KBMedia'}}}
         '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: trashOneKBMedia
+      x-permission: conversations:write
+      description: >
+        Move one library item to the trash. 409 `media_in_use`, with the articles, while a live
+        article's current text names it: change those articles first. The answer's `batch_id` undoes
+        it (`POST /api/v1/kb/media/restore`), as does `POST /api/v1/kb/media/{id}/restore`.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: Moved to the trash, or already there
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBMediaBatchResult'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/media/{id}/restore:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: restoreKBMedia
+      x-permission: conversations:write
+      description: Take one item out of the library's trash. 404 when it is not in the trash or does not exist.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: The item
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBMedia'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/media/{id}/replace:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: replaceKBMedia
+      x-permission: conversations:write
+      description: >
+        Put another library item (`with_media_id`, an image for an image, a video for a video) in the
+        place of this one in every live article whose current text or a translation shows it. Each such
+        article gets a new version of kind `media_replace`, and published ones change on the help
+        center at once. Ids never change their bytes, so the new item keeps its own id and caches stay
+        right. The answer is the replacement; `POST /api/v1/kb/media-replacements/{id}/undo` reverses
+        it. 400 when the kinds differ.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [with_media_id]
+              properties:
+                with_media_id: {type: string, format: uuid}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: The replacement
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBMediaReplacement'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/media-replacements/{id}/undo:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: undoKBMediaReplacement
+      x-permission: conversations:write
+      description: >
+        Put back the text each article and translation had before the replacement, where nothing changed
+        since (an article whose newest version is still the replacement's, a translation that still
+        holds the replaced text), as new versions. Anything changed since keeps its text and is listed in
+        `skipped_article_ids`. Undoing twice changes nothing more. 409 `media_gone` when the replaced
+        item was deleted for good.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: The replacement, with undone_at
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBMediaReplacement'}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
@@ -3595,8 +3830,8 @@ components:
         version: {type: integer, minimum: 1}
         kind:
           type: string
-          enum: [create, edit, delete, restore, undelete, import]
-          description: 'restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk.'
+          enum: [create, edit, delete, restore, undelete, import, media_replace]
+          description: 'restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone.'
         restored_from_version: {type: [integer, 'null'], description: The version a restore copied.}
         changed_by:
           description: The person who made the change (or approved the agent request that made it); null for an import or a removed person.
@@ -3665,6 +3900,10 @@ components:
           description: Translations an import brought in. They are kept and exported; the help center does not show them yet.
           items: {$ref: '#/components/schemas/KBArticleTranslation'}
         deleted_at: {type: [string, 'null'], format: date-time, description: Set while the article is in the trash.}
+        missing_media:
+          type: array
+          description: 'Only in the answer to a save: ids the text names that no item of the media library has (it was purged, or never existed), shown as "Media no longer exists". The save went through.'
+          items: {type: string, format: uuid}
     TrashedKBArticle:
       type: object
       required: [id, number, collection_id, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, deleted_at, deleted_by, purges_at]
@@ -3694,7 +3933,7 @@ components:
       required: [version, kind, restored_from_version, changed_by, token, agent_request_id, created_at, title, slug, body_md, status, collection_id]
       properties:
         version: {type: integer, minimum: 1}
-        kind: {type: string, enum: [create, edit, delete, restore, undelete, import]}
+        kind: {type: string, enum: [create, edit, delete, restore, undelete, import, media_replace]}
         restored_from_version: {type: [integer, 'null']}
         changed_by:
           oneOf:
@@ -3763,6 +4002,37 @@ components:
                   status: {type: string, enum: [draft, published]}
                   in_trash: {type: boolean}
                   current: {type: boolean, description: False when only an older version names the item.}
+    KBMediaResult:
+      type: object
+      required: [id, status]
+      properties:
+        id: {type: string, format: uuid}
+        status: {type: string, enum: [trashed, already_in_trash, in_use, not_found, restored, not_in_trash, purged]}
+    KBMediaBatchResult:
+      type: object
+      required: [results, batch_id]
+      properties:
+        results: {type: array, items: {$ref: '#/components/schemas/KBMediaResult'}}
+        batch_id: {type: [string, 'null'], format: uuid, description: 'The trash batch the moved items joined, for Undo; null when nothing moved.'}
+    KBMediaReplacement:
+      type: object
+      required: [id, from_media_id, to_media_id, article_ids, translations, skipped_article_ids, created_at, undone_at]
+      properties:
+        id: {type: string, format: uuid}
+        from_media_id: {type: string, format: uuid}
+        to_media_id: {type: string, format: uuid}
+        article_ids: {type: array, items: {type: string, format: uuid}, description: The articles that got a new version.}
+        translations:
+          type: array
+          items:
+            type: object
+            required: [article_id, locale]
+            properties:
+              article_id: {type: string, format: uuid}
+              locale: {type: string}
+        skipped_article_ids: {type: array, items: {type: string, format: uuid}, description: 'After an undo: the articles (or their translations) that changed since the replacement and kept their text.'}
+        created_at: {type: string, format: date-time}
+        undone_at: {type: [string, 'null'], format: date-time}
     KBMediaUnusedSummary:
       type: object
       required: [count, bytes, kept_count, kept_bytes]
@@ -4277,6 +4547,17 @@ components:
               description: 'Present on validation errors (422), one message per bad field name'
               additionalProperties: {type: string}
             retry_after_seconds: {type: integer, description: 'Only on trial_outbound_limit: seconds until a reply can be sent.'}
+            articles:
+              type: array
+              description: 'Only on media_in_use: the live articles whose current text names the item.'
+              items:
+                type: object
+                required: [id, number, title, status]
+                properties:
+                  id: {type: string, format: uuid}
+                  number: {type: integer}
+                  title: {type: string}
+                  status: {type: string, enum: [draft, published]}
             refused_cc:
               type: array
               items: {type: string}

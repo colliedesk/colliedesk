@@ -108,6 +108,12 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_media_list` | Lists the media library: what no article uses (with the space it takes) and images missing alt text | `read` |
 | `colliedesk_kb_media_get` | Shows one library item, its thumbnail and the articles that use it | `read` |
 | `colliedesk_kb_media_update` | Names an item, writes its alt text, or keeps it from the purge of unused images | `send` |
+| `colliedesk_kb_media_trash` | Moves library items to the trash by id, or all unused ones; a lower tier's request names the ids | `send` |
+| `colliedesk_kb_media_trash_list` | Lists the library's trash, with when each item is deleted for good | `read` |
+| `colliedesk_kb_media_undelete` | Takes items out of the trash, by id or a whole "move to trash" batch | `send` |
+| `colliedesk_kb_media_purge` | Deletes items in the trash for good, freeing their storage | `admin` |
+| `colliedesk_kb_media_replace` | Puts another image or video in place of one in every article that shows it | `send` |
+| `colliedesk_kb_media_replace_undo` | Undoes a replacement | `send` |
 | `colliedesk_help_center_get` | Says whether the public help center is on, its title and language | `read` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any |
 | `colliedesk_docs_search` | Searches these user guides | any |

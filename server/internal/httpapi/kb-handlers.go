@@ -273,6 +273,7 @@ func (a *API) createKBArticle(response http.ResponseWriter, request *http.Reques
 		writeKBError(response, err)
 		return
 	}
+	a.warnMissingKBMedia(request.Context(), who.Workspace.ID, &article)
 	writeJSON(response, http.StatusCreated, article)
 }
 
@@ -297,6 +298,7 @@ func (a *API) updateKBArticle(response http.ResponseWriter, request *http.Reques
 		writeKBError(response, err)
 		return
 	}
+	a.warnMissingKBMedia(request.Context(), who.Workspace.ID, &article)
 	writeJSON(response, http.StatusOK, article)
 }
 
@@ -373,6 +375,7 @@ func (a *API) restoreKBArticleVersion(response http.ResponseWriter, request *htt
 		writeKBError(response, err)
 		return
 	}
+	a.warnMissingKBMedia(request.Context(), who.Workspace.ID, &article)
 	writeJSON(response, http.StatusOK, article)
 }
 

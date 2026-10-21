@@ -78,9 +78,14 @@ The public help center is in `help-center.md`.
 - **"In use" is a live article's current text.** An article in the trash and an older version only are
   counted apart (`usage.trashed_articles`, `usage.older_versions`) and do not keep an item "in use".
   `linkKBMedia` reads the article's text and every translation from the database (a translation's write
-  must not unmark the main text's links), takes named items out of the library's trash (rows locked in
-  id order), then locks every named row `FOR SHARE`, inserts links and sets `current`. Share first and
-  update after deadlocked two saves naming the same trashed item.
+  must not unmark the main text's links), takes the named items in the trash out of it (locked in id
+  order), then locks every named item `FOR SHARE` in id order, restores any a trash committed while it
+  waited, inserts links and sets `current`. Shares let saves and replacements that name one item run
+  side by side. A trash locks only live rows and a restore or purge only trashed ones (`FOR UPDATE`, id
+  order), so none waits on a save that holds the other side. A replacement locks all its articles in
+  id order, then all their media the same way, before it writes. Tried and dropped: `FOR SHARE` then
+  an update deadlocked two saves of one trashed item; every named item `FOR NO KEY UPDATE` deadlocked
+  a replacement against a save (34 of 40 rounds).
 - **The purge keeps what someone kept.** It deletes an item in the library's trash for 30 days, or one
   not `kept`, linked by no version and last uploaded 30 days ago; either way never one a live article's
   current text names. It locks the rows `FOR UPDATE SKIP LOCKED` first, then checks the rule again in a
@@ -88,6 +93,21 @@ The public help center is in `help-center.md`.
   on the links, so a save that committed a link while the DELETE waited would lose its item. Uploading
   in the library (`keep=true`) or naming an item or writing its alt text keeps it. A Freshdesk undo
   leaves kept images.
+- **The library's trash goes by batch.** Trash, restore and purge take at most 100 ids (an agent
+  request names them all, so a person approves exactly what moves); "all unused" moves 500 a call
+  under one `kb_media_batches` row, so one Undo restores everything. A token below `send` calling
+  `trash-unused` files a request for `POST /kb/media/trash` with the ids it would move, never "all".
+  `before` (when the page was read) keeps an item uploaded since out of it. Batches go after 30 days.
+- **A replacement is a new version, not new bytes.** An id always names the same bytes (cache
+  `immutable`), so replacing writes the other item's id into every live article's current text and
+  translations (version kind `media_replace`), and `kb_media_replacements` keeps the version each
+  article got and each translation's text before and after. An undo puts back the version before
+  where the replacement's version is still the newest, and a translation's text where it still holds
+  the replaced text; anything changed since stays and is listed (`skipped_article_ids`). Rewriting
+  every link of the new item back would have also changed one the article had before. An undo after
+  the old item was purged is refused (`media_gone`). Zendesk keeps the URL instead; we do not.
+- **A restore starts the 30 days again.** Taking an item out of the trash (or a save that does) sets
+  `last_uploaded_at`, or an old item nobody kept would go with the next purge.
 - **Limits:** 10,000 library items per workspace, the trash included (`domain.MaxKBMedia`, counted
   under `lockKB`); 5 MiB, 8,192 px on a side and 40 megapixels per image.
 - **Tiers.** Reads are `read`; writes, publishing and image uploads are `send` like saved replies (a

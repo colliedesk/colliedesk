@@ -44,6 +44,8 @@ const (
 	KBArticleRestored  = "restore"
 	KBArticleUndeleted = "undelete"
 	KBArticleImported  = "import"
+	// KBArticleMediaReplaced: a library item was replaced in the text, or the replacement undone.
+	KBArticleMediaReplaced = "media_replace"
 )
 
 // Article statuses.
@@ -106,6 +108,9 @@ type KBArticle struct {
 	HasSourceHTML bool                   `json:"has_source_html"`
 	Translations  []KBArticleTranslation `json:"translations"`
 	DeletedAt     *time.Time             `json:"deleted_at"`
+	// MissingMedia is set only in the answer to a save: media ids the text names that the library
+	// does not have.
+	MissingMedia []string `json:"missing_media,omitempty"`
 }
 
 // TrashedKBArticle is a deleted article, restorable until PurgesAt.

@@ -427,7 +427,7 @@ func (s *Store) UndeleteKBCollection(ctx context.Context, workspaceID string, ac
 }
 
 // kbErrors are the refusals the API maps; anything else is wrapped as a store failure.
-var kbErrors = []error{domain.ErrKBArticleNotFound, domain.ErrKBArticleVersionNotFound, domain.ErrKBCollectionNotFound, domain.ErrKBImageNotFound, domain.ErrKBMediaNotFound,
+var kbErrors = []error{domain.ErrKBArticleNotFound, domain.ErrKBArticleVersionNotFound, domain.ErrKBCollectionNotFound, domain.ErrKBImageNotFound, domain.ErrKBMediaNotFound, domain.ErrKBMediaBatchNotFound,
 	domain.ErrKBChanged, domain.ErrKBDuplicateSlug, domain.ErrKBCollectionNotEmpty, domain.ErrKBParentInTrash, domain.ErrKBCollectionInTrash,
 	domain.ErrKBArticleLimit, domain.ErrKBCollectionLimit}
 

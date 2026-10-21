@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
@@ -175,6 +176,11 @@ func TestSolutionsBecomeTheKnowledgeBaseWithOriginalTimestampsDraftsAndTranslati
 	}
 	if !strings.Contains(api, "![Token page](/api/v1/kb/images/"+imageID+")") || !strings.Contains(api, env.fake.files.URL+"/inline-kb-gone") || counted {
 		t.Fatalf("article 104 body = %q, image %s counted=%v", api, imageID, counted)
+	}
+	var imageName, imageAlt string
+	if err := env.pool.QueryRow(context.Background(), `SELECT name, alt FROM kb_media WHERE id=$1`, imageID).Scan(&imageName, &imageAlt); err != nil ||
+		imageName != "inline-kb-7001" || imageAlt != "Token page" {
+		t.Fatalf("image name %q alt %q (%v), want the file name and the alt of its <img>", imageName, imageAlt, err)
 	}
 	if !strings.Contains(imageSource, "inline-kb-7001") {
 		t.Fatalf("the original HTML was changed: %q", imageSource)
@@ -425,6 +431,39 @@ func TestSolutionsRerunUpdatesFreshdeskChangesAndKeepsColliedeskEdits(t *testing
 	}
 	if upcoming := after["102"]; upcoming.Body != "Changed in Freshdesk." || upcoming.Status != "published" || !upcoming.UpdatedAt.Equal(time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC)) || upcoming.ID != before["102"].ID {
 		t.Fatalf("article 102 = %+v", upcoming)
+	}
+}
+
+func TestSolutionsOverTheMediaCapAreRefused(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	ctx := context.Background()
+	if _, err := env.pool.Exec(ctx, `INSERT INTO kb_media(workspace_id,storage_key,sha256,size,content_type)
+		SELECT $1::uuid, $1::text||'/00/'||lpad(to_hex(n),64,'0'), lpad(to_hex(n),64,'0'), 10, 'image/png' FROM generate_series(1,$2::int) n`, env.workspaceID, domain.MaxKBMedia); err != nil {
+		t.Fatal(err)
+	}
+	_, err := env.run(t, ctx, nil)
+	if err == nil || !strings.Contains(err.Error(), "media library (the trash counts) and the import may add") {
+		t.Fatalf("err = %v", err)
+	}
+	if env.count(t, "kb_articles") != 0 {
+		t.Fatalf("written: %s", env.tableCounts(t))
+	}
+}
+
+// An imported image a person kept in the media library stays when the import is undone.
+func TestSolutionsUndoLeavesImagesAPersonKept(t *testing.T) {
+	env := newImportEnv(t).withSolutions()
+	ctx := context.Background()
+	env.mustRun(t)
+	if _, err := env.pool.Exec(ctx, `UPDATE kb_media SET kept=true WHERE workspace_id=$1`, env.workspaceID); err != nil {
+		t.Fatal(err)
+	}
+	result, err := freshdesk.Undo(ctx, env.pool, env.storage, freshdesk.UndoOptions{WorkspaceSlug: "acme-support"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.KBImages != 0 || result.KeptKBImages != 1 || env.count(t, "kb_media") != 1 {
+		t.Fatalf("undo = %+v, media left %d", result, env.count(t, "kb_media"))
 	}
 }
 

@@ -4,7 +4,7 @@ import { messages } from '../messages';
 // savedReplyChangeText says who made a change to a saved reply and how: "Edited by Ada via Claude
 // triage", "Version 2 restored by Ada", or for an approved agent request "Edited by Ada via Claude
 // triage (approved request)". A knowledge base article's history reads the same, and adds imports.
-export function savedReplyChangeText(change: Pick<SavedReplyChange, 'restored_from_version' | 'changed_by' | 'token' | 'agent_request_id'> & { kind: SavedReplyChange['kind'] | 'import' }): string {
+export function savedReplyChangeText(change: Pick<SavedReplyChange, 'restored_from_version' | 'changed_by' | 'token' | 'agent_request_id'> & { kind: SavedReplyChange['kind'] | 'import' | 'media_replace' }): string {
   const what = change.kind === 'restore' && change.restored_from_version !== null
     ? messages.savedReplyRestoredVersion(change.restored_from_version)
     : messages.savedReplyChangeVerb[change.kind];

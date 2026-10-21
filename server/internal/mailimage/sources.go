@@ -95,6 +95,27 @@ func MapSources(markup string, fn func(src string) (string, bool)) string {
 	})
 }
 
+// ImageAlts returns the alt text of the first <img> of each src (HTML entities decoded), for an
+// import that names the images it brings in.
+func ImageAlts(markup string) map[string]string {
+	alts := map[string]string{}
+	mapImgTags(markup, func(tag *html.Token) {
+		var src, alt string
+		for _, attribute := range tag.Attr {
+			switch attribute.Key {
+			case "src":
+				src = attribute.Val
+			case "alt":
+				alt = attribute.Val
+			}
+		}
+		if _, seen := alts[src]; src != "" && !seen {
+			alts[src] = alt
+		}
+	})
+	return alts
+}
+
 // ParseSrc parses an http or https image address; a protocol-relative one is read as https.
 func ParseSrc(src string) (*url.URL, bool) {
 	src = strings.TrimSpace(src)

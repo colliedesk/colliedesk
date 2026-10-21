@@ -230,21 +230,9 @@ func linkKBMedia(ctx context.Context, tx pgx.Tx, workspaceID, articleID string) 
 	if named == nil {
 		named = []string{}
 	}
-	// Named items in the trash come out of it first, locked in id order: taking FOR SHARE first and
-	// then updating would deadlock two saves that name the same trashed item. Then every named row is
-	// locked FOR SHARE, so a purge of it waits or has already happened.
-	if _, err := tx.Exec(ctx, `UPDATE kb_media m SET deleted_at=NULL, deleted_by_agent_id=NULL, updated_at=clock_timestamp()
-		FROM (SELECT id FROM kb_media WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND deleted_at IS NOT NULL ORDER BY id FOR NO KEY UPDATE) t
-		WHERE m.workspace_id=$1 AND m.id=t.id AND m.deleted_at IS NOT NULL`, workspaceID, named); err != nil {
-		return nil, fmt.Errorf("restore knowledge base media from the trash: %w", err)
-	}
-	rows, err := tx.Query(ctx, `SELECT id::text FROM kb_media WHERE workspace_id=$1 AND id=ANY($2::uuid[]) ORDER BY id FOR SHARE`, workspaceID, named)
+	found, err := lockNamedKBMedia(ctx, tx, workspaceID, named)
 	if err != nil {
-		return nil, fmt.Errorf("lock knowledge base media: %w", err)
-	}
-	found, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
-		return nil, fmt.Errorf("lock knowledge base media: %w", err)
+		return nil, err
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_media(workspace_id,article_id,media_id,current)
 		SELECT $1,$2,id,true FROM unnest($3::uuid[]) id ON CONFLICT (workspace_id,article_id,media_id) DO NOTHING`, workspaceID, articleID, found); err != nil {
@@ -261,6 +249,46 @@ func linkKBMedia(ctx context.Context, tx pgx.Tx, workspaceID, articleID string) 
 		}
 	}
 	return missing, nil
+}
+
+// lockNamedKBMedia takes the items of named that are in the library's trash out of it, then locks every
+// named item FOR SHARE, both in id order, and returns the ids that exist. Shares let saves and
+// replacements that name the same item run side by side; a trash, restore or purge waits. Only items in
+// the trash are locked exclusively, and the trash's own writes lock only the rows of their side (a
+// trash only live rows, a restore or purge only trashed ones), so no two of them wait on each other in
+// a cycle. Taking FOR SHARE first and updating after deadlocked two saves of one trashed item;
+// locking every named item exclusively deadlocked a replacement against a save.
+func lockNamedKBMedia(ctx context.Context, tx pgx.Tx, workspaceID string, named []string) ([]string, error) {
+	if _, err := tx.Exec(ctx, `UPDATE kb_media m SET deleted_at=NULL, deleted_by_agent_id=NULL, updated_at=clock_timestamp(), last_uploaded_at=clock_timestamp()
+		FROM (SELECT id FROM kb_media WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND deleted_at IS NOT NULL ORDER BY id FOR NO KEY UPDATE) t
+		WHERE m.workspace_id=$1 AND m.id=t.id AND m.deleted_at IS NOT NULL`, workspaceID, named); err != nil {
+		return nil, fmt.Errorf("restore knowledge base media from the trash: %w", err)
+	}
+	rows, err := tx.Query(ctx, `SELECT id::text, deleted_at IS NOT NULL FROM kb_media WHERE workspace_id=$1 AND id=ANY($2::uuid[]) ORDER BY id FOR SHARE`, workspaceID, named)
+	if err != nil {
+		return nil, fmt.Errorf("lock knowledge base media: %w", err)
+	}
+	var found, trashedSince []string
+	var id string
+	var inTrash bool
+	if _, err := pgx.ForEachRow(rows, []any{&id, &inTrash}, func() error {
+		found = append(found, id)
+		if inTrash {
+			trashedSince = append(trashedSince, id)
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("lock knowledge base media: %w", err)
+	}
+	// A move to the trash that committed while the share waited for it is undone now, under the share,
+	// so nothing can trash the item again before this save commits.
+	if len(trashedSince) > 0 {
+		if _, err := tx.Exec(ctx, `UPDATE kb_media SET deleted_at=NULL, deleted_by_agent_id=NULL, updated_at=clock_timestamp(), last_uploaded_at=clock_timestamp()
+			WHERE workspace_id=$1 AND id=ANY($2::uuid[])`, workspaceID, trashedSince); err != nil {
+			return nil, fmt.Errorf("restore knowledge base media from the trash: %w", err)
+		}
+	}
+	return found, nil
 }
 
 // admitKBArticle takes the knowledge base lock, refuses a full workspace (the trash counts) and returns
