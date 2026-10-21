@@ -408,7 +408,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .cloud-signup .primary-action { --control: 44px; }
 /* The goal is a radio list; role and source are drop-downs side by side, so the button fits a laptop screen. */
 .signup-question { display: grid; margin: 0; border: 0; padding: 0; min-width: 0; }
-.signup-pickers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.signup-pickers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); align-items: end; }
+.signup-pickers > .field { min-width: 0; }
+.signup-pickers select { width: 100%; }
 .signup-question legend { grid-column: 1 / -1; float: left; width: 100%; padding: 0; margin-bottom: var(--space-1); }
 @media (max-width: 44rem) {
   .signup-pickers { grid-template-columns: 1fr; }
