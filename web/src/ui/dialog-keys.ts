@@ -4,12 +4,13 @@ import type { KeyboardEvent, MouseEvent, RefObject } from 'react';
 const FOCUSABLE = 'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary';
 
 // dialogKeys handles the keys of a modal dialog: Escape closes it, and Tab wraps so the page behind the
-// dialog is not reached from the keyboard.
+// dialog is not reached from the keyboard. Controls inside a hidden part (a tab not shown) are not reachable, so
+// they are neither the first nor the last.
 export function dialogKeys(root: RefObject<HTMLElement | null>, onClose: () => void) {
   return (event: KeyboardEvent) => {
     if (event.key === 'Escape') { onClose(); return; }
     if (event.key !== 'Tab') return;
-    const items = Array.from(root.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])
+    const items = Array.from(root.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter((item) => !item.closest('[hidden]'))
       .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
     const first = items[0];
     const last = items[items.length - 1];

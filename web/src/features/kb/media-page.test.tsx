@@ -379,3 +379,16 @@ test('on a phone the panel is a modal sheet: a dialog, and Tab from its last con
   fireEvent.keyDown(save, { key: 'Tab' });
   expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Close details' }));
 });
+
+test('on a phone, Tab from the last control the person can reach wraps in the sheet, past the controls of hidden tabs', async () => {
+  const phone = { matches: true, addEventListener: () => undefined, removeEventListener: () => undefined };
+  vi.stubGlobal('matchMedia', (text: string) => (text.includes('44rem') ? phone : { ...phone, matches: false }));
+  serve({ ...base, [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, articles: [{ id: id(9), number: 12, title: 'Getting started', status: 'published', in_trash: false, current: true }] }) });
+  open('library', { item: id(2) });
+  const sheet = await screen.findByRole('dialog', { name: 'Product tour' });
+  // Nothing changed: Save and Discard are disabled, so the Keep box is the last control on screen.
+  const keep = within(sheet).getByRole('checkbox', { name: /^Keep even when no article uses it/ });
+  keep.focus();
+  fireEvent.keyDown(keep, { key: 'Tab' });
+  expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Close details' }));
+});
