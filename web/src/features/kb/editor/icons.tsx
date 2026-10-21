@@ -20,19 +20,43 @@ const paths = {
   search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14M21 21l-5-5',
   undo: 'M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11',
   redo: 'm15 14 5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13',
+  text: 'M4 7V4h16v3M9 20h6M12 4v16',
+  h1: 'M4 6v12M12 6v12M4 12h8M17 10l3-2v10',
+  h2: 'M4 6v12M12 6v12M4 12h8M16 10a2.5 2.5 0 0 1 5 0c0 2-5 4-5 8h5',
+  h3: 'M4 6v12M12 6v12M4 12h8M16.5 8h4l-2.5 4a2.5 2.5 0 1 1-2 4',
+  // The knowledge base pages around the editor.
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  close: 'M18 6 6 18M6 6l12 12',
+  plus: 'M12 5v14M5 12h14',
+  trash: 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6',
+  chevronDown: 'm6 9 6 6 6-6',
+  chevronUp: 'm18 15-6-6-6 6',
+  chevronLeft: 'm15 18-6-6 6-6',
+  copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
+  download: 'M12 3v12M7 10l5 5 5-5M4 19h16',
+  replace: 'M21 12a9 9 0 0 1-15 6.7L3 16M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M3 21v-5h5',
+  history: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2',
+  globe: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18',
+  external: 'M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6',
+  pin: 'M12 17v5M9 3h6l-1 6 3 4H7l3-4z',
+  alert: 'M12 8v5M12 16h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18',
+  check: 'M20 6 9 17l-5-5',
+  pause: 'M8 5v14M16 5v14',
+  info: 'M12 11v5M12 8h.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18',
+  filter: 'M3 6h18M7 12h10M10 18h4',
 } as const;
 
 export type IconName = keyof typeof paths;
 
-export function Icon({ name }: { name: IconName }) {
+export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
   return (
     <svg
-      width="16"
-      height="16"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.75"
+      strokeWidth={name === 'more' ? 2.75 : 1.75}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

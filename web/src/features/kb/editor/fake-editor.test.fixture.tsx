@@ -26,6 +26,13 @@ export default function FakeEditor({ initial, uploads, label, describedBy, inval
       load: (markdown) => { const text = markdown.replace(/\r\n?/g, '\n'); put(text); emitted.current = text; },
       uploading: () => pending.current > 0,
       focus: () => {},
+      replace: (find, by) => {
+        const at = text.current.indexOf(find);
+        if (at < 0) return false;
+        put(`${text.current.slice(0, at)}${by}${text.current.slice(at + find.length)}`);
+        emit();
+        return true;
+      },
     });
     return () => window.clearTimeout(timer.current);
     // Made once, as the real editor is.

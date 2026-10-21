@@ -105,3 +105,22 @@ test('the trash restores an article with the version it shows', async () => {
   fireEvent.click(await within(panel).findByRole('button', { name: 'Restore Old pricing' }));
   await waitFor(() => expect(calls.find((call) => call.path.endsWith('/restore'))?.body).toEqual({ updated_at: trashed.updated_at }));
 });
+
+test('while the help center is off, the page says published articles are not public, and how to turn it on', async () => {
+  serve({ ...base, 'GET /api/v1/help-center': () => json(200, { enabled: false, title: '', locale: 'en', content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' }) });
+  open();
+  expect((await screen.findByText('The help center is off.')).closest('[role="status"]')).toHaveTextContent('only agents can read them');
+  expect(screen.getByRole('link', { name: 'Turn on in Settings' })).toHaveAttribute('href', '/settings#help-center-heading');
+  const row = (await screen.findByRole('link', { name: /Reset your password/ })).closest('li')!;
+  expect(row).toHaveTextContent('not public: help center off');
+  expect(within(row).queryByRole('link', { name: 'Open Reset your password on the help center' })).not.toBeInTheDocument();
+  expect((await screen.findByRole('link', { name: /Add a teammate/ })).closest('li')).toHaveTextContent('agents only');
+});
+
+test('while the help center is on, a published article opens on its public page', async () => {
+  serve({ ...base, 'GET /api/v1/help-center': () => json(200, { enabled: true, title: '', locale: 'en', content_version: 1, updated_at: null, url: 'https://desk.example.com/help/acme' }) });
+  open();
+  const link = await screen.findByRole('link', { name: 'Open Reset your password on the help center' });
+  expect(link).toHaveAttribute('href', summary(1, 'Reset your password', 'published').url);
+  expect(screen.queryByText('The help center is off.')).not.toBeInTheDocument();
+});

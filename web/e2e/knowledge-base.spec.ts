@@ -31,7 +31,8 @@ test('knowledge base: a collection, an article written in the Markdown editor wi
   await page.keyboard.type('## Steps');
   await page.keyboard.press('Enter');
   await page.keyboard.press('Enter');
-  await page.getByRole('toolbar', { name: 'Formatting' }).getByRole('button', { name: 'Checklist' }).click();
+  await page.getByRole('toolbar', { name: 'Formatting' }).getByRole('button', { name: 'More formatting' }).click();
+  await page.getByRole('menuitem', { name: 'Checklist' }).click();
   await page.keyboard.type('Open Settings');
   // A pasted image is uploaded and becomes a paragraph of its own after the line; nothing holds its place in the text.
   await text.evaluate((field, bytes) => {
@@ -47,7 +48,9 @@ test('knowledge base: a collection, an article written in the Markdown editor wi
   await expect(preview.getByRole('img', { name: 'login' })).toHaveJSProperty('naturalWidth', 1);
   await page.getByRole('button', { name: 'Save and publish' }).click();
   await expect(page).toHaveURL(/\/knowledge\/articles\/[0-9a-f-]{36}$/);
-  await expect(page.getByRole('button', { name: 'Unpublish' })).toBeVisible();
+  await page.getByRole('button', { name: 'More article actions' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Unpublish' })).toBeVisible();
+  await page.keyboard.press('Escape');
   const id = page.url().split('/').pop()!;
   const saved = await (await page.request.get(`${servers.main}/api/v1/kb/articles/${id}`)).json() as { body_md: string };
   expect(saved.body_md).toMatch(/^## Steps\n\n- \[ \] Open Settings\n\n!\[login\]\(\/api\/v1\/kb\/images\/[0-9a-f-]{36}\)\n?$/);
@@ -55,13 +58,16 @@ test('knowledge base: a collection, an article written in the Markdown editor wi
   await page.getByRole('textbox', { name: 'Title' }).fill('Reset a password');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: 'History' }).click();
+  await page.getByRole('button', { name: 'More article actions' }).click();
+  await page.getByRole('menuitem', { name: 'Version history' }).click();
   const history = page.getByRole('region', { name: 'History of Reset a password' });
   await history.getByRole('button', { name: 'Restore version 1' }).click();
   await expect(page.getByRole('textbox', { name: 'Title' })).toHaveValue('Reset your password');
 
-  await page.getByRole('button', { name: 'Delete' }).click();
-  await page.getByRole('button', { name: 'Move to trash' }).click();
+  await page.getByRole('button', { name: 'Close history' }).click();
+  await page.getByRole('button', { name: 'More article actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete article…' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Move to trash' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Knowledge base' })).toBeVisible();
   await expect(page.getByText('No articles here yet.')).toBeVisible();
   await page.getByRole('button', { name: 'Trash' }).click();
@@ -97,7 +103,9 @@ test('knowledge base: an article opened and published untouched keeps its Markdo
   expect(await page.evaluate(() => (window as { ran?: number }).ran)).toBeUndefined();
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Publish', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Unpublish' })).toBeVisible();
+  await page.getByRole('button', { name: 'More article actions' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Unpublish' })).toBeVisible();
+  await page.keyboard.press('Escape');
   const stored = await (await page.request.get(`${servers.main}/api/v1/kb/articles/${id}`)).json() as { body_md: string; status: string };
   expect(stored).toMatchObject({ body_md: body, status: 'published' });
   expect(external).toEqual([]);
@@ -129,7 +137,8 @@ test('knowledge base: Insert video puts a YouTube player in the article, which t
   await page.getByRole('tab', { name: 'Write' }).click();
   await page.getByRole('textbox', { name: 'Text (Markdown)' }).click();
   await page.keyboard.press('ControlOrMeta+End');
-  await page.getByRole('button', { name: 'Insert video' }).click();
+  await page.getByRole('button', { name: 'Insert image or video' }).click();
+  await page.getByRole('menuitem', { name: /^YouTube or Vimeo link/ }).click();
   const link = page.getByRole('textbox', { name: 'YouTube or Vimeo link' });
   await expect(link).toBeFocused();
   await link.fill('https://evil.example/watch?v=x');
@@ -143,7 +152,9 @@ test('knowledge base: Insert video puts a YouTube player in the article, which t
   await expect(frame).toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=65');
   await expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
   await page.getByRole('button', { name: 'Save and publish' }).click();
-  await expect(page.getByRole('button', { name: 'Unpublish' })).toBeVisible();
+  await page.getByRole('button', { name: 'More article actions' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Unpublish' })).toBeVisible();
+  await page.keyboard.press('Escape');
 
   const response = await page.goto(`${servers.main}/help/${slug}/a/1-tour`);
   expect(response?.headers()['content-security-policy']).toContain('frame-src https://www.youtube-nocookie.com https://player.vimeo.com');
@@ -164,7 +175,7 @@ test('knowledge base: a WebM uploaded in the media library plays in a published 
   await page.goto(`${servers.main}/knowledge/media`);
   await expect(page.getByRole('heading', { level: 1, name: 'Media' })).toBeVisible();
   await page.locator('input[type="file"]').setInputFiles(path.resolve(import.meta.dirname, '../../server/internal/media/testdata/video/vp9.webm'));
-  await expect(page.getByRole('region', { name: 'Uploads' })).toContainText('Uploaded');
+  await expect(page.getByRole('region', { name: /upload/ })).toContainText('1 added');
   const card = page.getByRole('button', { name: /^vp9, video,/ });
   await card.click();
   const panel = page.getByRole('complementary', { name: 'vp9' });
@@ -183,13 +194,18 @@ test('knowledge base: a WebM uploaded in the media library plays in a published 
   await page.getByRole('tab', { name: 'Write' }).click();
   await page.getByRole('textbox', { name: 'Text (Markdown)' }).click();
   await page.keyboard.press('ControlOrMeta+End');
-  await page.getByRole('button', { name: 'Media' }).click();
-  await page.getByRole('group', { name: 'Insert from the media library' }).getByRole('button', { name: /^Product tour, video,/ }).click();
+  await page.getByRole('button', { name: 'Insert image or video' }).click();
+  await page.getByRole('menuitem', { name: /^From the media library/ }).click();
+  const picker = page.getByRole('dialog', { name: 'Insert from the media library' });
+  await picker.getByRole('option', { name: /^Product tour, video,/ }).click();
+  await picker.getByRole('button', { name: 'Insert 1' }).click();
   await expect(page.getByRole('textbox', { name: 'Text (Markdown)' })).toContainText(`<video controls preload="metadata" src="/api/v1/kb/media/${id}" title="Product tour"></video>`);
   await page.getByRole('tab', { name: 'Preview' }).click();
   await expect(page.getByRole('region', { name: 'Preview' }).locator('video')).toHaveAttribute('src', `/api/v1/kb/media/${id}`);
   await page.getByRole('button', { name: 'Save and publish' }).click();
-  await expect(page.getByRole('button', { name: 'Unpublish' })).toBeVisible();
+  await page.getByRole('button', { name: 'More article actions' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Unpublish' })).toBeVisible();
+  await page.keyboard.press('Escape');
 
   await page.goto(`${servers.main}/help/${slug}/a/1-tour`);
   const player = page.locator('video');

@@ -34,9 +34,14 @@ one, for example "Getting started".
 Type in **Search articles**. The search finds whole words and the start of words in titles and text,
 and any part of a title, so `pass` finds "password". It does not find a part in the middle of a word
 in the text (`word` does not find "password"), and in text written without spaces between words
-(Chinese, Japanese, Thai) it finds only the start of the text or a title. **All**, **Draft** and
-**Published** filter by status. The search, the status and the collection are in the address, so a
-link opens the same list.
+(Chinese, Japanese, Thai) it finds only the start of the text or a title. **All**, **Published** and
+**Drafts** filter by status. The search, the status and the collection are in the address, so a
+link opens the same list. On a phone the collections are a list at the top of the articles.
+
+Each row says whether readers can see the article: a published article is public only while the help
+center is on. While it is off, a banner at the top says so, with **Turn on in Settings**, and each
+published article says "not public"; a draft says "agents only". With the help center on, the arrow at
+the end of a published article's row opens its public page.
 
 ## Write an article
 
@@ -45,14 +50,23 @@ link opens the same list.
    lists, `- [ ]` checklists, `[links](https://example.com)`, tables, `> quotes` and code. The Markdown
    is colored as you type, and what you type is exactly what is stored. Raw HTML in the text is not
    shown, except a [YouTube or Vimeo video](#videos).
-   - The toolbar sets the block (**Text**, **Heading 1** to **3**) and adds bold, italic,
-     strikethrough, code, a link, bulleted and numbered lists, a checklist, a quote, a code block, a
-     table, a divider, an image and a [video](#videos). With the keyboard, Tab reaches the toolbar and the arrow keys move
-     along it.
+   - The toolbar sets the block (**Text**, **Heading 1** to **3**) and adds bold, italic, a link,
+     numbered and bulleted lists, a quote and a table; **Insert image or video** adds an
+     [image](#images) or a [video](#videos); **⋯** (More formatting) holds strikethrough, code, a
+     checklist, a code block, a divider and redo. On a phone the toolbar keeps **Insert**, bold,
+     italic and link, and the rest is under **⋯**. With the keyboard, Tab reaches the toolbar and the
+     arrow keys move along it.
    - Shortcuts: `Ctrl+B` bold, `Ctrl+I` italic, `Ctrl+E` code, `Ctrl+K` link, `Ctrl+Z` undo,
      `Ctrl+F` find and replace (`Cmd` on a Mac).
-3. Choose the **Collection**.
+3. Choose the **Collection** (under **Placement** on the right; on a phone, under **Details**).
 4. Select **Save draft** to keep it for agents only, or **Save and publish**.
+
+Every action on an article is in the bar at the top: **Save**, **Publish** for a draft, and **⋯** with
+**View on help center**, **Copy link**, **Version history**, **Publish** or **Unpublish**, and
+**Delete article…**. The column on the right only shows the article's **Visibility** (with **Turn on
+help center** while it is off), the images that still need alt text, and its **Placement**
+(collection and address name). On a phone the bar is at the bottom of the screen: the status,
+**Details** (visibility, alt text, collection, address), **⋯** and **Save**.
 
 **Write** shows the Markdown, **Preview** shows how the article reads, and **Side by side** (in a wide
 window) shows both. A wide window opens an article side by side, unless it is longer than 20,000
@@ -69,13 +83,20 @@ two articles.
 
 ### Images
 
-Paste an image into the text, drag it in, or select **Upload**. Colliedesk uploads it and writes
+Paste an image into the text, drag it in, or select **Insert image or video → Upload from this
+device**. Colliedesk uploads it and writes
 `![name](/api/v1/kb/images/…)` on a line of its own after the paragraph, list or table you are in;
 while it uploads, a box says so and nothing is added to the text. A video pasted, dropped or chosen
 the same way goes up in parts, the box shows how much has gone, and it goes in as
 `<video controls preload="metadata" src="/api/v1/kb/media/…"></video>`; leaving the page cancels a
-video still uploading. **Media** opens the library: search it, pick an image or a video, and it goes
-in the same way, with its alt text (an image) or title (a video). PNG, JPEG, GIF and WebP up to 5 MB
+video still uploading. **Insert image or video → From the media library** opens the library in a
+dialog: search it, pick one or more images and videos (they go in in the order you picked them, each a
+block of its own), and check each one's alt text (a video's title). An image without alt text in the
+library asks for it, and **Insert** waits until it has one; what you type is saved to the library
+too, so the next article gets it. In the grid, Tab stops once, the arrow keys move, Space picks and
+Enter inserts. On a phone the library fills the screen and asks for the alt text on a second step
+(**Next: alt text**). A file that is not an image or a video, or one over its limit, is refused with the
+reason before anything is sent. PNG, JPEG, GIF and WebP up to 5 MB
 each are accepted, at most 8,192 pixels on a side and 40 megapixels. Images count toward your plan's
 storage. The same image uploaded twice is stored once. Saving waits until every image and video has
 finished uploading.
@@ -88,33 +109,52 @@ Every uploaded image goes into the workspace's media library, with a name, alt t
 preview. An image no article ever saved is deleted 30 days after it was uploaded, unless it is kept;
 naming it or writing its alt text keeps it.
 
+**Alt text.** Screen readers read an image's alt text out; an image without it says nothing to them.
+The column on the right of the editor lists the images of the article that have none, each with
+**Add alt text**, which writes it in the text (and in the library when the library has none).
+**Publish** asks first when an image still has no alt text: add it, or **Publish anyway**.
+
 ### Media library
 
 **Knowledge → Media** shows every image and video of the workspace, newest first, with a search by
-name or alt text, a choice of images or videos, of what is in use, not used or missing alt text,
-and a sort (newest, oldest, name, largest). **Upload** takes several files at once, or drop them
-anywhere on the page; an upload made here is kept. Each file shows its progress; a video shows its
-speed and the time left, and can be paused, resumed (also after a lost connection: it goes on from
-the bytes the server already has) or cancelled. The same file uploaded twice says **Already in the
-library**. Leaving the page cancels the videos it was still sending.
+name or alt text, a choice of images or videos, of what is in use, not used or missing alt text
+(on a phone, under **Filter**), and a sort (newest, oldest, name, largest). A card shows only what
+needs your attention: **No alt** on an image without alt text, **Not used**, and a pin on a kept item.
+**Upload** takes several files at once, or drop them anywhere on the page; an upload made here is
+kept. The uploads gather in a tray in the corner of the library, one line with how many went in, are
+already in the library or failed, and a bar of the three; open it for each file's progress. A video
+shows its speed and the time left, and can be paused, resumed (also after a lost connection: it goes
+on from the bytes the server already has) or cancelled. A file that failed opens the tray by itself
+and says why (a wrong type, a file over the limit, a video the server refuses), with **Dismiss**, and
+**Try again** when another try can work. The same file uploaded twice says **Already in the
+library**. Leaving the page cancels the videos it was still sending. A video uploaded from this
+browser gets a poster drawn from its first second; change it under **File** in its panel.
 
-A workspace has at most three video uploads in progress. **Uploads in progress** lists those this
-page is not sending (from another tab, or a page that closed), with who started each and when its
+A workspace has at most three video uploads in progress. **Uploads in progress**, in the tray, lists
+those this page is not sending (from another tab, or a page that closed), with who started each and when its
 parts expire (24 hours after the start): **Resume…** goes on when you choose the same file again, and
 **Cancel** frees its place; only the person who started an upload, or an admin, cancels it. A
 video resumed here is cancelled too if you leave the page before it finishes, whoever started it.
 
-Choose an item to see it in a panel: its type, size, length and where it is used, with a link to
-each article. There you rename it, write its alt text (a video's title for screen readers), keep it,
-copy what to put in an article (**Copy embed**), download it, **Replace…** it, or move it to the
-trash. A video's **Poster** is the frame the player shows when you press **Use this frame** (pause
-it where you want), or an image you upload.
+Choose an item to see it in the panel on the right (on a phone, a sheet over the grid). Under its
+preview, **Embed** copies what to put in an article, **Download**, **Replace…** and the trash. Three
+tabs hold the rest: **Details** (rename it, write its alt text or a video's title for screen readers,
+keep it), **Used in** (the articles that show it, with links) and **File** (type, size, dimensions,
+length). **Save** and **Discard** stay at the foot of the panel. A video's **Poster**, under **File**,
+is the frame the player shows when you press **Use this frame** (pause it where you want), or an image
+you upload.
 
-A line above the library says how many items no article uses and how much space they take;
-**Review** opens **Not used**. There, tick items (Shift picks a range) and **Move selected to trash**,
-or **Move all unused to trash**. A confirmation says how many and how large; kept items are skipped
-unless you include them, and Undo puts the whole batch back. **Trash** lists what is there; restore
-items, or, as an admin, **Delete forever** after a second confirmation.
+A line above the library says how many items no live article shows, how much space they take and
+how many of them are kept; **Review not used** opens **Not used**. Its count is what its list holds,
+kept items included, and it says which go to the trash on their own (an item nobody kept and no
+article, deleted article or older version names, 30 days after its last upload) and why the others
+stay (kept: uploaded on the Media page, or marked "Keep even when no article uses it"). **All**,
+**Not kept** and **Kept** filter the list. Tick items (Shift picks a range) and **Move N to trash**,
+or with nothing ticked **Move all N to trash**: on **All** that takes the kept items too, on **Not
+kept** only the others. A confirmation names how many, how large, which of them are kept and which
+a deleted article still shows; restoring an item brings it back as it was, kept or not, and Undo
+puts the whole batch back. **Trash** lists what is there; restore items, or, as an admin, **Delete
+forever** after a second confirmation.
 
 Items no article uses can go to the library's **trash**: one at a time, a chosen set, or all unused
 items at once (kept ones only when you say so). An image a published or draft article still shows
@@ -134,11 +174,11 @@ the preview or on the help center; the preview says so. Download it and paste it
 
 ### Videos
 
-An article can show a YouTube or Vimeo video. Select **Insert video** in the toolbar, paste the
-video's link (a watch page, a `youtu.be` short link, a Vimeo page, or a player address), and press
-Enter: the player goes in a block of its own after the one the cursor is in. A YouTube link's start
-time (`?t=1m5s`) is kept. A link the help center cannot show is refused, with the reason; Escape
-closes the box.
+An article can show a YouTube or Vimeo video. Select **Insert image or video → YouTube or Vimeo
+link**, paste the video's link (a watch page, a `youtu.be` short link, a Vimeo page, or a player
+address), and press Enter: the player goes in a block of its own after the one the cursor is in. A
+YouTube link's start time (`?t=1m5s`) is kept. A link the help center cannot show is refused, with
+the reason; Escape closes the box.
 
 You can also write the embed HTML yourself, in a paragraph of its own with a blank line before and
 after it, for example the code from YouTube's **Share → Embed**:
@@ -186,8 +226,8 @@ the help center does, and leaves out (and names) one the library does not have.
 ### Publish, unpublish, edit
 
 An article shows **Draft** or **Published**. **Publish** puts a draft on the help center and
-**Unpublish** takes it back off; both are versions, so neither is final. **Save** keeps an article's
-status.
+**Unpublish** (in **⋯**) takes it back off; both are versions, so neither is final. **Save** keeps an
+article's status. **⋯ → Delete article…** asks first, then moves the article to the [trash](#trash).
 
 Each article has a number that never changes. Its help center address ends in
 `/a/<number>-<address name>`, and the article page shows it under **Address name**. You can change the
@@ -201,7 +241,7 @@ Leaving the page with unsaved changes asks first.
 
 ## History
 
-**History** on an article lists every version, newest first: who made it (and through which AI
+**⋯ → Version history** on an article lists every version, newest first: who made it (and through which AI
 agent token or approved request), when, and what changed (title, address name, text, status,
 collection). **Restore version N** makes that version's title, address name and text current again,
 as a new version; the status and collection stay as they are, so a restore never publishes or moves
@@ -209,7 +249,7 @@ an article by surprise. Save or undo your own changes first.
 
 ## Trash
 
-Select **Trash** to see deleted articles and collections. Each shows who deleted it and how many days
+Select **Trash** at the top of the articles to see deleted articles and collections. Each shows who deleted it and how many days
 are left; after 30 days it is deleted for good, with its history. **Restore** brings it back as it
 was: a published article is published again. Restore a collection before the articles that were in
 it. Articles in the trash count toward the 2,000 articles a workspace can hold.

@@ -74,12 +74,14 @@ export function CollectionForm({ tree, node, parentId = null, onSubmit, onCancel
 
 interface CollectionTreeProps {
   tree: TreeNode[];
+  // total counts the articles of every collection, for All articles.
+  total?: number;
   selected?: string;
   onSelect: (collection?: KBCollection) => void;
 }
 
 // CollectionTree lists the collections as nested links; the chosen one filters the articles.
-export function CollectionTree({ tree, selected, onSelect }: CollectionTreeProps) {
+export function CollectionTree({ tree, total, selected, onSelect }: CollectionTreeProps) {
   const item = (node: TreeNode) => (
     <li key={node.collection.id}>
       <RouterLink href={`/knowledge?${new URLSearchParams({ collection: node.collection.id })}`} className="kb-tree-link" current={selected === node.collection.id}
@@ -95,6 +97,7 @@ export function CollectionTree({ tree, selected, onSelect }: CollectionTreeProps
       <li>
         <RouterLink href="/knowledge" className="kb-tree-link" current={!selected} onFollow={() => onSelect(undefined)}>
           <span className="kb-tree-name">{kbMessages.allArticles}</span>
+          {total !== undefined && <span className="kb-tree-count" aria-hidden="true">{total}</span>}
         </RouterLink>
       </li>
       {tree.map(item)}

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { request } from '../../api/client';
+import { ChangedElsewhereError, request } from '../../api/client';
 import type { RequestBody } from '../../api/client';
 import type { Generated, JsonResponse } from '../../api/schemas';
 
@@ -86,6 +86,20 @@ export const mediaApi = {
   cancelUpload: (id: string) => request(`/api/v1/kb/media-uploads/${id}`, noContent, { method: 'DELETE' }),
   completeUpload: (id: string) => request(`/api/v1/kb/media-uploads/${id}/complete`, kbMediaSchema, { method: 'POST' }),
 };
+
+// updateFields changes an item's name, alt text or kept mark from the version item was read at. A refusal
+// because the item was saved since, by a change that left those three as they were (a poster drawn after its
+// upload), is no conflict for them: the change goes again over the newer version. Any other is thrown.
+export async function updateFields(item: KBMedia, change: Omit<RequestBody<'updateKBMedia'>, 'updated_at'>): Promise<KBMedia> {
+  try {
+    return await mediaApi.update(item.id, { updated_at: item.updated_at, ...change });
+  } catch (error) {
+    if (!(error instanceof ChangedElsewhereError)) throw error;
+    const fresh = await mediaApi.details(item.id);
+    if (fresh.name !== item.name || fresh.alt !== item.alt || fresh.kept !== item.kept) throw error;
+    return mediaApi.update(item.id, { updated_at: fresh.updated_at, ...change });
+  }
+}
 
 // sendPart puts one part of an upload with its Content-Range and reports the bytes sent as they go;
 // fetch cannot tell upload progress, so it is an XMLHttpRequest. It resolves with the status and the

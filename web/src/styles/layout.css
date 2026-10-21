@@ -151,7 +151,7 @@
 @media (max-width: 44rem) {
   .app-main, .app-content { overflow: visible; }
   .account-menu { margin: 0 0 0 auto; }
-  .rail-avatar { width: var(--touch); height: var(--touch); }
+  .rail-avatar, .rail-brand { width: var(--touch); height: var(--touch); }
   .account-popover { left: auto; right: 0; bottom: auto; top: calc(100% + var(--space-2)); }
   .identity-bar { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
   .app-content > .inbox-shell { height: auto; }

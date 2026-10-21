@@ -223,7 +223,8 @@ a:hover { text-decoration-thickness: 2px; }
 /* An article whose text took too long to render shows it as written. */
 .prose .plain-note { color: var(--muted); font-size: 0.9375rem; }
 .prose .plain-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 0; }
-.prose video { display: block; max-width: 100%; height: auto; margin: 0 0 1.25rem; border-radius: 8px; }
+/* A portrait video (a phone recording) stays within the window: at most 60% of its height, centred. */
+.prose video { display: block; max-width: 100%; max-height: 60vh; width: auto; height: auto; margin: 0 auto 1.25rem; border-radius: 8px; background: var(--surface); }
 .prose blockquote { margin-left: 0; padding: 0.75rem 1.125rem; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 8px 8px 0; }
 .prose blockquote > :last-child { margin-bottom: 0; }
 .prose hr { border: 0; border-top: 1px solid var(--rule); margin: 2.25rem 0; }
