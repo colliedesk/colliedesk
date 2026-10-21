@@ -1,6 +1,7 @@
 package helpcenter
 
 import (
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"html/template"
 	"strings"
 	"sync"
@@ -30,7 +31,7 @@ func (g *gate) hold(body string) chan struct{} {
 	return g.release[body]
 }
 
-func (g *gate) render(body, base string) (rendered, error) {
+func (g *gate) render(body, base string, _ []domain.PublicKBVideo) (rendered, error) {
 	g.calls.Add(1)
 	g.started <- body
 	if strings.HasPrefix(body, "slow") {
@@ -152,10 +153,23 @@ func TestRenderedPagesStayWithinTheirBytes(t *testing.T) {
 	if r.bytes > 4000 || len(r.pages) != r.order.Len() || len(r.pages) == 0 {
 		t.Fatalf("%d bytes in %d pages", r.bytes, len(r.pages))
 	}
-	if _, ok := r.pages[renderKey("workspace-a", 19, "", strings.Repeat("x", 200))]; !ok {
+	if _, ok := r.pages[renderKey("workspace-a", 19, "", strings.Repeat("x", 200), nil)]; !ok {
 		t.Fatal("the newest page was dropped")
 	}
-	if _, ok := r.pages[renderKey("workspace-a", 0, "", strings.Repeat("x", 200))]; ok {
+	if _, ok := r.pages[renderKey("workspace-a", 0, "", strings.Repeat("x", 200), nil)]; ok {
 		t.Fatal("the oldest page was kept")
+	}
+}
+
+// A new poster or a video gone from the library is a new page for the same text.
+func TestRenderKeyChangesWithTheVideosOfAText(t *testing.T) {
+	video := domain.PublicKBVideo{ID: "v", Width: 640, Height: 360, PosterVersion: "aaaaaaaa"}
+	key := renderKey("w", 1, "/help/w", "text", []domain.PublicKBVideo{video})
+	newPoster := video
+	newPoster.PosterVersion = "bbbbbbbb"
+	for _, other := range [][]domain.PublicKBVideo{nil, {newPoster}} {
+		if renderKey("w", 1, "/help/w", "text", other) == key {
+			t.Errorf("videos %v give the same key", other)
+		}
 	}
 }

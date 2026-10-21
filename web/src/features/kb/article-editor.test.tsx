@@ -139,10 +139,10 @@ test('the preview renders Markdown with tables, and raw HTML never runs', async 
   expect(panel.querySelector('img')).toBeNull();
 });
 
-test('the preview shows YouTube and Vimeo players as the help center does, and names the HTML it leaves out', async () => {
+test('the preview shows YouTube and Vimeo players and library videos as the help center does, and names the HTML it leaves out', async () => {
   const body = 'Watch:\n\n<iframe src="https://www.youtube.com/embed/jNQXAC9IVRw?start=65" onload="alert(1)"></iframe>\n\n'
     + 'Inline <iframe src="https://evil.example/embed/x"></iframe> and <b>bold</b>.\n\n<script>window.__xss = 1</script>\n\n'
-    + '<video src="/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b" controls></video>';
+    + '<video src="/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b" autoplay controls></video>';
   serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: body })) });
   open({ articleId: ids.article });
   fireEvent.click(await screen.findByRole('tab', { name: 'Preview' }));
@@ -156,11 +156,14 @@ test('the preview shows YouTube and Vimeo players as the help center does, and n
   expect(frames[0]).toHaveAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
   expect(frames[0]).toHaveAttribute('loading', 'lazy');
   expect(frames[0]).not.toHaveAttribute('onload');
-  expect(panel.querySelector('script, video, b')).toBeNull();
+  expect(panel.querySelector('script, b')).toBeNull();
+  const video = panel.querySelector('video');
+  expect(video).toHaveAttribute('src', '/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b');
+  expect(video).toHaveAttribute('controls');
+  expect(video).not.toHaveAttribute('autoplay');
   expect(panel).toHaveTextContent('Inline and bold.');
-  expect(warning).toHaveTextContent('Left out of the article: iframe onload, iframe (evil.example), b, script.');
+  expect(warning).toHaveTextContent('Left out of the article: iframe onload, iframe (evil.example), b, script, video autoplay.');
   expect(panel).not.toHaveTextContent('__xss');
-  expect(warning).toHaveTextContent('Videos from the media library are not shown yet.');
   expect((window as { __xss?: number }).__xss).toBeUndefined();
 });
 

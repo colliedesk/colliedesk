@@ -124,8 +124,12 @@ after it, for example the code from YouTube's **Share → Embed**:
 - `title`, `width`, `height`, `allow` and `allowfullscreen` are kept; a player without `allow` gets
   `encrypted-media; picture-in-picture`. The video fills the width of the
   page at 16:9 whatever size you give, and loads only when a reader scrolls to it.
-- Any other HTML is not shown, text included: an iframe from another site, a `<video>` or `<audio>`
-  file, a script, a `style`, a form. Words on the same lines as the HTML count as part of it and go
+- A video of your media library shows as `<video src="/api/v1/kb/media/<id>"></video>` (below).
+  `muted`, `loop`, `playsinline`, `title`, `width`, `height` and `preload` (`metadata` or `none`) are
+  kept; it always has controls and never starts by itself (`autoplay` is left out). Its poster and
+  size come from the library, so a `poster` you write is left out.
+- Any other HTML is not shown, text included: an iframe from another site, a `<video>` of another
+  site, an `<audio>` file, a script, a `style`, a form. Words on the same lines as the HTML count as part of it and go
   too, so start your text after a blank line. Inside a paragraph only the tags are left out and the
   words between them stay, except the content of a `<script>`, `<style>` or similar element. **Preview** names what it left out on a line above the article; the saved text
   keeps the HTML as you wrote it.
@@ -140,8 +144,12 @@ Camera → Formats → Most Compatible**). A video goes up in parts, so a lost c
 stopped; it counts toward your plan's storage. Location, titles, recording dates and tracks of data a
 camera or phone writes (GPS, subtitles) are removed from the file without changing a frame; the
 name of the app that wrote a WebM stays. A video can be at most 8,192 pixels on a side. A video can have a
-poster, the still picture shown before it plays. For now videos are uploaded through the API and AI
-agents; the library page and the editor's button come next, and the help center shows them then.
+poster, the still picture shown before it plays. The help center plays a video a published article
+shows from its own address, with seeking, and shows its poster; a video in the trash, or that no
+published article shows, is not public. Browsers and proxies may keep a copy of a video once
+it was public, as with images: unpublishing or moving it to the trash stops new readers, not copies
+already made, so keep a video that must stay private out of published articles. For now videos are uploaded through the API and AI agents;
+the library page and the editor's button come next.
 
 ### Publish, unpublish, edit
 

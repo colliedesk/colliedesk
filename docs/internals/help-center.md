@@ -46,12 +46,19 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
     center's address, leak readers' addresses to sites nobody chose, and break when that site
     goes away; only these two players have a stable, documented embed address (No lock-in: the
     article's Markdown keeps the HTML as written, and the export carries it).
-  - `<video>` is ready in the allowlist (`video.enabled: false`) for the media library: until
-    `/api/v1/kb/media/<id>` serves files it would show a broken player, so the help center leaves it
-    out and the preview says it is not shown yet. Turning it on needs the route, a rewrite to
-    `<help center>/media/<id>` like images, and its tests. An article cannot set a `poster`: the
-    renderer will add the library's poster, width and height, so changing a poster never edits an
-    article.
+  - `<video>` of the media library (`src="/api/v1/kb/media/<id>"`, nothing else) is shown with
+    `controls` always and `preload` `metadata` or `none`; `muted`, `loop` and `playsinline` are the
+    author's, `autoplay` never is. An article cannot set a `poster`: `kbhtml.FragmentIn` takes the
+    page's library (`HelpCenterArticle` reads the videos its current text links, in the same
+    transaction, only when the text names a media path) and writes `<help center>/media/<id>`, the
+    library's poster `…/media/<id>/poster/<last 8 hex of its content address>` and, when the author
+    gave none, the width and height (scaled to 4,096 on the long side), so a new poster never edits
+    an article. A video the library does not know (trash, an image, another workspace) is left out.
+    The render cache key holds each video's id, size and poster version, so a new poster is a new
+    page for the same text; the goldmark node renderers are shared, so the page's library travels
+    in its writer (`pageWriter`) and, for `hiddenText`, in the parser context.
+  - The preview shows the same `<video>` from its API address, without a poster yet (PR 5 adds the
+    library to the editor).
   - Cost: a 100,000-character article of nothing but raw HTML (about 4,500 pieces, 900 of them
     players) renders in about 12 ms on an M-series Mac (plain text: 1 ms); pages are cached by
     content version.
@@ -62,7 +69,14 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   `kb_article_media` links an image to every article whose version ever named it (so restoring a
   version never shows a deleted image); the public route also checks `strpos(body_md, path)` on the
   published, live articles linked to it, and an image in the media library's trash is never served.
-  Images are `immutable` for a year: an id always names the
+  `/media/<id>` is the same rule for a video (`HelpCenterVideo`, path `/api/v1/kb/media/<id>`),
+  served with ranges by `attachments.Serve` (`http.ServeContent` on local disk), the app's route
+  too; its poster is public under the same rule, at its versioned address only. Every range request
+  counts toward the 600 pages a minute per address, and since that counts requests, not bytes, at
+  most 4 video responses are sent at once to one address and 64 on the server (503 with
+  `Retry-After`; `streams.go`): a player reads one or two ranges at a time. Like an image, a video
+  is public once a published text names its path anywhere, a code block or an HTML comment
+  included, not only in a `<video>` the page shows. Images are `immutable` for a year: an id always names the
   same bytes. A cache that kept one keeps it after the article is unpublished; the id is a random
   UUID that was public while the article was.
 - **Two addresses, one handler.** `APP_ORIGIN/help/<slug>` always works. With `HELP_CENTER_DOMAIN`,

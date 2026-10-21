@@ -31,7 +31,7 @@
     },
     {
       "name": "a paragraph of left-out HTML leaves no empty paragraph",
-      "markdown": "Intro\n\n<img src=x onerror=\"alert(1)\">\n\n<video src=\"/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b\" controls></video>\n\n<b></b> <i></i>\n\nEnd",
+      "markdown": "Intro\n\n<img src=x onerror=\"alert(1)\">\n\n<audio src=\"/a.mp3\" controls></audio>\n\n<b></b> <i></i>\n\nEnd",
       "text": "Intro End",
       "paragraphs": 2,
       "iframes": 0

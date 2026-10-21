@@ -8,11 +8,12 @@ import { fragment } from './kb-html';
 describe('raw HTML in the preview follows the help center', () => {
   it.each(shared.cases.map((c) => [c.name, c] as const))('%s', (_name, c) => {
     const { nodes, dropped } = fragment(c.html);
-    expect(nodes.map((node) => node.properties.src)).toEqual(c.iframes);
+    const iframes = nodes.filter((node) => node.tagName === 'iframe');
+    expect(iframes.map((node) => node.properties.src)).toEqual(c.iframes);
+    expect(nodes.filter((node) => node.tagName === 'video').map((node) => node.properties.src)).toEqual(c.videos);
     expect(dropped).toEqual(c.dropped);
-    if ('titles' in c) expect(nodes.map((node) => node.properties.title)).toEqual(c.titles);
-    for (const node of nodes) {
-      expect(node.tagName).toBe('iframe');
+    if ('titles' in c) expect(iframes.map((node) => node.properties.title)).toEqual(c.titles);
+    for (const node of iframes) {
       expect(node.properties).toMatchObject({
         sandbox: 'allow-scripts allow-same-origin allow-presentation allow-popups',
         referrerPolicy: 'strict-origin-when-cross-origin',
@@ -47,9 +48,9 @@ it('rebuilds a player with only its allowed attributes', () => {
   expect(dropped).toEqual(['iframe allow camera']);
 });
 
-// The <video> rule is ready for the media library and off until it ships.
-it('keeps a media library video once the library is on', () => {
-  const rules = { ...allowlist, video: { ...allowlist.video, enabled: true } };
+// A <video> of the media library keeps only its allowed attributes; with the rule off, nothing.
+it('keeps a media library video only', () => {
+  const rules = allowlist;
   const id = '/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b';
   const { nodes, dropped } = fragment(
     `<video src="${id}" poster="${id}/poster" title="Tour" aria-label="Product tour" width="640" preload="auto" autoplay muted playsinline onplay="x()"><source src="https://evil.example/a.mp4"><track src="x"></video>`,
@@ -66,5 +67,5 @@ it('keeps a media library video once the library is on', () => {
   expect(dropped).toEqual(['video preload=auto', 'video poster', 'video autoplay', 'video onplay', 'source', 'track']);
   for (const bad of [`${id}X`, 'https://evil.example/a.mp4', id.toUpperCase(), `${id}?x=1`])
     expect(fragment(`<video src="${bad}"></video>`, rules).nodes).toEqual([]);
-  expect(fragment(`<video src="${id}"></video>`).nodes).toEqual([]);
+  expect(fragment(`<video src="${id}"></video>`, { ...allowlist, video: { ...allowlist.video, enabled: false } }).nodes).toEqual([]);
 });

@@ -17,6 +17,7 @@ type fixture struct {
 		Name    string   `json:"name"`
 		HTML    string   `json:"html"`
 		Iframes []string `json:"iframes"`
+		Videos  []string `json:"videos"`
 		Dropped []string `json:"dropped"`
 		Titles  []string `json:"titles"`
 	} `json:"cases"`
@@ -26,6 +27,7 @@ type fixture struct {
 // elements, and the visible text with whitespace collapsed.
 type shown struct {
 	iframes  []string
+	videos   []string
 	attrs    []map[string]string
 	elements []string
 	text     string
@@ -53,6 +55,14 @@ func parse(t *testing.T, out string) shown {
 				}
 				result.iframes = append(result.iframes, attrs["src"])
 				result.attrs = append(result.attrs, attrs)
+				return
+			}
+			if node.Data == "video" {
+				for _, attr := range node.Attr {
+					if attr.Key == "src" {
+						result.videos = append(result.videos, attr.Val)
+					}
+				}
 				return
 			}
 		}
@@ -87,6 +97,9 @@ func TestFragmentFollowsTheSharedCases(t *testing.T) {
 			if !reflect.DeepEqual(append([]string{}, got.iframes...), append([]string{}, c.Iframes...)) {
 				t.Errorf("iframes %q, want %q (out %s)", got.iframes, c.Iframes, out)
 			}
+			if !reflect.DeepEqual(append([]string{}, got.videos...), append([]string{}, c.Videos...)) {
+				t.Errorf("videos %q, want %q (out %s)", got.videos, c.Videos, out)
+			}
 			if got.text != "" {
 				t.Errorf("shows the text %q (out %s)", got.text, out)
 			}
@@ -103,7 +116,7 @@ func TestFragmentFollowsTheSharedCases(t *testing.T) {
 				}
 			}
 			for _, element := range got.elements {
-				if element != "iframe" {
+				if element != "iframe" && element != "video" {
 					t.Errorf("out %s holds <%s>", out, element)
 				}
 			}
@@ -142,10 +155,9 @@ func TestFragmentGivesAPlayerWithoutATitleOrAllowTheSiteDefaults(t *testing.T) {
 	}
 }
 
-// The <video> rule is ready for the media library and off until it ships.
-func TestVideoRuleOnceTheMediaLibraryIsOn(t *testing.T) {
+// A <video> of the media library keeps only its allowed attributes; with the rule off, nothing.
+func TestVideoRuleKeepsALibraryVideoOnly(t *testing.T) {
 	rules := kbhtml.Load()
-	rules.Video.Enabled = true
 	id := "/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b"
 	out, dropped := rules.Fragment(`<video src="` + id + `" poster="` + id + `/poster" title="Tour" aria-label="Product tour" width="640" preload="auto" autoplay muted playsinline onplay="x()"><source src="https://evil.example/a.mp4"><track src="x"></video>`)
 	want := `<video src="` + id + `" title="Tour" aria-label="Product tour" width="640" preload="metadata" muted="" playsinline="" controls=""></video>`
@@ -165,8 +177,30 @@ func TestVideoRuleOnceTheMediaLibraryIsOn(t *testing.T) {
 			t.Errorf("%s rendered %s", bad, out)
 		}
 	}
-	if out, _ := kbhtml.Fragment(`<video src="` + id + `"></video>`); out != "" {
-		t.Errorf("with the library off a video rendered %s", out)
+	rules.Video.Enabled = false
+	if out, _ := rules.Fragment(`<video src="` + id + `"></video>`); out != "" {
+		t.Errorf("with the rule off a video rendered %s", out)
+	}
+}
+
+// A page that knows the library plays the video from the address the library gives, with its
+// poster, and its size when the author gave none; a video the library does not know is left out.
+func TestFragmentInPlaysFromTheLibrary(t *testing.T) {
+	id := "0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b"
+	library := func(want string) (kbhtml.Video, bool) {
+		if want != id {
+			return kbhtml.Video{}, false
+		}
+		return kbhtml.Video{Src: "/help/acme/media/" + id, Poster: `/help/acme/media/` + id + `/poster/"x<`, Width: 1280, Height: 720}, true
+	}
+	out, dropped := kbhtml.FragmentIn(`<video src="/api/v1/kb/media/`+id+`" muted></video><video src="/api/v1/kb/media/`+id+`" width="320"></video><video src="/api/v1/kb/media/1b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b"></video>`, library)
+	want := `<video src="/help/acme/media/` + id + `" preload="metadata" muted="" poster="/help/acme/media/` + id + `/poster/&#34;x&lt;" width="1280" height="720" controls=""></video>` +
+		`<video src="/help/acme/media/` + id + `" width="320" preload="metadata" poster="/help/acme/media/` + id + `/poster/&#34;x&lt;" controls=""></video>`
+	if out != want {
+		t.Errorf("out\n%s\nwant\n%s", out, want)
+	}
+	if !reflect.DeepEqual(dropped, []string{"video (not in the library)"}) {
+		t.Errorf("dropped %q", dropped)
 	}
 }
 

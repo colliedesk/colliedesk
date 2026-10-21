@@ -19,7 +19,8 @@ const (
 
 func (a *API) newHelpCenter() *helpcenter.Site {
 	return helpcenter.New(helpcenter.Config{Store: a.store, Objects: a.config.Attachments, Origin: a.config.Origin,
-		Domain: a.config.HelpCenterDomain, Version: a.config.Version, Allow: a.allowHelpCenter})
+		Domain: a.config.HelpCenterDomain, Version: a.config.Version, Allow: a.allowHelpCenter,
+		Client: func(request *http.Request) string { return clientAddress(request, a.config.TrustedProxies) }})
 }
 
 // allowHelpCenter charges a help center request to its client address: every page to one limiter, and

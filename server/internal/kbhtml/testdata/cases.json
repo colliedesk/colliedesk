@@ -1,5 +1,5 @@
 {
-  "about": "One raw HTML fragment of an article per case, as the Markdown parser hands it over, and what may be shown of it. The Go test (kbhtml_test.go) and the preview test (web/src/features/kb/kb-html.test.ts) both run every case, so the help center and the preview cannot drift apart. iframes is the address of each player shown (nothing else is ever shown, text included); dropped is what the preview warns about, in order; titles, when given, is the title of each player.",
+  "about": "One raw HTML fragment of an article per case, as the Markdown parser hands it over, and what may be shown of it. The Go test (kbhtml_test.go) and the preview test (web/src/features/kb/kb-html.test.ts) both run every case, so the help center and the preview cannot drift apart. iframes is the address of each player shown and videos the address of each library video (nothing else is ever shown, text included; the help center then plays each video from its own address, with the library's poster); dropped is what the preview warns about, in order; titles, when given, is the title of each player.",
   "cases": [
     {
       "name": "youtube no-cookie player",
@@ -7,6 +7,7 @@
       "iframes": [
         "https://www.youtube-nocookie.com/embed/jNQXAC9IVRw"
       ],
+      "videos": [],
       "dropped": []
     },
     {
@@ -15,6 +16,7 @@
       "iframes": [
         "https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=65"
       ],
+      "videos": [],
       "dropped": []
     },
     {
@@ -26,6 +28,7 @@
         "https://player.vimeo.com/video/3",
         "https://player.vimeo.com/video/4"
       ],
+      "videos": [],
       "titles": [
         "Hướng dẫn đăng nhập",
         "Team's tour & setup",
@@ -40,6 +43,7 @@
       "iframes": [
         "https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=65"
       ],
+      "videos": [],
       "dropped": []
     },
     {
@@ -48,6 +52,7 @@
       "iframes": [
         "https://player.vimeo.com/video/76979871?h=8272103f6e"
       ],
+      "videos": [],
       "dropped": []
     },
     {
@@ -56,6 +61,7 @@
       "iframes": [
         "https://player.vimeo.com/video/1"
       ],
+      "videos": [],
       "dropped": [
         "iframe sandbox",
         "iframe referrerpolicy",
@@ -72,6 +78,7 @@
       "iframes": [
         "https://player.vimeo.com/video/1"
       ],
+      "videos": [],
       "dropped": [
         "iframe allow camera",
         "iframe allow microphone"
@@ -83,6 +90,7 @@
       "iframes": [
         "https://player.vimeo.com/video/1"
       ],
+      "videos": [],
       "dropped": [
         "iframe width",
         "iframe height"
@@ -92,6 +100,7 @@
       "name": "iframe from another site",
       "html": "<iframe src=\"https://evil.example/embed/jNQXAC9IVRw\">fallback</iframe>",
       "iframes": [],
+      "videos": [],
       "dropped": [
         "iframe (evil.example)"
       ]
@@ -100,6 +109,7 @@
       "name": "lookalike host",
       "html": "<iframe src=\"https://www.youtube-nocookie.com.evil.example/embed/jNQXAC9IVRw\"></iframe><iframe src=\"https://evil.example/?u=https://player.vimeo.com/video/1\"></iframe>",
       "iframes": [],
+      "videos": [],
       "dropped": [
         "iframe (www.youtube-nocookie.com.evil.example)",
         "iframe (evil.example)"
@@ -109,6 +119,7 @@
       "name": "allowed host but another path",
       "html": "<iframe src=\"https://www.youtube.com/watch?v=jNQXAC9IVRw\"></iframe><iframe src=\"https://www.youtube.com/embed/jNQXAC9IVRw/../../redirect\"></iframe>",
       "iframes": [],
+      "videos": [],
       "dropped": [
         "iframe (www.youtube.com)"
       ]
@@ -117,6 +128,7 @@
       "name": "a playlist or live stream names no single video",
       "html": "<iframe src=\"https://www.youtube.com/embed/videoseries?list=PLx1234567890\"></iframe><iframe src=\"https://www.youtube-nocookie.com/embed/live_stream?channel=UCx\"></iframe>",
       "iframes": [],
+      "videos": [],
       "dropped": [
         "iframe (YouTube playlist or live stream)"
       ]
@@ -125,6 +137,7 @@
       "name": "http, port, user, relative, protocol-relative, javascript and data",
       "html": "<iframe src=\"http://player.vimeo.com/video/1\"></iframe><iframe src=\"https://player.vimeo.com:8443/video/1\"></iframe><iframe src=\"https://me@player.vimeo.com/video/1\"></iframe><iframe src=\"/video/1\"></iframe><iframe src=\"//player.vimeo.com/video/1\"></iframe><iframe src=\"javascript:alert(1)\"></iframe><iframe src=\"data:text/html,<script>alert(1)</script>\"></iframe><iframe></iframe>",
       "iframes": [],
+      "videos": [],
       "dropped": [
         "iframe (player.vimeo.com)",
         "iframe (player.vimeo.com:8443)",
@@ -141,6 +154,7 @@
       "iframes": [
         "https://player.vimeo.com/video/1"
       ],
+      "videos": [],
       "dropped": [
         "iframe (https://player.vimeo.com/vi\ndeo/1)",
         "iframe (https://player.vimeo.com\\video\\1)"
@@ -150,6 +164,7 @@
       "name": "dot segments in the path",
       "html": "<iframe src=\"https://www.youtube.com/embed/x/../jNQXAC9IVRw\"></iframe><iframe src=\"https://www.youtube.com/embed/x/%2e%2e/jNQXAC9IVRw\"></iframe>",
       "iframes": [],
+      "videos": [],
       "dropped": [
         "iframe (www.youtube.com)"
       ]
@@ -160,6 +175,7 @@
       "iframes": [
         "https://player.vimeo.com/video/1"
       ],
+      "videos": [],
       "dropped": [
         "iframe (evil.example)"
       ]
@@ -170,12 +186,14 @@
       "iframes": [
         "https://player.vimeo.com/video/7"
       ],
+      "videos": [],
       "dropped": []
     },
     {
       "name": "script and its text",
       "html": "<script>window.__xss = 1</script>after",
       "iframes": [],
+      "videos": [],
       "dropped": [
         "script",
         "text in an HTML block"
@@ -185,6 +203,7 @@
       "name": "event handler on a harmless tag: the tag and its text are left out",
       "html": "<div onclick=\"alert(1)\"><b>bold</b> text</div>",
       "iframes": [],
+      "videos": [],
       "dropped": [
         "div",
         "b"
@@ -194,6 +213,7 @@
       "name": "image with onerror",
       "html": "<img src=x onerror=\"alert(1)\">",
       "iframes": [],
+      "videos": [],
       "dropped": [
         "img"
       ]
@@ -202,6 +222,7 @@
       "name": "javascript link is left out with its text",
       "html": "<a href=\"javascript:alert(1)\">click</a>",
       "iframes": [],
+      "videos": [],
       "dropped": [
         "a"
       ]
@@ -210,6 +231,7 @@
       "name": "style, object, embed, svg and math",
       "html": "<style>body{display:none}</style><object data=\"x.swf\">o</object><embed src=\"x.swf\"><svg onload=\"alert(1)\"><text>s</text></svg><math><mi>m</mi></math>",
       "iframes": [],
+      "videos": [],
       "dropped": [
         "style",
         "object",
@@ -224,6 +246,7 @@
       "iframes": [
         "https://www.youtube-nocookie.com/embed/jNQXAC9IVRw"
       ],
+      "videos": [],
       "dropped": [
         "div"
       ]
@@ -234,18 +257,21 @@
       "iframes": [
         "https://player.vimeo.com/video/1"
       ],
+      "videos": [],
       "dropped": []
     },
     {
       "name": "a closing tag alone shows nothing",
       "html": "</iframe>",
       "iframes": [],
+      "videos": [],
       "dropped": []
     },
     {
       "name": "a comment is left out quietly",
       "html": "<!-- editor note -->",
       "iframes": [],
+      "videos": [],
       "dropped": []
     },
     {
@@ -254,6 +280,7 @@
       "iframes": [
         "https://player.vimeo.com/video/1"
       ],
+      "videos": [],
       "dropped": [
         "text in an HTML block"
       ]
@@ -262,22 +289,29 @@
       "name": "text of other HTML is not shown",
       "html": "<span>&lt;script&gt;alert(1)&lt;/script&gt;</span>",
       "iframes": [],
+      "videos": [],
       "dropped": [
         "span"
       ]
     },
     {
-      "name": "library video waits for the media library",
-      "html": "<video src=\"/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b\" controls></video>",
+      "name": "a library video plays, its poster and autoplay left to the library and the reader",
+      "html": "<video src=\"/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b\" poster=\"https://evil.example/p.png\" autoplay controls muted onplay=\"x()\"></video>",
       "iframes": [],
+      "videos": [
+        "/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b"
+      ],
       "dropped": [
-        "video (media library)"
+        "video poster",
+        "video autoplay",
+        "video onplay"
       ]
     },
     {
       "name": "video from another site",
       "html": "<video src=\"https://evil.example/a.mp4\" autoplay><source src=\"https://evil.example/b.mp4\"></video><video><source src=\"/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b\"></video>",
       "iframes": [],
+      "videos": [],
       "dropped": [
         "video (evil.example)",
         "video (no src)"

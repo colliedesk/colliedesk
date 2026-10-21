@@ -300,4 +300,14 @@ type PublicKBArticle struct {
 	Excerpt      string
 	PublishedAt  *time.Time
 	UpdatedAt    time.Time
+	// Videos are the library videos the text may show, read with the article page only.
+	Videos []PublicKBVideo
+}
+
+// PublicKBVideo is a library video a published article's current text links, as its page shows it.
+// PosterVersion is the end of the poster's content address ("" for none).
+type PublicKBVideo struct {
+	ID            string
+	Width, Height int
+	PosterVersion string
 }

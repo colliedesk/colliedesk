@@ -59,6 +59,7 @@ type Rules struct {
 		Enabled    bool     `json:"enabled"`
 		Attributes []string `json:"attributes"`
 		Src        string   `json:"src"`
+		Prefix     string   `json:"prefix"`
 		Preload    []string `json:"preload"`
 		Flags      []string `json:"flags"`
 
@@ -170,15 +171,36 @@ const TextInHTMLBlock = "text in an HTML block"
 // Fragment is (*Rules).Fragment with allowlist.json.
 func Fragment(raw string) (string, []string) { return rules.Fragment(raw) }
 
+// Video is what a page shows of a library video: the address it plays from, its poster's address
+// ("" for none) and its size, all from the library, never from the article.
+type Video struct {
+	Src, Poster   string
+	Width, Height int
+}
+
+// Library finds the video an article's <video> names by its library id; false for an id that is no
+// video the page may show (in the trash, an image, another workspace's).
+type Library func(id string) (Video, bool)
+
+// FragmentIn is (*Rules).FragmentIn with allowlist.json.
+func FragmentIn(raw string, library Library) (string, []string) {
+	return rules.FragmentIn(raw, library)
+}
+
 // Fragment turns one piece of raw HTML, as the Markdown parser hands it over, into the players a page
 // may show, and names the elements it left out, in order and once each. Text, a closing tag alone or a
 // comment shows nothing and is not named.
-func (r *Rules) Fragment(raw string) (string, []string) {
+func (r *Rules) Fragment(raw string) (string, []string) { return r.FragmentIn(raw, nil) }
+
+// FragmentIn is Fragment for a page that knows the library: a <video> plays from the address library
+// gives, with its poster, and its width and height when the author gave none; a video library does
+// not know is left out. With a nil library a video keeps its API address and has no poster.
+func (r *Rules) FragmentIn(raw string, library Library) (string, []string) {
 	nodes, err := nethtml.ParseFragment(strings.NewReader(raw), &nethtml.Node{Type: nethtml.ElementNode, Data: "body", DataAtom: atom.Body})
 	if err != nil {
 		return "", []string{"html"}
 	}
-	f := fragment{rules: r}
+	f := fragment{rules: r, library: library}
 	for _, node := range nodes {
 		// Words on the lines of an HTML block are part of it, so they go too; say so.
 		if node.Type == nethtml.TextNode && strings.Trim(node.Data, " \t\n\f\r") != "" {
@@ -191,6 +213,7 @@ func (r *Rules) Fragment(raw string) (string, []string) {
 
 type fragment struct {
 	rules   *Rules
+	library Library
 	out     strings.Builder
 	dropped []string
 }
@@ -409,9 +432,26 @@ func (f *fragment) video(node *nethtml.Node) {
 		f.drop("video")
 		return
 	}
+	out := tag.String()
+	if f.library != nil {
+		found, ok := f.library(strings.TrimPrefix(src, r.Video.Prefix))
+		if !ok {
+			f.drop("video (not in the library)")
+			return
+		}
+		// Every value below is the server's, checked by the policy above or built from the library.
+		out = strings.Replace(out, ` src="`+html.EscapeString(src)+`"`, ` src="`+html.EscapeString(found.Src)+`"`, 1)
+		if found.Poster != "" {
+			out += ` poster="` + html.EscapeString(found.Poster) + `"`
+		}
+		if _, ok := given["width"]; !ok && found.Width > 0 {
+			if _, ok := given["height"]; !ok && found.Height > 0 {
+				out += ` width="` + strconv.Itoa(found.Width) + `" height="` + strconv.Itoa(found.Height) + `"`
+			}
+		}
+	}
 	// Controls are not the author's choice: a video always has them.
-	attr("controls", "")
-	f.out.WriteString("<video" + tag.String() + "></video>")
+	f.out.WriteString("<video" + out + ` controls=""></video>`)
 }
 
 func (r *Rules) dimension(value string) bool {
