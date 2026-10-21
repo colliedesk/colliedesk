@@ -27,6 +27,7 @@ export function HelpCenterSettings({ canManage, workspaceName }: { canManage: bo
   const on = settings.data.enabled;
   return <>
     <p role="status" className="saved-state" data-on={on ? 'true' : 'false'}>{on ? kbMessages.helpCenterOn : kbMessages.helpCenterOff}</p>
+    <p className="muted-copy">{kbMessages.helpCenterAddress} <a href={settings.data.url} target="_blank" rel="noopener noreferrer">{settings.data.url}</a></p>
     {canManage
       ? <form className="stacked-form" onSubmit={(event) => { event.preventDefault(); if (!feedback.pending) save.mutate({ enabled, title: title.trim() }); }}>
           <label className="field-inline"><input type="checkbox" checked={enabled} onChange={(event) => { feedback.touch(); setEnabled(event.target.checked); }} /><span>{kbMessages.helpCenterEnable}</span></label>

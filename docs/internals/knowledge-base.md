@@ -3,8 +3,8 @@
 Decisions and traps only. Code: `server/internal/store/kb-*.go`, `server/internal/httpapi/kb-handlers.go`,
 `server/internal/mcpserver/catalog-kb.go` and `tools-kb.go`, `server/internal/domain/kb.go`, migration
 `knowledge-base`, and the web app in `web/src/features/kb/`. Issue #90. So far: the data model, the API,
-the MCP tools, the export and the editor in the web app; the public help center and the Freshdesk import
-come in later pull requests.
+the MCP tools, the export and the editor in the web app; the Freshdesk import comes in a later pull
+request. The public help center is in `help-center.md`.
 
 ## Decisions
 

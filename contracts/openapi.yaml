@@ -1834,6 +1834,25 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/FoundingSlots'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/public/help-center/tls-ask:
+    get:
+      operationId: askHelpCenterCertificate
+      security: []
+      x-permission: public
+      description: >-
+        For the reverse proxy, not for people: Caddy's `on_demand_tls` asks it before getting a
+        certificate for a host name it has never seen. It answers 200 only when `domain` is exactly
+        one label below `HELP_CENTER_DOMAIN`, that label is a workspace slug that can be a host name,
+        the workspace's help center is on and the workspace is not locked. Every other case, and a
+        server without `HELP_CENTER_DOMAIN`, is the same 404.
+      parameters:
+        - name: domain
+          in: query
+          required: true
+          schema: {type: string, maxLength: 253}
+      responses:
+        '200': {description: The proxy may get a certificate for this host name}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/export:
     get:
       operationId: exportWorkspace
@@ -3605,13 +3624,21 @@ components:
         locale: {type: string, minLength: 2, maxLength: 35, description: 'BCP 47 language tag of the pages, such as en or pt-BR.'}
     HelpCenter:
       type: object
-      required: [enabled, title, locale, content_version, updated_at]
+      required: [enabled, title, locale, content_version, updated_at, url]
       properties:
         enabled: {type: boolean}
         title: {type: string}
         locale: {type: string}
         content_version: {type: integer, minimum: 0}
         updated_at: {type: [string, 'null'], format: date-time, description: Null until the knowledge base or its settings were first changed.}
+        url:
+          type: string
+          format: uri
+          description: >-
+            The public address of the help center, also while it is off: `<APP_ORIGIN>/help/<slug>` on
+            a self-hosted server, `https://<slug>.<HELP_CENTER_DOMAIN>` when the server sets that
+            variable and the slug can be a host name. Changing the workspace slug changes it, and links
+            to the old address stop working.
     SavedReplyText:
       type: object
       required: [title, body, updated_at]

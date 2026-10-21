@@ -131,6 +131,7 @@ export const kbMessages = {
   helpCenterTitle: 'Title',
   helpCenterTitleHelp: 'Shown at the top of every page. Empty uses the workspace name.',
   saveHelpCenter: 'Save help center',
+  helpCenterAddress: 'Address:',
   helpCenterAdminsOnly: 'Only admins can turn the help center on or off.',
   helpCenterFailed: 'The help center settings could not be loaded.',
 } as const;

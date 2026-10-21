@@ -49,6 +49,17 @@ per run that made the `simple` parser quadratic (`_a`, `~/`, `a1@`, `a-1-`, `a-a
 write must stay at or below 200 ms (10–25 ms locally; unnormalized, seconds to tens of seconds). A
 3-second statement timeout makes a regression fail instead of hanging the run.
 
+## Help center pages budget
+
+`TestHelpCenterPagesLatencyBudget` reads the knowledge base search budget's fixture, seeded once per
+test binary for both gates (`sharedKBBudget`; seeding twice cost 33 s of the 120-second CI budget):
+half of the articles published, all in one collection, help centers on. It loads each public
+page 50 times, HTML rendering included: the home page, the first and last page of the collection
+(1,000 published articles, 50 a page), a 9,000- and a 100,000-character article, and searches with two
+words, a short prefix, no match and a title. Each must stay at or below 100 ms p95 (6–16 ms locally).
+A page is five short scoped transactions at most (slug lookup, settings and lock, collections,
+articles, neighbours); a 304 stops after the second.
+
 ## Pending agent requests budget
 
 `TestPendingAgentRequestsLatencyBudget` holds the store query behind

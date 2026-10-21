@@ -1,0 +1,30 @@
+{{define "content"}}
+<section class="hero">
+<h1 class="hero-title">How can we help?</h1>
+{{template "heroSearch" .}}
+</section>
+{{- if .Collections}}
+<section class="topics" aria-labelledby="topics">
+<h2 id="topics" class="section-label">Browse by topic</h2>
+<ul class="cards">
+{{- range .Collections}}
+<li class="card">
+<h3 class="card-tab"><a href="{{.URL}}">{{.Name}}</a></h3>
+<div class="card-body">
+{{- with .Description}}<p class="card-desc">{{.}}</p>{{end}}
+{{- if .Articles}}
+<ul class="card-list">{{range .Articles}}<li><a href="{{.URL}}">{{.Title}}</a></li>{{end}}</ul>
+{{- end}}
+{{- if .Children}}
+<ul class="chips" aria-label="Sections of {{.Name}}">{{range .Children}}<li><a href="{{.URL}}">{{.Name}}</a></li>{{end}}</ul>
+{{- end}}
+<a class="card-more" href="{{.URL}}">{{if .More}}All {{template "count" .Count}}{{else}}Open {{.Name}}{{end}}<span aria-hidden="true"> →</span></a>
+</div>
+</li>
+{{- end}}
+</ul>
+</section>
+{{- else}}
+<p class="empty">Nothing is published here yet. Check back soon.</p>
+{{- end}}
+{{end}}

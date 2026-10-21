@@ -1,0 +1,19 @@
+{{define "content"}}
+<div class="article-layout">
+<article class="article">
+<header class="page-head">
+<h1>{{.Heading}}</h1>
+<p class="meta">Updated <time datetime="{{.UpdatedISO}}">{{.Updated}}</time>{{if .CollectionName}} in <a href="{{.Collection}}">{{.CollectionName}}</a>{{end}}</p>
+</header>
+<div class="prose">
+{{.Body}}
+</div>
+</article>
+{{- if .Neighbours}}
+<aside class="rail" aria-labelledby="rail-title">
+<h2 id="rail-title" class="section-label">{{if .CollectionName}}In {{.CollectionName}}{{else}}Related articles{{end}}</h2>
+<ul class="index index-rail">{{range .Neighbours}}<li>{{if .Current}}<a href="{{.URL}}" aria-current="page">{{.Title}}</a>{{else}}<a href="{{.URL}}">{{.Title}}</a>{{end}}</li>{{end}}</ul>
+</aside>
+{{- end}}
+</div>
+{{end}}

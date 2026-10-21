@@ -465,11 +465,13 @@ func (a *API) getKBImage(response http.ResponseWriter, request *http.Request) {
 }
 
 func (a *API) getHelpCenter(response http.ResponseWriter, request *http.Request) {
-	center, err := a.store.GetHelpCenter(request.Context(), principal(request).Workspace.ID)
+	who := principal(request)
+	center, err := a.store.GetHelpCenter(request.Context(), who.Workspace.ID)
 	if err != nil {
 		writeStoreError(response, err)
 		return
 	}
+	center.URL = a.helpCenterURL(who.Workspace.Slug)
 	writeJSON(response, http.StatusOK, center)
 }
 
@@ -483,10 +485,12 @@ func (a *API) putHelpCenter(response http.ResponseWriter, request *http.Request)
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send enabled, title and locale.")
 		return
 	}
-	center, err := a.store.PutHelpCenter(request.Context(), principal(request).Workspace.ID, *input.Enabled, *input.Title, *input.Locale)
+	who := principal(request)
+	center, err := a.store.PutHelpCenter(request.Context(), who.Workspace.ID, *input.Enabled, *input.Title, *input.Locale)
 	if err != nil {
 		writeKBError(response, err)
 		return
 	}
+	center.URL = a.helpCenterURL(who.Workspace.Slug)
 	writeJSON(response, http.StatusOK, center)
 }

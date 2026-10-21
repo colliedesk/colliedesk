@@ -6,7 +6,7 @@ import { json, serve } from './kb.test.fixture';
 
 afterEach(() => vi.unstubAllGlobals());
 
-const off = { enabled: false, title: '', locale: 'pt-BR', content_version: 3, updated_at: null };
+const off = { enabled: false, title: '', locale: 'pt-BR', content_version: 3, updated_at: null, url: 'https://desk.example.com/help/acme' };
 
 function open(canManage: boolean) {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><HelpCenterSettings canManage={canManage} workspaceName="Acme" /></QueryClientProvider>);
@@ -29,4 +29,12 @@ test('an agent sees whether it is on but cannot change it', async () => {
   expect(await screen.findByText(/The help center is on/)).toHaveAttribute('role', 'status');
   expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   expect(screen.getByText('Only admins can turn the help center on or off.')).toBeInTheDocument();
+});
+
+test('everyone sees the public address as a link, also while the help center is off', async () => {
+  serve({ 'GET /api/v1/help-center': () => json(200, off) });
+  open(false);
+  const link = await screen.findByRole('link', { name: 'https://desk.example.com/help/acme' });
+  expect(link).toHaveAttribute('href', 'https://desk.example.com/help/acme');
+  expect(link).toHaveAttribute('rel', 'noopener noreferrer');
 });

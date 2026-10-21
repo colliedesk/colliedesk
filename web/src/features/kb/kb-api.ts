@@ -43,7 +43,7 @@ const imageSchema = z.object({
   url: z.string(), created_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'KBImage'>>;
 const helpCenterSchema = z.object({
-  enabled: z.boolean(), title: z.string(), locale: z.string(), content_version: z.number().int(), updated_at: nullableDate,
+  enabled: z.boolean(), title: z.string(), locale: z.string(), content_version: z.number().int(), updated_at: nullableDate, url: z.string(),
 }) satisfies z.ZodType<Generated<'HelpCenter'>>;
 
 const collectionListSchema = z.object({ items: z.array(kbCollectionSchema) }) satisfies z.ZodType<JsonResponse<'listKBCollections', 200>>;
