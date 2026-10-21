@@ -398,6 +398,7 @@ export const messages = {
     },
   },
   signupAnswerEach: 'Answer each question to continue.',
+  signupChooseOne: 'Choose one',
   signupErrors: {
     trial_already_used: 'This email already started a Colliedesk trial. Sign in to that workspace instead, or contact us if you need help.',
     rate_limited: 'Too many workspaces were created from this network today. Try again tomorrow, or contact us.',

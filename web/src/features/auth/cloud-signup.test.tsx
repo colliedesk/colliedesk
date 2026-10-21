@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { expect, test, vi } from 'vitest';
 import { SignupError } from '../../api/cloud-signup';
 import { CloudSignup } from './cloud-signup';
-import { answerSignupQuestions } from './test-signup-answers';
+import { answerSignupQuestions, chooseSignupAnswer } from './test-signup-answers';
 
 function fill(name: string) {
   fireEvent.change(screen.getByLabelText(/workspace name/i), { target: { value: name } });
@@ -25,21 +25,23 @@ test('the form is not sent until each of the three questions has an answer', asy
   fireEvent.click(submit);
   expect(screen.getByRole('alert')).toHaveTextContent('Answer each question to continue.');
   fireEvent.click(within(screen.getByRole('group', { name: 'What do you want Colliedesk to do for you first?' })).getByRole('radio', { name: 'Let AI agents draft or send replies' }));
-  fireEvent.click(within(screen.getByRole('group', { name: 'What is your role?' })).getByRole('radio', { name: 'Developer or IT' }));
+  chooseSignupAnswer('What is your role?', 'Developer or IT');
   fireEvent.click(submit);
   expect(screen.getByRole('alert')).toHaveTextContent('Answer each question to continue.');
   expect(onCreate).not.toHaveBeenCalled();
-  fireEvent.click(within(screen.getByRole('group', { name: 'Where did you hear about Colliedesk?' })).getByRole('radio', { name: 'A friend or colleague' }));
+  chooseSignupAnswer('Where did you hear about Colliedesk?', 'A friend or colleague');
   fireEvent.click(submit);
   await waitFor(() => expect(onCreate).toHaveBeenCalledWith('Acme Support', { goal: 'ai_agents', role: 'developer', source: 'referral' }));
 });
 
 test('each question offers exactly its listed answers', () => {
   render(<CloudSignup onCreate={vi.fn()} onSignIn={vi.fn()} onUseAnotherAccount={vi.fn()} />);
-  const options = (legend: string) => within(screen.getByRole('group', { name: legend })).getAllByRole('radio').map((radio) => (radio as HTMLInputElement).labels?.[0]?.textContent);
-  expect(options('What do you want Colliedesk to do for you first?')).toEqual(['Move off Freshdesk or another helpdesk', 'Answer support email together as a team', 'Pay less per agent', 'Let AI agents draft or send replies', 'Something else']);
-  expect(options('What is your role?')).toEqual(['Founder or owner', 'Support lead or manager', 'Support agent', 'Developer or IT', 'Other']);
-  expect(options('Where did you hear about Colliedesk?')).toEqual(['X (Twitter)', 'An email from us', 'Search engine', 'Reddit', 'GitHub', 'A friend or colleague', 'Other']);
+  const radios = (legend: string) => within(screen.getByRole('group', { name: legend })).getAllByRole('radio').map((radio) => (radio as HTMLInputElement).labels?.[0]?.textContent);
+  // A drop-down starts on an empty prompt, so nobody is counted as an answer they did not pick.
+  const options = (label: string) => within(screen.getByRole('combobox', { name: label })).getAllByRole('option').map((option) => option.textContent);
+  expect(radios('What do you want Colliedesk to do for you first?')).toEqual(['Move off Freshdesk or another helpdesk', 'Answer support email together as a team', 'Pay less per agent', 'Let AI agents draft or send replies', 'Something else']);
+  expect(options('What is your role?')).toEqual(['Choose one', 'Founder or owner', 'Support lead or manager', 'Support agent', 'Developer or IT', 'Other']);
+  expect(options('Where did you hear about Colliedesk?')).toEqual(['Choose one', 'X (Twitter)', 'An email from us', 'Search engine', 'Reddit', 'GitHub', 'A friend or colleague', 'Other']);
 });
 
 test('a name outside 2 to 60 characters is stopped before any request', () => {

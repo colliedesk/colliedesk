@@ -406,11 +406,14 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .cloud-signup { display: grid; gap: var(--space-3); }
 .cloud-signup h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
 .cloud-signup .primary-action { --control: 44px; }
-/* Short answers sit in two columns so the three questions and the button fit one screen. */
-.signup-question { display: grid; column-gap: var(--space-3); margin: 0; border: 0; padding: 0; min-width: 0; }
-.signup-question[data-short] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* The goal is a radio list; role and source are drop-downs side by side, so the button fits a laptop screen. */
+.signup-question { display: grid; margin: 0; border: 0; padding: 0; min-width: 0; }
+.signup-pickers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); align-items: end; }
+.signup-pickers > .field { min-width: 0; }
+.signup-pickers select { width: 100%; }
 .signup-question legend { grid-column: 1 / -1; float: left; width: 100%; padding: 0; margin-bottom: var(--space-1); }
 @media (max-width: 44rem) {
+  .signup-pickers { grid-template-columns: 1fr; }
   .plan-banner { margin-right: var(--space-2); padding-inline: var(--space-3); }
   .plan-banner button { margin-left: 0; --control: var(--touch); }
   .trial-survey { margin-right: var(--space-2); padding-inline: var(--space-3); }
