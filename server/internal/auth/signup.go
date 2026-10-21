@@ -35,6 +35,7 @@ var (
 	ErrTrialAlreadyUsed  = errors.New("this email already started a trial")
 	ErrSignupRateLimited = errors.New("too many sign-ups from this address")
 	ErrSlugUnavailable   = errors.New("no free workspace address for this name")
+	ErrInvalidOnboarding = errors.New("an onboarding answer is not one of its listed values")
 	ErrInvalidEmail      = domain.ErrInvalidEmail
 	// ErrSignupKeyMissing means the service has no SIGNUP_HASH_KEY, so it cannot record a trial.
 	ErrSignupKeyMissing = errors.New("SIGNUP_HASH_KEY is not set")
@@ -50,6 +51,8 @@ type SignUp struct {
 	// HostedMailDomain, when set, connects email at support@<slug>.<HostedMailDomain> in the same
 	// transaction: settings show that address as ready, so mail sent there must not be refused.
 	HostedMailDomain string
+	// Onboarding is what the person said about their team; it is stored with the workspace.
+	Onboarding domain.Onboarding
 }
 
 // SignUpCloud creates a trial workspace with Email as its admin. In one privileged transaction it
@@ -60,6 +63,9 @@ type SignUp struct {
 // without the key an address cannot be tested against the table, and the key cannot be rotated
 // without losing the trial history.
 func (s *Service) SignUpCloud(ctx context.Context, in SignUp) (domain.Workspace, error) {
+	if !in.Onboarding.Valid() {
+		return domain.Workspace{}, ErrInvalidOnboarding
+	}
 	name := strings.TrimSpace(in.Name)
 	if length := utf8.RuneCountInString(name); length < minNameLength || length > maxNameLength {
 		return domain.Workspace{}, ErrInvalidName
@@ -99,6 +105,10 @@ func (s *Service) SignUpCloud(ctx context.Context, in SignUp) (domain.Workspace,
 		if _, err := tx.Exec(ctx, `INSERT INTO cloud_signups(email_hash,signup_workspace_id,ip_hash,created_at) VALUES($1,$2,$3,$4)`,
 			emailHash, workspace.ID, ipHash, now); err != nil {
 			return fmt.Errorf("record sign-up: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO workspace_onboarding(workspace_id,goal,role,source,created_at) VALUES($1,$2,$3,$4,$5)`,
+			workspace.ID, in.Onboarding.Goal, in.Onboarding.Role, in.Onboarding.Source, now); err != nil {
+			return fmt.Errorf("record onboarding answers: %w", err)
 		}
 		return nil
 	})

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/telemetry"
 )
 
@@ -36,22 +37,29 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 	var input struct {
-		WorkspaceName string `json:"workspace_name"`
+		WorkspaceName string  `json:"workspace_name"`
+		Goal          *string `json:"goal"`
+		Role          *string `json:"role"`
+		Source        *string `json:"source"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "A workspace name is required.")
 		return
 	}
+	onboarding := domain.Onboarding{Goal: input.Goal, Role: input.Role, Source: input.Source}
 	verified, err := a.cloud.Verify(request.Context(), token)
 	if err != nil {
 		writeError(response, http.StatusUnauthorized, "unauthorized", "A valid cloud session is required.")
 		return
 	}
 	ip := clientIP(request, a.config.TrustedProxies)
-	workspace, err := a.auth.SignUpCloud(request.Context(), auth.SignUp{Email: verified, Name: input.WorkspaceName, ClientIP: ip, HostedMailDomain: a.config.Email.HostedMailDomain})
+	workspace, err := a.auth.SignUpCloud(request.Context(), auth.SignUp{Email: verified, Name: input.WorkspaceName, ClientIP: ip, HostedMailDomain: a.config.Email.HostedMailDomain, Onboarding: onboarding})
 	switch {
 	case errors.Is(err, auth.ErrInvalidEmail):
 		writeError(response, http.StatusBadRequest, "invalid_request", "The identity provider returned an email address this service cannot use.")
+		return
+	case errors.Is(err, auth.ErrInvalidOnboarding):
+		writeError(response, http.StatusBadRequest, "invalid_request", "goal, role and source must each be one of their listed values.")
 		return
 	case errors.Is(err, auth.ErrInvalidName):
 		writeError(response, http.StatusBadRequest, "invalid_request", "The workspace name must be 2 to 60 characters.")
@@ -80,10 +88,14 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 		writeInternalError(response, err)
 		return
 	}
-	// Counted only once the person has a session, so a failed sign-in is not a started trial.
-	var properties map[string]any
+	// Counted only once the person has a session, so a failed sign-in is not a started trial. The
+	// answers are fixed lists, never free text, and the event carries no email.
+	properties := onboarding.Properties()
 	if visitor := telemetry.WebsiteVisitorID(request); visitor != "" {
-		properties = map[string]any{"website_visitor_id": visitor}
+		if properties == nil {
+			properties = map[string]any{}
+		}
+		properties["website_visitor_id"] = visitor
 	}
 	a.recordFunnel("trial_started", workspace.ID, properties)
 	setSessionCookie(response, result.Token)
