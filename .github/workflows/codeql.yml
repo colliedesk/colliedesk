@@ -27,10 +27,23 @@ jobs:
             build-mode: none
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The toolchain comes from the tool cache when it holds it; see the go job in ci.yml.
+      - if: matrix.language == 'go'
+        id: go-release
+        name: Find the newest Go 1.27 release
+        # Without it, setup-go resolves 1.27.x itself and downloads the toolchain as before.
+        continue-on-error: true
+        run: curl -fsSL --retry 3 https://raw.githubusercontent.com/actions/go-versions/main/versions-manifest.json | python3 .github/scripts/go-release.py 1.27 >> "$GITHUB_OUTPUT"
+      - if: matrix.language == 'go' && steps.go-release.outputs.version != ''
+        name: Restore the Go toolchain
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.tool_cache }}/go/${{ steps.go-release.outputs.version }}
+          key: go-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-release.outputs.version }}
       - if: matrix.language == 'go'
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
-          go-version: '1.27.x'
+          go-version: ${{ steps.go-release.outputs.version || '1.27.x' }}
           # The extractor reads source, not compiler output: a cached build extracted the same 563
           # files as a cold one, in 9 seconds instead of 38.
           cache-dependency-path: server/go.sum

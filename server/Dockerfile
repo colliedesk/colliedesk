@@ -8,9 +8,13 @@ COPY contracts /src/contracts
 COPY server/internal/kbhtml /src/server/internal/kbhtml
 COPY web ./
 COPY server/internal/webui/static /src/server/internal/webui/static
-RUN corepack pnpm build
+# Only the Vite build: the e2e job runs the API drift and type checks on the same commit, and here
+# they competed for the runner's cores with the Go stage, the image's long pole.
+RUN corepack pnpm exec vite build
 
-FROM golang:1.27-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61 AS go
+# Alpine only builds the static binary (CGO_ENABLED=0). Its pull is 75 MB against 302 MB for
+# bookworm, whose pull took about 25 seconds in CI while the Go stage waited for it.
+FROM golang:1.27-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS go
 WORKDIR /src/server
 COPY server/go.mod server/go.sum ./
 RUN go mod download
