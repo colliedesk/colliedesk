@@ -99,7 +99,7 @@ Colliedesk Cloud (`app.colliedesk.com`) is production. Every sign-up there count
 trial in the funnel and emails the team. Test locally or with the e2e suite first.
 
 - **Sign up on Cloud only with a team address.** The server reads `INTERNAL_SIGNUP_EMAILS`
-  (`@colliedesk.com`, `@hclabs.co` on Cloud) and sends `trial_started` with `internal: true` for a
+  (`@colliedesk.com`, `@hclabs.co`, `@hclabs.colliedesk.com` on Cloud) and sends `trial_started` with `internal: true` for a
   match. Never use a personal mailbox: it is counted as a customer. If you must, add that exact
   address to `INTERNAL_SIGNUP_EMAILS` first (HC Labs `infra` repo,
   `hosts/collie-01/colliedesk/compose.yaml`) and wait for the deploy.
