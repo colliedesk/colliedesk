@@ -154,6 +154,8 @@ span.kb-article-open { opacity: 0.35; }
   .dialog-backdrop.kb-backdrop { align-items: end; padding: 0; }
   .kb-backdrop .kb-dialog { width: 100%; max-height: calc(100dvh - 12px); border-width: 1px 0 0; border-radius: 16px 16px 0 0; }
   .kb-backdrop[data-phone="full"] .kb-dialog { height: 100dvh; max-height: none; border-radius: 0; }
+  /* A full-screen dialog has no grab handle: its rows are the head, the body and the foot. */
+  .kb-backdrop[data-phone="full"] .kb-dialog { grid-template-rows: auto minmax(0, 1fr) auto; }
   .kb-backdrop[data-phone="sheet"] .kb-grab { display: block; width: 40px; height: 4px; margin: var(--space-2) auto 0; border-radius: 999px; background: var(--line-strong); }
   .kb-dialog { grid-template-rows: auto auto minmax(0, 1fr) auto; }
   .kb-dialog-head .icon-button { width: var(--touch); }
@@ -552,6 +554,7 @@ span.kb-article-open { opacity: 0.35; }
 /* The library picker of the editor: a dialog, the grid on the left, the picks with their alt text on the right. */
 .kb-dialog.picker { width: min(1040px, 100%); height: min(720px, calc(100dvh - 32px)); }
 .picker .kb-dialog-body { display: flex; flex-direction: column; gap: 0; overflow: hidden; padding: 0; }
+.picker-alts .kb-dialog-body { display: grid; align-content: start; gap: var(--space-3); overflow-y: auto; padding: 0 var(--space-5) var(--space-4); }
 .picker-tools { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 0 var(--space-5) var(--space-3); }
 .picker-tools .picker-search { flex: 1 1 15rem; max-width: 360px; }
 .picker-tools .segmented legend { padding: 0; }
