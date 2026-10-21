@@ -96,11 +96,13 @@ interface MenuProps {
   // A menu in a toolbar joins its roving focus: its button is named by data-tool and takes the tabIndex given.
   tool?: string;
   tabIndex?: number;
+  // grid lays a long menu out as tiles on a phone, so its sheet fits the screen without scrolling.
+  grid?: boolean;
 }
 
 // KBMenu is a button with a menu under it; on a phone the menu is a sheet from the bottom with 48 px rows.
 // Arrows move between its items, Escape closes it and gives the focus back to the button.
-export function KBMenu({ label, trigger, title, items, className, buttonClassName, align = 'end', describe = false, disabled, tool, tabIndex }: MenuProps) {
+export function KBMenu({ label, trigger, title, items, className, buttonClassName, align = 'end', describe = false, disabled, tool, tabIndex, grid }: MenuProps) {
   const id = useId();
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
@@ -131,7 +133,7 @@ export function KBMenu({ label, trigger, title, items, className, buttonClassNam
         disabled={disabled} data-tool={tool} tabIndex={tabIndex} onMouseDown={tool ? (event) => event.preventDefault() : undefined} onClick={() => setOpen(!open)}>{trigger}</button>
       {open && <>
         <div className="kb-menu-scrim" aria-hidden="true" onPointerDown={() => close(false)} />
-        <div ref={menu} id={`${id}-menu`} className="kb-menu" data-align={align} data-describe={describe ? 'true' : undefined} role="menu" aria-label={title} onKeyDown={keys}>
+        <div ref={menu} id={`${id}-menu`} className="kb-menu" data-align={align} data-describe={describe ? 'true' : undefined} data-grid={grid ? 'true' : undefined} role="menu" aria-label={title} onKeyDown={keys}>
           <span className="kb-grab" aria-hidden="true" />
           <div className="kb-menu-head"><span>{title}</span>
             <button type="button" className="icon-button" aria-label={kbMessages.close} onClick={() => close()}><Icon name="close" /></button></div>

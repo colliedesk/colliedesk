@@ -198,10 +198,10 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   );
   const line = (kind: LineKind) => (view: EditorView) => toggleLines(view, kind);
   const item = (label: string, icon: IconName, run: (view: EditorView) => unknown, disabled = false): MenuItem => ({ label, icon, disabled: disabled || !editing, onSelect: () => act(run) });
-  const heading = (block: Block, label: string): MenuItem => ({ label, disabled: !editing || active?.block === block, onSelect: () => act((view) => setHeading(view, block)) });
+  const heading = (block: Block, label: string, icon: IconName): MenuItem => ({ label, icon, disabled: !editing || active?.block === block, onSelect: () => act((view) => setHeading(view, block)) });
   // Formatting a phone has no room for, and on a computer the less used tools: in the menu at the end.
   const more: MenuItem[] = [
-    ...(phone ? [heading('paragraph', t.paragraph), heading('h1', t.h1), heading('h2', t.h2), heading('h3', t.h3),
+    ...(phone ? [heading('paragraph', t.paragraph, 'text'), heading('h1', t.h1, 'h1'), heading('h2', t.h2, 'h2'), heading('h3', t.h3, 'h3'),
       { ...item(t.ordered, 'ordered', line('ordered')), separated: true }, item(t.bullet, 'bullet', line('bullet')), item(t.quote, 'quote', line('quote')),
       item(t.table, 'table', (view) => insertBlock(view, tableTemplate, [2, 8]))] : []),
     { ...item(t.strike, 'strike', (view) => toggleMark(view, '~~')), separated: phone }, item(t.code, 'code', inlineCode), item(t.task, 'task', line('task')),
@@ -248,7 +248,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
           {tool('search', t.search, `${mod}F`, openSearchPanel)}
           {tool('undo', t.undo, `${mod}Z`, undo, undefined, !active?.canUndo)}
         </>}
-        <KBMenu label={t.moreFormatting} title={t.moreFormatting} items={more} className="md-more" buttonClassName="md-tool" tool="more" tabIndex={stop === 'more' ? 0 : -1}
+        <KBMenu label={t.moreFormatting} title={t.moreFormatting} items={more} grid className="md-more" buttonClassName="md-tool" tool="more" tabIndex={stop === 'more' ? 0 : -1}
           disabled={!editing} trigger={<Icon name="more" />} />
       </div>
       {picking && editing && <MediaPicker onClose={() => { setPicking(false); viewRef.current?.focus(); }}

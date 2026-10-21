@@ -168,6 +168,15 @@ span.kb-article-open { opacity: 0.35; }
   .kb-menu-head { display: flex; align-items: center; justify-content: space-between; padding: 0 var(--space-1) var(--space-2); font-weight: 600; }
   .kb-menu-head .icon-button { width: var(--touch); }
   .kb-menu-item button { min-height: 48px; }
+  /* A long menu (More formatting) is tiles of four across, so its sheet fits a 360 x 740 screen. */
+  .kb-menu[data-grid="true"] { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-1); }
+  .kb-menu[data-grid="true"] > .kb-grab, .kb-menu[data-grid="true"] > .kb-menu-head { grid-column: 1 / -1; }
+  .kb-menu[data-grid="true"] .kb-menu-item[data-separated="true"] { margin: 0; border: 0; padding: 0; }
+  .kb-menu[data-grid="true"] .kb-menu-item button { flex-direction: column; justify-content: center; gap: 2px; min-height: 56px; padding: var(--space-1); text-align: center; }
+  .kb-menu[data-grid="true"] .kb-menu-text { flex: none; justify-content: center; font-size: var(--fs-label); line-height: 1.2; }
+  .kb-frame .segmented label, .kb-dialog .segmented label { min-height: var(--touch); }
+  .kb-dialog .picker-pick-field input { font-size: 16px; }
+  .kb-editor-head .kb-count:not(.error-copy) { display: none; }
   .kb-toast { bottom: calc(var(--space-3) + env(safe-area-inset-bottom)); }
   .kb-toast button { min-width: var(--touch); min-height: var(--touch); }
 }

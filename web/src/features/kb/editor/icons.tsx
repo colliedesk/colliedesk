@@ -20,6 +20,10 @@ const paths = {
   search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14M21 21l-5-5',
   undo: 'M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11',
   redo: 'm15 14 5-5-5-5M20 9H9.5a5.5 5.5 0 0 0 0 11H13',
+  text: 'M4 7V4h16v3M9 20h6M12 4v16',
+  h1: 'M4 6v12M12 6v12M4 12h8M17 10l3-2v10',
+  h2: 'M4 6v12M12 6v12M4 12h8M16 10a2.5 2.5 0 0 1 5 0c0 2-5 4-5 8h5',
+  h3: 'M4 6v12M12 6v12M4 12h8M16.5 8h4l-2.5 4a2.5 2.5 0 1 1-2 4',
   // The knowledge base pages around the editor.
   more: 'M5 12h.01M12 12h.01M19 12h.01',
   close: 'M18 6 6 18M6 6l12 12',
