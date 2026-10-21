@@ -262,6 +262,9 @@ type KBMediaUpload struct {
 	ExpiresAt time.Time `json:"expires_at"`
 	// MediaID is set once the upload is complete.
 	MediaID *string `json:"media_id"`
+	// CreatedBy is the person who started it (nil once they left the workspace); only they or an admin cancel it.
+	CreatedBy *SavedReplyPerson `json:"created_by"`
+	CreatedAt time.Time         `json:"created_at"`
 }
 
 // NewKBMediaUpload is what starting an upload asks.
@@ -273,7 +276,9 @@ type NewKBMediaUpload struct {
 var (
 	ErrKBMediaUploadNotFound = errors.New("knowledge base media upload not found")
 	// ErrKBMediaUploadLimit means too many uploads in progress, or started this hour.
-	ErrKBMediaUploadLimit = fmt.Errorf("at most %d uploads may be in progress in a workspace and %d started by one person in an hour; finish or cancel one first", MaxKBMediaUploadsOpen, MaxKBMediaUploadsPerHour)
+	ErrKBMediaUploadLimit = fmt.Errorf("at most %d uploads may be in progress in a workspace and %d started by one person in an hour; finish or cancel one under Uploads in progress on the Knowledge → Media page, or wait", MaxKBMediaUploadsOpen, MaxKBMediaUploadsPerHour)
+	// ErrKBMediaUploadNotYours means a cancel of another person's upload by someone who is not an admin.
+	ErrKBMediaUploadNotYours = errors.New("only the person who started this upload, or an admin, can cancel it")
 	// ErrKBMediaUploadIncomplete means a complete before every byte arrived.
 	ErrKBMediaUploadIncomplete = errors.New("the upload has not received every byte yet")
 )

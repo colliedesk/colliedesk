@@ -15,6 +15,7 @@ import type { CollectionValues } from './collection-panel';
 import { kbApi } from './kb-api';
 import type { KBArticleStatus, KBArticleSummary, KBCollection } from './kb-api';
 import { kbMessages } from './kb-messages';
+import { KBSections } from './media-page';
 import { buildTree, flatten, maxDepth, reason } from './kb-tree';
 import type { TreeNode } from './kb-tree';
 
@@ -110,6 +111,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
     <main className="settings-page kb-page" aria-labelledby="kb-heading">
       <header className="kb-header">
         <div>
+          <KBSections current="articles" />
           <h1 id="kb-heading">{kbMessages.heading}</h1>
           <p>{kbMessages.description}</p>
         </div>

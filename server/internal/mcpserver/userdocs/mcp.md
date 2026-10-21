@@ -117,7 +117,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_video_upload_start` | Starts uploading a video (MP4 or WebM, up to 200 MiB) in parts | `send` |
 | `colliedesk_kb_video_upload_part` | Sends the next part of an upload (up to 5 MiB, base64) | `send` |
 | `colliedesk_kb_video_upload_status` | Says where an upload stands, to go on after an interruption | `read` |
-| `colliedesk_kb_video_upload_cancel` | Cancels an upload and throws its parts away | `send` |
+| `colliedesk_kb_video_upload_list` | Lists the workspace's uploads in progress, who started each and when it expires | `read` |
+| `colliedesk_kb_video_upload_cancel` | Cancels an upload and throws its parts away (one you started; an admin's token, any) | `send` |
 | `colliedesk_kb_video_upload_complete` | Checks and stores the uploaded video | `send` |
 | `colliedesk_kb_video_poster_set` | Sets a video's poster, the still picture shown before it plays | `send` |
 | `colliedesk_help_center_get` | Says whether the public help center is on, its title and language | `read` |

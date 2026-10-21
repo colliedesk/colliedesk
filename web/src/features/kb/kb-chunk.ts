@@ -4,3 +4,4 @@ import './kb.css';
 
 export { KnowledgeRoute } from './knowledge-page';
 export { ArticleRoute } from './article-editor';
+export { MediaRoute } from './media-page';

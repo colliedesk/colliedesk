@@ -3010,6 +3010,24 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/kb/media-uploads:
+    get:
+      operationId: listKBMediaUploads
+      x-permission: conversations:read
+      description: >
+        The workspace's video uploads in progress, the oldest first: who started each, the bytes received
+        and when its parts expire. At most 3 are in progress at once (429 `too_many_uploads` on a fourth);
+        the person who started one, or an admin, cancels it to make room.
+      responses:
+        '200':
+          description: The uploads in progress
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/KBMediaUpload'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
     post:
       operationId: createKBMediaUpload
       x-permission: conversations:write
@@ -3103,7 +3121,8 @@ paths:
       x-permission: conversations:write
       description: >
         Cancel an upload in progress and throw its parts away, at once, even while a part is being sent
-        (that part then answers 404). A token below `send` gets 403 `files_need_approval`.
+        (that part then answers 404). Only the person who started it, or an admin, can (403
+        `not_your_upload`). A token below `send` gets 403 `files_need_approval`.
       responses:
         '204': {description: Cancelled}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -4248,7 +4267,7 @@ components:
         undone_at: {type: [string, 'null'], format: date-time}
     KBMediaUpload:
       type: object
-      required: [id, kind, name, size, offset, part_size, expires_at, media_id]
+      required: [id, kind, name, size, offset, part_size, expires_at, media_id, created_by, created_at]
       properties:
         id: {type: string, format: uuid}
         kind: {type: string, enum: [video]}
@@ -4258,6 +4277,10 @@ components:
         part_size: {type: integer, description: The most bytes one part may carry (8 MiB).}
         expires_at: {type: string, format: date-time, description: The parts are thrown away after this (24 hours after the start).}
         media_id: {type: [string, 'null'], format: uuid, description: The library item once the upload is complete.}
+        created_by:
+          description: Who started it; null once they left the workspace. Only they, or an admin, cancel it.
+          oneOf: [{$ref: '#/components/schemas/SavedReplyPerson'}, {type: 'null'}]
+        created_at: {type: string, format: date-time}
     KBMediaUnusedSummary:
       type: object
       required: [count, bytes, kept_count, kept_bytes]

@@ -109,6 +109,33 @@ const knowledgeRoute = createRoute({
     return <Part part={kbPart} failed={kbFailed} render={({ KnowledgeRoute }) => <KnowledgeRoute search={search} />} />;
   },
 });
+// The media library: its search and the item open in the panel are in the address.
+const mediaSearch = (search: Record<string, unknown>): { q?: string; kind?: 'image' | 'video'; usage?: 'in_use' | 'unused' | 'missing_alt'; sort?: 'oldest' | 'name' | 'largest'; item?: string } => ({
+  ...(typeof search.q === 'string' && search.q !== '' ? { q: search.q } : {}),
+  ...(search.kind === 'image' || search.kind === 'video' ? { kind: search.kind } : {}),
+  ...(search.usage === 'in_use' || search.usage === 'unused' || search.usage === 'missing_alt' ? { usage: search.usage } : {}),
+  ...(search.sort === 'oldest' || search.sort === 'name' || search.sort === 'largest' ? { sort: search.sort } : {}),
+  ...(typeof search.item === 'string' && /^[0-9a-f-]{36}$/.test(search.item) ? { item: search.item } : {}),
+});
+const mediaRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/knowledge/media',
+  validateSearch: mediaSearch,
+  component: function Media() {
+    const search = mediaRoute.useSearch();
+    return <Part part={kbPart} failed={kbFailed} render={({ MediaRoute }) => <MediaRoute view="library" search={search} />} />;
+  },
+});
+const unusedMediaRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/knowledge/media/unused',
+  component: () => <Part part={kbPart} failed={kbFailed} render={({ MediaRoute }) => <MediaRoute view="unused" search={{}} />} />,
+});
+const mediaTrashRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/knowledge/media/trash',
+  component: () => <Part part={kbPart} failed={kbFailed} render={({ MediaRoute }) => <MediaRoute view="trash" search={{}} />} />,
+});
 const newArticleRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/knowledge/new',
@@ -160,7 +187,7 @@ const signInRoute = createRoute({
   component: () => <RedeemRoute token={signInRoute.useSearch().token ?? ''} />,
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, signInRoute]);
+export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, signInRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

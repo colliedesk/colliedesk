@@ -12,12 +12,17 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const kbMediaUploadColumns = `id::text,kind,name,size,received,expires_at,media_id::text`
+// kbMediaUploadColumns reads a row of kb_media_uploads, named so: the name of whoever started it comes
+// from a subquery, which RETURNING takes too.
+const kbMediaUploadColumns = `id::text,kind,name,size,received,expires_at,media_id::text,created_at,created_by_agent_id::text,
+	(SELECT COALESCE(NULLIF(a.display_name,''),a.email) FROM agents a WHERE a.workspace_id=kb_media_uploads.workspace_id AND a.id=kb_media_uploads.created_by_agent_id)`
 
 func scanKBMediaUpload(row pgx.Row) (domain.KBMediaUpload, error) {
 	var upload domain.KBMediaUpload
-	err := row.Scan(&upload.ID, &upload.Kind, &upload.Name, &upload.Size, &upload.Offset, &upload.ExpiresAt, &upload.MediaID)
-	upload.ExpiresAt = domain.UTC(upload.ExpiresAt)
+	var agentID, name *string
+	err := row.Scan(&upload.ID, &upload.Kind, &upload.Name, &upload.Size, &upload.Offset, &upload.ExpiresAt, &upload.MediaID, &upload.CreatedAt, &agentID, &name)
+	upload.ExpiresAt, upload.CreatedAt = domain.UTC(upload.ExpiresAt), domain.UTC(upload.CreatedAt)
+	upload.CreatedBy = savedReplyPerson(agentID, name)
 	upload.PartSize = domain.KBMediaPartSize
 	return upload, err
 }
@@ -137,20 +142,53 @@ func (s *Store) RecordKBMediaUploadPart(ctx context.Context, workspaceID, id str
 	return upload, err
 }
 
-// CancelKBMediaUpload forgets an upload in progress; the caller removes its file.
-func (s *Store) CancelKBMediaUpload(ctx context.Context, workspaceID, id string) error {
+// ListKBMediaUploads returns the workspace's uploads in progress, the oldest first: what holds its
+// three, and the room they reserve.
+func (s *Store) ListKBMediaUploads(ctx context.Context, workspaceID string) ([]domain.KBMediaUpload, error) {
+	uploads, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.KBMediaUpload, error) {
+		rows, err := tx.Query(ctx, `SELECT `+kbMediaUploadColumns+` FROM kb_media_uploads
+			WHERE workspace_id=$1 AND completed_at IS NULL AND expires_at>clock_timestamp() ORDER BY created_at, id`, workspaceID)
+		if err != nil {
+			return nil, err
+		}
+		return pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.KBMediaUpload, error) { return scanKBMediaUpload(row) })
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list knowledge base media uploads: %w", err)
+	}
+	return uploads, nil
+}
+
+// CancelKBMediaUpload forgets an upload in progress; the caller removes its file. Unless anyone, only an
+// upload startedBy started goes (domain.ErrKBMediaUploadNotYours otherwise).
+func (s *Store) CancelKBMediaUpload(ctx context.Context, workspaceID, id, startedBy string, anyone bool) error {
 	if !savedReplyID.MatchString(id) {
 		return domain.ErrKBMediaUploadNotFound
 	}
-	gone, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
-		tag, err := tx.Exec(ctx, `DELETE FROM kb_media_uploads WHERE workspace_id=$1 AND id=$2 AND completed_at IS NULL`, workspaceID, id)
-		return tag.RowsAffected() == 1, err
+	if !anyone && startedBy == "" {
+		return domain.ErrKBMediaUploadNotYours
+	}
+	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
+		tag, err := tx.Exec(ctx, `DELETE FROM kb_media_uploads WHERE workspace_id=$1 AND id=$2 AND completed_at IS NULL
+			AND ($4 OR created_by_agent_id=$3::uuid)`, workspaceID, id, optionalID(startedBy), anyone)
+		if err != nil || tag.RowsAffected() == 1 {
+			return struct{}{}, err
+		}
+		var exists bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM kb_media_uploads WHERE workspace_id=$1 AND id=$2 AND completed_at IS NULL)`,
+			workspaceID, id).Scan(&exists); err != nil {
+			return struct{}{}, err
+		}
+		if exists {
+			return struct{}{}, domain.ErrKBMediaUploadNotYours
+		}
+		return struct{}{}, domain.ErrKBMediaUploadNotFound
 	})
+	if errors.Is(err, domain.ErrKBMediaUploadNotFound) || errors.Is(err, domain.ErrKBMediaUploadNotYours) {
+		return err
+	}
 	if err != nil {
 		return fmt.Errorf("cancel knowledge base media upload: %w", err)
-	}
-	if !gone {
-		return domain.ErrKBMediaUploadNotFound
 	}
 	return nil
 }

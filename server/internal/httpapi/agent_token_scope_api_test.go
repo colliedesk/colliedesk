@@ -70,6 +70,7 @@ var routeTiers = map[string]string{
 	"POST /api/v1/kb/media/{id}/replace":                         "send",
 	"POST /api/v1/kb/media-replacements/{id}/undo":               "send",
 	"POST /api/v1/kb/media-uploads":                              "send",
+	"GET /api/v1/kb/media-uploads":                               "read",
 	"GET /api/v1/kb/media-uploads/{id}":                          "read",
 	"PUT /api/v1/kb/media-uploads/{id}":                          "send",
 	"DELETE /api/v1/kb/media-uploads/{id}":                       "send",

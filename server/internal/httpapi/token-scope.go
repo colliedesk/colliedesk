@@ -123,6 +123,7 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/kb/media/{id}/replace":                         tier(auth.ScopeSend),
 	"POST /api/v1/kb/media-replacements/{id}/undo":               tier(auth.ScopeSend),
 	"POST /api/v1/kb/media-uploads":                              tier(auth.ScopeSend),
+	"GET /api/v1/kb/media-uploads":                               tier(auth.ScopeRead),
 	"GET /api/v1/kb/media-uploads/{id}":                          tier(auth.ScopeRead),
 	"PUT /api/v1/kb/media-uploads/{id}":                          tier(auth.ScopeSend),
 	"DELETE /api/v1/kb/media-uploads/{id}":                       tier(auth.ScopeSend),

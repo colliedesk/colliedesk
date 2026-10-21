@@ -1614,7 +1614,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** @description The workspace's video uploads in progress, the oldest first: who started each, the bytes received and when its parts expire. At most 3 are in progress at once (429 `too_many_uploads` on a fourth); the person who started one, or an admin, cancels it to make room. */
+        get: operations["listKBMediaUploads"];
         put?: never;
         /** @description Start an upload of a video in parts: MP4 (H.264 or AV1 with AAC sound, QuickTime .mov included) or WebM (VP8, VP9 or AV1 with Opus or Vorbis), at most 200 MiB unless the server says otherwise. Nothing is converted, so the video must be one every browser plays: an H.265 (HEVC) video, the default of iPhones, is refused when the upload completes. Send the parts with `PUT /api/v1/kb/media-uploads/{id}`, then complete it. The plan's storage (counting the uploads in progress) and the server's disk (counting every upload in progress on the server) must have room before any byte is sent: 403 `storage_limit_reached`, 507 `insufficient_disk`; past 200 uploads in progress on the server a new one is 503 `server_busy`. At most 3 uploads are in progress in a workspace and 10 are started by one person in an hour (429 `too_many_uploads`). The parts are thrown away after 24 hours. A token below `send` gets 403 `files_need_approval`. */
         post: operations["createKBMediaUpload"];
@@ -1638,7 +1639,7 @@ export interface paths {
         /** @description Send the next part, at most `part_size` bytes, with `Content-Range: bytes <first>-<last>/<size>`. A part that does not start at the upload's offset is refused with 409 `upload_offset_mismatch`, the offset in `Upload-Offset` and in the answer; send that part again. One part of an upload at a time; a part must arrive within 120 seconds. */
         put: operations["putKBMediaUploadPart"];
         post?: never;
-        /** @description Cancel an upload in progress and throw its parts away, at once, even while a part is being sent (that part then answers 404). A token below `send` gets 403 `files_need_approval`. */
+        /** @description Cancel an upload in progress and throw its parts away, at once, even while a part is being sent (that part then answers 404). Only the person who started it, or an admin, can (403 `not_your_upload`). A token below `send` gets 403 `files_need_approval`. */
         delete: operations["cancelKBMediaUpload"];
         options?: never;
         head?: never;
@@ -2661,6 +2662,10 @@ export interface components {
              * @description The library item once the upload is complete.
              */
             media_id: string | null;
+            /** @description Who started it; null once they left the workspace. Only they, or an admin, cancel it. */
+            created_by: components["schemas"]["SavedReplyPerson"] | null;
+            /** Format: date-time */
+            created_at: string;
         };
         /** @description Every unused item the filter selects, not only the page; kept items apart. Bytes count the original and a video's poster. */
         KBMediaUnusedSummary: {
@@ -6948,6 +6953,29 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    listKBMediaUploads: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The uploads in progress */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["KBMediaUpload"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     createKBMediaUpload: {
