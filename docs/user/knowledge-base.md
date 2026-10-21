@@ -6,7 +6,9 @@ help center while an admin has it turned on; a draft is seen only by agents. Eve
 a version you can restore, and a deleted article or collection waits in a trash for 30 days. AI
 agents can do the same (see [AI agents](#ai-agents)).
 
-Open it from **Knowledge** in the left rail (on a phone, in the bar at the top).
+Open it from **Knowledge** in the left rail (on a phone, in the bar at the top). Moving from
+Freshdesk? `collie import freshdesk` brings your Freshdesk knowledge base over with its collections,
+dates and images; see [Import from Freshdesk](import-freshdesk.md#knowledge-base).
 
 ## Collections
 

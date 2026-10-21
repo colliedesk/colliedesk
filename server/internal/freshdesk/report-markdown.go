@@ -39,7 +39,9 @@ func (r *Report) Markdown() string {
 	for _, row := range []struct {
 		name  string
 		count EntityCount
-	}{{"Contacts", r.Contacts}, {"Tickets", r.Tickets.EntityCount}, {"Messages", r.Messages}, {"Attachments", r.Attachments.EntityCount}, {"Inline images", r.InlineImages.EntityCount}, {"Time entries", r.TimeEntries}, {"Saved replies", r.SavedReplies.EntityCount}} {
+	}{{"Contacts", r.Contacts}, {"Tickets", r.Tickets.EntityCount}, {"Messages", r.Messages}, {"Attachments", r.Attachments.EntityCount}, {"Inline images", r.InlineImages.EntityCount}, {"Time entries", r.TimeEntries}, {"Saved replies", r.SavedReplies.EntityCount},
+		{"Knowledge base collections", r.KnowledgeBase.Collections}, {"Knowledge base articles", r.KnowledgeBase.Articles},
+		{"Knowledge base translations", r.KnowledgeBase.Translations}, {"Knowledge base images", r.KnowledgeBase.Images.EntityCount}} {
 		fmt.Fprintf(&b, "| %s | %d | %d | %d |\n", row.name, row.count.Source, row.count.Imported, row.count.Failed)
 	}
 	fmt.Fprintf(&b, "\nAttachment bytes: %d in Freshdesk, %d stored. SHA-256 re-verified from storage: %d.\n",
@@ -62,13 +64,14 @@ func (r *Report) Markdown() string {
 	}
 	fmt.Fprintf(&b, "Saved replies: %d canned response folders; %d canned responses had no text and were skipped; %d files on canned responses were not imported.\n",
 		r.SavedReplies.Folders, len(r.SavedReplies.EmptySkipped), r.SavedReplies.AttachmentsNotImported)
+	writeKnowledgeBase(&b, r.KnowledgeBase)
 	fmt.Fprintf(&b, "Rate limiting: %d pause(s) after X-Ratelimit-Remaining 0, %d HTTP 429 response(s), %s waited in total.\n",
 		r.RateLimit.Pauses, r.RateLimit.Throttled, (time.Duration(r.RateLimit.WaitSeconds * float64(time.Second))).Round(time.Second))
 	b.WriteString("\n## How the totals were verified\n\n")
 	for _, row := range []struct {
 		name string
 		v    Verification
-	}{{"Tickets", r.Verification.Tickets}, {"Contacts", r.Verification.Contacts}, {"Saved replies", r.Verification.SavedReplies}} {
+	}{{"Tickets", r.Verification.Tickets}, {"Contacts", r.Verification.Contacts}, {"Saved replies", r.Verification.SavedReplies}, {"Knowledge base", r.Verification.KnowledgeBase}} {
 		verdict := "verified"
 		if !row.v.Verified {
 			verdict = "NOT verified"
@@ -91,6 +94,12 @@ func (r *Report) Markdown() string {
 	writeList(&b, "Canned responses in personal folders, not imported (Freshdesk ids; run again with --include-personal-canned-responses to share them)", r.SavedReplies.PersonalNotImported)
 	writeList(&b, "Canned responses whose files were not imported (Freshdesk ids)", r.SavedReplies.ResponsesWithAttachments)
 	writeList(&b, "Freshdesk placeholders left as written in saved replies (canned response ids)", placeholderLines(r.SavedReplies.UnmappedPlaceholders))
+	writeList(&b, "Knowledge base limits this import would pass (nothing is imported until they fit)", r.KnowledgeBase.Refused)
+	writeList(&b, "Knowledge base articles imported as drafts, by reason (Freshdesk ids)", draftLines(r.KnowledgeBase.Drafts))
+	writeList(&b, "Knowledge base articles changed in Freshdesk and in Colliedesk; the Colliedesk version was kept (Freshdesk ids)", r.KnowledgeBase.ChangedInBoth)
+	writeList(&b, "Knowledge base articles made drafts again: Freshdesk no longer shows them to everyone (Freshdesk ids)", r.KnowledgeBase.Unpublished)
+	writeList(&b, "Knowledge base articles deleted for good in Colliedesk, not imported again (Freshdesk ids)", r.KnowledgeBase.DeletedInColliedesk)
+	writeList(&b, "Knowledge base images already gone in Freshdesk (the article keeps the link)", kbGoneLines(r.KnowledgeBase.Images.GoneImages))
 	writeList(&b, "Ticket ids that could not be resolved (archive unavailable)", r.Tickets.UnresolvedIDs)
 	writeList(&b, "Deleted in Freshdesk during the import (ticket ids)", r.Tickets.DeletedAtSource)
 	writeList(&b, "In Freshdesk Trash, not imported (ticket ids)", r.Tickets.Trashed)
@@ -146,6 +155,56 @@ func goneLines(images []GoneImage) []string {
 	lines := make([]string, 0, len(images))
 	for _, image := range images {
 		lines = append(lines, fmt.Sprintf("ticket %s: %s. The message keeps its Freshdesk link, which no longer works. %s", image.TicketID, image.Message, image.Detail))
+	}
+	return lines
+}
+
+// draftReasons explains each reason an article published in Freshdesk became a draft.
+var draftReasons = map[string]string{
+	draftInFreshdesk:    "a draft in Freshdesk",
+	draftFolderVisible:  "in a folder not visible to all users (logged-in users, agents, companies, segments or bots only)",
+	draftNotInPortal:    "its category is in no portal",
+	draftPortalUnknown:  "its category names no portal while others do, so its portal is unknown",
+	draftSeveralPortals: "its category is not in the help center's portal (choose one with --help-center-portal)",
+}
+
+func writeKnowledgeBase(b *strings.Builder, kb KnowledgeBaseCount) {
+	if kb.NotAvailable {
+		b.WriteString("Knowledge base: this Freshdesk account has none, so nothing was imported. This does not affect the ticket import.\n")
+		return
+	}
+	drafts := 0
+	for _, ids := range kb.Drafts {
+		drafts += len(ids)
+	}
+	languages := "none"
+	if len(kb.Languages) > 0 {
+		languages = strings.Join(kb.Languages, ", ")
+	}
+	fmt.Fprintf(b, "Knowledge base: %d published, %d imported as drafts (reasons below; publish them in Colliedesk when they should be public). Translation languages: %s. Images already gone in Freshdesk: %d. The whole knowledge base is read on every run; --since applies to tickets only.\n",
+		len(kb.Published), drafts, languages, kb.Images.Gone)
+	for _, note := range kb.Notes {
+		fmt.Fprintf(b, "Knowledge base: %s\n", note)
+	}
+}
+
+func draftLines(drafts map[string][]string) []string {
+	reasons := make([]string, 0, len(drafts))
+	for reason := range drafts {
+		reasons = append(reasons, reason)
+	}
+	sort.Strings(reasons)
+	lines := make([]string, 0, len(reasons))
+	for _, reason := range reasons {
+		lines = append(lines, fmt.Sprintf("%s (%s): %d%s", reason, draftReasons[reason], len(drafts[reason]), idSuffix(drafts[reason])))
+	}
+	return lines
+}
+
+func kbGoneLines(images []KBGoneImage) []string {
+	lines := make([]string, 0, len(images))
+	for _, image := range images {
+		lines = append(lines, fmt.Sprintf("article %s: %s", image.ArticleID, image.Detail))
 	}
 	return lines
 }

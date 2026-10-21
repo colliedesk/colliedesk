@@ -1,0 +1,73 @@
+{
+  "settings": {"primary_language": "en", "supported_languages": ["es"], "portal_languages": ["es"]},
+  "categories": [
+    {"id": 1, "name": "Getting started", "description": "First steps", "created_at": "2023-01-02T08:00:00Z", "updated_at": "2023-02-02T08:00:00Z"},
+    {"id": 2, "name": "Billing", "description": null, "created_at": "2023-01-03T08:00:00Z", "updated_at": "2023-01-03T08:00:00Z"}
+  ],
+  "category_folders": {
+    "1": [
+      {"id": 11, "name": "Basics", "description": "The basics", "parent_folder_id": null, "articles_count": 2, "sub_folders_count": 1, "visibility": 1,
+       "created_at": "2023-01-04T08:00:00Z", "updated_at": "2023-01-04T08:00:00Z"},
+      {"id": 12, "name": "Internal", "description": null, "parent_folder_id": null, "articles_count": 1, "sub_folders_count": 0, "visibility": 3,
+       "created_at": "2023-01-05T08:00:00Z", "updated_at": "2023-01-05T08:00:00Z"},
+      {"id": 111, "name": "Advanced", "description": null, "parent_folder_id": 11, "articles_count": 1, "sub_folders_count": 1, "visibility": 1,
+       "created_at": "2023-01-06T08:00:00Z", "updated_at": "2023-01-06T08:00:00Z"}
+    ],
+    "2": [
+      {"id": 21, "name": "Invoices", "description": null, "parent_folder_id": null, "articles_count": 1, "sub_folders_count": 0, "visibility": 1,
+       "created_at": "2023-01-07T08:00:00Z", "updated_at": "2023-01-07T08:00:00Z"}
+    ]
+  },
+  "subfolders": {
+    "11": [
+      {"id": 111, "name": "Advanced", "description": null, "parent_folder_id": 11, "articles_count": 1, "sub_folders_count": 1, "visibility": 1,
+       "created_at": "2023-01-06T08:00:00Z", "updated_at": "2023-01-06T08:00:00Z"}
+    ],
+    "111": [
+      {"id": 1111, "name": "Deep", "description": null, "parent_folder_id": 111, "articles_count": 1, "sub_folders_count": 0, "visibility": 1,
+       "created_at": "2023-01-08T08:00:00Z", "updated_at": "2023-01-08T08:00:00Z"}
+    ]
+  },
+  "articles": {
+    "11": [
+      {"id": 101, "type": 1, "category_id": 1, "folder_id": 11, "agent_id": 101, "title": "Reset your password", "status": 2,
+       "description": "<h2>Steps</h2><p>Open <b>Settings</b> and choose <a href=\"https://acme.example/reset\">Reset</a>.</p>",
+       "description_text": "Steps Open Settings and choose Reset.", "tags": ["password", "login"], "seo_data": {"meta_title": "Reset"},
+       "hits": 42, "thumbs_up": 3, "thumbs_down": 1, "created_at": "2023-03-01T10:00:00Z", "updated_at": "2023-04-01T10:00:00Z"},
+      {"id": 102, "type": 1, "category_id": 1, "folder_id": 11, "agent_id": 102, "title": "Upcoming feature", "status": 1,
+       "description": "<p>Not ready yet.</p>", "description_text": "Not ready yet.", "tags": [], "seo_data": {},
+       "hits": 0, "thumbs_up": 0, "thumbs_down": 0, "created_at": "2023-03-02T10:00:00Z", "updated_at": "2023-03-02T10:00:00Z"}
+    ],
+    "12": [
+      {"id": 103, "type": 1, "category_id": 1, "folder_id": 12, "agent_id": 101, "title": "Escalation runbook", "status": 2,
+       "description": "<p>Call the on-call engineer.</p>", "description_text": "Call the on-call engineer.", "tags": [], "seo_data": {},
+       "hits": 5, "thumbs_up": 0, "thumbs_down": 0, "created_at": "2023-03-03T10:00:00Z", "updated_at": "2023-03-03T10:00:00Z"}
+    ],
+    "111": [
+      {"id": 104, "type": 1, "category_id": 1, "folder_id": 111, "agent_id": 101, "title": "Use the API", "status": 2,
+       "description": "<p>See the screenshot:</p><p><img src=\"{{files}}/inline-kb-7001?Signature=s&amp;Expires=1\" alt=\"Token page\"></p><p><img src=\"{{files}}/inline-kb-gone\"></p>",
+       "description_text": "See the screenshot:", "tags": [], "seo_data": {},
+       "hits": 1, "thumbs_up": 0, "thumbs_down": 0, "created_at": "2023-03-04T10:00:00Z", "updated_at": "2023-03-04T10:00:00Z"}
+    ],
+    "1111": [
+      {"id": 105, "type": 1, "category_id": 1, "folder_id": 1111, "agent_id": 101, "title": "Webhooks in depth", "status": 2,
+       "description": "<p>Retries back off.</p>", "description_text": "Retries back off.", "tags": [], "seo_data": {},
+       "hits": 0, "thumbs_up": 0, "thumbs_down": 0, "created_at": "2023-03-05T10:00:00Z", "updated_at": "2023-03-05T10:00:00Z"}
+    ],
+    "21": [
+      {"id": 106, "type": 2, "category_id": 2, "folder_id": 21, "agent_id": 999, "title": "Read your invoice", "status": 2,
+       "description": "<p>Watch <iframe src=\"https://video.example/embed/1\"></iframe> then <a href=\"javascript:alert(1)\">click</a>.</p><table><tr><th>Item</th><th>Price</th></tr><tr><td colspan=\"2\">Total</td></tr></table>",
+       "description_text": "Watch then click.", "tags": ["invoice"], "seo_data": {},
+       "hits": 9, "thumbs_up": 1, "thumbs_down": 0, "created_at": "2023-03-06T10:00:00Z", "updated_at": "2023-03-06T10:00:00Z"}
+    ]
+  },
+  "translations": {
+    "es": {
+      "11": [
+        {"id": 101, "type": 1, "category_id": 1, "folder_id": 11, "agent_id": 101, "title": "Restablecer la contraseña", "status": 2,
+         "description": "<p>Abra <b>Ajustes</b>.</p>", "description_text": "Abra Ajustes.", "tags": [], "seo_data": {},
+         "hits": 2, "thumbs_up": 0, "thumbs_down": 0, "created_at": "2023-03-10T10:00:00Z", "updated_at": "2023-03-11T10:00:00Z"}
+      ]
+    }
+  }
+}

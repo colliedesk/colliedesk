@@ -210,6 +210,14 @@ func addKBArticleVersion(ctx context.Context, tx pgx.Tx, workspaceID, articleID 
 	if err := tx.QueryRow(ctx, `SELECT body_md FROM kb_articles WHERE workspace_id=$1 AND id=$2`, workspaceID, articleID).Scan(&body); err != nil {
 		return err
 	}
+	if err := linkKBImages(ctx, tx, workspaceID, articleID, body); err != nil {
+		return err
+	}
+	return bumpKB(ctx, tx, workspaceID)
+}
+
+// linkKBImages links the images a text of the article points at to the article.
+func linkKBImages(ctx context.Context, tx pgx.Tx, workspaceID, articleID, body string) error {
 	if ids := domain.KBImageIDs(body); len(ids) > 0 {
 		// Only images of this workspace are linked; an id of another workspace's image matches no row.
 		if _, err := tx.Exec(ctx, `INSERT INTO kb_article_images(workspace_id,article_id,image_id)
@@ -217,7 +225,28 @@ func addKBArticleVersion(ctx context.Context, tx pgx.Tx, workspaceID, articleID 
 			return fmt.Errorf("link knowledge base images: %w", err)
 		}
 	}
-	return bumpKB(ctx, tx, workspaceID)
+	return nil
+}
+
+// admitKBArticle takes the knowledge base lock, refuses a full workspace (the trash counts) and returns
+// the next article number.
+func admitKBArticle(ctx context.Context, tx pgx.Tx, workspaceID string) (int64, error) {
+	if err := lockKB(ctx, tx, workspaceID); err != nil {
+		return 0, err
+	}
+	var count int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM kb_articles WHERE workspace_id=$1`, workspaceID).Scan(&count); err != nil {
+		return 0, err
+	}
+	if count >= domain.MaxKBArticles {
+		return 0, domain.ErrKBArticleLimit
+	}
+	var number int64
+	if err := tx.QueryRow(ctx, `INSERT INTO help_centers(workspace_id,last_article_number) VALUES($1,1)
+		ON CONFLICT (workspace_id) DO UPDATE SET last_article_number=help_centers.last_article_number+1 RETURNING last_article_number`, workspaceID).Scan(&number); err != nil {
+		return 0, fmt.Errorf("number the article: %w", err)
+	}
+	return number, nil
 }
 
 // checkKBCollection refuses a collection that is missing or in the trash. The share lock holds off a
@@ -261,23 +290,12 @@ func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor A
 		return domain.KBArticle{}, err
 	}
 	article, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBArticle, error) {
-		if err := lockKB(ctx, tx, workspaceID); err != nil {
+		number, err := admitKBArticle(ctx, tx, workspaceID)
+		if err != nil {
 			return domain.KBArticle{}, err
-		}
-		var count int
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM kb_articles WHERE workspace_id=$1`, workspaceID).Scan(&count); err != nil {
-			return domain.KBArticle{}, err
-		}
-		if count >= domain.MaxKBArticles {
-			return domain.KBArticle{}, domain.ErrKBArticleLimit
 		}
 		if err := checkKBCollection(ctx, tx, workspaceID, input.CollectionID); err != nil {
 			return domain.KBArticle{}, err
-		}
-		var number int64
-		if err := tx.QueryRow(ctx, `INSERT INTO help_centers(workspace_id,last_article_number) VALUES($1,1)
-			ON CONFLICT (workspace_id) DO UPDATE SET last_article_number=help_centers.last_article_number+1 RETURNING last_article_number`, workspaceID).Scan(&number); err != nil {
-			return domain.KBArticle{}, fmt.Errorf("number the article: %w", err)
 		}
 		var id string
 		if err := tx.QueryRow(ctx, `INSERT INTO kb_articles(workspace_id,collection_id,number,title,slug,body_md,status,published_at,author_agent_id)

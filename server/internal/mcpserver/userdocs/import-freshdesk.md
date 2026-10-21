@@ -22,12 +22,13 @@ code. Run the same command again to retry: finished items are never copied twice
 | Images inside a message that Freshdesk hosts | Stored by Colliedesk with a SHA-256 checksum, embedded in the formatted message, and also listed as files in the plain-text view. See "Images inside messages" below |
 | Time entries | Time entries (agent, minutes, note, billable, time), shown under **Time logged** on the timeline |
 | Canned responses | [Saved replies](saved-replies.md), titled `<folder name> / <title>` so the folder is still visible. See below |
+| Knowledge base (solutions): categories, folders, articles and their translations | Knowledge base collections and articles with the original dates and author. See "Knowledge base" below |
 
 Status mapping: Open → Open, Pending → Pending, Resolved → Resolved, Closed → Closed. Custom
 statuses become Pending and are listed in the report. Priority: Low → Low, Medium → Normal, High → High, Urgent → Urgent. An unknown priority becomes
 Normal and is listed in the report.
 
-The report lists what is **not** imported, for example custom fields and knowledge base articles.
+The report lists what is **not** imported, for example custom fields.
 
 ### Canned responses
 
@@ -62,8 +63,53 @@ replies, or a text is longer than 20 000 characters, that item is listed under *
 status is `FAILED`. If Freshdesk fails to list the folders (not a refusal, for example server errors),
 the tickets still import; the report shows a failure for the canned responses and the status is
 `FAILED` until you run the import again. Running the import again never adds a canned response twice and never overwrites
-a saved reply your team edited or deleted. The Freshdesk API key needs a plan that has canned
-responses; if Freshdesk refuses them, the report says so and the status is `UNVERIFIED`.
+a saved reply your team edited or deleted. If your Freshdesk plan has no canned responses (Freshdesk
+refuses them), the report says so and this does not change the status.
+
+### Knowledge base
+
+The whole knowledge base is imported on every run, whatever `--since` says:
+
+| Freshdesk | Colliedesk |
+|---|---|
+| Category | Top-level collection |
+| Folder, subfolder | Collection inside it, then a collection inside that one |
+| A folder nested deeper | A third-level collection named after its folders, for example `Advanced / Deep`, listed under the warning `kb_folder_flattened` |
+| Article | Article in Markdown with its title, original created and updated dates, and the author when a Colliedesk agent has the same email |
+| Article images hosted by Freshdesk | Stored by Colliedesk; the article points at the stored copy |
+| Translations | Kept with the article and in the [export](export.md); not shown in Colliedesk yet |
+
+An article is **published** only when it is published in Freshdesk, every folder above it is
+visible to **All Users**, and its category is in your help center's portal. Everything else is
+imported as a **draft**, so an internal article never becomes public by mistake. The report lists the
+drafts by reason; publish the ones that should be public. If your Freshdesk account has several
+portals, choose the one whose articles stay published with `--help-center-portal <id>` (the portal ids
+are in the report under `knowledge_base.portals`); without it, all articles of those categories are
+drafts.
+
+Markdown cannot hold everything HTML can. Embedded video, iframes, forms and scripts are left out of
+the article, a table cell that spans several columns is repeated in each, and a table whose cells hold
+several lines or a list becomes plain text (the words stay). The report names the
+articles under the warning `kb_article_markup_dropped`. The original HTML stays with the article and
+is in the export.
+
+An image Freshdesk no longer has stays a link and is listed. An image that fails to download for
+another reason makes the status `FAILED`; run the import again.
+
+The import refuses, before it writes anything, a knowledge base that does not fit: more than 2,000
+articles in the workspace (articles in the trash count) or 1,000 collections, or an article longer than
+100,000 characters once converted. A text is never cut. `--dry-run` lists what does not fit.
+
+Running the import again updates an article that changed in Freshdesk, unless your team changed it in
+Colliedesk since: then your version stays and the report lists the article under
+`kb_article_changed_in_both`. If an article is no longer public in Freshdesk (its folder became
+private, or its category left the portal), the next run makes it a draft again, unless your team
+changed it since: then it stays published and the report warns (`kb_article_published_but_not_public`).
+When only a folder or a portal changes the other way, the article stays a draft; publish it in
+Colliedesk. `import undo` removes the imported articles and collections, but keeps an
+article your team edited, restored or deleted since, and the collections that hold it or your own
+articles. If Freshdesk has no knowledge base, the report says so. If Freshdesk refuses it (the API key
+may lack the right), the status is `UNVERIFIED`.
 
 ## Before you start
 
@@ -109,6 +155,8 @@ Options:
 - `--dry-run`: count only.
 - `--last-ticket-id N`: the highest ticket number you see in Freshdesk. Recommended: the ticket
   check then covers at least this far (see "How completeness is checked").
+- `--help-center-portal ID`: on an account with several portals, the portal whose published
+  knowledge base articles stay published (see "Knowledge base").
 - `--report-dir DIR`: where to write the report. Default: the current directory.
 
 The import respects Freshdesk's rate limit. It waits when Freshdesk says the limit is used up,

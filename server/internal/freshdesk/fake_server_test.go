@@ -19,12 +19,13 @@ import (
 
 const testAPIKey = "fd-test-key-DO-NOT-PRINT"
 
-var fileBodies = map[string]string{"9001": "PDF-BYTES-1", "9002": "PNG-BYTES", "9003": "log line 1", "inline-5001": inlineImageBody}
+var fileBodies = map[string]string{"9001": "PDF-BYTES-1", "9002": "PNG-BYTES", "9003": "log line 1", "inline-5001": inlineImageBody, "inline-kb-7001": kbImageBody}
 
 const (
 	pngSignature     = "\x89PNG\r\n\x1a\n"
 	inlineImageBody  = pngSignature + "INLINE-1"
 	accountImageBody = pngSignature + "ACCOUNT"
+	kbImageBody      = pngSignature + "KNOWLEDGE-BASE"
 )
 
 // fakeFreshdesk serves JSON shaped like the public Freshdesk API v2 from
@@ -77,6 +78,10 @@ type fakeFreshdesk struct {
 	failPathTimes map[string]int
 	// failPathStatus makes every API request to a path answer with the given status.
 	failPathStatus map[string]int
+	// solutions serves the knowledge base fixture (testdata/solutions.json); without it every solutions
+	// path answers 404, an account without a knowledge base. solutionsEdit changes the fixture first.
+	solutions     bool
+	solutionsEdit func(map[string]any)
 }
 
 func newFakeFreshdesk(t *testing.T) *fakeFreshdesk {
@@ -218,8 +223,64 @@ func (f *fakeFreshdesk) serveAPI(w http.ResponseWriter, r *http.Request) {
 		f.page(w, r, f.cannedFolders())
 	case len(parts) == 3 && parts[0] == "canned_response_folders" && parts[2] == "responses":
 		f.page(w, r, f.cannedResponses(parts[1]))
+	case f.solutions && r.URL.Path == "/api/v2/products":
+		f.page(w, r, []map[string]any{})
+	case f.solutions && (parts[0] == "solutions" || r.URL.Path == "/api/v2/settings/helpdesk"):
+		f.serveSolutions(w, r, parts)
 	case len(parts) == 3 && parts[2] == "time_entries":
 		f.page(w, r, f.list("time-entries-"+parts[1]+".json"))
+	default:
+		writeJSON(w, http.StatusNotFound, map[string]string{"message": "not found"})
+	}
+}
+
+// solutionsFixture reads testdata/solutions.json with the file host filled in and solutionsEdit applied.
+func (f *fakeFreshdesk) solutionsFixture() map[string]any {
+	data, err := os.ReadFile(filepath.Join("testdata", "solutions.json"))
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	var fixture map[string]any
+	if err := json.Unmarshal([]byte(strings.ReplaceAll(string(data), "{{files}}", f.files.URL)), &fixture); err != nil {
+		f.t.Fatalf("fixture solutions.json: %v", err)
+	}
+	f.mu.Lock()
+	edit := f.solutionsEdit
+	f.mu.Unlock()
+	if edit != nil {
+		edit(fixture)
+	}
+	return fixture
+}
+
+// items reads fixture[group][key] as a list; a missing key is an empty list.
+func items(fixture map[string]any, group, key string) []map[string]any {
+	byKey, _ := fixture[group].(map[string]any)
+	list, _ := byKey[key].([]any)
+	out := []map[string]any{}
+	for _, item := range list {
+		out = append(out, item.(map[string]any))
+	}
+	return out
+}
+
+func (f *fakeFreshdesk) serveSolutions(w http.ResponseWriter, r *http.Request, parts []string) {
+	fixture := f.solutionsFixture()
+	switch {
+	case r.URL.Path == "/api/v2/settings/helpdesk":
+		writeJSON(w, http.StatusOK, fixture["settings"])
+	case len(parts) == 2 && parts[1] == "categories":
+		f.page(w, r, items(map[string]any{"all": map[string]any{"categories": fixture["categories"]}}, "all", "categories"))
+	case len(parts) == 4 && parts[1] == "categories" && parts[3] == "folders":
+		f.page(w, r, items(fixture, "category_folders", parts[2]))
+	case len(parts) == 4 && parts[1] == "folders" && parts[3] == "subfolders":
+		f.page(w, r, items(fixture, "subfolders", parts[2]))
+	case len(parts) == 4 && parts[1] == "folders" && parts[3] == "articles":
+		f.page(w, r, items(fixture, "articles", parts[2]))
+	case len(parts) == 5 && parts[1] == "folders" && parts[3] == "articles":
+		byLanguage, _ := fixture["translations"].(map[string]any)
+		language, _ := byLanguage[parts[4]].(map[string]any)
+		f.page(w, r, items(map[string]any{"t": language}, "t", parts[2]))
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "not found"})
 	}

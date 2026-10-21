@@ -201,24 +201,8 @@ func (s *Store) CreateKBCollection(ctx context.Context, workspaceID string, acto
 		return domain.KBCollection{}, err
 	}
 	collection, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBCollection, error) {
-		if err := lockKB(ctx, tx, workspaceID); err != nil {
+		if err := admitKBCollection(ctx, tx, workspaceID, input.ParentID); err != nil {
 			return domain.KBCollection{}, err
-		}
-		var count int
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM kb_collections WHERE workspace_id=$1`, workspaceID).Scan(&count); err != nil {
-			return domain.KBCollection{}, err
-		}
-		if count >= domain.MaxKBCollections {
-			return domain.KBCollection{}, domain.ErrKBCollectionLimit
-		}
-		if input.ParentID != nil {
-			depth, err := kbDepth(ctx, tx, workspaceID, *input.ParentID)
-			if err != nil {
-				return domain.KBCollection{}, err
-			}
-			if depth+1 > domain.MaxKBDepth {
-				return domain.KBCollection{}, tooDeep()
-			}
 		}
 		collection, err := kbSavepoint(ctx, tx, func(sub pgx.Tx) (domain.KBCollection, error) {
 			var id string
@@ -234,6 +218,31 @@ func (s *Store) CreateKBCollection(ctx context.Context, workspaceID string, acto
 		return collection, bumpKB(ctx, tx, workspaceID)
 	})
 	return collection, kbCollectionError("create", err)
+}
+
+// admitKBCollection takes the knowledge base lock and refuses a full workspace (the trash counts) or a
+// parent that is missing, in the trash or too deep for one more level.
+func admitKBCollection(ctx context.Context, tx pgx.Tx, workspaceID string, parentID *string) error {
+	if err := lockKB(ctx, tx, workspaceID); err != nil {
+		return err
+	}
+	var count int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM kb_collections WHERE workspace_id=$1`, workspaceID).Scan(&count); err != nil {
+		return err
+	}
+	if count >= domain.MaxKBCollections {
+		return domain.ErrKBCollectionLimit
+	}
+	if parentID != nil {
+		depth, err := kbDepth(ctx, tx, workspaceID, *parentID)
+		if err != nil {
+			return err
+		}
+		if depth+1 > domain.MaxKBDepth {
+			return tooDeep()
+		}
+	}
+	return nil
 }
 
 // KBCollectionChange is a partial update; a nil field stays as it is. MoveParent set moves the

@@ -169,7 +169,8 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
   Colliedesk variables; other placeholders stay and are reported by name. A ledger-`done` reply is never
   rewritten or recreated, so an agent's edit or deletion survives a rerun. Files on a canned response
   are not imported (saved replies carry none) and are listed. Personal folders are listed by response id and skipped unless `Options.IncludePersonalCannedResponses` (CLI `--include-personal-canned-responses`). HTML fallback keeps `<a href>` as `text (url)` and warns when an `<img>` is dropped. A folder list that fails for a reason other than 403/404 is a `saved_reply_folder` failure with id `all`; tickets still import. Verification compares the sum of folder
-  `responses_count` with the responses listed; a refused endpoint is a warning plus `UNVERIFIED`; an
+  `responses_count` with the responses listed; a refused or missing endpoint (403 or 404: a plan without
+  canned responses) is only a note (`not_available`) and never makes the run `UNVERIFIED`; an
   unreadable folder is a `saved_reply_folder` failure that the next successful read clears. Undo
   deletes imported replies whose `updated_at` equals `created_at` and keeps (with their ledger rows)
   the ones an agent edited.
@@ -184,6 +185,93 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
 - **Downloads are never rendered inline.** `GET /api/v1/attachments/{id}` answers
   `application/octet-stream`, `Content-Disposition: attachment` (RFC 5987 `filename*`) and
   `nosniff`, and refuses a row whose storage key belongs to another workspace.
+
+## Knowledge base (solutions)
+
+Code: `solutions*.go`; the writes are `store/kb-import.go`, which take the same lock, limits,
+numbering and versions as the API (`docs/internals/knowledge-base.md`).
+
+- **Listed in full before any write**, on every run: categories, the folders of each category, the
+  subfolders of every folder, the articles of every folder, `/settings/helpdesk` and, for every
+  supported language other than the primary one, the translated articles of every folder; then
+  `/products`. `--since` applies to tickets only. Settings and products are read only when there is at
+  least one category, so an account without a knowledge base costs one call.
+- **Folders are kept once by id and placed by `parent_folder_id`.** With Flexible Hierarchy the
+  category's folder list already returns nested folders (the docs' example does) and `/subfolders`
+  returns them again. Category → collection level 1, folder → 2, subfolder → 3. Deeper folders become
+  level-3 collections named after the folders from level 3 down (`Advanced / Deep`) next to the level-3
+  one, and warn `kb_folder_flattened`. A slug taken by a sibling gets `-<Freshdesk id>`.
+- **HTML to Markdown** with html-to-markdown v2 (MIT; base, commonmark, table, strikethrough). Before
+  converting, iframes, video, audio, embeds, objects, forms, scripts, styles, SVG and MathML are
+  removed and named in `kb_article_markup_dropped`, as are a table cell with `colspan`/`rowspan` (its
+  content is repeated in the cells it spans), a table cell holding a line break or a block (a Markdown
+  cell is one line, so the converter writes that table as plain text: the words stay, the grid goes),
+  subscript and superscript, a link whose scheme is not http, https or mailto (its text stays), and
+  any tag left in the Markdown (raw HTML is never rendered). Files on an article are not in the
+  documented attributes; if the API sends them they are listed (`kb_article_attachments_not_imported`). `source_html` keeps the original; `source_meta` keeps `tags`, `seo_data`, `hits`,
+  `thumbs_*`, `type`, `status`, `hierarchy`, `agent_id` and the draft reason. Timestamps are
+  Freshdesk's; `published_at` is `updated_at` (Freshdesk has no publish time). The author is the
+  Colliedesk agent with the Freshdesk agent's email.
+- **Published only under the strictest reading.** `status` 2, every folder on the path
+  `visibility` 1 (All Users), and the category in the help center's portal. The docs say
+  `visible_in_portals` is "allowed only if the account is configured with multiple portals"
+  (category attributes), so: no category with the field → one portal, every category in it; the
+  field present → it must hold the portal (the only one the categories name, or
+  `--help-center-portal`; another id is refused before writing); an empty array → draft; a category
+  without the field while others have it → draft (portal unknown). `/products` only adds a note when
+  the account has products and no category names a portal. Everything else is a draft, counted by
+  reason in `knowledge_base.drafts`.
+- **Images** go through the same host allowlist, type sniffing, 5 MiB limit and SHA-256 as message
+  images, into `kb_images` with `counted` false (an imported file, like imported attachments), and
+  the `src` becomes `/api/v1/kb/images/<id>` before converting. 404/410 is gone (ledger `skipped`,
+  link kept, listed); any other failure fails the image and marks the article `failed`, which keeps the
+  link; the next run tries again and writes the article again. Ledger id `<article>:<key>`
+  (`<article>:<language>:<key>` for a translation); no `parent_source_id`, so the ticket reconcile
+  queries, which group by parent, never see knowledge base rows. Translation images are linked to
+  their article in `kb_article_images`, or the purge would delete them.
+- **Translations** go to `kb_article_translations` (kept and exported, not rendered); `source_meta`
+  says whether the language is in `portal_languages`. A 404 on a folder's translated list means
+  nothing there is translated.
+- **Limits are checked before the first write** (`kbLimitProblems`): articles and collections of the
+  workspace (trash included) plus the new ones against `domain.MaxKBArticles` and
+  `MaxKBCollections`, and every title, name, description, locale and converted body (images counted at
+  the length of their Colliedesk address) against its column. A real run that would pass one stops
+  with `KnowledgeBaseLimitError` and writes nothing; a dry run lists them in `knowledge_base.refused`.
+  The write-time checks under `lockKB` stay authoritative (a race with the web app fails that item).
+  Image bytes join the storage-cap sizing and the dry run's `storage_cap`.
+- **Reconcile.** A folder's `articles_count` and `sub_folders_count` are compared with what was
+  listed in it; categories and folders directly in a category are listed only (Freshdesk reports no
+  count for them), which `Verification.Method` says. A mismatch, unreadable settings or an unreadable
+  translated list is `UNVERIFIED`. A failing list is a failure (`kb_category`/`kb_folder`) and the rest
+  imports. The category list: 404 is a note (`not_available`), 403 is `UNVERIFIED` (the key may only
+  lack the right; the knowledge base is what customers fear losing), unlike canned responses.
+- **Rerun by version.** An article is written again when Freshdesk's `updated_at` is newer than the
+  ledger's or its last run failed, and only while its newest version is of kind `import`; the row is
+  locked (`FOR UPDATE`) before that check. Otherwise Colliedesk's version stays and
+  `kb_article_changed_in_both` lists it. An article deleted for good is not brought back. Collections
+  are never renamed by a rerun. A folder's visibility or a category's portal can change without
+  touching the article's `updated_at`, so every run judges publication again: an untouched published
+  article Freshdesk no longer shows to everyone becomes a draft (a new import version,
+  `kb_article_unpublished`); one changed in Colliedesk stays published with
+  `kb_article_published_but_not_public`. A folder or portal change the other way never publishes an unchanged article.
+- **Undo** removes imported articles whose newest version is the import (`updated_at > created_at`
+  cannot tell: the article carries Freshdesk's timestamps), then imported collections left with no
+  article and no collection (deepest first), then images the import added (`meta.created`) that no
+  article links, with their files. `targetExists` covers every `kb_*` entity, so a kept article keeps
+  its ledger row and a later import does not add it twice.
+
+### Not verified against a live account
+
+1. Whether the article list returns draft articles (and whether `articles_count` counts them; a
+   difference makes the run `UNVERIFIED`, never `OK`).
+2. Which version the API returns for a published article with an unpublished draft.
+3. On which hosts article images live (the message-image allowlist is used).
+4. Which rights the API key needs for solutions, `/settings/helpdesk` and `/products`.
+5. Whether a single-portal account really omits `visible_in_portals`, and what the field holds on an
+   account with several products.
+6. Whether an article can carry attached files in the API (the docs list no `attachments` attribute).
+
+Stored knowledge base images are not re-hashed by the reconcile, unlike attachments and message images.
 
 ## Not verified against a live account
 
