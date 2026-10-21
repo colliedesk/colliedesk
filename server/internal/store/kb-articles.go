@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -193,7 +194,7 @@ func (s *Store) ListTrashedKBArticles(ctx context.Context, workspaceID string, l
 	return items, next, nil
 }
 
-// addKBArticleVersion records the article as it is now as its next version, links the images its
+// addKBArticleVersion records the article as it is now as its next version, links the media its
 // text points at, and bumps the knowledge base version. The caller changed the row in tx first, so
 // the row lock orders concurrent versions of one article.
 func addKBArticleVersion(ctx context.Context, tx pgx.Tx, workspaceID, articleID string, actor Actor, kind string, restoredFrom *int) error {
@@ -206,26 +207,60 @@ func addKBArticleVersion(ctx context.Context, tx pgx.Tx, workspaceID, articleID 
 		workspaceID, articleID, kind, restoredFrom, optionalID(actor.AgentID), optionalID(actor.TokenID), optionalID(actor.RequestID)); err != nil {
 		return fmt.Errorf("record knowledge base article version: %w", err)
 	}
-	var body string
-	if err := tx.QueryRow(ctx, `SELECT body_md FROM kb_articles WHERE workspace_id=$1 AND id=$2`, workspaceID, articleID).Scan(&body); err != nil {
-		return err
-	}
-	if err := linkKBImages(ctx, tx, workspaceID, articleID, body); err != nil {
+	if _, err := linkKBMedia(ctx, tx, workspaceID, articleID); err != nil {
 		return err
 	}
 	return bumpKB(ctx, tx, workspaceID)
 }
 
-// linkKBImages links the images a text of the article points at to the article.
-func linkKBImages(ctx context.Context, tx pgx.Tx, workspaceID, articleID, body string) error {
-	if ids := domain.KBImageIDs(body); len(ids) > 0 {
-		// Only images of this workspace are linked; an id of another workspace's image matches no row.
-		if _, err := tx.Exec(ctx, `INSERT INTO kb_article_images(workspace_id,article_id,image_id)
-			SELECT $1,$2,i.id FROM kb_images i WHERE i.workspace_id=$1 AND i.id=ANY($3::uuid[]) ON CONFLICT DO NOTHING`, workspaceID, articleID, ids); err != nil {
-			return fmt.Errorf("link knowledge base images: %w", err)
+// linkKBMedia links to the article the media its text and translations name, as the database holds
+// them now, and marks which links are current: named by the current text or a translation. Media in
+// the library's trash that a text names comes out of it, so saving, restoring a version, taking the
+// article out of the trash or importing it again never leaves it showing an item the purge may
+// delete. Each item's row is locked before the link is written, so a trash or purge of it in progress
+// is waited for (PurgeKBTrash). Only media of this workspace is linked; it returns the named ids no item has.
+func linkKBMedia(ctx context.Context, tx pgx.Tx, workspaceID, articleID string) ([]string, error) {
+	var text string
+	if err := tx.QueryRow(ctx, `SELECT a.body_md || ' ' || COALESCE((SELECT string_agg(t.body_md, ' ') FROM kb_article_translations t
+			WHERE t.workspace_id=a.workspace_id AND t.article_id=a.id), '')
+		FROM kb_articles a WHERE a.workspace_id=$1 AND a.id=$2`, workspaceID, articleID).Scan(&text); err != nil {
+		return nil, fmt.Errorf("read knowledge base article texts: %w", err)
+	}
+	named := domain.KBMediaIDs(text)
+	if named == nil {
+		named = []string{}
+	}
+	// Named items in the trash come out of it first, locked in id order: taking FOR SHARE first and
+	// then updating would deadlock two saves that name the same trashed item. Then every named row is
+	// locked FOR SHARE, so a purge of it waits or has already happened.
+	if _, err := tx.Exec(ctx, `UPDATE kb_media m SET deleted_at=NULL, deleted_by_agent_id=NULL, updated_at=clock_timestamp()
+		FROM (SELECT id FROM kb_media WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND deleted_at IS NOT NULL ORDER BY id FOR NO KEY UPDATE) t
+		WHERE m.workspace_id=$1 AND m.id=t.id AND m.deleted_at IS NOT NULL`, workspaceID, named); err != nil {
+		return nil, fmt.Errorf("restore knowledge base media from the trash: %w", err)
+	}
+	rows, err := tx.Query(ctx, `SELECT id::text FROM kb_media WHERE workspace_id=$1 AND id=ANY($2::uuid[]) ORDER BY id FOR SHARE`, workspaceID, named)
+	if err != nil {
+		return nil, fmt.Errorf("lock knowledge base media: %w", err)
+	}
+	found, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, fmt.Errorf("lock knowledge base media: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO kb_article_media(workspace_id,article_id,media_id,current)
+		SELECT $1,$2,id,true FROM unnest($3::uuid[]) id ON CONFLICT (workspace_id,article_id,media_id) DO NOTHING`, workspaceID, articleID, found); err != nil {
+		return nil, fmt.Errorf("link knowledge base media: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `UPDATE kb_article_media SET current = (media_id = ANY($3::uuid[]))
+		WHERE workspace_id=$1 AND article_id=$2 AND current <> (media_id = ANY($3::uuid[]))`, workspaceID, articleID, found); err != nil {
+		return nil, fmt.Errorf("mark current knowledge base media: %w", err)
+	}
+	missing := []string{}
+	for _, id := range named {
+		if !slices.Contains(found, id) {
+			missing = append(missing, id)
 		}
 	}
-	return nil
+	return missing, nil
 }
 
 // admitKBArticle takes the knowledge base lock, refuses a full workspace (the trash counts) and returns

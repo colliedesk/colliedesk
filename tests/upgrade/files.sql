@@ -2,10 +2,16 @@
 -- its files so their content follows from the row: see the header of the first fixture file.
 SELECT to_regclass('mail_image_cache') IS NOT NULL AS has_image_cache \gset
 SELECT to_regclass('kb_images') IS NOT NULL AS has_kb_images \gset
+SELECT to_regclass('kb_media') IS NOT NULL AS has_kb_media \gset
 SELECT DISTINCT storage_key, 'colliedesk upgrade fixture: ' || filename FROM attachments ORDER BY 1;
 \if :has_image_cache
 SELECT storage_key, 'colliedesk upgrade fixture image: ' || url_hash FROM mail_image_cache ORDER BY 1;
 \endif
 \if :has_kb_images
 SELECT i.storage_key, 'colliedesk upgrade fixture kb image: ' || w.slug FROM kb_images i JOIN workspaces w ON w.id = i.workspace_id ORDER BY 1;
+\endif
+\if :has_kb_media
+SELECT m.storage_key, 'colliedesk upgrade fixture kb ' || CASE m.kind WHEN 'video' THEN 'video' ELSE 'image' END || ': ' || w.slug FROM kb_media m JOIN workspaces w ON w.id = m.workspace_id ORDER BY 1;
+SELECT m.thumb_storage_key, 'colliedesk upgrade fixture kb ' || CASE m.kind WHEN 'video' THEN 'video thumbnail' ELSE 'thumbnail' END || ': ' || w.slug FROM kb_media m JOIN workspaces w ON w.id = m.workspace_id WHERE m.thumb_storage_key IS NOT NULL ORDER BY 1;
+SELECT m.poster_storage_key, 'colliedesk upgrade fixture kb poster: ' || w.slug FROM kb_media m JOIN workspaces w ON w.id = m.workspace_id WHERE m.poster_storage_key IS NOT NULL ORDER BY 1;
 \endif

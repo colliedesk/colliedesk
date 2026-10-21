@@ -242,11 +242,34 @@ func sweepDaily(ctx context.Context, data *store.Store) {
 			slog.Info("purged knowledge base articles and collections deleted more than 30 days ago, and unused images",
 				"articles", purged.Articles, "collections", purged.Collections, "images", purged.Images)
 		}
+		backfillKBMedia(ctx, data)
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
 		}
+	}
+}
+
+// backfillKBMedia gives the library images stored before the server read their size and made a
+// thumbnail at upload (and imported ones) both, a batch at a time until none is left.
+func backfillKBMedia(ctx context.Context, data *store.Store) {
+	total := 0
+	for {
+		done, err := data.BackfillKBMedia(ctx, store.KBBackfillBatch)
+		if err != nil {
+			if ctx.Err() == nil {
+				slog.Error("backfill knowledge base images", "error", err)
+			}
+			return
+		}
+		total += done
+		if done < store.KBBackfillBatch {
+			break
+		}
+	}
+	if total > 0 {
+		slog.Info("read the size and made the thumbnail of older knowledge base images", "count", total)
 	}
 }
 

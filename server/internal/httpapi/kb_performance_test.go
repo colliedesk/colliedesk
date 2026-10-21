@@ -48,8 +48,8 @@ var kbBudget struct {
 }
 
 // sharedKBBudget returns an API on the shared fixture: workspaces "KB Budget A" and "KB Budget B", each
-// with domain.MaxKBArticles articles (seedKBBudget) and its help center on; the session token and slug
-// are workspace A's.
+// with domain.MaxKBArticles articles (seedKBBudget) and its help center on, and the media library of
+// seedKBMediaBudget; the session token and slug are workspace A's.
 func sharedKBBudget(t *testing.T) (http.Handler, *pgxpool.Pool, string, string) {
 	t.Helper()
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
@@ -86,6 +86,7 @@ func sharedKBBudget(t *testing.T) (http.Handler, *pgxpool.Pool, string, string) 
 		if err := exec(`ANALYZE kb_articles; ANALYZE kb_article_versions; ANALYZE kb_collections; ANALYZE help_centers`); err != nil {
 			t.Fatal(err)
 		}
+		seedKBMediaBudget(t, exec)
 		kbBudget.ready = true
 	})
 	if !kbBudget.ready {

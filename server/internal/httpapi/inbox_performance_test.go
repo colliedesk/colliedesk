@@ -93,7 +93,14 @@ func seedInboxBudget(t *testing.T, pool *pgxpool.Pool, workspaceName, messageBod
 
 func inboxP95(t *testing.T, api http.Handler, token, path string) time.Duration {
 	t.Helper()
-	durations := make([]time.Duration, 50)
+	return apiPercentile(t, api, token, path, 50)
+}
+
+// apiPercentile calls the authenticated GET path calls times and returns the 95th percentile (the
+// 48th of 50, the 19th of 20).
+func apiPercentile(t *testing.T, api http.Handler, token, path string, calls int) time.Duration {
+	t.Helper()
+	durations := make([]time.Duration, calls)
 	for index := range durations {
 		started := time.Now()
 		response := request(t, api, http.MethodGet, path, nil, token, nil)
@@ -103,5 +110,5 @@ func inboxP95(t *testing.T, api http.Handler, token, path string) time.Duration 
 		}
 	}
 	sort.Slice(durations, func(left, right int) bool { return durations[left] < durations[right] })
-	return durations[47]
+	return durations[(calls*95+99)/100-1]
 }

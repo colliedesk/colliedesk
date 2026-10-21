@@ -3,13 +3,22 @@ package mcpserver_test
 import (
 	"bytes"
 	"encoding/base64"
+	"image"
+	"image/png"
 	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-var kbPNG = []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00synthetic")
+// kbPNG is a real 1 × 1 PNG: the upload reads its header and stores it as it is.
+var kbPNG = func() []byte {
+	var out bytes.Buffer
+	if err := png.Encode(&out, image.NewNRGBA(image.Rect(0, 0, 1, 1))); err != nil {
+		panic(err)
+	}
+	return out.Bytes()
+}()
 
 func TestSendTokenWritesTheKnowledgeBaseWithHistoryTrashAndImages(t *testing.T) {
 	e := newEnv(t)

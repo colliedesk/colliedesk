@@ -228,13 +228,13 @@ numbering and versions as the API (`docs/internals/knowledge-base.md`).
   the account has products and no category names a portal. Everything else is a draft, counted by
   reason in `knowledge_base.drafts`.
 - **Images** go through the same host allowlist, type sniffing, 5 MiB limit and SHA-256 as message
-  images, into `kb_images` with `counted` false (an imported file, like imported attachments), and
+  images, into `kb_media` with `counted` false (an imported file, like imported attachments), and
   the `src` becomes `/api/v1/kb/images/<id>` before converting. 404/410 is gone (ledger `skipped`,
   link kept, listed); any other failure fails the image and marks the article `failed`, which keeps the
   link; the next run tries again and writes the article again. Ledger id `<article>:<key>`
   (`<article>:<language>:<key>` for a translation); no `parent_source_id`, so the ticket reconcile
   queries, which group by parent, never see knowledge base rows. Translation images are linked to
-  their article in `kb_article_images`, or the purge would delete them.
+  their article in `kb_article_media`, or the purge would delete them.
 - **Translations** go to `kb_article_translations` (kept and exported, not rendered); `source_meta`
   says whether the language is in `portal_languages`. A 404 on a folder's translated list means
   nothing there is translated.

@@ -163,17 +163,28 @@ type KBArticleTranslation struct {
 	UpdatedAt  time.Time       `json:"updated_at"`
 }
 
-// KBImage is an image of the knowledge base; its bytes are the file at Path. StorageKey stays out of
-// the archive.
+// KBImage is an image of the knowledge base library; its bytes are the file at Path. Name and Alt are
+// what the library shows; Width and Height the size shown (null until the server read them); Kept
+// keeps it from the purge; DeletedAt marks it in the library's trash. StorageKey stays out of the
+// archive, and so do thumbnails, which the server makes again.
 type KBImage struct {
-	ID               string    `json:"id"`
-	ContentType      string    `json:"content_type"`
-	Size             int64     `json:"size"`
-	SHA256           string    `json:"sha256"`
-	Path             string    `json:"path"`
-	CreatedByAgentID *string   `json:"created_by_agent_id"`
-	CreatedAt        time.Time `json:"created_at"`
-	StorageKey       string    `json:"-"`
+	ID               string     `json:"id"`
+	ContentType      string     `json:"content_type"`
+	Size             int64      `json:"size"`
+	SHA256           string     `json:"sha256"`
+	Path             string     `json:"path"`
+	Name             string     `json:"name"`
+	Alt              string     `json:"alt"`
+	Width            *int       `json:"width"`
+	Height           *int       `json:"height"`
+	Kept             bool       `json:"kept"`
+	CreatedByAgentID *string    `json:"created_by_agent_id"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	UpdatedByAgentID *string    `json:"updated_by_agent_id"`
+	DeletedAt        *time.Time `json:"deleted_at"`
+	DeletedByAgentID *string    `json:"deleted_by_agent_id"`
+	StorageKey       string     `json:"-"`
 }
 
 // HelpCenter is the public help center's settings and the knowledge base counters.

@@ -471,7 +471,8 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	}
 
 	rows, err = tx.Query(ctx, `SELECT a.id::text,a.collection_id::text,a.number,a.title,a.slug,a.body_md,a.status,a.published_at,a.author_agent_id::text,a.source_meta,a.source_html,
-			COALESCE((SELECT array_agg(l.image_id::text ORDER BY l.image_id) FROM kb_article_images l WHERE l.workspace_id=a.workspace_id AND l.article_id=a.id), '{}'),
+			COALESCE((SELECT array_agg(l.media_id::text ORDER BY l.media_id) FROM kb_article_media l JOIN kb_media m ON m.workspace_id=l.workspace_id AND m.id=l.media_id
+				WHERE l.workspace_id=a.workspace_id AND l.article_id=a.id AND m.kind='image'), '{}'),
 			a.created_at,a.updated_at,a.deleted_at,a.deleted_by_agent_id::text
 		FROM kb_articles a WHERE a.workspace_id=$1 ORDER BY a.number`, workspaceID)
 	if err != nil {
@@ -543,18 +544,20 @@ func exportKB(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 		return err
 	}
 
-	rows, err = tx.Query(ctx, `SELECT id::text,content_type,size,sha256,storage_key,created_by_agent_id::text,created_at
-		FROM kb_images WHERE workspace_id=$1 ORDER BY id`, workspaceID)
+	rows, err = tx.Query(ctx, `SELECT id::text,content_type,size,sha256,storage_key,created_by_agent_id::text,created_at,
+			name,alt,width,height,kept,deleted_at,deleted_by_agent_id::text,updated_at,updated_by_agent_id::text
+		FROM kb_media WHERE workspace_id=$1 AND kind='image' ORDER BY id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export knowledge base images: %w", err)
 	}
 	for rows.Next() {
 		var record export.KBImage
-		if err := rows.Scan(&record.ID, &record.ContentType, &record.Size, &record.SHA256, &record.StorageKey, &record.CreatedByAgentID, &record.CreatedAt); err != nil {
+		if err := rows.Scan(&record.ID, &record.ContentType, &record.Size, &record.SHA256, &record.StorageKey, &record.CreatedByAgentID, &record.CreatedAt,
+			&record.Name, &record.Alt, &record.Width, &record.Height, &record.Kept, &record.DeletedAt, &record.DeletedByAgentID, &record.UpdatedAt, &record.UpdatedByAgentID); err != nil {
 			rows.Close()
 			return fmt.Errorf("export knowledge base images: %w", err)
 		}
-		record.CreatedAt = domain.UTC(record.CreatedAt)
+		record.CreatedAt, record.UpdatedAt, record.DeletedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt), domain.UTCOptional(record.DeletedAt)
 		if err := sink.KBImage(record); err != nil {
 			rows.Close()
 			return err

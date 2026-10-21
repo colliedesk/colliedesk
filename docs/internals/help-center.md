@@ -59,9 +59,10 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   shared origin an image pointing at an API path would fire a request with the reader's cookies.
   Article images (`/api/v1/kb/images/<id>`) are rewritten to `<help center>/images/<id>`.
 - **An image is public only while a published article's current text names it.**
-  `kb_article_images` links an image to every article whose version ever named it (so restoring a
+  `kb_article_media` links an image to every article whose version ever named it (so restoring a
   version never shows a deleted image); the public route also checks `strpos(body_md, path)` on the
-  published, live articles linked to it. Images are `immutable` for a year: an id always names the
+  published, live articles linked to it, and an image in the media library's trash is never served.
+  Images are `immutable` for a year: an id always names the
   same bytes. A cache that kept one keeps it after the article is unpublished; the id is a random
   UUID that was public while the article was.
 - **Two addresses, one handler.** `APP_ORIGIN/help/<slug>` always works. With `HELP_CENTER_DOMAIN`,

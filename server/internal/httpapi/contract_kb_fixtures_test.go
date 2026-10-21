@@ -21,7 +21,7 @@ type contractKB struct {
 	trashArticleID, trashArticleSeen string
 	versionArticleID                 string
 	versionArticleSeen               string
-	imageID                          string
+	imageID, imageSeen               string
 }
 
 func seedContractKB(t *testing.T, api http.Handler, admin string) contractKB {
@@ -39,8 +39,8 @@ func seedContractKB(t *testing.T, api http.Handler, admin string) contractKB {
 	kbCall(t, api, http.MethodGet, "/api/v1/kb/collections/trash", nil, admin, http.StatusOK, &trash)
 	kb.trashCollectionID, kb.trashCollectionSeen = trashed.ID, trashUpdatedAt(trash.Items, trashed.ID)
 
-	image := uploadKBImage(t, api, admin, tinyPNG, http.StatusCreated)
-	kb.imageID = image.ID
+	image := uploadKBImage(t, api, admin, kbPNG, http.StatusCreated)
+	kb.imageID, kb.imageSeen = image.ID, image.UpdatedAt
 	article := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Contract article", "body_md": "![Screen](" + image.URL + ")"})
 	kb.articleID, kb.articleSeen = article.ID, article.UpdatedAt
 	deleteArticle := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Contract article to delete", "body_md": "x"})
@@ -59,7 +59,7 @@ func seedContractKB(t *testing.T, api http.Handler, admin string) contractKB {
 
 // kbImageRequest is the contract request of an image upload: raw PNG bytes.
 func kbImageRequest(token string, cookie *http.Cookie) *http.Request {
-	req := httptest.NewRequest(http.MethodPost, kbImagesPath, bytes.NewReader(tinyPNG))
+	req := httptest.NewRequest(http.MethodPost, kbImagesPath, bytes.NewReader(kbPNG))
 	req.Header.Set("Content-Type", "image/png")
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -90,6 +90,10 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/kb/articles/{id}/versions/{version}/restore": {"/api/v1/kb/articles/" + kb.versionArticleID + "/versions/1/restore", map[string]any{"updated_at": kb.versionArticleSeen}, admin, 200, ""},
 		"POST /api/v1/kb/images":                                   {path: kbImagesPath, token: admin, status: 201},
 		"GET /api/v1/kb/images/{id}":                               {path: "/api/v1/kb/images/" + kb.imageID, token: admin, status: 200},
+		"GET /api/v1/kb/media":                                     {path: "/api/v1/kb/media?usage=unused&sort=largest", token: admin, status: 200},
+		"PATCH /api/v1/kb/media/{id}":                              {"/api/v1/kb/media/" + kb.imageID, map[string]any{"updated_at": kb.imageSeen, "alt": "The settings screen"}, admin, 200, ""},
+		"GET /api/v1/kb/media/{id}/details":                        {path: "/api/v1/kb/media/" + kb.imageID + "/details", token: admin, status: 200},
+		"GET /api/v1/kb/media/{id}/thumbnail":                      {path: "/api/v1/kb/media/" + kb.imageID + "/thumbnail", token: admin, status: 200},
 		"GET /api/v1/help-center":                                  {"/api/v1/help-center", nil, admin, 200, ""},
 		"PUT /api/v1/help-center":                                  {"/api/v1/help-center", map[string]any{"enabled": true, "title": "Contract help", "locale": "en"}, admin, 200, ""},
 		// The contract server has no HELP_CENTER_DOMAIN, so every host name is refused.

@@ -7,3 +7,5 @@
 # Format example (not a real decision):
 #   conversations	held_at	20261101000000-drop-conversation-holds.up.sql	<why its values are no longer needed>
 
+kb_images	*	20261020180000-kb-media-library.up.sql	Renamed to kb_media with every row and column kept (image_id rows become media rows of kind image); the old name holds nothing any more
+kb_article_images	*	20261020180000-kb-media-library.up.sql	Renamed to kb_article_media with every row kept and image_id renamed media_id; the old name holds nothing any more

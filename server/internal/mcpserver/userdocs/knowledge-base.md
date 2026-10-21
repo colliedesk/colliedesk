@@ -72,8 +72,18 @@ two articles.
 Paste an image into the text, drag it in, or select **Insert image**. Colliedesk uploads it and writes
 `![name](/api/v1/kb/images/…)` on a line of its own after the paragraph, list or table you are in;
 while it uploads, a box says so and nothing is added to the text. PNG, JPEG, GIF and WebP up to 5 MB
-each are accepted. Images count toward your plan's storage. The same image uploaded twice is stored
-once. Saving waits until every image has finished uploading.
+each are accepted, at most 8,192 pixels on a side and 40 megapixels. Images count toward your plan's
+storage. The same image uploaded twice is stored once. Saving waits until every image has finished
+uploading.
+
+Location, camera details, dates and comments that a phone or editor leaves in an image are removed
+before it is stored, without changing the picture: a photo keeps the way it should be turned. Images
+an import brings in keep their bytes as the other helpdesk served them.
+
+Every uploaded image goes into the workspace's media library, with a name, alt text and a small
+preview. An image no article ever saved is deleted 30 days after it was uploaded, unless it is kept;
+naming it or writing its alt text keeps it. For now the library is reached through the API and AI
+agents (below); its page in the web app comes next.
 
 Only uploaded images are shown. An image linked from another site (`![x](https://…)`) is not shown in
 the preview or on the help center; the preview says so. Download it and paste it in instead.
@@ -202,7 +212,10 @@ marks your articles' language for browsers and search engines.
 
 An AI agent connected through [MCP](mcp.md), or the API with an agent token, can search and read
 articles (`colliedesk_kb_articles_search`, `colliedesk_kb_article_get`), write, publish, delete and
-restore them, manage collections, upload and read images, and read the help center settings.
+restore them, manage collections, upload and read images, and read the help center settings. In
+the media library (`colliedesk_kb_media_list`, `colliedesk_kb_media_get`) an agent sees which images
+no article uses and which have no alt text, and can name, describe or keep them
+(`colliedesk_kb_media_update`, the same tiers as writing an article).
 
 | Token tier | Read, search, history, trash | Write, publish, delete, restore, upload images | Turn the help center on or off |
 |---|---|---|---|
@@ -214,7 +227,8 @@ restore them, manage collections, upload and read images, and read the help cent
 
 - 2,000 articles per workspace, counting the trash, and 1,000 collections.
 - 100,000 characters per article text, 300 per title; never cut.
-- Images: PNG, JPEG, GIF and WebP, 5 MB each.
+- Images: PNG, JPEG, GIF and WebP, 5 MB each, at most 8,192 pixels on a side and 40 megapixels.
+- 10,000 images in the media library per workspace, counting its trash.
 - Collections go three levels deep.
 - Search does not find a part in the middle of a word, nor words in text written without spaces.
 - Translations an import brings in are kept and exported, but not shown or edited yet.
