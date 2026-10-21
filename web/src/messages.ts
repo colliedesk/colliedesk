@@ -364,6 +364,11 @@ export const messages = {
   signupExplanation: 'No workspace uses this email yet. Name your team\'s workspace to start a 14-day free trial. No card needed.',
   workspaceName: 'Workspace name',
   startTrial: 'Start free trial',
+  // A visitor who came from a website "buy" link pays right after naming the workspace, so no trial wording.
+  signupBuyingExplanation: 'No workspace uses this email yet. Name your team\'s workspace, then pay on the next screen.',
+  createWorkspaceAndPay: 'Create workspace and continue to payment',
+  buyingTitle: (plan: string) => (plan === 'founding' ? 'Join Founding' : 'Create your Colliedesk account'),
+  buyingExplanation: 'Create your account with your work email. Then name your workspace and pay on the next screen.',
   creatingWorkspace: 'Creating workspace…',
   signInToWorkspace: 'Sign in to your workspace',
   useAnotherAccount: 'Use another account',

@@ -3,9 +3,9 @@ import { messages } from '../../messages';
 import { billingMessages } from './billing-messages';
 
 export type Interval = 'monthly' | 'yearly';
-// amount is the price per month, so plans compare at a glance; billed says what a yearly plan charges.
+// amount is the price per month (per quarter for Founding, which is billed quarterly); billed says what a yearly plan charges.
 // refusal is the server's reason this workspace cannot buy the price now; the button is then disabled.
-export interface PlanPrice { plan: CheckoutPlan; interval: Interval; amount: string; billed?: string; label: string; refusal?: string }
+export interface PlanPrice { plan: CheckoutPlan; interval: Interval; amount: string; per?: string; billed?: string; label: string; refusal?: string }
 export interface PlanCard { name: string; includes: string[]; prices: PlanPrice[] }
 
 // What each plan includes; the numbers match docs/user/billing.md and the server's plan limits.
@@ -24,17 +24,26 @@ const allPlans: { name: string; includes: string[]; prices: (Omit<PlanPrice, 'la
     { plan: 'team25_monthly', interval: 'monthly', amount: '$149', charge: '$149 per month' },
     { plan: 'team25_yearly', interval: 'yearly', amount: '$124.17', billed: billingMessages.billedYearly('$1,490'), charge: '$1,490 per year' }] },
   { name: messages.plans.founding, includes: [billingMessages.planAgents(10), billingMessages.planStorage('20 GiB'), billingMessages.foundingLimited], prices: [
-    { plan: 'founding', interval: 'yearly', amount: '$33', billed: billingMessages.billedFounding, charge: '$99 per quarter for life' }] },
+    { plan: 'founding', interval: 'yearly', amount: '$99', per: billingMessages.perQuarter, billed: billingMessages.billedFounding, charge: '$99 per quarter for life' }] },
 ];
 
 // The plans a workspace can buy, in the order they are offered: only the prices the server says it
-// can sell, and only plans with at least one of them.
+// can sell, and only plans with at least one of them. While Founding is open (the server offers it
+// only until its slots are taken) and this workspace fits it, Founding is the only plan sold, as on
+// the website; the ladder comes back on its own once Founding closes.
 export function planCardsFor(sellable: readonly CheckoutPlan[], refusals: readonly { plan: CheckoutPlan; reason: string }[] = []): PlanCard[] {
-  return allPlans
+  const cards = allPlans
     .map((card) => ({ ...card, prices: card.prices.filter((price) => sellable.includes(price.plan))
       .map(({ charge, ...price }) => ({ ...price, label: billingMessages.choosePlanPrice(card.name, charge),
         refusal: refusals.find((refusal) => refusal.plan === price.plan)?.reason })) }))
     .filter((card) => card.prices.length > 0);
+  const founding = cards.find((card) => card.prices.some((price) => price.plan === 'founding' && price.refusal === undefined));
+  return founding ? [founding] : cards;
+}
+
+// isFoundingOnly is true when Founding is the one plan on offer.
+export function isFoundingOnly(cards: readonly PlanCard[]): boolean {
+  return cards.length === 1 && cards[0].prices.every((price) => price.plan === 'founding');
 }
 
 // priceFor is the card's price for the chosen interval, or its only price (Founding has one price, billed every 3 months).

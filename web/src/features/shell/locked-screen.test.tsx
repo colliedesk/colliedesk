@@ -5,13 +5,19 @@ import { LockedScreen } from './locked-screen';
 
 const ended: Billing = {
   plan: 'none', trial_ends_at: '2026-10-15T09:00:00Z', locked: true, status: 'none', current_period_end: null, cancel_at_period_end: false,
-  active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_refusals: [], storage_upgrade_plan: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
+  active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_refusals: [], storage_upgrade_plan: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly'],
   limits: { agents: 0, replies_per_24h: null, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 2, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 const exportSlot = <button type="button">Export all data</button>;
 
+test('while Founding is open a locked workspace is offered Founding, as on the website', () => {
+  render(<LockedScreen isAdmin billing={{ ...ended, checkout_plans: [...ended.checkout_plans, 'founding'] }} timezone="UTC" onCheckout={vi.fn()} onSignOut={vi.fn()} />);
+  expect(screen.getByRole('button', { name: 'Choose Founding, $99 per quarter for life' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /team/i })).not.toBeInTheDocument();
+});
+
 test('the locked screen offers only the plans the server can sell', () => {
-  render(<LockedScreen isAdmin billing={{ ...ended, checkout_plans: ['team_monthly', 'team_yearly', 'founding'] }} timezone="UTC" onCheckout={vi.fn()} onSignOut={vi.fn()} />);
+  render(<LockedScreen isAdmin billing={{ ...ended, checkout_plans: ['team_monthly', 'team_yearly'] }} timezone="UTC" onCheckout={vi.fn()} onSignOut={vi.fn()} />);
   expect(screen.queryByRole('button', { name: /team 25/i })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: /team, \$69 per month/i })).toBeInTheDocument();
 });
@@ -26,8 +32,7 @@ test('an admin whose trial ended can choose each plan, export and sign out', () 
   fireEvent.click(screen.getByRole('button', { name: /team, \$69 per month/i }));
   fireEvent.click(screen.getByRole('radio', { name: /yearly/i }));
   fireEvent.click(screen.getByRole('button', { name: /team, \$690 per year/i }));
-  fireEvent.click(screen.getByRole('button', { name: /founding/i }));
-  expect(onCheckout.mock.calls).toEqual([['team_monthly'], ['team_yearly'], ['founding']]);
+  expect(onCheckout.mock.calls).toEqual([['team_monthly'], ['team_yearly']]);
   expect(screen.getByRole('button', { name: 'Export all data' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
   expect(onSignOut).toHaveBeenCalledTimes(1);

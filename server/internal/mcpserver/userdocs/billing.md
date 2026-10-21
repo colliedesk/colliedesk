@@ -17,6 +17,9 @@ Every new cloud workspace starts a 14-day free trial of the full Team plan. No c
 - One trial per email address. Writing the address with capitals, a `+tag` or (for Gmail) dots does
   not make a new one. If you sign up again with the same address you are told to sign in instead.
 - Sign-up is limited to 3 new workspaces per network address per day.
+- Coming from the website's Founding link, a visitor who is not signed in goes straight to sign-up,
+  which says the plan they came for. The button reads **Create workspace and continue to payment**,
+  and the payment window opens as soon as the workspace exists.
 
 ### Limits during the trial
 
@@ -50,7 +53,9 @@ Nothing else is limited. Conversations, contacts, tags, notes and search work as
 There is no free plan; every workspace starts with the free trial. Unlimited, for teams with more
 than 25 agents at $349 per month billed yearly, is coming soon.
 
-Founding is limited to 10 subscriptions. When all 10 are taken it is closed for good and the billing page offers the other plans only.
+Founding is limited to 10 subscriptions. While a Founding slot is free, the billing page and the locked page offer Founding only
+($99 every 3 months, $396 a year), with a link to self-host for free; a workspace that does not fit Founding (more than 10 agents or
+20 GiB) still sees every plan. When all 10 are taken Founding is closed for good and the pages offer the other plans.
 
 When all seats of a plan are taken, the refusal names the next plan up (Solo, then Small, then
 Team, then Team 25). Switch plans under **Manage billing**.
@@ -113,8 +118,8 @@ trial (or the subscription) has ended, instead of the inbox.
 
 1. Open **Settings → Plan and billing** (or select **Choose a plan** in the banner or on the locked page).
 2. Under **Choose a plan**, pick **Monthly** or **Yearly, 2 months free**. Each plan is a card with its
-   price per month (a yearly plan also shows what is billed once a year), its agents and attachment
-   storage. Select **Choose Solo**, **Choose Small**, **Choose Team**, **Choose Team 25** or **Choose Founding**.
+   price per month (a yearly plan also shows what is billed once a year; Founding shows its price per
+   quarter), its agents and attachment storage. While Founding is open it is the only card. Select **Choose Solo**, **Choose Small**, **Choose Team**, **Choose Team 25** or **Choose Founding**.
 3. Pay in the window that opens on top of Colliedesk. It is run by our payment provider, Polar;
    Colliedesk never sees your card. Pay by card. Apple Pay and Google Pay come later. If you
    close the window, you stay on the page and can start again.

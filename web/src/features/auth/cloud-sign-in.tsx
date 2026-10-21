@@ -10,6 +10,8 @@ interface CloudSignInProps {
   onSessionToken: (token: string) => Promise<void>;
   // onSignUp creates a trial workspace; present only where the server offers sign-up.
   onSignUp?: (token: string, workspaceName: string) => Promise<void>;
+  // buying is true when the visitor came to buy a plan; sign-up then leads to payment.
+  buying?: boolean;
 }
 
 // Clerk draws its own form; it reads the brand tokens of the active theme so it matches the app.
@@ -25,7 +27,7 @@ function clerkAppearance() {
   };
 }
 
-function CloudSession({ onSessionToken, onSignUp }: Pick<CloudSignInProps, 'onSessionToken' | 'onSignUp'>) {
+function CloudSession({ onSessionToken, onSignUp, buying }: Pick<CloudSignInProps, 'onSessionToken' | 'onSignUp' | 'buying'>) {
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const clerk = useClerk();
   const exchanged = useRef(false);
@@ -65,7 +67,7 @@ function CloudSession({ onSessionToken, onSignUp }: Pick<CloudSignInProps, 'onSe
       await onSignUp(token, name);
     };
     return <>
-      <CloudSignup onCreate={create} onSignIn={leave} onUseAnotherAccount={leave} />
+      <CloudSignup buying={buying} onCreate={create} onSignIn={leave} onUseAnotherAccount={leave} />
       {signOutFailed && <p role="alert" className="error-copy">{messages.signOutFailed}</p>}
     </>;
   }
@@ -83,8 +85,8 @@ function CloudSession({ onSessionToken, onSignUp }: Pick<CloudSignInProps, 'onSe
   return <SignIn routing="hash" withSignUp forceRedirectUrl={here} signUpForceRedirectUrl={here} appearance={clerkAppearance()} />;
 }
 
-export function CloudSignIn({ publishableKey, onSessionToken, onSignUp }: CloudSignInProps) {
+export function CloudSignIn({ publishableKey, onSessionToken, onSignUp, buying }: CloudSignInProps) {
   return <ClerkProvider publishableKey={publishableKey}>
-    <CloudSession onSessionToken={onSessionToken} onSignUp={onSignUp} />
+    <CloudSession onSessionToken={onSessionToken} onSignUp={onSignUp} buying={buying} />
   </ClerkProvider>;
 }

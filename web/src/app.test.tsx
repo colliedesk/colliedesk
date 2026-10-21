@@ -8,6 +8,13 @@ import { createQueryClient } from './query-client';
 import { resetProductAnalytics } from './lib/product-analytics';
 
 // Only PostHog's own wrapper calls are observed; the rest of the module is the real one.
+// Clerk draws its own sign-in form from the network; the page around it is what is under test here.
+vi.mock('@clerk/clerk-react', () => ({
+  ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
+  SignIn: () => <div>Clerk widget</div>,
+  useAuth: () => ({ getToken: vi.fn(), isLoaded: true, isSignedIn: false }),
+  useClerk: () => ({ signOut: vi.fn() }),
+}));
 vi.mock('./lib/product-analytics', async (original) => ({ ...(await original<typeof import('./lib/product-analytics')>()), resetProductAnalytics: vi.fn() }));
 
 const fetchMock = vi.fn();
@@ -21,10 +28,12 @@ const meBody = (role: 'admin' | 'agent', plan: unknown) => ({
   workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Beta Desk', timezone: 'UTC' },
   timezone: 'UTC', scope: null, plan,
 });
-const config = { cloud_sign_in: { enabled: true, publishable_key: 'pk' }, billing: { enabled: true }, signup: { enabled: true }, limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 } };
+const config = { cloud_sign_in: { enabled: true, publishable_key: 'pk' }, billing: { enabled: true }, signup: { enabled: true }, limits: { outgoing_attachments_bytes: 10485760, outgoing_attachments_files: 10 },
+  product_analytics: { enabled: false, key: null, host: null, realm: null } };
+// Founding is full in these fixtures, so the server sells the plan ladder.
 const billing = {
   plan: 'none', trial_ends_at: '2026-10-01T09:00:00Z', locked: true, status: 'none', current_period_end: null, cancel_at_period_end: false,
-  active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_refusals: [], storage_upgrade_plan: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly', 'founding'],
+  active_subscriptions: 0, complimentary: false, complimentary_until: null, checkout_refusals: [], storage_upgrade_plan: null, checkout_plans: ['team_monthly', 'team_yearly', 'team25_monthly', 'team25_yearly'],
   limits: { agents: 0, replies_per_24h: null, storage_bytes: 2147483648, storage_warn_bytes: 1717986918 }, usage: { agents: 1, pending_invites: 0, replies_last_24h: 0, storage_bytes: 0 },
 };
 
@@ -38,6 +47,7 @@ function serve(handlers: Record<string, () => Response>) {
 function open(path = '/') {
   const router = createRouter({ routeTree, history: createMemoryHistory({ initialEntries: [path] }) });
   render(<QueryClientProvider client={createQueryClient()}><RouterProvider router={router} /></QueryClientProvider>);
+  return router;
 }
 
 test('a locked workspace sees the locked screen with the identity bar and an admin\'s plan choices', async () => {
@@ -92,16 +102,31 @@ test('a locked workspace does not poll for inbox activity', async () => {
 });
 
 const trialPlan = { plan: 'trial', trial_ends_at: '2026-10-30T09:00:00Z', locked: false, trial_extended: false, agents_over: 0, seat_paused: false };
-const trialBilling = { ...billing, plan: 'trial', locked: false };
+const trialBilling = { ...billing, plan: 'trial', locked: false, checkout_plans: [...billing.checkout_plans, 'founding'] };
 
-test('the billing link with buy=founding remembers the intent for a visitor who is signed out', async () => {
+test('the billing link with buy=founding sends a signed-out visitor straight to sign-up as a buyer, keeping the plan', async () => {
   serve({
     '/api/v1/auth/me': () => json(401, { error: { code: 'unauthorized', message: 'Sign in.' } }),
     '/api/v1/config': () => json(200, config),
   });
-  open('/settings/billing?buy=founding');
-  await screen.findByRole('alert');
+  const router = open('/settings/billing?buy=founding');
+  expect(await screen.findByRole('heading', { level: 1, name: 'Join Founding' })).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe('/sign-in');
+  expect(router.state.location.search).toEqual({ buy: 'founding' });
+  expect(screen.queryByText(/you are signed out/i)).not.toBeInTheDocument();
+  expect(screen.queryByText(/ask your workspace admin/i)).not.toBeInTheDocument();
   expect(readCheckoutIntent()).toBe('founding');
+});
+
+test('a signed-out visit without a plan to buy keeps the signed-out screen and its sign-in link', async () => {
+  serve({
+    '/api/v1/auth/me': () => json(401, { error: { code: 'unauthorized', message: 'Sign in.' } }),
+    '/api/v1/config': () => json(200, config),
+  });
+  const router = open('/settings/billing');
+  expect(await screen.findByRole('alert')).toHaveTextContent('You are signed out. Ask your workspace admin for a new link.');
+  expect(await screen.findByRole('link', { name: 'Sign in' })).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe('/settings/billing');
 });
 
 test('the billing link with buy=founding starts the founding checkout for a signed-in trial admin', async () => {
@@ -163,7 +188,7 @@ test('going back to the billing page after the checkout was started does not sta
   expect(router.state.location.search).not.toHaveProperty('buy');
   view.unmount();
   render(<QueryClientProvider client={createQueryClient()}><RouterProvider router={createRouter({ routeTree, history })} /></QueryClientProvider>);
-  await screen.findByRole('button', { name: /team, \$69 per month/i });
+  await screen.findByRole('button', { name: 'Choose Founding, $99 per quarter for life' });
   expect(checkouts()).toBe(1);
 });
 
