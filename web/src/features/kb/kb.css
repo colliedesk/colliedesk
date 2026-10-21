@@ -526,7 +526,7 @@ span.kb-article-open { opacity: 0.35; }
   /* Details: a sheet over the grid, which keeps its scroll position. */
   .media-detail-scrim { position: fixed; z-index: 29; inset: 0; display: block; background: rgb(0 0 0 / 0.45); }
   .media-detail { position: fixed; z-index: 30; inset: auto 0 0 0; grid-template-rows: auto auto minmax(0, 1fr); max-height: calc(100dvh - 12px); border-width: 1px 0 0; border-radius: 16px 16px 0 0; box-shadow: var(--shadow-2); }
-  .media-detail .kb-grab { display: block; width: 40px; height: 4px; margin: 8px auto 0; border-radius: 999px; background: var(--line-strong); }
+  .media-detail > .kb-grab { display: block; width: 40px; height: 4px; margin: 8px auto 0; border-radius: 999px; background: var(--line-strong); }
   .media-detail-head .icon-button { width: var(--touch); }
   .media-detail-preview { height: 96px; }
   .media-action-row { grid-template-columns: repeat(3, minmax(0, 1fr)) 44px; }
