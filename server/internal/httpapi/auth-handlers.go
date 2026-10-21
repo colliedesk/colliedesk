@@ -76,8 +76,14 @@ func (a *API) me(response http.ResponseWriter, request *http.Request) {
 	if identity.Scope != "" {
 		scope = &identity.Scope
 	}
+	goal, err := a.store.OnboardingGoal(request.Context(), identity.Workspace.ID)
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
 	writeJSON(response, http.StatusOK, map[string]any{
 		"agent": identity.Agent, "workspace": identity.Workspace, "timezone": effectiveTimezone, "scope": scope, "plan": plan,
+		"onboarding_goal": goal,
 	})
 }
 

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef } from 'react';
 import type { ReactNode, Ref } from 'react';
-import type { Conversation } from '../../api/schemas';
+import type { Conversation, OnboardingGoal } from '../../api/schemas';
 import { dayGroup, formatDate, formatShortDate } from '../../lib/format-date';
 import { useNow } from '../../lib/use-now';
 import { messages } from '../../messages';
@@ -37,12 +37,29 @@ interface ConversationListProps {
   draftIds?: ReadonlySet<string>;
   // grouped splits the rows under Today and Earlier; only the latest-activity order keeps the groups contiguous.
   grouped?: boolean;
+  // onboardingGoal is what the team said it wants first at sign-up; its step leads the get-started list.
+  onboardingGoal?: OnboardingGoal | null;
+}
+
+type Step = 'connect' | 'import' | 'invite' | 'mcp';
+
+// The step each sign-up goal starts with; any other goal keeps the usual order.
+const firstStep: Partial<Record<OnboardingGoal, Step>> = { leave_helpdesk: 'import', shared_inbox: 'connect', lower_cost: 'invite', ai_agents: 'mcp' };
+
+// getStartedSteps lists the steps this agent can take, the goal's step first. The settings steps stay
+// admin-only; a goal whose step this agent cannot take recommends nothing.
+function getStartedSteps(goal: OnboardingGoal | null | undefined, canManage: boolean): { steps: Step[]; recommended?: Step } {
+  const lead = goal ? firstStep[goal] : undefined;
+  const steps = (['connect', 'import', 'invite'] as Step[]).filter((step) => canManage || step === 'import');
+  if (lead === 'mcp') return { steps: ['mcp', ...steps], recommended: 'mcp' };
+  if (!lead || !steps.includes(lead)) return { steps };
+  return { steps: [lead, ...steps.filter((step) => step !== lead)], recommended: lead };
 }
 
 const visibleTags = 2;
 
 export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
-  failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds, grouped = true }: ConversationListProps) {
+  failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds, grouped = true, onboardingGoal }: ConversationListProps) {
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
   const now = useNow(timezone);
   const settled = !loading && !failed;
@@ -63,6 +80,13 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
     event.preventDefault();
     onOpenSettings();
   }}>{label}</a>;
+  const getStarted = getStartedSteps(onboardingGoal, canManage);
+  const stepLink: Record<Step, ReactNode> = {
+    connect: settingsLink(messages.connectEmail),
+    import: <a href={messages.importFreshdeskURL} target="_blank" rel="noreferrer">{messages.importFreshdesk}</a>,
+    invite: settingsLink(messages.inviteTeam),
+    mcp: <a href={messages.mcpURL} target="_blank" rel="noreferrer">{messages.connectAIAgent}</a>,
+  };
   return (
     <div className="conversation-scroll" aria-busy={refreshing}>
       {loading && items.length === 0 && <p role="status" className="empty-copy">{messages.loading}</p>}
@@ -70,9 +94,8 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
         <h2>{messages.noConversationsYet}</h2>
         <p className="muted-copy">{messages.getStartedExplanation}</p>
         <ul>
-          {canManage && <li>{settingsLink(messages.connectEmail)}</li>}
-          <li><a href={messages.importFreshdeskURL} target="_blank" rel="noreferrer">{messages.importFreshdesk}</a></li>
-          {canManage && <li>{settingsLink(messages.inviteTeam)}</li>}
+          {getStarted.steps.map((step) => <li key={step} data-recommended={step === getStarted.recommended || undefined}>
+            {step === getStarted.recommended && <><span className="recommended-step">{messages.recommendedFirstStep}</span>{' '}</>}{stepLink[step]}</li>)}
         </ul>
       </section>}
       {failed && <div className="empty-copy"><p role="alert" className="error-copy">{messages.conversationsFailed}</p>

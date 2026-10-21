@@ -90,7 +90,10 @@ paths:
         The route exists only on the hosted cloud, where cloud sign-in and billing are both configured;
         everywhere else it answers 404. One trial per mailbox: the email is lowercased, a `+tag` is dropped
         and Gmail dots are ignored, so `Ana.B+x@gmail.com` and `anab@googlemail.com` are the same person.
-        At most 3 sign-ups per client address in a rolling 24 hours.
+        At most 3 sign-ups per client address in a rolling 24 hours. The web form also asks what the
+        team wants first (`goal`), the person's `role` and where they heard of Colliedesk (`source`);
+        each is optional, is stored with the workspace and is counted with the trial. A value outside
+        its list answers 400 `invalid_request` and creates nothing.
       security:
         - bearerAuth: []
       x-permission: public
@@ -104,6 +107,9 @@ paths:
               additionalProperties: false
               properties:
                 workspace_name: {type: string, minLength: 2, maxLength: 60, description: 'Trimmed; 2 to 60 characters.'}
+                goal: {$ref: '#/components/schemas/OnboardingGoal'}
+                role: {$ref: '#/components/schemas/OnboardingRole'}
+                source: {$ref: '#/components/schemas/OnboardingSource'}
       responses:
         '201': {$ref: '#/components/responses/Redeemed'}
         '400': {$ref: '#/components/responses/BadRequest'}
@@ -3782,13 +3788,30 @@ components:
         token: {type: string}
         agent: {$ref: '#/components/schemas/Agent'}
         workspace: {$ref: '#/components/schemas/Workspace'}
+    OnboardingGoal:
+      type: string
+      enum: [leave_helpdesk, shared_inbox, lower_cost, ai_agents, other]
+      description: What the team wants Colliedesk to do first, asked at cloud sign-up.
+    OnboardingRole:
+      type: string
+      enum: [founder, support_lead, support_agent, developer, other]
+      description: The role of the person who signed up.
+    OnboardingSource:
+      type: string
+      enum: [x, email, search, reddit, github, referral, other]
+      description: Where the person heard of Colliedesk.
     Me:
       type: object
-      required: [agent, workspace, timezone, scope, plan]
+      required: [agent, workspace, timezone, scope, plan, onboarding_goal]
       properties:
         agent: {$ref: '#/components/schemas/Agent'}
         workspace: {$ref: '#/components/schemas/Workspace'}
         timezone: {type: string}
+        onboarding_goal:
+          description: The goal given at cloud sign-up; the empty inbox starts with the matching step. Null when none was given and on self-hosted instances.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/OnboardingGoal'}
         scope:
           description: The tier of the agent token making the call (read, draft or send); null for a person's own session.
           oneOf:

@@ -3,6 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { api, CloudWorkspaceChoiceError, PlanLimitError } from '../../api/client';
 import { NotAnAgentError } from '../../api/cloud-signup';
+import type { SignupAnswers } from '../../api/cloud-signup';
 import type { WorkspaceChoice } from '../../api/schemas';
 import { messages } from '../../messages';
 import { readCheckoutIntent } from '../settings/checkout-intent';
@@ -38,8 +39,8 @@ export function RedeemRoute({ token, buy }: { token: string; buy?: string }) {
       setCloudPending(false);
     }
   }, [goAfterSignIn, workspaceSlug]);
-  const signUp = useCallback(async (sessionToken: string, workspaceName: string) => {
-    await api.signUpCloud(sessionToken, workspaceName);
+  const signUp = useCallback(async (sessionToken: string, workspaceName: string, answers: SignupAnswers) => {
+    await api.signUpCloud(sessionToken, workspaceName, answers);
     await goAfterSignIn();
   }, [goAfterSignIn]);
   const cloudConfig = config.data?.cloud_sign_in;

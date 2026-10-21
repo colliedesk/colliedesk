@@ -47,7 +47,7 @@ export interface paths {
         put?: never;
         /**
          * Start a cloud trial
-         * @description Creates a workspace on a 14 day trial with the verified email of the identity provider's bearer token as its first admin, and signs that person in (session cookie, as for the cloud exchange). The route exists only on the hosted cloud, where cloud sign-in and billing are both configured; everywhere else it answers 404. One trial per mailbox: the email is lowercased, a `+tag` is dropped and Gmail dots are ignored, so `Ana.B+x@gmail.com` and `anab@googlemail.com` are the same person. At most 3 sign-ups per client address in a rolling 24 hours.
+         * @description Creates a workspace on a 14 day trial with the verified email of the identity provider's bearer token as its first admin, and signs that person in (session cookie, as for the cloud exchange). The route exists only on the hosted cloud, where cloud sign-in and billing are both configured; everywhere else it answers 404. One trial per mailbox: the email is lowercased, a `+tag` is dropped and Gmail dots are ignored, so `Ana.B+x@gmail.com` and `anab@googlemail.com` are the same person. At most 3 sign-ups per client address in a rolling 24 hours. The web form also asks what the team wants first (`goal`), the person's `role` and where they heard of Colliedesk (`source`); each is optional, is stored with the workspace and is counted with the trial. A value outside its list answers 400 `invalid_request` and creates nothing.
          */
         post: operations["signUpCloud"];
         delete?: never;
@@ -2126,10 +2126,27 @@ export interface components {
             agent: components["schemas"]["Agent"];
             workspace: components["schemas"]["Workspace"];
         };
+        /**
+         * @description What the team wants Colliedesk to do first, asked at cloud sign-up.
+         * @enum {string}
+         */
+        OnboardingGoal: "leave_helpdesk" | "shared_inbox" | "lower_cost" | "ai_agents" | "other";
+        /**
+         * @description The role of the person who signed up.
+         * @enum {string}
+         */
+        OnboardingRole: "founder" | "support_lead" | "support_agent" | "developer" | "other";
+        /**
+         * @description Where the person heard of Colliedesk.
+         * @enum {string}
+         */
+        OnboardingSource: "x" | "email" | "search" | "reddit" | "github" | "referral" | "other";
         Me: {
             agent: components["schemas"]["Agent"];
             workspace: components["schemas"]["Workspace"];
             timezone: string;
+            /** @description The goal given at cloud sign-up; the empty inbox starts with the matching step. Null when none was given and on self-hosted instances. */
+            onboarding_goal: null | components["schemas"]["OnboardingGoal"];
             /** @description The tier of the agent token making the call (read, draft or send); null for a person's own session. */
             scope: null | components["schemas"]["TokenScope"];
             /** @description The trial and lock state, so every agent sees it. Null on self-hosted instances. */
@@ -3430,6 +3447,9 @@ export interface operations {
                 "application/json": {
                     /** @description Trimmed; 2 to 60 characters. */
                     workspace_name: string;
+                    goal?: components["schemas"]["OnboardingGoal"];
+                    role?: components["schemas"]["OnboardingRole"];
+                    source?: components["schemas"]["OnboardingSource"];
                 };
             };
         };

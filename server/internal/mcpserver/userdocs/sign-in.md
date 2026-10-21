@@ -34,6 +34,12 @@ New to Colliedesk Cloud? On the same sign-in page continue with email, Google or
 verified email is not an agent of any workspace, the page asks you to name a workspace and starts a
 14-day free trial with you as its admin. No card is needed. See [Plan and billing](billing.md).
 
+The same page asks three short questions, each with a fixed list of answers: what you want
+Colliedesk to do for you first, your role, and where you heard of Colliedesk. Your first goal decides
+which step the empty inbox recommends first (for example **Import from Freshdesk** when you are moving
+off a helpdesk), and the answers help us send you emails that fit. The web form needs an answer to
+each; for API clients `goal`, `role` and `source` are optional.
+
 - **This email already started a trial.** Each mailbox gets one trial. Sign in to that workspace
   instead (**Sign in to your workspace**), or ask us for help.
 - **Too many workspaces from this network.** At most 3 a day per network address. Try again tomorrow.

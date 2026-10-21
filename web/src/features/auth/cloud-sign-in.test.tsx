@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { NotAnAgentError } from '../../api/cloud-signup';
 import { CloudSignIn } from './cloud-sign-in';
+import { answerSignupQuestions } from './test-signup-answers';
 
 const clerk = vi.hoisted(() => ({ getToken: vi.fn(), signOut: vi.fn(), signedIn: true, signInProps: vi.fn() }));
 
@@ -32,9 +33,10 @@ test('a verified identity with no workspace can create one, with a token fetched
   render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={onSessionToken} onSignUp={onSignUp} />);
 
   fireEvent.change(await screen.findByLabelText(/workspace name/i), { target: { value: 'Acme Support' } });
+  answerSignupQuestions({ goal: 'Pay less per agent', role: 'Support agent', source: 'Search engine' });
   fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
 
-  await waitFor(() => expect(onSignUp).toHaveBeenCalledWith('fresh-token', 'Acme Support'));
+  await waitFor(() => expect(onSignUp).toHaveBeenCalledWith('fresh-token', 'Acme Support', { goal: 'lower_cost', role: 'support_agent', source: 'search' }));
   expect(onSessionToken).toHaveBeenCalledTimes(1);
 });
 
@@ -54,6 +56,7 @@ test('"Sign in to your workspace" after a used trial signs the identity out of t
   render(<CloudSignIn publishableKey="pk_test_example" onSessionToken={vi.fn().mockRejectedValue(new NotAnAgentError())}
     onSignUp={vi.fn().mockRejectedValue(new SignupError('trial_already_used'))} />);
   fireEvent.change(await screen.findByLabelText(/workspace name/i), { target: { value: 'Acme' } });
+  answerSignupQuestions();
   fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Sign in to your workspace' }));
   expect(clerk.signOut).toHaveBeenCalled();

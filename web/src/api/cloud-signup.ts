@@ -1,4 +1,12 @@
 import { redeemedSchema } from './schemas';
+import type { Generated } from './schemas';
+
+// SignupAnswers are what the sign-up form asks about the team; the server stores them with the workspace.
+export interface SignupAnswers {
+  goal: Generated<'OnboardingGoal'>;
+  role: Generated<'OnboardingRole'>;
+  source: Generated<'OnboardingSource'>;
+}
 
 // NotAnAgentError means the identity provider vouched for the email but no workspace has that
 // person as an agent (HTTP 403 `forbidden` from the cloud exchange): the place to offer sign-up.
@@ -43,11 +51,11 @@ async function signupFailure(response: Response): Promise<SignupError> {
 
 // signUpCloud creates a trial workspace for the verified identity of the bearer token and returns
 // the signed-in agent and workspace (the session cookie is set by the response).
-export async function signUpCloud(token: string, workspaceName: string) {
+export async function signUpCloud(token: string, workspaceName: string, answers?: SignupAnswers) {
   const response = await fetch('/api/v1/auth/cloud/signup', {
     method: 'POST', credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ workspace_name: workspaceName }),
+    body: JSON.stringify({ workspace_name: workspaceName, ...answers }),
   });
   if (!response.ok) throw await signupFailure(response);
   return redeemedSchema.parse(await response.json());

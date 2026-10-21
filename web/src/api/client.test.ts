@@ -49,6 +49,16 @@ test.each([
   expect((error as SignupError).reason).toBe(reason);
 });
 
+test('sign-up sends the onboarding answers with the workspace name', async () => {
+  fetchMock.mockResolvedValue(reply(201, {
+    agent: { id: '11111111-1111-4111-8111-111111111111', email: 'ana@example.com', display_name: '', role: 'admin', timezone_override: null },
+    workspace: { id: '22222222-2222-4222-8222-222222222222', slug: 'acme', name: 'Acme', timezone: 'UTC' },
+  }));
+  await api.signUpCloud('jwt', 'Acme', { goal: 'shared_inbox', role: 'support_lead', source: 'github' });
+  const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+  expect(JSON.parse(init.body as string)).toEqual({ workspace_name: 'Acme', goal: 'shared_inbox', role: 'support_lead', source: 'github' });
+});
+
 test('sign-up sends the bearer token and the workspace name and returns the session', async () => {
   fetchMock.mockResolvedValue(reply(201, {
     agent: { id: '11111111-1111-4111-8111-111111111111', email: 'ana@example.com', display_name: '', role: 'admin', timezone_override: null },

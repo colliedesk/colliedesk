@@ -44,6 +44,9 @@ export const messages = {
   importFreshdesk: 'Import from Freshdesk',
   importFreshdeskURL: 'https://colliedesk.com/docs/import-freshdesk',
   inviteTeam: 'Invite your team',
+  connectAIAgent: 'Connect an AI agent',
+  mcpURL: 'https://colliedesk.com/docs/mcp',
+  recommendedFirstStep: 'Recommended first step:',
   sessionStates: { active: 'Active', revoked: 'Revoked', expired: 'Expired' },
   tokenTierTitle: 'Agent token tier',
   tokenExpires: 'Expires',
@@ -373,6 +376,28 @@ export const messages = {
   signInToWorkspace: 'Sign in to your workspace',
   useAnotherAccount: 'Use another account',
   noWorkspaceForEmail: 'This email is not part of a workspace yet. Ask your workspace admin for an invite link, or use another account.',
+  // The answers order the first steps of the empty inbox and fit our emails to the team; fixed lists, no free text.
+  signupQuestions: {
+    goal: {
+      legend: 'What do you want Colliedesk to do for you first?',
+      options: {
+        leave_helpdesk: 'Move off Freshdesk or another helpdesk', shared_inbox: 'Answer support email together as a team',
+        lower_cost: 'Pay less per agent', ai_agents: 'Let AI agents draft or send replies', other: 'Something else',
+      },
+    },
+    role: {
+      legend: 'What is your role?',
+      options: { founder: 'Founder or owner', support_lead: 'Support lead or manager', support_agent: 'Support agent', developer: 'Developer or IT', other: 'Other' },
+    },
+    source: {
+      legend: 'Where did you hear about Colliedesk?',
+      options: {
+        x: 'X (Twitter)', email: 'An email from us', search: 'Search engine', reddit: 'Reddit', github: 'GitHub',
+        referral: 'A friend or colleague', other: 'Other',
+      },
+    },
+  },
+  signupAnswerEach: 'Answer each question to continue.',
   signupErrors: {
     trial_already_used: 'This email already started a Colliedesk trial. Sign in to that workspace instead, or contact us if you need help.',
     rate_limited: 'Too many workspaces were created from this network today. Try again tomorrow, or contact us.',

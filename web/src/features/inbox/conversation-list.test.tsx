@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { Conversation } from '../../api/schemas';
 import { ConversationList } from './conversation-list';
@@ -62,4 +62,28 @@ test('a refetch keeps the previous rows, marks the list busy and shows no loadin
 test('a settled list is not marked busy', () => {
   render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} filtered />);
   expect(document.querySelector('.conversation-scroll')).toHaveAttribute('aria-busy', 'false');
+});
+
+const steps = () => within(screen.getByRole('region', { name: 'Get started' })).getAllByRole('listitem').map((item) => item.textContent);
+
+test.each([
+  ['leave_helpdesk', ['Recommended first step: Import from Freshdesk', 'Connect your support email', 'Invite your team']],
+  ['shared_inbox', ['Recommended first step: Connect your support email', 'Import from Freshdesk', 'Invite your team']],
+  ['lower_cost', ['Recommended first step: Invite your team', 'Connect your support email', 'Import from Freshdesk']],
+  ['ai_agents', ['Recommended first step: Connect an AI agent', 'Connect your support email', 'Import from Freshdesk', 'Invite your team']],
+  ['other', ['Connect your support email', 'Import from Freshdesk', 'Invite your team']],
+  [null, ['Connect your support email', 'Import from Freshdesk', 'Invite your team']],
+] as const)('a brand-new workspace whose goal is %s starts with the matching step', (goal, expected) => {
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} canManage onboardingGoal={goal} />);
+  expect(steps()).toEqual(expected);
+});
+
+test('the AI agent step links to the MCP guide', () => {
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} onboardingGoal="ai_agents" />);
+  expect(screen.getByRole('link', { name: 'Connect an AI agent' })).toHaveAttribute('href', 'https://colliedesk.com/docs/mcp');
+});
+
+test('an agent who is not an admin never gets the settings steps, whatever the goal', () => {
+  render(<ConversationList items={[]} timezone="UTC" page={1} hasNextPage={false} onboardingGoal="lower_cost" />);
+  expect(steps()).toEqual(['Import from Freshdesk']);
 });
