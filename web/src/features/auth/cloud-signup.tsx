@@ -33,6 +33,9 @@ export function CloudSignup({ onCreate, onSignIn, onUseAnotherAccount, buying = 
   const [answers, setAnswers] = useState<Partial<SignupAnswers>>({});
   const [pending, setPending] = useState(false);
   const [problem, setProblem] = useState<Problem>();
+  // The value is a key of answerLabels[question], so it is a listed answer of that question.
+  const answer = (question: Question) => (value: string) =>
+    setAnswers((current) => ({ ...current, [question]: value || undefined }) as Partial<SignupAnswers>);
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const trimmed = name.trim();
@@ -48,9 +51,11 @@ export function CloudSignup({ onCreate, onSignIn, onUseAnotherAccount, buying = 
       <p className="muted-copy">{buying ? messages.signupBuyingExplanation : messages.signupExplanation}</p>
       <label className="field"><span>{messages.workspaceName}</span>
         <input value={name} autoComplete="organization" maxLength={nameLength.max * 2} onChange={(event) => setName(event.target.value)} /></label>
-      {questions.map((question) => <QuestionField key={question} question={question} value={answers[question]}
-        // The value is a key of answerLabels[question], so it is a listed answer of that question.
-        onChange={(value) => setAnswers((current) => ({ ...current, [question]: value }) as Partial<SignupAnswers>)} />)}
+      <QuestionField question="goal" value={answers.goal} onChange={answer('goal')} />
+      <div className="signup-pickers">
+        <PickerField question="role" value={answers.role} onChange={answer('role')} />
+        <PickerField question="source" value={answers.source} onChange={answer('source')} />
+      </div>
       {problem && <p role="alert" className="error-copy">{problem === 'unanswered' ? messages.signupAnswerEach : messages.signupErrors[problem]}</p>}
       {problem === 'trial_already_used' && <button type="button" onClick={onSignIn}>{messages.signInToWorkspace}</button>}
       <button type="submit" className="primary-action" disabled={pending}>{pending ? messages.creatingWorkspace : buying ? messages.createWorkspaceAndPay : messages.startTrial}</button>
@@ -65,14 +70,26 @@ interface QuestionFieldProps {
   onChange: (value: string) => void;
 }
 
-// QuestionField is one single-choice question: a radio group, so arrow keys move between its answers.
+// QuestionField is the goal: a radio group, so every answer is visible and arrow keys move between them.
 function QuestionField({ question, value, onChange }: QuestionFieldProps) {
   return (
-    <fieldset className="signup-question" data-short={question !== 'goal' || undefined}>
+    <fieldset className="signup-question">
       <legend>{messages.signupQuestions[question].legend}</legend>
       {Object.entries(answerLabels[question]).map(([option, label]) => (
         <label key={option} className="check-row"><input type="radio" name={`signup-${question}`} required checked={value === option}
           onChange={() => onChange(option)} /><span>{label}</span></label>))}
     </fieldset>
+  );
+}
+
+// PickerField is a short question as a drop-down, so the form and its button fit a laptop screen. It
+// starts on an empty prompt: nobody is counted as an answer they did not pick.
+function PickerField({ question, value, onChange }: QuestionFieldProps) {
+  return (
+    <label className="field"><span>{messages.signupQuestions[question].legend}</span>
+      <select required value={value ?? ''} onChange={(event) => onChange(event.target.value)}>
+        <option value="">{messages.signupChooseOne}</option>
+        {Object.entries(answerLabels[question]).map(([option, label]) => <option key={option} value={option}>{label}</option>)}
+      </select></label>
   );
 }
