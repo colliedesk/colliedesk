@@ -43,10 +43,11 @@ link opens the same list.
 1. Select **New article** (inside a collection, it starts there).
 2. Type a **Title** and the **Text** in Markdown: `**bold**`, `_italic_`, `#` headings, `-` and `1.`
    lists, `- [ ]` checklists, `[links](https://example.com)`, tables, `> quotes` and code. The Markdown
-   is colored as you type, and what you type is exactly what is stored.
+   is colored as you type, and what you type is exactly what is stored. Raw HTML in the text is not
+   shown, except a [YouTube or Vimeo video](#videos).
    - The toolbar sets the block (**Text**, **Heading 1** to **3**) and adds bold, italic,
      strikethrough, code, a link, bulleted and numbered lists, a checklist, a quote, a code block, a
-     table, a divider and an image. With the keyboard, Tab reaches the toolbar and the arrow keys move
+     table, a divider, an image and a [video](#videos). With the keyboard, Tab reaches the toolbar and the arrow keys move
      along it.
    - Shortcuts: `Ctrl+B` bold, `Ctrl+I` italic, `Ctrl+E` code, `Ctrl+K` link, `Ctrl+Z` undo,
      `Ctrl+F` find and replace (`Cmd` on a Mac).
@@ -56,7 +57,7 @@ link opens the same list.
 **Write** shows the Markdown, **Preview** shows how the article reads, and **Side by side** (in a wide
 window) shows both. A wide window opens an article side by side, unless it is longer than 20,000
 characters: then it opens in **Write**, which stays fast at any length. Raw HTML in the text never runs:
-the preview shows it as text, and the help center leaves it out.
+the preview and the help center show only [YouTube and Vimeo players](#videos) and leave the rest out.
 
 Enter starts a plain new line (type `- ` or `> ` again to go on with a list or quote), and Tab moves on
 to the next control instead of indenting, so the keyboard never gets stuck in the text; indent with
@@ -76,6 +77,36 @@ once. Saving waits until every image has finished uploading.
 
 Only uploaded images are shown. An image linked from another site (`![x](https://…)`) is not shown in
 the preview or on the help center; the preview says so. Download it and paste it in instead.
+
+### Videos
+
+An article can show a YouTube or Vimeo video. Select **Insert video** in the toolbar, paste the
+video's link (a watch page, a `youtu.be` short link, a Vimeo page, or a player address), and press
+Enter: the player goes in a block of its own after the one the cursor is in. A YouTube link's start
+time (`?t=1m5s`) is kept. A link the help center cannot show is refused, with the reason; Escape
+closes the box.
+
+You can also write the embed HTML yourself, in a paragraph of its own with a blank line before and
+after it, for example the code from YouTube's **Share → Embed**:
+
+```html
+<iframe src="https://www.youtube.com/embed/jNQXAC9IVRw?start=65" title="Me at the zoo" allowfullscreen></iframe>
+```
+
+- The address must be `https://www.youtube.com/embed/<id>`, `https://www.youtube-nocookie.com/embed/<id>`
+  or `https://player.vimeo.com/video/<id>`. YouTube videos play from `youtube-nocookie.com`, YouTube's
+  privacy-enhanced mode. Of the address only the video id, YouTube's `start=`
+  (seconds) and Vimeo's `h=` (the key of an unlisted video) are kept. A YouTube playlist or live
+  stream (`embed/videoseries`, `embed/live_stream`) is not shown: embed one video of it.
+- `title`, `width`, `height`, `allow` and `allowfullscreen` are kept; a player without `allow` gets
+  `encrypted-media; picture-in-picture`. The video fills the width of the
+  page at 16:9 whatever size you give, and loads only when a reader scrolls to it.
+- Any other HTML is not shown, text included: an iframe from another site, a `<video>` or `<audio>`
+  file, a script, a `style`, a form. Words on the same lines as the HTML count as part of it and go
+  too, so start your text after a blank line. Inside a paragraph only the tags are left out and the
+  words between them stay, except the content of a `<script>`, `<style>` or similar element. **Preview** names what it left out on a line above the article; the saved text
+  keeps the HTML as you wrote it.
+- Uploading a video file to the knowledge base is not available yet.
 
 ### Publish, unpublish, edit
 
@@ -148,7 +179,9 @@ address name** (Settings → Email) changes every help center address, and old l
   text, and any part of a title. It shows the best 25 matches.
 - Images you added to an article are shown while a published article uses them. An image from
   another site is shown as a link to it: the help center loads nothing from other sites.
-- Raw HTML in the text is never shown, and links work only for `http`, `https`, `mailto` and `tel`.
+- Raw HTML in the text is not shown, except [YouTube and Vimeo videos](#videos), and links work only
+  for `http`, `https`, `mailto` and `tel`. A video's site sees the reader's address when the video
+  loads, as with any embedded video.
 
 Pages have no scripts, no cookies and no tracking, follow the visitor's light or dark setting, and
 fit a phone. The page labels (Search, Home and so on) are in English; the help center's language

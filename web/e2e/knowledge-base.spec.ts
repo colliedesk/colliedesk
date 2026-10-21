@@ -107,3 +107,48 @@ test('knowledge base: an article opened and published untouched keeps its Markdo
   await page.keyboard.press('ControlOrMeta+f');
   await expect(page.getByRole('textbox', { name: 'Find' })).toBeFocused();
 });
+
+test('knowledge base: Insert video puts a YouTube player in the article, which the preview and the help center show sandboxed from youtube-nocookie.com', async ({ page }) => {
+  const suffix = `${Date.now()}-${process.pid}`;
+  const { url, slug } = createWorkspaceWithSlug(`KB Video ${suffix}`, `admin-${suffix}@example.com`);
+  // The player's site is outside the test: every request to it is answered empty and counted.
+  const players: string[] = [];
+  await page.route(/youtube(-nocookie)?\.com|vimeo\.com/, (route) => { players.push(route.request().url()); return route.fulfill({ status: 204 }); });
+  await page.goto(url);
+  await page.getByRole('button', { name: 'Continue to Colliedesk' }).click();
+  await expect(page).toHaveURL(`${servers.main}/`);
+  const headers = { Origin: servers.main };
+  expect((await page.request.put(`${servers.main}/api/v1/help-center`, { headers, data: { enabled: true, title: 'Video help', locale: 'en' } })).status()).toBe(200);
+  const created = await page.request.post(`${servers.main}/api/v1/kb/collections`, { headers, data: { name: 'Guides' } });
+  const { id: collection } = await created.json() as { id: string };
+  const article = await page.request.post(`${servers.main}/api/v1/kb/articles`, { headers, data: { collection_id: collection, title: 'Tour', body_md: 'Watch this.' } });
+  const { id } = await article.json() as { id: string };
+
+  await page.goto(`${servers.main}/knowledge/articles/${id}`);
+  await page.getByRole('tab', { name: 'Write' }).click();
+  await page.getByRole('textbox', { name: 'Text (Markdown)' }).click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.getByRole('button', { name: 'Insert video' }).click();
+  const link = page.getByRole('textbox', { name: 'YouTube or Vimeo link' });
+  await expect(link).toBeFocused();
+  await link.fill('https://evil.example/watch?v=x');
+  await link.press('Enter');
+  await expect(page.getByRole('alert')).toContainText('evil.example is not a video site');
+  await link.fill('https://youtu.be/jNQXAC9IVRw?t=65');
+  await link.press('Enter');
+  await expect(link).toBeHidden();
+  await page.getByRole('tab', { name: 'Preview' }).click();
+  const frame = page.getByRole('region', { name: 'Preview' }).locator('iframe');
+  await expect(frame).toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=65');
+  await expect(frame).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
+  await page.getByRole('button', { name: 'Save and publish' }).click();
+  await expect(page.getByRole('button', { name: 'Unpublish' })).toBeVisible();
+
+  const response = await page.goto(`${servers.main}/help/${slug}/a/1-tour`);
+  expect(response?.headers()['content-security-policy']).toContain('frame-src https://www.youtube-nocookie.com https://player.vimeo.com');
+  const player = page.locator('iframe');
+  await expect(player).toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=65');
+  await expect(player).toHaveAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+  await expect(player).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
+  expect(players.every((address) => address.startsWith('https://www.youtube-nocookie.com/embed/'))).toBe(true);
+});

@@ -4,6 +4,8 @@ COPY web/package.json web/pnpm-lock.yaml ./
 RUN corepack enable && corepack install
 RUN corepack pnpm install --frozen-lockfile
 COPY contracts /src/contracts
+# The knowledge base preview reads the help center's HTML allowlist.
+COPY server/internal/kbhtml /src/server/internal/kbhtml
 COPY web ./
 COPY server/internal/webui/static /src/server/internal/webui/static
 RUN corepack pnpm build

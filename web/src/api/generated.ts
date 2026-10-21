@@ -2089,7 +2089,7 @@ export interface components {
             title: string;
             /** @description Lowercase letters, digits and hyphens in any script; made from the title when left out. */
             slug?: string;
-            /** @description The text in Markdown. Raw HTML in it is never rendered on the help center. */
+            /** @description The text in Markdown. Of raw HTML the help center shows only a YouTube or Vimeo player, an <iframe> whose src is https://www.youtube.com/embed/<id>, https://www.youtube-nocookie.com/embed/<id> or https://player.vimeo.com/video/<id>; anything else is left out when shown and kept as written. */
             body_md: string;
             /**
              * @default draft

@@ -236,14 +236,14 @@ func TestHelpCenterPagesForbidScriptsFramingAndBranding(t *testing.T) {
 	enableHelpCenter(t, api, admin, "", true)
 	collection := kbCollection(t, api, admin, map[string]any{"name": "Guides"})
 	article := kbArticle(t, api, admin, map[string]any{"collection_id": collection.ID, "title": "Tricky <b>title</b>", "status": "published",
-		"body_md": "<script>alert(1)</script>\n\n[x](javascript:alert(1))\n\n<img src=x onerror=alert(1)>\n\n![a](https://tracker.example/pixel.gif)"})
+		"body_md": "<script>alert(1)</script>\n\n[x](javascript:alert(1))\n\n<img src=x onerror=alert(1)>\n\n![a](https://tracker.example/pixel.gif)\n\n<iframe src=\"https://www.youtube.com/embed/jNQXAC9IVRw\" onload=\"alert(1)\"></iframe>"})
 	base := "/help/" + slug
 	page := visit(site, base, "192.0.2.40")
 	var style string
 	for _, path := range []string{base, base + "/c/guides", fmt.Sprintf("%s/a/%d-%s", base, article.Number, article.Slug), base + "/search?q=tricky", base + "/missing", "/help/nobody"} {
 		response := visit(site, path, "192.0.2.40")
 		header := response.Header()
-		if got := header.Get("Content-Security-Policy"); got != "default-src 'none'; img-src 'self'; style-src 'self'; script-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'" {
+		if got := header.Get("Content-Security-Policy"); got != "default-src 'none'; img-src 'self'; style-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; media-src 'self'; script-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'" {
 			t.Errorf("%s CSP=%q", path, got)
 		}
 		if header.Get("X-Content-Type-Options") != "nosniff" || header.Get("X-Frame-Options") != "DENY" || header.Get("Content-Type") != "text/html; charset=utf-8" {
@@ -254,6 +254,9 @@ func TestHelpCenterPagesForbidScriptsFramingAndBranding(t *testing.T) {
 			if strings.Contains(body, bad) {
 				t.Errorf("%s holds %q:\n%s", path, bad, body)
 			}
+		}
+		if strings.Contains(path, "/a/") && !strings.Contains(body, `<iframe src="https://www.youtube-nocookie.com/embed/jnqxac9ivrw" title="youtube video" allow="encrypted-media; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-presentation allow-popups" referrerpolicy="strict-origin-when-cross-origin" loading="lazy"></iframe>`) {
+			t.Errorf("%s shows no sandboxed player:\n%s", path, body)
 		}
 		if start := strings.Index(body, `<link rel="stylesheet" href="`); start >= 0 {
 			style = body[start+len(`<link rel="stylesheet" href="`):]

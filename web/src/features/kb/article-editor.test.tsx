@@ -139,6 +139,31 @@ test('the preview renders Markdown with tables, and raw HTML never runs', async 
   expect(panel.querySelector('img')).toBeNull();
 });
 
+test('the preview shows YouTube and Vimeo players as the help center does, and names the HTML it leaves out', async () => {
+  const body = 'Watch:\n\n<iframe src="https://www.youtube.com/embed/jNQXAC9IVRw?start=65" onload="alert(1)"></iframe>\n\n'
+    + 'Inline <iframe src="https://evil.example/embed/x"></iframe> and <b>bold</b>.\n\n<script>window.__xss = 1</script>\n\n'
+    + '<video src="/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b" controls></video>';
+  serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: body })) });
+  open({ articleId: ids.article });
+  fireEvent.click(await screen.findByRole('tab', { name: 'Preview' }));
+  const panel = screen.getByRole('tabpanel', { name: 'Preview' });
+  // The preview draws after the editor is on screen.
+  const warning = await within(panel).findByRole('status');
+  const frames = panel.querySelectorAll('iframe');
+  expect(frames).toHaveLength(1);
+  expect(frames[0]).toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=65');
+  expect(frames[0]).toHaveAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-popups');
+  expect(frames[0]).toHaveAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+  expect(frames[0]).toHaveAttribute('loading', 'lazy');
+  expect(frames[0]).not.toHaveAttribute('onload');
+  expect(panel.querySelector('script, video, b')).toBeNull();
+  expect(panel).toHaveTextContent('Inline and bold.');
+  expect(warning).toHaveTextContent('Left out of the article: iframe onload, iframe (evil.example), b, script.');
+  expect(panel).not.toHaveTextContent('__xss');
+  expect(warning).toHaveTextContent('Videos from the media library are not shown yet.');
+  expect((window as { __xss?: number }).__xss).toBeUndefined();
+});
+
 test('restoring a version asks to save unsaved edits first, then makes the version current', async () => {
   const restored = article({ title: 'Old title', updated_at: '2026-10-06T00:00:00Z' });
   const version = (n: number, title: string) => ({ version: n, kind: n === 1 ? 'create' : 'edit', restored_from_version: null, changed_by: { agent_id: null, name: 'Ada' },

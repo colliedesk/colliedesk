@@ -1,8 +1,11 @@
 package freshdesk
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -11,12 +14,14 @@ import (
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/strikethrough"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/table"
+	"github.com/colliedesk/colliedesk/server/internal/kbhtml"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )
 
 // Markdown has no place for these; the converter drops them, so the import names them in a warning.
-// The original HTML stays in source_html and in the export.
+// The original HTML stays in source_html and in the export. An iframe of a YouTube or Vimeo player is
+// the exception: the article keeps it as raw HTML, which the help center shows (kbhtml).
 var droppedElements = map[atom.Atom]bool{
 	atom.Iframe: true, atom.Video: true, atom.Audio: true, atom.Embed: true, atom.Object: true, atom.Form: true,
 	atom.Input: true, atom.Button: true, atom.Select: true, atom.Textarea: true, atom.Script: true, atom.Style: true,
@@ -28,7 +33,8 @@ var markdownConverter = converter.NewConverter(converter.WithPlugins(base.NewBas
 
 // articleMarkdown turns an article's HTML into Markdown. It returns what Markdown could not hold
 // (element names, "table cell spanning rows or columns", "link with an unsafe address"); a link whose
-// address is not http, https, mailto, relative or a fragment keeps only its text.
+// address is not http, https, mailto, relative or a fragment keeps only its text. A YouTube or Vimeo
+// player stays where it was, as the editor's Insert video writes it.
 func articleMarkdown(markup string) (string, []string, error) {
 	nodes, err := html.ParseFragment(strings.NewReader(markup), &html.Node{Type: html.ElementNode, Data: "body", DataAtom: atom.Body})
 	if err != nil {
@@ -38,6 +44,11 @@ func articleMarkdown(markup string) (string, []string, error) {
 	for _, node := range nodes {
 		root.AppendChild(node)
 	}
+	// A player goes through the converter as a word of its own and comes back as HTML after it.
+	var players []string
+	nonce := make([]byte, 8)
+	_, _ = rand.Read(nonce)
+	mark := "colliedeskplayer" + hex.EncodeToString(nonce) + "n"
 	var dropped []string
 	note := func(what string) {
 		if !slices.Contains(dropped, what) {
@@ -48,6 +59,21 @@ func articleMarkdown(markup string) (string, []string, error) {
 	walk = func(node *html.Node) {
 		for child := node.FirstChild; child != nil; {
 			next := child.NextSibling
+			if snippet, ok := kbhtml.PlayerSnippet(child); ok {
+				marker := &html.Node{Type: html.TextNode, Data: mark + strconv.Itoa(len(players)) + "x"}
+				if !inCell(node) {
+					// A paragraph of its own: a line that starts with <iframe> is an HTML block in
+					// Markdown, which would take the text after it on that line along.
+					paragraph := &html.Node{Type: html.ElementNode, Data: "p", DataAtom: atom.P}
+					paragraph.AppendChild(marker)
+					marker = paragraph
+				}
+				node.InsertBefore(marker, child)
+				node.RemoveChild(child)
+				players = append(players, snippet)
+				child = next
+				continue
+			}
 			if child.Type == html.ElementNode && droppedElements[child.DataAtom] {
 				note(child.Data)
 				node.RemoveChild(child)
@@ -92,11 +118,24 @@ func articleMarkdown(markup string) (string, []string, error) {
 		// Raw HTML in Markdown is never rendered (the help center and the editor's preview skip it).
 		note("HTML the converter could not turn into Markdown")
 	}
+	for i, snippet := range players {
+		markdown = strings.Replace(markdown, mark+strconv.Itoa(i)+"x", snippet, 1)
+	}
 	return markdown, dropped, nil
 }
 
 // htmlTag finds a tag the converter left in the Markdown as raw HTML.
 var htmlTag = regexp.MustCompile(`</?[A-Za-z][A-Za-z0-9-]*(\s[^<>]*)?/?>`)
+
+// inCell tells whether node is or sits in a table cell, where a player stays inline in its row.
+func inCell(node *html.Node) bool {
+	for ; node != nil; node = node.Parent {
+		if node.Type == html.ElementNode && (node.DataAtom == atom.Td || node.DataAtom == atom.Th) {
+			return true
+		}
+	}
+	return false
+}
 
 // holdsBlock tells whether a table cell holds a line break or block content.
 func holdsBlock(cell *html.Node) bool {

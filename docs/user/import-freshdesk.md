@@ -87,8 +87,9 @@ portals, choose the one whose articles stay published with `--help-center-portal
 are in the report under `knowledge_base.portals`); without it, all articles of those categories are
 drafts.
 
-Markdown cannot hold everything HTML can. Embedded video, iframes, forms and scripts are left out of
-the article, a table cell that spans several columns is repeated in each, and a table whose cells hold
+Markdown cannot hold everything HTML can. A YouTube or Vimeo video embedded in an article is kept and
+plays on the help center (see [Videos](knowledge-base.md#videos)). Other embedded video and iframes,
+forms and scripts are left out of the article, a table cell that spans several columns is repeated in each, and a table whose cells hold
 several lines or a list becomes plain text (the words stay). The report names the
 articles under the warning `kb_article_markup_dropped`. The original HTML stays with the article and
 is in the export.

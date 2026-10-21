@@ -1,0 +1,48 @@
+{
+  "about": "The only raw HTML a knowledge base article may show: these players, rebuilt; any other HTML is left out with its text. The help center (server/internal/kbhtml) and the editor preview (web/src/features/kb/kb-html.ts) both read this file; docs/internals/knowledge-base.md explains each rule. Attribute names are HTML names. The Markdown an author saves keeps every byte; only what is shown leaves HTML out.",
+  "iframe": {
+    "embeds": [
+      {
+        "name": "youtube",
+        "title": "YouTube video",
+        "hosts": ["www.youtube-nocookie.com", "youtube-nocookie.com", "www.youtube.com", "youtube.com", "m.youtube.com"],
+        "path": "^/embed/([A-Za-z0-9_-]{11})$",
+        "src": "https://www.youtube-nocookie.com/embed/",
+        "query": { "start": "^[0-9]{1,6}$" },
+        "notVideos": ["videoseries", "live_stream"],
+        "notVideoReason": "YouTube playlist or live stream"
+      },
+      {
+        "name": "vimeo",
+        "title": "Vimeo video",
+        "hosts": ["player.vimeo.com"],
+        "path": "^/video/([0-9]{1,12})$",
+        "src": "https://player.vimeo.com/video/",
+        "query": { "h": "^[0-9a-f]{6,20}$" },
+        "notVideos": [],
+        "notVideoReason": ""
+      }
+    ],
+    "attributes": ["src", "title", "width", "height", "allow", "allowfullscreen", "loading"],
+    "defaultAllow": "encrypted-media; picture-in-picture",
+    "allow": ["accelerometer", "clipboard-write", "encrypted-media", "gyroscope", "picture-in-picture", "web-share", "fullscreen"],
+    "forced": {
+      "sandbox": "allow-scripts allow-same-origin allow-presentation allow-popups",
+      "referrerpolicy": "strict-origin-when-cross-origin",
+      "loading": "lazy"
+    }
+  },
+  "video": {
+    "enabled": false,
+    "disabledBecause": "Turned on with the media library: until /api/v1/kb/media serves files, a <video> would only show a broken player. Its poster, width and height will come from the library, not from the article.",
+    "attributes": ["src", "title", "aria-label", "width", "height", "controls", "preload", "muted", "loop", "playsinline"],
+    "src": "^/api/v1/kb/media/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    "preload": ["none", "metadata"],
+    "flags": ["muted", "loop", "playsinline"]
+  },
+  "dimension": { "pattern": "^[0-9]{1,4}$", "min": 1, "max": 4096 },
+  "dropWithContent": [
+    "applet", "audio", "canvas", "embed", "frame", "frameset", "iframe", "math", "noembed", "noframes", "noscript",
+    "object", "script", "select", "style", "svg", "template", "textarea", "title", "video", "xmp"
+  ]
+}

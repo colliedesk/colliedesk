@@ -114,6 +114,9 @@
 .kb-preview .task-list-item input { margin: 0 var(--space-2) 0 0; vertical-align: -2px; }
 .kb-preview li + li { margin-top: var(--space-1); }
 .kb-preview img { max-width: 100%; height: auto; border-radius: var(--radius); }
+/* A video player fills the column at 16:9 whatever width and height its HTML gives, as on the help center. */
+.kb-preview iframe { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); }
+.kb-html-warning { border: 1px solid var(--note-line); border-radius: var(--radius-sm); background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); font-size: var(--fs-small); }
 .kb-preview blockquote { margin-inline: 0; border-left: 3px solid var(--line-strong); padding-left: var(--space-4); color: var(--text-2); }
 .kb-preview pre { overflow-x: auto; border-radius: var(--radius); background: var(--surface-2); padding: var(--space-3); }
 .kb-preview pre code { background: none; padding: 0; }

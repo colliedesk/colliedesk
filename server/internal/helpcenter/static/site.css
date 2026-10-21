@@ -218,6 +218,12 @@ a:hover { text-decoration-thickness: 2px; }
 .prose li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.5rem; }
 .prose li > input[type="checkbox"] { margin: 0 0.5rem 0 0; vertical-align: -0.1em; accent-color: var(--accent); }
 .prose img { max-width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--rule); background: var(--surface); }
+/* A video player fills the column at 16:9 whatever width and height its HTML gives. */
+.prose iframe { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; margin: 0 0 1.25rem; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+/* An article whose text took too long to render shows it as written. */
+.prose .plain-note { color: var(--muted); font-size: 0.9375rem; }
+.prose .plain-text { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 0; }
+.prose video { display: block; max-width: 100%; height: auto; margin: 0 0 1.25rem; border-radius: 8px; }
 .prose blockquote { margin-left: 0; padding: 0.75rem 1.125rem; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 8px 8px 0; }
 .prose blockquote > :last-child { margin-bottom: 0; }
 .prose hr { border: 0; border-top: 1px solid var(--rule); margin: 2.25rem 0; }
