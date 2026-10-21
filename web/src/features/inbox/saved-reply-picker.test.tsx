@@ -83,3 +83,39 @@ test('with no saved replies it says so and leads to the place that adds them', (
   fireEvent.click(screen.getByRole('button', { name: 'Manage saved replies' }));
   expect(onManage).toHaveBeenCalledOnce();
 });
+
+const texts = { label: 'Articles', search: 'Search articles', loading: 'Loading articles…', failed: 'Articles could not be loaded.', none: 'No published article yet.', noMatch: 'No published article matches.', manage: 'Open settings' };
+
+test('a source that searches by itself gets every search and its answer is shown as it is, under its own names', () => {
+  const onQueryChange = vi.fn();
+  const { rerender } = render(<SavedReplyPicker replies={replies} texts={texts} onQueryChange={onQueryChange} onPick={vi.fn()} onClose={vi.fn()} />);
+  expect(screen.getByRole('dialog', { name: 'Articles' })).toBeInTheDocument();
+  const search = screen.getByRole('combobox', { name: 'Search articles' });
+  fireEvent.change(search, { target: { value: 'zzz' } });
+  expect(onQueryChange).toHaveBeenLastCalledWith('zzz');
+  // The source has not answered yet: its last list stays, unfiltered.
+  expect(screen.getAllByRole('option')).toHaveLength(3);
+  rerender(<SavedReplyPicker replies={[]} texts={texts} onQueryChange={onQueryChange} onPick={vi.fn()} onClose={vi.fn()} />);
+  expect(screen.getByRole('status')).toHaveTextContent('No published article matches.');
+  fireEvent.change(search, { target: { value: '' } });
+  expect(screen.getByRole('status')).toHaveTextContent('No published article yet.');
+});
+
+test('the way to add some carries the name the source gives it', () => {
+  const onManage = vi.fn();
+  render(<SavedReplyPicker replies={[]} texts={texts} onManage={onManage} onPick={vi.fn()} onClose={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Open settings' }));
+  expect(onManage).toHaveBeenCalledOnce();
+});
+
+test('it comes into view when it opens, below the fold on a phone', () => {
+  const scrolled = vi.fn();
+  Element.prototype.scrollIntoView = scrolled;
+  try {
+    render(<SavedReplyPicker replies={replies} onPick={vi.fn()} onClose={vi.fn()} />);
+    expect(scrolled).toHaveBeenCalledExactlyOnceWith({ block: 'nearest' });
+    expect(scrolled.mock.contexts[0]).toBe(screen.getByRole('dialog', { name: 'Saved replies' }));
+  } finally {
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  }
+});

@@ -25,7 +25,7 @@ const trashedCollectionSchema = z.object({
 const summaryFields = {
   id: z.string().uuid(), number: z.number().int(), collection_id: z.string().uuid(), title: z.string(), slug: z.string(), status: statusSchema,
   published_at: nullableDate, author_agent_id: z.string().uuid().nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
-  last_change: changeSchema.nullable(),
+  last_change: changeSchema.nullable(), url: z.string(),
 };
 const summarySchema = z.object(summaryFields) satisfies z.ZodType<Generated<'KBArticleSummary'>>;
 export const kbArticleSchema = z.object({

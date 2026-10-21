@@ -91,6 +91,8 @@ type KBArticleSummary struct {
 	CreatedAt     time.Time        `json:"created_at"`
 	UpdatedAt     time.Time        `json:"updated_at"`
 	LastChange    *KBArticleChange `json:"last_change"`
+	// URL is the public address on the help center; the API fills it in, the store does not know it.
+	URL string `json:"url"`
 }
 
 // KBArticleTranslation is a translation an import brought in; it is kept and exported, not rendered yet.

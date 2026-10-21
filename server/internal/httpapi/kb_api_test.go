@@ -37,6 +37,7 @@ type kbArticleView struct {
 	UpdatedAt    string           `json:"updated_at"`
 	DeletedAt    *string          `json:"deleted_at"`
 	LastChange   *replyChangeView `json:"last_change"`
+	URL          string           `json:"url"`
 }
 
 // kbCall sends a JSON call, checks the status and the contract, and decodes the answer into into.
@@ -202,6 +203,7 @@ func TestKnowledgeBaseArticlesHaveStableNumbersVersionsAndATrash(t *testing.T) {
 
 type kbTrashItem struct {
 	ID        string    `json:"id"`
+	URL       string    `json:"url"`
 	UpdatedAt string    `json:"updated_at"`
 	DeletedAt time.Time `json:"deleted_at"`
 	PurgesAt  time.Time `json:"purges_at"`

@@ -19,6 +19,9 @@ database schema.
   report.
 - **Help Scout importer**: conversations of one inbox, replies, notes, attachments (checksummed),
   inline images, tags and customers, with a reconcile report and undo.
+- **Knowledge base and public help center**: Markdown articles in collections with history and a
+  trash, a media library with images and videos, a public help center without scripts,
+  your Freshdesk solution articles imported, and article links in replies.
 - Team settings: invite, deactivate and reactivate agents.
 - **MCP server** so your AI agent (Claude, Codex, Cursor) can work the queue: search, read and
   triage conversations and add private notes, with read, draft-only, send and admin agent tokens; an
@@ -52,7 +55,6 @@ Beta starts when HC Labs announces it. Before that:
   ([#100](https://github.com/colliedesk/colliedesk/issues/100)).
 - Auto-answer only for topics where drafts proved accurate, with a human in the loop.
 - Usage metering; bring your own AI key.
-- Knowledge base and public help center, including your Freshdesk articles ([#90](https://github.com/colliedesk/colliedesk/issues/90)).
 - Connect any agent host in one step, with setup docs and an Agent Skills pack ([#113](https://github.com/colliedesk/colliedesk/issues/113)).
 
 ## Later

@@ -20,6 +20,11 @@ export function HelpCenterSettings({ canManage, workspaceName }: { canManage: bo
   const [title, setTitle] = useState('');
   useEffect(() => setEnabled(settings.data?.enabled ?? false), [settings.data?.enabled]);
   useEffect(() => setTitle(settings.data?.title ?? ''), [settings.data?.title]);
+  // The reply box's articles list opens Settings at #help-center-heading. This card is a chunk of its own,
+  // so the browser looked for the heading before the card was there; once it is, go to it.
+  useEffect(() => {
+    if (settings.isSuccess && window.location.hash === '#help-center-heading') document.getElementById('help-center-heading')?.scrollIntoView();
+  }, [settings.isSuccess]);
   const feedback = useSaveFeedback({ pending: save.isPending, saved: save.isSuccess,
     error: save.isError ? (save.error instanceof InvalidRequestError ? save.error.message : messages.settingsActionFailed) : undefined });
   if (settings.isError) return <p role="alert" className="error-copy">{kbMessages.helpCenterFailed}</p>;

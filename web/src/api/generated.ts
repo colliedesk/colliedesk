@@ -2448,6 +2448,11 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             last_change: null | components["schemas"]["KBArticleChange"];
+            /**
+             * Format: uri
+             * @description The public address of the article, `<help center url>/a/<number>-<slug>` (see HelpCenter.url). It is the one to put in a reply. The help center shows the article there only while the article is published and the help center is on; a new slug is a new address, and the old one still leads to the article.
+             */
+            url: string;
         };
         KBArticleTranslation: {
             locale: string;
@@ -2474,6 +2479,11 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             last_change: null | components["schemas"]["KBArticleChange"];
+            /**
+             * Format: uri
+             * @description The public address of the article, as in KBArticleSummary.
+             */
+            url: string;
             body_md: string;
             /** @description An import kept the original HTML; it is in the workspace export and is never shown on the help center. */
             has_source_html: boolean;
@@ -2505,6 +2515,11 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             last_change: null | components["schemas"]["KBArticleChange"];
+            /**
+             * Format: uri
+             * @description The public address of the article, as in KBArticleSummary.
+             */
+            url: string;
             /** Format: date-time */
             deleted_at: string;
             deleted_by: null | components["schemas"]["SavedReplyPerson"];

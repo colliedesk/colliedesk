@@ -142,6 +142,7 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
 - Messages support Markdown.
 - **Cc** (under the message box) copies colleagues of the customer on a reply; see [Copy other people on a reply](email-channel.md#copy-other-people-on-a-reply-cc).
 - **Insert saved reply** (or `/`) puts a [saved reply](saved-replies.md) into the box, with the customer's name and yours filled in. You can edit it before you send.
+- **Articles** puts a link to a published [knowledge base article](knowledge-base.md#link-an-article-in-a-reply) into the box: its title and its help center address on two lines.
 - **Add attachment** (the paperclip under the message box) attaches files to a reply or a private
   note. A message carries at most 10 files and 10 MiB in total. Each chosen file is listed with its
   size; select the **x** next to it to remove it before you send. Over the limit, Colliedesk says so,

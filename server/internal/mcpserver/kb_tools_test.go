@@ -58,6 +58,12 @@ func TestSendTokenWritesTheKnowledgeBaseWithHistoryTrashAndImages(t *testing.T) 
 	if at(t, created, "article", "number") != float64(1) || at(t, created, "article", "status") != "published" || at(t, created, "article", "last_change", "via_token") != "test send" {
 		t.Fatalf("create = %v", created)
 	}
+	// The article's public address is the one to put in a reply: the help center's own, then /a/<number>-<slug>.
+	center := at(t, e.ok(session, "colliedesk_help_center_get", nil), "help_center", "url").(string)
+	address := center + "/a/1-reset-your-password"
+	if !strings.HasPrefix(center, "https://desk.example.com/help/") || at(t, created, "article", "url") != address {
+		t.Fatalf("article url = %v, help center = %q, want %q", at(t, created, "article", "url"), center, address)
+	}
 	seen := at(t, created, "article", "updated_at")
 	updated := e.ok(session, "colliedesk_kb_article_update", map[string]any{"article_id": articleID, "updated_at": seen, "body": "Open **Settings**, then *Password*.", "status": "draft"})
 	if at(t, updated, "article", "status") != "draft" || at(t, updated, "article", "team_text", "body") != "Open **Settings**, then *Password*." {
@@ -67,7 +73,7 @@ func TestSendTokenWritesTheKnowledgeBaseWithHistoryTrashAndImages(t *testing.T) 
 		t.Errorf("stale update: %q", message)
 	}
 	found := e.ok(session, "colliedesk_kb_articles_search", map[string]any{"query": "password"})["articles"].([]any)
-	if len(found) != 1 || at(t, found[0], "team_text", "title") != "Reset your password" {
+	if len(found) != 1 || at(t, found[0], "team_text", "title") != "Reset your password" || at(t, found[0], "url") != address {
 		t.Fatalf("search = %v", found)
 	}
 	restored := e.ok(session, "colliedesk_kb_article_version_restore", map[string]any{"article_id": articleID, "version": 1, "updated_at": at(t, updated, "article", "updated_at")})
@@ -82,7 +88,7 @@ func TestSendTokenWritesTheKnowledgeBaseWithHistoryTrashAndImages(t *testing.T) 
 	if len(trash) != 1 || at(t, trash[0], "purges_at") == nil {
 		t.Fatalf("trash = %v", trash)
 	}
-	if got := e.ok(session, "colliedesk_kb_article_get", map[string]any{"article_id": articleID}); at(t, got, "article", "in_trash") != true {
+	if got := e.ok(session, "colliedesk_kb_article_get", map[string]any{"article_id": articleID}); at(t, got, "article", "in_trash") != true || at(t, got, "article", "url") != address {
 		t.Fatalf("get of a trashed article = %v", got)
 	}
 	e.ok(session, "colliedesk_kb_article_undelete", map[string]any{"article_id": articleID, "updated_at": at(t, trash[0], "updated_at")})

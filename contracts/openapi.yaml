@@ -4082,7 +4082,7 @@ components:
         created_at: {type: string, format: date-time}
     KBArticleSummary:
       type: object
-      required: [id, number, collection_id, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change]
+      required: [id, number, collection_id, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url]
       properties:
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1, description: 'Never changes and is never reused in the workspace; the help center address is /a/<number>-<slug>.'}
@@ -4098,6 +4098,14 @@ components:
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/KBArticleChange'}
+        url:
+          type: string
+          format: uri
+          description: >-
+            The public address of the article, `<help center url>/a/<number>-<slug>` (see HelpCenter.url).
+            It is the one to put in a reply. The help center shows the article there only while the
+            article is published and the help center is on; a new slug is a new address, and the old
+            one still leads to the article.
     KBArticleTranslation:
       type: object
       required: [locale, title, body_md, updated_at]
@@ -4108,7 +4116,7 @@ components:
         updated_at: {type: string, format: date-time}
     KBArticle:
       type: object
-      required: [id, number, collection_id, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, body_md, has_source_html, translations, deleted_at]
+      required: [id, number, collection_id, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, body_md, has_source_html, translations, deleted_at]
       properties:
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1}
@@ -4124,6 +4132,7 @@ components:
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/KBArticleChange'}
+        url: {type: string, format: uri, description: 'The public address of the article, as in KBArticleSummary.'}
         body_md: {type: string}
         has_source_html: {type: boolean, description: An import kept the original HTML; it is in the workspace export and is never shown on the help center.}
         translations:
@@ -4137,7 +4146,7 @@ components:
           items: {type: string, format: uuid}
     TrashedKBArticle:
       type: object
-      required: [id, number, collection_id, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, deleted_at, deleted_by, purges_at]
+      required: [id, number, collection_id, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, deleted_at, deleted_by, purges_at]
       properties:
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1}
@@ -4153,6 +4162,7 @@ components:
           oneOf:
             - {type: 'null'}
             - {$ref: '#/components/schemas/KBArticleChange'}
+        url: {type: string, format: uri, description: 'The public address of the article, as in KBArticleSummary.'}
         deleted_at: {type: string, format: date-time}
         deleted_by:
           oneOf:

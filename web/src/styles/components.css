@@ -230,10 +230,13 @@
 .saved-reply-button:hover:not(:disabled) { color: var(--text-1); }
 .saved-reply-button svg { width: 14px; height: 14px; }
 .saved-reply-button kbd { margin-left: var(--space-1); }
+/* Saved replies and Articles sit together on the left; the last of them pushes the rest to the right. */
+.saved-reply-button:has(+ .saved-reply-button) { margin-right: 0; }
 .saved-reply-picker { display: grid; gap: var(--space-1); margin: 0 var(--space-2) var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1); padding: var(--space-2); }
 .saved-reply-picker ul { max-height: 14rem; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
 .saved-reply-picker li { cursor: pointer; overflow: hidden; border-radius: var(--radius); padding: var(--space-2) var(--space-3); text-overflow: ellipsis; white-space: nowrap; }
 .saved-reply-picker li[aria-selected="true"] { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--accent); }
+.article-link-picker { display: contents; }
 .saved-reply-empty { margin: 0; padding: var(--space-2) var(--space-3); color: var(--text-3); }
 .saved-reply-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
 .saved-reply-list > li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); border-bottom: 1px solid var(--line); padding: var(--space-3) 0; }
@@ -307,6 +310,10 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .composer { padding-inline: var(--space-3); }
   .composer-notice { width: auto; margin-inline: var(--space-3); }
   .composer-actions .composer-hint { display: none; }
+  /* Saved replies, Articles, Cc and Send wrap rather than push the card past the screen. */
+  .composer-actions { flex-wrap: wrap; row-gap: var(--space-2); }
+  .saved-reply-button kbd { display: none; }
+  .saved-reply-picker li { display: flex; align-items: center; min-height: var(--touch); }
   .status-tabs label { min-height: var(--touch); }
   .conversation-row { min-height: var(--touch); }
 }
