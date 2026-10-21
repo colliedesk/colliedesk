@@ -20,10 +20,13 @@ function newClientAddress() {
   return `10.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}.${1 + Math.floor(Math.random() * 254)}`;
 }
 
+// The sign-up form sends the three onboarding answers with the name; the journey answers as a team leaving Freshdesk.
+const answers = { goal: 'leave_helpdesk', role: 'support_lead', source: 'email' };
+
 function signUp(page: Page, email: string, workspaceName: string): Promise<APIResponse> {
   return page.request.post(`${baseURL}/api/v1/auth/cloud/signup`, {
     headers: { Origin: baseURL, Authorization: `Bearer ${provider.token({ email })}`, 'X-Forwarded-For': newClientAddress() },
-    data: { workspace_name: workspaceName },
+    data: { workspace_name: workspaceName, ...answers },
   });
 }
 
@@ -54,6 +57,14 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   await expect(appNavigationWith(page, name)).toHaveCount(1);
   await expect(page.getByRole('region', { name: 'Plan notices' })).toContainText('Trial: 14 days left');
   await expect(page.getByRole('button', { name: 'Choose a plan' })).toBeVisible();
+  // The goal given at sign-up picks the first step of the empty inbox.
+  await expect(page.getByRole('region', { name: 'Get started' }).getByRole('listitem').first()).toHaveText('Recommended first step: Import from Freshdesk');
+  // An unknown answer is refused before anything is created.
+  const refused = await page.request.post(`${baseURL}/api/v1/auth/cloud/signup`, {
+    headers: { Origin: baseURL, Authorization: `Bearer ${provider.token({ email: `other-${email}` })}`, 'X-Forwarded-For': newClientAddress() },
+    data: { workspace_name: `Refused ${name}`, goal: 'world_domination' },
+  });
+  expect(refused.status()).toBe(400);
 
   // One trial per mailbox, however it is written.
   const again = await signUp(page, email.toUpperCase(), `Another ${name}`);

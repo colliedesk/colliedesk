@@ -208,7 +208,7 @@ export function InboxRoute() {
     void navigate({ to: params.conversationId ? '/conversations/$conversationId' : '/', params: params.conversationId ? { conversationId: params.conversationId } : {}, search: next, replace });
   };
   return <><InboxPage hosted={config?.billing.enabled ?? false} conversations={conversations.data?.items} selected={selected} timeline={selected ? timeline.data?.items : undefined} timeEntries={selected ? timeEntries.data?.items : undefined}
-    agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone}
+    agents={agents.data?.items} tags={tags.data?.items} timezone={me.data?.timezone} onboardingGoal={me.data?.onboarding_goal}
     page={page} hasNextPage={(conversations.data?.items.length ?? 0) === (conversations.data?.page_size ?? 50)} onPage={setPage}
     // Opening a conversation keeps the filters in the address, so Back returns to the same list.
     onSelect={(id) => { reportedOpen.current = id; track('conversation_opened', { source: 'list' }); setSelectedId(id); navigate({ to: '/conversations/$conversationId', params: { conversationId: id }, search: filters }); }}

@@ -1,6 +1,7 @@
 import { ClerkProvider, SignIn, useAuth, useClerk } from '@clerk/clerk-react';
 import { useEffect, useRef, useState } from 'react';
 import { NotAnAgentError } from '../../api/cloud-signup';
+import type { SignupAnswers } from '../../api/cloud-signup';
 import { messages } from '../../messages';
 import { CloudSignup } from './cloud-signup';
 
@@ -9,7 +10,7 @@ interface CloudSignInProps {
   // onSessionToken rejects with NotAnAgentError when the verified email belongs to no workspace.
   onSessionToken: (token: string) => Promise<void>;
   // onSignUp creates a trial workspace; present only where the server offers sign-up.
-  onSignUp?: (token: string, workspaceName: string) => Promise<void>;
+  onSignUp?: (token: string, workspaceName: string, answers: SignupAnswers) => Promise<void>;
   // buying is true when the visitor came to buy a plan; sign-up then leads to payment.
   buying?: boolean;
 }
@@ -61,10 +62,10 @@ function CloudSession({ onSessionToken, onSignUp, buying }: Pick<CloudSignInProp
   };
   if (noWorkspace && onSignUp) {
     // Clerk session tokens live for about a minute, so the token is fetched when the form is sent.
-    const create = async (name: string) => {
+    const create = async (name: string, answers: SignupAnswers) => {
       const token = await getToken();
       if (!token) throw new Error('Clerk did not return a session token');
-      await onSignUp(token, name);
+      await onSignUp(token, name, answers);
     };
     return <>
       <CloudSignup buying={buying} onCreate={create} onSignIn={leave} onUseAnotherAccount={leave} />

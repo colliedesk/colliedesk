@@ -1,18 +1,45 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { expect, test, vi } from 'vitest';
 import { SignupError } from '../../api/cloud-signup';
 import { CloudSignup } from './cloud-signup';
+import { answerSignupQuestions } from './test-signup-answers';
 
 function fill(name: string) {
   fireEvent.change(screen.getByLabelText(/workspace name/i), { target: { value: name } });
+  answerSignupQuestions();
   fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
 }
 
-test('submits the trimmed name', async () => {
+test('submits the trimmed name and the three answers', async () => {
   const onCreate = vi.fn().mockResolvedValue(undefined);
   render(<CloudSignup onCreate={onCreate} onSignIn={vi.fn()} onUseAnotherAccount={vi.fn()} />);
   fill('  Acme Support ');
-  await waitFor(() => expect(onCreate).toHaveBeenCalledWith('Acme Support'));
+  await waitFor(() => expect(onCreate).toHaveBeenCalledWith('Acme Support', { goal: 'leave_helpdesk', role: 'founder', source: 'x' }));
+});
+
+test('the form is not sent until each of the three questions has an answer', async () => {
+  const onCreate = vi.fn().mockResolvedValue(undefined);
+  render(<CloudSignup onCreate={onCreate} onSignIn={vi.fn()} onUseAnotherAccount={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText(/workspace name/i), { target: { value: 'Acme Support' } });
+  const submit = screen.getByRole('button', { name: 'Start free trial' });
+  fireEvent.click(submit);
+  expect(screen.getByRole('alert')).toHaveTextContent('Answer each question to continue.');
+  fireEvent.click(within(screen.getByRole('group', { name: 'What do you want Colliedesk to do for you first?' })).getByRole('radio', { name: 'Let AI agents draft or send replies' }));
+  fireEvent.click(within(screen.getByRole('group', { name: 'What is your role?' })).getByRole('radio', { name: 'Developer or IT' }));
+  fireEvent.click(submit);
+  expect(screen.getByRole('alert')).toHaveTextContent('Answer each question to continue.');
+  expect(onCreate).not.toHaveBeenCalled();
+  fireEvent.click(within(screen.getByRole('group', { name: 'Where did you hear about Colliedesk?' })).getByRole('radio', { name: 'A friend or colleague' }));
+  fireEvent.click(submit);
+  await waitFor(() => expect(onCreate).toHaveBeenCalledWith('Acme Support', { goal: 'ai_agents', role: 'developer', source: 'referral' }));
+});
+
+test('each question offers exactly its listed answers', () => {
+  render(<CloudSignup onCreate={vi.fn()} onSignIn={vi.fn()} onUseAnotherAccount={vi.fn()} />);
+  const options = (legend: string) => within(screen.getByRole('group', { name: legend })).getAllByRole('radio').map((radio) => (radio as HTMLInputElement).labels?.[0]?.textContent);
+  expect(options('What do you want Colliedesk to do for you first?')).toEqual(['Move off Freshdesk or another helpdesk', 'Answer support email together as a team', 'Pay less per agent', 'Let AI agents draft or send replies', 'Something else']);
+  expect(options('What is your role?')).toEqual(['Founder or owner', 'Support lead or manager', 'Support agent', 'Developer or IT', 'Other']);
+  expect(options('Where did you hear about Colliedesk?')).toEqual(['X (Twitter)', 'An email from us', 'Search engine', 'Reddit', 'GitHub', 'A friend or colleague', 'Other']);
 });
 
 test('a name outside 2 to 60 characters is stopped before any request', () => {
@@ -59,6 +86,7 @@ test('a visitor who came to buy is told payment comes next, not a free trial', a
   expect(screen.queryByText(/free trial/i)).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Start free trial' })).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText(/workspace name/i), { target: { value: 'Acme Support' } });
+  answerSignupQuestions();
   fireEvent.click(screen.getByRole('button', { name: 'Create workspace and continue to payment' }));
-  await waitFor(() => expect(onCreate).toHaveBeenCalledWith('Acme Support'));
+  await waitFor(() => expect(onCreate).toHaveBeenCalledWith('Acme Support', { goal: 'leave_helpdesk', role: 'founder', source: 'x' }));
 });

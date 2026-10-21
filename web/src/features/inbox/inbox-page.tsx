@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { AgentRequest, Conversation, Message, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
+import type { AgentRequest, Conversation, Message, OnboardingGoal, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import { BulkActionBar } from './bulk-action-bar';
 import { ConversationList } from './conversation-list';
@@ -74,9 +74,11 @@ interface InboxPageProps {
   contactMatches?: ReactNode;
   onOpenContact?: (contactId: string) => void;
   onNewConversation?: () => void;
+  // The goal given at cloud sign-up; it orders the get-started steps of an empty inbox.
+  onboardingGoal?: OnboardingGoal | null;
 }
 
-export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation }: InboxPageProps) {
+export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation, onboardingGoal }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Clearing from the empty list returns to the Open view and puts focus back on the search box.
@@ -160,7 +162,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
           checkedIds={checked} onToggle={toggle} onToggleAll={toggleAll} selectAllRef={selectAll}
           toolbar={checkedIds.length > 0 && <BulkActionBar selected={conversations.filter((item) => checked.has(item.id))} agents={agents} tags={tags} currentAgentId={currentAgentId}
             busy={bulkBusy} onApply={(changes) => void applyBulk(changes)} onClear={() => { changeSelection(new Set()); setRefocus((count) => count + 1); }} />} draftIds={draftConversationIds}
-          grouped={(query.sort ?? 'updated_desc') === 'updated_desc'} />
+          grouped={(query.sort ?? 'updated_desc') === 'updated_desc'} onboardingGoal={onboardingGoal} />
       </section>
       <div className="conversation-center panel">
         <TimelinePanel conversation={selected} items={timeline} onOpenContact={onOpenContact} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}

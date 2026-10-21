@@ -155,8 +155,11 @@ export const inviteSchema = z.object({
 }) satisfies z.ZodType<Generated<'Invite'>>;
 export const errorSchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) }) satisfies z.ZodType<Generated<'Error'>>;
 export const redeemedSchema = z.object({ token: z.string().optional(), agent: agentSchema, workspace: workspaceSchema }) satisfies z.ZodType<Generated<'Redeemed'>>;
+export const onboardingGoalSchema = z.enum(['leave_helpdesk', 'shared_inbox', 'lower_cost', 'ai_agents', 'other']) satisfies z.ZodType<Generated<'OnboardingGoal'>>;
 export const meSchema = z.object({
   agent: agentSchema, workspace: workspaceSchema, timezone: z.string(), scope: z.enum(['read', 'draft', 'send', 'admin']).nullable(),
+  // An older server sends no goal; a goal this client does not know yet orders nothing.
+  onboarding_goal: onboardingGoalSchema.nullable().catch(null),
   plan: z.object({ plan: planSchema, trial_ends_at: z.string().datetime(), locked: z.boolean(), trial_extended: z.boolean(), agents_over: z.number().int(), seat_paused: z.boolean() }).nullable(),
 }) satisfies z.ZodType<Generated<'Me'>>;
 export const sessionListSchema = z.object({ items: z.array(sessionSchema) }) satisfies z.ZodType<JsonResponse<'listSessions', 200>>;
@@ -184,6 +187,7 @@ export type TeamMember = Generated<'TeamMember'>;
 export type Billing = Generated<'Billing'>;
 export type CheckoutPlan = Generated<'CheckoutPlan'>;
 export type Me = Generated<'Me'>;
+export type OnboardingGoal = Generated<'OnboardingGoal'>;
 export type Attachment = Generated<'Attachment'>;
 export type ConversationOrigin = Generated<'ConversationOrigin'>;
 export type MessageOrigin = Generated<'MessageOrigin'>;

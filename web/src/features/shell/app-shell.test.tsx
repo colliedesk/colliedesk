@@ -8,6 +8,7 @@ const me = {
   timezone: 'UTC',
   scope: null,
   plan: null,
+  onboarding_goal: null,
 };
 
 test('shows the page content next to the rail', () => {
