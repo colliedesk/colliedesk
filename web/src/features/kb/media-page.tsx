@@ -47,8 +47,10 @@ export function MediaRoute({ view, search }: { view: MediaView; search: MediaSea
   // go is stable: the cards are memoized, and a new function each render would draw them all again.
   const latest = useRef({ navigate, view });
   latest.current = { navigate, view };
+  // Opening or closing an item keeps the grid where it was scrolled (on a phone the item is a sheet over it).
   const go = useCallback((to: MediaView, change: Partial<MediaSearch> = {}, replace = false) =>
-    void latest.current.navigate({ to: viewPath[to], search: to === latest.current.view ? { ...current.current, ...change } : change, replace }), []);
+    void latest.current.navigate({ to: viewPath[to], search: to === latest.current.view ? { ...current.current, ...change } : change, replace,
+      ...('item' in change ? { resetScroll: false } : {}) }), []);
   const { queue, rows } = useUploadQueue(() => void refresh());
   const add = (files: File[]) => { queue.add(files); };
   const [dragging, setDragging] = useState(false);

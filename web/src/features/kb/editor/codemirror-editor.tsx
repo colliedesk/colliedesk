@@ -62,6 +62,8 @@ const phrases = EditorState.phrases.of({
   Find: 'Find', Replace: 'Replace', next: 'Next', previous: 'Previous', all: 'All', 'match case': 'Match case', regexp: 'Regular expression',
   'by word': 'Whole words', replace: 'Replace', 'replace all': 'Replace all', close: 'Close',
 });
+// Under this width (px) the whole desktop toolbar does not fit on one row.
+const compactWidth = 720;
 const mod = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl+';
 
 // CodeMirrorEditor is the article's text as Markdown source: what is typed is what body_md stores, byte for byte
@@ -83,6 +85,18 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   // button is, so the toolbar never loses its stop.
   const [rover, setRover] = useState<string>('bold');
   const phone = usePhone();
+  // compact: the toolbar of a phone, also in a column too narrow for every tool (a tablet held upright, where the
+  // side column takes its share): Insert, Bold, Italic, Link, and the rest under More. Measured on the editor itself.
+  const shell = useRef<HTMLDivElement>(null);
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const box = shell.current;
+    if (!box || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => setNarrow((entry?.contentRect.width ?? 1000) < compactWidth));
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, []);
+  const compact = phone || narrow;
   // The view is made once; what its callbacks call reads the latest props through this.
   const latest = useRef({ uploads, onChange, onReady, initial, label, describedBy });
   useEffect(() => { latest.current = { uploads, onChange, onReady, initial, label, describedBy }; });
@@ -191,7 +205,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   // The Tab stop falls back to Bold when its button is disabled (Undo with nothing to undo) or not in this layout
   // (a phone's toolbar has Insert, Bold, Italic, Link and More only).
   const onPhone = ['insert', 'bold', 'italic', 'link', 'more'];
-  const stop = (rover === 'undo' && !active?.canUndo) || (rover === 'redo' && !active?.canRedo) || (phone && !onPhone.includes(rover)) ? 'bold' : rover;
+  const stop = (rover === 'undo' && !active?.canUndo) || (rover === 'redo' && !active?.canRedo) || (compact && !onPhone.includes(rover)) ? 'bold' : rover;
   const t = kbMessages.tools;
   const tool = (name: IconName, text: string, keys: string, run: (view: EditorView) => unknown, pressed?: boolean, disabled?: boolean) => (
     <button type="button" data-tool={name} className="md-tool" aria-label={`${text}${keys ? ` (${keys})` : ''}`} data-tip={text} aria-pressed={pressed}
@@ -204,12 +218,12 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   const heading = (block: Block, label: string, icon: IconName): MenuItem => ({ label, icon, disabled: !editing || active?.block === block, onSelect: () => act((view) => setHeading(view, block)) });
   // Formatting a phone has no room for, and on a computer the less used tools: in the menu at the end.
   const more: MenuItem[] = [
-    ...(phone ? [heading('paragraph', t.paragraph, 'text'), heading('h1', t.h1, 'h1'), heading('h2', t.h2, 'h2'), heading('h3', t.h3, 'h3'),
+    ...(compact ? [heading('paragraph', t.paragraph, 'text'), heading('h1', t.h1, 'h1'), heading('h2', t.h2, 'h2'), heading('h3', t.h3, 'h3'),
       { ...item(t.ordered, 'ordered', line('ordered')), separated: true }, item(t.bullet, 'bullet', line('bullet')), item(t.quote, 'quote', line('quote')),
       item(t.table, 'table', (view) => insertBlock(view, tableTemplate, [2, 8]))] : []),
-    { ...item(t.strike, 'strike', (view) => toggleMark(view, '~~')), separated: phone }, item(t.code, 'code', inlineCode), item(t.task, 'task', line('task')),
+    { ...item(t.strike, 'strike', (view) => toggleMark(view, '~~')), separated: compact }, item(t.code, 'code', inlineCode), item(t.task, 'task', line('task')),
     item(t.codeBlock, 'codeBlock', (view) => insertBlock(view, codeBlockTemplate, [4, 8])), item(t.hr, 'hr', (view) => insertBlock(view, '---')),
-    ...(phone ? [{ ...item(t.search, 'search', openSearchPanel), separated: true }, item(t.undo, 'undo', undo, !active?.canUndo)] : []),
+    ...(compact ? [{ ...item(t.search, 'search', openSearchPanel), separated: true }, item(t.undo, 'undo', undo, !active?.canUndo)] : []),
     item(t.redo, 'redo', redo, !active?.canRedo),
   ];
   const insert: MenuItem[] = [
@@ -221,10 +235,10 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
     tool="insert" tabIndex={stop === 'insert' ? 0 : -1} disabled={!editing}
     trigger={<><Icon name="image" /><span>{t.insertMenu}</span><span className="md-insert-long">{t.insertMenuMore}</span><Icon name="chevronDown" /></>} />;
   return (
-    <div className="md-shell" data-mode={mode}>
+    <div ref={shell} className="md-shell" data-mode={mode} data-compact={compact ? 'true' : undefined}>
       <div className="md-toolbar" role="toolbar" aria-label={kbMessages.formatting} onKeyDown={onToolbarKey}>
-        {phone && insertMenu}
-        {!phone && <>
+        {compact && insertMenu}
+        {!compact && <>
           <label className="sr-only" htmlFor={`${id}-block`}>{kbMessages.blockType}</label>
           <select id={`${id}-block`} className="md-block" value={active?.block ?? 'paragraph'} disabled={!editing}
             onChange={(event) => act((view) => setHeading(view, event.target.value as Block))}>
@@ -235,11 +249,11 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
           </select>
           <span className="md-sep" aria-hidden="true" />
         </>}
-        {phone && <span className="md-grow" />}
+        {compact && <span className="md-grow" />}
         {tool('bold', t.bold, `${mod}B`, (view) => toggleMark(view, '**'), active?.strong)}
         {tool('italic', t.italic, `${mod}I`, (view) => toggleMark(view, '*'), active?.emphasis)}
         {tool('link', t.link, `${mod}K`, insertLink, active?.link)}
-        {!phone && <>
+        {!compact && <>
           <span className="md-sep" aria-hidden="true" />
           {tool('ordered', t.ordered, '', line('ordered'), active?.ordered)}
           {tool('bullet', t.bullet, '', line('bullet'), active?.bullet)}

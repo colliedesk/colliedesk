@@ -52,7 +52,7 @@ test('the library shows images and videos, a video with its length, and leads to
   fireEvent.change(screen.getByRole('combobox', { name: 'Use' }), { target: { value: 'missing_alt' } });
   expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge/media', search: { usage: 'missing_alt' }, replace: false });
   fireEvent.click(within(grid).getByRole('button', { name: /Product tour/ }));
-  expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge/media', search: { item: id(2) }, replace: false });
+  expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge/media', search: { item: id(2) }, replace: false, resetScroll: false });
   expect(calls.some((call) => call.path === '/api/v1/kb/media' && call.search.get('usage') === 'unused' && call.search.get('sort') === 'largest')).toBe(true);
 });
 
@@ -97,7 +97,7 @@ test('the unused page moves the chosen items to the trash after saying how much,
   // The count is what the list holds, kept items included, and why the kept ones stay is said.
   expect((await screen.findByText('42 items · 430.0 MiB')).closest('p')).toHaveTextContent('42 items · 430.0 MiB are in no live article.');
   expect(screen.getByText(/37 are not kept/)).toHaveTextContent('the next on');
-  expect(screen.getByText('5 are kept').closest('p')).toHaveTextContent('they stay until you move them. Files uploaded on the Media page are kept');
+  expect(screen.getByText('5 are kept:').closest('p')).toHaveTextContent('they stay until you move them. Files uploaded on the Media page are kept');
   fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Screenshot 3' }));
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select Screenshot 5' }), { shiftKey: true });
   expect(screen.getByText('3 selected')).toBeInTheDocument();

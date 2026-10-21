@@ -49,6 +49,7 @@ export const mediaMessages = {
   usedIn: (count: number) => `In ${plural(count, 'article', 'articles')}`,
   notUsed: 'Not used',
   noAlt: 'No alt',
+  notUsedNoAlt: 'Not used, and no alt text',
   kept: 'Kept',
   unusedSummary: (count: number, bytes: number) => `${plural(count, 'item', 'items')} not used in any article · ${formatBytes(bytes)}`,
   review: 'Review',
@@ -117,8 +118,8 @@ export const mediaMessages = {
   itemsAndBytes: (count: number, bytes: number) => `${plural(count, 'item', 'items')} · ${formatBytes(bytes)}`,
   inNoLiveArticle: 'are in no live article.',
   autoCleanup: (count: number, first?: string) => `${count.toLocaleString('en')} ${count === 1 ? 'is' : 'are'} not kept: one that no article, deleted article or older version names goes to the trash on its own 30 days after its last upload${first ? ` (the next on ${first})` : ''}.`,
-  areKept: (count: number) => `${count.toLocaleString('en')} ${count === 1 ? 'is' : 'are'} kept`,
-  keptReason: ': they stay until you move them. Files uploaded on the Media page are kept, so nothing you upload for later disappears before you use it.',
+  areKept: (count: number) => `${count.toLocaleString('en')} ${count === 1 ? 'is' : 'are'} kept:`,
+  keptReason: ' they stay until you move them. Files uploaded on the Media page are kept, so nothing you upload for later disappears before you use it.',
   howCleanup: 'How clean-up works',
   cleanupRules: [
     'An image or video no live article shows is not used. Items only in deleted articles or older versions count as not used too.',

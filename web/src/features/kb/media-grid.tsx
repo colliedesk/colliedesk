@@ -56,7 +56,8 @@ function Caption({ item, reason }: { item: KBMedia; reason?: string }) {
         <span className="media-facts-line">{facts(item)}</span>
         {/* One flag at most, so the size stays readable: not used first, then a used image without alt text. */}
         {reason === undefined && (noAlt || unused) && <span className="media-flags">
-          {unused ? <span className="badge">{mediaMessages.notUsed}</span> : <span className="badge media-flag-note">{mediaMessages.noAlt}</span>}
+          {unused ? <span className="badge" title={noAlt ? mediaMessages.notUsedNoAlt : undefined}>{mediaMessages.notUsed}{noAlt && <span aria-hidden="true"> · {mediaMessages.noAlt}</span>}</span>
+            : <span className="badge media-flag-note">{mediaMessages.noAlt}</span>}
         </span>}
       </span>
       {reason && <span className="media-reason" title={reason}>{reason}</span>}

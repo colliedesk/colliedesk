@@ -343,10 +343,12 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     queries: ids.map((videoId) => ({ queryKey: ['kb-media-details', videoId], queryFn: () => mediaApi.details(videoId), retry: false, staleTime: 60_000 })),
     combine: combineVideos,
   });
+  // submit saves, or first asks about new images without alt text (set below, once those are known).
+  const submit = useRef(() => undefined as void);
   const onKeyDown = (event: KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
       event.preventDefault();
-      void save();
+      submit.current();
     }
   };
   const restoreVersion = async (version: number) => {
@@ -369,7 +371,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const collectionName = tree.find((node) => node.collection.id === draft.collection_id)?.collection.name;
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [askingAlt, setAskingAlt] = useState(false);
+  // askingAlt: what waits for the answer about images without alt text, publishing a draft or saving a published article.
+  const [askingAlt, setAskingAlt] = useState<'publish' | 'save'>();
   const [altFor, setAltFor] = useState<MissingAlt>();
   // Images in the text without alt text: the side column lists them, and publishing asks about them again.
   const missing = useMemo(() => missingAlt(draft.body), [draft.body]);
@@ -377,7 +380,13 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     queries: missing.map((image) => ({ queryKey: ['kb-media-details', image.id ?? image.url], queryFn: () => mediaApi.details(image.id!), enabled: image.id !== undefined, retry: false, staleTime: 60_000 })),
   });
   const nameOf = (image: MissingAlt, at: number) => missingNames[at]?.data?.name || image.fallback;
-  const publish = () => { if (missing.length > 0) setAskingAlt(true); else void save('published'); };
+  const publish = () => { if (missing.length > 0) setAskingAlt('publish'); else void save('published'); };
+  // Saving a published article asks too when it brings in an image without alt text the saved version did not
+  // have: that image would go on the help center at once.
+  const savedMissing = useMemo(() => (base ? missingAlt(base.body_md).map((image) => image.markdown) : []), [base]);
+  const newMissing = missing.filter((image, at) => missing.slice(0, at + 1).filter((each) => each.markdown === image.markdown).length
+    > savedMissing.filter((markdown) => markdown === image.markdown).length);
+  submit.current = () => { if (status === 'published' && newMissing.length > 0) setAskingAlt('save'); else void save(); };
   const disabledSave = busy || invalid || (base !== undefined && !dirty);
   const saveLabel = busy ? kbMessages.saving : base ? kbMessages.saveChanges : kbMessages.saveDraft;
   const publishLabel = dirty || !base ? kbMessages.saveAndPublish : kbMessages.publish;
@@ -468,7 +477,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         {imageProblems.map((text) => <p key={text} role="alert" className="error-copy">{text}</p>)}
         {base?.has_source_html && <p className="muted-copy">{kbMessages.importedNotice}</p>}
       </div>}
-      <form id={`${id}-form`} className="kb-editor" aria-label={heading} onKeyDown={onKeyDown} onSubmit={(event) => { event.preventDefault(); void save(); }}>
+      <form id={`${id}-form`} className="kb-editor" aria-label={heading} onKeyDown={onKeyDown} onSubmit={(event) => { event.preventDefault(); submit.current(); }}>
         <div className="kb-editor-main">
           <div className="field kb-title-field"><label htmlFor={`${id}-title`} className="sr-only">{kbMessages.articleTitle}</label>
             <input id={`${id}-title`} value={draft.title} required placeholder={kbMessages.articleTitle} aria-invalid={titleLength > maxTitle || undefined} aria-describedby={titleLength > maxTitle ? `${id}-title-error` : undefined}
@@ -512,21 +521,25 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         <button type="button" className="kb-details-button" aria-haspopup="dialog" aria-label={kbMessages.detailsLabel(missing.length)} onClick={() => setDetailsOpen(true)}>
           {kbMessages.details}{missing.length > 0 && <span className="kb-badge-count" aria-hidden="true">{missing.length}</span>}</button>
         {more}
-        <button className="primary-action" type="submit" form={`${id}-form`} disabled={disabledSave} aria-describedby={needsCollection}>{saveLabel}</button>
+        {/* A saved draft has nothing to save: its next step, Publish, takes the place of Save. */}
+        {status !== 'published' && base && !dirty
+          ? <button type="button" className="primary-action" disabled={busy || invalid} onClick={publish}>{kbMessages.publish}</button>
+          : <button className="primary-action" type="submit" form={`${id}-form`} disabled={disabledSave} aria-describedby={needsCollection}>{saveLabel}</button>}
       </div>}
-      {phone && detailsOpen && <KBDialog title={kbMessages.details} className="kb-details-sheet" closeLabel={kbMessages.closeDetails} onClose={() => setDetailsOpen(false)}>{details}</KBDialog>}
+      {phone && detailsOpen && <KBDialog title={kbMessages.details} className="kb-details-sheet" fieldFirst={false} closeLabel={kbMessages.closeDetails} onClose={() => setDetailsOpen(false)}>{details}</KBDialog>}
       {deleting && base && <KBDialog title={kbMessages.deleteHeading(base.title)} role="alertdialog" onClose={() => setDeleting(false)} footer={<>
         <button type="button" disabled={busy} onClick={() => setDeleting(false)}>{kbMessages.cancel}</button>
         <button type="button" className="danger-solid" disabled={busy} onClick={() => void remove()}>{kbMessages.confirmDelete}</button>
       </>}><p className="muted-copy">{kbMessages.deleteBody}</p></KBDialog>}
-      {askingAlt && <KBDialog title={kbMessages.imagesWithoutAlt(missing.length)} role="alertdialog" onClose={() => setAskingAlt(false)} footer={<>
-        <button type="button" onClick={() => setAskingAlt(false)}>{kbMessages.cancel}</button>
-        <button type="button" className="primary-action" disabled={busy || invalid} onClick={() => { setAskingAlt(false); void save('published'); }}>{kbMessages.publishAnyway}</button>
+      {askingAlt && <KBDialog title={kbMessages.imagesWithoutAlt(missing.length)} role="alertdialog" onClose={() => setAskingAlt(undefined)} footer={<>
+        <button type="button" onClick={() => setAskingAlt(undefined)}>{kbMessages.cancel}</button>
+        <button type="button" className="primary-action" disabled={busy || invalid} onClick={() => { const then = askingAlt; setAskingAlt(undefined); void save(then === 'publish' ? 'published' : undefined); }}>
+          {askingAlt === 'publish' ? kbMessages.publishAnyway : kbMessages.saveAnyway}</button>
       </>}>
-        <p className="muted-copy">{kbMessages.publishAltHelp}</p>
+        <p className="muted-copy">{askingAlt === 'publish' ? kbMessages.publishAltHelp : kbMessages.saveAltHelp}</p>
         <ul className="kb-alt-list">{missing.map((image, at) => (
           <li key={`${image.url}-${at}`}><span title={nameOf(image, at)}>{nameOf(image, at)}</span>
-            <button type="button" aria-label={kbMessages.addAltFor(nameOf(image, at))} onClick={() => { setAskingAlt(false); setAltFor({ ...image, fallback: nameOf(image, at) }); }}>{kbMessages.addAlt}</button></li>
+            <button type="button" aria-label={kbMessages.addAltFor(nameOf(image, at))} onClick={() => { setAskingAlt(undefined); setAltFor({ ...image, fallback: nameOf(image, at) }); }}>{kbMessages.addAlt}</button></li>
         ))}</ul>
       </KBDialog>}
       {altFor && <AltDialog image={altFor} library={missingNames[missing.findIndex((each) => each.markdown === altFor.markdown)]?.data}

@@ -282,7 +282,7 @@ function ReplacePicker({ item, onPick, onClose }: { item: KBMedia; onPick: (othe
           <li key={other.id}>
             <button type="button" onClick={() => onPick(other)} aria-label={mediaMessages.replaceWith(mediaName(other))}>
               {other.thumbnail_url ? <img src={other.thumbnail_url} alt="" loading="lazy" /> : <span className="media-picture-empty" aria-hidden="true" />}
-              <span>{mediaName(other)}</span>
+              <span title={mediaName(other)}>{mediaName(other)}</span>
             </button>
           </li>
         ))}

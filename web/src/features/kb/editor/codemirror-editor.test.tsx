@@ -323,3 +323,25 @@ test('the toolbar keeps one Tab stop when the window turns phone-sized and the b
   expect(within(toolbar).getAllByRole('button').filter((button) => button.tabIndex === 0 && !button.hasAttribute('disabled'))).toHaveLength(1);
   vi.unstubAllGlobals();
 });
+
+test('in a column too narrow for every tool (a tablet held upright), the toolbar keeps Insert, Bold, Italic and Link and puts the rest under More', async () => {
+  // CodeMirror watches its own boxes too: only the editor's shell hears the width.
+  const shells: ((entries: { contentRect: { width: number } }[]) => void)[] = [];
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(private readonly callback: (entries: { contentRect: { width: number } }[]) => void) {}
+    observe(element: Element) { if (element.classList.contains('md-shell')) shells.push(this.callback); }
+    unobserve() {}
+    disconnect() {}
+  });
+  const report = (width: number) => { for (const callback of shells) callback([{ contentRect: { width } }]); };
+  await make('Text');
+  const toolbar = screen.getByRole('toolbar', { name: 'Formatting' });
+  expect(within(toolbar).getByRole('button', { name: /^Find and replace/ })).toBeInTheDocument();
+  act(() => report(500));
+  expect(within(toolbar).queryByRole('button', { name: /^Find and replace/ })).not.toBeInTheDocument();
+  expect(within(toolbar).getAllByRole('button').map((button) => button.getAttribute('aria-label') ?? button.textContent)).toEqual(
+    ['Insert image or video', expect.stringMatching(/^Bold/), expect.stringMatching(/^Italic/), expect.stringMatching(/^Link/), 'More formatting']);
+  fireEvent.click(within(toolbar).getByRole('button', { name: 'More formatting' }));
+  expect(screen.getByRole('menuitem', { name: 'Find and replace' })).toBeInTheDocument();
+  vi.unstubAllGlobals();
+});

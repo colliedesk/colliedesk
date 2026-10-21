@@ -463,3 +463,37 @@ test('Publish anyway publishes an article whose images still lack alt text', asy
   fireEvent.click(within(screen.getByRole('alertdialog', { name: '1 image has no alt text' })).getByRole('button', { name: 'Publish anyway' }));
   await waitFor(() => expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ updated_at: article().updated_at, status: 'published' }));
 });
+
+test('saving a published article asks about an image without alt text it brings in, not about one it already had', async () => {
+  const old = '![](https://example.com/old.png)';
+  const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ status: 'published', body_md: old })),
+    'PATCH /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': (call) => json(200, article({ status: 'published', body_md: (call.body as { body_md: string }).body_md, updated_at: `2026-10-0${3 + calls.filter((each) => each.method === 'PATCH').length}T00:00:00Z` })) });
+  open({ articleId: ids.article });
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
+  fireEvent.change(text, { target: { value: `${old}\n\nMore.` } });
+  await settle();
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1));
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  fireEvent.change(text, { target: { value: `${old}\n\nMore.\n\n![](https://example.com/new.png)` } });
+  await settle();
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  const asking = screen.getByRole('alertdialog', { name: '2 images have no alt text' });
+  expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
+  fireEvent.click(within(asking).getByRole('button', { name: 'Save anyway' }));
+  await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(2));
+  expect(calls.filter((call) => call.method === 'PATCH')[1]!.body).not.toHaveProperty('status');
+});
+
+test('on a phone a saved draft offers Publish in the bottom bar, and Details opens without a keyboard', async () => {
+  const phone = { matches: true, addEventListener: () => undefined, removeEventListener: () => undefined };
+  vi.stubGlobal('matchMedia', (text: string) => (text.includes('44rem') ? phone : { ...phone, matches: false }));
+  serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article()) });
+  open({ articleId: ids.article });
+  const bar = await screen.findByRole('region', { name: 'Article actions' });
+  expect(within(bar).getByRole('button', { name: 'Publish' })).toBeEnabled();
+  expect(within(bar).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+  fireEvent.click(within(bar).getByRole('button', { name: /^Details/ }));
+  const sheet = screen.getByRole('dialog', { name: 'Details' });
+  await waitFor(() => expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Close details' })));
+});
