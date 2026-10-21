@@ -1,4 +1,5 @@
 """Public CLI contracts for CI partitioning and its whole-phase clock."""
+import json
 import pathlib
 import re
 import subprocess
@@ -46,6 +47,21 @@ class Shards(unittest.TestCase):
             self.assertRegex(name, patterns[-1])
         self.assertNotRegex('TestAlpha', patterns[-1])
 
+    def test_parts_split_a_regular_shard_and_never_the_latency_one(self):
+        listing = self.listing + 'TestDelta\nTestEpsilon\nTestZeta\nTestInboxListLatencyBudget\nTestTrialCapStaysFast\n'
+        whole = run('go-test-shard.py', '1', '2', stdin=listing).stdout.strip()
+        parted = run('go-test-shard.py', '1', '2', '--parts', '2', stdin=listing)
+        self.assertEqual(parted.returncode, 0, parted.stderr)
+        parts = parted.stdout.split()
+        self.assertEqual(len(parts), 2)
+        for name in ['TestAlpha', 'TestBeta', 'TestGamma', 'TestDelta', 'TestEpsilon', 'TestZeta',
+                     'FuzzBytes', 'ExampleClient']:
+            self.assertEqual(sum(bool(re.search(p, name)) for p in parts), int(bool(re.search(whole, name))), name)
+        latency = run('go-test-shard.py', '2', '2', '--parts', '2', stdin=listing).stdout.split()
+        self.assertEqual(latency, [run('go-test-shard.py', '2', '2', stdin=listing).stdout.strip()])
+        self.assertEqual(run('go-test-shard.py', '1', '2', '--parts', '1', stdin=listing).stdout.strip(), whole)
+        self.assertNotEqual(run('go-test-shard.py', '1', '2', '--parts', '0', stdin=listing).returncode, 0)
+
     def test_empty_inventory_and_invalid_shards_fail_closed(self):
         for args, listing in [(('0', '3'), self.listing), (('4', '3'), self.listing),
                               (('1', '0'), self.listing), (('1', '3'), '? pkg [no test files]')]:
@@ -55,6 +71,35 @@ class Shards(unittest.TestCase):
         result = run('go-test-shard.py', '3', '3', stdin='TestOnly\n')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIsNone(re.search(result.stdout.strip(), 'TestOnly'))
+
+
+class GoRelease(unittest.TestCase):
+    """go-release.py names the Go release setup-go would install for a minor line, so the toolchain
+    cache is keyed on it and setup-go is told that exact version."""
+    manifest = json.dumps([
+        {'version': '1.28.0-rc1', 'stable': False, 'files': [{'platform': 'linux', 'arch': 'x64'}]},
+        {'version': '1.27.10', 'stable': True, 'files': [{'platform': 'darwin', 'arch': 'arm64'}]},
+        {'version': '1.27.3', 'stable': True, 'files': [{'platform': 'linux', 'arch': 'x64'}]},
+        {'version': '1.27.20', 'stable': False, 'files': [{'platform': 'linux', 'arch': 'x64'}]},
+        {'version': '1.27.2', 'stable': True, 'files': [{'platform': 'linux', 'arch': 'x64'}]},
+        {'version': '1.270.1', 'stable': True, 'files': [{'platform': 'linux', 'arch': 'x64'}]},
+    ])
+
+    def test_newest_stable_linux_release_of_the_minor_line(self):
+        result = run('go-release.py', '1.27', stdin=self.manifest)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, 'version=1.27.3\n')
+
+    def test_patch_numbers_compare_as_numbers(self):
+        manifest = json.dumps([{'version': v, 'stable': True, 'files': [{'platform': 'linux', 'arch': 'x64'}]}
+                               for v in ['1.27.9', '1.27.10', '1.27.0']])
+        self.assertEqual(run('go-release.py', '1.27', stdin=manifest).stdout, 'version=1.27.10\n')
+
+    def test_no_release_or_a_broken_manifest_fails_closed(self):
+        for line, manifest in [('1.29', self.manifest), ('1.27', 'not json'), ('1.27', ''), ('1.27.x', self.manifest)]:
+            result = run('go-release.py', line, stdin=manifest)
+            self.assertNotEqual(result.returncode, 0, line)
+            self.assertEqual(result.stdout, '')
 
 
 class Onboarding(unittest.TestCase):
