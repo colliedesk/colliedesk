@@ -61,7 +61,9 @@ test('an edit sends only what changed with the version it was made on, and the n
   fireEvent.click(await screen.findByRole('button', { name: 'Publish' }));
   await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(2));
   expect(calls.filter((call) => call.method === 'PATCH')[1].body).toEqual({ updated_at: '2026-10-03T00:00:00Z', status: 'published' });
-  expect(await screen.findByRole('button', { name: 'Unpublish' })).toBeInTheDocument();
+  // Unpublish is in the article's ⋯ menu, with the other article actions.
+  fireEvent.click(await screen.findByRole('button', { name: 'More article actions' }));
+  expect(await screen.findByRole('menuitem', { name: /^Unpublish/ })).toBeInTheDocument();
 });
 
 test('when someone else saved first, the text stays on screen and the person chooses: keep mine saves over theirs', async () => {
@@ -195,7 +197,8 @@ test('restoring a version asks to save unsaved edits first, then makes the versi
     'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/versions': () => json(200, { items: [version(2, 'Reset your password'), version(1, 'Old title')], next_before_version: null }),
     'POST /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/versions/1/restore': () => json(200, restored) });
   open({ articleId: ids.article });
-  fireEvent.click(await screen.findByRole('button', { name: 'History' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'More article actions' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: /^Version history/ }));
   const history = await screen.findByRole('region', { name: 'History of Reset your password' });
   expect(within(history).getAllByText('Title changed')).toHaveLength(1);
   fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), { target: { value: 'Unsaved' } });
@@ -219,8 +222,11 @@ test('a deleted article goes to the trash with the version it was read at, then 
   const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article()),
     'DELETE /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(204) });
   open({ articleId: ids.article });
-  fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Move to trash' })); });
+  // Delete is the last of the article's ⋯ menu, and asks first.
+  fireEvent.click(await screen.findByRole('button', { name: 'More article actions' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: /^Delete article/ }));
+  const confirm = screen.getByRole('alertdialog', { name: 'Move "Reset your password" to the trash?' });
+  await act(async () => { fireEvent.click(within(confirm).getByRole('button', { name: 'Move to trash' })); });
   await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/knowledge' }));
   expect(calls.find((call) => call.method === 'DELETE')?.search.get('updated_at')).toBe('2026-10-02T00:00:00Z');
 });
@@ -285,7 +291,8 @@ test('an open history loads again after a save adds a version', async () => {
     'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/versions': () => json(200, { items: saved ? [version(2), version(1)] : [version(1)], next_before_version: null }),
     'PATCH /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => { saved = true; return json(200, article({ body_md: 'Text 2', updated_at: '2026-10-07T00:00:00Z' })); } });
   open({ articleId: ids.article });
-  fireEvent.click(await screen.findByRole('button', { name: 'History' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'More article actions' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: /^Version history/ }));
   expect(await screen.findByText(/Version 1 ·/)).toBeInTheDocument();
   fireEvent.change(screen.getByRole('textbox', { name: 'Text (Markdown)' }), { target: { value: 'Text 2' } });
   await settle();
@@ -335,7 +342,8 @@ test('a restore puts the restored text in the editor', async () => {
     'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/versions': () => json(200, { items: [{ ...version, version: 2, body_md: 'Open **Settings**.' }, version], next_before_version: null }),
     'POST /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/versions/1/restore': () => json(200, restored) });
   open({ articleId: ids.article });
-  fireEvent.click(await screen.findByRole('button', { name: 'History' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'More article actions' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: /^Version history/ }));
   fireEvent.click(await within(await screen.findByRole('region', { name: 'History of Reset your password' })).findByRole('button', { name: 'Restore version 1' }));
   await waitFor(() => expect(screen.getByRole('textbox', { name: 'Text (Markdown)' })).toHaveValue('Restored text'));
   expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
@@ -418,4 +426,40 @@ test('Cancel in an upload\'s place stops a video, and a video that fails is thro
   expect(await screen.findByText('This video is H.265.')).toBeInTheDocument();
   await waitFor(() => expect(calls.some((call) => call.method === 'DELETE' && call.path === `/api/v1/kb/media-uploads/${upload.id}`)).toBe(true));
   expect(text).toHaveValue('Intro');
+});
+
+test('publishing an article with an image without alt text asks first; the alt text goes in the text and in the library', async () => {
+  const body = `Steps.\n\n![](/api/v1/kb/images/${ids.image})\n`;
+  const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: body })),
+    [`GET /api/v1/kb/media/${ids.image}/details`]: () => json(200, { ...uploaded, articles: [] }),
+    [`PATCH /api/v1/kb/media/${ids.image}`]: () => json(200, { ...uploaded, alt: 'The login screen' }),
+    'PATCH /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': (call) => json(200, article({ ...(call.body as object), updated_at: '2026-10-05T00:00:00Z' })) });
+  open({ articleId: ids.article });
+  // The side column names the image (from the library) and says publishing asks again.
+  const side = await screen.findByRole('complementary', { name: 'Publishing and placement' });
+  expect(await within(side).findByText('login screen')).toBeInTheDocument();
+  expect(side).toHaveTextContent('1 image has no alt text');
+  fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+  const asking = screen.getByRole('alertdialog', { name: '1 image has no alt text' });
+  expect(calls.some((call) => call.method === 'PATCH')).toBe(false);
+  fireEvent.click(within(asking).getByRole('button', { name: 'Add alt text to login screen' }));
+  const dialog = screen.getByRole('dialog', { name: 'Alt text for login screen' });
+  fireEvent.change(within(dialog).getByRole('textbox', { name: 'Alt text' }), { target: { value: 'The login screen' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Add alt text' }));
+  await waitFor(() => expect(screen.getByRole('textbox', { name: 'Text (Markdown)' })).toHaveValue(`Steps.\n\n![The login screen](/api/v1/kb/images/${ids.image})\n`));
+  expect(calls.find((call) => call.path === `/api/v1/kb/media/${ids.image}`)?.body).toEqual({ updated_at: uploaded.updated_at, alt: 'The login screen', kept: false });
+  await waitFor(() => expect(screen.queryByText('1 image has no alt text')).not.toBeInTheDocument());
+  // With the alt text in, Publish saves at once.
+  fireEvent.click(screen.getByRole('button', { name: 'Save and publish' }));
+  await waitFor(() => expect(calls.find((call) => call.path === '/api/v1/kb/articles/55555555-5555-4555-8555-555555555555' && call.method === 'PATCH')?.body)
+    .toMatchObject({ status: 'published', body_md: `Steps.\n\n![The login screen](/api/v1/kb/images/${ids.image})\n` }));
+});
+
+test('Publish anyway publishes an article whose images still lack alt text', async () => {
+  const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: '![](https://example.com/x.png)' })),
+    'PATCH /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ status: 'published', updated_at: '2026-10-05T00:00:00Z' })) });
+  open({ articleId: ids.article });
+  fireEvent.click(await screen.findByRole('button', { name: 'Publish' }));
+  fireEvent.click(within(screen.getByRole('alertdialog', { name: '1 image has no alt text' })).getByRole('button', { name: 'Publish anyway' }));
+  await waitFor(() => expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ updated_at: article().updated_at, status: 'published' }));
 });

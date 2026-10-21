@@ -28,12 +28,14 @@ export function keepDialogFocus(event: MouseEvent) {
 
 // useReturnFocus gives focus back, when a dialog closes, to what had it when the dialog opened (the
 // button that opened it), so keyboard and screen reader users keep their place on the page. Safari does
-// not focus a button on click, so opener, when given, names that button in the page instead.
-export function useReturnFocus(opener?: string) {
+// not focus a button on click, so opener, when given, names that button in the page instead. active false leaves
+// the focus to whoever closes the dialog (an editor that takes it back itself).
+export function useReturnFocus(opener?: string, active = true) {
   // Read on the first render, before an autoFocus field inside the dialog takes the focus.
   const [focused] = useState(() => (document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null));
   useEffect(() => () => {
+    if (!active) return;
     const target = focused?.isConnected ? focused : opener ? document.querySelector<HTMLElement>(opener) : null;
     target?.focus();
-  }, [focused, opener]);
+  }, [focused, opener, active]);
 }

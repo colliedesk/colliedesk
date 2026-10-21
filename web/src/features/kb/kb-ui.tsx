@@ -33,15 +33,17 @@ interface DialogProps {
   describedBy?: string;
   // closeLabel puts a Close button in the header.
   closeLabel?: string;
+  // returnFocus: false when the one who closes it puts the focus somewhere itself (the editor's text).
+  returnFocus?: boolean;
   children: ReactNode;
   onClose: () => void;
 }
 
 // KBDialog is a modal: Escape and the backdrop close it, Tab stays inside, and the focus goes back where it was.
-export function KBDialog({ title, role = 'dialog', phone = 'sheet', className, footer, describedBy, closeLabel, children, onClose }: DialogProps) {
+export function KBDialog({ title, role = 'dialog', phone = 'sheet', className, footer, describedBy, closeLabel, returnFocus = true, children, onClose }: DialogProps) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
-  useReturnFocus();
+  useReturnFocus(undefined, returnFocus);
   useEffect(() => {
     // The first field, or else the first button of the footer (Cancel in a confirmation), takes the focus.
     const box = root.current;
@@ -91,11 +93,14 @@ interface MenuProps {
   align?: 'start' | 'end';
   describe?: boolean;
   disabled?: boolean;
+  // A menu in a toolbar joins its roving focus: its button is named by data-tool and takes the tabIndex given.
+  tool?: string;
+  tabIndex?: number;
 }
 
 // KBMenu is a button with a menu under it; on a phone the menu is a sheet from the bottom with 48 px rows.
 // Arrows move between its items, Escape closes it and gives the focus back to the button.
-export function KBMenu({ label, trigger, title, items, className, buttonClassName, align = 'end', describe = false, disabled }: MenuProps) {
+export function KBMenu({ label, trigger, title, items, className, buttonClassName, align = 'end', describe = false, disabled, tool, tabIndex }: MenuProps) {
   const id = useId();
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
@@ -123,7 +128,7 @@ export function KBMenu({ label, trigger, title, items, className, buttonClassNam
   return (
     <div className={`kb-menu-wrap${className ? ` ${className}` : ''}`}>
       <button ref={button} type="button" className={buttonClassName} aria-label={label} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? `${id}-menu` : undefined}
-        disabled={disabled} onClick={() => setOpen(!open)}>{trigger}</button>
+        disabled={disabled} data-tool={tool} tabIndex={tabIndex} onMouseDown={tool ? (event) => event.preventDefault() : undefined} onClick={() => setOpen(!open)}>{trigger}</button>
       {open && <>
         <div className="kb-menu-scrim" aria-hidden="true" onPointerDown={() => close(false)} />
         <div ref={menu} id={`${id}-menu`} className="kb-menu" data-align={align} data-describe={describe ? 'true' : undefined} role="menu" aria-label={title} onKeyDown={keys}>

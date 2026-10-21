@@ -5,7 +5,6 @@ import { useBlocker, useNavigate } from '@tanstack/react-router';
 import { api, ChangedElsewhereError, InvalidRequestError } from '../../api/client';
 import { messages } from '../../messages';
 import { RouterLink } from '../../ui/router-link';
-import { ChevronLeftIcon } from '../../ui/icons';
 import { Part, PartUnavailable } from '../../ui/lazy-part';
 import { SavedReplyHistory } from '../settings/saved-reply-panels';
 import type { EditorHandle, UploadHooks, ViewMode } from './editor/codemirror-editor';
@@ -14,6 +13,9 @@ import { kbApi } from './kb-api';
 import type { KBArticle, KBArticleStatus, KBArticleVersion } from './kb-api';
 import { kbMessages } from './kb-messages';
 import { buildTree, flatten, indent, reason } from './kb-tree';
+import { KBDialog, KBMenu, usePhone } from './kb-ui';
+import type { MenuItem } from './kb-ui';
+import { Icon } from './editor/icons';
 import { useRefreshKB } from './knowledge-page';
 import { MarkdownPreview, videoIds } from './markdown-preview';
 import type { PreviewVideo } from './markdown-preview';
@@ -49,14 +51,14 @@ export function ArticleRoute({ articleId, collectionId }: { articleId?: string; 
   const article = useQuery({ queryKey: ['kb-article', articleId], queryFn: () => kbApi.article(articleId ?? ''), enabled: articleId !== undefined, retry: false });
   const back = <BackLink />;
   if ((articleId && article.isPending) || collections.isPending) {
-    return <main className="settings-page kb-editor-page">{back}<p role="status" className="empty-copy">{messages.loading}</p></main>;
+    return <main className="kb-frame kb-editor-page">{back}<p role="status" className="empty-copy">{messages.loading}</p></main>;
   }
   if (articleId && !article.data) {
     const missing = article.error instanceof Error && article.error.message === 'API 404';
-    return <main className="settings-page kb-editor-page">{back}<p role="alert" className="error-copy">{missing ? kbMessages.articleNotFound : kbMessages.articleLoadFailed}</p></main>;
+    return <main className="kb-frame kb-editor-page">{back}<p role="alert" className="error-copy">{missing ? kbMessages.articleNotFound : kbMessages.articleLoadFailed}</p></main>;
   }
   if (article.data?.deleted_at) {
-    return <main className="settings-page kb-editor-page">{back}<p role="status" className="warning-note">{kbMessages.articleInTrash}</p></main>;
+    return <main className="kb-frame kb-editor-page">{back}<p role="status" className="warning-note">{kbMessages.articleInTrash}</p></main>;
   }
   const items = collections.data?.items ?? [];
   const known = collectionId && items.some((item) => item.id === collectionId) ? collectionId : undefined;
@@ -66,7 +68,7 @@ export function ArticleRoute({ articleId, collectionId }: { articleId?: string; 
 
 function BackLink() {
   const navigate = useNavigate();
-  return <RouterLink className="kb-back" href="/knowledge" onFollow={() => void navigate({ to: '/knowledge' })}><ChevronLeftIcon />{kbMessages.backToList}</RouterLink>;
+  return <RouterLink className="kb-back" href="/knowledge" onFollow={() => void navigate({ to: '/knowledge' })}><Icon name="chevronLeft" />{kbMessages.backToList}</RouterLink>;
 }
 
 // Side by side needs a wide window: the text and the preview each get half of the column left of the settings.
@@ -107,14 +109,9 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   const [problem, setProblem] = useState<string>();
   const [conflict, setConflict] = useState(false);
   const [savedOnce, setSavedOnce] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [imageProblems, setImageProblems] = useState<string[]>([]);
-  const historyButton = useRef<HTMLButtonElement>(null);
-  // A refused save says why where the person can see it: on a phone the side column is below the text.
-  const conflictNote = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (conflict) conflictNote.current?.scrollIntoView?.({ block: 'nearest' }); }, [conflict]);
   const set = (change: Partial<Draft>) => { setSavedOnce(false); setDraft((current) => ({ ...current, ...change })); };
   // sameBody: the editor writes every line ending as \n, so a text that differs from the stored one only there (an
   // import or an API client wrote \r\n) is the article's own text, not an edit.
@@ -225,7 +222,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     } catch (error) {
       if (error instanceof ChangedElsewhereError) setConflict(true);
       else setProblem(reason(error, kbMessages.articleActionFailed));
-      setConfirmingDelete(false);
+      setDeleting(false);
       setBusy(false);
     }
   };
@@ -365,32 +362,137 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
 
   const status = base?.status ?? 'draft';
   const heading = base ? kbMessages.editArticleHeading(base.title) : kbMessages.newArticleHeading;
+  const phone = usePhone();
+  // The help center decides whether Published is public; the bar and the details say so, with the way to turn it on.
+  const center = useQuery({ queryKey: ['help-center'], queryFn: kbApi.helpCenter });
+  const isPublic = center.data?.enabled;
+  const collectionName = tree.find((node) => node.collection.id === draft.collection_id)?.collection.name;
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [askingAlt, setAskingAlt] = useState(false);
+  const [altFor, setAltFor] = useState<MissingAlt>();
+  // Images in the text without alt text: the side column lists them, and publishing asks about them again.
+  const missing = useMemo(() => missingAlt(draft.body), [draft.body]);
+  const missingNames = useQueries({
+    queries: missing.map((image) => ({ queryKey: ['kb-media-details', image.id ?? image.url], queryFn: () => mediaApi.details(image.id!), enabled: image.id !== undefined, retry: false, staleTime: 60_000 })),
+  });
+  const nameOf = (image: MissingAlt, at: number) => missingNames[at]?.data?.name || image.fallback;
+  const publish = () => { if (missing.length > 0) setAskingAlt(true); else void save('published'); };
+  const disabledSave = busy || invalid || (base !== undefined && !dirty);
+  const saveLabel = busy ? kbMessages.saving : base ? kbMessages.saveChanges : kbMessages.saveDraft;
+  const publishLabel = dirty || !base ? kbMessages.saveAndPublish : kbMessages.publish;
+  const needsCollection = !draft.collection_id ? `${id}-needs-collection` : undefined;
+  const actions: MenuItem[] = [
+    ...(base ? [
+      { label: kbMessages.viewOnHelpCenter, icon: 'external' as const, hint: status !== 'published' ? kbMessages.draft : isPublic === false ? kbMessages.helpCenterOffShort : undefined,
+        disabled: status !== 'published' || isPublic !== true, onSelect: () => window.open(base.url, '_blank', 'noopener') },
+      { label: kbMessages.copyLink, icon: 'copy' as const, onSelect: () => void navigator.clipboard.writeText(base.url).then(() => setNotice(kbMessages.linkCopied)) },
+      { label: kbMessages.versionHistory, icon: 'history' as const, onSelect: () => setHistoryOpen(true) },
+    ] : []),
+    status === 'published'
+      ? { label: kbMessages.unpublish, icon: 'globe' as const, disabled: busy || invalid, onSelect: () => void save('draft') }
+      : { label: publishLabel, icon: 'globe' as const, disabled: busy || invalid, onSelect: publish },
+    ...(base ? [{ label: kbMessages.deleteArticleMenu, icon: 'trash' as const, danger: true, separated: true, onSelect: () => setDeleting(true) }] : []),
+  ];
+  const stateWords = [status === 'published' ? (isPublic === false ? kbMessages.notPublicShort : '') : '', dirty ? kbMessages.unsaved : savedOnce ? kbMessages.saved : ''].filter(Boolean);
+  const details = (
+    <>
+      <section className="kb-side-box" aria-labelledby={`${id}-visibility`}>
+        <h3 id={`${id}-visibility`}>{kbMessages.visibility}</h3>
+        <div className="kb-side-status">
+          <span className="kb-dot-status" data-status={status}>{status === 'published' ? kbMessages.published : kbMessages.draft}</span>
+          <span>{status === 'published' ? (isPublic === false ? kbMessages.notPublicHelpCenter : kbMessages.statusPublished) : kbMessages.statusDraft}</span>
+        </div>
+        {isPublic === false && <RouterLink className="button-link" href="/settings#help-center-heading" onFollow={() => void navigate({ to: '/settings', hash: 'help-center-heading' })}>
+          <Icon name="globe" />{kbMessages.turnOnHelpCenter}</RouterLink>}
+      </section>
+      {missing.length > 0 && <section className="kb-alt-warn" aria-labelledby={`${id}-alt-warn`}>
+        <strong id={`${id}-alt-warn`}>{kbMessages.imagesWithoutAlt(missing.length)}</strong>
+        <span>{kbMessages.imagesWithoutAltHelp}</span>
+        <ul>{missing.slice(0, 3).map((image, at) => (
+          <li key={`${image.url}-${at}`}><span title={nameOf(image, at)}>{nameOf(image, at)}</span>
+            <button type="button" aria-label={kbMessages.addAltFor(nameOf(image, at))} onClick={() => { setDetailsOpen(false); setAltFor({ ...image, fallback: nameOf(image, at) }); }}>{kbMessages.addAlt}</button></li>
+        ))}</ul>
+        {missing.length > 3 && <span className="kb-hint">{kbMessages.andMoreImages(missing.length - 3)}</span>}
+      </section>}
+      <section className="kb-side-box" aria-labelledby={`${id}-placement`}>
+        <h3 id={`${id}-placement`}>{kbMessages.placement}</h3>
+        <div className="field"><label htmlFor={`${id}-collection`}>{kbMessages.articleCollection}</label>
+          <select id={`${id}-collection`} value={draft.collection_id} required onChange={(event) => set({ collection_id: event.target.value })}>
+            {!draft.collection_id && <option value="">{kbMessages.chooseCollection}</option>}
+            {tree.map((node) => <option key={node.collection.id} value={node.collection.id}>{indent(node)}</option>)}
+          </select>
+          {collectionsFailed && <small className="error-copy">{kbMessages.collectionsFailed}</small>}
+          {!draft.collection_id && <small id={`${id}-needs-collection`} className="kb-hint">{kbMessages.needsCollection}</small>}</div>
+        {base && <div className="field"><label htmlFor={`${id}-slug-input`}>{kbMessages.articleSlug}</label>
+          <input id={`${id}-slug-input`} value={draft.slug} aria-describedby={`${id}-slug`} onChange={(event) => set({ slug: event.target.value })} />
+          <small id={`${id}-slug`} className="kb-hint">{kbMessages.articleSlugHelp(base.number, draft.slug.trim())}</small></div>}
+      </section>
+    </>
+  );
+  const more = <KBMenu label={kbMessages.moreArticleActions} title={draft.title.trim() || heading} items={actions} buttonClassName="kb-more-button" trigger={<Icon name="more" />} />;
   return (
-    <main className="settings-page kb-editor-page" aria-label={heading}>
-      <BackLink />
+    <main className="kb-frame kb-editor-page" aria-label={heading}>
       <p className="sr-only" role="status" aria-live="polite">{notice}</p>
-      <form className="kb-editor" aria-label={heading} onKeyDown={onKeyDown} onSubmit={(event) => { event.preventDefault(); void save(); }}>
+      <header className="kb-art-bar">
+        <nav className="kb-crumbs" aria-label={kbMessages.breadcrumb}>
+          <BackLink />
+          {collectionName && <><span aria-hidden="true">/</span><RouterLink href={`/knowledge?${new URLSearchParams({ collection: draft.collection_id })}`}
+            onFollow={() => void navigate({ to: '/knowledge', search: { collection: draft.collection_id } })}>{collectionName}</RouterLink></>}
+          <span aria-hidden="true">/</span><span aria-current="page">{draft.title.trim() || heading}</span>
+        </nav>
+        {!phone && <>
+          <span className="kb-art-state">
+            <span className="kb-dot-status" data-status={status}>{status === 'published' ? kbMessages.published : kbMessages.draft}</span>
+            {stateWords.map((word) => <span key={word}>· {word}</span>)}
+          </span>
+          <span className="kb-art-acts">
+            {status !== 'published' && <button type="button" disabled={busy || invalid} aria-describedby={needsCollection} onClick={publish}>{publishLabel}</button>}
+            <button className="primary-action" type="submit" form={`${id}-form`} disabled={disabledSave} aria-describedby={needsCollection}>{saveLabel}</button>
+            {more}
+          </span>
+        </>}
+      </header>
+      {(conflict || problem || tooLong || uploading > 0 || imageProblems.length > 0 || base?.has_source_html) && <div className="kb-editor-notes">
+        {conflict && <div role="alert" className="warning-note kb-conflict">
+          <p>{kbMessages.changedElsewhere}</p>
+          <div className="button-row">
+            <button type="button" disabled={busy} onClick={() => void keepMine()}>{kbMessages.keepMine}</button>
+            <button type="button" disabled={busy} onClick={() => void loadTheirs()}>{kbMessages.loadTheirs}</button>
+          </div>
+          <small>{kbMessages.keepMineHelp}</small>
+        </div>}
+        {problem && <p role="alert" className="error-copy">{problem}</p>}
+        {tooLong && <p role="alert" className="error-copy">{kbMessages.tooLong(bodyLength - maxBody)}</p>}
+        {uploading > 0 && <p role="status" className="kb-hint">{kbMessages.waitingForImages}</p>}
+        {imageProblems.map((text) => <p key={text} role="alert" className="error-copy">{text}</p>)}
+        {base?.has_source_html && <p className="muted-copy">{kbMessages.importedNotice}</p>}
+      </div>}
+      <form id={`${id}-form`} className="kb-editor" aria-label={heading} onKeyDown={onKeyDown} onSubmit={(event) => { event.preventDefault(); void save(); }}>
         <div className="kb-editor-main">
-          <div className="field kb-title-field"><label htmlFor={`${id}-title`}>{kbMessages.articleTitle}</label>
-            <input id={`${id}-title`} value={draft.title} required aria-invalid={titleLength > maxTitle || undefined} aria-describedby={titleLength > maxTitle ? `${id}-title-error` : undefined}
+          <div className="field kb-title-field"><label htmlFor={`${id}-title`} className="sr-only">{kbMessages.articleTitle}</label>
+            <input id={`${id}-title`} value={draft.title} required placeholder={kbMessages.articleTitle} aria-invalid={titleLength > maxTitle || undefined} aria-describedby={titleLength > maxTitle ? `${id}-title-error` : undefined}
               onChange={(event) => set({ title: event.target.value })} />
             {titleLength > maxTitle && <small id={`${id}-title-error`} className="error-copy">{kbMessages.titleTooLong(titleLength - maxTitle)}</small>}</div>
-          {base?.has_source_html && <p className="muted-copy">{kbMessages.importedNotice}</p>}
           <div className="kb-editor-card">
-            <div className="kb-tabs" role="tablist" aria-label={kbMessages.editorTabs}>
-              {modes.map((name, at) => (
-                <button key={name} type="button" role="tab" id={`${id}-${name}-tab`} aria-controls={`${id}-panel`} aria-selected={mode === name}
-                  tabIndex={mode === name ? 0 : -1} onClick={() => setMode(name)}
-                  onKeyDown={(event) => {
-                    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-                    const next = modes[(at + (event.key === 'ArrowRight' ? 1 : modes.length - 1)) % modes.length];
-                    setMode(next);
-                    document.getElementById(`${id}-${next}-tab`)?.focus();
-                  }}>
-                  {name === 'edit' ? kbMessages.write : name === 'split' ? kbMessages.split : kbMessages.preview}</button>
-              ))}
+            <div className="kb-editor-head">
+              <div className="kb-tabs" role="tablist" aria-label={kbMessages.editorTabs}>
+                {modes.map((name, at) => (
+                  <button key={name} type="button" role="tab" id={`${id}-${name}-tab`} aria-controls={`${id}-panel`} aria-selected={mode === name}
+                    tabIndex={mode === name ? 0 : -1} onClick={() => setMode(name)}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+                      const next = modes[(at + (event.key === 'ArrowRight' ? 1 : modes.length - 1)) % modes.length];
+                      setMode(next);
+                      document.getElementById(`${id}-${next}-tab`)?.focus();
+                    }}>
+                    {name === 'edit' ? kbMessages.write : name === 'split' ? kbMessages.split : kbMessages.preview}</button>
+                ))}
+              </div>
+              <small id={`${id}-count`} className={tooLong ? 'error-copy kb-count' : 'kb-count'}>{kbMessages.characters(bodyLength, maxBody)}</small>
+              <small id={`${id}-help`} className="sr-only">{kbMessages.bodyHelp}</small>
             </div>
-            <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-${mode}-tab`}>
+            <div role="tabpanel" id={`${id}-panel`} className="kb-editor-panel" aria-labelledby={`${id}-${mode}-tab`}>
               <Part part={editorPart} failed={<div className="kb-editor-loading"><PartUnavailable /></div>} render={({ default: Editor }) => {
                 madeWith.current ??= draft.body;
                 return <Editor initial={madeWith.current} uploads={imageHooks} label={kbMessages.body} describedBy={`${id}-help ${id}-count`} invalid={tooLong} mode={mode}
@@ -398,66 +500,91 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
               }} />
               {!handle && <p role="status" className="kb-editor-loading kb-hint">{kbMessages.loadingEditor}</p>}
             </div>
-            <div className="kb-editor-foot">
-              <small id={`${id}-help`} className="kb-hint">{kbMessages.bodyHelp}</small>
-              <small id={`${id}-count`} className={tooLong ? 'error-copy kb-count' : 'kb-count'}>{kbMessages.characters(bodyLength, maxBody)}</small>
-            </div>
           </div>
-          {tooLong && <p role="alert" className="error-copy">{kbMessages.tooLong(bodyLength - maxBody)}</p>}
-          {uploading > 0 && <p role="status" className="kb-hint">{kbMessages.waitingForImages}</p>}
-          {imageProblems.map((text) => <p key={text} role="alert" className="error-copy">{text}</p>)}
         </div>
-        <aside className="kb-editor-side" aria-label={kbMessages.articleSettings}>
-          <div className="kb-status">
-            <span className="badge" data-status={status}>{status === 'published' ? kbMessages.published : kbMessages.draft}</span>
-            <span className="muted-copy">{status === 'published' ? kbMessages.statusPublished : kbMessages.statusDraft}</span>
-          </div>
-          {conflict && <div role="alert" ref={conflictNote} className="warning-note kb-conflict">
-            <p>{kbMessages.changedElsewhere}</p>
-            <div className="button-row">
-              <button type="button" disabled={busy} onClick={() => void keepMine()}>{kbMessages.keepMine}</button>
-              <button type="button" disabled={busy} onClick={() => void loadTheirs()}>{kbMessages.loadTheirs}</button>
-            </div>
-            <small>{kbMessages.keepMineHelp}</small>
-          </div>}
-          {problem && <p role="alert" className="error-copy">{problem}</p>}
-          <div className="kb-actions">
-            <button className="primary-action" type="submit" disabled={busy || invalid || (base !== undefined && !dirty)} aria-describedby={!draft.collection_id ? `${id}-needs-collection` : undefined}>
-              {busy ? kbMessages.saving : base ? kbMessages.saveChanges : kbMessages.saveDraft}</button>
-            {status === 'published'
-              ? <button type="button" disabled={busy || invalid} onClick={() => void save('draft')}>{kbMessages.unpublish}</button>
-              : <button type="button" disabled={busy || invalid} aria-describedby={!draft.collection_id ? `${id}-needs-collection` : undefined} onClick={() => void save('published')}>{dirty || !base ? kbMessages.saveAndPublish : kbMessages.publish}</button>}
-          </div>
-          {!draft.collection_id && <p id={`${id}-needs-collection`} className="kb-hint">{kbMessages.needsCollection}</p>}
-          <p className="kb-hint kb-save-state" aria-hidden="true">{dirty ? kbMessages.unsaved : savedOnce ? kbMessages.saved : ' '}</p>
-          <div className="field"><label htmlFor={`${id}-collection`}>{kbMessages.articleCollection}</label>
-            <select id={`${id}-collection`} value={draft.collection_id} required onChange={(event) => set({ collection_id: event.target.value })}>
-              {!draft.collection_id && <option value="">{kbMessages.chooseCollection}</option>}
-              {tree.map((node) => <option key={node.collection.id} value={node.collection.id}>{indent(node)}</option>)}
-            </select>
-            {collectionsFailed && <small className="error-copy">{kbMessages.collectionsFailed}</small>}</div>
-          {base && <div className="field"><label htmlFor={`${id}-slug-input`}>{kbMessages.articleSlug}</label>
-            <input id={`${id}-slug-input`} value={draft.slug} aria-describedby={`${id}-slug`} onChange={(event) => set({ slug: event.target.value })} />
-            <small id={`${id}-slug`} className="kb-hint">{kbMessages.articleSlugHelp(base.number, draft.slug.trim())}</small></div>}
-          {base && <div className="kb-side-actions">
-            <button type="button" ref={historyButton} aria-expanded={historyOpen} onClick={() => setHistoryOpen(!historyOpen)}>{kbMessages.history}</button>
-            {confirmingDelete
-              ? <div role="group" aria-label={kbMessages.deleteArticle} className="kb-confirm">
-                  <span>{kbMessages.confirmDeleteArticle(base.title)}</span>
-                  <div className="button-row">
-                    <button type="button" className="danger-action" disabled={busy} onClick={() => void remove()}>{kbMessages.confirmDelete}</button>
-                    <button type="button" disabled={busy} onClick={() => setConfirmingDelete(false)}>{kbMessages.cancel}</button>
-                  </div>
-                </div>
-              : <button type="button" className="danger-action" onClick={() => setConfirmingDelete(true)}>{kbMessages.deleteArticle}</button>}
-          </div>}
-        </aside>
+        {!phone && <aside className="kb-editor-side" aria-label={kbMessages.articleSettings}>{details}</aside>}
       </form>
+      {phone && <div className="kb-phone-bar" role="region" aria-label={kbMessages.articleActions}>
+        <span className="kb-phone-state">
+          <span className="kb-dot-status" data-status={status}>{status === 'published' ? kbMessages.published : kbMessages.draft}</span>
+          <span>{stateWords.join(' · ')}</span>
+        </span>
+        <button type="button" className="kb-details-button" aria-haspopup="dialog" aria-label={kbMessages.detailsLabel(missing.length)} onClick={() => setDetailsOpen(true)}>
+          {kbMessages.details}{missing.length > 0 && <span className="kb-badge-count" aria-hidden="true">{missing.length}</span>}</button>
+        {more}
+        <button className="primary-action" type="submit" form={`${id}-form`} disabled={disabledSave} aria-describedby={needsCollection}>{saveLabel}</button>
+      </div>}
+      {phone && detailsOpen && <KBDialog title={kbMessages.details} className="kb-details-sheet" closeLabel={kbMessages.closeDetails} onClose={() => setDetailsOpen(false)}>{details}</KBDialog>}
+      {deleting && base && <KBDialog title={kbMessages.deleteHeading(base.title)} role="alertdialog" onClose={() => setDeleting(false)} footer={<>
+        <button type="button" disabled={busy} onClick={() => setDeleting(false)}>{kbMessages.cancel}</button>
+        <button type="button" className="danger-solid" disabled={busy} onClick={() => void remove()}>{kbMessages.confirmDelete}</button>
+      </>}><p className="muted-copy">{kbMessages.deleteBody}</p></KBDialog>}
+      {askingAlt && <KBDialog title={kbMessages.imagesWithoutAlt(missing.length)} role="alertdialog" onClose={() => setAskingAlt(false)} footer={<>
+        <button type="button" onClick={() => setAskingAlt(false)}>{kbMessages.cancel}</button>
+        <button type="button" className="primary-action" disabled={busy || invalid} onClick={() => { setAskingAlt(false); void save('published'); }}>{kbMessages.publishAnyway}</button>
+      </>}>
+        <p className="muted-copy">{kbMessages.publishAltHelp}</p>
+        <ul className="kb-alt-list">{missing.map((image, at) => (
+          <li key={`${image.url}-${at}`}><span title={nameOf(image, at)}>{nameOf(image, at)}</span>
+            <button type="button" aria-label={kbMessages.addAltFor(nameOf(image, at))} onClick={() => { setAskingAlt(false); setAltFor({ ...image, fallback: nameOf(image, at) }); }}>{kbMessages.addAlt}</button></li>
+        ))}</ul>
+      </KBDialog>}
+      {altFor && <AltDialog image={altFor} library={missingNames[missing.findIndex((each) => each.markdown === altFor.markdown)]?.data}
+        onSave={(alt) => { handle?.replace(altFor.markdown, altFor.markdown.replace(/^!\[\s*\]/, `![${alt.replace(/[[\]\\\n]/g, ' ')}]`)); setAltFor(undefined); }}
+        onClose={() => setAltFor(undefined)} />}
       {/* key: a save or a restore adds a version, so an open history loads again. */}
-      {base && historyOpen && <SavedReplyHistory<KBArticleVersion> key={base.updated_at} title={base.title} timezone={timezone} load={(before) => kbApi.versions(base.id, before)}
-        text={(version) => version.body_md} changes={versionChanges} failedMessage={kbMessages.articleActionFailed}
-        onRestore={restoreVersion} onClose={() => { setHistoryOpen(false); historyButton.current?.focus(); }} />}
+      {base && historyOpen && <KBDialog title={kbMessages.versionHistory} className="kb-history" phone="full" closeLabel={kbMessages.closeHistory}
+        onClose={() => setHistoryOpen(false)}>
+        <SavedReplyHistory<KBArticleVersion> key={base.updated_at} title={base.title} timezone={timezone} load={(before) => kbApi.versions(base.id, before)}
+          text={(version) => version.body_md} changes={versionChanges} failedMessage={kbMessages.articleActionFailed}
+          onRestore={restoreVersion} onClose={() => setHistoryOpen(false)} />
+      </KBDialog>}
     </main>
+  );
+}
+
+interface MissingAlt {
+  // markdown is the image as the text holds it, `![](url)`; id the library item when the address is one.
+  markdown: string;
+  url: string;
+  id?: string;
+  fallback: string;
+}
+
+// missingAlt lists the images of a text that have no alt text, in order.
+export function missingAlt(text: string): MissingAlt[] {
+  const found: MissingAlt[] = [];
+  for (const match of text.matchAll(/!\[\s*\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g)) {
+    const url = match[1]!;
+    const id = /\/api\/v1\/kb\/images\/([0-9a-f-]{36})/.exec(url)?.[1];
+    found.push({ markdown: match[0], url, id, fallback: kbMessages.imageNumber(found.length + 1) });
+  }
+  return found;
+}
+
+// AltDialog asks for an image's alt text; it goes in the text, and in the library when the library has none.
+function AltDialog({ image, library, onSave, onClose }: { image: MissingAlt; library?: KBMediaDetails; onSave: (alt: string) => void; onClose: () => void }) {
+  const [alt, setAlt] = useState('');
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    const text = alt.trim();
+    if (!text || busy) return;
+    setBusy(true);
+    // The library keeps the alt text for the next article; kept is sent as it is (a new alt text would keep it).
+    if (library && !library.alt.trim()) await mediaApi.update(library.id, { updated_at: library.updated_at, alt: text, kept: library.kept }).catch(() => undefined);
+    onSave(text);
+  };
+  return (
+    <KBDialog title={kbMessages.altFor(image.fallback)} onClose={onClose} footer={<>
+      <button type="button" onClick={onClose}>{kbMessages.cancel}</button>
+      <button type="button" className="primary-action" disabled={!alt.trim() || busy} onClick={() => void save()}>{kbMessages.addAlt}</button>
+    </>}>
+      <img className="kb-alt-preview" src={image.url} alt="" />
+      <label className="field">{kbMessages.altLabel}
+        <input value={alt} maxLength={500} placeholder={kbMessages.pickerAltPlaceholder} onChange={(event) => setAlt(event.target.value)}
+          onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void save(); } }} /></label>
+      <p className="kb-hint">{kbMessages.pickerSavedToLibrary}</p>
+    </KBDialog>
   );
 }
 

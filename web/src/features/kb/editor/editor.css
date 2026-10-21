@@ -5,7 +5,8 @@
 
 .kb-editor-card:has(.cm-editor.cm-focused) { outline: 2px solid var(--focus); outline-offset: 2px; }
 /* Toolbar */
-.md-shell { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.md-shell { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.md-shell > * { flex: none; }
 .md-toolbar {
   display: flex; align-items: center; gap: 2px; border-bottom: 1px solid var(--line); background: var(--surface-0);
   padding: var(--space-1) var(--space-2);
@@ -15,34 +16,28 @@
 .md-tool { --control: 30px; flex: none; width: 30px; padding: 0; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-2); }
 .md-tool:hover:not(:disabled) { border-color: transparent; color: var(--text-1); }
 .md-tool[aria-pressed="true"] { background: var(--surface-3); color: var(--text-1); }
-.md-tool-text { width: auto; gap: var(--space-1); padding: 0 var(--space-2); }
+.md-grow { flex: 1; }
+.md-insert-button { --control: 30px; gap: var(--space-1); padding: 0 var(--space-2); font-weight: 600; }
+.md-insert-button svg { width: 16px; height: 16px; }
 .md-tool:focus-visible { outline-offset: -2px; }
 /* Tooltips open below the toolbar; on a phone the row scrolls sideways and would clip them, so they wait for a hover. */
 .md-toolbar [data-tip]::after { display: none; }
 .md-toolbar.scroll-x-fade { overflow-y: visible; }
-/* Insert video: a row under the toolbar for the link. */
-.md-video {
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); border-bottom: 1px solid var(--line);
-  background: var(--surface-0); padding: var(--space-2) var(--space-3);
-}
-.md-video label { color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
-.md-video input { flex: 1 1 14rem; min-width: 0; }
-.md-video .primary-action { flex: none; }
-.md-video-help { flex-basis: 100%; font-size: var(--fs-small); }
+.md-video input { width: 100%; }
 
 
 /* Body: CodeMirror with the app's tokens. The editor scrolls inside .cm-scroller, so it has a bounded height; its
    scrollbars come from the global rules in base.css like every other scrolling area. */
 .md-shell { --select-bg: color-mix(in srgb, var(--accent) 24%, transparent); }
-.cm-area { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.cm-area { flex: 1 1 auto; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
 .md-shell[data-mode="split"] .cm-area { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .md-shell[data-mode="split"] .cm-preview { border-left: 1px solid var(--line); }
-.cm-host { min-width: 0; }
+.cm-host { min-width: 0; min-height: 0; }
 /* Text and preview lay out apart: a key typed in a long article does not lay the preview out again. */
 .cm-host, .cm-preview { contain: content; }
 .cm-host[hidden] { display: none; }
-.cm-preview { min-width: 0; height: 70vh; min-height: 26rem; max-height: none; padding: var(--space-5) var(--space-6); }
-.cm-host .cm-editor { height: 70vh; min-height: 26rem; background: var(--surface-1); color: var(--text-1); font-size: var(--fs-small); }
+.cm-preview { min-width: 0; height: 100%; min-height: 0; max-height: none; padding: var(--space-5) var(--space-6); }
+.cm-host .cm-editor { height: 100%; min-height: 12rem; background: var(--surface-1); color: var(--text-1); font-size: var(--fs-small); }
 .cm-host .cm-editor.cm-focused { outline: none; }
 .cm-host .cm-scroller { font-family: var(--font-mono); line-height: 1.7; overscroll-behavior: contain; }
 .cm-host .cm-content { padding: var(--space-4) 0; caret-color: var(--text-1); }
@@ -93,19 +88,16 @@
 .kb-editor-card .cm-host .cm-search [name="close"]:hover { background: var(--surface-2); color: var(--text-1); }
 
 
-@media (min-width: 761px) {
-  .md-toolbar.scroll-x-fade { flex-wrap: wrap; overflow: visible; mask-image: none; }
-}
 @media (min-width: 761px) and (hover: hover) {
   .md-toolbar [data-tip]:hover::after { display: block; }
 }
-@media (max-width: 900px) {
-  .md-shell[data-mode="split"] .cm-area { grid-template-columns: minmax(0, 1fr); }
-  .md-shell[data-mode="split"] .cm-host .cm-editor, .md-shell[data-mode="split"] .cm-preview { height: 45dvh; min-height: 16rem; }
-  .md-shell[data-mode="split"] .cm-preview { border-left: 0; border-top: 1px solid var(--line); }
-}
-@media (max-width: 760px) {
+@media (max-width: 44rem) {
+  .md-toolbar { gap: 0; padding: 0 var(--space-1); }
+  .md-tool, .md-insert-button { --control: var(--touch); min-height: var(--touch); }
+  .md-tool { width: var(--touch); }
+  .md-insert-long { display: none; }
   .cm-host .cm-editor, .cm-preview { height: 60dvh; min-height: 18rem; }
+  .cm-host .cm-content { font-size: 16px; }
   .cm-host .cm-line { padding: 0 var(--space-3); }
   .cm-preview { padding: var(--space-4); }
 }
@@ -124,9 +116,4 @@
   .md-tool[aria-pressed="true"] { outline: 2px solid Highlight; }
 }
 
-/* The media library picker, below the toolbar: the library's own cards, a little smaller. */
-.media-picker { display: grid; gap: var(--space-2); max-height: 26rem; overflow-y: auto; border-bottom: 1px solid var(--line); background: var(--surface-0); padding: var(--space-3); }
-.media-picker-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-.media-picker-head h3 { font-size: 14px; font-weight: 600; }
-.media-picker-grid { grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); }
 .cm-uploading .link-action { margin-left: auto; min-height: 0; }
