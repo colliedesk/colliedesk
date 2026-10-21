@@ -18,6 +18,8 @@ type restKBMedia struct {
 	Height       *int            `json:"height"`
 	DurationMS   *int64          `json:"duration_ms"`
 	ThumbnailURL *string         `json:"thumbnail_url"`
+	PosterURL    *string         `json:"poster_url"`
+	Codecs       []string        `json:"codecs"`
 	Kept         bool            `json:"kept"`
 	DeletedAt    *string         `json:"deleted_at"`
 	CreatedAt    string          `json:"created_at"`
@@ -31,7 +33,7 @@ func kbMediaView(media restKBMedia) map[string]any {
 		"width": media.Width, "height": media.Height, "has_thumbnail": media.ThumbnailURL != nil, "kept": media.Kept, "in_trash": media.DeletedAt != nil,
 		"created_at": media.CreatedAt, "updated_at": media.UpdatedAt, "team_text": map[string]any{"name": media.Name, "alt": media.Alt}}
 	if media.Kind == "video" {
-		view["duration_ms"] = media.DurationMS
+		view["duration_ms"], view["codecs"], view["has_poster"] = media.DurationMS, media.Codecs, media.PosterURL != nil
 	}
 	if media.Usage != nil {
 		view["usage"] = *media.Usage

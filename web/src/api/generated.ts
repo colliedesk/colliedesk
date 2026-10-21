@@ -1538,7 +1538,8 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /** @description The bytes of a library item, with ranges (206) so a video seeks, `nosniff` and a sandboxing Content-Security-Policy. An id always names the same bytes: the answer may be cached for a year. `download=1` asks the browser to save it under its name. */
+        get: operations["getKBMediaFile"];
         put?: never;
         post?: never;
         /** @description Move one library item to the trash. 409 `media_in_use`, with the articles, while a live article's current text names it: change those articles first. The answer's `batch_id` undoes it (`POST /api/v1/kb/media/restore`), as does `POST /api/v1/kb/media/{id}/restore`. */
@@ -1600,6 +1601,102 @@ export interface paths {
         put?: never;
         /** @description Put back the text each article and translation had before the replacement, where nothing changed since (an article whose newest version is still the replacement's, a translation that still holds the replaced text), as new versions. Anything changed since keeps its text and is listed in `skipped_article_ids`. Undoing twice changes nothing more. 409 `media_gone` when the replaced item was deleted for good. */
         post: operations["undoKBMediaReplacement"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/media-uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Start an upload of a video in parts: MP4 (H.264 or AV1 with AAC sound, QuickTime .mov included) or WebM (VP8, VP9 or AV1 with Opus or Vorbis), at most 200 MiB unless the server says otherwise. Nothing is converted, so the video must be one every browser plays: an H.265 (HEVC) video, the default of iPhones, is refused when the upload completes. Send the parts with `PUT /api/v1/kb/media-uploads/{id}`, then complete it. The plan's storage (counting the uploads in progress) and the server's disk (counting every upload in progress on the server) must have room before any byte is sent: 403 `storage_limit_reached`, 507 `insufficient_disk`; past 200 uploads in progress on the server a new one is 503 `server_busy`. At most 3 uploads are in progress in a workspace and 10 are started by one person in an hour (429 `too_many_uploads`). The parts are thrown away after 24 hours. A token below `send` gets 403 `files_need_approval`. */
+        post: operations["createKBMediaUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/media-uploads/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description Where an upload stands; after a lost connection, send the part that starts at `offset`. */
+        get: operations["getKBMediaUpload"];
+        /** @description Send the next part, at most `part_size` bytes, with `Content-Range: bytes <first>-<last>/<size>`. A part that does not start at the upload's offset is refused with 409 `upload_offset_mismatch`, the offset in `Upload-Offset` and in the answer; send that part again. One part of an upload at a time; a part must arrive within 120 seconds. */
+        put: operations["putKBMediaUploadPart"];
+        post?: never;
+        /** @description Cancel an upload in progress and throw its parts away, at once, even while a part is being sent (that part then answers 404). A token below `send` gets 403 `files_need_approval`. */
+        delete: operations["cancelKBMediaUpload"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/media-uploads/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Check and store the video once every part arrived. The server reads its length, size and codecs from the file, and removes in place what a camera or phone leaves in it (location, titles, XMP, tracks of data such as GPS or subtitles) without changing a frame. A video it refuses (400 `unsupported_codec`, `invalid_request`; more than 8,192 pixels on a side) is thrown away with the upload. A full library or plan (409) keeps the parts, so the same upload completes once there is room; parts gone from the server are 409 `upload_lost` and the upload is cancelled. Location, titles and recording dates are removed. The same bytes give the item that holds them, and a repeated complete answers the same item. Put it in an article as `<video controls src="/api/v1/kb/media/<id>"></video>`. */
+        post: operations["completeKBMediaUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/media/{id}/poster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Give a video its poster, the still picture shown before it plays: the raw bytes of a PNG, JPEG, GIF or WebP image, at most 5 MiB, metadata removed. It counts toward the plan's storage with the video and becomes the video's thumbnail in the library. A new poster is a new `poster_url`; the old one is deleted. Images have no poster (400). */
+        put: operations["putKBVideoPoster"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/kb/media/{id}/poster/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                version: string;
+            };
+            cookie?: never;
+        };
+        /** @description A video's poster, the version `poster_url` names; an older version is 404, so a cache never shows another picture under an address. */
+        get: operations["getKBVideoPoster"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2466,6 +2563,8 @@ export interface components {
             codecs: string[];
             /** @description The thumbnail, /api/v1/kb/media/<id>/thumbnail?v=<version>; a new thumbnail gets a new version. Null while there is none. */
             thumbnail_url: string | null;
+            /** @description A video's still picture, /api/v1/kb/media/<id>/poster/<version>; a new poster is a new URL. Null for an image or a video without one. */
+            poster_url: string | null;
             /** @description The purge never deletes a kept item. */
             kept: boolean;
             /**
@@ -2539,6 +2638,29 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             undone_at: string | null;
+        };
+        KBMediaUpload: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "video";
+            name: string;
+            /** @description The bytes announced. */
+            size: number;
+            /** @description The bytes received; the next part starts here. */
+            offset: number;
+            /** @description The most bytes one part may carry (8 MiB). */
+            part_size: number;
+            /**
+             * Format: date-time
+             * @description The parts are thrown away after this (24 hours after the start).
+             */
+            expires_at: string;
+            /**
+             * Format: uuid
+             * @description The library item once the upload is complete.
+             */
+            media_id: string | null;
         };
         /** @description Every unused item the filter selects, not only the page; kept items apart. Bytes count the original and a video's poster. */
         KBMediaUnusedSummary: {
@@ -2957,6 +3079,8 @@ export interface components {
                 };
                 /** @description Only on trial_outbound_limit: seconds until a reply can be sent. */
                 retry_after_seconds?: number;
+                /** @description Only on upload_offset_mismatch: where the upload stands; send the part that starts there. */
+                offset?: number;
                 /** @description Only on media_in_use: the live articles whose current text names the item. */
                 articles?: {
                     /** Format: uuid */
@@ -6611,6 +6735,69 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    getKBMediaFile: {
+        parameters: {
+            query?: {
+                download?: "1";
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The bytes */
+            200: {
+                headers: {
+                    /** @description private, max-age=31536000, immutable */
+                    "Cache-Control"?: string;
+                    ETag?: string;
+                    "Accept-Ranges"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/mp4": string;
+                    "video/webm": string;
+                    "image/png": string;
+                    "image/jpeg": string;
+                    "image/gif": string;
+                    "image/webp": string;
+                };
+            };
+            /** @description The range asked for */
+            206: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/mp4": string;
+                    "video/webm": string;
+                    "image/png": string;
+                    "image/jpeg": string;
+                    "image/gif": string;
+                    "image/webp": string;
+                };
+            };
+            /** @description Not modified (If-None-Match) */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description The range is outside the bytes */
+            416: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     trashOneKBMedia: {
         parameters: {
             query?: never;
@@ -6761,6 +6948,290 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    createKBMediaUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    size: number;
+                    name?: string;
+                    /** @description The video's title for screen readers. */
+                    alt?: string;
+                    /** @description true keeps the video from the purge of unused items, as an upload in the library does. */
+                    keep?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description The upload, at offset 0 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBMediaUpload"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            /** @description The video is larger than the server takes; nothing was stored. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many uploads in progress or started this hour. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The server has too many uploads in progress; try again later. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The server's disk has no room for the video. */
+            507: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getKBMediaUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The upload */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBMediaUpload"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putKBMediaUploadPart: {
+        parameters: {
+            query?: never;
+            header: {
+                "Content-Range": string;
+            };
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description The upload, at its new offset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBMediaUpload"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The part does not start where the upload stands, or the upload is complete. */
+            409: {
+                headers: {
+                    "Upload-Offset"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Another part of this upload, or too many of the workspace, are being sent. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    cancelKBMediaUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cancelled */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    completeKBMediaUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The video in the library */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBMedia"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            /** @description A part of this upload is being sent. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putKBVideoPoster: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "image/png": string;
+                "image/jpeg": string;
+                "image/gif": string;
+                "image/webp": string;
+            };
+        };
+        responses: {
+            /** @description The video with its poster */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBMedia"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The poster is over 5 MiB; nothing was stored. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getKBVideoPoster: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                version: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The poster */
+            200: {
+                headers: {
+                    /** @description private, max-age=31536000, immutable */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/jpeg": string;
+                    "image/gif": string;
+                    "image/webp": string;
+                };
+            };
+            /** @description Not modified (If-None-Match) */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     getKBMediaDetails: {

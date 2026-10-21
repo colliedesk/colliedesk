@@ -16,6 +16,7 @@ service of `compose.yaml`.
 | `DISABLE_TELEMETRY`, `DO_NOT_TRACK` | empty | Turn off the usage report and product analytics. See [usage report](#usage-report). |
 | `COLLIE_DESK_IMAGE` | set by the installer | Image the installer's `compose.yaml` runs. See [upgrading](README.md#upgrading). |
 | `HELP_CENTER_DOMAIN` | empty | Give each workspace's public help center its own host name, `<slug>.<domain>`. Empty serves it on `APP_ORIGIN/help/<slug>`. See [help center host names](running-behind-proxy.md#help-center-host-names). |
+| `KB_VIDEO_MAX_BYTES` | `209715200` (200 MiB) | The largest knowledge base video the server takes. Videos go up in parts of 8 MiB (see [running behind a proxy](running-behind-proxy.md#large-uploads)) and their files stay in `ATTACHMENTS_DIR` like attachments. |
 | `PROBLEM_REPORT_WORKSPACE` | empty | Send problem reports to a workspace on this server. See [problem reports](#problem-reports). |
 | `SMTP_*`, `EMAIL_FROM_POLICY`, `MAIL_FROM_*`, `EMAIL_TRUSTED_AUTHSERV_ID` | | Outgoing and incoming email. See [configuring email](email.md). |
 | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `MAILBOX_TOKEN_KEYS` | empty | Replies sent through a connected Gmail mailbox. See [send replies through Gmail](email.md#send-replies-through-gmail). |

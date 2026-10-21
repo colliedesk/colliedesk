@@ -568,6 +568,9 @@ func TestEveryRequestableRouteDeclaresTheAgentRequestAnswer(t *testing.T) {
 		if operation != nil && operation.RequestBody != nil && operation.RequestBody.Value.Content.Get("application/json") == nil {
 			continue
 		}
+		if kbFileRouteKeys[key] { // a video upload's routes are refused the same way
+			continue
+		}
 		if operation == nil || operation.Responses.Value("202") == nil {
 			t.Errorf("%s can become an agent request but contracts/openapi.yaml declares no 202 for it: add '202': {$ref: '#/components/responses/AgentRequestAccepted'}", key)
 		}

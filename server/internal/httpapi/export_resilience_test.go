@@ -217,6 +217,7 @@ func (s idleSink) KBArticleVersion(export.KBArticleVersion) error         { retu
 func (s idleSink) KBArticleTranslation(export.KBArticleTranslation) error { return nil }
 func (s idleSink) KBImage(export.KBImage) error                           { return nil }
 func (s idleSink) KBMediaReplacement(export.KBMediaReplacement) error     { return nil }
+func (s idleSink) KBVideo(export.KBVideo) error                           { return nil }
 func (s idleSink) HelpCenter(export.HelpCenter) error                     { return nil }
 func (s idleSink) AgentRequest(export.AgentRequest) error                 { return nil }
 func (s idleSink) BeginConversation(export.ConversationHead) error        { return nil }

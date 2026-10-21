@@ -25,6 +25,10 @@ const (
 	// leave the transaction; bytes go through the scoped DiscardObject, and the backfill reads and
 	// writes each image in its own workspace.
 	PrivilegeKBPurge Privilege = "kb-purge"
+	// PrivilegeKBUploadDisk sums, over every workspace, the uploads of videos in progress and the bytes
+	// they still need, so a new upload's disk check counts what the other workspaces reserved. Only a
+	// count and a byte total leave the transaction.
+	PrivilegeKBUploadDisk Privilege = "kb-upload-disk"
 	// PrivilegeRetention finds locked workspaces, records and sends their deletion notice, and deletes
 	// the ones locked for a year with their attachment files.
 	PrivilegeRetention Privilege = "retention"

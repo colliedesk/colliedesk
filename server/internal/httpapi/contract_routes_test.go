@@ -4,6 +4,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,6 +34,22 @@ func contractRequest(t *testing.T, method string, item contractCase, token, secr
 	}
 	if item.path == kbImagesPath {
 		return kbImageRequest(token, cookie)
+	}
+	if method == http.MethodPut && strings.HasPrefix(item.path, "/api/v1/kb/media-uploads/") {
+		req := kbPartRequest(strings.TrimPrefix(item.path, "/api/v1/kb/media-uploads/"), token, contractVideoPart, 0, len(contractVideoPart)-1, len(contractVideoPart))
+		if cookie != nil {
+			req.Header.Del("Authorization")
+			req.AddCookie(cookie)
+		}
+		return req
+	}
+	if method == http.MethodPut && strings.HasSuffix(item.path, "/poster") {
+		req := kbPosterRequest(strings.TrimSuffix(strings.TrimPrefix(item.path, "/api/v1/kb/media/"), "/poster"), token, pngImage(209))
+		if cookie != nil {
+			req.Header.Del("Authorization")
+			req.AddCookie(cookie)
+		}
+		return req
 	}
 	if item.path == recipientPath {
 		// The MTA authenticates with the server-wide secret; an empty secret exercises the 401.

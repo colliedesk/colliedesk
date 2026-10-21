@@ -129,7 +129,19 @@ after it, for example the code from YouTube's **Share → Embed**:
   too, so start your text after a blank line. Inside a paragraph only the tags are left out and the
   words between them stay, except the content of a `<script>`, `<style>` or similar element. **Preview** names what it left out on a line above the article; the saved text
   keeps the HTML as you wrote it.
-- Uploading a video file to the knowledge base is not available yet.
+- A video file of your own goes into the media library (below), not as `<video>` HTML of another site.
+
+**Video files.** The media library also holds videos you upload: MP4 (H.264 or AV1 video with AAC
+sound, including a QuickTime `.mov` screen recording) or WebM (VP8, VP9 or AV1 with Opus or Vorbis),
+up to 200 MiB (about ten minutes of a 1080p screen recording; a self-hosted server may set another
+limit). Nothing is converted, so the video must be one every browser plays: a video recorded in H.265
+(HEVC), the default of iPhones, is refused with how to export it as H.264 (on an iPhone: **Settings →
+Camera → Formats → Most Compatible**). A video goes up in parts, so a lost connection resumes where it
+stopped; it counts toward your plan's storage. Location, titles, recording dates and tracks of data a
+camera or phone writes (GPS, subtitles) are removed from the file without changing a frame; the
+name of the app that wrote a WebM stays. A video can be at most 8,192 pixels on a side. A video can have a
+poster, the still picture shown before it plays. For now videos are uploaded through the API and AI
+agents; the library page and the editor's button come next, and the help center shows them then.
 
 ### Publish, unpublish, edit
 
@@ -231,7 +243,9 @@ no article uses and which have no alt text, and can name, describe or keep them
 (`colliedesk_kb_media_update`), move them to the trash or back (`colliedesk_kb_media_trash`,
 `colliedesk_kb_media_undelete`) and replace one in every article (`colliedesk_kb_media_replace`), with
 the same tiers as writing an article. A request from a lower tier always names the images it would
-move. Deleting forever (`colliedesk_kb_media_purge`) is an admin's.
+move. Deleting forever (`colliedesk_kb_media_purge`) is an admin's. An agent with a `send` token uploads
+a video in parts (`colliedesk_kb_video_upload_start`, `_part`, `_complete`) and sets its poster
+(`colliedesk_kb_video_poster_set`); a lower tier cannot upload files.
 
 | Token tier | Read, search, history, trash | Write, publish, delete, restore, upload images | Turn the help center on or off |
 |---|---|---|---|
@@ -244,7 +258,8 @@ move. Deleting forever (`colliedesk_kb_media_purge`) is an admin's.
 - 2,000 articles per workspace, counting the trash, and 1,000 collections.
 - 100,000 characters per article text, 300 per title; never cut.
 - Images: PNG, JPEG, GIF and WebP, 5 MB each, at most 8,192 pixels on a side and 40 megapixels.
-- 10,000 images in the media library per workspace, counting its trash.
+- 10,000 images and videos in the media library per workspace, counting its trash; videos up to
+  200 MiB and 8,192 pixels on a side, three uploads in progress at a time.
 - Collections go three levels deep.
 - Search does not find a part in the middle of a word, nor words in text written without spaces.
 - Translations an import brings in are kept and exported, but not shown or edited yet.
