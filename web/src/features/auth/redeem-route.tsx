@@ -10,7 +10,8 @@ import { RedeemPage } from './redeem-page';
 
 const CloudSignIn = lazy(() => import('./cloud-sign-in').then((module) => ({ default: module.CloudSignIn })));
 
-export function RedeemRoute({ token }: { token: string }) {
+// buy is the plan named in the sign-in address when a visitor came from the website to buy it.
+export function RedeemRoute({ token, buy }: { token: string; buy?: string }) {
   const navigate = useNavigate();
   // A visitor who came to buy a plan lands on the billing page, which carries the purchase out.
   const goAfterSignIn = useCallback(
@@ -43,12 +44,13 @@ export function RedeemRoute({ token }: { token: string }) {
   }, [goAfterSignIn]);
   const cloudConfig = config.data?.cloud_sign_in;
   const cloudEnabled = !token && cloudConfig?.enabled === true && cloudConfig.publishable_key !== null;
+  const buying = buy ?? readCheckoutIntent();
 
   return <RedeemPage token={token} cloudEnabled={cloudEnabled} signupEnabled={cloudEnabled && config.data?.signup.enabled === true} workspaces={workspaces}
-    pending={redeem.isPending || cloudPending} failed={redeem.isError || cloudFailed} planLimited={redeem.error instanceof PlanLimitError}
+    buying={buying} pending={redeem.isPending || cloudPending} failed={redeem.isError || cloudFailed} planLimited={redeem.error instanceof PlanLimitError}
     onRedeem={() => redeem.mutate()} onSelectWorkspace={(slug) => { setWorkspaces([]); setWorkspaceSlug(slug); }}
     cloudSignIn={cloudEnabled && <Suspense fallback={<p>{messages.loadingCloudSignIn}</p>}>
       <CloudSignIn key={workspaceSlug ?? 'default'} publishableKey={cloudConfig.publishable_key ?? ''} onSessionToken={exchange}
-        onSignUp={config.data?.signup.enabled ? signUp : undefined} />
+        onSignUp={config.data?.signup.enabled ? signUp : undefined} buying={buying !== undefined} />
     </Suspense>} />;
 }

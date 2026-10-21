@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { Link, Outlet, createRootRoute, redirect, createRoute, createRouter, useRouterState } from '@tanstack/react-router';
+import { Link, Navigate, Outlet, createRootRoute, redirect, createRoute, createRouter, useRouterState } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
 import { ContactsPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
@@ -8,7 +8,7 @@ import { useInboxActivity } from './features/inbox/use-inbox-activity';
 import { RequestsRoute } from './features/requests/requests-route';
 import { usePendingRequests } from './features/requests/use-pending-requests';
 import { RedeemRoute } from './features/auth/redeem-route';
-import { clearCheckoutIntent, rememberCheckoutIntent } from './features/settings/checkout-intent';
+import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent } from './features/settings/checkout-intent';
 import { SettingsRoute } from './features/settings/settings-route';
 import { SettingsNavLinkContext } from './features/settings/settings-nav';
 import type { NavItem } from './features/settings/settings-nav';
@@ -56,6 +56,11 @@ function AppLayout() {
   if (onSignIn) return <div className="app-main"><Outlet /></div>;
   // Billing exists only on the hosted cloud and only admins manage it.
   const inBilling = path.startsWith('/settings/billing');
+  // A signed-out visitor who came from the website to buy a plan has no workspace yet: they go
+  // straight to sign-up with the plan in the address, not to the screen meant for invited agents.
+  const buying = signedOut && inBilling ? readCheckoutIntent() : undefined;
+  if (buying && config.data?.cloud_sign_in.enabled) return <Navigate to="/sign-in" search={{ buy: buying }} replace />;
+  if (buying && config.isPending) return <div className="app-main" />;
   // Plan and billing is a page inside Settings, so Settings stays the current rail destination there.
   const inSettings = path.startsWith('/settings');
   const inRequests = path.startsWith('/requests');
@@ -183,8 +188,17 @@ const billingRoute = createRoute({
 const signInRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sign-in',
-  validateSearch: (search: Record<string, unknown>): { token?: string } => (typeof search.token === 'string' ? { token: search.token } : {}),
-  component: () => <RedeemRoute token={signInRoute.useSearch().token ?? ''} />,
+  validateSearch: (search: Record<string, unknown>): { token?: string; buy?: string } => ({
+    ...(typeof search.token === 'string' ? { token: search.token } : {}),
+    ...(typeof search.buy === 'string' && search.buy !== '' ? { buy: search.buy } : {}),
+  }),
+  // `buy` stays in the address through the identity provider's round trip; the plan is remembered
+  // again here so a sign-in link that names it works on its own.
+  beforeLoad: ({ search }) => { if (search.buy) rememberCheckoutIntent(search.buy); },
+  component: function SignIn() {
+    const { token, buy } = signInRoute.useSearch();
+    return <RedeemRoute token={token ?? ''} buy={buy} />;
+  },
 });
 
 export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, signInRoute]);

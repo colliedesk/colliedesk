@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { CheckoutPlan } from '../../api/schemas';
 import { billingMessages } from './billing-messages';
-import { planCardsFor, priceFor } from './plan-options';
+import { isFoundingOnly, planCardsFor, priceFor } from './plan-options';
 import type { Interval } from './plan-options';
 
 interface PlanPickerProps {
@@ -33,7 +33,7 @@ export function PlanPicker({ sellable, refusals = [], busy = false, onChoose }: 
         return (
           <article key={card.name} className="plan-card" aria-label={card.name}>
             <h3>{card.name}</h3>
-            <div className="plan-price"><p><strong>{price.amount}</strong><span>{billingMessages.perMonth}</span></p>
+            <div className="plan-price"><p><strong>{price.amount}</strong><span>{price.per ?? billingMessages.perMonth}</span></p>
               <small>{price.billed ?? billingMessages.billedMonthly}</small></div>
             <button type="button" className="primary-action" aria-label={price.label} disabled={busy || price.refusal !== undefined} aria-busy={busy}
               aria-describedby={price.refusal ? refusalId : undefined} onClick={() => onChoose(price.plan)}>{billingMessages.choosePlanName(card.name)}</button>
@@ -42,6 +42,7 @@ export function PlanPicker({ sellable, refusals = [], busy = false, onChoose }: 
           </article>
         );
       })}</div>
+      {isFoundingOnly(cards) && <p className="muted-copy">{billingMessages.selfHostInstead} <a href={billingMessages.selfHostURL}>{billingMessages.selfHostLink}</a></p>}
     </div>
   );
 }

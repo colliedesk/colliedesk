@@ -52,3 +52,13 @@ test('the person can leave with another account', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Use another account' }));
   expect(other).toHaveBeenCalled();
 });
+
+test('a visitor who came to buy is told payment comes next, not a free trial', async () => {
+  const onCreate = vi.fn().mockResolvedValue(undefined);
+  render(<CloudSignup buying onCreate={onCreate} onSignIn={vi.fn()} onUseAnotherAccount={vi.fn()} />);
+  expect(screen.queryByText(/free trial/i)).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Start free trial' })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText(/workspace name/i), { target: { value: 'Acme Support' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Create workspace and continue to payment' }));
+  await waitFor(() => expect(onCreate).toHaveBeenCalledWith('Acme Support'));
+});

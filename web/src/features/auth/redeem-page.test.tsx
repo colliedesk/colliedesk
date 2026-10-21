@@ -59,3 +59,11 @@ test('a link refused by the plan says the link is fine and the workspace is full
 	expect(screen.getByRole('alert')).toHaveTextContent(/use this link again/i);
 	expect(screen.getByRole('alert')).not.toHaveTextContent(/invalid/i);
 });
+
+test('a visitor who came to buy Founding is greeted as a buyer, not sent to an admin', () => {
+	render(<RedeemPage token="" cloudEnabled signupEnabled buying="founding" cloudSignIn={<div>form</div>} />);
+	expect(screen.getByRole('heading', { level: 1, name: 'Join Founding' })).toBeInTheDocument();
+	expect(screen.getByText('Create your account with your work email. Then name your workspace and pay on the next screen.')).toBeInTheDocument();
+	expect(screen.queryByText(/admin/i)).not.toBeInTheDocument();
+	expect(screen.queryByText(/free trial/i)).not.toBeInTheDocument();
+});

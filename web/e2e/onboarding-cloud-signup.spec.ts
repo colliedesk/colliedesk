@@ -66,7 +66,8 @@ test('cloud signup: a verified identity starts a trial, the same email cannot st
   await page.goto(baseURL);
   await expect(page.getByRole('heading', { level: 1, name: 'Your free trial has ended' })).toBeVisible();
   await expect(appNavigationWith(page, name)).toHaveCount(1);
-  await expect(page.getByRole('button', { name: /Team, \$69 per month/ })).toBeVisible();
+  // While Founding has free slots it is the plan on sale, as on the website.
+  await expect(page.getByRole('button', { name: /Founding, \$99 per quarter/ })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Message body' })).toHaveCount(0);
 
   // Locked is not lost: the admin still takes everything out as one ZIP with its manifest.

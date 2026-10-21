@@ -16,11 +16,14 @@ interface RedeemPageProps {
   cloudSignIn?: ReactNode;
   workspaces?: WorkspaceChoice[];
   onSelectWorkspace?: (slug: string) => void;
+  // buying is the plan a visitor came from the website to buy; the page then greets a buyer.
+  buying?: string;
 }
 
 export function RedeemPage({
-  token, pending, failed, planLimited = false, onRedeem, cloudEnabled = false, signupEnabled = false, cloudSignIn, workspaces = [], onSelectWorkspace,
+  token, pending, failed, planLimited = false, onRedeem, cloudEnabled = false, signupEnabled = false, cloudSignIn, workspaces = [], onSelectWorkspace, buying,
 }: RedeemPageProps) {
+  const buyer = !token && cloudEnabled && buying !== undefined;
   return (
     <main className="redeem-page signin-split">
       <div className="signin-brand">
@@ -31,8 +34,8 @@ export function RedeemPage({
       <section className="redeem-panel">
         <div className="brand-lockup"><LogoMark size={36} /><span>{messages.brand}</span></div>
         {/* Without a link in hand, cloud sign-in is an emailed code, so the page is titled as a sign-in. */}
-        <h1>{!token && cloudEnabled ? messages.cloudSignInTitle : messages.openSecureLink}</h1>
-        <p>{!token && cloudEnabled ? messages.cloudSignInExplanation : messages.redeemExplanation}</p>
+        <h1>{buyer ? messages.buyingTitle(buying) : !token && cloudEnabled ? messages.cloudSignInTitle : messages.openSecureLink}</h1>
+        <p>{buyer ? messages.buyingExplanation : !token && cloudEnabled ? messages.cloudSignInExplanation : messages.redeemExplanation}</p>
         {!token && !cloudEnabled && <p className="muted-copy">{messages.requestLink}</p>}
         {!token && cloudEnabled && <div className="cloud-sign-in">
           {workspaces.length > 0 ? <>
@@ -42,8 +45,8 @@ export function RedeemPage({
                 onClick={() => onSelectWorkspace?.(workspace.slug)} disabled={pending}>{workspace.name}</button>)}
             </div>
           </> : cloudSignIn}
-          {signupEnabled && workspaces.length === 0 && <p className="muted-copy">{messages.cloudNewHere}</p>}
-          <p className="muted-copy">{messages.oneTimeLinkInstead}</p>
+          {!buyer && signupEnabled && workspaces.length === 0 && <p className="muted-copy">{messages.cloudNewHere}</p>}
+          {!buyer && <p className="muted-copy">{messages.oneTimeLinkInstead}</p>}
         </div>}
         {failed && workspaces.length === 0 && <p role="alert" className="error-copy">
           {token ? (planLimited ? messages.linkPlanLimited : messages.invalidLink) : messages.cloudSignInFailed}
