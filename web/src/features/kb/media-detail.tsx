@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent, RefObject } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { ChangedElsewhereError } from '../../api/client';
 import { formatBytes } from '../../lib/format-bytes';
 import { RouterLink } from '../../ui/router-link';
 import { Icon } from './editor/icons';
@@ -45,7 +46,7 @@ function OpenDetail({ id, onChanged, onClose }: { id: string; onChanged: () => v
         {details.isPending && <p role="status" className="empty-copy media-detail-pad">{mediaMessages.loading}</p>}
         {details.isError && <p role="alert" className="error-copy media-detail-pad">{mediaMessages.listFailed}{' '}
           <button type="button" className="link-action" onClick={() => void details.refetch()}>{mediaMessages.retry}</button></p>}
-        {details.data && <DetailBody key={details.data.updated_at} item={details.data} onChanged={refresh} onNotice={setNotice} onTrashed={() => { onChanged(); onClose(); }} />}
+        {details.data && <DetailBody key={details.data.id} item={details.data} onChanged={refresh} onNotice={setNotice} onTrashed={() => { onChanged(); onClose(); }} />}
         {notice && <p role="status" className="media-notice">{notice.text}
           {notice.undo && <button type="button" onClick={notice.undo}>{mediaMessages.undo}</button>}
           <button type="button" className="media-notice-close" aria-label={mediaMessages.dismiss} onClick={() => setNotice(undefined)}><Icon name="close" /></button></p>}
@@ -65,6 +66,17 @@ function DetailBody({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDet
   const [name, setName] = useState(item.name);
   const [alt, setAlt] = useState(item.alt);
   const [kept, setKept] = useState(item.kept);
+  // A new version of the item (a save here, a poster drawn after an upload, a teammate's edit) refreshes the
+  // fields the person has not touched; what they are typing stays.
+  const shown = useRef(item);
+  useEffect(() => {
+    const before = shown.current;
+    shown.current = item;
+    if (before === item) return;
+    setName((now) => (now === before.name ? item.name : now));
+    setAlt((now) => (now === before.alt ? item.alt : now));
+    setKept((now) => (now === before.kept ? item.kept : now));
+  }, [item]);
   const [state, setState] = useState<{ saving?: boolean; problem?: string }>({});
   const changed = name !== item.name || alt !== item.alt || kept !== item.kept;
   const discard = () => { setName(item.name); setAlt(item.alt); setKept(item.kept); setState({}); };
@@ -72,11 +84,21 @@ function DetailBody({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDet
     event.preventDefault();
     if (!changed || state.saving) return;
     setState({ saving: true });
+    const send = (version: string) => mediaApi.update(item.id, {
+      updated_at: version,
+      ...(name !== item.name ? { name } : {}), ...(alt !== item.alt ? { alt } : {}), ...(kept !== item.kept ? { kept } : {}),
+    });
     try {
-      await mediaApi.update(item.id, {
-        updated_at: item.updated_at,
-        ...(name !== item.name ? { name } : {}), ...(alt !== item.alt ? { alt } : {}), ...(kept !== item.kept ? { kept } : {}),
-      });
+      try {
+        await send(item.updated_at);
+      } catch (error) {
+        // A version saved meanwhile that left these fields as they were (a poster drawn after the upload) is no
+        // conflict for them: they are sent again over it. One that changed them is, and says so.
+        if (!(error instanceof ChangedElsewhereError)) throw error;
+        const fresh = await mediaApi.details(item.id);
+        if (fresh.name !== item.name || fresh.alt !== item.alt || fresh.kept !== item.kept) throw error;
+        await send(fresh.updated_at);
+      }
       setState({});
       onNotice({ text: mediaMessages.saved });
       onChanged();

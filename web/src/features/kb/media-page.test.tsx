@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { MediaRoute } from './media-page';
 import type { MediaSearch, MediaView } from './media-page';
@@ -316,4 +316,33 @@ test('a file that cannot go up opens the tray with why, instead of a full bar; D
   expect(within(tray).getByRole('button', { name: 'Collapse uploads' })).toHaveAttribute('aria-expanded', 'true');
   fireEvent.click(within(tray).getByRole('button', { name: 'Dismiss release-notes.txt' }));
   await waitFor(() => expect(screen.queryByRole('region', { name: 'Uploads' })).not.toBeInTheDocument());
+});
+
+test('a new version of the item arriving while the person types (a poster drawn after the upload) keeps what they typed', async () => {
+  let version = 0;
+  serve({ ...base, [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, updated_at: `2026-10-0${2 + version++}T00:00:00Z`, poster_url: version > 1 ? '/p' : null, articles: [] }) });
+  open('library', { item: id(2) });
+  const panel = await screen.findByRole('complementary', { name: 'Product tour' });
+  fireEvent.change(within(panel).getByRole('textbox', { name: 'Name' }), { target: { value: 'Tour' } });
+  // The page comes back to the front: the panel reads the item again and gets a newer version.
+  await act(async () => { focusManager.setFocused(false); focusManager.setFocused(true); });
+  await waitFor(() => expect(version).toBeGreaterThan(1));
+  expect(within(panel).getByRole('textbox', { name: 'Name' })).toHaveValue('Tour');
+  expect(within(panel).getByRole('button', { name: 'Save' })).toBeEnabled();
+  focusManager.setFocused(undefined);
+});
+
+test('a save refused because only the poster changed since goes again over the new version', async () => {
+  let reads = 0;
+  const calls = serve({ ...base,
+    [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, updated_at: reads++ === 0 ? video.updated_at : '2026-10-09T00:00:00Z', articles: [] }),
+    [`PATCH /api/v1/kb/media/${id(2)}`]: (call) => ((call.body as { updated_at: string }).updated_at === video.updated_at
+      ? refusal(409, 'changed_elsewhere', 'This was changed by someone else.') : json(200, { ...video, name: 'Tour', updated_at: '2026-10-10T00:00:00Z' })) });
+  open('library', { item: id(2) });
+  const panel = await screen.findByRole('complementary', { name: 'Product tour' });
+  fireEvent.change(within(panel).getByRole('textbox', { name: 'Name' }), { target: { value: 'Tour' } });
+  fireEvent.click(within(panel).getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH').map((call) => call.body)).toEqual([
+    { updated_at: video.updated_at, name: 'Tour' }, { updated_at: '2026-10-09T00:00:00Z', name: 'Tour' }]));
+  expect(within(panel).queryByRole('alert')).not.toBeInTheDocument();
 });
