@@ -80,3 +80,13 @@ export const SelectCard = memo(function SelectCard({ item, checked, extra, onTog
     </li>
   );
 });
+
+// embedFor is what an article holds to show the item: Markdown for an image, the allowed <video> HTML
+// for a video, as a block of its own.
+export function embedFor(item: KBMedia) {
+  if (item.kind === 'image') return `![${item.alt.replace(/[[\]]/g, '')}](${item.url})`;
+  // A video's title for screen readers: its alt text, or its name.
+  const text = item.alt || item.name;
+  const title = text ? ` title="${text.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"` : '';
+  return `<video controls preload="metadata" src="${item.url}"${title}></video>`;
+}

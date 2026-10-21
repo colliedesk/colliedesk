@@ -13,6 +13,8 @@ import type { IconName } from './icons';
 import { markdownHighlight, markdownLanguage } from './theme';
 import { embedSnippet, parseVideoLink } from '../video-link';
 import { startUpload, uploadEvents, uploads as uploadField, uploadsPending } from './upload';
+import { MediaPicker } from '../media-picker';
+import { embedFor } from '../media-grid';
 import type { UploadHooks } from './upload';
 import './editor.css';
 
@@ -69,6 +71,8 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   const videoLink = useRef<HTMLInputElement>(null);
   // video is the Insert video row: closed, open, or open with why the link cannot be used.
   const [video, setVideo] = useState<{ error: string } | undefined>();
+  // picking is the media library picker, open or not.
+  const [picking, setPicking] = useState(false);
   const [active, setActive] = useState<Active>();
   // rover is the toolbar button that is the Tab stop; when it is disabled (Undo with nothing to undo), the first
   // button is, so the toolbar never loses its stop.
@@ -211,7 +215,12 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
         <span className="md-sep" aria-hidden="true" />
         <button type="button" data-tool="insertImage" className="md-tool md-tool-text" tabIndex={stop === 'insertImage' ? 0 : -1} disabled={!editing}
           onMouseDown={(event) => event.preventDefault()} onClick={() => fileInput.current?.click()}>
-          <Icon name="image" /><span>{t.insertImage}</span>
+          <Icon name="upload" /><span>{t.insertImage}</span>
+        </button>
+        <button type="button" data-tool="insertMedia" className="md-tool md-tool-text" tabIndex={stop === 'insertMedia' ? 0 : -1} disabled={!editing}
+          aria-expanded={picking} aria-controls={`${id}-media`} onMouseDown={(event) => event.preventDefault()}
+          onClick={() => { setPicking(!picking); if (picking) viewRef.current?.focus(); }}>
+          <Icon name="library" /><span>{t.insertMedia}</span>
         </button>
         <button type="button" data-tool="insertVideo" className="md-tool md-tool-text" tabIndex={stop === 'insertVideo' ? 0 : -1} disabled={!editing}
           aria-expanded={!!video} aria-controls={`${id}-video`} onMouseDown={(event) => event.preventDefault()}
@@ -223,6 +232,12 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
         {tool('undo', t.undo, `${mod}Z`, undo, undefined, !active?.canUndo)}
         {tool('redo', t.redo, `${mod}Shift+Z`, redo, undefined, !active?.canRedo)}
       </div>
+      {picking && editing && (
+        <div id={`${id}-media`}>
+          <MediaPicker onClose={() => { setPicking(false); viewRef.current?.focus(); }}
+            onPick={(item) => { setPicking(false); act((view) => insertBlock(view, embedFor(item))); }} />
+        </div>
+      )}
       {video && editing && (
         <div id={`${id}-video`} className="md-video" role="group" aria-label={t.insertVideo}
           onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); closeVideo(); } }}>
@@ -237,7 +252,7 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
           </small>
         </div>
       )}
-      <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden tabIndex={-1} aria-hidden="true"
+      <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime,.mov" multiple hidden tabIndex={-1} aria-hidden="true"
         onChange={(event) => {
           const files = [...(event.target.files ?? [])];
           event.target.value = '';

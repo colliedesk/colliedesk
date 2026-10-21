@@ -1,6 +1,6 @@
-import { useDeferredValue, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { KeyboardEvent } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useBlocker, useNavigate } from '@tanstack/react-router';
 import { api, ChangedElsewhereError, InvalidRequestError } from '../../api/client';
 import { messages } from '../../messages';
@@ -15,13 +15,17 @@ import type { KBArticle, KBArticleStatus, KBArticleVersion } from './kb-api';
 import { kbMessages } from './kb-messages';
 import { buildTree, flatten, indent, reason } from './kb-tree';
 import { useRefreshKB } from './knowledge-page';
-import { MarkdownPreview } from './markdown-preview';
+import { MarkdownPreview, videoIds } from './markdown-preview';
+import type { PreviewVideo } from './markdown-preview';
+import { mediaApi } from './media-api';
+import type { KBMediaDetails } from './media-api';
+import { embedFor } from './media-grid';
+import { baseName, kindOf, uploadVideo } from './media-uploads';
 
 // The limits the server checks (server/internal/domain/kb.go), counted in characters like the server.
 export const maxTitle = 300;
 export const maxBody = 100000;
 const maxImageBytes = 5 * 1024 * 1024;
-const imageTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
 // characters counts what a person sees as characters (Unicode code points), as the server does; a
 // string's length counts UTF-16 units, so an emoji would count twice.
@@ -229,21 +233,81 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   // Images are checked before any upload: a wrong type or a file over 5 MB is refused with a reason. The editor
   // holds an uploading image's place on screen only, never in the text, and puts the image in as a paragraph of
   // its own: right after a table row or inside a line, Markdown would read it as part of the table or the text.
+  // A video goes up in parts (media-uploads.ts); leaving the page cancels the ones still going, so they
+  // hold none of the workspace's three uploads in progress.
+  // The videos waiting their turn stop too: one signal for the editor, made by the effect (so a second run of
+  // it, as in development, gets a fresh one) and aborted when it goes.
+  const videoUploads = useRef(new Set<{ id?: string }>());
+  const videoTurn = useRef<Promise<void>>(Promise.resolve());
+  const videoSignal = useRef(new AbortController().signal);
+  useEffect(() => {
+    const uploads = videoUploads.current;
+    let controller = new AbortController();
+    videoSignal.current = controller.signal;
+    const leave = () => {
+      controller.abort();
+      for (const session of uploads) cancelVideoUpload(session);
+      uploads.clear();
+    };
+    // A page the browser kept and shows again (Back) uploads again with a fresh signal.
+    const back = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      controller = new AbortController();
+      videoSignal.current = controller.signal;
+    };
+    window.addEventListener('pagehide', leave);
+    window.addEventListener('pageshow', back);
+    return () => { window.removeEventListener('pagehide', leave); window.removeEventListener('pageshow', back); leave(); };
+  }, []);
   const imageHooks = useMemo<UploadHooks>(() => ({
     accept: (files) => {
       const problems: string[] = [];
       const accepted = files.filter((file) => {
-        if (!imageTypes.includes(file.type)) { problems.push(kbMessages.imageType(file.name)); return false; }
-        if (file.size > maxImageBytes) { problems.push(kbMessages.imageTooLarge(file.name)); return false; }
+        const kind = kindOf(file);
+        if (!kind) { problems.push(kbMessages.imageType(file.name)); return false; }
+        if (kind === 'image' && file.size > maxImageBytes) { problems.push(kbMessages.imageTooLarge(file.name)); return false; }
         return true;
       });
       setImageProblems(problems);
       return accepted;
     },
-    upload: async (file) => ({ url: (await kbApi.uploadImage(file)).url, alt: altText(file.name) }),
+    upload: async (file, progress, cancelled) => {
+      // The name the library shows is the file's; a pasted image without one is "image".
+      if (kindOf(file) === 'image') return { snippet: `![${altText(file.name)}](${(await mediaApi.uploadImage(file, baseName(file.name) || 'image', false)).url})` };
+      const session: { id?: string } = {};
+      // Either the editor going away or the person's Cancel stops it.
+      const both = new AbortController();
+      for (const signal of [videoSignal.current, cancelled]) {
+        if (signal.aborted) both.abort();
+        else signal.addEventListener('abort', () => both.abort(), { once: true });
+      }
+      const signal = both.signal;
+      videoUploads.current.add(session);
+      // One video at a time, in the order they came: a workspace has three uploads in progress at most.
+      const turn = videoTurn.current.then(() => (signal.aborted ? undefined
+        : uploadVideo(file, { keep: false, signal, session, onProgress: (sent) => progress(sent / file.size) })));
+      videoTurn.current = turn.then(() => undefined, () => undefined);
+      try {
+        const item = await turn;
+        if (!item) throw new DOMException('Cancelled', 'AbortError');
+        return { snippet: embedFor(item) };
+      } catch (error) {
+        // The editor cannot resume an upload: a failed or cancelled one is thrown away, so it holds none of the
+        // workspace's three.
+        cancelVideoUpload(session);
+        throw error;
+      } finally {
+        videoUploads.current.delete(session);
+      }
+    },
     onStart: () => setUploading((count) => count + 1),
     onDone: (file) => { setUploading((count) => count - 1); setNotice(kbMessages.imageUploaded(file.name)); },
-    onError: (file, error) => { setUploading((count) => count - 1); setImageProblems((current) => [...current, reason(error, kbMessages.imageFailed(file.name))]); },
+    onError: (file, error) => {
+      setUploading((count) => count - 1);
+      // A cancel is no problem to report.
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      setImageProblems((current) => [...current, reason(error, kbMessages.imageFailed(file.name))]);
+    },
   }), []);
   // onReady: the editor shows the text it was made with; one loaded meanwhile (a restore, theirs) goes in now.
   const draftNow = useRef(draft);
@@ -260,6 +324,26 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
   // goes first (the editor tells the page of typing 120 ms after it stops, then this renders). It starts empty
   // (null) so the first frame shows the editor without waiting for it.
   const previewText = useDeferredValue<string | null>(draft.body, null);
+  // The library videos the text names, for their poster and size in the preview; a 404 is a video the
+  // library does not have, which the preview leaves out and names, as the help center does.
+  const ids = useMemo(() => (previewText === null ? [] : videoIds(previewText)), [previewText]);
+  // combine runs again only when an answer changes (it is stable for the same ids), so the preview gets the
+  // same map until then and does not render again on every keystroke.
+  const combineVideos = useCallback((answers: { data?: KBMediaDetails; isError: boolean; error: unknown }[]) => {
+    const known = new Map<string, PreviewVideo>();
+    answers.forEach((answer, index) => {
+      const videoId = ids[index]!;
+      if (answer.data) known.set(videoId, answer.data.kind === 'video' && !answer.data.deleted_at
+        ? { poster: answer.data.poster_url, width: answer.data.width, height: answer.data.height } : null);
+      // Only a 404 says the library has no such video; a failure that may pass leaves it as not looked up.
+      else if (answer.isError && answer.error instanceof Error && answer.error.message === 'API 404') known.set(videoId, null);
+    });
+    return known;
+  }, [ids]);
+  const library = useQueries({
+    queries: ids.map((videoId) => ({ queryKey: ['kb-media-details', videoId], queryFn: () => mediaApi.details(videoId), retry: false, staleTime: 60_000 })),
+    combine: combineVideos,
+  });
   const onKeyDown = (event: KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
       event.preventDefault();
@@ -308,7 +392,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
               <Part part={editorPart} failed={<div className="kb-editor-loading"><PartUnavailable /></div>} render={({ default: Editor }) => {
                 madeWith.current ??= draft.body;
                 return <Editor initial={madeWith.current} uploads={imageHooks} label={kbMessages.body} describedBy={`${id}-help ${id}-count`} invalid={tooLong} mode={mode}
-                  preview={mode === 'edit' || !previewReady || previewText === null ? undefined : <MarkdownPreview text={previewText} />} onChange={(text) => set({ body: text })} onReady={onReady} />;
+                  preview={mode === 'edit' || !previewReady || previewText === null ? undefined : <MarkdownPreview text={previewText} library={library} />} onChange={(text) => set({ body: text })} onReady={onReady} />;
               }} />
               {!handle && <p role="status" className="kb-editor-loading kb-hint">{kbMessages.loadingEditor}</p>}
             </div>
@@ -384,6 +468,13 @@ function versionChanges(version: KBArticleVersion, previous: KBArticleVersion): 
     ...(version.status !== previous.status ? [version.status === 'published' ? kbMessages.published : kbMessages.draft] : []),
     ...(version.collection_id !== previous.collection_id ? [kbMessages.movedCollection] : []),
   ];
+}
+
+// cancelVideoUpload throws an unfinished video upload away on the server; keepalive outlives a closing page.
+function cancelVideoUpload(session: { id?: string }) {
+  if (!session.id) return;
+  void fetch(`/api/v1/kb/media-uploads/${session.id}`, { method: 'DELETE', credentials: 'same-origin', keepalive: true }).catch(() => undefined);
+  session.id = undefined;
 }
 
 // altText describes an image by its file name, without the characters that would end the Markdown.

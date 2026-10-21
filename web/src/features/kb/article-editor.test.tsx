@@ -10,11 +10,23 @@ vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate, useBlock
 // The editor is a field with its contract here (editor/fake-editor.test.fixture.tsx); codemirror-editor.test.tsx
 // runs the real one.
 vi.mock('./editor/codemirror-editor', () => import('./editor/fake-editor.test.fixture'));
+// A video's parts go through XMLHttpRequest (for the progress); here they land at once.
+const sentParts = vi.hoisted(() => [] as string[]);
+vi.mock('./media-api', async (original) => ({
+  ...(await original<typeof import('./media-api')>()),
+  sendPart: async (_id: string, part: Blob, first: number, size: number, onSent: (bytes: number) => void) => {
+    sentParts.push(`${first}+${part.size}/${size}`);
+    onSent(part.size);
+    return { status: 200, body: { id: '77777777-0000-4000-8000-000000000001', kind: 'video', name: 'tour', size, offset: first + part.size, part_size: 8,
+      expires_at: '2026-10-22T00:00:00Z', media_id: null, created_by: null, created_at: '2026-10-21T00:00:00Z' }, offset: String(first + part.size) };
+  },
+}));
 afterEach(() => { navigate.mockReset(); blocker.mockReset(); vi.unstubAllGlobals(); });
 
 // settle waits for the editor to tell the page of what was typed, as it does a moment after typing stops.
 const settle = () => act(() => new Promise((resolve) => { setTimeout(resolve, 150); }));
-const uploaded = { id: ids.image, content_type: 'image/png', size: 4, sha256: 'ab', url: `/api/v1/kb/images/${ids.image}`, created_at: '2026-10-02T00:00:00Z' };
+const uploaded = { id: ids.image, kind: 'image', content_type: 'image/png', size: 4, sha256: 'ab', url: `/api/v1/kb/images/${ids.image}`, name: 'login screen', alt: '', width: 1, height: 1,
+  duration_ms: null, codecs: [], thumbnail_url: null, poster_url: null, kept: false, deleted_at: null, created_at: '2026-10-02T00:00:00Z', updated_at: '2026-10-02T00:00:00Z' };
 
 function open(props: { articleId?: string; collectionId?: string }) {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ArticleRoute {...props} /></QueryClientProvider>);
@@ -123,7 +135,7 @@ test('an image the server refuses leaves no placeholder and says why; a wrong ty
   open({ articleId: ids.article });
   const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
   fireEvent.paste(text, { clipboardData: { files: [new File(['x'], 'shot.png', { type: 'image/png' }), new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' })] } });
-  expect(await screen.findByText('logo.svg is not a PNG, JPEG, GIF or WebP image.')).toBeInTheDocument();
+  expect(await screen.findByText('logo.svg is not a PNG, JPEG, GIF or WebP image, nor an MP4 or WebM video.')).toBeInTheDocument();
   expect(await screen.findByText('Storage is full.')).toBeInTheDocument();
   expect(text).toHaveValue('');
   expect(calls.filter((call) => call.path === '/api/v1/kb/images')).toHaveLength(1);
@@ -143,7 +155,11 @@ test('the preview shows YouTube and Vimeo players and library videos as the help
   const body = 'Watch:\n\n<iframe src="https://www.youtube.com/embed/jNQXAC9IVRw?start=65" onload="alert(1)"></iframe>\n\n'
     + 'Inline <iframe src="https://evil.example/embed/x"></iframe> and <b>bold</b>.\n\n<script>window.__xss = 1</script>\n\n'
     + '<video src="/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b" autoplay controls></video>';
-  serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: body })) });
+  const libraryVideo = { id: '0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b', kind: 'video', content_type: 'video/mp4', size: 10, sha256: 'a'.repeat(64),
+    url: '/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b', name: 'Tour', alt: '', width: 1280, height: 720, duration_ms: 1000, codecs: [], thumbnail_url: null,
+    poster_url: '/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b/poster/abcdef12', kept: false, deleted_at: null, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', articles: [] };
+  serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: body + '\n\n<video src="/api/v1/kb/media/1b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b"></video>' })),
+    'GET /api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b/details': () => json(200, libraryVideo) });
   open({ articleId: ids.article });
   fireEvent.click(await screen.findByRole('tab', { name: 'Preview' }));
   const panel = screen.getByRole('tabpanel', { name: 'Preview' });
@@ -161,8 +177,12 @@ test('the preview shows YouTube and Vimeo players and library videos as the help
   expect(video).toHaveAttribute('src', '/api/v1/kb/media/0b6f8a8e-3c4d-4e5f-8a9b-0c1d2e3f4a5b');
   expect(video).toHaveAttribute('controls');
   expect(video).not.toHaveAttribute('autoplay');
+  // The library gives the poster and the size; a video it does not have is left out and named.
+  await waitFor(() => expect(video).toHaveAttribute('poster', libraryVideo.poster_url));
+  expect(video).toHaveAttribute('width', '1280');
+  await waitFor(() => expect(panel.querySelectorAll('video')).toHaveLength(1));
   expect(panel).toHaveTextContent('Inline and bold.');
-  expect(warning).toHaveTextContent('Left out of the article: iframe onload, iframe (evil.example), b, script, video autoplay.');
+  await waitFor(() => expect(within(panel).getByRole('status')).toHaveTextContent('Left out of the article: iframe onload, iframe (evil.example), b, script, video autoplay, video (not in the library).'));
   expect(panel).not.toHaveTextContent('__xss');
   expect((window as { __xss?: number }).__xss).toBeUndefined();
 });
@@ -231,7 +251,7 @@ test('saving waits while an image uploads, so a placeholder is never stored; a $
   expect(screen.getByRole('button', { name: 'Publish' })).toBeDisabled();
   fireEvent.keyDown(text, { key: 's', ctrlKey: true });
   expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(0);
-  await act(async () => { finish(json(201, { id: ids.image, content_type: 'image/png', size: 1, sha256: 'ab', url: `/api/v1/kb/images/${ids.image}`, created_at: '2026-10-02T00:00:00Z' })); });
+  await act(async () => { finish(json(201, uploaded)); });
   await waitFor(() => expect(text).toHaveValue(`![cost$$ $&](/api/v1/kb/images/${ids.image})`));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
 });
@@ -302,7 +322,7 @@ test('a wrong type or a file over 5 MB is refused before any upload', async () =
   const big = new File(['x'], 'huge.png', { type: 'image/png' });
   Object.defineProperty(big, 'size', { value: 6 * 1024 * 1024 });
   fireEvent.paste(await screen.findByRole('textbox', { name: 'Text (Markdown)' }), { clipboardData: { files: [new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' }), big] } });
-  expect(await screen.findByText('logo.svg is not a PNG, JPEG, GIF or WebP image.')).toBeInTheDocument();
+  expect(await screen.findByText('logo.svg is not a PNG, JPEG, GIF or WebP image, nor an MP4 or WebM video.')).toBeInTheDocument();
   expect(screen.getByText('huge.png is over 5 MB.')).toBeInTheDocument();
   expect(calls.some((call) => call.path === '/api/v1/kb/images')).toBe(false);
 });
@@ -331,4 +351,71 @@ test('an article with Windows line endings opened untouched is no change: nothin
   fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
   await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1));
   expect(calls.find((call) => call.method === 'PATCH')?.body).toEqual({ updated_at: '2026-10-02T00:00:00Z', status: 'published' });
+});
+
+test('a pasted video goes up in parts and goes in as the library video HTML, kept out of the library\'s keep', async () => {
+  const upload = { id: '77777777-0000-4000-8000-000000000001', kind: 'video', name: 'tour', size: 12, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z',
+    media_id: null, created_by: null, created_at: '2026-10-21T00:00:00Z' };
+  const media = { id: '77777777-0000-4000-8000-000000000002', kind: 'video', content_type: 'video/webm', size: 12, sha256: 'a'.repeat(64), url: '/api/v1/kb/media/77777777-0000-4000-8000-000000000002',
+    name: 'tour', alt: '', width: 640, height: 360, duration_ms: 3000, codecs: ['V_VP9'], thumbnail_url: null, poster_url: null, kept: false, deleted_at: null,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: 'Intro' })),
+    'POST /api/v1/kb/media-uploads': () => json(201, upload), [`GET /api/v1/kb/media-uploads/${upload.id}`]: () => json(200, upload),
+    [`POST /api/v1/kb/media-uploads/${upload.id}/complete`]: () => json(201, media) });
+  open({ articleId: ids.article });
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
+  fireEvent.paste(text, { clipboardData: { files: [new File([new Uint8Array(12)], 'tour.webm', { type: 'video/webm' })] } });
+  await waitFor(() => expect(text).toHaveValue(`Intro\n\n<video controls preload="metadata" src="${media.url}" title="tour"></video>`));
+  expect(calls.find((call) => call.path === '/api/v1/kb/media-uploads')?.body).toEqual({ size: 12, name: 'tour', keep: false });
+  expect(sentParts.slice(-2)).toEqual(['0+8/12', '8+4/12']);
+});
+
+test('leaving the editor stops the videos waiting their turn, and cancels the one the server was starting', async () => {
+  const upload = { id: '77777777-0000-4000-8000-000000000003', kind: 'video', name: 'one', size: 12, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z',
+    media_id: null, created_by: null, created_at: '2026-10-21T00:00:00Z' };
+  let release: () => void = () => undefined;
+  const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: 'Intro' })),
+    'POST /api/v1/kb/media-uploads': () => new Promise<Response>((resolve) => { release = () => resolve(json(201, upload)); }),
+    [`DELETE /api/v1/kb/media-uploads/${upload.id}`]: () => json(204) });
+  const view = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ArticleRoute articleId={ids.article} /></QueryClientProvider>);
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
+  fireEvent.paste(text, { clipboardData: { files: [new File([new Uint8Array(12)], 'one.webm', { type: 'video/webm' }), new File([new Uint8Array(12)], 'two.webm', { type: 'video/webm' })] } });
+  await waitFor(() => expect(calls.filter((call) => call.path === '/api/v1/kb/media-uploads')).toHaveLength(1));
+  view.unmount();
+  await act(async () => { release(); await new Promise((resolve) => { setTimeout(resolve, 50); }); });
+  expect(calls.filter((call) => call.method === 'POST' && call.path === '/api/v1/kb/media-uploads')).toHaveLength(1);
+  expect(calls.some((call) => call.method === 'DELETE' && call.path === `/api/v1/kb/media-uploads/${upload.id}`)).toBe(true);
+});
+
+test('a page the browser kept and shows again from Back uploads videos again', async () => {
+  const upload = { id: '77777777-0000-4000-8000-000000000004', kind: 'video', name: 'tour', size: 12, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z',
+    media_id: null, created_by: null, created_at: '2026-10-21T00:00:00Z' };
+  const media = { id: '77777777-0000-4000-8000-000000000005', kind: 'video', content_type: 'video/webm', size: 12, sha256: 'a'.repeat(64), url: '/api/v1/kb/media/77777777-0000-4000-8000-000000000005',
+    name: 'tour', alt: '', width: 640, height: 360, duration_ms: 3000, codecs: [], thumbnail_url: null, poster_url: null, kept: false, deleted_at: null,
+    created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: 'Intro' })),
+    'POST /api/v1/kb/media-uploads': () => json(201, upload), [`GET /api/v1/kb/media-uploads/${upload.id}`]: () => json(200, upload),
+    [`POST /api/v1/kb/media-uploads/${upload.id}/complete`]: () => json(201, media) });
+  open({ articleId: ids.article });
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
+  // The page goes into the back cache and comes out of it.
+  window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
+  window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+  fireEvent.paste(text, { clipboardData: { files: [new File([new Uint8Array(12)], 'tour.webm', { type: 'video/webm' })] } });
+  await waitFor(() => expect(text).toHaveValue(`Intro\n\n<video controls preload="metadata" src="${media.url}" title="tour"></video>`));
+});
+
+test('Cancel in an upload\'s place stops a video, and a video that fails is thrown away on the server', async () => {
+  const upload = { id: '77777777-0000-4000-8000-000000000006', kind: 'video', name: 'tour', size: 12, offset: 0, part_size: 8, expires_at: '2026-10-22T00:00:00Z',
+    media_id: null, created_by: null, created_at: '2026-10-21T00:00:00Z' };
+  const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, article({ body_md: 'Intro' })),
+    'POST /api/v1/kb/media-uploads': () => json(201, upload), [`GET /api/v1/kb/media-uploads/${upload.id}`]: () => json(200, upload),
+    [`POST /api/v1/kb/media-uploads/${upload.id}/complete`]: () => refusal(400, 'unsupported_codec', 'This video is H.265.'),
+    [`DELETE /api/v1/kb/media-uploads/${upload.id}`]: () => json(204) });
+  open({ articleId: ids.article });
+  const text = await screen.findByRole('textbox', { name: 'Text (Markdown)' });
+  fireEvent.paste(text, { clipboardData: { files: [new File([new Uint8Array(12)], 'tour.webm', { type: 'video/webm' })] } });
+  expect(await screen.findByText('This video is H.265.')).toBeInTheDocument();
+  await waitFor(() => expect(calls.some((call) => call.method === 'DELETE' && call.path === `/api/v1/kb/media-uploads/${upload.id}`)).toBe(true));
+  expect(text).toHaveValue('Intro');
 });

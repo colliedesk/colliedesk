@@ -5,7 +5,7 @@ import { formatBytes } from '../../lib/format-bytes';
 import { RouterLink } from '../../ui/router-link';
 import { mediaApi } from './media-api';
 import type { KBMedia, KBMediaDetails } from './media-api';
-import { mediaName } from './media-grid';
+import { embedFor, mediaName } from './media-grid';
 import { mediaMessages } from './media-messages';
 import { reason } from './kb-tree';
 
@@ -175,14 +175,6 @@ function Usage({ item }: { item: KBMediaDetails }) {
           </ul>}
     </section>
   );
-}
-
-// embedFor is what an article holds to show the item: Markdown for an image, the allowed <video> HTML
-// for a video, as a block of its own.
-export function embedFor(item: KBMedia) {
-  if (item.kind === 'image') return `![${item.alt.replace(/[[\]]/g, '')}](${item.url})`;
-  const title = item.alt ? ` title="${item.alt.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"` : '';
-  return `<video controls preload="metadata" src="${item.url}"${title}></video>`;
 }
 
 function Actions({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDetails; onChanged: () => void; onNotice: Notify; onTrashed: () => void }) {

@@ -176,8 +176,20 @@ test('knowledge base: a WebM uploaded in the media library plays in a published 
   const headers = { Origin: servers.main };
   expect((await page.request.put(`${servers.main}/api/v1/help-center`, { headers, data: { enabled: true, title: 'Video help', locale: 'en' } })).status()).toBe(200);
   const { id: collection } = await (await page.request.post(`${servers.main}/api/v1/kb/collections`, { headers, data: { name: 'Guides' } })).json() as { id: string };
-  expect((await page.request.post(`${servers.main}/api/v1/kb/articles`, { headers,
-    data: { collection_id: collection, title: 'Tour', status: 'published', body_md: `<video controls src="/api/v1/kb/media/${id}"></video>` } })).status()).toBe(201);
+  const { id: article } = await (await page.request.post(`${servers.main}/api/v1/kb/articles`, { headers, data: { collection_id: collection, title: 'Tour', body_md: 'Watch this.' } })).json() as { id: string };
+
+  // The editor's Media button puts the library video in the article; the preview shows it.
+  await page.goto(`${servers.main}/knowledge/articles/${article}`);
+  await page.getByRole('tab', { name: 'Write' }).click();
+  await page.getByRole('textbox', { name: 'Text (Markdown)' }).click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.getByRole('button', { name: 'Media' }).click();
+  await page.getByRole('group', { name: 'Insert from the media library' }).getByRole('button', { name: /^Product tour, video,/ }).click();
+  await expect(page.getByRole('textbox', { name: 'Text (Markdown)' })).toContainText(`<video controls preload="metadata" src="/api/v1/kb/media/${id}" title="Product tour"></video>`);
+  await page.getByRole('tab', { name: 'Preview' }).click();
+  await expect(page.getByRole('region', { name: 'Preview' }).locator('video')).toHaveAttribute('src', `/api/v1/kb/media/${id}`);
+  await page.getByRole('button', { name: 'Save and publish' }).click();
+  await expect(page.getByRole('button', { name: 'Unpublish' })).toBeVisible();
 
   await page.goto(`${servers.main}/help/${slug}/a/1-tour`);
   const player = page.locator('video');

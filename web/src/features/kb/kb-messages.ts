@@ -72,7 +72,7 @@ export const kbMessages = {
   tools: {
     paragraph: 'Text', h1: 'Heading 1', h2: 'Heading 2', h3: 'Heading 3', bold: 'Bold', italic: 'Italic', strike: 'Strikethrough', code: 'Code',
     link: 'Link', bullet: 'Bulleted list', ordered: 'Numbered list', task: 'Checklist', quote: 'Quote', codeBlock: 'Code block', table: 'Table',
-    hr: 'Divider', insertImage: 'Insert image', insertVideo: 'Insert video', search: 'Find and replace', undo: 'Undo', redo: 'Redo',
+    hr: 'Divider', insertImage: 'Upload', insertMedia: 'Media', insertVideo: 'Insert video', search: 'Find and replace', undo: 'Undo', redo: 'Redo',
   },
   videoLink: 'YouTube or Vimeo link',
   videoLinkHelp: 'A watch page, a short link or a Share link. YouTube videos play from youtube-nocookie.com.',
@@ -117,9 +117,11 @@ export const kbMessages = {
   importedNotice: 'Imported from another help desk. The original HTML is kept in the workspace export.',
   // Images
   uploadingImage: (name: string) => `Uploading ${name}…`,
+  uploadingPercent: (name: string, percent: number) => `Uploading ${name}: ${percent}%`,
+  cancelUpload: (name: string) => `Cancel the upload of ${name}`,
   imageAlt: 'image',
-  waitingForImages: 'Saving waits until the images finish uploading.',
-  imageType: (name: string) => `${name} is not a PNG, JPEG, GIF or WebP image.`,
+  waitingForImages: 'Saving waits until the images and videos finish uploading.',
+  imageType: (name: string) => `${name} is not a PNG, JPEG, GIF or WebP image, nor an MP4 or WebM video.`,
   imageTooLarge: (name: string) => `${name} is over 5 MB.`,
   imageFailed: (name: string) => `${name} could not be uploaded. Try again.`,
   imageUploaded: (name: string) => `${name} added.`,
