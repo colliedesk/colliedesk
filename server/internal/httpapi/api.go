@@ -93,6 +93,8 @@ type Config struct {
 	// SignupDisabled turns cloud sign-up off (503 signup_unavailable) while its settings are missing;
 	// serve sets it and logs why rather than refusing to start.
 	SignupDisabled bool
+	// InternalSignups marks the team's own sign-ups in the funnel (INTERNAL_SIGNUP_EMAILS).
+	InternalSignups InternalSignups
 	// Random is the entropy for generated workspace slug suffixes; nil uses crypto/rand.
 	Random io.Reader
 	// Funnel receives the cloud's trial, activation (email channel, reply, teammate) and payment

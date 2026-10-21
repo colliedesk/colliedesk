@@ -97,6 +97,12 @@ func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {
 		}
 		properties["website_visitor_id"] = visitor
 	}
+	if a.config.InternalSignups.Match(verified) {
+		if properties == nil {
+			properties = map[string]any{}
+		}
+		properties["internal"] = true
+	}
 	a.recordFunnel("trial_started", workspace.ID, properties)
 	setSessionCookie(response, result.Token)
 	result.Token = ""
