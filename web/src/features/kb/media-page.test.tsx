@@ -39,10 +39,13 @@ test('the library shows images and videos, a video with its length, and leads to
   open();
   const grid = await screen.findByRole('list', { name: 'Library items' });
   expect(await within(grid).findByRole('button', { name: 'Product tour, video, 1:24, 4.0 KiB, In 1 article' })).toHaveTextContent('1:24');
-  expect(within(grid).getByRole('button', { name: 'Screenshot 1, image, 2.0 KiB, In 1 article' })).toHaveTextContent('In 1 article');
-  expect(await screen.findByText(/37 items not used in any article · 412\.0 MiB/)).toBeInTheDocument();
-  expect(screen.getByText(/5 kept items not used · 18\.0 MiB/)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('link', { name: 'Review' }));
+  // A card shows only what is out of the ordinary: an image without alt text says so; being used is not news.
+  const shot = within(grid).getByRole('button', { name: 'Screenshot 1, image, 2.0 KiB, In 1 article' });
+  expect(shot).toHaveTextContent('2.0 KiB · 800×600No alt');
+  expect(shot).not.toHaveTextContent('In 1 article');
+  // Not used counts every item the Not used page lists, kept ones too.
+  expect((await screen.findByText('42 not used')).closest('p')).toHaveTextContent('42 not used · 430.0 MiB, 5 of them kept');
+  fireEvent.click(screen.getByRole('link', { name: 'Review not used' }));
   expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge/media/unused', search: {}, replace: false });
   fireEvent.click(screen.getByRole('radio', { name: 'Videos' }));
   expect(navigate).toHaveBeenLastCalledWith({ to: '/knowledge/media', search: { kind: 'video' }, replace: false });
@@ -63,8 +66,11 @@ test('the panel saves a name and alt text with the version it read, and a used i
   });
   open('library', { item: id(2) });
   const panel = await screen.findByRole('complementary', { name: 'Product tour' });
-  expect(within(panel).getByText('1920 × 1080')).toBeInTheDocument();
-  expect(within(panel).getByRole('link', { name: 'Getting started' })).toHaveAttribute('href', `/knowledge/articles/${id(9)}`);
+  fireEvent.click(within(panel).getByRole('tab', { name: 'File' }));
+  expect(within(panel).getByText('1920 × 1080')).toBeVisible();
+  fireEvent.click(within(panel).getByRole('tab', { name: 'Used in 1' }));
+  expect(within(panel).getByRole('link', { name: /^Getting started/ })).toHaveAttribute('href', `/knowledge/articles/${id(9)}`);
+  fireEvent.click(within(panel).getByRole('tab', { name: 'Details' }));
   fireEvent.change(within(panel).getByRole('textbox', { name: 'Name' }), { target: { value: 'Tour' } });
   fireEvent.change(within(panel).getByRole('textbox', { name: 'Title for screen readers' }), { target: { value: 'A tour of the inbox' } });
   fireEvent.click(within(panel).getByRole('button', { name: 'Save' }));
@@ -73,6 +79,11 @@ test('the panel saves a name and alt text with the version it read, and a used i
   const alert = await within(panel).findByRole('alert');
   expect(alert).toHaveTextContent('Articles still show this');
   expect(within(alert).getByRole('link', { name: 'Getting started' })).toBeInTheDocument();
+  // Save stays at the panel's foot; Discard puts the fields back.
+  fireEvent.change(within(panel).getByRole('textbox', { name: 'Name' }), { target: { value: 'Other' } });
+  expect(within(panel).getByText('Unsaved changes')).toBeInTheDocument();
+  fireEvent.click(within(panel).getByRole('button', { name: 'Discard' }));
+  expect(within(panel).getByRole('button', { name: 'Save' })).toBeDisabled();
 });
 
 test('the unused page moves the chosen items to the trash after saying how much, and Undo brings that batch back', async () => {
@@ -83,16 +94,19 @@ test('the unused page moves the chosen items to the trash after saying how much,
     'POST /api/v1/kb/media/restore': () => json(200, { results: [{ id: id(3), status: 'restored' }, { id: id(4), status: 'restored' }] }),
   });
   open('unused');
-  expect(await screen.findByText('37 items · 412.0 MiB can be freed')).toBeInTheDocument();
-  expect(screen.getByText(/5 kept items · 18\.0 MiB/)).toBeInTheDocument();
+  // The count is what the list holds, kept items included, and why the kept ones stay is said.
+  expect((await screen.findByText('42 items · 430.0 MiB')).closest('p')).toHaveTextContent('42 items · 430.0 MiB are in no live article.');
+  expect(screen.getByText(/37 are not kept/)).toHaveTextContent('the next on');
+  expect(screen.getByText('5 are kept').closest('p')).toHaveTextContent('they stay until you move them. Files uploaded on the Media page are kept');
   fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Screenshot 3' }));
   fireEvent.click(screen.getByRole('checkbox', { name: 'Select Screenshot 5' }), { shiftKey: true });
   expect(screen.getByText('3 selected')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Move selected to trash' }));
-  const dialog = screen.getByRole('alertdialog', { name: 'Move to the trash?' });
-  expect(dialog).toHaveTextContent('3 items, 24.0 KiB.');
-  expect(dialog).toHaveTextContent('In 1 deleted article');
-  fireEvent.click(within(dialog).getByRole('button', { name: 'Move to trash' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Move 3 to trash' }));
+  const dialog = screen.getByRole('alertdialog', { name: 'Move 3 items to the trash?' });
+  expect(dialog).toHaveTextContent('24.0 KiB. They stay in the trash for 30 days');
+  expect(dialog).toHaveTextContent('1 is in a deleted article');
+  expect(dialog).toHaveTextContent('1 is kept (Screenshot 4); restoring brings it back kept.');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Move 3 to trash' }));
   expect(await screen.findByRole('status')).toHaveTextContent('Moved 2 items to the trash. 1 item is in use again and stayed.');
   expect(calls.find((call) => call.path === '/api/v1/kb/media/trash')?.body).toEqual({ ids: [id(3), id(4), id(5)] });
   fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
@@ -105,16 +119,33 @@ test('move all unused asks again with batch_id until nothing is left, skipping w
   let rounds = 0;
   const calls = serve({ ...base, 'POST /api/v1/kb/media/trash-unused': () => json(200, { trashed: rounds++ === 0 ? 500 : 12, more: rounds === 1, batch_id: batch }) });
   open('unused');
-  fireEvent.click(await screen.findByRole('button', { name: 'Move all unused to trash' }));
-  const dialog = screen.getByRole('alertdialog');
-  expect(dialog).toHaveTextContent('Every unused item: 37 items, 412.0 MiB.');
+  // Not kept: only the items nobody kept go.
+  fireEvent.click(await screen.findByRole('radio', { name: /^Not kept/ }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Move all 37 to trash' }));
+  const dialog = screen.getByRole('alertdialog', { name: 'Move 37 items to the trash?' });
+  expect(dialog).toHaveTextContent('412.0 MiB.');
   expect(dialog).toHaveTextContent('Kept items are skipped.');
-  fireEvent.click(within(dialog).getByRole('button', { name: 'Move to trash' }));
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Move 37 to trash' }));
   expect(await screen.findByText(/Moved 512 items to the trash/)).toBeInTheDocument();
   const sent = calls.filter((call) => call.path === '/api/v1/kb/media/trash-unused').map((call) => call.body as Record<string, unknown>);
   expect(sent).toHaveLength(2);
   expect(sent[0]).toMatchObject({ include_kept: false });
   expect(sent[1]).toMatchObject({ batch_id: batch, before: sent[0]?.before });
+});
+
+test('kept items never lock the clean-up: all of them can go, and the confirmation says the kept ones go too', async () => {
+  const calls = serve({ ...base, 'POST /api/v1/kb/media/trash-unused': () => json(200, { trashed: 42, more: false, batch_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' }) });
+  open('unused');
+  fireEvent.click(await screen.findByRole('button', { name: 'Move all 42 to trash' }));
+  const dialog = screen.getByRole('alertdialog', { name: 'Move 42 items to the trash?' });
+  expect(dialog).toHaveTextContent('5 kept items go too; restoring brings them back kept.');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Move 42 to trash' }));
+  expect(await screen.findByText('Moved 42 items to the trash.')).toBeInTheDocument();
+  expect(calls.find((call) => call.path === '/api/v1/kb/media/trash-unused')?.body).toMatchObject({ include_kept: true });
+  // The kept view moves what is ticked; nothing is locked there either.
+  fireEvent.click(screen.getByRole('radio', { name: /^Kept/ }));
+  fireEvent.click(await screen.findByRole('checkbox', { name: 'Select Screenshot 4' }));
+  expect(screen.getByRole('button', { name: 'Move 1 to trash' })).toBeEnabled();
 });
 
 test('only an admin deletes forever, after a second confirmation that names what goes', async () => {
@@ -243,6 +274,9 @@ test('uploads in progress that this page is not sending are listed, go on with t
     created_by: { agent_id: '99999999-9999-4999-8999-999999999999', name: 'Grace' }, created_at: '2026-10-21T00:00:00Z' };
   const calls = serve({ ...base, 'GET /api/v1/kb/media-uploads': () => json(200, { items: [open_] }), [`DELETE /api/v1/kb/media-uploads/${id(7)}`]: () => json(204) });
   open();
+  // The tray is one line until opened; it says there is an upload from elsewhere.
+  expect(await screen.findByText('1 from elsewhere')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Show the upload' }));
   const section = await screen.findByRole('region', { name: 'Uploads in progress' });
   expect(section).toHaveTextContent('50% · started by Grace');
   const input = section.querySelector('input[type="file"]') as HTMLInputElement;
@@ -260,7 +294,26 @@ test('an agent sees uploads in progress but cancels only their own', async () =>
     created_by: { agent_id: '99999999-9999-4999-8999-999999999999', name: 'Grace' }, created_at: '2026-10-21T00:00:00Z' };
   serve({ ...base, 'GET /api/v1/auth/me': () => json(200, agent), 'GET /api/v1/kb/media-uploads': () => json(200, { items: [open_] }) });
   open();
+  // The tray is one line until opened; it says there is an upload from elsewhere.
+  expect(await screen.findByText('1 from elsewhere')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Show the upload' }));
   const section = await screen.findByRole('region', { name: 'Uploads in progress' });
   await waitFor(() => expect(within(section).queryByRole('button', { name: 'Cancel the upload of tour' })).not.toBeInTheDocument());
   expect(within(section).getByRole('button', { name: /^Resume tour/ })).toBeInTheDocument();
+});
+
+test('a file that cannot go up opens the tray with why, instead of a full bar; Dismiss takes the row away', async () => {
+  serve(base);
+  open();
+  // With nothing open, the panel says what it is for, so opening an item never moves the grid.
+  expect(await screen.findByText(/Select an image or video to see its alt text/)).toBeInTheDocument();
+  const input = document.querySelector('input[type="file"][multiple]') as HTMLInputElement;
+  fireEvent.change(input, { target: { files: [new File(['x'], 'release-notes.txt', { type: 'text/plain' })] } });
+  const tray = await screen.findByRole('region', { name: 'Uploads' });
+  expect(tray).toHaveTextContent('1 not uploaded');
+  expect(within(tray).getByRole('alert')).toHaveTextContent('Not an image or video (PNG, JPEG, GIF, WebP, MP4, WebM).');
+  expect(within(tray).queryByRole('progressbar')).not.toBeInTheDocument();
+  expect(within(tray).getByRole('button', { name: 'Collapse uploads' })).toHaveAttribute('aria-expanded', 'true');
+  fireEvent.click(within(tray).getByRole('button', { name: 'Dismiss release-notes.txt' }));
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Uploads' })).not.toBeInTheDocument());
 });

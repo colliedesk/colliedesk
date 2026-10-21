@@ -52,7 +52,11 @@ export function KBDialog({ title, role = 'dialog', phone = 'sheet', className, f
   return (
     <div className="dialog-backdrop kb-backdrop" data-phone={phone} onMouseDown={(event) => { keepDialogFocus(event); if (event.target === event.currentTarget) onClose(); }}>
       <div ref={root} className={`kb-dialog${className ? ` ${className}` : ''}`} role={role} aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={describedBy}
-        onKeyDown={dialogKeys(root, onClose)}>
+        onKeyDown={(event) => {
+          // A dialog over a panel closes alone: the panel under it does not hear its Escape.
+          if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); }
+          dialogKeys(root, onClose)(event);
+        }}>
         <span className="kb-grab" aria-hidden="true" />
         <header className="kb-dialog-head">
           <h2 id={`${id}-title`}>{title}</h2>

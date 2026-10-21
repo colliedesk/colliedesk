@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import type { FormEvent, RefObject } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import type { FormEvent, KeyboardEvent, RefObject } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { formatBytes } from '../../lib/format-bytes';
 import { RouterLink } from '../../ui/router-link';
+import { Icon } from './editor/icons';
+import { KBDialog } from './kb-ui';
 import { mediaApi } from './media-api';
 import type { KBMedia, KBMediaDetails } from './media-api';
 import { embedFor, mediaName } from './media-grid';
@@ -10,72 +12,65 @@ import { mediaMessages } from './media-messages';
 import { reason } from './kb-tree';
 import { posterFrom } from './video-poster';
 
-// MediaDetail is the panel of one library item: what it is, where it is used, its name and alt text
-// (a video's title), a video's poster, and what can be done to it.
-export function MediaDetail({ id, onChanged, onClose }: { id: string; onChanged: () => void; onClose: () => void }) {
+// MediaDetail is the panel of one library item: its preview, what can be done to it, then three tabs
+// (Details: name, alt text or a video's title, kept; Used in: the articles; File: the facts and a video's
+// poster) and Save at its foot. Each tab fits the panel, so nothing in it is reached by scrolling. Without
+// an item it says what it is for: the column stays, and opening an item never moves the grid. On a phone
+// it is a sheet over the grid, which keeps its place.
+export function MediaDetail({ id, onChanged, onClose }: { id?: string; onChanged: () => void; onClose: () => void }) {
+  if (!id) {
+    return <aside className="media-detail" data-empty="true" aria-label={mediaMessages.details}><p className="media-detail-none">{mediaMessages.noneSelected}</p></aside>;
+  }
+  return <OpenDetail key={id} id={id} onChanged={onChanged} onClose={onClose} />;
+}
+
+function OpenDetail({ id, onChanged, onClose }: { id: string; onChanged: () => void; onClose: () => void }) {
   const details = useQuery({ queryKey: ['kb-media-details', id], queryFn: () => mediaApi.details(id) });
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { heading.current?.focus(); }, [id]);
   const refresh = () => { void details.refetch(); onChanged(); };
-  // What the last change said, with an Undo when it has one. It lives here, above the body, which is drawn
-  // again for each new version of the item.
+  // What the last change said, with an Undo when it has one. It floats over the panel's foot, so it moves nothing.
   const [notice, setNotice] = useState<{ text: string; undo?: () => void }>();
-  // The notice is at the top of the panel; on a phone the person is at its foot, so it comes into view.
-  const noticeRef = useRef<HTMLParagraphElement>(null);
-  useEffect(() => { if (notice) noticeRef.current?.scrollIntoView?.({ block: 'nearest' }); }, [notice]);
+  const name = details.data ? mediaName(details.data) : mediaMessages.details;
   return (
-    <aside className="media-detail" aria-labelledby="media-detail-heading" onKeyDown={(event) => { if (event.key === 'Escape' && !(event.target instanceof HTMLVideoElement)) onClose(); }}>
-      <div className="media-detail-head">
-        <h2 id="media-detail-heading" tabIndex={-1} ref={heading}>{details.data ? mediaName(details.data) : mediaMessages.details}</h2>
-        <button type="button" onClick={onClose} aria-label={mediaMessages.closeDetails}>{mediaMessages.close}</button>
-      </div>
-      {details.isPending && <p role="status" className="empty-copy">{mediaMessages.loading}</p>}
-      {details.isError && <p role="alert" className="error-copy">{mediaMessages.listFailed}{' '}
-        <button type="button" className="link-action" onClick={() => void details.refetch()}>{mediaMessages.retry}</button></p>}
-      {notice && <p ref={noticeRef} role="status" className="media-toast">{notice.text}{' '}
-        {notice.undo && <button type="button" className="link-action" onClick={notice.undo}>{mediaMessages.undo}</button>}</p>}
-      {details.data && <DetailBody key={details.data.updated_at} item={details.data} onChanged={refresh} onNotice={setNotice} onTrashed={() => { onChanged(); onClose(); }} />}
-    </aside>
+    <>
+      <div className="media-detail-scrim" aria-hidden="true" onClick={onClose} />
+      <aside className="media-detail" aria-labelledby="media-detail-heading" data-open="true" data-modal="mobile"
+        onKeyDown={(event) => { if (event.key === 'Escape' && !(event.target instanceof HTMLVideoElement) && !event.defaultPrevented) onClose(); }}>
+        <span className="kb-grab" aria-hidden="true" />
+        <header className="media-detail-head">
+          <h2 id="media-detail-heading" tabIndex={-1} ref={heading} title={name}>{name}</h2>
+          <button type="button" className="icon-button" onClick={onClose} aria-label={mediaMessages.closeDetails}><Icon name="close" /></button>
+        </header>
+        {details.isPending && <p role="status" className="empty-copy media-detail-pad">{mediaMessages.loading}</p>}
+        {details.isError && <p role="alert" className="error-copy media-detail-pad">{mediaMessages.listFailed}{' '}
+          <button type="button" className="link-action" onClick={() => void details.refetch()}>{mediaMessages.retry}</button></p>}
+        {details.data && <DetailBody key={details.data.updated_at} item={details.data} onChanged={refresh} onNotice={setNotice} onTrashed={() => { onChanged(); onClose(); }} />}
+        {notice && <p role="status" className="media-notice">{notice.text}
+          {notice.undo && <button type="button" onClick={notice.undo}>{mediaMessages.undo}</button>}
+          <button type="button" className="media-notice-close" aria-label={mediaMessages.dismiss} onClick={() => setNotice(undefined)}><Icon name="close" /></button></p>}
+      </aside>
+    </>
   );
 }
 
 type Notify = (notice: { text: string; undo?: () => void } | undefined) => void;
+type Tab = 'details' | 'used' | 'file';
 
 function DetailBody({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDetails; onChanged: () => void; onNotice: Notify; onTrashed: () => void }) {
+  const id = useId();
   const video = item.kind === 'video';
   const player = useRef<HTMLVideoElement>(null);
-  return (
-    <div className="media-detail-body">
-      <div className="media-detail-preview">
-        {video
-          ? <video ref={player} controls preload="metadata" src={item.url} poster={item.poster_url ?? undefined} />
-          : <img src={item.url} alt={item.alt} />}
-      </div>
-      <MetaForm item={item} onSaved={() => { onNotice({ text: mediaMessages.saved }); onChanged(); }} />
-      <section aria-labelledby="media-facts">
-        <h3 id="media-facts">{mediaMessages.facts}</h3>
-        <dl className="media-facts">
-          <dt>{mediaMessages.factType}</dt><dd>{item.content_type}{item.codecs.length > 0 ? ` (${item.codecs.join(', ')})` : ''}</dd>
-          {item.width !== null && item.height !== null && <><dt>{mediaMessages.factDimensions}</dt><dd>{mediaMessages.dimensions(item.width, item.height)}</dd></>}
-          {item.duration_ms !== null && <><dt>{mediaMessages.factLength}</dt><dd>{mediaMessages.duration(item.duration_ms)}</dd></>}
-          <dt>{mediaMessages.factSize}</dt><dd>{formatBytes(item.size)}</dd>
-        </dl>
-      </section>
-      {video && <Poster item={item} player={player} onSaved={() => { onNotice({ text: mediaMessages.posterSaved }); onChanged(); }} />}
-      <Usage item={item} />
-      <Actions item={item} onChanged={onChanged} onNotice={onNotice} onTrashed={onTrashed} />
-    </div>
-  );
-}
-
-function MetaForm({ item, onSaved }: { item: KBMediaDetails; onSaved: () => void }) {
+  const [tab, setTab] = useState<Tab>('details');
   const [name, setName] = useState(item.name);
   const [alt, setAlt] = useState(item.alt);
   const [kept, setKept] = useState(item.kept);
-  const [state, setState] = useState<{ saving?: boolean; saved?: boolean; problem?: string }>({});
+  const [state, setState] = useState<{ saving?: boolean; problem?: string }>({});
   const changed = name !== item.name || alt !== item.alt || kept !== item.kept;
+  const discard = () => { setName(item.name); setAlt(item.alt); setKept(item.kept); setState({}); };
   const save = async (event: FormEvent) => {
     event.preventDefault();
+    if (!changed || state.saving) return;
     setState({ saving: true });
     try {
       await mediaApi.update(item.id, {
@@ -83,36 +78,74 @@ function MetaForm({ item, onSaved }: { item: KBMediaDetails; onSaved: () => void
         ...(name !== item.name ? { name } : {}), ...(alt !== item.alt ? { alt } : {}), ...(kept !== item.kept ? { kept } : {}),
       });
       setState({});
-      onSaved();
+      onNotice({ text: mediaMessages.saved });
+      onChanged();
     } catch (error) {
       setState({ problem: reason(error, mediaMessages.saveFailed) });
     }
   };
-  const video = item.kind === 'video';
+  const live = item.articles.filter((article) => !article.in_trash && article.current).length;
+  const tabs: [Tab, string][] = [['details', mediaMessages.details], ['used', mediaMessages.usedInCount(live)], ['file', mediaMessages.facts]];
+  // Arrows move between the tabs (one Tab stop), as in a tab list.
+  const tabKeys = (event: KeyboardEvent<HTMLButtonElement>, at: number) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    const next = tabs[(at + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]![0];
+    setTab(next);
+    document.getElementById(`${id}-${next}-tab`)?.focus();
+  };
   return (
-    <form className="media-form" onSubmit={(event) => void save(event)}>
-      <label>{mediaMessages.nameLabel}
-        <input value={name} maxLength={200} onChange={(event) => { setName(event.target.value); setState({}); }} />
-      </label>
-      <label>{video ? mediaMessages.titleLabel : mediaMessages.altLabel}
-        <textarea value={alt} maxLength={500} rows={2} aria-describedby="media-alt-help" onChange={(event) => { setAlt(event.target.value); setState({}); }} />
-      </label>
-      <p id="media-alt-help" className="kb-hint">{video ? mediaMessages.titleHelp : mediaMessages.altHelp}</p>
-      <label className="checkbox-row">
-        <input type="checkbox" checked={kept} aria-describedby="media-keep-help" onChange={(event) => { setKept(event.target.checked); setState({}); }} />
-        {mediaMessages.keep}
-      </label>
-      <p id="media-keep-help" className="kb-hint">{mediaMessages.keepHelp}</p>
-      <div className="button-row">
-        <button type="submit" className="primary-action" disabled={!changed || state.saving}>{mediaMessages.save}</button>
+    <form className="media-detail-body" onSubmit={(event) => void save(event)}>
+      <div className="media-detail-main">
+        <div className="media-detail-preview">
+          {video
+            ? <video ref={player} controls preload="metadata" src={item.url} poster={item.poster_url ?? undefined} />
+            : <img src={item.url} alt={item.alt} />}
+        </div>
+        <Actions item={item} onChanged={onChanged} onNotice={onNotice} onTrashed={onTrashed} />
+        <div className="media-tabs" role="tablist" aria-label={mediaMessages.itemTabs}>
+          {tabs.map(([name_, label], at) => (
+            <button key={name_} type="button" role="tab" id={`${id}-${name_}-tab`} aria-selected={tab === name_} aria-controls={`${id}-${name_}`} tabIndex={tab === name_ ? 0 : -1}
+              onClick={() => setTab(name_)} onKeyDown={(event) => tabKeys(event, at)}>{label}</button>
+          ))}
+        </div>
+        <div className="media-tabpanel" role="tabpanel" id={`${id}-details`} aria-labelledby={`${id}-details-tab`} hidden={tab !== 'details'}>
+          <label className="field">{mediaMessages.nameLabel}
+            <input value={name} maxLength={200} onChange={(event) => { setName(event.target.value); setState({}); }} />
+          </label>
+          <label className="field">{video ? mediaMessages.titleLabel : mediaMessages.altLabel}
+            <textarea value={alt} maxLength={500} rows={2} aria-describedby={`${id}-alt-help`} onChange={(event) => { setAlt(event.target.value); setState({}); }} />
+          </label>
+          <p id={`${id}-alt-help`} className="kb-hint">{video ? mediaMessages.titleHelp : mediaMessages.altHelp}</p>
+          <label className="media-keep">
+            <input type="checkbox" checked={kept} aria-describedby={`${id}-keep-help`} onChange={(event) => { setKept(event.target.checked); setState({}); }} />
+            <span>{mediaMessages.keep}</span>
+            <span id={`${id}-keep-help`} className="kb-hint">{live > 0 ? mediaMessages.keepHelpInUse : mediaMessages.keepHelp}</span>
+          </label>
+        </div>
+        <div className="media-tabpanel" role="tabpanel" id={`${id}-used`} aria-labelledby={`${id}-used-tab`} hidden={tab !== 'used'}>
+          <Usage item={item} />
+        </div>
+        <div className="media-tabpanel" role="tabpanel" id={`${id}-file`} aria-labelledby={`${id}-file-tab`} hidden={tab !== 'file'}>
+          <dl className="media-facts">
+            <dt>{mediaMessages.factType}</dt><dd>{item.content_type}{item.codecs.length > 0 ? ` (${item.codecs.join(', ')})` : ''}</dd>
+            {item.width !== null && item.height !== null && <><dt>{mediaMessages.factDimensions}</dt><dd>{mediaMessages.dimensions(item.width, item.height)}</dd></>}
+            {item.duration_ms !== null && <><dt>{mediaMessages.factLength}</dt><dd>{mediaMessages.duration(item.duration_ms)}</dd></>}
+            <dt>{mediaMessages.factSize}</dt><dd>{formatBytes(item.size)}</dd>
+          </dl>
+          {video && <Poster item={item} player={player} onSaved={() => { onNotice({ text: mediaMessages.posterSaved }); onChanged(); }} />}
+        </div>
       </div>
-      {state.problem && <p role="alert" className="error-copy">{state.problem}</p>}
+      <footer className="media-detail-foot">
+        <span className="media-save-state" role={state.problem ? 'alert' : undefined}>{state.problem ?? (changed ? mediaMessages.unsavedChanges : '')}</span>
+        <button type="button" disabled={!changed || state.saving} onClick={discard}>{mediaMessages.discard}</button>
+        <button type="submit" className="primary-action" disabled={!changed || state.saving}>{mediaMessages.save}</button>
+      </footer>
     </form>
   );
 }
 
 function Poster({ item, player, onSaved }: { item: KBMediaDetails; player: RefObject<HTMLVideoElement | null>; onSaved: () => void }) {
-  const [state, setState] = useState<{ busy?: boolean; saved?: boolean; problem?: string }>({});
+  const [state, setState] = useState<{ busy?: boolean; problem?: string }>({});
   const file = useRef<HTMLInputElement>(null);
   const send = async (image: Promise<Blob> | Blob, failed: string) => {
     setState({ busy: true });
@@ -133,10 +166,9 @@ function Poster({ item, player, onSaved }: { item: KBMediaDetails; player: RefOb
     void send(posterFrom(current), mediaMessages.frameFailed);
   };
   return (
-    <section aria-labelledby="media-poster">
+    <section className="media-poster" aria-labelledby="media-poster">
       <h3 id="media-poster">{mediaMessages.poster}</h3>
-      <p className="kb-hint">{item.poster_url ? mediaMessages.posterHelp : mediaMessages.noPoster}</p>
-      <p className="kb-hint">{mediaMessages.chooseFrameHelp}</p>
+      <p className="kb-hint">{item.poster_url ? mediaMessages.posterHelp : mediaMessages.noPoster} {mediaMessages.chooseFrameHelp}</p>
       <div className="button-row">
         <button type="button" disabled={state.busy} onClick={useFrame}>{mediaMessages.useThisFrame}</button>
         <button type="button" disabled={state.busy} onClick={() => file.current?.click()}>{mediaMessages.uploadPoster}</button>
@@ -149,21 +181,19 @@ function Poster({ item, player, onSaved }: { item: KBMediaDetails; player: RefOb
 }
 
 function Usage({ item }: { item: KBMediaDetails }) {
-  return (
-    <section aria-labelledby="media-used-in">
-      <h3 id="media-used-in">{mediaMessages.usedInHeading}</h3>
-      {item.articles.length === 0
-        ? <p className="muted-copy">{mediaMessages.notUsedAnywhere}</p>
-        : <ul className="media-articles">
-            {item.articles.map((article) => (
-              <li key={article.id}>
-                <RouterLink href={`/knowledge/articles/${article.id}`}>{article.title}</RouterLink>
-                <span className="kb-hint"> #{article.number}{article.in_trash ? ` · ${mediaMessages.inTrash}` : ''}{article.current ? '' : ` · ${mediaMessages.olderVersion}`}</span>
-              </li>
-            ))}
-          </ul>}
-    </section>
-  );
+  return item.articles.length === 0
+    ? <p className="muted-copy">{mediaMessages.notUsedAnywhere}</p>
+    : <ul className="media-used">
+        {item.articles.map((article) => (
+          <li key={article.id}>
+            <RouterLink href={`/knowledge/articles/${article.id}`}>
+              <span className="media-used-title">{article.title}</span>
+              <span className="kb-hint">#{article.number}{article.in_trash ? ` · ${mediaMessages.inTrash}` : ''}{article.current ? '' : ` · ${mediaMessages.olderVersion}`}</span>
+              <span className="kb-dot-status" data-status={article.status}>{article.status === 'published' ? mediaMessages.published : mediaMessages.draft}</span>
+            </RouterLink>
+          </li>
+        ))}
+      </ul>;
 }
 
 function Actions({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDetails; onChanged: () => void; onNotice: Notify; onTrashed: () => void }) {
@@ -188,6 +218,7 @@ function Actions({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDetail
       onNotice({ text: mediaMessages.replaced(done.article_ids.length), undo: () => void undoReplace(done.id) });
       onChanged();
     } catch (error) {
+      setReplacing(false);
       setProblem(reason(error, mediaMessages.actionFailed));
     }
   };
@@ -200,37 +231,34 @@ function Actions({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDetail
       setProblem(reason(error, mediaMessages.actionFailed));
     }
   };
-  const [copied, setCopied] = useState(false);
   return (
-    <section className="media-actions" aria-label={mediaMessages.details}>
-      <div className="button-row">
-        <button type="button" onClick={() => void navigator.clipboard.writeText(embedFor(item)).then(() => setCopied(true))}>{mediaMessages.copyEmbed}</button>
-        <a className="button-link" href={`/api/v1/kb/media/${item.id}?download=1`} download>{mediaMessages.download}</a>
-        <button type="button" aria-expanded={replacing} onClick={() => setReplacing(!replacing)}>{mediaMessages.replace}</button>
-        <button type="button" className="danger-action" onClick={() => void trash()}>{mediaMessages.moveToTrash}</button>
-        {copied && <span role="status" className="muted-copy">{mediaMessages.copied}</span>}
+    <div className="media-actions">
+      <div className="media-action-row">
+        <button type="button" aria-label={mediaMessages.copyEmbed} title={mediaMessages.copyEmbed} onClick={() => void navigator.clipboard.writeText(embedFor(item)).then(() => onNotice({ text: mediaMessages.copied }))}><Icon name="copy" />{mediaMessages.embed}</button>
+        <a className="button-link" href={`/api/v1/kb/media/${item.id}?download=1`} download><Icon name="download" />{mediaMessages.download}</a>
+        <button type="button" aria-haspopup="dialog" onClick={() => setReplacing(true)}><Icon name="replace" />{mediaMessages.replace}</button>
+        <button type="button" className="danger-action media-trash-button" aria-label={mediaMessages.moveToTrash} data-tip={mediaMessages.moveToTrash} onClick={() => void trash()}><Icon name="trash" /></button>
       </div>
-      {problem && <div role="alert" className="error-copy">
+      {problem && <div role="alert" className="error-copy media-problem">
         <p>{problem}</p>
         {problem === mediaMessages.inUseRefused && <ul className="media-articles">
           {live.map((article) => <li key={article.id}><RouterLink href={`/knowledge/articles/${article.id}`}>{article.title}</RouterLink></li>)}
         </ul>}
       </div>}
-      {replacing && <ReplacePicker item={item} onPick={(other) => void replace(other)} />}
-    </section>
+      {replacing && <ReplacePicker item={item} onPick={(other) => void replace(other)} onClose={() => setReplacing(false)} />}
+    </div>
   );
 }
 
-// ReplacePicker lists the other items of the same kind, the newest first, with a search.
-function ReplacePicker({ item, onPick }: { item: KBMedia; onPick: (other: KBMedia) => void }) {
+// ReplacePicker lists the other items of the same kind, the newest first, with a search, in a dialog.
+function ReplacePicker({ item, onPick, onClose }: { item: KBMedia; onPick: (other: KBMedia) => void; onClose: () => void }) {
   const [text, setText] = useState('');
   const [q, setQ] = useState('');
   useEffect(() => { const timer = window.setTimeout(() => setQ(text.trim()), 250); return () => window.clearTimeout(timer); }, [text]);
   const others = useQuery({ queryKey: ['kb-media', { kind: item.kind, q, for: 'replace' }], queryFn: ({ signal }) => mediaApi.list({ kind: item.kind, q: q || undefined }, signal) });
   const items = (others.data?.items ?? []).filter((other) => other.id !== item.id);
   return (
-    <div className="media-replace" role="group" aria-labelledby="media-replace-heading">
-      <h3 id="media-replace-heading">{mediaMessages.replaceHeading(item.kind)}</h3>
+    <KBDialog title={mediaMessages.replaceHeading(item.kind)} phone="full" closeLabel={mediaMessages.close} className="media-replace" onClose={onClose}>
       <p className="kb-hint">{mediaMessages.replaceHelp}</p>
       <input type="search" value={text} placeholder={mediaMessages.search} aria-label={mediaMessages.search} onChange={(event) => setText(event.target.value)} />
       {others.isSuccess && items.length === 0 && <p className="muted-copy">{mediaMessages.noMatches}</p>}
@@ -244,6 +272,6 @@ function ReplacePicker({ item, onPick }: { item: KBMedia; onPick: (other: KBMedi
           </li>
         ))}
       </ul>
-    </div>
+    </KBDialog>
   );
 }
