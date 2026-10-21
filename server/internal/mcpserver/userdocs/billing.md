@@ -54,8 +54,8 @@ There is no free plan; every workspace starts with the free trial. Unlimited, fo
 than 25 agents at $349 per month billed yearly, is coming soon.
 
 Founding is limited to 10 subscriptions. While a Founding slot is free, the billing page and the locked page offer Founding only
-($99 every 3 months, $396 a year), with a link to self-host for free; a workspace that does not fit Founding (more than 10 agents or
-20 GiB) still sees every plan. When all 10 are taken Founding is closed for good and the pages offer the other plans.
+($99 every 3 months, $396 a year), with a link to self-host for free; a workspace that does not fit Founding (its 10-agent or
+20 GiB cap) still sees every plan. When all 10 are taken Founding is closed for good and the pages offer the other plans.
 
 When all seats of a plan are taken, the refusal names the next plan up (Solo, then Small, then
 Team, then Team 25). Switch plans under **Manage billing**.
