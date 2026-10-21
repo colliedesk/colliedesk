@@ -244,3 +244,82 @@ test('alt text from the picker still goes in when the item was saved since witho
   expect(versions).toEqual([bare.updated_at, '2026-10-04T00:00:00Z']);
   vi.unstubAllGlobals();
 });
+
+// A window as wide as a phone (kb-ui.tsx usePhone), switched on and off in a test.
+function phoneScreen(on = true) {
+  const listeners = new Set<() => void>();
+  const query = { get matches() { return state.on; }, addEventListener: (_: string, listener: () => void) => listeners.add(listener), removeEventListener: (_: string, listener: () => void) => listeners.delete(listener) };
+  const state = { on };
+  const other = { matches: false, addEventListener: () => undefined, removeEventListener: () => undefined };
+  vi.stubGlobal('matchMedia', (text: string) => (text.includes('44rem') ? query : other));
+  return (next: boolean) => { state.on = next; act(() => { for (const listener of listeners) listener(); }); };
+}
+const libraryItem = (n: number, fields: Record<string, unknown> = {}) => ({ id: `aaaaaaaa-aaaa-4aaa-8aaa-${String(n).padStart(12, '0')}`, kind: 'image', content_type: 'image/png', size: 10, sha256: 'a'.repeat(64),
+  url: `/api/v1/kb/images/aaaaaaaa-aaaa-4aaa-8aaa-${String(n).padStart(12, '0')}`, name: `Shot ${n}`, alt: '', width: 10, height: 10, duration_ms: null, codecs: [], thumbnail_url: null,
+  poster_url: null, kept: true, deleted_at: null, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z', ...fields });
+async function withLibrary(items: unknown[], answer: (url: string, init: RequestInit) => Response | undefined = () => undefined) {
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => answer(url, init) ?? new Response(JSON.stringify({ items, next_cursor: null }), { status: 200 })));
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  let handle: EditorHandle | undefined;
+  render(<QueryClientProvider client={new QueryClient()}><CodeMirrorEditor initial="Intro" uploads={never} label="Text" describedBy="help" invalid={false} mode="edit"
+    onChange={() => undefined} onReady={(ready) => { handle = ready; }} /></QueryClientProvider>);
+  await waitFor(() => expect(handle).toBeDefined());
+  fireEvent.click(screen.getByRole('button', { name: /^Insert/ }));
+  fireEvent.click(screen.getByRole('menuitem', { name: /^From the media library/ }));
+  return () => handle!;
+}
+
+test('when one alt text of several fails to save, Insert again saves the rest over the versions already saved and inserts all', async () => {
+  const sent: string[] = [];
+  let failB = true;
+  const handle = await withLibrary([libraryItem(1), libraryItem(2)], (url, init) => {
+    if (init.method !== 'PATCH') return undefined;
+    const body = JSON.parse(init.body as string) as { updated_at: string; alt: string };
+    sent.push(`${url.slice(-2)} ${body.updated_at}`);
+    if (url.endsWith('02') && failB) { failB = false; return new Response(JSON.stringify({ error: { code: 'internal', message: 'x' } }), { status: 500 }); }
+    // A's first save stored it: a second one from the old version would be refused.
+    if (url.endsWith('01') && body.updated_at === '2026-10-01T00:00:00Z' && sent.filter((line) => line.startsWith('01')).length > 1) return new Response(JSON.stringify({ error: { code: 'changed_elsewhere', message: 'Changed.' } }), { status: 409 });
+    return new Response(JSON.stringify(libraryItem(Number(url.slice(-2)), { alt: body.alt, updated_at: '2026-10-05T00:00:00Z' })), { status: 200 });
+  });
+  const picker = screen.getByRole('dialog', { name: 'Insert from the media library' });
+  fireEvent.click(await within(picker).findByRole('option', { name: /^Shot 1, image/ }));
+  fireEvent.click(within(picker).getByRole('option', { name: /^Shot 2, image/ }));
+  fireEvent.change(within(picker).getByRole('textbox', { name: 'Alt text for Shot 1' }), { target: { value: 'One' } });
+  fireEvent.change(within(picker).getByRole('textbox', { name: 'Alt text for Shot 2' }), { target: { value: 'Two' } });
+  fireEvent.click(within(picker).getByRole('button', { name: 'Insert 2' }));
+  expect(await within(picker).findByRole('alert')).toBeInTheDocument();
+  fireEvent.click(within(picker).getByRole('button', { name: 'Insert 2' }));
+  await waitFor(() => expect(handle().markdown().trimEnd()).toBe('Intro\n\n![One](/api/v1/kb/images/aaaaaaaa-aaaa-4aaa-8aaa-000000000001)\n\n![Two](/api/v1/kb/images/aaaaaaaa-aaaa-4aaa-8aaa-000000000002)'));
+  vi.unstubAllGlobals();
+});
+
+test('on a phone the alt text step takes the focus, comes only with a pick, and Back gives the grid back its focus', async () => {
+  phoneScreen();
+  await withLibrary([libraryItem(1)]);
+  const picker = screen.getByRole('dialog', { name: 'Insert from the media library' });
+  const option = await within(picker).findByRole('option', { name: /^Shot 1, image/ });
+  option.focus();
+  fireEvent.keyDown(option, { key: 'Enter' });
+  // Nothing picked: no empty step.
+  expect(screen.queryByRole('dialog', { name: /^Alt text for/ })).not.toBeInTheDocument();
+  fireEvent.click(option);
+  fireEvent.click(within(picker).getByRole('button', { name: 'Next: alt text' }));
+  const step = screen.getByRole('dialog', { name: 'Alt text for 1 item' });
+  await waitFor(() => expect(step.contains(document.activeElement)).toBe(true));
+  fireEvent.click(within(step).getAllByRole('button', { name: 'Back to the library' })[0]!);
+  await waitFor(() => expect(screen.getByRole('dialog', { name: 'Insert from the media library' }).contains(document.activeElement)).toBe(true));
+  vi.unstubAllGlobals();
+});
+
+test('the toolbar keeps one Tab stop when the window turns phone-sized and the button that held it is gone', async () => {
+  const toPhone = phoneScreen(false);
+  await make('Text');
+  const toolbar = screen.getByRole('toolbar', { name: 'Formatting' });
+  within(toolbar).getByRole('button', { name: /^Bold/ }).focus();
+  fireEvent.keyDown(document.activeElement!, { key: 'End' });
+  fireEvent.keyDown(document.activeElement!, { key: 'ArrowLeft' });
+  expect(document.activeElement).toHaveAccessibleName(/^Find and replace/);
+  toPhone(true);
+  expect(within(toolbar).getAllByRole('button').filter((button) => button.tabIndex === 0 && !button.hasAttribute('disabled'))).toHaveLength(1);
+  vi.unstubAllGlobals();
+});

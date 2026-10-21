@@ -188,7 +188,10 @@ export default function CodeMirrorEditor({ initial, uploads, label, describedBy,
   };
 
   const editing = mode !== 'preview' && !!active;
-  const stop = (rover === 'undo' && !active?.canUndo) || (rover === 'redo' && !active?.canRedo) ? 'bold' : rover;
+  // The Tab stop falls back to Bold when its button is disabled (Undo with nothing to undo) or not in this layout
+  // (a phone's toolbar has Insert, Bold, Italic, Link and More only).
+  const onPhone = ['insert', 'bold', 'italic', 'link', 'more'];
+  const stop = (rover === 'undo' && !active?.canUndo) || (rover === 'redo' && !active?.canRedo) || (phone && !onPhone.includes(rover)) ? 'bold' : rover;
   const t = kbMessages.tools;
   const tool = (name: IconName, text: string, keys: string, run: (view: EditorView) => unknown, pressed?: boolean, disabled?: boolean) => (
     <button type="button" data-tool={name} className="md-tool" aria-label={`${text}${keys ? ` (${keys})` : ''}`} data-tip={text} aria-pressed={pressed}

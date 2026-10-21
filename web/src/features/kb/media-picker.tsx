@@ -38,6 +38,8 @@ export function MediaPicker({ onInsert, onUpload, onClose }: { onInsert: (items:
   const [focus, setFocus] = useState(0);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
+  // saved holds the versions this picker already stored, so a second Insert after a failure goes from them.
+  const saved = useRef(new Map<string, KBMedia>());
   const grid = useRef<HTMLUListElement>(null);
   const toggle = (item: KBMedia) => setPicked((current) => (current.some((each) => each.id === item.id) ? current.filter((each) => each.id !== item.id) : [...current, item]));
   const altOf = (item: KBMedia) => alts[item.id] ?? item.alt;
@@ -52,13 +54,18 @@ export function MediaPicker({ onInsert, onUpload, onClose }: { onInsert: (items:
       // The alt text typed here goes to the library; kept is sent as it is, since the server keeps an item whose
       // alt text a person writes unless told otherwise.
       // Each pick as the list holds it now: a poster drawn since the pick is a newer version of it.
-      const saved = await Promise.all(picked.map(async (pick) => {
-        const item = items.find((each) => each.id === pick.id) ?? pick;
+      // One that fails leaves the others saved: their new versions are kept for the next try.
+      const results = await Promise.allSettled(picked.map(async (pick) => {
+        const item = saved.current.get(pick.id) ?? items.find((each) => each.id === pick.id) ?? pick;
         const alt = altOf(pick).trim();
         if (alt === item.alt) return item;
-        return updateFields(item, { alt, kept: item.kept });
+        const stored = await updateFields(item, { alt, kept: item.kept });
+        saved.current.set(pick.id, stored);
+        return stored;
       }));
-      onInsert(saved);
+      const failed = results.find((result) => result.status === 'rejected');
+      if (failed) throw failed.reason;
+      onInsert(results.map((result) => (result as PromiseFulfilledResult<KBMedia>).value));
     } catch (error) {
       setProblem(reason(error, kbMessages.pickerSaveFailed));
       setBusy(false);
@@ -88,7 +95,7 @@ export function MediaPicker({ onInsert, onUpload, onClose }: { onInsert: (items:
     if (event.key === ' ') { event.preventDefault(); const item = items[here]; if (item) toggle(item); return; }
     if (event.key === 'Enter') {
       event.preventDefault();
-      if (phone) setStep('alt');
+      if (phone) { if (picked.length > 0) setStep('alt'); }
       else if (ready) void insert();
       else document.getElementById(`${id}-alt-${missing[0]?.id}`)?.focus();
     }
@@ -113,7 +120,7 @@ export function MediaPicker({ onInsert, onUpload, onClose }: { onInsert: (items:
   const insertLabel = kbMessages.insertCount(picked.length);
   if (phone && step === 'alt') {
     return (
-      <KBDialog title={kbMessages.pickerAltHeading(picked.length)} phone="full" className="picker picker-alts" returnFocus={false} onClose={() => setStep('pick')} closeLabel={kbMessages.pickerBack}
+      <KBDialog key="alt" title={kbMessages.pickerAltHeading(picked.length)} phone="full" className="picker picker-alts" returnFocus={false} onClose={() => setStep('pick')} closeLabel={kbMessages.pickerBack}
         footer={<>
           <button type="button" onClick={() => setStep('pick')}>{kbMessages.pickerBack}</button>
           <button type="button" className="primary-action" disabled={!ready || busy} onClick={() => void insert()}>{insertLabel}</button>
@@ -125,7 +132,7 @@ export function MediaPicker({ onInsert, onUpload, onClose }: { onInsert: (items:
     );
   }
   return (
-    <KBDialog title={mediaMessages.pickerHeading} phone="full" className="picker" returnFocus={false} closeLabel={mediaMessages.close} onClose={onClose}
+    <KBDialog key="pick" title={mediaMessages.pickerHeading} phone="full" className="picker" returnFocus={false} fieldFirst={!phone} closeLabel={mediaMessages.close} onClose={onClose}
       footer={<>
         <span className="picker-hint" aria-hidden="true"><kbd>←</kbd><kbd>→</kbd> {kbMessages.pickerKeysMove} <kbd>Space</kbd> {kbMessages.pickerKeysSelect} <kbd>Enter</kbd> {kbMessages.pickerKeysInsert}</span>
         <span className="picker-strip" role="status">{picked.length > 0 ? kbMessages.pickerStrip(picked.length, missing.length) : kbMessages.pickerNone}</span>
@@ -161,6 +168,7 @@ export function MediaPicker({ onInsert, onUpload, onClose }: { onInsert: (items:
               return (
                 <li key={item.id} role="presentation">
                   <div role="option" className="picker-card" aria-selected={place >= 0} tabIndex={at === Math.min(focus, items.length - 1) ? 0 : -1} aria-label={cardLabel(item)}
+                    data-autofocus={phone && at === Math.min(focus, items.length - 1) ? 'true' : undefined}
                     onClick={() => { setFocus(at); toggle(item); }} onFocus={() => setFocus(at)}>
                     <span className="picker-order" aria-hidden="true">{place >= 0 ? place + 1 : ''}</span>
                     <span className="media-picture" data-kind={item.kind} data-empty={item.thumbnail_url ? undefined : 'true'}>

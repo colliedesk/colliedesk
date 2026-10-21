@@ -35,20 +35,23 @@ interface DialogProps {
   closeLabel?: string;
   // returnFocus: false when the one who closes it puts the focus somewhere itself (the editor's text).
   returnFocus?: boolean;
+  // fieldFirst false starts at the header's Close rather than at a field (a phone keyboard would cover the screen).
+  fieldFirst?: boolean;
   children: ReactNode;
   onClose: () => void;
 }
 
 // KBDialog is a modal: Escape and the backdrop close it, Tab stays inside, and the focus goes back where it was.
-export function KBDialog({ title, role = 'dialog', phone = 'sheet', className, footer, describedBy, closeLabel, returnFocus = true, children, onClose }: DialogProps) {
+export function KBDialog({ title, role = 'dialog', phone = 'sheet', className, footer, describedBy, closeLabel, returnFocus = true, fieldFirst = true, children, onClose }: DialogProps) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
   useReturnFocus(undefined, returnFocus);
   useEffect(() => {
     // The first field, or else the first button of the footer (Cancel in a confirmation), takes the focus.
     const box = root.current;
-    const first = box?.querySelector<HTMLElement>('[data-autofocus]') ?? box?.querySelector<HTMLElement>('.kb-dialog-body input:not([type=hidden]), .kb-dialog-body textarea')
-      ?? box?.querySelector<HTMLElement>('.kb-dialog-foot button, .kb-dialog-head button');
+    const first = box?.querySelector<HTMLElement>('[data-autofocus]')
+      ?? (fieldFirst ? box?.querySelector<HTMLElement>('.kb-dialog-body input:not([type=hidden]), .kb-dialog-body textarea') : null)
+      ?? box?.querySelector<HTMLElement>(fieldFirst ? '.kb-dialog-foot button, .kb-dialog-head button' : '.kb-dialog-head button');
     first?.focus();
   }, []);
   return (

@@ -365,3 +365,17 @@ test('the tray closes only when every upload is over, and closing clears them', 
   fireEvent.change(input, { target: { files: [new File(['x'], 'other.txt', { type: 'text/plain' })] } });
   expect(await screen.findByRole('region', { name: /^Upload/ })).not.toHaveTextContent('notes.txt');
 });
+
+test('on a phone the panel is a modal sheet: a dialog, and Tab from its last control comes back to its first', async () => {
+  const phone = { matches: true, addEventListener: () => undefined, removeEventListener: () => undefined };
+  vi.stubGlobal('matchMedia', (text: string) => (text.includes('44rem') ? phone : { ...phone, matches: false }));
+  serve({ ...base, [`GET /api/v1/kb/media/${id(2)}/details`]: () => json(200, { ...video, articles: [] }) });
+  open('library', { item: id(2) });
+  const sheet = await screen.findByRole('dialog', { name: 'Product tour' });
+  expect(sheet).toHaveAttribute('aria-modal', 'true');
+  const save = within(sheet).getByRole('button', { name: 'Save' });
+  fireEvent.change(within(sheet).getByRole('textbox', { name: 'Name' }), { target: { value: 'Tour' } });
+  save.focus();
+  fireEvent.keyDown(save, { key: 'Tab' });
+  expect(document.activeElement).toBe(within(sheet).getByRole('button', { name: 'Close details' }));
+});

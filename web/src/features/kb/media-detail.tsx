@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { formatBytes } from '../../lib/format-bytes';
 import { RouterLink } from '../../ui/router-link';
 import { Icon } from './editor/icons';
-import { KBDialog } from './kb-ui';
+import { dialogKeys } from '../../ui/dialog-keys';
+import { KBDialog, usePhone } from './kb-ui';
 import { mediaApi, updateFields } from './media-api';
 import type { KBMedia, KBMediaDetails } from './media-api';
 import { embedFor, mediaName } from './media-grid';
@@ -32,11 +33,17 @@ function OpenDetail({ id, onChanged, onClose }: { id: string; onChanged: () => v
   // What the last change said, with an Undo when it has one. It floats over the panel's foot, so it moves nothing.
   const [notice, setNotice] = useState<{ text: string; undo?: () => void }>();
   const name = details.data ? mediaName(details.data) : mediaMessages.details;
+  // On a phone the panel is a sheet over the grid: a modal dialog, with Tab kept inside it.
+  const phone = usePhone();
+  const root = useRef<HTMLElement>(null);
   return (
     <>
       <div className="media-detail-scrim" aria-hidden="true" onClick={onClose} />
-      <aside className="media-detail" aria-labelledby="media-detail-heading" data-open="true" data-modal="mobile"
-        onKeyDown={(event) => { if (event.key === 'Escape' && !(event.target instanceof HTMLVideoElement) && !event.defaultPrevented) onClose(); }}>
+      <aside ref={root} className="media-detail" aria-labelledby="media-detail-heading" data-open="true" data-modal="mobile" role={phone ? 'dialog' : undefined} aria-modal={phone || undefined}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && !(event.target instanceof HTMLVideoElement) && !event.defaultPrevented) onClose();
+          else if (phone && event.key === 'Tab') dialogKeys(root, onClose)(event);
+        }}>
         <span className="kb-grab" aria-hidden="true" />
         <header className="media-detail-head">
           <h2 id="media-detail-heading" tabIndex={-1} ref={heading} title={name}>{name}</h2>
