@@ -101,6 +101,9 @@ function UploadTray({ queue, rows, onShow }: { queue: UploadQueue; rows: UploadR
   const done = rows.filter((row) => row.state === 'done');
   const duplicates = done.filter((row) => row.duplicate).length;
   const running = rows.filter((row) => row.state === 'sending' || row.state === 'waiting').length;
+  // The tray closes only when nothing is on its way: an upload still going or paused stays in sight, and
+  // closing clears what is finished, so nothing is hidden that still needs the person.
+  const settled = rows.every((row) => !['waiting', 'sending', 'paused'].includes(row.state));
   const total = rows.length;
   const at = total - running + (running > 0 ? 1 : 0);
   const title = running > 0 ? mediaMessages.uploadingOf(Math.min(at, total), total) : total > 0 && failed === 0 ? mediaMessages.uploadsFinished(total) : mediaMessages.uploads;
@@ -119,7 +122,7 @@ function UploadTray({ queue, rows, onShow }: { queue: UploadQueue; rows: UploadR
           {open && done.length > 0 && <button type="button" className="link-action" onClick={() => queue.clear()}>{mediaMessages.clearFinished}</button>}
           <button type="button" className="icon-button" aria-expanded={open} aria-controls="media-tray-list" aria-label={open ? mediaMessages.collapseUploads : mediaMessages.showUploads(total + others.length)}
             onClick={() => setOpen(!open)}><Icon name={open ? 'chevronDown' : 'chevronUp'} /></button>
-          <button type="button" className="icon-button" aria-label={mediaMessages.hideUploads} onClick={() => setHidden(true)}><Icon name="close" /></button>
+          {settled && <button type="button" className="icon-button" aria-label={mediaMessages.closeUploads} onClick={() => { for (const row of rows) queue.dismiss(row.key); setHidden(true); }}><Icon name="close" /></button>}
         </span>
         {total > 0 && <span className="media-tray-bar" aria-hidden="true">
           <i data-part="done" style={{ width: part(done.length) }} /><i data-part="running" style={{ width: part(running) }} /><i data-part="failed" style={{ width: part(failed) }} />

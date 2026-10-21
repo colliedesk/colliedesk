@@ -1,12 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent, RefObject } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChangedElsewhereError } from '../../api/client';
 import { formatBytes } from '../../lib/format-bytes';
 import { RouterLink } from '../../ui/router-link';
 import { Icon } from './editor/icons';
 import { KBDialog } from './kb-ui';
-import { mediaApi } from './media-api';
+import { mediaApi, updateFields } from './media-api';
 import type { KBMedia, KBMediaDetails } from './media-api';
 import { embedFor, mediaName } from './media-grid';
 import { mediaMessages } from './media-messages';
@@ -84,21 +83,8 @@ function DetailBody({ item, onChanged, onNotice, onTrashed }: { item: KBMediaDet
     event.preventDefault();
     if (!changed || state.saving) return;
     setState({ saving: true });
-    const send = (version: string) => mediaApi.update(item.id, {
-      updated_at: version,
-      ...(name !== item.name ? { name } : {}), ...(alt !== item.alt ? { alt } : {}), ...(kept !== item.kept ? { kept } : {}),
-    });
     try {
-      try {
-        await send(item.updated_at);
-      } catch (error) {
-        // A version saved meanwhile that left these fields as they were (a poster drawn after the upload) is no
-        // conflict for them: they are sent again over it. One that changed them is, and says so.
-        if (!(error instanceof ChangedElsewhereError)) throw error;
-        const fresh = await mediaApi.details(item.id);
-        if (fresh.name !== item.name || fresh.alt !== item.alt || fresh.kept !== item.kept) throw error;
-        await send(fresh.updated_at);
-      }
+      await updateFields(item, { ...(name !== item.name ? { name } : {}), ...(alt !== item.alt ? { alt } : {}), ...(kept !== item.kept ? { kept } : {}) });
       setState({});
       onNotice({ text: mediaMessages.saved });
       onChanged();

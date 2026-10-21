@@ -346,3 +346,22 @@ test('a save refused because only the poster changed since goes again over the n
     { updated_at: video.updated_at, name: 'Tour' }, { updated_at: '2026-10-09T00:00:00Z', name: 'Tour' }]));
   expect(within(panel).queryByRole('alert')).not.toBeInTheDocument();
 });
+
+test('the tray closes only when every upload is over, and closing clears them', async () => {
+  let refuse: (response: Response) => void = () => undefined;
+  serve({ ...base, 'POST /api/v1/kb/images': () => new Promise<Response>((resolve) => { refuse = resolve; }) });
+  open();
+  await screen.findByText(/Select an image or video/);
+  const input = document.querySelector('input[type="file"][multiple]') as HTMLInputElement;
+  // An upload still going keeps the tray: there is no way to hide it.
+  fireEvent.change(input, { target: { files: [new File([new Uint8Array(4)], 'shot.png', { type: 'image/png' }), new File(['x'], 'notes.txt', { type: 'text/plain' })] } });
+  const tray = await screen.findByRole('region', { name: /^Upload/ });
+  expect(within(tray).queryByRole('button', { name: /^Close uploads/ })).not.toBeInTheDocument();
+  // The server refuses the image: now every row is over, and the tray can close.
+  await act(async () => { refuse(refusal(413, 'too_large', 'Too large.')); });
+  fireEvent.click(await within(tray).findByRole('button', { name: /^Close uploads/ }));
+  await waitFor(() => expect(screen.queryByRole('region', { name: /^Upload/ })).not.toBeInTheDocument());
+  // A new file shows it again, without the cleared rows.
+  fireEvent.change(input, { target: { files: [new File(['x'], 'other.txt', { type: 'text/plain' })] } });
+  expect(await screen.findByRole('region', { name: /^Upload/ })).not.toHaveTextContent('notes.txt');
+});

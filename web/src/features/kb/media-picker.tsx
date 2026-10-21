@@ -6,7 +6,7 @@ import { Icon } from './editor/icons';
 import { kbMessages } from './kb-messages';
 import { reason } from './kb-tree';
 import { KBDialog, usePhone } from './kb-ui';
-import { mediaApi } from './media-api';
+import { mediaApi, updateFields } from './media-api';
 import type { KBMedia, MediaKind } from './media-api';
 import { cardLabel, facts, mediaName } from './media-grid';
 import { mediaMessages } from './media-messages';
@@ -51,10 +51,12 @@ export function MediaPicker({ onInsert, onUpload, onClose }: { onInsert: (items:
     try {
       // The alt text typed here goes to the library; kept is sent as it is, since the server keeps an item whose
       // alt text a person writes unless told otherwise.
-      const saved = await Promise.all(picked.map(async (item) => {
-        const alt = altOf(item).trim();
+      // Each pick as the list holds it now: a poster drawn since the pick is a newer version of it.
+      const saved = await Promise.all(picked.map(async (pick) => {
+        const item = items.find((each) => each.id === pick.id) ?? pick;
+        const alt = altOf(pick).trim();
         if (alt === item.alt) return item;
-        return mediaApi.update(item.id, { updated_at: item.updated_at, alt, kept: item.kept });
+        return updateFields(item, { alt, kept: item.kept });
       }));
       onInsert(saved);
     } catch (error) {

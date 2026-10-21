@@ -19,7 +19,7 @@ import { Icon } from './editor/icons';
 import { useRefreshKB } from './knowledge-page';
 import { MarkdownPreview, videoIds } from './markdown-preview';
 import type { PreviewVideo } from './markdown-preview';
-import { mediaApi } from './media-api';
+import { mediaApi, updateFields } from './media-api';
 import type { KBMediaDetails } from './media-api';
 import { embedFor } from './media-grid';
 import { baseName, fileProblem, kindOf, uploadVideo } from './media-uploads';
@@ -571,7 +571,7 @@ function AltDialog({ image, library, onSave, onClose }: { image: MissingAlt; lib
     if (!text || busy) return;
     setBusy(true);
     // The library keeps the alt text for the next article; kept is sent as it is (a new alt text would keep it).
-    if (library && !library.alt.trim()) await mediaApi.update(library.id, { updated_at: library.updated_at, alt: text, kept: library.kept }).catch(() => undefined);
+    if (library && !library.alt.trim()) await updateFields(library, { alt: text, kept: library.kept }).catch(() => undefined);
     onSave(text);
   };
   return (

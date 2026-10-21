@@ -94,7 +94,7 @@ export const mediaMessages = {
   elsewhere: (count: number) => `${count.toLocaleString('en')} from elsewhere`,
   collapseUploads: 'Collapse uploads',
   showUploads: (count: number) => (count === 1 ? 'Show the upload' : `Show all ${count.toLocaleString('en')} uploads`),
-  hideUploads: 'Hide uploads (the running ones go on)',
+  closeUploads: 'Close uploads (clears the finished ones)',
   show: 'Show',
   showName: (name: string) => `Show ${name}`,
   // Library

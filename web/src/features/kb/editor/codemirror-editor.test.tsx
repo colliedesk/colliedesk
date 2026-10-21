@@ -212,3 +212,35 @@ test('an image without alt text waits in the picker until it gets one, which is 
   expect(sent).toEqual([{ method: 'PATCH', body: { updated_at: bare.updated_at, alt: 'The invoices list', kept: false } }]);
   vi.unstubAllGlobals();
 });
+
+test('alt text from the picker still goes in when the item was saved since without touching it (a poster drawn after its upload)', async () => {
+  const id = 'aaaaaaaa-aaaa-4aaa-8aaa-000000000010';
+  const bare = { id, kind: 'image', content_type: 'image/png', size: 10, sha256: 'a'.repeat(64), url: `/api/v1/kb/images/${id}`, name: 'Plans', alt: '', width: 10, height: 10,
+    duration_ms: null, codecs: [], thumbnail_url: null, poster_url: null, kept: true, deleted_at: null, created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' };
+  const versions: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+    if (init.method === 'PATCH') {
+      const body = JSON.parse(init.body as string) as { updated_at: string };
+      versions.push(body.updated_at);
+      return body.updated_at === bare.updated_at
+        ? new Response(JSON.stringify({ error: { code: 'changed_elsewhere', message: 'Changed.' } }), { status: 409 })
+        : new Response(JSON.stringify({ ...bare, alt: 'Plans', updated_at: '2026-10-05T00:00:00Z' }), { status: 200 });
+    }
+    if (url.endsWith('/details')) return new Response(JSON.stringify({ ...bare, updated_at: '2026-10-04T00:00:00Z', articles: [] }), { status: 200 });
+    return new Response(JSON.stringify({ items: [bare], next_cursor: null }), { status: 200 });
+  }));
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+  let handle: EditorHandle | undefined;
+  render(<QueryClientProvider client={new QueryClient()}><CodeMirrorEditor initial="Intro" uploads={never} label="Text" describedBy="help" invalid={false} mode="edit"
+    onChange={() => undefined} onReady={(ready) => { handle = ready; }} /></QueryClientProvider>);
+  await waitFor(() => expect(handle).toBeDefined());
+  fireEvent.click(screen.getByRole('button', { name: 'Insert image or video' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: /^From the media library/ }));
+  const picker = screen.getByRole('dialog', { name: 'Insert from the media library' });
+  fireEvent.click(await within(picker).findByRole('option', { name: /^Plans, image/ }));
+  fireEvent.change(within(picker).getByRole('textbox', { name: 'Alt text for Plans' }), { target: { value: 'Plans' } });
+  fireEvent.click(within(picker).getByRole('button', { name: 'Insert 1' }));
+  await waitFor(() => expect(handle!.markdown().trimEnd()).toBe(`Intro\n\n![Plans](/api/v1/kb/images/${id})`));
+  expect(versions).toEqual([bare.updated_at, '2026-10-04T00:00:00Z']);
+  vi.unstubAllGlobals();
+});
