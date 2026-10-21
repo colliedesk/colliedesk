@@ -34,6 +34,21 @@ If the gate fails:
 3. Check for N+1 queries, tenant-unscoped scans, missing filter/order indexes, and repeated search scans.
 4. Optimize the query or infrastructure. Do not raise the 100 ms threshold.
 
+## Knowledge base search budget
+
+`TestKnowledgeBaseSearchLatencyBudget` seeds two workspaces at the article cap (`domain.MaxKBArticles`,
+2,000 articles of about 9,000 characters from a vocabulary of 20,000 words, 20 of them at the
+100,000-character limit) and calls the article list 50 times per path at the largest page: a two-word
+search, a short prefix, a search that matches nothing, a title search, the published articles, and
+the collections. Each path must stay at or below 100 ms p95 (about 11 ms locally). A search reads every
+vector of the workspace, because row-level security keeps Postgres off the GIN index; raise the cap
+only with this gate, after reading `docs/internals/knowledge-base.md`.
+
+`TestKnowledgeBaseSearchVectorCostsLinearTime` writes and rewrites one article of 100,000 characters
+per run that made the `simple` parser quadratic (`_a`, `~/`, `a1@`, `a-1-`, `a-a.` and others). Each
+write must stay at or below 200 ms (10–25 ms locally; unnormalized, seconds to tens of seconds). A
+3-second statement timeout makes a regression fail instead of hanging the run.
+
 ## Pending agent requests budget
 
 `TestPendingAgentRequestsLatencyBudget` holds the store query behind

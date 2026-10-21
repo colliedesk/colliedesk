@@ -41,6 +41,25 @@ var routeTiers = map[string]string{
 	"PATCH /api/v1/saved-views/{id}":                             "draft",
 	"DELETE /api/v1/saved-views/{id}":                            "draft",
 	"POST /api/v1/saved-views/{id}/restore":                      "draft",
+	"GET /api/v1/kb/collections":                                 "read",
+	"POST /api/v1/kb/collections":                                "send",
+	"GET /api/v1/kb/collections/trash":                           "read",
+	"PATCH /api/v1/kb/collections/{id}":                          "send",
+	"DELETE /api/v1/kb/collections/{id}":                         "send",
+	"POST /api/v1/kb/collections/{id}/restore":                   "send",
+	"GET /api/v1/kb/articles":                                    "read",
+	"POST /api/v1/kb/articles":                                   "send",
+	"GET /api/v1/kb/articles/trash":                              "read",
+	"GET /api/v1/kb/articles/{id}":                               "read",
+	"PATCH /api/v1/kb/articles/{id}":                             "send",
+	"DELETE /api/v1/kb/articles/{id}":                            "send",
+	"POST /api/v1/kb/articles/{id}/restore":                      "send",
+	"GET /api/v1/kb/articles/{id}/versions":                      "read",
+	"POST /api/v1/kb/articles/{id}/versions/{version}/restore":   "send",
+	"POST /api/v1/kb/images":                                     "send",
+	"GET /api/v1/kb/images/{id}":                                 "read",
+	"GET /api/v1/help-center":                                    "read",
+	"PUT /api/v1/help-center":                                    "admin",
 	"POST /api/v1/conversations":                                 "send",
 	"GET /api/v1/conversations/{id}":                             "read",
 	"PATCH /api/v1/conversations/{id}":                           "draft",
@@ -116,7 +135,15 @@ func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
 				body = map[string]any{"name": "matrix view " + tier, "scope": "shared", "filters": map[string]any{}}
 			}
 			response := request(t, fixture.api, route.Method, item.path, body, token, nil)
+			if key == "POST "+kbImagesPath { // the body is the raw image
+				response = serve(fixture.api, kbImageRequest(token, nil))
+			}
 			switch {
+			case key == "POST "+kbImagesPath && tierRank[tier] < tierRank[want]:
+				// Bytes never wait for approval: a lower tier is refused, not filed.
+				if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "files_need_approval") {
+					t.Errorf("%s with a %s token: status=%d body=%s, want 403 files_need_approval", key, tier, response.Code, response.Body.String())
+				}
 			case want == "person":
 				if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "person_only") {
 					t.Errorf("%s with a %s token: status=%d body=%s, want 403 person_only", key, tier, response.Code, response.Body.String())

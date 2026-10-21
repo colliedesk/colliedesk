@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"maps"
 	"net/http"
 	"net/url"
 	"testing"
@@ -29,6 +30,9 @@ func contractRequest(t *testing.T, method string, item contractCase, token, secr
 	}
 	if item.raw != "" {
 		return inboundRequest(t, item.raw, secret)
+	}
+	if item.path == kbImagesPath {
+		return kbImageRequest(token, cookie)
 	}
 	if item.path == recipientPath {
 		// The MTA authenticates with the server-wide secret; an empty secret exercises the 401.
@@ -115,7 +119,7 @@ func TestCookieWriteRoutesReturnContractValidForbidden(t *testing.T) {
 			continue
 		}
 		item := cases[route.Method+" "+route.Pattern]
-		req := newRequest(t, route.Method, item.path, item.body, "", cookie)
+		req := contractRequest(t, route.Method, item, "", "", cookie)
 		validateContractRequest(t, req)
 		response := serve(fixture.api, req)
 		if response.Code != http.StatusForbidden {
@@ -127,7 +131,7 @@ func TestCookieWriteRoutesReturnContractValidForbidden(t *testing.T) {
 
 func successfulContractCases(f contractFixture) map[string]contractCase {
 	admin := f.adminToken
-	return map[string]contractCase{
+	cases := map[string]contractCase{
 		"GET /api/v1/config":                                         {"/api/v1/config", nil, "", 200, ""},
 		"POST /api/v1/auth/cloud/exchange":                           {"/api/v1/auth/cloud/exchange", map[string]any{}, "disabled-cloud-token", 404, ""},
 		"POST /api/v1/auth/cloud/signup":                             {"/api/v1/auth/cloud/signup", map[string]any{"workspace_name": "Acme"}, "disabled-cloud-token", 404, ""},
@@ -216,4 +220,6 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/support/problem-reports":          {path: "/api/v1/support/problem-reports", body: goodReport(), token: admin, status: 201},
 		"POST /api/v1/public/forms/{workspace_slug}":    {path: "/api/v1/public/forms/contract-desk" /* the slug set by PATCH /api/v1/workspace/slug, which runs earlier */, body: map[string]any{"email": "visitor@contract.example.com", "source": "site:updates"}, status: 202},
 	}
+	maps.Copy(cases, kbContractCases(f))
+	return cases
 }

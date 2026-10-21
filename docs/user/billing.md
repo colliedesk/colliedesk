@@ -79,6 +79,8 @@ The plan belongs to the workspace, not to a person. Paid plans have no reply cap
 | Team 25 | 250 GiB. Files brought in by an import count. |
 | Founding | 20 GiB. Files brought in by an import count. |
 
+Knowledge base images count toward the same limit as attachments.
+
 **Plan and billing** shows the attachments you have used, and warns at 80% of the limit.
 
 On a paid plan, at the limit nothing is deleted. You can still read everything, reply without adding

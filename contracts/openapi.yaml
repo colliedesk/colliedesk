@@ -2226,6 +2226,458 @@ paths:
             Retry-After: {schema: {type: integer}}
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
         '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/kb/collections:
+    get:
+      operationId: listKBCollections
+      x-permission: conversations:read
+      description: >
+        The knowledge base collections of the workspace that are not in the trash, as a flat list
+        ordered by parent, position and name. A collection sits at most three levels deep (category,
+        folder, subfolder). `article_count` counts its articles outside the trash, drafts included.
+      responses:
+        '200':
+          description: Knowledge base collections
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/KBCollection'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createKBCollection
+      x-permission: conversations:write
+      description: >
+        Any agent may create one, and a `send` agent token; a lower tier files an agent request a
+        person approves. Without `slug` one is made from the name. The slug is unique among the
+        collections of the same parent outside the trash (409 `duplicate_slug`). A parent in the trash,
+        or one already three levels deep, is 400. A workspace holds at most 1,000 collections,
+        counting the ones in the trash (409 `kb_limit`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/KBCollectionInput'}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '201':
+          description: Created collection
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBCollection'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/collections/trash:
+    get:
+      operationId: listTrashedKBCollections
+      x-permission: conversations:read
+      description: >
+        Collections deleted in the last 30 days, most recently deleted first. Each can be restored
+        with `POST /api/v1/kb/collections/{id}/restore` until `purges_at`; after that it is deleted
+        for good.
+      responses:
+        '200':
+          description: Collections in the trash
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/TrashedKBCollection'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/kb/collections/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    patch:
+      operationId: updateKBCollection
+      x-permission: conversations:write
+      description: >
+        Rename a collection, change its slug, description or position, or move it under another
+        parent (`parent_id`; null moves it to the top). Send back the `updated_at` you read (409
+        `changed_elsewhere` when it was saved since). A move that would put a collection under itself
+        or more than three levels deep is 400. Changing the slug changes the addresses of the help
+        center pages under it; old addresses are not redirected. A collection in the trash is 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updated_at]
+              properties:
+                updated_at: {type: string, format: date-time}
+                name: {type: string, minLength: 1, maxLength: 200}
+                slug: {type: string, minLength: 1, maxLength: 120}
+                description: {type: string, maxLength: 2000}
+                parent_id: {type: [string, 'null'], format: uuid}
+                position: {type: integer, minimum: 0, maximum: 1000000}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: Updated collection
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBCollection'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: deleteKBCollection
+      x-permission: conversations:write
+      description: >
+        Move an empty collection to the trash: restorable for 30 days, then deleted for good. A
+        collection that still holds articles or collections outside the trash is 409
+        `collection_not_empty` (move or delete them first). Send the `updated_at` you read (409
+        `changed_elsewhere`).
+      parameters:
+        - {name: updated_at, in: query, required: true, schema: {type: string, format: date-time}}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '204': {description: Collection moved to the trash}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/collections/{id}/restore:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: restoreKBCollection
+      x-permission: conversations:write
+      description: >
+        Take a collection out of the trash. Send its `updated_at` as the trash shows it (409
+        `changed_elsewhere`). 409 `parent_in_trash` when its parent is in the trash (restore that
+        first), 409 `duplicate_slug` when a sibling took its slug meanwhile. 404 when it is not in the
+        trash.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updated_at]
+              properties:
+                updated_at: {type: string, format: date-time}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: Restored collection
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBCollection'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/articles:
+    get:
+      operationId: listKBArticles
+      x-permission: conversations:read
+      description: >
+        Knowledge base articles outside the trash, without their text, in pages. Without `q` the
+        most recently updated come first. With `q` the articles whose title or text hold every word of
+        `q` as a word or the start of a word (or whose title holds `q`) come first by relevance. Words
+        are split the same way in the query and the text, with no language rules, so a word inside
+        another word, and text in scripts written without spaces (Chinese, Japanese, Thai), are found
+        only when they start a word or match the title.
+      parameters:
+        - {name: q, in: query, schema: {type: string, maxLength: 200}}
+        - {name: status, in: query, schema: {type: string, enum: [draft, published]}}
+        - {name: collection_id, in: query, description: Only the articles directly in this collection., schema: {type: string, format: uuid}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string, maxLength: 200}}
+      responses:
+        '200':
+          description: Knowledge base articles
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/KBArticleSummary'}}
+                  next_cursor: {type: [string, 'null'], description: Null on the last page.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    post:
+      operationId: createKBArticle
+      x-permission: conversations:write
+      description: >
+        Write an article in Markdown. It starts as a draft unless `status` is `published`. It gets the
+        next `number` of the workspace, which never changes and is never reused, so the address
+        `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the
+        title. The text holds at most 100,000 characters and is never cut; a workspace holds at most
+        2,000 articles, counting the ones in the trash (409 `kb_limit`). A `send` agent token may
+        create one; a lower tier files an agent request (at most 64 KiB of JSON).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/KBArticleInput'}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '201':
+          description: Created article
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/articles/trash:
+    get:
+      operationId: listTrashedKBArticles
+      x-permission: conversations:read
+      description: >
+        Articles deleted in the last 30 days, most recently deleted first, in pages, without their
+        text. Each can be restored with `POST /api/v1/kb/articles/{id}/restore` until `purges_at`; after
+        that it is deleted for good with its history. Articles in the trash count toward the 2,000 of
+        a workspace.
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string, maxLength: 200}}
+      responses:
+        '200':
+          description: Articles in the trash
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/TrashedKBArticle'}}
+                  next_cursor: {type: [string, 'null'], description: Null on the last page.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/kb/articles/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getKBArticle
+      x-permission: conversations:read
+      description: >
+        One article with its Markdown text and its stored translations. It also finds an article in
+        the trash (`deleted_at` is then set).
+      responses:
+        '200':
+          description: The article
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      operationId: updateKBArticle
+      x-permission: conversations:write
+      description: >
+        Change the title, slug, text, collection or status (publish or unpublish). Send back the
+        `updated_at` you read; when the article was saved since, nothing changes and the answer is 409
+        `changed_elsewhere`. Every change adds a version to the history. An article in the trash is
+        404. A `send` agent token may edit; a lower tier files an agent request (at most 64 KiB of
+        JSON).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updated_at]
+              properties:
+                updated_at: {type: string, format: date-time}
+                title: {type: string, minLength: 1, maxLength: 300}
+                slug: {type: string, minLength: 1, maxLength: 120}
+                body_md: {type: string, maxLength: 100000}
+                collection_id: {type: string, format: uuid}
+                status: {type: string, enum: [draft, published]}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: Updated article
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: deleteKBArticle
+      x-permission: conversations:write
+      description: >
+        Move the article to the trash: it leaves the list and the help center, and can be restored for
+        30 days. Send the `updated_at` you read (409 `changed_elsewhere`). A `send` agent token may
+        delete; a lower tier files an agent request.
+      parameters:
+        - {name: updated_at, in: query, required: true, schema: {type: string, format: date-time}}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '204': {description: Article moved to the trash}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/articles/{id}/restore:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: restoreKBArticle
+      x-permission: conversations:write
+      description: >
+        Take an article out of the trash, as it was when deleted (a published article is published
+        again). Send its `updated_at` as the trash shows it (409 `changed_elsewhere`). 409
+        `collection_in_trash` when its collection is in the trash (restore that first). 404 when it is
+        not in the trash.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updated_at]
+              properties:
+                updated_at: {type: string, format: date-time}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: Restored article
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/articles/{id}/versions:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: listKBArticleVersions
+      x-permission: conversations:read
+      description: >
+        The versions of an article, newest first, in pages: who made each, through which agent token
+        or approved agent request, and the title, slug, text, collection and status it had. An article
+        in the trash keeps its history. Versions are never changed or removed while the article exists.
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: before_version, in: query, description: Only versions older than this one (the next_before_version of the previous page)., schema: {type: integer, minimum: 1}}
+      responses:
+        '200':
+          description: Versions of the article
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_before_version]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/KBArticleVersion'}}
+                  next_before_version: {type: [integer, 'null'], description: Null on the last page.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/kb/articles/{id}/versions/{version}/restore:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: version, in: path, required: true, schema: {type: integer, minimum: 1}}
+    post:
+      operationId: restoreKBArticleVersion
+      x-permission: conversations:write
+      description: >
+        Make the title, slug and text of an earlier version current again, as a new version; the
+        status and collection stay as they are now, and nothing in the history is rewritten. Send back
+        the `updated_at` you read (409 `changed_elsewhere`). An article in the trash is 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [updated_at]
+              properties:
+                updated_at: {type: string, format: date-time}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: Article with the restored text
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/images:
+    post:
+      operationId: uploadKBImage
+      x-permission: conversations:write
+      description: >
+        Store an image for articles. The body is the raw image, at most 5 MiB; only PNG, JPEG, GIF and
+        WebP are accepted, judged from the bytes, not from the declared type (400 otherwise). The same
+        bytes uploaded twice give the same image. Images count toward the plan's storage cap (403
+        `storage_limit_reached` when it is full). Put it in an article as `![text](url)`. A `send` agent token may
+        upload; a lower tier gets 403 `files_need_approval`.
+      requestBody:
+        required: true
+        content:
+          image/png: {schema: {type: string, format: binary}}
+          image/jpeg: {schema: {type: string, format: binary}}
+          image/gif: {schema: {type: string, format: binary}}
+          image/webp: {schema: {type: string, format: binary}}
+      responses:
+        '201':
+          description: The stored image
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBImage'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '413':
+          description: The image is over 5 MiB; nothing was stored.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  /api/v1/kb/images/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getKBImage
+      x-permission: conversations:read
+      description: >
+        The bytes of one image of the workspace's knowledge base, with `nosniff` and a sandboxing
+        Content-Security-Policy so nothing in it can run.
+      responses:
+        '200':
+          description: The image
+          headers:
+            Cache-Control: {schema: {type: string}, description: 'private, max-age=31536000, immutable'}
+            X-Content-SHA256: {schema: {type: string}}
+          content:
+            image/png: {schema: {type: string, format: binary}}
+            image/jpeg: {schema: {type: string, format: binary}}
+            image/gif: {schema: {type: string, format: binary}}
+            image/webp: {schema: {type: string, format: binary}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/help-center:
+    get:
+      operationId: getHelpCenter
+      x-permission: conversations:read
+      description: >
+        Whether the public help center is on, its title and language. `content_version` grows with
+        every change to the knowledge base, so a cached page can tell it is stale. Until an admin turns
+        it on, it is off and nothing of the knowledge base is public.
+      responses:
+        '200':
+          description: Help center settings
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenter'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+    put:
+      operationId: putHelpCenter
+      x-permission: access:write
+      description: >
+        Turn the public help center on or off, and set its title and language (a BCP 47 tag such as
+        `en` or `pt-BR`). Admins only, and an `admin` agent token. Turning it off takes every page off
+        line at once; turning it on again publishes the articles marked published.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HelpCenterInput'}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: Help center settings
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenter'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
@@ -2591,7 +3043,7 @@ components:
             storage_bytes:
               type: integer
               format: int64
-              description: Attachment bytes counted against `limits.storage_bytes`. On the trial files of imported messages are not counted; on a paid plan every file is, imported ones included.
+              description: Attachment and knowledge base image bytes counted against `limits.storage_bytes`. On the trial files of imported messages are not counted; on a paid plan every file is, imported ones included.
             replies_last_24h:
               type: integer
               description: People reached by the emailed replies of the last 24 hours (the contact plus every Cc address of each reply), which count against the trial cap of 200; 0 on other plans.
@@ -2953,6 +3405,213 @@ components:
         created_at: {type: string, format: date-time}
         title: {type: string, description: The title after this change.}
         body: {type: string, description: The text after this change.}
+    KBCollectionInput:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        slug: {type: string, minLength: 1, maxLength: 120, description: 'Lowercase letters, digits and hyphens in any script; made from the name when left out.'}
+        description: {type: string, maxLength: 2000}
+        parent_id: {type: [string, 'null'], format: uuid}
+        position: {type: integer, minimum: 0, maximum: 1000000}
+    KBCollection:
+      type: object
+      required: [id, parent_id, name, slug, description, position, article_count, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        parent_id: {type: [string, 'null'], format: uuid}
+        name: {type: string}
+        slug: {type: string}
+        description: {type: string}
+        position: {type: integer}
+        article_count: {type: integer, description: 'Articles directly in this collection and outside the trash, drafts included.'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    TrashedKBCollection:
+      type: object
+      required: [id, parent_id, name, slug, description, position, article_count, created_at, updated_at, deleted_at, deleted_by, purges_at]
+      properties:
+        id: {type: string, format: uuid}
+        parent_id: {type: [string, 'null'], format: uuid}
+        name: {type: string}
+        slug: {type: string}
+        description: {type: string}
+        position: {type: integer}
+        article_count: {type: integer}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        deleted_at: {type: string, format: date-time}
+        deleted_by:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
+        purges_at: {type: string, format: date-time, description: When it is deleted for good (30 days after deleted_at).}
+    KBArticleInput:
+      type: object
+      required: [collection_id, title, body_md]
+      properties:
+        collection_id: {type: string, format: uuid}
+        title: {type: string, minLength: 1, maxLength: 300}
+        slug: {type: string, minLength: 1, maxLength: 120, description: 'Lowercase letters, digits and hyphens in any script; made from the title when left out.'}
+        body_md: {type: string, maxLength: 100000, description: The text in Markdown. Raw HTML in it is never rendered on the help center.}
+        status: {type: string, enum: [draft, published], default: draft}
+    KBArticleStatus:
+      type: string
+      enum: [draft, published]
+      description: 'published: on the public help center while it is on. draft: only agents see it.'
+    KBArticleChange:
+      type: object
+      required: [version, kind, restored_from_version, changed_by, token, agent_request_id, created_at]
+      properties:
+        version: {type: integer, minimum: 1}
+        kind:
+          type: string
+          enum: [create, edit, delete, restore, undelete, import]
+          description: 'restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk.'
+        restored_from_version: {type: [integer, 'null'], description: The version a restore copied.}
+        changed_by:
+          description: The person who made the change (or approved the agent request that made it); null for an import or a removed person.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
+        token:
+          description: The agent token that made or asked for the change; null when a person made it in the web app.
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [id, label]
+              properties:
+                id: {type: [string, 'null'], format: uuid}
+                label: {type: string}
+        agent_request_id: {type: [string, 'null'], format: uuid, description: The approved agent request that made the change.}
+        created_at: {type: string, format: date-time}
+    KBArticleSummary:
+      type: object
+      required: [id, number, collection_id, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change]
+      properties:
+        id: {type: string, format: uuid}
+        number: {type: integer, minimum: 1, description: 'Never changes and is never reused in the workspace; the help center address is /a/<number>-<slug>.'}
+        collection_id: {type: string, format: uuid}
+        title: {type: string}
+        slug: {type: string}
+        status: {$ref: '#/components/schemas/KBArticleStatus'}
+        published_at: {type: [string, 'null'], format: date-time, description: When it was last published; null for a draft.}
+        author_agent_id: {type: [string, 'null'], format: uuid}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        last_change:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/KBArticleChange'}
+    KBArticleTranslation:
+      type: object
+      required: [locale, title, body_md, updated_at]
+      properties:
+        locale: {type: string}
+        title: {type: string}
+        body_md: {type: string}
+        updated_at: {type: string, format: date-time}
+    KBArticle:
+      type: object
+      required: [id, number, collection_id, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, body_md, has_source_html, translations, deleted_at]
+      properties:
+        id: {type: string, format: uuid}
+        number: {type: integer, minimum: 1}
+        collection_id: {type: string, format: uuid}
+        title: {type: string}
+        slug: {type: string}
+        status: {$ref: '#/components/schemas/KBArticleStatus'}
+        published_at: {type: [string, 'null'], format: date-time}
+        author_agent_id: {type: [string, 'null'], format: uuid}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        last_change:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/KBArticleChange'}
+        body_md: {type: string}
+        has_source_html: {type: boolean, description: An import kept the original HTML; it is in the workspace export and is never shown on the help center.}
+        translations:
+          type: array
+          description: Translations an import brought in. They are kept and exported; the help center does not show them yet.
+          items: {$ref: '#/components/schemas/KBArticleTranslation'}
+        deleted_at: {type: [string, 'null'], format: date-time, description: Set while the article is in the trash.}
+    TrashedKBArticle:
+      type: object
+      required: [id, number, collection_id, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, deleted_at, deleted_by, purges_at]
+      properties:
+        id: {type: string, format: uuid}
+        number: {type: integer, minimum: 1}
+        collection_id: {type: string, format: uuid}
+        title: {type: string}
+        slug: {type: string}
+        status: {$ref: '#/components/schemas/KBArticleStatus'}
+        published_at: {type: [string, 'null'], format: date-time}
+        author_agent_id: {type: [string, 'null'], format: uuid}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        last_change:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/KBArticleChange'}
+        deleted_at: {type: string, format: date-time}
+        deleted_by:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
+        purges_at: {type: string, format: date-time, description: When the article and its history are deleted for good (30 days after deleted_at).}
+    KBArticleVersion:
+      type: object
+      required: [version, kind, restored_from_version, changed_by, token, agent_request_id, created_at, title, slug, body_md, status, collection_id]
+      properties:
+        version: {type: integer, minimum: 1}
+        kind: {type: string, enum: [create, edit, delete, restore, undelete, import]}
+        restored_from_version: {type: [integer, 'null']}
+        changed_by:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
+        token:
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              required: [id, label]
+              properties:
+                id: {type: [string, 'null'], format: uuid}
+                label: {type: string}
+        agent_request_id: {type: [string, 'null'], format: uuid}
+        created_at: {type: string, format: date-time}
+        title: {type: string}
+        slug: {type: string}
+        body_md: {type: string}
+        status: {$ref: '#/components/schemas/KBArticleStatus'}
+        collection_id: {type: [string, 'null'], format: uuid, description: Null once that collection was deleted for good.}
+    KBImage:
+      type: object
+      required: [id, content_type, size, sha256, url, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        content_type: {type: string, enum: [image/png, image/jpeg, image/gif, image/webp]}
+        size: {type: integer, description: Bytes.}
+        sha256: {type: string}
+        url: {type: string, description: 'The path to put in an article: /api/v1/kb/images/<id>.'}
+        created_at: {type: string, format: date-time}
+    HelpCenterInput:
+      type: object
+      required: [enabled, title, locale]
+      properties:
+        enabled: {type: boolean}
+        title: {type: string, maxLength: 200, description: Shown at the top of every page; empty uses the workspace name.}
+        locale: {type: string, minLength: 2, maxLength: 35, description: 'BCP 47 language tag of the pages, such as en or pt-BR.'}
+    HelpCenter:
+      type: object
+      required: [enabled, title, locale, content_version, updated_at]
+      properties:
+        enabled: {type: boolean}
+        title: {type: string}
+        locale: {type: string}
+        content_version: {type: integer, minimum: 0}
+        updated_at: {type: [string, 'null'], format: date-time, description: Null until the knowledge base or its settings were first changed.}
     SavedReplyText:
       type: object
       required: [title, body, updated_at]

@@ -66,11 +66,27 @@ func execute(ctx context.Context, request *mcp.CallToolRequest, spec Spec, input
 	if err != nil {
 		return failure(failureText(c, err))
 	}
+	image, isImage := output.(*imageResult)
+	if isImage {
+		output = image.Meta
+	}
 	data, err := json.Marshal(output)
 	if err != nil {
 		return failure(failureText(c, err))
 	}
-	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(data)}}, StructuredContent: json.RawMessage(data)}
+	content := []mcp.Content{&mcp.TextContent{Text: string(data)}}
+	if isImage {
+		content = append(content, &mcp.ImageContent{Data: image.Data, MIMEType: image.MIMEType})
+	}
+	return &mcp.CallToolResult{Content: content, StructuredContent: json.RawMessage(data)}
+}
+
+// imageResult is the answer of a tool that shows an image: the bytes go to the model as image content,
+// Meta is the structured content that matches the tool's output schema.
+type imageResult struct {
+	Data     []byte
+	MIMEType string
+	Meta     any
 }
 
 func failure(message string) *mcp.CallToolResult {

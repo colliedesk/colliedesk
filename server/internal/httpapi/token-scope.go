@@ -60,8 +60,10 @@ var (
 // a tag, which rewrites every conversation that carries it). send: everything else
 // an agent may do, such as replying, creating, renaming and merging contacts (a merge is undone the same way), creating conversations, and writing the saved replies
 // the team sends (every change is a version that can be restored, and a delete stays in the trash for
-// 30 days). Posting a message is gated by the handler: a note needs draft, an outgoing reply needs send.
-// admin: workspace settings, the team, revoking invites, channels and sessions. An admin token acts
+// 30 days); the knowledge base is send for the same reason (an article can be published, which reaches
+// customers, but every change is a version and a delete waits 30 days in the trash), and so are its
+// image uploads. Posting a message is gated by the handler: a note needs draft, an outgoing reply needs send.
+// admin: workspace settings (the help center's on and off among them), the team, revoking invites, channels and sessions. An admin token acts
 // with its creator's role, so it reaches these only while that person is an admin, and the role still
 // decides the admin-only reads (billing is classified admin for that reason). The handlers file a
 // request for every tier when the change is risky for people: a change that grants, keeps or takes
@@ -91,6 +93,24 @@ var tokenTiers = map[string]TokenAccess{
 	"PATCH /api/v1/saved-views/{id}":                             tier(auth.ScopeDraft),
 	"DELETE /api/v1/saved-views/{id}":                            tier(auth.ScopeDraft),
 	"POST /api/v1/saved-views/{id}/restore":                      tier(auth.ScopeDraft),
+	"GET /api/v1/kb/collections":                                 tier(auth.ScopeRead),
+	"GET /api/v1/kb/collections/trash":                           tier(auth.ScopeRead),
+	"POST /api/v1/kb/collections":                                tier(auth.ScopeSend),
+	"PATCH /api/v1/kb/collections/{id}":                          tier(auth.ScopeSend),
+	"DELETE /api/v1/kb/collections/{id}":                         tier(auth.ScopeSend),
+	"POST /api/v1/kb/collections/{id}/restore":                   tier(auth.ScopeSend),
+	"GET /api/v1/kb/articles":                                    tier(auth.ScopeRead),
+	"GET /api/v1/kb/articles/trash":                              tier(auth.ScopeRead),
+	"GET /api/v1/kb/articles/{id}":                               tier(auth.ScopeRead),
+	"GET /api/v1/kb/articles/{id}/versions":                      tier(auth.ScopeRead),
+	"POST /api/v1/kb/articles":                                   tier(auth.ScopeSend),
+	"PATCH /api/v1/kb/articles/{id}":                             tier(auth.ScopeSend),
+	"DELETE /api/v1/kb/articles/{id}":                            tier(auth.ScopeSend),
+	"POST /api/v1/kb/articles/{id}/restore":                      tier(auth.ScopeSend),
+	"POST /api/v1/kb/articles/{id}/versions/{version}/restore":   tier(auth.ScopeSend),
+	"POST /api/v1/kb/images":                                     tier(auth.ScopeSend),
+	"GET /api/v1/kb/images/{id}":                                 tier(auth.ScopeRead),
+	"GET /api/v1/help-center":                                    tier(auth.ScopeRead),
 	"POST /api/v1/conversations":                                 tier(auth.ScopeSend),
 	"GET /api/v1/conversations/{id}":                             tier(auth.ScopeRead),
 	"PATCH /api/v1/conversations/{id}":                           tier(auth.ScopeDraft),
@@ -132,6 +152,7 @@ var tokenTiers = map[string]TokenAccess{
 	"PATCH /api/v1/agents/{id}":                       tier(auth.ScopeAdmin),
 	"DELETE /api/v1/auth/invites/{id}":                tier(auth.ScopeAdmin),
 	"PUT /api/v1/channels/web-form":                   tier(auth.ScopeAdmin),
+	"PUT /api/v1/help-center":                         tier(auth.ScopeAdmin),
 	"PUT /api/v1/channels/email":                      tier(auth.ScopeAdmin),
 	"POST /api/v1/channels/email/domain-verification": tier(auth.ScopeAdmin),
 	"DELETE /api/v1/auth/sessions/{id}":               tier(auth.ScopeAdmin),

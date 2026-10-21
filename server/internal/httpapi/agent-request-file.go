@@ -41,7 +41,8 @@ func (a *API) fileAgentRequest(response http.ResponseWriter, request *http.Reque
 		return
 	}
 	if body == nil {
-		if mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type")); err == nil && mediaType == "multipart/form-data" {
+		// A file waits for nobody: neither a multipart upload nor the raw bytes of an image is filed.
+		if mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type")); err == nil && (mediaType == "multipart/form-data" || strings.HasPrefix(mediaType, "image/")) {
 			writeFilesNeedApproval(response)
 			return
 		}

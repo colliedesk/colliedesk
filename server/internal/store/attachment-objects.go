@@ -43,10 +43,10 @@ func lockObjects(ctx context.Context, tx pgx.Tx, keys []string) error {
 	return nil
 }
 
-// DiscardObject deletes the object when no attachment of the workspace references it. Objects are
-// content-addressed, so one object can back several attachments. The reference check and the delete
-// happen under the object's lock, so a request that stored the same bytes and is about to commit its
-// row is waited for, never undercut.
+// DiscardObject deletes the object when no attachment, cached mail image or knowledge base image of the
+// workspace references it. Objects are content-addressed, so one object can back several rows. The
+// reference check and the delete happen under the object's lock, so a request that stored the same
+// bytes and is about to commit its row is waited for, never undercut.
 func DiscardObject(ctx context.Context, db *database.DB, storage attachments.Storage, workspaceID, key string) error {
 	tx, err := db.BeginWorkspace(ctx, workspaceID)
 	if err != nil {
@@ -57,9 +57,11 @@ func DiscardObject(ctx context.Context, db *database.DB, storage attachments.Sto
 		return err
 	}
 	var used bool
-	// The proxy's image cache points at objects too; a file shared with an attachment stays while either needs it.
+	// The proxy's image cache and knowledge base images point at objects too; a file shared between them
+	// stays while any of them needs it.
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM attachments WHERE workspace_id=$1 AND storage_key=$2)
-		OR EXISTS(SELECT 1 FROM mail_image_cache WHERE workspace_id=$1 AND storage_key=$2)`, workspaceID, key).Scan(&used); err != nil {
+		OR EXISTS(SELECT 1 FROM mail_image_cache WHERE workspace_id=$1 AND storage_key=$2)
+		OR EXISTS(SELECT 1 FROM kb_images WHERE workspace_id=$1 AND storage_key=$2)`, workspaceID, key).Scan(&used); err != nil {
 		return fmt.Errorf("check attachment key: %w", err)
 	}
 	if !used {

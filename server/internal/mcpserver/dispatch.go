@@ -86,6 +86,27 @@ func (r *restClient) do(ctx context.Context, token, method, path string, query u
 	return nil
 }
 
+// upload posts raw bytes of contentType as the caller and decodes a 2xx JSON answer into into. A non-2xx
+// answer comes back as a *restError.
+func (r *restClient) upload(ctx context.Context, token, path, contentType string, data []byte, into any) error {
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, path, bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("Content-Type", contentType)
+	recorder := &recorder{header: http.Header{}}
+	r.api.ServeHTTP(recorder, request)
+	if recorder.status < 200 || recorder.status > 299 {
+		return parseRESTError(recorder)
+	}
+	if err := json.Unmarshal(recorder.body.Bytes(), into); err != nil {
+		return fmt.Errorf("decode POST %s answer: %w", path, err)
+	}
+	return nil
+}
+
 // download fetches path as the caller and returns the headers and at most limit bytes of a 2xx body,
 // so a large file is never buffered whole. Any other status comes back as a *restError.
 func (r *restClient) download(ctx context.Context, token, path string, limit int) (http.Header, []byte, error) {
