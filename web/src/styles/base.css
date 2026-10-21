@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* The article editor is plain CSS in its own chunk: words in its code (italic, underline) are no utilities here. */
+@source not "../features/kb/editor";
 @import "./fonts.css";
 @import "./tokens.css";
 

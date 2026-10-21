@@ -9,6 +9,8 @@ import { TeamSection } from './team-section';
 import { WebFormSection } from './web-form-section';
 import { SettingsPage } from './settings-page';
 import { messages } from '../../messages';
+import { Part, PartUnavailable } from '../../ui/lazy-part';
+import { helpCenterPart } from '../kb/kb-part';
 import type { SaveState } from './save-feedback';
 
 function saveState(m: { isPending: boolean; isSuccess: boolean; isError: boolean; error: unknown }): SaveState {
@@ -48,6 +50,8 @@ export function SettingsRoute() {
   const [gmailReturned] = useState(gmailReturn);
   // The "Send from Gmail" block is its own chunk; it loads alongside the settings requests, not after them.
   useEffect(gmailPart.preload, []);
+  // So is the help center card, from the knowledge base chunk.
+  useEffect(helpCenterPart.preload, []);
   const connectGmail = useMutation({ mutationFn: api.connectGmail, onSuccess: ({ url }) => window.location.assign(url) });
   const disconnectGmail = useMutation({ mutationFn: api.disconnectGmail, onSettled: () => refresh('email-channel') });
   const gmailFailure = connectGmail.error ?? disconnectGmail.error;
@@ -89,6 +93,11 @@ export function SettingsRoute() {
       onRotate={() => rotateSecret.mutate()} onVerifyDomain={() => verifyDomain.mutate()} verifyPending={verifyDomain.isPending} verifyError={verifyDomain.error instanceof InvalidRequestError ? verifyDomain.error.message : undefined} onDisconnect={() => disconnectEmail.mutate()}
       onConnectGmail={() => connectGmail.mutate()} onDisconnectGmail={() => disconnectGmail.mutate()}
       gmailPending={connectGmail.isPending || connectGmail.isSuccess} gmailError={gmailError} gmailReturned={gmailReturned} />}
+    helpCenterSection={<section className="settings-card" aria-labelledby="help-center-heading">
+      <div className="section-heading"><h2 id="help-center-heading">{messages.helpCenter}</h2><p>{messages.helpCenterDescription}</p></div>
+      <div className="settings-body"><Part part={helpCenterPart} failed={<PartUnavailable />}
+        render={({ HelpCenterSettings }) => <HelpCenterSettings canManage={isAdmin} workspaceName={me.data?.workspace.name} />} /></div>
+    </section>}
     webFormSection={<WebFormSection settings={webForm.data} canManage={isAdmin} save={saveState(saveWebForm)} onSave={(enabled, origins) => saveWebForm.mutate({ enabled, origins })} />}
     inviteError={createInvite.error instanceof PlanLimitError || createInvite.error instanceof InvalidRequestError ? createInvite.error.message : createInvite.isError ? messages.settingsActionFailed : undefined}
     createdInviteUrl={createInvite.data?.url}

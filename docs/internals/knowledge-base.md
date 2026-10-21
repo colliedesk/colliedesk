@@ -2,8 +2,9 @@
 
 Decisions and traps only. Code: `server/internal/store/kb-*.go`, `server/internal/httpapi/kb-handlers.go`,
 `server/internal/mcpserver/catalog-kb.go` and `tools-kb.go`, `server/internal/domain/kb.go`, migration
-`knowledge-base`. Issue #90. This first part is the data model, the API, the MCP tools and the export;
-the editor, the public help center and the Freshdesk import come in later pull requests.
+`knowledge-base`, and the web app in `web/src/features/kb/`. Issue #90. So far: the data model, the API,
+the MCP tools, the export and the editor in the web app; the public help center and the Freshdesk import
+come in later pull requests.
 
 ## Decisions
 
@@ -57,6 +58,56 @@ the editor, the public help center and the Freshdesk import come in later pull r
   `files_need_approval`, like a multipart upload.
 - **Locked workspaces get 402 on every KB route.** None is in `lockedAllowed`; the export still runs.
 
+## Editor (web app)
+
+- **Lazy, all of it, and the editor apart.** The first bundle carries only the rail link and the three
+  routes; the list, the article page, the preview with `remark-gfm` and their styles are the `kb-chunk`
+  part, the editor is a chunk of its own (`features/kb/editor-part.ts`), and the Help center card in
+  Settings is a small part of its own (`features/kb/kb-part.tsx`). `react-markdown` is already in the
+  first bundle for messages, so the preview shares it. The list never loads the editor; an article page
+  starts it with the article, and a pointer or the focus on the list or on New article preloads it.
+  The first bundle's Tailwind scan skips `features/kb/editor/` (`@source not` in `styles/base.css`):
+  words in its code (`italic`, `underline`) would otherwise become utilities in the first CSS.
+- **The editor is CodeMirror 6 on Markdown source, byte for byte** (`editor/codemirror-editor.tsx`):
+  what the person types is what `body_md` stores, so opening and saving an article an AI agent or an
+  import wrote never rewrites its syntax. One exception: CodeMirror splits lines on `\r\n`, `\r` and `\n`
+  and writes `\n`. The page compares bodies with line endings normalized (`sameBody`), so opening,
+  publishing or leaving an article stored with `\r\n` sends nothing; its first real edit saves it with
+  `\n` endings. Highlighting is the bare `@lezer/markdown` GFM parser in a
+  `Language`, not `@codemirror/lang-markdown`, which imports the HTML, CSS and JavaScript languages
+  (74 KB gzip) for code blocks. History, find and replace (`@codemirror/search`, Ctrl/Cmd+F), line
+  wrapping. Enter does not continue a list or quote and Tab is not bound, so focus moves on: both
+  belong to `lang-markdown` and the default keymap's indentation, which are left out on purpose (no
+  keyboard trap, 74 KB). The toolbar only adds or removes Markdown around the selection (`editor/commands.ts`); a
+  marker put on the cursor's line leaves the cursor after it. Its Tab stop is React state (`rover`) and
+  falls back to Bold when the button that held it is disabled, so the toolbar never loses its stop.
+- **Write, Side by side, Preview.** Side by side shows only in a window at least 1,180 px wide and is
+  the default there for an article up to 20,000 characters (`splitLimit`); a longer one opens in Write,
+  since every pause in typing redraws its preview in one long task (measured on a structured article of
+  99,600 characters at 4× CPU: 190–220 ms). The preview's first draw waits for the editor's first frame
+  (a frame, then a task: `previewReady`). The preview (`markdown-preview.tsx`, react-markdown) is the only costly part:
+  rendering 100,000 characters takes tens of milliseconds. It never runs on the typing path: the
+  editor tells the page of typing 120 ms after it stops, the preview reads that text through
+  `useDeferredValue` (starting from `null`, so opening an article shows the editor first), and both
+  panes have `contain: content`, so a key does not lay the preview out again.
+- **Typing reaches the page 120 ms later.** Save, Ctrl+S, the leave prompt and a restore read the
+  editor at once (`handle.markdown()`), so none of them works on a stale text.
+- **A text is never cut.** The body has no `maxLength` (a browser cuts a paste to it silently); a
+  counter of code points, as the server counts (`[...text].length`, not `.length`), refuses the save.
+- **A lost race keeps the person's text.** On `changed_elsewhere` the editor offers "save mine over
+  theirs" (reads the article again and saves with its `updated_at`; theirs stays in the history) or
+  "discard mine". Every save takes the answer's `updated_at`, so a second save does not race itself.
+- **Images never leave a placeholder in the text.** A pasted, dropped or inserted image is checked first
+  (type, 5 MiB). A widget decoration in CodeMirror's state (`editor/upload.ts`) shows "Uploading…"
+  while the text stays as it was; the image then goes in as a paragraph of its own after the block the
+  cursor was in (a paragraph, a table, a list), never inside a line or a table row. A refusal removes
+  the widget and shows the server's reason. An upload whose place went away (a restore or "their"
+  version replaced the text) still ends, so saving does not wait for it forever.
+- **Only collection address names break links.** An article's address carries its number, so a new
+  article slug is harmless; a collection's is not redirected, so its form warns before saving.
+- **History and trash are the saved reply panels** (`saved-reply-panels.tsx`), made generic with
+  optional props; the change line reads the same, with `import` added.
+
 ## Traps
 
 - **Default privileges grant UPDATE and DELETE on every new table.** The schema's default privileges
@@ -85,6 +136,9 @@ the editor, the public help center and the Freshdesk import come in later pull r
   every workspace table forces row-level security, which the isolation gate and the upgrade check
   enforce); (2) a leakproof match function installed by a superuser (self-hosters would need one);
   (3) an external search engine.
+- **No object literal inside an API path in the web app.** `TestEveryAPIPathTheWebAppCallsIsARoute`
+  reads a path literal up to its first `}`, so `` `/kb/articles${query({ cursor })}` `` reads as a path
+  that is not a route. `kb-api.ts` builds queries through small helpers called with variables.
 - **The default text search parser is quadratic in a run without whitespace.** The triggers are the
   characters of an email, a host, a URL, a file path or a hyphenated word, so the parser most likely
   reads ahead for one of those at every character and fails at the end of the run (the cause is

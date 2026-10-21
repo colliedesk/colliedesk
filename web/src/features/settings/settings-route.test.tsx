@@ -12,6 +12,8 @@ const api = vi.hoisted(() => ({
   connectGmail: vi.fn(), disconnectGmail: vi.fn(),
 }));
 vi.mock('../../api/client', () => ({ api, PlanLimitError: class extends Error {}, InvalidRequestError: class extends Error {} }));
+// The help center card has tests of its own (features/kb); here it stands for itself in the page.
+vi.mock('../kb/help-center-card', () => ({ HelpCenterSettings: () => <p>Help center card</p> }));
 
 const me = (role: 'admin' | 'agent') => ({
   agent: { id: '11111111-1111-4111-8111-111111111111', email: 'sam@example.com', display_name: '', role, timezone_override: null },
@@ -161,4 +163,11 @@ test('Connect Gmail sends the browser to Google, and the outcome it comes back w
   } finally {
     Object.defineProperty(window, 'location', { configurable: true, value: original });
   }
+});
+
+test('Settings has a Help center section in its nav, for every agent', async () => {
+  show('agent');
+  expect(await screen.findByText('Help center card')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Help center' })).toBeInTheDocument();
+  expect(screen.getByRole('navigation', { name: 'Settings sections' })).toHaveTextContent('Help center');
 });
