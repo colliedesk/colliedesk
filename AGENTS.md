@@ -93,6 +93,26 @@ Run locally: `docker compose --profile test up -d postgres mailpit`, then
 `make e2e E2E_ARGS='--grep @onboarding'`; for the installer,
 `docker build -t colliedesk:smoke -f server/Dockerfile . && COLLIE_DESK_IMAGE=colliedesk:smoke sh tests/install-smoke.sh`.
 
+## Testing on Colliedesk Cloud
+
+Colliedesk Cloud (`app.colliedesk.com`) is production. Every sign-up there counts as a customer
+trial in the funnel and emails the team. Test locally or with the e2e suite first.
+
+- **Sign up on Cloud only with a team address.** The server reads `INTERNAL_SIGNUP_EMAILS`
+  (`@colliedesk.com`, `@hclabs.co`, `@hclabs.colliedesk.com` on Cloud) and sends `trial_started` with `internal: true` for a
+  match. Never use a personal mailbox: it is counted as a customer. If you must, add that exact
+  address to `INTERNAL_SIGNUP_EMAILS` first (HC Labs `infra` repo,
+  `hosts/collie-01/colliedesk/compose.yaml`) and wait for the deploy.
+- **Name a test workspace for what it is** (`e2e-…`, `test-…`), so a person reading the database
+  sees it at once.
+- **Every count of trials, activation or payments leaves out internal sign-ups.** Only
+  `trial_started` carries the flag: drop a workspace's later events (`email_channel_saved`,
+  `reply_sent`, `teammate_invited`, `subscription_activated`, `workspace_snapshot`) by its
+  workspace id from an internal `trial_started`. A new query, alert or report that skips this
+  inflates the funnel.
+- `TestInternalSignupIsMarkedOnTrialStarted` guards the flag. Never weaken it; a new place that
+  starts a trial sets the flag through `Config.InternalSignups` too.
+
 ## Releases
 
 Colliedesk is **alpha**: releases are `v0.0.N`. Merging to `main` never makes a release, and
