@@ -473,3 +473,22 @@ func TestAIRetrievalMasksAContactRenamedAfterTheConversation(t *testing.T) {
 		t.Errorf("a second rename unmasked an earlier name:\n%s", got)
 	}
 }
+
+// A name too long for an index entry still renames, and is still masked.
+func TestAIRetrievalKeepsALongFormerName(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Retrieval Long Name", "admin@retrieval-long-name.example.com")
+	workspace := workspaceID(t, api, admin)
+	var long string
+	if err := pool.QueryRow(context.Background(), `SELECT string_agg(chr(97 + floor(random()*26)::int), '') FROM generate_series(1,3000)`).Scan(&long); err != nil {
+		t.Fatal(err)
+	}
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": long, "email": "long@customer.example"})
+	seedResolvedConversation(t, api, pool, admin, workspace, contact, "Paper jam", "I am "+long+". The printer has a paper jam.", "note", "Open the tray.")
+	kbCall(t, api, http.MethodPatch, "/api/v1/contacts/"+contact, map[string]any{"name": "Short"}, admin, http.StatusOK, nil)
+	buildAIRetrieval(t, pool)
+	got := aiRetrieve(t, pool, workspace, store.AIRetrievalQuery{Text: "printer paper jam", ConversationLimit: 3})
+	if len(got) != 1 || strings.Contains(got[0].Text, long[:40]) {
+		t.Fatalf("after renaming a long name = %+v", got)
+	}
+}

@@ -78,9 +78,10 @@ CREATE TABLE ai_retrieval_former_names (
     kind text NOT NULL CHECK (kind IN ('name', 'organization')),
     value text NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (workspace_id, contact_id, kind, value),
     FOREIGN KEY (workspace_id, contact_id) REFERENCES contacts(workspace_id, id) ON DELETE CASCADE
 );
+-- Each value once, by its hash: a name of a few kilobytes would not fit in an index entry.
+CREATE UNIQUE INDEX ai_retrieval_former_names_value_idx ON ai_retrieval_former_names(workspace_id, contact_id, kind, md5(value));
 
 DO $$
 DECLARE

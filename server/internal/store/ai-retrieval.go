@@ -540,12 +540,13 @@ func buildAIConversations(ctx context.Context, tx pgx.Tx, workspaceID string, id
 		if incoming == nil {
 			continue
 		}
-		body := "Customer: " + cutRunes(strings.TrimSpace(*incoming), aiCustomerRunes)
+		// Masked before it is cut: a cut through a name would leave the part before it unmasked.
+		body := "Customer: " + cutRunes(maskAIText(strings.TrimSpace(*incoming), contact), aiCustomerRunes)
 		if reply != nil {
-			body += "\n\nReply: " + strings.TrimSpace(*reply)
+			body += "\n\nReply: " + maskAIText(strings.TrimSpace(*reply), contact)
 		}
 		title := cutRunes(maskAIText(subject, contact), 300)
-		docs.add(nil, nil, &id, title, cutRunes(maskAIText(body, contact), aiConversationRunes-utf8.RuneCountInString(title)), updated)
+		docs.add(nil, nil, &id, title, cutRunes(body, aiConversationRunes-utf8.RuneCountInString(title)), updated)
 	}
 	if err := rows.Err(); err != nil {
 		return err
