@@ -667,3 +667,9 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
     background: var(--surface-1); padding: var(--space-2) var(--space-2) calc(var(--space-2) + env(safe-area-inset-bottom)); }
 }
 .import-page details p { overflow-wrap: anywhere; }
+.import-page .section-heading p { overflow-wrap: anywhere; }
+/* At 320 px a seven-digit count and its neighbours still fit the screen. */
+@media (max-width: 22.5rem) {
+  .import-ledger { font-size: var(--fs-label); }
+  .import-ledger th, .import-ledger td { padding-inline: var(--space-1); }
+}
