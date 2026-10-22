@@ -114,9 +114,12 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and bo
 - **Mark** (`web/src/ui/logo.tsx`, `LogoMark`): a collie in profile wearing a support headset. Wedge
   muzzle, tipped ear, white ruff, the mic running along the muzzle. Greys only (ink and paper). The white
   parts need a dark ground, so the mark always sits on its rounded tile (`--logo-tile`). 20 px or larger.
-- **Favicon** (`web/public/favicon.svg`, `.ico`): a shepherd's crook drawn as a question mark, with a
-  sheep for the dot. The headset collie turns to noise at 16 px; the crook stays legible. Same tile.
-  `apple-touch-icon.png` (180 px) uses the mark, full bleed.
+- **Favicon** (`web/public/favicon.svg`, `.ico` with 16 and 32 px): the collie head from the mark as a
+  white silhouette on the same tile, without the headset. The tab icon must call up the mark, so no
+  abstract symbol (a question mark was tried and dropped: nobody tied it to Colliedesk). At 16 px the
+  grey mark and its headset blur; the white ear and muzzle stay readable. `apple-touch-icon.png`
+  (180 px) uses the full mark. Icon links in `web/index.html` carry `?v=` = the first 10 hex of the
+  file's sha256 (`src/favicon-version.test.ts`), because browsers keep a favicon per URL.
 - **Wordmark** (`LogoWordmark` reads `web/public/wordmark-on-dark.svg`, kept out of the JS bundle; the
   site uses `public/logo-wordmark.svg`): outlined IBM Plex Sans,
   "collie" 700 and "desk" 400. The second "l" is tipped forward like a collie ear. Use the outlined
