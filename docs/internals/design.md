@@ -16,9 +16,11 @@ https://design.hclabs.co, owner only). The site direction is "price ledger"; the
 2. **Colour means something.** Status (open blue, pending amber, resolved green, urgent red, high orange),
    focus (amber) and private notes (amber) keep their colours; nothing else is coloured. On the site the
    price has its own colour (`--price`, orange) and nothing else does.
-3. **Serif for titles only.** Instrument Serif (`--font-display`) sets page titles (Inbox, Settings,
+3. **Serif for titles only.** IBM Plex Serif 500 (`--font-display`) sets page titles (Inbox, Settings,
    Requests, Billing, the sign-in heading and promise) and the site's h1/h2. Every control, label and
-   body line stays IBM Plex Sans.
+   body line stays IBM Plex Sans. One Plex skeleton for serif, sans and mono (owner 22/10/2026): it
+   replaced Instrument Serif, whose narrow high-contrast cut spoke in a different voice from the
+   Plex Sans wordmark.
 4. **Rings, not borders.** Cards and our replies sit on a 1px shadow ring (`--shadow-1`), so the eye reads
    layers by surface and ring, not by outlines.
 5. **Links are ink and underlined** inside running text (`a:not([class])`); colour alone never marks a link.
@@ -97,7 +99,7 @@ focus `#f0b44c`. Every text pair is at least 4.5:1; focus rings and input border
 ## Type
 
 - IBM Plex Sans (400, 500, 600, 700) for text, buttons, tabs, labels and time stamps, always in
-  sentence case. Instrument Serif 400 (`--font-display`) only for page titles and the sign-in promise. IBM Plex Mono (400, 500) only for code, IDs, URLs and keycaps. No uppercase labels.
+  sentence case. IBM Plex Serif 500 (`--font-display`, letter-spacing −0.02em) only for page titles and the sign-in promise. IBM Plex Mono (400, 500) only for code, IDs, URLs and keycaps. No uppercase labels.
 - Fonts are self-hosted: `web/src/styles/fonts/` (woff2 subsets latin, latin-ext, vietnamese) and
   `fonts.css`, licence SIL OFL 1.1 (`fonts/OFL-*.txt`). Never load a font from Google Fonts or a
   CDN, and never use Be Vietnam Pro.
