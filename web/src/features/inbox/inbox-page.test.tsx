@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { InboxQuery } from '../../lib/inbox-query';
 import { InboxPage } from './inbox-page';
 
-const conversation = {
+const conversation = { latest_reply_number: 0,
   id: '11111111-1111-4111-8111-111111111111',
   contact_id: '22222222-2222-4222-8222-222222222222',
   contact_name: 'Mai Linh',
@@ -83,7 +83,7 @@ test('renders message Markdown in the timeline', () => {
     attachments: [],
     cc: [],
     created_at: '2026-10-14T00:00:00Z',
-    delivery: null,
+    delivery: null, reply_number: null,
     email: null,
   }]} />);
   expect(screen.getByText('secure link').tagName).toBe('STRONG');
@@ -125,7 +125,7 @@ test('shows the author name and attachment download links on a timeline message'
     }],
     cc: [],
     created_at: '2026-10-14T00:00:00Z',
-    delivery: null,
+    delivery: null, reply_number: null,
     email: null,
   }]} />);
   expect(screen.getByText('Grace Hopper')).toBeInTheDocument();
@@ -148,7 +148,7 @@ const imported = {
   attachments: [],
   cc: [],
   created_at: '2026-10-14T00:00:00Z',
-  delivery: null,
+  delivery: null, reply_number: null,
   email: null,
 };
 
@@ -357,20 +357,21 @@ test('the reply box starts with the people the customer copied and sends them wi
   const onMessage = vi.fn();
   const timeline = [{
     id: '33333333-3333-4333-8333-333333333333', conversation_id: conversation.id, author_agent_id: null, author_name: null, agent_token: null, agent_request_id: null, kind: 'incoming' as const,
-    body: 'Adding my manager.', body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null,
+    body: 'Adding my manager.', body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, reply_number: null,
     email: { from: 'mai@customer.example', authentication: 'pass' as const, attachments: [], original_attachment_id: null, cc: ['manager@customer.example'] },
   }];
   render(<InboxPage selected={conversation} conversations={[conversation]} timeline={timeline} onMessage={onMessage} />);
   expect(screen.getByRole('list', { name: 'Cc' })).toHaveTextContent('manager@customer.example');
   fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Thanks both.' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
-  expect(onMessage).toHaveBeenCalledWith('outgoing', 'Thanks both.', [], ['manager@customer.example']);
+  // No reply on screen yet: it was started having seen reply 0.
+  expect(onMessage).toHaveBeenCalledWith('outgoing', 'Thanks both.', [], ['manager@customer.example'], 0);
 });
 
 test('on the hosted cloud the reply box offers no Cc from mail the workspace posted itself', () => {
   const posted = [{
     id: '33333333-3333-4333-8333-333333333333', conversation_id: conversation.id, author_agent_id: null, author_name: null, agent_token: null, agent_request_id: null, kind: 'incoming' as const,
-    body: 'Adding my manager.', body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null,
+    body: 'Adding my manager.', body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, reply_number: null,
     email: { from: 'mai@customer.example', authentication: 'pass' as const, via: 'workspace' as const, attachments: [], original_attachment_id: null, cc: ['manager@customer.example'] },
   }];
   render(<InboxPage hosted selected={conversation} conversations={[conversation]} timeline={posted} />);

@@ -6,12 +6,12 @@ import { requestExportLink } from './workspace-export';
 import { recordFailedCall } from '../lib/diagnostics';
 import type { operations } from './generated';
 import {
-  agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationPresenceSchema, conversationSchema, inboxActivitySchema,
+  agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, consentLinkSchema, emailChannelSettingsSchema, inboundSecretSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, messageListSchema, messageSchema, timeEntryListSchema,
   agentRequestListSchema, agentRequestSchema, approvedAgentRequestSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, publicConfigSchema, redeemedSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
 } from './schemas';
-import type { WorkspaceChoice } from './schemas';
+import type { Message, WorkspaceChoice } from './schemas';
 
 // UnauthorizedError means the browser has no valid session: never signed in, expired, or revoked.
 export class UnauthorizedError extends Error {
@@ -83,6 +83,11 @@ async function invalidRequest(response: Response): Promise<Error> {
     const body = await response.json() as { error?: { code?: unknown; message?: unknown } };
     if (typeof body.error?.message === 'string' && body.error.message) {
       if (response.status === 409 && body.error.code === 'changed_elsewhere') return new ChangedElsewhereError(body.error.message);
+      // The replies are only shown, as text, so they are taken as sent.
+      if (response.status === 409 && body.error.code === 'reply_conflict') {
+        const { latest_reply_number: latest, newer_replies: newer } = body.error as { latest_reply_number?: number; newer_replies?: Message[] };
+        return new ReplyConflictError(body.error.message, latest ?? 0, newer ?? []);
+      }
       return response.status === 409 ? new ConflictError(body.error.message, body.error)
         : new InvalidRequestError(body.error.message);
     }
@@ -92,14 +97,16 @@ async function invalidRequest(response: Response): Promise<Error> {
   return failure(response.status);
 }
 
-// TooManyRequestsError is a call repeated sooner than the server takes it (429 too_many_requests); it may
-// be sent again after retryAfterSeconds.
-export class TooManyRequestsError extends Error {
-  readonly retryAfterSeconds: number;
-  constructor(retryAfterSeconds: number) {
-    super('Too many requests');
-    this.name = 'TooManyRequestsError';
-    this.retryAfterSeconds = retryAfterSeconds;
+// ReplyConflictError refuses a reply because someone replied after the sender started writing (409
+// reply_conflict): nothing was sent; newer are those replies, latest the number to send again with.
+export class ReplyConflictError extends Error {
+  readonly latest: number;
+  readonly newer: Message[];
+  constructor(message: string, latest: number, newer: Message[]) {
+    super(message);
+    this.name = 'ReplyConflictError';
+    this.latest = latest;
+    this.newer = newer;
   }
 }
 
@@ -129,7 +136,6 @@ async function outboundRefusal(response: Response): Promise<Error> {
     // The knowledge base's video uploads: the answer says which upload holds the place, or whose it is.
     if (['too_many_uploads', 'not_your_upload', 'server_busy', 'files_need_approval'].includes(String(code)) && typeof message === 'string' && message)
       return new ConflictError(message, { code });
-    if (code === 'too_many_requests' && response.status === 429) return new TooManyRequestsError(Number(response.headers.get('Retry-After')) || 1);
     if (code === 'trial_outbound_restricted' || code === 'trial_outbound_limit') {
       const refusedCc = Array.isArray(refused) ? refused.filter((item): item is string => typeof item === 'string') : [];
       return new OutboundRefusedError(code, typeof message === 'string' ? message : '', typeof retry === 'number' ? retry : undefined, refusedCc,
@@ -191,10 +197,12 @@ type OptionalBody<Operation extends keyof operations> =
   NonNullable<operations[Operation]['requestBody']> extends { content: { 'application/json': infer Body } } ? Body : never;
 const optionalJson = <Operation extends keyof operations>(value: OptionalBody<Operation>): string => JSON.stringify(value);
 
-function messageForm(kind: string, body: string, files: File[], cc: string[]): FormData {
+function messageForm(kind: string, body: string, files: File[], cc: string[], seen?: number): FormData {
   const form = new FormData();
   form.append('kind', kind);
   form.append('body', body);
+  // Before the files: a reply refused for a newer one stores none of them.
+  if (seen !== undefined) form.append('seen_reply_number', String(seen));
   // The server reads the copied addresses before the files, so a refusal costs no upload.
   for (const address of cc) form.append('cc', address);
   for (const file of files) form.append('files', file, file.name);
@@ -281,16 +289,13 @@ export const api = {
   bulkUpdateConversations: (ids: string[], changes: BulkConversationChanges) => request('/api/v1/conversations', bulkUpdateResultSchema, { method: 'PATCH', body: json<'bulkUpdateConversations'>({ ids, changes }) }),
   addConversationTag: (id: string, tagId: string) => request(`/api/v1/conversations/${id}/tags/${tagId}`, conversationSchema, { method: 'PUT' }),
   removeConversationTag: (id: string, tagId: string) => request(`/api/v1/conversations/${id}/tags/${tagId}`, conversationSchema, { method: 'DELETE' }),
-  // Says this tab has the conversation open (and whether a reply is being written) and answers who else has.
-  announcePresence: (id: string, body: RequestBody<'putConversationPresence'>) =>
-    request(`/api/v1/conversations/${id}/presence`, conversationPresenceSchema, { method: 'PUT', body: json<'putConversationPresence'>(body) }),
-  // keepalive lets the leave finish while the tab closes.
-  leavePresence: (id: string, clientId: string) => requestNoContent(`/api/v1/conversations/${id}/presence/${clientId}`, { method: 'DELETE', keepalive: true }),
   messages: (id: string) => request(`/api/v1/conversations/${id}/messages`, messageListSchema),
   timeEntries: (id: string) => request(`/api/v1/conversations/${id}/time-entries`, timeEntryListSchema),
-  createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = [], cc: string[] = []) =>
+  // seen is the newest reply number the sender had seen when they started writing (409 ReplyConflictError when older).
+  createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = [], cc: string[] = [], seen?: number) =>
     request(`/api/v1/conversations/${id}/messages`, messageSchema, { method: 'POST',
-      body: files.length > 0 ? messageForm(kind, body, files, cc) : json<'createMessage'>(cc.length > 0 ? { kind, body, cc } : { kind, body }) }),
+      body: files.length > 0 ? messageForm(kind, body, files, cc, seen)
+        : json<'createMessage'>({ kind, body, ...(cc.length > 0 ? { cc } : {}), ...(seen === undefined ? {} : { seen_reply_number: seen }) }) }),
   contacts: (search = '') => request(`/api/v1/contacts?search=${encodeURIComponent(search)}`, contactListSchema),
   createContact: (name: string, email: string) => request('/api/v1/contacts', contactSchema, { method: 'POST', body: json<'createContact'>({ name, email }) }),
   agents: () => request('/api/v1/agents', agentListSchema),

@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { InboxRoute } from './inbox-route';
 import { testRouter } from './test-router';
+import { presenceViewPart } from './presence-part';
 
 const api = vi.hoisted(() => ({
   announcePresence: vi.fn(async (_id: string, _body: unknown): Promise<{ viewers: unknown[]; heartbeat_seconds: number }> => ({ viewers: [], heartbeat_seconds: 5 })), leavePresence: vi.fn(async () => undefined),
@@ -15,7 +16,8 @@ const api = vi.hoisted(() => ({
   emailChannel: vi.fn(async () => ({ channel: null, inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null })),
 }));
 
-vi.mock('../../api/client', () => ({ api, InvalidRequestError: class extends Error {} }));
+vi.mock('../../api/client', () => ({ api, InvalidRequestError: class extends Error {}, ReplyConflictError: class extends Error {} }));
+vi.mock('./presence-api', () => ({ presenceApi: { announce: api.announcePresence, leave: api.leavePresence }, RetryLater: class extends Error {} }));
 vi.mock('../contacts/contact-api', () => ({ contactApi: { startConversation: api.createConversation, searchContacts: api.contacts }, existingContact: () => undefined }));
 const views = vi.hoisted(() => ({
   list: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })), trash: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })),
@@ -25,7 +27,7 @@ vi.mock('../../api/saved-views', () => ({ savedViewsApi: views }));
 vi.mock('@tanstack/react-router', async () => (await import('./test-router')).routerModule);
 beforeEach(() => testRouter.reset());
 
-const conversation = (id: string, subject: string) => ({
+const conversation = (id: string, subject: string) => ({ latest_reply_number: 0,
   id, contact_id: '22222222-2222-4222-8222-222222222222', contact_name: 'Mai Linh', subject,
   status: 'open' as const, priority: 'normal' as const, assignee_id: null, tags: [], channel: 'email' as const, origin: null,
   created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z',
@@ -33,6 +35,14 @@ const conversation = (id: string, subject: string) => ({
 
 // A ticket opened by its address must not wait for the list or for the conversation detail before it asks for
 // its messages: those three requests are independent, and a chain of them costs a round trip each.
+
+// The presence chunk loads once a conversation is open; start with it there, so no test ends while it is
+// still on its way (vitest refuses a module asked for after the test environment is gone).
+beforeAll(async () => {
+  presenceViewPart.preload();
+  await import('./presence-view');
+});
+
 test('a ticket opened by its address asks for its messages and time entries at once, before the list or the detail arrive', async () => {
   const id = '11111111-1111-4111-8111-111111111111';
   testRouter.params = { conversationId: id };

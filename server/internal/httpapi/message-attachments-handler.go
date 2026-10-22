@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -49,6 +50,8 @@ type messageFields struct {
 	contactID, subject string
 	// contactName and contactEmail add a customer with the conversation, instead of contactID.
 	contactName, contactEmail string
+	// seen is the seen_reply_number field: the latest reply the sender had seen; nil when not sent.
+	seen *int
 }
 
 // newContact is the customer the fields add, or nil when they name a contact of the workspace.
@@ -74,6 +77,9 @@ func (f messageFields) validate() error {
 	}
 	if (f.kind != "outgoing" && f.kind != "note") || strings.TrimSpace(f.body) == "" {
 		return &uploadError{http.StatusBadRequest, "invalid_request", "A reply or note body is required."}
+	}
+	if f.seen != nil && *f.seen < 0 {
+		return &uploadError{http.StatusBadRequest, "invalid_request", "seen_reply_number is the number of a reply, 0 or more."}
 	}
 	return nil
 }
@@ -111,6 +117,9 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 	var stored []store.NewAttachment
 	defer func() { a.discardUnreferenced(context.WithoutCancel(request.Context()), workspaceID, stored) }()
 	fields, files, err := a.readMessageParts(request.Context(), reader, workspaceID, conversationID, messageFields{}, &stored)
+	if a.writeReplyConflict(response, identity, err) {
+		return
+	}
 	if err != nil {
 		a.writeUploadError(response, err)
 		return
@@ -129,7 +138,10 @@ func (a *API) createMessageWithFiles(response http.ResponseWriter, request *http
 		a.writeUploadError(response, refusal)
 		return
 	}
-	item, err := a.store.CreateMessageWithCC(request.Context(), workspaceID, conversationID, actor, fields.kind, fields.body, cc, files...)
+	item, err := a.store.CreateReply(request.Context(), workspaceID, conversationID, actor, fields.kind, fields.body, cc, fields.seen, files...)
+	if a.writeReplyConflict(response, identity, err) {
+		return
+	}
 	if errors.Is(err, store.ErrObjectMissing) {
 		writeError(response, http.StatusInternalServerError, "internal_error", "A file was lost while the message was saved. Nothing was sent; try again.")
 		return
@@ -243,7 +255,7 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 			return fields, nil, invalidUpload(err)
 		}
 		switch name := part.FormName(); {
-		case name == "kind" && !fields.opening, name == "body", name == "cc",
+		case name == "kind" && !fields.opening, name == "body", name == "cc", name == "seen_reply_number" && !fields.opening,
 			fields.opening && (name == "contact_id" || name == "subject" || name == "contact_name" || name == "contact_email"):
 			text, err := readField(part)
 			if err != nil {
@@ -262,6 +274,12 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 				fields.contactEmail = text
 			case "body":
 				fields.body = text
+			case "seen_reply_number":
+				seen, err := strconv.Atoi(text)
+				if err != nil {
+					return fields, nil, &uploadError{http.StatusBadRequest, "invalid_request", "seen_reply_number is the number of a reply, 0 or more."}
+				}
+				fields.seen = &seen
 			default:
 				if len(fields.cc) > maxCC {
 					return fields, nil, a.invalidCC("A reply can be copied to at most 10 addresses.")
@@ -282,6 +300,12 @@ func (a *API) readMessageParts(ctx context.Context, reader *multipart.Reader, wo
 				}
 				if err := a.store.CheckAttachmentAdmission(ctx, workspaceID, conversationID, fields.kind, cc); err != nil {
 					return fields, nil, err
+				}
+				// A reply that would be refused for a newer one is refused before its files are stored.
+				if fields.kind == "outgoing" && fields.seen != nil && !fields.opening {
+					if err := a.store.CheckReplySeen(ctx, workspaceID, conversationID, *fields.seen); err != nil {
+						return fields, nil, err
+					}
 				}
 				admitted = true
 			}

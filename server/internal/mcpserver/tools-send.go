@@ -3,12 +3,15 @@ package mcpserver
 import (
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
 type replyOut struct {
 	ConversationID string `json:"conversation_id"`
-	Message        struct {
+	// Warning says a person had a reply to this customer open and not sent yet.
+	Warning string `json:"warning,omitempty"`
+	Message struct {
 		ID                  string    `json:"id"`
 		Kind                string    `json:"kind"`
 		CreatedAt           string    `json:"created_at"`
@@ -21,9 +24,10 @@ type replyOut struct {
 
 func replySend(c *call, arguments map[string]any) (any, error) {
 	args, err := decodeArguments[struct {
-		ConversationID string   `json:"conversation_id"`
-		Body           string   `json:"body"`
-		CC             []string `json:"cc"`
+		ConversationID  string   `json:"conversation_id"`
+		Body            string   `json:"body"`
+		CC              []string `json:"cc"`
+		SeenReplyNumber *int     `json:"seen_reply_number"`
 	}](arguments)
 	if err != nil {
 		return nil, err
@@ -31,13 +35,24 @@ func replySend(c *call, arguments map[string]any) (any, error) {
 	if strings.TrimSpace(args.Body) == "" {
 		return nil, &toolError{"The reply is empty. Write the reply text in body."}
 	}
+	if args.SeenReplyNumber == nil {
+		return nil, &toolError{"Pass seen_reply_number: the latest_reply_number of colliedesk_conversation_get for this conversation. Nothing was sent."}
+	}
 	c.notFound = notFoundConversation(args.ConversationID)
-	request := map[string]any{"kind": "outgoing", "body": args.Body}
+	request := map[string]any{"kind": "outgoing", "body": args.Body, "seen_reply_number": *args.SeenReplyNumber}
 	if len(args.CC) > 0 {
 		request["cc"] = args.CC
 	}
+	path := "/api/v1/conversations/" + url.PathEscape(args.ConversationID) + "/messages"
 	var created restMessage
-	if err := c.send(http.MethodPost, "/api/v1/conversations/"+url.PathEscape(args.ConversationID)+"/messages", request, &created); err != nil {
+	err = c.rest.do(c.ctx, c.token, http.MethodPost, path, nil, request, &created)
+	if failure, ok := err.(*restError); ok && failure.Status == http.StatusConflict && failure.Code == "reply_conflict" {
+		return nil, c.replyConflict(args.ConversationID, *args.SeenReplyNumber)
+	}
+	if err == nil {
+		c.wrote = true
+	}
+	if err := c.refuse(err, c.notFound); err != nil {
 		return nil, err
 	}
 	out := replyOut{ConversationID: args.ConversationID}
@@ -50,7 +65,54 @@ func replySend(c *call, arguments map[string]any) (any, error) {
 	if agents, err := c.agentsByID(); err == nil && created.AuthorAgentID != nil {
 		out.Message.Author = authorOf(created, agents)
 	}
+	// Nor does a failed look at who else has the conversation open.
+	var activity restActivity
+	if err := c.get("/api/v1/inbox/activity", nil, &activity); err == nil {
+		for _, item := range activity.Viewing {
+			if item.ConversationID == args.ConversationID {
+				out.Warning = writingWarning(viewersOut(item.Viewers))
+			}
+		}
+	}
 	return out, nil
+}
+
+// writingWarning names the people who had a reply to this customer open and not sent when the agent's went.
+func writingWarning(viewers []viewerOut) string {
+	var people []string
+	for _, viewer := range viewers {
+		if viewer.Writing && viewer.AgentToken == nil {
+			people = append(people, viewer.Name)
+		}
+	}
+	if len(people) == 0 {
+		return ""
+	}
+	return strings.Join(people, ", ") + ` had a reply to this customer open and not sent yet when yours went. Tell the user, so the customer does not get two answers.`
+}
+
+// replyConflict words a reply refused because someone replied after seen: what they wrote (team text;
+// an imported or customer-written message is only pointed at), and what to do.
+func (c *call) replyConflict(conversationID string, seen int) error {
+	text := "Someone replied to this conversation after the version you read (seen_reply_number " + strconv.Itoa(seen) + "). Nothing was sent."
+	var thread struct {
+		Items []restMessage `json:"items"`
+	}
+	if err := c.get("/api/v1/conversations/"+url.PathEscape(conversationID)+"/messages", nil, &thread); err == nil {
+		agents, _ := c.agentsByID()
+		for _, message := range thread.Items {
+			if message.Kind != "outgoing" || message.ReplyNumber == nil || *message.ReplyNumber <= seen {
+				continue
+			}
+			text += "\n\nReply " + strconv.Itoa(*message.ReplyNumber) + " at " + utc(message.CreatedAt)
+			if nativeTeamMessage(message) {
+				text += " by " + authorOf(message, agents) + ":\n" + message.Body
+			} else {
+				text += ", imported from another helpdesk: read it with colliedesk_conversation_get."
+			}
+		}
+	}
+	return &toolError{text + "\n\nRead the conversation again with colliedesk_conversation_get, and send only if your reply still fits, with its new latest_reply_number."}
 }
 
 func replyRetry(c *call, arguments map[string]any) (any, error) {

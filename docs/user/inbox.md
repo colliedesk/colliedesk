@@ -162,6 +162,14 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   **Delivery failed** (with **Retry delivery**).
 - **Private note** is visible only to your team.
 - Messages support Markdown.
+- **Someone replied while you were writing.** When a teammate's reply (or one you sent from another
+  tab, or an AI agent's) reached the customer after you started your reply, Colliedesk does not send
+  yours. Your text stays in the box, their reply shows above it with its time (an imported reply keeps
+  its own time and says where it came from), and you choose **Send anyway** or **Edit reply**. Either
+  way you are asked about those replies once. Private notes never trigger it.
+- Approving an AI agent's [reply draft](agent-requests.md) works the same way: when someone replied
+  after the newest reply on your screen, the draft is not sent and keeps waiting; read the new reply,
+  then send the draft again if it still fits.
 - **Cc** (under the message box) copies colleagues of the customer on a reply; see [Copy other people on a reply](email-channel.md#copy-other-people-on-a-reply-cc).
 - **Insert saved reply** (or `/`) puts a [saved reply](saved-replies.md) into the box, with the customer's name and yours filled in. You can edit it before you send.
 - **Articles** puts a link to a published [knowledge base article](knowledge-base.md#link-an-article-in-a-reply) into the box: its title and its help center address on two lines.

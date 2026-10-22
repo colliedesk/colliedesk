@@ -5,6 +5,8 @@ import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import { AttachmentsTooLargeError, AttachmentStorageError } from '../../api/attachments-error';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { json, serve, summary } from '../kb/kb.test.fixture';
+import { ReplyConflictError } from '../../api/client';
+import { presenceViewPart } from './presence-part';
 import { ReplyComposer, replyPickersPart } from './reply-composer';
 
 // The lists under the box come from their own chunk, which the composer loads when it mounts. These tests
@@ -12,7 +14,9 @@ import { ReplyComposer, replyPickersPart } from './reply-composer';
 // reply-composer-pickers.test.tsx.
 beforeAll(async () => {
   replyPickersPart.preload();
+  presenceViewPart.preload();
   await import('./reply-pickers');
+  await import('./presence-view');
   // The part takes the module on the next turn of the event loop.
   await new Promise((resolve) => setTimeout(resolve, 0));
 });
@@ -619,4 +623,67 @@ test('the composer says when its reply box holds a reply not sent yet, and when 
   await waitFor(() => expect(onSubmit).toHaveBeenCalled());
   accept();
   await waitFor(() => expect(onReplyDraft).toHaveBeenLastCalledWith(false));
+});
+
+const lanReply = {
+  id: '99999999-9999-4999-8999-999999999999', conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: '44444444-4444-4444-8444-444444444444',
+  author_name: 'Lan', agent_token: null, agent_request_id: null, kind: 'outgoing' as const, body: 'Your refund left today.', body_html: null, origin: null,
+  attachments: [], cc: [], created_at: '2026-10-22T09:00:00Z', delivery: null, email: null, reply_number: 3,
+};
+
+test('a reply says which replies its writer had on screen when they started, not when they press send', async () => {
+  const onSubmit = vi.fn(async () => undefined);
+  const { rerender } = render(<ReplyComposer onSubmit={onSubmit} latestReplyNumber={2} />);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Refund on its way' } });
+  // Lan's reply arrives on screen while this one is being written: the mark stays at 2.
+  rerender(<ReplyComposer onSubmit={onSubmit} latestReplyNumber={3} />);
+  fireEvent.keyDown(screen.getByLabelText('Message body'), { key: 'Enter', ctrlKey: true });
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledWith('outgoing', 'Refund on its way', [], [], 2));
+  // A note is never checked.
+  fireEvent.click(screen.getByRole('button', { name: 'Private note' }));
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'FYI' } });
+  fireEvent.keyDown(screen.getByLabelText('Message body'), { key: 'Enter', ctrlKey: true });
+  await waitFor(() => expect(onSubmit).toHaveBeenLastCalledWith('note', 'FYI'));
+});
+
+test('someone replied meanwhile: the text stays, their reply shows, and Send anyway or Edit reply move the mark so it is asked once', async () => {
+  const onSubmit = vi.fn<(...args: unknown[]) => Promise<unknown>>()
+    .mockRejectedValueOnce(new ReplyConflictError('Someone replied', 3, [lanReply]))
+    .mockResolvedValue(undefined);
+  render(<ReplyComposer onSubmit={onSubmit} latestReplyNumber={2} timezone="UTC" />);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Refund on its way' } });
+  fireEvent.keyDown(screen.getByLabelText('Message body'), { key: 'Enter', ctrlKey: true });
+  expect(await screen.findByRole('alert')).toHaveTextContent('Someone replied while you were writing (1 new reply). Nothing was sent');
+  const warning = screen.getByRole('region', { name: 'New replies' });
+  expect(warning).toHaveTextContent('Lan');
+  expect(warning).toHaveTextContent('Your refund left today.');
+  expect(within(warning).getByRole('list', { name: 'New replies' })).toHaveAttribute('tabindex', '0');
+  // The safe choice takes the focus, so the warning is where the person is.
+  expect(within(warning).getByRole('button', { name: 'Edit reply' })).toHaveFocus();
+  expect(body).toHaveValue('Refund on its way');
+  fireEvent.click(within(warning).getByRole('button', { name: 'Edit reply' }));
+  expect(screen.queryByRole('region', { name: 'New replies' })).toBeNull();
+  expect(body).toHaveFocus();
+  fireEvent.keyDown(screen.getByLabelText('Message body'), { key: 'Enter', ctrlKey: true });
+  await waitFor(() => expect(onSubmit).toHaveBeenLastCalledWith('outgoing', 'Refund on its way', [], [], 3));
+  await waitFor(() => expect(body).toHaveValue(''));
+});
+
+test('Send anyway sends the same text with the newest reply number', async () => {
+  const onSubmit = vi.fn<(...args: unknown[]) => Promise<unknown>>()
+    .mockRejectedValueOnce(new ReplyConflictError('Someone replied', 3, [{ ...lanReply, author_name: null, origin: { system: 'freshdesk', external_id: '7', kind: 'reply', from: null, to: [], cc: [], bcc: [] } }]))
+    .mockResolvedValue(undefined);
+  render(<ReplyComposer onSubmit={onSubmit} latestReplyNumber={2} timezone="UTC" />);
+  fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Refund on its way' } });
+  fireEvent.keyDown(screen.getByLabelText('Message body'), { key: 'Enter', ctrlKey: true });
+  await screen.findByRole('alert');
+  const warning = screen.getByRole('region', { name: 'New replies' });
+  // An imported reply keeps its own time and says where it came from, and the title does not call it someone replying.
+  expect(screen.getByRole('alert')).toHaveTextContent('1 reply imported from Freshdesk arrived after you started writing');
+  expect(warning).toHaveTextContent('Imported from Freshdesk');
+  expect(warning).toHaveTextContent('Oct 22, 9:00 AM');
+  fireEvent.click(within(warning).getByRole('button', { name: 'Send anyway' }));
+  await waitFor(() => expect(onSubmit).toHaveBeenLastCalledWith('outgoing', 'Refund on its way', [], [], 3));
+  await waitFor(() => expect(screen.getByLabelText('Message body')).toHaveValue(''));
 });

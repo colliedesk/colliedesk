@@ -75,3 +75,52 @@ people and revoked or expired sessions, so a signed-out tab disappears before it
    whatever rows the backup held; they expire within minutes.
 3. **The read tier.** `PUT` and `DELETE` change nothing anyone wrote, so a read token may announce
    itself. Do not give presence a side effect that does.
+
+## Warning before sending
+
+Every reply (an `outgoing` message) gets the next `messages.reply_number` of its conversation, 1, 2,
+3... (migration `20261022140100-reply-numbers`); the newest is `latest_reply_number` of the
+conversation in the API, read as `max(reply_number)` through the unique index. A reply sent with
+`seen_reply_number` below it answers 409 `reply_conflict` with the newer replies; nothing is stored. The
+web app takes the mark when the reply box stops being empty (the newest reply on screen then), so a
+teammate's reply that arrived on screen while you wrote is still asked about once; **Send anyway** and
+**Edit reply** both move the mark to the latest number. The MCP tool `colliedesk_reply_send` requires
+the mark (`latest_reply_number` of `colliedesk_conversation_get`); the REST API takes it as optional so
+older clients keep working. Approving a reply draft checks the approver's mark before the draft is
+claimed, so a refusal leaves it waiting; the replay checks again under the lock, and a reply in between
+(rare) fails the draft with 409.
+
+Numbers, not times. `created_at` is taken when a transaction starts and the row is visible when it
+commits, so "replies after the time I started" misses a reply that committed late; an import also
+writes old times. Two replies at once with the same mark never both go
+(`TestTwoRepliesSentAtOnceWithTheSameMarkOnlyOneGoes`).
+
+The migration numbers the existing replies in one pass: 3.4 s on the dev host for 50,000
+conversations and 400,000 messages (200,000 replies); it locks `messages` while it runs.
+
+Traps:
+
+1. **The number comes from a trigger, under an advisory lock.** `messages_number_reply` (row-level,
+   `BEFORE INSERT`) takes the transaction-scoped advisory lock `reply_number:<workspace>:<conversation>`
+   and gives `max + 1`, so every writer gets numbers without knowing about them, importers and older
+   images included. `CreateReply` takes the same lock (`store.lockReplyNumbers`, the same key) before it
+   checks the mark and keeps it to the insert. Two designs were dropped: a row-level trigger that
+   updated a counter on the conversation row locked conversations in insert order and deadlocked with a
+   contact merge (`TestAMergeAndMailOnTheSameConversationsNeverDeadlock`); a statement-level trigger
+   that numbered the rows after the insert had to update them again, which fired the `last_public`
+   update trigger over a transition table of every row and ran for minutes on a 100,000-row insert
+   (`TestTrialCapCountStaysFastOnALargeOutbox`).
+2. **Lock order.** A writer of a reply takes the numbering lock first and conversation row locks after
+   (the `last_public` trigger at the end of the insert, then `updated_at`). Keep it so: taking a
+   conversation row lock and then inserting a reply in the same transaction can deadlock with one that
+   holds the numbering lock. Importers write each message in a transaction of its own
+   (`TestAnImportedReplyAndAPersonsReplyAtOnceAreNumberedInTurn`).
+3. **One lock per conversation.** An insert of replies into many conversations at once takes one
+   advisory lock per conversation until commit, from the shared lock table (`max_locks_per_transaction`).
+   Write many conversations' replies in batches, as the importers do.
+4. **A re-run import numbers old replies last.** A Freshdesk reply imported into a conversation that
+   already has native replies gets the next number though its time is older. The conflict lists newer
+   replies by `created_at` with their `origin`, so nobody reads it as just written.
+5. **A restore copies the numbers.** `restore-workspace.sh` copies with triggers off
+   (`session_replication_role = replica`), so the numbers come from the backup and the next reply
+   continues after the backup's last one.

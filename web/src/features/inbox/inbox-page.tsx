@@ -33,7 +33,8 @@ interface InboxPageProps {
   onQuery?: (query: InboxQuery) => void;
   // The saved views menu, which sits in the filter bar (the route loads it lazily with its data).
   viewsMenu?: ReactNode;
-  onMessage?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[]) => void | Promise<unknown>;
+  // seen is the newest reply number on screen when the reply was started.
+  onMessage?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[], seen?: number) => void | Promise<unknown>;
   attachmentLimits?: AttachmentLimits;
   savedReplies?: SavedReply[];
   // The names the composer fills into a saved reply: the selected customer and the signed-in agent.
@@ -131,6 +132,21 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
     }
   };
   const copied = useMemo(() => suggestedCc(timeline, { hosted }), [timeline, hosted]);
+  // A refusal under a long timeline (a phone) is brought on screen with the reply drafts below it, whose
+  // buttons are the next step, not left below the screen.
+  const deliveryRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    const notice = deliveryRef.current;
+    if (!deliveryNotice || !notice) return;
+    const drafts = notice.parentElement?.querySelectorAll('.reply-draft');
+    // The code comes with the presence chunk, which an open conversation has loaded already.
+    let stop = () => {};
+    let gone = false;
+    void import('./presence-view').then(({ keepInView }) => { if (!gone) stop = keepInView(notice, drafts?.[drafts.length - 1] ?? notice); });
+    return () => { gone = true; stop(); };
+  }, [deliveryNotice]);
+  // The newest reply on screen; unknown while the timeline loads, so nothing is checked against a guess.
+  const latestReply = useMemo(() => timeline.reduce((latest, item) => Math.max(latest, item.reply_number ?? 0), 0), [timeline]);
   const agentNames = useMemo(() => new Map(agents.map((agent) => [agent.id, agent.display_name || agent.email])), [agents]);
   const closeDetails = () => { setDetailsOpen(false); (detailsToggle.current ?? listPane.current)?.focus(); };
   // The drawer belongs to one conversation: a new selection or none closes it. Without a toggle left
@@ -177,11 +193,12 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
           viewers={openViewers} detailsOpen={detailsOpen} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}
           {canManage && onOpenSettings && <> <button type="button" className="link-action" onClick={() => onOpenSettings()}>{messages.openSettings}</button></>}</p>}
-        {deliveryNotice && <p role="alert" className="composer-notice">{deliveryNotice}</p>}
+        {deliveryNotice && <p role="alert" className="composer-notice" ref={deliveryRef}>{deliveryNotice}</p>}
         {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft} customer={customerName}
           onSend={(edit) => onSendDraft?.(draft, edit) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}
         {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
         <ReplyComposer key={selected?.id} disabled={!selected} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
+          latestReplyNumber={selected && !timelineLoading ? latestReply : undefined} timezone={timezone}
           savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState}
           canManage={canManage} onReplyDraft={onReplyDraft} onReplyEdited={onReplyEdited} />
       </div>

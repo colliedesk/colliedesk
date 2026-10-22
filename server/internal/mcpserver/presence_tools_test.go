@@ -95,3 +95,41 @@ func TestConversationPresenceToolWaitsOutAnAnnounceTooSoon(t *testing.T) {
 		t.Fatalf("people see %v, want the agent writing", viewers)
 	}
 }
+
+// An AI agent's reply says which replies it had read (latest_reply_number from colliedesk_conversation_get):
+// a reply sent since refuses it, with that reply in the error, and the agent reads again before sending.
+func TestReplySendRefusesWhenSomeoneRepliedSinceTheAgentRead(t *testing.T) {
+	e := newEnv(t)
+	f := seedInbox(t, e)
+	session := e.connect(f.w.send, "")
+	read := e.ok(session, "colliedesk_conversation_get", map[string]any{"conversation_id": f.c2})
+	seen := at(t, read, "latest_reply_number").(float64)
+	if seen != 0 {
+		t.Fatalf("latest_reply_number of a conversation without replies = %v", seen)
+	}
+	// A person answers while the agent prepares its reply.
+	if status, body := e.rest(http.MethodPost, "/api/v1/conversations/"+f.c2+"/messages", map[string]any{"kind": "outgoing", "body": "Ada already refunded you."}, f.w.admin); status != http.StatusCreated {
+		t.Fatalf("person's reply status=%d body=%v", status, body)
+	}
+	message := e.fails(session, "colliedesk_reply_send", map[string]any{"conversation_id": f.c2, "body": "Refund on its way.", "seen_reply_number": seen})
+	if !strings.Contains(message, "Ada already refunded you.") || !strings.Contains(message, "Ada Admin") || !strings.Contains(message, "colliedesk_conversation_get") || !strings.Contains(message, "Nothing was sent") {
+		t.Fatalf("conflict message = %q", message)
+	}
+	if kinds := messageKinds(t, e, f.w, f.c2); len(kinds) != 1 {
+		t.Fatalf("timeline = %v, want only the person's reply", kinds)
+	}
+	// Without the number the tool refuses before sending anything.
+	if message := e.fails(session, "colliedesk_reply_send", map[string]any{"conversation_id": f.c2, "body": "x"}); !strings.Contains(message, "seen_reply_number") {
+		t.Fatalf("missing seen_reply_number: %q", message)
+	}
+	// Read again: the number moved, and the reply goes; a person writing on it is a warning, not a refusal.
+	viewersOf(t, e, f.w, f.c2, true)
+	read = e.ok(session, "colliedesk_conversation_get", map[string]any{"conversation_id": f.c2})
+	out := e.ok(session, "colliedesk_reply_send", map[string]any{"conversation_id": f.c2, "body": "Refund on its way.", "seen_reply_number": at(t, read, "latest_reply_number")})
+	if at(t, out, "message", "kind") != "outgoing" {
+		t.Fatalf("reply after reading again = %v", out)
+	}
+	if warning, _ := out["warning"].(string); !strings.Contains(warning, "Ada Admin") {
+		t.Errorf("warning %q must say a person was writing a reply", out["warning"])
+	}
+}

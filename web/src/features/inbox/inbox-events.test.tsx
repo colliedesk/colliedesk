@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { InboxRoute } from './inbox-route';
 import { testRouter } from './test-router';
+import { presenceViewPart } from './presence-part';
 
 // The two boundaries: the API and the analytics service.
 const api = vi.hoisted(() => ({
@@ -13,7 +14,8 @@ const api = vi.hoisted(() => ({
   emailChannel: vi.fn(async () => ({ channel: null, inbound_url: '', smtp: { configured: false }, from_policy: 'verified', sending_from: null })),
 }));
 const analytics = vi.hoisted(() => ({ track: vi.fn(() => true) }));
-vi.mock('../../api/client', () => ({ api, InvalidRequestError: class extends Error {} }));
+vi.mock('../../api/client', () => ({ api, InvalidRequestError: class extends Error {}, ReplyConflictError: class extends Error {} }));
+vi.mock('./presence-api', () => ({ presenceApi: { announce: api.announcePresence, leave: api.leavePresence }, RetryLater: class extends Error {} }));
 const views = vi.hoisted(() => ({
   list: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })), trash: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })),
   create: vi.fn(), update: vi.fn(), remove: vi.fn(), restore: vi.fn(),
@@ -23,7 +25,7 @@ vi.mock('../../lib/product-analytics', () => ({ track: analytics.track }));
 vi.mock('@tanstack/react-router', async () => (await import('./test-router')).routerModule);
 
 const meId = '66666666-6666-4666-8666-666666666666';
-const conversation = (id: string, subject: string) => ({
+const conversation = (id: string, subject: string) => ({ latest_reply_number: 0,
   id, contact_id: '22222222-2222-4222-8222-222222222222', contact_name: 'Mai Linh', subject,
   status: 'open' as const, priority: 'normal' as const, assignee_id: null, tags: [], origin: null,
   created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z',
@@ -47,6 +49,14 @@ async function open() {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
   await screen.findByRole('button', { name: /alpha conversation/i });
 }
+
+
+// The presence chunk loads once a conversation is open; start with it there, so no test ends while it is
+// still on its way (vitest refuses a module asked for after the test environment is gone).
+beforeAll(async () => {
+  presenceViewPart.preload();
+  await import('./presence-view');
+});
 
 test('picking a conversation from the list reports conversation_opened from the list', async () => {
   await open();

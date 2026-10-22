@@ -87,6 +87,7 @@ export const conversationSchema = z.object({
   id: z.string().uuid(), contact_id: z.string().uuid(), contact_name: z.string(), subject: z.string(),
   status: statusSchema, priority: prioritySchema, assignee_id: z.string().uuid().nullable(),
   tags: z.array(tagSchema), channel: channelSchema, origin: conversationOriginSchema.nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
+  latest_reply_number: z.number().int().nonnegative(),
 }) satisfies z.ZodType<Generated<'Conversation'>>;
 export const deliveryStatusSchema = z.enum(['queued', 'sent', 'failed']);
 export const messageDeliverySchema = z.object({
@@ -112,7 +113,7 @@ export const messageSchema = z.object({
   kind: z.enum(['incoming', 'outgoing', 'note']), body: z.string(),
   body_html: z.string().nullable(), origin: messageOriginSchema.nullable(),
   attachments: z.array(attachmentSchema), cc: z.array(z.string()), created_at: z.string().datetime(),
-  delivery: messageDeliverySchema.nullable(), email: incomingEmailSchema.nullable(),
+  delivery: messageDeliverySchema.nullable(), email: incomingEmailSchema.nullable(), reply_number: z.number().int().positive().nullable(),
 }) satisfies z.ZodType<Generated<'Message'>>;
 export const emailDnsRecordSchema = z.object({
   record: z.string(), type: z.string(), name: z.string(), value: z.string(), priority: z.number().int().nullable(), status: z.string(),
@@ -170,7 +171,6 @@ export const conversationViewerSchema = z.object({
   agent_id: z.string().uuid(), name: z.string(), writing: z.boolean(), writing_since: z.string().datetime().nullable(), edited_at: z.string().datetime().nullable(),
   agent_token: messageAgentTokenSchema.nullable(),
 }) satisfies z.ZodType<Generated<'ConversationViewer'>>;
-export const conversationPresenceSchema = z.object({ viewers: z.array(conversationViewerSchema), heartbeat_seconds: z.number().int().positive() }) satisfies z.ZodType<Generated<'ConversationPresence'>>;
 export const inboxActivitySchema = z.object({
   now: z.string().datetime(),
   new_conversations: z.array(z.object({ id: z.string().uuid(), subject: z.string(), contact_name: z.string(), created_at: z.string().datetime() })),

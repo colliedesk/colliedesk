@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ConversationViewer } from '../../api/schemas';
+import type { ConversationViewer, Message } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
+import { keepInView } from '../../lib/keep-in-view';
 import { Avatar } from '../../ui/avatar';
 
 // Who else has a conversation open: the marks on the inbox list, the lines under the open conversation's
@@ -8,6 +9,7 @@ import { Avatar } from '../../ui/avatar';
 // open or somebody else is there, so the first bundle carries none of it.
 
 export { startPresence } from './presence-runtime';
+export { keepInView } from '../../lib/keep-in-view';
 
 const text = {
   writing: (name: string) => `${name} is writing a reply`,
@@ -20,8 +22,19 @@ const text = {
   replying: 'Replying',
   draftOpen: 'Draft open',
   more: (count: number) => `Show ${count} more`,
+  conflictTitle: (count: number) => `Someone replied while you were writing (${count === 1 ? '1 new reply' : `${count} new replies`}). Nothing was sent; your text is still here.`,
+  newReplies: 'New replies',
+  teammate: 'A teammate',
+  imported: (system: string) => `Imported from ${systemName(system)}`,
+  importedTitle: (count: number, system: string) => `${count === 1 ? '1 reply' : `${count} replies`} imported from ${systemName(system)} arrived after you started writing; ${count === 1 ? 'it was' : 'they were'} written earlier, at the time shown. Nothing was sent; your text is still here.`,
+  sendAnyway: 'Send anyway',
+  editReply: 'Edit reply',
   fewer: 'Show fewer',
 };
+
+// The helpdesks an import comes from, by the name they go by.
+const systems: Record<string, string> = { freshdesk: 'Freshdesk', helpscout: 'Help Scout' };
+const systemName = (system: string) => systems[system] ?? system.charAt(0).toUpperCase() + system.slice(1);
 
 // A reply nobody changed for this long is a draft left open in a tab, not someone typing now.
 const typingWithin = 2 * 60_000;
@@ -106,5 +119,39 @@ export function ConversationViewers({ viewers, timezone }: { viewers: Conversati
       {(hidden.length > 0 || (expanded && lines.length > shownLines)) && <button type="button" className="link-action viewer-more" aria-expanded={expanded}
         onClick={() => setExpanded((open) => !open)}>{expanded ? text.fewer : text.more(hidden.length)}</button>}
     </div>
+  );
+}
+
+// ReplyConflict stands above the reply box when a reply was refused because someone replied after its
+// writer started: their replies by time (an imported one keeps its own time and says where it came
+// from), then Send anyway or Edit reply. Both count those replies as read, so they are asked about once.
+export function ReplyConflict({ replies, timezone, onSendAnyway, onEdit }: { replies: Message[]; timezone: string; onSendAnyway: () => void; onEdit: () => void }) {
+  // On a phone the timeline sits above the reply box and the new replies push it down: the warning is
+  // brought on screen and its safe choice takes the focus, so the refusal never goes unseen.
+  const panel = useRef<HTMLElement>(null);
+  const edit = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    edit.current?.focus({ preventScroll: true });
+    return keepInView(panel.current, edit.current?.parentElement);
+  }, []);
+  return (
+    <section className="reply-conflict" aria-label={text.newReplies} ref={panel}>
+      {/* Only the fact is read out at once; the replies are there to read, not to be read aloud whole. */}
+      {/* Replies a re-run import added are not someone answering now: the title says so when they are all there is. */}
+      <p role="alert" className="reply-conflict-title">{replies.length > 0 && replies.every((reply) => reply.origin)
+        ? text.importedTitle(replies.length, replies[0].origin!.system) : text.conflictTitle(replies.length)}</p>
+      <ul tabIndex={0} aria-label={text.newReplies}>
+        {replies.map((reply) => <li key={reply.id}>
+          <p className="reply-conflict-by">{reply.author_name ?? text.teammate} · <time dateTime={reply.created_at}>{formatDate(reply.created_at, timezone)}</time>
+            {reply.origin && <> · {text.imported(reply.origin.system)}</>}</p>
+          <p className="reply-conflict-text">{reply.body}</p>
+        </li>)}
+      </ul>
+      {/* Editing is the safe default; sending anyway answers the customer a second time. */}
+      <div className="reply-conflict-actions">
+        <button type="button" className="primary-action" ref={edit} onClick={onEdit}>{text.editReply}</button>
+        <button type="button" className="send-anyway" onClick={onSendAnyway}>{text.sendAnyway}</button>
+      </div>
+    </section>
   );
 }
