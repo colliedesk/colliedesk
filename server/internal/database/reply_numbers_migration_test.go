@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-const replyNumbersMigration = "20261022100554-reply-numbers.up.sql"
+const replyNumbersMigration = "20261022140100-reply-numbers.up.sql"
 
 // An upgraded database numbers the replies it already holds in the order they were written (time,
 // then id), per conversation; notes and customer mail get no number. A reply written afterwards, by

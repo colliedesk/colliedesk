@@ -233,7 +233,7 @@ func (s *Store) CheckReplySeen(ctx context.Context, workspaceID, conversationID 
 }
 
 // lockReplyNumbers takes the transaction-scoped advisory lock the numbering trigger takes for the
-// conversation (migration 20261022100554-reply-numbers: the same key), so no reply is numbered in it
+// conversation (migration 20261022140100-reply-numbers: the same key), so no reply is numbered in it
 // until this transaction ends.
 func lockReplyNumbers(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) error {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('reply_number:'||$1::uuid::text||':'||$2::uuid::text,0))`, workspaceID, conversationID); err != nil {

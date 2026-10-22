@@ -119,7 +119,10 @@
   .settings-page { padding: var(--space-6); }
   .settings-layout { grid-template-columns: 1fr; gap: var(--space-4); }
   /* Narrow: the section nav is one row of links that scrolls sideways. */
-  .settings-nav { position: static; display: flex; gap: var(--space-1); overflow-x: auto; padding-bottom: var(--space-1); }
+  /* It hides its scrollbar and fades at the edges (like .scroll-x-fade); the current page scrolls into view. */
+  .settings-nav { position: static; display: flex; gap: var(--space-1); overflow-x: auto; padding-bottom: var(--space-1); scrollbar-width: none;
+    mask-image: linear-gradient(to right, transparent, #000 var(--space-4), #000 calc(100% - var(--space-4)), transparent); }
+  .settings-nav::-webkit-scrollbar { display: none; }
   .settings-nav > div { display: contents; }
   .settings-nav .settings-group-label { display: none; }
   .settings-nav ul { display: flex; gap: var(--space-1); margin: 0; }

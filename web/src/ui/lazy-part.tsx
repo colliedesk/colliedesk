@@ -62,7 +62,7 @@ export function PartUnavailable() {
   return (
     <p role="alert" className="error-copy">
       {messages.partNotLoaded}{' '}
-      <button type="button" className="link-action" onClick={() => window.location.reload()}>{messages.reloadPage}</button>
+      <button type="button" className="link-action part-reload" onClick={() => window.location.reload()}>{messages.reloadPage}</button>
     </p>
   );
 }

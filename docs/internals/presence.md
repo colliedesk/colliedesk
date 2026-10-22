@@ -1,7 +1,7 @@
 # Presence: who has a conversation open
 
 Decisions and traps behind `PUT` / `DELETE /api/v1/conversations/{id}/presence` and the
-`conversation_presence` table (migration `20261022093123-conversation-presence`), issue #101.
+`conversation_presence` table (migration `20261022140000-conversation-presence`), issue #101.
 
 ## A poll, not a push channel
 
@@ -79,7 +79,7 @@ people and revoked or expired sessions, so a signed-out tab disappears before it
 ## Warning before sending
 
 Every reply (an `outgoing` message) gets the next `messages.reply_number` of its conversation, 1, 2,
-3... (migration `20261022100554-reply-numbers`); the newest is `latest_reply_number` of the
+3... (migration `20261022140100-reply-numbers`); the newest is `latest_reply_number` of the
 conversation in the API, read as `max(reply_number)` through the unique index. A reply sent with
 `seen_reply_number` below it answers 409 `reply_conflict` with the newer replies; nothing is stored. The
 web app takes the mark when the reply box stops being empty (the newest reply on screen then), so a

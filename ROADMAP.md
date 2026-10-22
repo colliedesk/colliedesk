@@ -18,7 +18,8 @@ database schema.
 - **Email channel**: inbound and outbound, threading, spoof and loop protection.
 - **Freshdesk importer**: tickets (including archived), replies, notes, attachments
   (checksummed), tags, contacts, companies, time entries and canned responses, with a reconcile
-  report.
+  report. In the app or from the command line; in the app, recent tickets come first and the
+  Freshdesk agents can be invited and linked.
 - **Help Scout importer**: conversations of one inbox, replies, notes, attachments (checksummed),
   inline images, tags and customers, with a reconcile report and undo.
 - **Knowledge base and public help center**: Markdown articles in collections with history and a
@@ -41,8 +42,6 @@ Beta starts when HC Labs announces it. Before that:
 
 - Connect a Gmail / Google Workspace or Microsoft 365 mailbox with one click (OAuth); replies
   leave from your own address. Forwarding keeps working ([#95](https://github.com/colliedesk/colliedesk/issues/95)).
-- Import from Freshdesk inside the app, recent tickets first, with the reconcile report on screen
-  ([#97](https://github.com/colliedesk/colliedesk/issues/97)).
 - One end-to-end test of the first-time path (sign up, import, first reply) on every change
   ([#105](https://github.com/colliedesk/colliedesk/issues/105)).
 - A first team that moved from Freshdesk and works in Colliedesk every day.

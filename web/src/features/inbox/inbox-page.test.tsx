@@ -199,8 +199,22 @@ test('an empty new workspace explains the next steps instead of a filter message
   const start = screen.getByRole('region', { name: /get started/i });
   expect(start).toHaveTextContent('No conversations yet');
   expect(within(start).getByRole('link', { name: 'Connect your support email' })).toHaveAttribute('href', '/settings');
-  expect(within(start).getByRole('link', { name: 'Import from Freshdesk' })).toHaveAttribute('href', 'https://colliedesk.com/docs/import-freshdesk');
+  // An admin imports in the app.
+  expect(within(start).getByRole('link', { name: 'Import from Freshdesk' })).toHaveAttribute('href', '/settings/import-freshdesk');
   expect(within(start).getByRole('link', { name: 'Invite your team' })).toHaveAttribute('href', '/settings');
+});
+
+test('an agent of an empty workspace reads how to import, which an admin does', () => {
+  render(<InboxPage conversations={[]} />);
+  const start = screen.getByRole('region', { name: /get started/i });
+  expect(within(start).getByRole('link', { name: 'Import from Freshdesk' })).toHaveAttribute('href', 'https://colliedesk.com/docs/import-freshdesk');
+});
+
+test('the import link of an empty workspace opens the import page in the app', () => {
+  const onOpenSettings = vi.fn();
+  render(<InboxPage conversations={[]} canManage onOpenSettings={onOpenSettings} />);
+  fireEvent.click(within(screen.getByRole('region', { name: /get started/i })).getByRole('link', { name: 'Import from Freshdesk' }));
+  expect(onOpenSettings).toHaveBeenCalledWith('/settings/import-freshdesk');
 });
 
 test('an empty filtered list says no conversation matches', () => {

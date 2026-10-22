@@ -34,6 +34,16 @@ If the gate fails:
 3. Check for N+1 queries, tenant-unscoped scans, missing filter/order indexes, and repeated search scans.
 4. Optimize the query or infrastructure. Do not raise the 100 ms threshold.
 
+## Import status budget
+
+`TestImportStatusLatencyBudget` holds the store calls behind `GET /api/v1/imports/{id}` to 20 ms p95
+and `GET /api/v1/imports` to 100 ms p95. The import screen polls the status every few seconds while an
+import runs for hours. The fixture is two workspaces with 300 finished imports each, every preview
+naming 50 agents, and the newest import with a 4 MB report: the status and the list never read a
+report (`/report` does), so its size must not show. Same method as the inbox activity budget: 10
+warm-up calls, then 200 timed calls of the store call. No handler talks to Freshdesk; the worker does.
+Do not widen either budget.
+
 ## Knowledge base search budget
 
 `TestKnowledgeBaseSearchLatencyBudget` seeds two workspaces at the article cap (`domain.MaxKBArticles`,
@@ -139,7 +149,9 @@ On 2026-10-20 the first bundle was 203,268 bytes of 204,800. Plan and billing, t
 
 On 2026-10-21 the reply box got **Articles** (link a help center article in a reply). Its first version kept the button, its strings, the link format and the extended saved reply picker in the first bundle: 201,985 → 202,563 (+578). The saved reply picker and the articles picker then moved together into one lazy part, `reply-pickers` (1.7 KB gzip, plus a 4.0 KB chunk of the API calls and strings it shares with the knowledge base pages), which the composer starts loading when it mounts; the first bundle keeps the two buttons and the part's loading and failure states: 201,776 bytes (−209 against 201,985), CSS 14,267 → 14,317.
 
-On 2026-10-22 presence (issue #101: who else has a conversation open) first kept its list marks, the lines under the conversation title and the tab's heartbeat in the first bundle and went over the gate (204,929). They moved to one lazy part, `presence-view`, loaded once a conversation is open (after the ticket's own requests) or somebody else is on a listed one; the first bundle keeps the two small hooks, the API calls and the schemas: 204,078 bytes, CSS 14,641.
+On 2026-10-22 the in-app Freshdesk import (#97) brought the first bundle to 203,852 bytes, and collision detection (#101) needed about 1,100 more. Settings (its route and every section: team, email channel, saved replies, web form, help center, preferences) moved to a lazy part, `settings-route` (7,988 bytes gzip), as Plan and billing already was: the first bundle went from 203,852 to 196,712. The rail link starts loading the chunk on hover and focus; while it loads, `/settings` keeps an empty Settings page (`aria-busy`), so nothing jumps when the sections arrive. Measured with Playwright on the dev host against the e2e server: from a click on the rail link to the Settings heading 29 to 88 ms (5 runs), a full load of `/settings` 64 to 86 ms (3 runs).
+
+On 2026-10-22 presence (issue #101: who else has a conversation open) first kept its list marks, the lines under the conversation title and the tab's heartbeat in the first bundle and went over the gate (204,929). They moved to one lazy part, `presence-view`, loaded once a conversation is open (after the ticket's own requests) or somebody else is on a listed one; the first bundle keeps the two small hooks, the API calls and the schemas: 204,078 bytes, CSS 14,641, before Settings moved out; with it, 197,547.
 
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
 
@@ -189,6 +201,8 @@ Measuring: the phase is the run's `updated_at` minus its `created_at`. The budge
 Image builds use no remote layer cache: the measured cache restore/export cost exceeded the rebuild savings. A PR builds and loads through the runner's Docker driver, which skips the builder container and the tarball export; main keeps the container builder because its push carries an SBOM attestation. Keep image boot, real installer and compose smoke checks before publishing.
 
 GitHub Free runs at most 20 GitHub-hosted jobs at once for the whole account. A pull request starts 18 CI jobs plus the Docs site build, leaving one runner for another repository; a twenty-first job would queue and its wait counts toward the 120 seconds (measured on 2026-10-19: a 21-second queue pushed a clean run to 134 seconds). The compose smoke test therefore shares the `roadmap` runner, started in the background by `.github/scripts/ci-background.sh` so the quick gates run during its build, and `tests/ci-tools-test.py` fails when the jobs a pull request starts together exceed 19.
+
+That limit is shared by every run, so a push to main that lands while other pull requests are testing queues behind them: on 2026-10-22 three pushes to main took 126 to 135 seconds, their jobs waiting 20 to 33 seconds for a runner while up to 20 ran, and edge did not move for four hours. A push to main therefore first asks `.github/scripts/pr-verified.py` whether a pull request run from this repository already passed on the same files: the push must be a merge commit whose tree equals its second parent's (the branch already contained main, so the pull request run tested exactly this tree), and that head must have a successful `pull_request` CI run whose head repository is this one. Then the Go shards, `web`, `e2e`, `onboarding` and CodeQL are skipped, and the run keeps `image` (it builds, checks and pushes the `sha-<commit>` image that edge moves to), `roadmap` (the issue tracker changes independently of the files) and `ci-ok`, three runners instead of eighteen. Any other push (a branch behind main, a direct push, a fork, an API error) runs every job. Of the 40 merges before 2026-10-22, 23 were up to date. Pull requests are unchanged: `pr-verified` is skipped and the other jobs start at once. CodeQL's results for main come from the weekly scheduled run and from the full runs.
 
 Test jobs start PostgreSQL and Mailpit with `.github/scripts/ci-services.sh start` as their first step and wait for them just before the tests, instead of a `services:` block: GitHub boots services before the first step, so their 9 to 18 seconds of pull and start used to delay checkout and toolchain setup. Each main run saves the Go module and build cache under its commit (`go-<os>-<go version>-<go.sum hash>-<sha>`, from Go shard 1), and every Go and browser job restores the newest entry with the same `go.sum`, falling back to the newest entry of any `go.sum`, so a dependency change no longer starts from an empty cache and the cache follows the code instead of freezing at its first save. Browser jobs install only Playwright's headless shell.
 
