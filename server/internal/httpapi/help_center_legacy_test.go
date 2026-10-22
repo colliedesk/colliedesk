@@ -59,9 +59,13 @@ func TestOldFreshdeskAddressesMoveToTheirNewPages(t *testing.T) {
 	}
 	// A failed row is not an imported item yet.
 	ledgerRow(t, pool, slug, source, "kb_article", "7204", paid.ID, "failed", "2026-10-20 10:00:00+00")
-	// Two Freshdesk accounts imported into one workspace with the same article id: the newest row wins.
+	// Two Freshdesk accounts imported into one workspace with the same article id: the newest row of a
+	// public page wins.
 	ledgerRow(t, pool, slug, source, "kb_article", "7210", older.ID, "done", "2026-10-20 10:00:00+00")
 	ledgerRow(t, pool, slug, second, "kb_article", "7210", paid.ID, "done", "2026-10-21 10:00:00+00")
+	// The same id twice, the newer row a draft: the public page wins over the newer row.
+	ledgerRow(t, pool, slug, source, "kb_article", "7220", older.ID, "done", "2026-10-20 10:00:00+00")
+	ledgerRow(t, pool, slug, second, "kb_article", "7220", draft.ID, "done", "2026-10-21 10:00:00+00")
 
 	home := testOrigin + "/help/" + slug
 	article := home + fmt.Sprintf("/a/%d-pay-by-card", paid.Number)
@@ -75,6 +79,8 @@ func TestOldFreshdeskAddressesMoveToTheirNewPages(t *testing.T) {
 		{"/de/support/solutions/articles/7201", http.StatusMovedPermanently, article},
 		{"/support/solutions/articles/7201-old-title?utm_source=mail", http.StatusMovedPermanently, article},
 		{"/support/solutions/articles/7210-refunds", http.StatusMovedPermanently, article},
+		{"/support/solutions/articles/7220-refunds", http.StatusMovedPermanently, home + fmt.Sprintf("/a/%d-refunds", older.Number)},
+		{"/Support/Solutions/Articles/7201-Pay-By-Card", http.StatusMovedPermanently, article},
 		{"/support/solutions/11", http.StatusMovedPermanently, home + "/c/billing"},
 		{"/support/solutions/folders/21-cards", http.StatusMovedPermanently, home + "/c/billing/cards"},
 		{"/support/home", http.StatusMovedPermanently, home},

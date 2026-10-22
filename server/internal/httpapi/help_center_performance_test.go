@@ -13,7 +13,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
-	"github.com/jackc/pgx/v5"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -299,6 +299,12 @@ func TestHelpCenterOldFreshdeskAddressesLatencyBudget(t *testing.T) {
 	api, _, _, _ := testAPIOnPool(t, pool, nil)
 	site := helpCenterSite(api)
 	ctx := context.Background()
+	// Registered before anything can stop the test, so the shared fixture never keeps these rows.
+	t.Cleanup(func() {
+		if _, err := pool.Exec(ctx, `DELETE FROM import_items WHERE source='freshdesk:account:77'`); err != nil {
+			t.Errorf("remove the budget ledger: %v", err)
+		}
+	})
 	seeded := time.Now()
 	if _, err := pool.Exec(ctx, `INSERT INTO import_items(workspace_id,source,entity,source_id,target_id,status)
 		SELECT w.id,'freshdesk:account:77','ticket',g::text,NULL,'done' FROM workspaces w, generate_series(1,25000) g WHERE w.name LIKE 'KB Budget %';
@@ -311,22 +317,33 @@ func TestHelpCenterOldFreshdeskAddressesLatencyBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("seeded the import ledger in %s", time.Since(seeded))
-	// The lookup is a probe of (workspace, entity, Freshdesk id), whatever the ledger's size.
-	workspaceID := queryString(t, pool, `SELECT id::text FROM workspaces WHERE slug=$1`, slug)
-	rows, err := pool.Query(ctx, `EXPLAIN SELECT i.entity, i.target_id FROM import_items i WHERE i.workspace_id=$1 AND i.entity='kb_article'
-		AND i.source_id='901000' AND i.source LIKE 'freshdesk:%' AND i.status='done' ORDER BY i.updated_at DESC, i.source LIMIT 1`, workspaceID)
+	// The index holds the knowledge base rows only, so ticket imports never maintain it.
+	var index string
+	if err := pool.QueryRow(ctx, `SELECT indexdef FROM pg_indexes WHERE indexname='import_items_source_id_idx' AND schemaname=current_schema()`).Scan(&index); err != nil ||
+		!strings.Contains(index, "WHERE") || !strings.Contains(index, "kb_article") {
+		t.Errorf("import_items_source_id_idx is not limited to the knowledge base rows (%v): %s", err, index)
+	}
+	// The store's own lookup is a probe of that index for every entity, even as the generic plan a
+	// prepared statement settles on after a few runs.
+	// GENERIC_PLAN takes the statement with its $n placeholders unbound, which only the raw protocol sends.
+	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	lines, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if plan := strings.Join(lines, "\n"); err != nil || !strings.Contains(plan, "import_items_source_id_idx") {
-		t.Errorf("the old address lookup does not use import_items_source_id_idx (%v):\n%s", err, plan)
-	}
-	t.Cleanup(func() {
-		if _, err := pool.Exec(ctx, `DELETE FROM import_items WHERE source='freshdesk:account:77'`); err != nil {
-			t.Errorf("remove the budget ledger: %v", err)
+	defer conn.Release()
+	for _, entity := range []string{"kb_category", "kb_folder", "kb_article"} {
+		results, err := conn.Conn().PgConn().Exec(ctx, "EXPLAIN (GENERIC_PLAN) "+store.HelpCenterLegacyTargetSQL(entity)).ReadAll()
+		var plan strings.Builder
+		for _, result := range results {
+			for _, row := range result.Rows {
+				plan.Write(row[0])
+				plan.WriteByte('\n')
+			}
 		}
-	})
+		if err != nil || !strings.Contains(plan.String(), "import_items_source_id_idx") {
+			t.Errorf("the %s lookup does not use import_items_source_id_idx (%v):\n%s", entity, err, plan.String())
+		}
+	}
 	base := "/help/" + slug
 	paths := []struct {
 		name, path string
