@@ -35,6 +35,10 @@ STUB
 
 cat >"$BIN/openssl" <<'STUB'
 #!/bin/sh
+if [ "$2" = -base64 ]; then
+  printf '%s\n' MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+  exit
+fi
 printf '%s\n' 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 STUB
 
@@ -74,6 +78,8 @@ grep -Fx 'POSTGRES_USER=postgres' "$fresh/.env" >/dev/null
 grep -E '^DATABASE_URL=postgres://colliedesk:[0-9a-f]{64}@postgres:5432/colliedesk\?sslmode=disable$' "$fresh/.env" >/dev/null
 grep -E '^DATABASE_REQUEST_URL=postgres://colliedesk_request:[0-9a-f]{64}@postgres:5432/colliedesk\?sslmode=disable$' "$fresh/.env" >/dev/null
 grep -E '^COLLIEDESK_OWNER_PASSWORD=[0-9a-f]{64}$' "$fresh/.env" >/dev/null
+# A fresh install gets a key ring, so Gmail grants and in-app import keys are sealed and survive restarts.
+grep -Ex 'MAILBOX_TOKEN_KEYS=k1:[A-Za-z0-9+/]{43}=' "$fresh/.env" >/dev/null
 [ -f "$fresh/initdb/10-colliedesk-owner.sh" ]
 # The owner password reaches psql through its environment, never its argv (visible in ps).
 grep -F '\getenv owner_password COLLIEDESK_OWNER_PASSWORD' "$fresh/initdb/10-colliedesk-owner.sh" >/dev/null
