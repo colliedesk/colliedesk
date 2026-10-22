@@ -67,3 +67,8 @@ test('a visitor who came to buy Founding is greeted as a buyer, not sent to an a
 	expect(screen.queryByText(/admin/i)).not.toBeInTheDocument();
 	expect(screen.queryByText(/free trial/i)).not.toBeInTheDocument();
 });
+
+test('the sign-in brand side shows the Colliedesk wordmark as one named image', () => {
+	render(<RedeemPage token="" cloudEnabled cloudSignIn={<div>form</div>} />);
+	expect(screen.getByRole('img', { name: 'Colliedesk' })).toBeInTheDocument();
+});
