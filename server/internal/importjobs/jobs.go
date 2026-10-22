@@ -206,6 +206,14 @@ func (k *Keys) keep(jobID, apiKey string) {
 	k.mu.Unlock()
 }
 
+// held reports whether this process keeps the job's key in memory.
+func (k *Keys) held(jobID string) bool {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	_, ok := k.memory[jobID]
+	return ok
+}
+
 // forget drops the in-memory copy of a job's key.
 func (k *Keys) forget(jobIDs ...string) {
 	k.mu.Lock()

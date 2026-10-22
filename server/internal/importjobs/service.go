@@ -35,6 +35,14 @@ func (s *Service) inWorkspace(ctx context.Context, workspaceID string, fn func(p
 	return s.db.InWorkspace(ctx, workspaceID, fn)
 }
 
+// withKey marks a job whose key only this process's memory holds.
+func (s *Service) withKey(job Job) Job {
+	if !job.HasKey && s.keys.held(job.ID) {
+		job.HasKey = true
+	}
+	return job
+}
+
 // known refuses an id that is not a UUID as not found, before it reaches a query.
 func known(id string) error {
 	if !uuidPattern.MatchString(id) {
@@ -91,7 +99,7 @@ func (s *Service) Preview(ctx context.Context, workspaceID, agentID, domain, api
 	if err == nil {
 		s.keys.keep(job.ID, apiKey)
 	}
-	return job, err
+	return s.withKey(job), err
 }
 
 // Get returns one job.
@@ -105,7 +113,7 @@ func (s *Service) Get(ctx context.Context, workspaceID, id string) (Job, error) 
 		job, err = scanJob(tx.QueryRow(ctx, `SELECT `+jobColumns+` FROM import_jobs WHERE workspace_id=$1 AND id=$2`, workspaceID, id))
 		return err
 	})
-	return job, err
+	return s.withKey(job), err
 }
 
 // List returns the workspace's jobs, newest first.
@@ -125,7 +133,7 @@ func (s *Service) List(ctx context.Context, workspaceID string, limit int) ([]Jo
 			if err != nil {
 				return err
 			}
-			jobs = append(jobs, job)
+			jobs = append(jobs, s.withKey(job))
 		}
 		return rows.Err()
 	})
@@ -141,6 +149,7 @@ func (s *Service) Active(ctx context.Context, workspaceID string) (*Job, error) 
 		if errors.Is(err, ErrNotFound) {
 			return nil
 		}
+		found = s.withKey(found)
 		job = &found
 		return err
 	})
@@ -227,7 +236,7 @@ func (s *Service) SetKey(ctx context.Context, workspaceID, id, apiKey string) (J
 		return Job{}, err
 	}
 	s.keys.keep(id, apiKey)
-	return job, nil
+	return s.withKey(job), nil
 }
 
 // Undo queues an undo of an import that has ended: it removes what that Freshdesk account brought in,
@@ -270,5 +279,5 @@ func (s *Service) transition(ctx context.Context, workspaceID, id string, query 
 	if uniqueViolation(err) {
 		return Job{}, ErrActive
 	}
-	return job, err
+	return s.withKey(job), err
 }
