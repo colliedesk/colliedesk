@@ -209,6 +209,22 @@ asks for it and another workspace holds it, release it:
 docker compose exec server /app/collie email release-domain <domain>
 ```
 
+### Set a sender name with a brand in it
+
+When billing is on (Colliedesk Cloud), the API refuses a
+[sender name](../user/email-channel.md#sender-name) with a well-known brand in it, such as
+"PayPal Support". When the workspace owns that brand, set the name for it:
+
+```sh
+docker compose exec server /app/collie email sender-name [--by <name>] <workspace slug> "<name>"
+```
+
+The command checks the name like the API does: 1 to 100 characters after trimming, no line breaks or
+other control characters. It skips only the brand check. It prints the old and the new name, and
+logs who made the change: `--by`, else the operating system user. It changes only that workspace's
+email channel. A workspace without an email channel is refused; an admin saves a support address
+first. If an admin later saves another name in **Settings**, the brand check applies to that name.
+
 ### Lift a pause after spam complaints
 
 When the Resend webhook above is on, Colliedesk [pauses sending](../user/email-channel.md#sending-pauses-after-spam-complaints)

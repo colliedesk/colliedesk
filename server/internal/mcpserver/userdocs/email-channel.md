@@ -51,8 +51,10 @@ A new channel starts with the workspace name. To change it:
 The next reply uses the new name, on every way a reply leaves: your own domain, the
 `via Colliedesk` address and Gmail. A name is 1 to 100 characters. Spaces at the ends are removed.
 Line breaks and other control characters are refused. On Colliedesk Cloud a name with a well-known
-brand in it (for example "PayPal Support") is refused, as at sign-up; contact us if it is your own
-brand. Only admins can change it; other teammates see it.
+brand in it (for example "PayPal Support") is refused, as at sign-up. If it is your own brand, contact
+us: the operator sets the name for you with `collie email sender-name`
+([self-hosting guide](../self-host/email.md#set-a-sender-name-with-a-brand-in-it)). Only admins can
+change it; other teammates see it.
 
 Saving the sender name changes only the name. The support address, its domain verification and the
 sending domain stay as they are.
