@@ -218,6 +218,9 @@ func (s *Store) ingest(ctx context.Context, workspaceID string, in email.Inbound
 	if err := linkFiles(ctx, tx, s.objects, workspaceID, messageID, files); err != nil {
 		return result, err
 	}
+	if err := s.queueAIDraft(ctx, tx, workspaceID, conversationID, messageID); err != nil {
+		return result, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return result, fmt.Errorf("commit inbound email: %w", err)
 	}

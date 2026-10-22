@@ -51,9 +51,11 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		// SeenReplyNumber is the latest reply the sender had seen when they started writing; a newer one
 		// refuses the reply (409 reply_conflict). Without it nothing is checked.
 		SeenReplyNumber *int `json:"seen_reply_number"`
+		// AIDraftID names the AI draft the reply was written from, so its outcome is recorded.
+		AIDraftID string `json:"ai_draft_id"`
 	}
 	if err := decodeJSON(request, &input); err != nil || (input.Kind != "outgoing" && input.Kind != "note") || strings.TrimSpace(input.Body) == "" ||
-		(input.SeenReplyNumber != nil && *input.SeenReplyNumber < 0) {
+		(input.SeenReplyNumber != nil && *input.SeenReplyNumber < 0) || (input.AIDraftID != "" && (input.Kind != "outgoing" || !contactIDPattern.MatchString(strings.ToLower(input.AIDraftID)))) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "A reply or note body is required.")
 		return
 	}
@@ -77,12 +79,13 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		a.writeUploadError(response, refusal)
 		return
 	}
+	actor.AIDraftID = strings.ToLower(input.AIDraftID)
 	item, err := a.store.CreateReply(request.Context(), identity.Workspace.ID, request.PathValue("id"), actor, input.Kind, input.Body, cc, input.SeenReplyNumber)
 	if a.writeReplyConflict(response, identity, err) {
 		return
 	}
 	if err != nil {
-		writeStoreError(response, err)
+		writeAIError(response, err)
 		return
 	}
 	a.recordReply(identity, input.Kind)

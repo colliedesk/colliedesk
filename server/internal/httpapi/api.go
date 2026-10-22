@@ -85,6 +85,9 @@ type Config struct {
 	// (default 60 s) before the export is aborted and its database connection released.
 	MaxConcurrentExports int
 	ExportWriteTimeout   time.Duration
+	// AI says the server has an AI provider (AI_SERVER_*): customer messages queue AI drafts and the AI
+	// routes work. Without it they answer ai_unavailable and nothing is queued.
+	AI bool
 	// ExportTimeout is the longest one export may run in total (default 2 h), however slowly the
 	// client keeps reading.
 	ExportTimeout time.Duration
@@ -223,7 +226,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		problemReports:  newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
 		helpCenterPages: newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
 		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
-		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale())}
+		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).WithAI(config.AI)}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
 	importKeys := config.ImportKeys
 	if importKeys == nil {
@@ -292,6 +295,11 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/conversations/{id}/time-entries", auth.PermissionConversationsRead},
 		{http.MethodPut, "/api/v1/conversations/{id}/presence", auth.PermissionConversationsRead},
 		{http.MethodDelete, "/api/v1/conversations/{id}/presence/{clientId}", auth.PermissionConversationsRead},
+		{http.MethodGet, "/api/v1/conversations/{id}/ai-draft", auth.PermissionConversationsRead},
+		{http.MethodPost, "/api/v1/conversations/{id}/ai-draft", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/conversations/{id}/ai-draft/{draftId}/discard", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/conversations/{id}/ai-draft/{draftId}/apply-triage", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/conversations/{id}/ai-draft/{draftId}/cancel-auto-answer", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/inbox/activity", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/attachments/{id}", auth.PermissionConversationsRead},
 		{http.MethodGet, mailimage.ProxyPath, auth.PermissionConversationsRead},
@@ -305,6 +313,8 @@ func Routes() []Route {
 		{http.MethodPatch, "/api/v1/workspace/timezone", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/workspace/slug", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/workspace/name", auth.PermissionAccessWrite},
+		{http.MethodGet, "/api/v1/workspace/ai", auth.PermissionAccessRead},
+		{http.MethodPatch, "/api/v1/workspace/ai", auth.PermissionAccessWrite},
 		{http.MethodPatch, "/api/v1/agents/me/timezone", auth.PermissionAuthenticated},
 		{http.MethodPatch, "/api/v1/agents/me/display-name", auth.PermissionAuthenticated},
 		{http.MethodPatch, "/api/v1/agents/{id}", auth.PermissionAccessWrite},

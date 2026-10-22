@@ -190,12 +190,14 @@ type Message struct {
 	AuthorName     *string       `json:"author_name"`
 	AgentToken     *MessageToken `json:"agent_token"`
 	// AgentRequestID names the agent request a person approved to send this message (a reply draft).
-	AgentRequestID *string        `json:"agent_request_id"`
-	Kind           string         `json:"kind"`
-	Body           string         `json:"body"`
-	BodyHTML       *string        `json:"body_html"`
-	Origin         *MessageOrigin `json:"origin"`
-	Attachments    []Attachment   `json:"attachments"`
+	AgentRequestID *string `json:"agent_request_id"`
+	// AIDraftID names the AI draft this reply was sent from; with no author, auto-answer sent it.
+	AIDraftID   *string        `json:"ai_draft_id"`
+	Kind        string         `json:"kind"`
+	Body        string         `json:"body"`
+	BodyHTML    *string        `json:"body_html"`
+	Origin      *MessageOrigin `json:"origin"`
+	Attachments []Attachment   `json:"attachments"`
 	// CC lists the addresses an outgoing reply was copied to; empty for every other message.
 	CC        []string         `json:"cc"`
 	CreatedAt time.Time        `json:"created_at"`
