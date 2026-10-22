@@ -404,3 +404,35 @@ func TestExcludingAnArticleFromAIIsAVersionThatKeepsTheTextAndCanBeUndone(t *tes
 	kbCall(t, api, http.MethodDelete, path, nil, admin, http.StatusOK, nil)
 	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles/00000000-0000-4000-8000-000000000000/ai-exclusion", nil, admin, http.StatusNotFound, nil)
 }
+
+// A name's words alone are masked only as a name is written, so English text about a customer named
+// Trần Văn Long keeps "long" and "an"; the names of contacts merged into the customer are masked too.
+func TestAIRetrievalMasksNamesWithoutEatingWords(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Retrieval Names", "admin@retrieval-names.example.com")
+	workspace := workspaceID(t, api, admin)
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Trần Văn Long", "email": "long@customer.example"})
+	if _, err := pool.Exec(context.Background(), `INSERT INTO contacts(workspace_id,name,email,merged_into_id) VALUES($1,'Duplicate Person','dup@customer.example',$2)`,
+		workspace, contact); err != nil {
+		t.Fatal(err)
+	}
+	conversation := seedResolvedConversation(t, api, pool, admin, workspace, contact, "Export takes too long",
+		"Hi, Long here (also writing as Duplicate Person). The export takes too long and an error shows. Regards, Tran Van Long",
+		"note", "Hello Long, an export of that size takes a while; it is fixed now.")
+	buildAIRetrieval(t, pool)
+	got := aiRetrieve(t, pool, workspace, store.AIRetrievalQuery{Text: "export takes too long error", ConversationLimit: 3})
+	if len(got) != 1 || got[0].ConversationID != conversation {
+		t.Fatalf("search = %+v", got)
+	}
+	text := got[0].Title + "\n" + got[0].Text
+	for _, leak := range []string{"Long here", "Hello Long", "Tran Van Long", "Duplicate Person", "Duplicate"} {
+		if strings.Contains(text, leak) {
+			t.Errorf("retrieved text holds %q:\n%s", leak, text)
+		}
+	}
+	for _, kept := range []string{"takes too long", "and an error", "an export"} {
+		if !strings.Contains(text, kept) {
+			t.Errorf("retrieved text lost %q:\n%s", kept, text)
+		}
+	}
+}

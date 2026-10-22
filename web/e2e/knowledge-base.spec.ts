@@ -240,7 +240,7 @@ test('knowledge base: an article excluded from AI says since when and by whom, k
   await expect(page).toHaveURL(/\/knowledge\/articles\/[0-9a-f-]{36}$/);
 
   const box = page.getByRole('region', { name: 'Used by AI' });
-  await expect(box).toContainText('Drafts and suggestions can quote this article.');
+  await expect(box).toContainText('When AI is on, reply drafts and suggestions can quote this article.');
   await box.getByRole('button', { name: 'Exclude from AI' }).click();
   await expect(box).toContainText(/Off for this article since .+, by /);
   await expect(page.getByText('AI does not read this article.')).toBeVisible();

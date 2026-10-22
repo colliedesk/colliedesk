@@ -508,7 +508,7 @@ test('an article is excluded from AI and let back without touching an edit in pr
     'DELETE /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/ai-exclusion': () => json(200, { ...shown, last_change: { ...shown.last_change, version: 3, kind: 'ai_include' } }) });
   open({ articleId: ids.article });
   const box = await screen.findByRole('region', { name: 'Used by AI' });
-  expect(within(box).getByText('Drafts and suggestions can quote this article.')).toBeInTheDocument();
+  expect(within(box).getByText('When AI is on, reply drafts and suggestions can quote this article.')).toBeInTheDocument();
   fireEvent.change(screen.getByRole('textbox', { name: 'Text (Markdown)' }), { target: { value: 'Open **Settings**, then Security.' } });
   await settle();
   fireEvent.click(within(box).getByRole('button', { name: 'Exclude from AI' }));
@@ -530,7 +530,7 @@ test('a refused change of AI use says so and keeps the state', async () => {
     'POST /api/v1/kb/articles/55555555-5555-4555-8555-555555555555/ai-exclusion': () => refusal(500, 'internal', 'Down') });
   open({ articleId: ids.article });
   const box = await screen.findByRole('region', { name: 'Used by AI' });
-  expect(within(box).getByText('Drafts and suggestions can quote this article once it is published.')).toBeInTheDocument();
+  expect(within(box).getByText('When AI is on, reply drafts and suggestions can quote this article once it is published.')).toBeInTheDocument();
   fireEvent.click(within(box).getByRole('button', { name: 'Exclude from AI' }));
   expect(await within(box).findByRole('alert')).toHaveTextContent('Could not change whether AI reads this article. Try again.');
   expect(within(box).getByRole('button', { name: 'Exclude from AI' })).toBeEnabled();

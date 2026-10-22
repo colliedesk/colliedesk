@@ -14,10 +14,12 @@ database.
    translation, unless an admin excluded it from AI (`kb_articles.ai_excluded`). Drafts and the trash
    are never in it.
 2. A resolved or closed conversation: its subject, its first customer message (1,800 characters at
-   most) and its last public reply, 4,000 characters in all. Private notes are never read. The name,
-   email and company of that conversation's contact (whole, then each word of the name of two
-   letters or more, with or without accents) become `[customer]`, `[email]`, `[company]`; every email
-   address becomes `[email]` and every run of six or more digits, spaces, dots, dashes, slashes or
+   most) and its last public reply, 4,000 characters in all. Private notes are never read. The names and companies
+   of that conversation's contact and of the contacts merged into it become `[customer]` and
+   `[company]`: whole in any case, with or without accents, and each word of a name of two letters or
+   more on its own only capitalized as a name ("Long", "Tran" for Trần), so English text about Trần
+   Văn Long keeps "too long" (`TestAIRetrievalMasksNamesWithoutEatingWords`). Every email address
+   becomes `[email]` and every run of six or more digits, with spaces, dots, dashes, slashes or
    brackets allowed between them, `[number]`. A conversation without a customer message yet has no row.
 
 `folded` is `kb_search_vector` of the text after `store.FoldForAIRetrieval`: lower case, accents
@@ -50,7 +52,8 @@ A source that may no longer be read loses its rows in the same transaction as th
 trash, exclusion, reopen), and a search checks every returned row against its source again, so a
 queue that is behind never hands AI what it should not read. Deletes need nothing: foreign keys
 cascade from the conversation, the article and the translation (undo of an import, retention, purge of
-the trash). `restore-workspace.sh` copies the rows like any other table; they match the restored data.
+the trash). `restore-workspace.sh` copies the rows like any other table; they match the restored data, and the
+queue's ids are uuids, not a sequence, so copied rows never collide with live ones.
 
 ## Ranking
 

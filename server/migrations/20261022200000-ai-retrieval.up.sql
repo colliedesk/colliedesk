@@ -57,16 +57,18 @@ CREATE INDEX ai_retrieval_docs_recent_idx ON ai_retrieval_docs(workspace_id, upd
 
 -- Sources to build again. Rows are only added, never updated, so a change that commits while the
 -- server builds a source leaves a row of its own and is built next; the server deletes the rows it read.
+-- A uuid, not a sequence: restore-workspace.sh copies a workspace's rows as they are, and copied
+-- sequence values would collide with the live ones.
 CREATE TABLE ai_retrieval_pending (
-    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     kb_article_id uuid,
     conversation_id uuid,
-    created_at timestamptz NOT NULL DEFAULT now(),
+    created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
     CHECK ((kb_article_id IS NULL) <> (conversation_id IS NULL))
 );
 -- The worker finds the workspaces with rows, then reads the oldest rows of one.
-CREATE INDEX ai_retrieval_pending_workspace_idx ON ai_retrieval_pending(workspace_id, id);
+CREATE INDEX ai_retrieval_pending_workspace_idx ON ai_retrieval_pending(workspace_id, created_at, id);
 
 DO $$
 DECLARE

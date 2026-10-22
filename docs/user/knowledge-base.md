@@ -249,7 +249,7 @@ an article by surprise. Save or undo your own changes first.
 
 ## Keep an article away from AI
 
-AI features (reply drafts and triage suggestions, when an admin turns them on) find the published
+AI features (reply drafts and triage suggestions, once an admin turns them on) find the published
 articles that fit a conversation by themselves, in every language an article has, and quote them;
 nobody has to sort the knowledge base for AI. A draft, an article in the trash and an internal note
 of a conversation are never read.
