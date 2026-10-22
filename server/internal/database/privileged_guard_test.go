@@ -27,6 +27,7 @@ var privilegedCallSites = []string{
 	"internal/database/migrate.go: PrivilegeMigrate",
 	"internal/database/scope.go: PrivilegeRequestLogin",
 	"internal/database/scope.go: PrivilegeWorkspaceBySlug",
+	"internal/importjobs/store.go: PrivilegeImportJobClaim",
 	"internal/retention/service.go: PrivilegeRetention",
 	"internal/store/agent-requests.go: PrivilegeAgentRequestPrune",
 	"internal/store/billing-reconcile.go: PrivilegeBillingReconcile",
@@ -64,6 +65,7 @@ var poolFiles = []string{
 	"internal/freshdesk/undo.go",
 	"internal/helpscout/importer.go",
 	"internal/httpapi/api.go",
+	"internal/importjobs/worker.go",
 	"internal/store/store.go",
 }
 

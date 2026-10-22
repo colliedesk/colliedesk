@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -26,8 +25,6 @@ var importRun = freshdesk.Run
 
 // progressOutput receives progress lines (stderr), so stdout keeps its stable summary format.
 var progressOutput io.Writer = os.Stderr
-
-var freshdeskDomain = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.freshdesk\.com$`)
 
 const importUsage = "usage: collie import freshdesk --workspace <slug> --domain <account>.freshdesk.com [--api-key-env FRESHDESK_API_KEY] [--since YYYY-MM-DD] [--last-ticket-id N] [--include-personal-canned-responses] [--help-center-portal ID] [--dry-run] [--report-dir DIR]"
 
@@ -125,8 +122,8 @@ func parseImportFlags(args []string) (freshdesk.Options, string, error) {
 	if flags.NArg() != 0 || *workspace == "" || *lastTicket < 0 || *portal < 0 {
 		return freshdesk.Options{}, "", errors.New(importUsage)
 	}
-	host := strings.ToLower(strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(*domain), "https://"), "/"))
-	if !freshdeskDomain.MatchString(host) {
+	host, err := freshdesk.AccountHost(*domain)
+	if err != nil {
 		return freshdesk.Options{}, "", fmt.Errorf("--domain must be your <account>.freshdesk.com address, got %q", *domain)
 	}
 	apiKey := strings.TrimSpace(os.Getenv(*keyEnv))

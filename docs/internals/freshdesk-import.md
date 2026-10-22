@@ -229,6 +229,65 @@ options for it; with their zero values the CLI behaves as before.
   agent can be linked to a Colliedesk agent after the import. Messages imported before this have no
   id; a re-run updates the conversation origin but not existing messages.
 
+## In-app import (#97): the job
+
+Code: `server/internal/importjobs`. A row of `import_jobs` is the durable state of one in-app import
+(or undo); `collie serve` runs the worker. No HTTP handler talks to Freshdesk.
+
+### States
+
+| State | Meaning | Next |
+|---|---|---|
+| `previewing` | Waiting for a worker to read the account (`freshdesk.Preview`) | `previewed`, `failed` |
+| `previewed` | Counts shown, nothing written; the key is kept one hour | `queued` (start), `discarded` (cancel, a new preview, or one hour) |
+| `queued` | Started, waiting for a worker | `running`, `cancelled` |
+| `running` | A worker holds the lease; `phase` is `recent`, `full` or `undo` | `finished`, `failed`, `cancelled`, `retry_wait`, `waiting_key` |
+| `retry_wait` | Freshdesk unavailable, another import holds the lock, or failed items are retried; runs again at `next_run_at` | `running`, `failed`, `cancelled` |
+| `waiting_key` | The key cannot be opened (server restarted without `MAILBOX_TOKEN_KEYS`, or its key left the ring) | `queued` (new key), `cancelled` |
+| `finished` | The full pass returned a report (`status` OK, UNVERIFIED or FAILED), or an undo finished | |
+| `failed` | The run stopped; `error_code` says why. Imported data stays | |
+| `cancelled`, `discarded` | Stopped by a person; imported data stays | |
+
+One job per workspace is `queued`, `running`, `retry_wait` or `waiting_key` (partial unique index):
+a second start answers "an import is running". The worker also takes the importer's advisory lock,
+so the CLI and a job never run together; a job that finds it taken waits in `retry_wait`.
+
+The key is erased (`sealed_key` and the in-memory copy) in the same update that moves a job to
+`finished`, `failed`, `cancelled`, `discarded` or `waiting_key`; a check constraint refuses a key on
+any of them. An undo job holds no key.
+
+### Error codes
+
+| Code | Cause | State |
+|---|---|---|
+| `freshdesk_key_rejected` | Freshdesk answered 401 (`ErrKeyRejected`) | `failed` |
+| `freshdesk_needs_admin_key` | 403 on the account or the agents (`ErrNeedsAdminKey`) | `failed` |
+| `freshdesk_plan_no_api` | `X-Ratelimit-Total: 0` (`ErrPlanNoAPI`): the Free plan, or a trial of a higher plan that ended | `failed`, never retried |
+| `freshdesk_unavailable` | 5xx, 429 or network after the client's retries (`ErrUnavailable`) | `retry_wait`, backoff 1, 2, 5, 10, then 30 minutes; `failed` after 24 hours without progress |
+| `import_running_elsewhere` | Another import or undo (CLI) holds the lock | `retry_wait` 1 minute, same 24 hours |
+| `retrying_failed_items` | The full pass reported FAILED; it runs again (twice at most, while failures go down) | `retry_wait` 1 minute |
+| `storage_cap` | The full pass does not fit the plan's storage; the recent tickets stay | `failed` |
+| `knowledge_base_limit` | The knowledge base passes a limit (`KnowledgeBaseLimitError`) | `failed` |
+| `key_unavailable` | The key cannot be opened | `waiting_key` |
+| `no_progress` | Found running after a crash five times without progress in between | `failed` |
+| `import_error` | Anything else: never retried, the message is kept | `failed` |
+
+### Lease
+
+The claim crosses workspaces (`PrivilegeImportJobClaim`) and returns only ids; everything else runs
+in the job's workspace. A claim sets `claim_token` and a two-minute lease; the worker renews it every
+30 seconds and reads `cancel_requested_at` then. Every write of a run presents the claim token; a
+write that matches no row means another worker took the job, and the run stops. After a restart the
+lease expires and the job runs its saved phase again; the ledger skips what is done. The recent
+window ends at `started_at` minus `recent_days` (default 90; 0 skips the recent pass), so a rerun
+reads the same window. The phase moves to `full`, with the interim report saved, before the full
+pass starts.
+
+Without `MAILBOX_TOKEN_KEYS` the key stays in the memory of the process that received it and the
+job is pinned to that process (`owner_instance`). Another process, or the same one after a restart,
+moves the job to `waiting_key`. Cloud sets the ring; it is shared with Gmail grants, so rotate it by
+putting a new key in front (`k2:new,k1:old`), never by replacing it.
+
 ## Knowledge base (solutions)
 
 Code: `solutions*.go`; the writes are `store/kb-import.go`, which take the same lock, limits,
