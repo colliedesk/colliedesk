@@ -247,7 +247,9 @@ type EmailAttachment struct {
 }
 
 type EmailChannel struct {
-	SupportAddress   string     `json:"support_address"`
+	SupportAddress string `json:"support_address"`
+	// SenderName is the name customers see in the From line of every reply the channel sends.
+	SenderName       string     `json:"sender_name"`
 	SecretSet        bool       `json:"secret_set"`
 	SecretRotatedAt  *time.Time `json:"secret_rotated_at"`
 	Domain           string     `json:"domain"`

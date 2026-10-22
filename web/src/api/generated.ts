@@ -2948,6 +2948,8 @@ export interface components {
         EmailChannel: {
             /** Format: email */
             support_address: string;
+            /** @description The name customers see in the From line of every reply this channel sends (with " via Colliedesk" while the domain is not verified) and in Reply-To. Renaming the workspace does not change it. */
+            sender_name: string;
             secret_set: boolean;
             /** @description Records to publish when the server verifies domains through its email provider (`domain_verification` is `provider`), with the provider's last reported status for each. Empty when it uses the TXT record above, or before the provider has created the domain. */
             dns_records: components["schemas"]["EmailDNSRecord"][];
@@ -4100,6 +4102,8 @@ export interface operations {
                 "application/json": {
                     /** Format: email */
                     support_address: string;
+                    /** @description The name customers see in the From line of every reply. Spaces at the ends are removed; 1 to 100 characters without line breaks or other control characters (400 otherwise). Leave it out to keep the current name; a new channel starts with the workspace name. */
+                    sender_name?: string;
                 };
             };
         };

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -145,23 +146,45 @@ func (a *API) getEmailChannel(response http.ResponseWriter, request *http.Reques
 
 func (a *API) putEmailChannel(response http.ResponseWriter, request *http.Request) {
 	var input struct {
-		SupportAddress string `json:"support_address"`
+		SupportAddress string          `json:"support_address"`
+		SenderName     json.RawMessage `json:"sender_name"`
 	}
 	if err := decodeJSON(request, &input); err != nil || !plainAddress(input.SupportAddress) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "A plain support address such as support@example.com is required.")
+		return
+	}
+	senderName, ok := optionalSenderName(input.SenderName)
+	if !ok {
+		writeError(response, http.StatusBadRequest, "invalid_request", senderNameInvalid)
 		return
 	}
 	if a.foreignHostedAddress(principal(request).Workspace.Slug, input.SupportAddress) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "This address belongs to another workspace's forwarding address.")
 		return
 	}
-	channel, err := a.store.UpsertEmailChannel(request.Context(), principal(request).Workspace.ID, input.SupportAddress)
+	channel, err := a.store.UpsertEmailChannel(request.Context(), principal(request).Workspace.ID, input.SupportAddress, senderName)
 	if err != nil {
 		writeEmailStoreError(response, err)
 		return
 	}
 	a.recordFunnel("email_channel_saved", principal(request).Workspace.ID, nil)
 	a.writeEmailSettings(response, request, &channel)
+}
+
+const senderNameInvalid = "sender_name must be 1 to 100 characters without line breaks or other control characters."
+
+// optionalSenderName reads sender_name when the request has it: a trimmed, header-safe name. Without it
+// the channel keeps its name (a new channel starts with the workspace name).
+func optionalSenderName(raw json.RawMessage) (*string, bool) {
+	if len(raw) == 0 {
+		return nil, true
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, false
+	}
+	name, ok := domain.NormalizeHeaderName(value)
+	return &name, ok
 }
 
 // foreignHostedAddress reports whether the address is on the hosted mail domain but not this workspace's own

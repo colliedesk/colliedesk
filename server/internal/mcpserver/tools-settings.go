@@ -41,6 +41,7 @@ type restSession struct {
 type restEmailSettings struct {
 	Channel *struct {
 		SupportAddress   string     `json:"support_address"`
+		SenderName       string     `json:"sender_name"`
 		SecretSet        bool       `json:"secret_set"`
 		Domain           string     `json:"domain"`
 		DomainVerifiedAt *time.Time `json:"domain_verified_at"`
@@ -276,7 +277,7 @@ func emailChannelView(settings restEmailSettings) map[string]any {
 	}
 	view["gmail"] = gmail
 	if channel := settings.Channel; channel != nil {
-		view["support_address"], view["inbound_secret_set"], view["domain"] = channel.SupportAddress, channel.SecretSet, channel.Domain
+		view["support_address"], view["sender_name"], view["inbound_secret_set"], view["domain"] = channel.SupportAddress, channel.SenderName, channel.SecretSet, channel.Domain
 		view["domain_verified"], view["dns_record_name"], view["dns_record_value"] = channel.DomainVerifiedAt != nil, channel.DNSRecordName, channel.DNSRecordValue
 	}
 	return view

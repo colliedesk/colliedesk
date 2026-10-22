@@ -150,7 +150,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_web_form_update` | Turns the web form on or off and sets the allowed origins | `admin` |
 | `colliedesk_help_center_update` | Turns the public help center on or off and sets its title and language | `admin` |
 | `colliedesk_email_channel_get` | Shows the email channel, never the inbound secret | `read` |
-| `colliedesk_email_channel_update` | Connects the email channel or changes the support address | `admin` |
+| `colliedesk_email_channel_update` | Connects the email channel or changes the support address or the sender name | `admin` |
 | `colliedesk_email_domain_verify` | Checks the DNS record that verifies the sending domain | `admin` |
 | `colliedesk_billing_get` | Shows the plan, trial and seats on the hosted cloud | `admin` |
 | `colliedesk_problem_report` | Sends a problem report to the team that runs the server, with the request ids of failed calls | `read` |

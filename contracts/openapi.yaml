@@ -671,6 +671,14 @@ paths:
               required: [support_address]
               properties:
                 support_address: {type: string, format: email}
+                sender_name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  description: >
+                    The name customers see in the From line of every reply. Spaces at the ends are removed;
+                    1 to 100 characters without line breaks or other control characters (400 otherwise).
+                    Leave it out to keep the current name; a new channel starts with the workspace name.
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200': {$ref: '#/components/responses/EmailChannelSettings'}
@@ -4624,9 +4632,16 @@ components:
               content_type: {type: string}
     EmailChannel:
       type: object
-      required: [support_address, secret_set, secret_rotated_at, domain, domain_verified_at, dns_record_name, dns_record_value, dns_records, dns_records_expired_at, created_at, updated_at]
+      required: [support_address, sender_name, secret_set, secret_rotated_at, domain, domain_verified_at, dns_record_name, dns_record_value, dns_records, dns_records_expired_at, created_at, updated_at]
       properties:
         support_address: {type: string, format: email}
+        sender_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: >
+            The name customers see in the From line of every reply this channel sends (with " via Colliedesk"
+            while the domain is not verified) and in Reply-To. Renaming the workspace does not change it.
         secret_set: {type: boolean}
         dns_records:
           type: array

@@ -140,7 +140,7 @@ test('signing out this device from Sessions reloads who is signed in, so the sig
 
 const withChannel = {
   channel: {
-    support_address: 'support@example.com', secret_set: true, secret_rotated_at: '2026-10-14T09:00:00Z', domain: 'example.com', domain_verified_at: null,
+    support_address: 'support@example.com', sender_name: 'Acme Support', secret_set: true, secret_rotated_at: '2026-10-14T09:00:00Z', domain: 'example.com', domain_verified_at: null,
     dns_record_name: '_colliedesk.example.com', dns_record_value: 'colliedesk-verification=abc', dns_records: [], dns_records_expired_at: null,
     created_at: '2026-10-14T08:00:00Z', updated_at: '2026-10-14T09:00:00Z',
   },
@@ -163,6 +163,15 @@ test('Connect Gmail sends the browser to Google, and the outcome it comes back w
   } finally {
     Object.defineProperty(window, 'location', { configurable: true, value: original });
   }
+});
+
+test('saving the sender name keeps the support address and sends the trimmed name', async () => {
+  api.saveEmailChannel.mockResolvedValue(withChannel);
+  show('admin', [], withChannel);
+  const field = await screen.findByRole('textbox', { name: 'Sender name' });
+  fireEvent.change(field, { target: { value: ' Colliedesk Support ' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save sender name' }));
+  await waitFor(() => expect(api.saveEmailChannel).toHaveBeenCalledWith('support@example.com', 'Colliedesk Support'));
 });
 
 test('Settings has a Help center section in its nav, for every agent', async () => {

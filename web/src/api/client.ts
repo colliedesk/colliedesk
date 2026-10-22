@@ -224,7 +224,9 @@ async function errorCode(response: Response): Promise<unknown> {
 
 export const api = {
   emailChannel: () => request('/api/v1/channels/email', emailChannelSettingsSchema),
-  saveEmailChannel: (support_address: string) => request('/api/v1/channels/email', emailChannelSettingsSchema, { method: 'PUT', body: json<'putEmailChannel'>({ support_address }) }),
+  // Without sender_name the channel keeps its name; a new channel starts with the workspace name.
+  saveEmailChannel: (support_address: string, sender_name?: string) => request('/api/v1/channels/email', emailChannelSettingsSchema,
+    { method: 'PUT', body: json<'putEmailChannel'>(sender_name === undefined ? { support_address } : { support_address, sender_name }) }),
   disconnectEmailChannel: () => requestNoContent('/api/v1/channels/email', { method: 'DELETE' }),
   webForm: () => request('/api/v1/channels/web-form', webFormSettingsSchema),
   saveWebForm: (enabled: boolean, allowed_origins: string[]) => request('/api/v1/channels/web-form', webFormSettingsSchema, { method: 'PUT', body: json<'putWebForm'>({ enabled, allowed_origins }) }),

@@ -25,7 +25,7 @@ var settingsFields = map[string][]string{
 	"POST /api/v1/auth/invites":                       {"email", "role_ceiling"},
 	"DELETE /api/v1/auth/invites/{id}":                {},
 	"PUT /api/v1/channels/web-form":                   {"enabled", "allowed_origins"},
-	"PUT /api/v1/channels/email":                      {"support_address"},
+	"PUT /api/v1/channels/email":                      {"support_address", "sender_name"},
 	"POST /api/v1/channels/email/domain-verification": {},
 	"DELETE /api/v1/auth/sessions/{id}":               {},
 	"GET /api/v1/billing":                             {},
@@ -64,6 +64,7 @@ func (a *API) summarizeSettingsRequest(ctx context.Context, request *http.Reques
 		Enabled        *bool    `json:"enabled"`
 		AllowedOrigins []string `json:"allowed_origins"`
 		SupportAddress string   `json:"support_address"`
+		SenderName     *string  `json:"sender_name"`
 	}
 	_ = json.Unmarshal(body, &call)
 	id := request.PathValue("id")
@@ -109,11 +110,15 @@ func (a *API) summarizeSettingsRequest(ctx context.Context, request *http.Reques
 		}
 		return "Change the web form: " + strings.Join(changes, "; ")
 	case "PUT /api/v1/channels/email":
-		before := "not connected"
+		before, beforeName := "not connected", who.Workspace.Name
 		if channel, err := a.store.GetEmailChannel(ctx, who.Workspace.ID); err == nil && channel != nil {
-			before = channel.SupportAddress
+			before, beforeName = channel.SupportAddress, channel.SenderName
 		}
-		return fmt.Sprintf("Change the email channel's support address: %s → %s", before, call.SupportAddress)
+		summary := fmt.Sprintf("Change the email channel's support address: %s → %s", before, call.SupportAddress)
+		if call.SenderName != nil {
+			summary += "; sender name: " + beforeName + " → " + *call.SenderName
+		}
+		return summary
 	case "POST /api/v1/channels/email/domain-verification":
 		if channel, err := a.store.GetEmailChannel(ctx, who.Workspace.ID); err == nil && channel != nil {
 			return "Check the DNS record that verifies " + channel.Domain + " for sending"

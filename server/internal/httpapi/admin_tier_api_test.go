@@ -167,6 +167,8 @@ func TestSettingsRequestsSayWhatChangesFromWhatToWhat(t *testing.T) {
 		{http.MethodDelete, "/api/v1/auth/invites/" + inviteID, nil, []string{"pending@settings-summary.example.com"}},
 		{http.MethodPut, "/api/v1/channels/web-form", map[string]any{"enabled": true, "allowed_origins": []string{"https://shop.example.com"}}, []string{"off → on", "https://shop.example.com"}},
 		{http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "new@settings-summary.example.com"}, []string{"old@settings-summary.example.com → new@settings-summary.example.com"}},
+		{http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "old@settings-summary.example.com", "sender_name": "Summary Support"},
+			[]string{"sender name: Settings Summary → Summary Support"}},
 	}
 	for _, item := range cases {
 		filed := accepted(t, api, item.method, item.path, item.body, send)

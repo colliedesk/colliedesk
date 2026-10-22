@@ -25,6 +25,7 @@ const (
 		`"allowed_origins":{"type":"array","items":{"type":"string"}},"submit_path":{"type":"string"}}}`
 
 	emailChannelSchema = `{"type":"object","required":["connected"],"properties":{"connected":{"type":"boolean"},"support_address":{"type":"string"},` +
+		`"sender_name":{"type":"string","description":"The name customers see in the From line of every reply (with \" via Colliedesk\" while the domain is not verified)."},` +
 		`"inbound_secret_set":{"type":"boolean","description":"The secret itself is never shown to an agent."},"inbound_url":{"type":"string"},"hosted_address":{"type":["string","null"]},` +
 		`"domain":{"type":"string"},"domain_verified":{"type":"boolean"},"dns_record_name":{"type":"string"},"dns_record_value":{"type":"string"},` +
 		`"smtp_configured":{"type":"boolean"},"sending_from":{"type":["string","null"]},` +
@@ -221,10 +222,12 @@ func emailChannelUpdateSpec() Spec {
 		Name:  "colliedesk_email_channel_update",
 		Title: "Connect or change the email channel",
 		Description: `Set the support address customers write to (a plain address such as support@example.com). It connects the channel when it is not connected. ` +
-			`A new domain needs verifying again (colliedesk_email_domain_verify). It is safe to repeat. ` + belowAdmin + "\n\nTier: admin.",
+			`A new domain needs verifying again (colliedesk_email_domain_verify). sender_name sets the name customers see in the From line; leave it out to keep the current one ` +
+			`(a new channel starts with the workspace name). It is safe to repeat. ` + belowAdmin + "\n\nTier: admin.",
 		Tier: "admin", Idempotent: true,
-		REST:   []string{"PUT /api/v1/channels/email"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["support_address"],"properties":{"support_address":{"type":"string","minLength":3,"maxLength":254}}}`,
+		REST: []string{"PUT /api/v1/channels/email"},
+		Input: `{"type":"object","additionalProperties":false,"required":["support_address"],"properties":{"support_address":{"type":"string","minLength":3,"maxLength":254},` +
+			`"sender_name":{"type":"string","minLength":1,"maxLength":100,"description":"Spaces at the ends are removed; no line breaks or other control characters."}}}`,
 		Output: `{"type":"object","required":["email_channel"],"properties":{"email_channel":` + emailChannelSchema + `}}`,
 		run:    emailChannelUpdate,
 	}

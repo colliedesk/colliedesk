@@ -45,7 +45,7 @@ func (w *Worker) deliverGmail(ctx context.Context, item store.Delivery) error {
 		return w.retry(ctx, item, err)
 	}
 	copies, unusable := usableCopies(item.CC)
-	message, err := w.compose(item, mail.Address{Name: item.WorkspaceName, Address: mailbox.Address}, copies, files)
+	message, err := w.compose(item, mail.Address{Name: item.SenderName, Address: mailbox.Address}, copies, files)
 	if err != nil {
 		return w.store.MarkDeliveryFailed(ctx, item, truncate(err.Error()))
 	}

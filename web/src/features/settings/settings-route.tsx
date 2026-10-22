@@ -40,7 +40,8 @@ export function SettingsRoute() {
   // Your name also shows in the team list and the assignee lists.
   const agentDisplayName = useMutation({ mutationFn: api.updateAgentDisplayName, onSuccess: () => { void refresh('me'); void refresh('agents'); } });
   const emailChannel = useQuery({ queryKey: ['email-channel'], queryFn: api.emailChannel });
-  const saveEmail = useMutation({ mutationFn: api.saveEmailChannel, onSuccess: () => refresh('email-channel') });
+  const saveEmail = useMutation({ mutationFn: (address: string) => api.saveEmailChannel(address), onSuccess: () => refresh('email-channel') });
+  const saveSenderName = useMutation({ mutationFn: ({ address, name }: { address: string; name: string }) => api.saveEmailChannel(address, name), onSuccess: () => refresh('email-channel') });
   const workspaceSlug = useMutation({ mutationFn: api.updateWorkspaceSlug, onSuccess: () => { void refresh('me'); void refresh('email-channel'); } });
   const rotateSecret = useMutation({ mutationFn: api.rotateEmailSecret, onSuccess: () => refresh('email-channel') });
   // A refused check still reloads: the provider's per-record status changed.
@@ -88,8 +89,9 @@ export function SettingsRoute() {
       onRestoreVersion={async (id, version, updatedAt) => { await api.restoreSavedReplyVersion(id, version, updatedAt); await refreshSavedReplies(); }}
       loadTrash={(cursor) => api.trashedSavedReplies(cursor)}
       onUndelete={async (id, updatedAt) => { await api.restoreSavedReply(id, updatedAt); await refreshSavedReplies(); }} />}
-    emailSection={<EmailChannelSection settings={emailChannel.data} timezone={me.data?.timezone ?? 'UTC'} canManage={isAdmin} workspaceSlug={me.data?.workspace.slug} addressSave={saveState(saveEmail)} slugSave={saveState(workspaceSlug)}
+    emailSection={<EmailChannelSection settings={emailChannel.data} timezone={me.data?.timezone ?? 'UTC'} canManage={isAdmin} workspaceSlug={me.data?.workspace.slug} addressSave={saveState(saveEmail)} senderNameSave={saveState(saveSenderName)} slugSave={saveState(workspaceSlug)}
       onSaveSlug={(slug) => workspaceSlug.mutate(slug)} createdSecret={rotateSecret.data?.inbound_secret} onSave={(address) => saveEmail.mutate(address)}
+      onSaveSenderName={(name) => { const address = emailChannel.data?.channel?.support_address; if (address) saveSenderName.mutate({ address, name }); }}
       onRotate={() => rotateSecret.mutate()} onVerifyDomain={() => verifyDomain.mutate()} verifyPending={verifyDomain.isPending} verifyError={verifyDomain.error instanceof InvalidRequestError ? verifyDomain.error.message : undefined} onDisconnect={() => disconnectEmail.mutate()}
       onConnectGmail={() => connectGmail.mutate()} onDisconnectGmail={() => disconnectGmail.mutate()}
       gmailPending={connectGmail.isPending || connectGmail.isSuccess} gmailError={gmailError} gmailReturned={gmailReturned} />}

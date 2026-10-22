@@ -203,7 +203,7 @@ func (w *Worker) deliver(ctx context.Context, item store.Delivery) error {
 func (w *Worker) compose(item store.Delivery, from mail.Address, copies []string, files []email.File) ([]byte, error) {
 	return email.Compose(email.Outgoing{Files: files,
 		FromName: from.Name, FromAddress: from.Address, ReplyTo: email.PlusAddress(item.SupportAddress, item.ReplyToken),
-		ReplyToName: item.WorkspaceName,
+		ReplyToName: item.SenderName,
 		ToName:      item.ContactName, ToAddress: item.ContactEmail, Cc: copies, Subject: item.Subject, Body: item.Body,
 		MessageID: item.EmailMessageID, InReplyTo: item.InReplyTo, References: item.References, Date: w.options.Now(), Opening: item.Opening,
 	})
@@ -277,13 +277,13 @@ func readStored(ctx context.Context, storage attachments.Storage, key string) ([
 // in Reply-To, so the customer's reply still reaches the workspace and threads.
 func (w *Worker) identity(item store.Delivery) (mail.Address, string, bool) {
 	if w.options.FromPolicy == email.FromPolicyAny || item.DomainVerified {
-		return mail.Address{Name: item.WorkspaceName, Address: item.SupportAddress}, item.SupportAddress, true
+		return mail.Address{Name: item.SenderName, Address: item.SupportAddress}, item.SupportAddress, true
 	}
 	if w.options.MailFromDomain == "" || item.ReplyToken == "" {
 		return mail.Address{}, "", false
 	}
 	address := email.PlatformReplyFrom(item.ReplyToken, item.EmailMessageID, w.options.MailFromDomain)
-	return mail.Address{Name: item.WorkspaceName + " via Colliedesk", Address: address}, address, true
+	return mail.Address{Name: item.SenderName + " via Colliedesk", Address: address}, address, true
 }
 
 func truncate(value string) string {

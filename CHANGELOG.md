@@ -25,6 +25,10 @@ API changes in the email view (the full notes will be on the releases page):
   message's `body_html`. Existing attachments are `false`.
 - For a signed-in person, `body_html` in `GET /conversations/{id}/messages` has its remote images rewritten
   to the new `GET /api/v1/mail-image` route; an agent token still reads the HTML as stored.
+- `EmailChannel` has a new required field, `sender_name`: the name customers see in the From and
+  Reply-To lines of every reply. `PUT /channels/email` takes it as an optional field (1 to 100
+  characters, no control characters). The upgrade sets each existing channel to its workspace name, so
+  mail does not change until an admin edits it; replies no longer use the workspace name.
 
 ## 0.0.1
 

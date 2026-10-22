@@ -92,8 +92,15 @@ func TestAdminTierRunsTheWorkspaceThroughTheTools(t *testing.T) {
 	if at(t, channel, "email_channel", "support_address") != "help@settings-tools.example.com" || at(t, channel, "email_channel", "connected") != true {
 		t.Fatalf("email channel = %v", channel)
 	}
-	if got := e.ok(session, "colliedesk_email_channel_get", nil); at(t, got, "email_channel", "dns_record_name") == "" {
+	if got := e.ok(session, "colliedesk_email_channel_get", nil); at(t, got, "email_channel", "dns_record_name") == "" || at(t, got, "email_channel", "sender_name") != "Settings Tools Desk" {
 		t.Fatalf("email channel get = %v", got)
+	}
+	renamed := e.ok(session, "colliedesk_email_channel_update", map[string]any{"support_address": "help@settings-tools.example.com", "sender_name": "Settings Support"})
+	if at(t, renamed, "email_channel", "sender_name") != "Settings Support" {
+		t.Fatalf("sender name update = %v", renamed)
+	}
+	if message := e.fails(session, "colliedesk_email_channel_update", map[string]any{"support_address": "help@settings-tools.example.com", "sender_name": "Two\nlines"}); !strings.Contains(message, "sender_name") {
+		t.Errorf("a sender name with a line break: %q", message)
 	}
 	if message := e.fails(session, "colliedesk_email_domain_verify", nil); !strings.Contains(message, "TXT record") {
 		t.Errorf("verify without the DNS record: %q", message)

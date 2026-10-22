@@ -37,6 +37,23 @@ address stops receiving mail at once, so change the forwarding in your mailbox a
 A name is 1 to 63 lowercase letters, digits or hyphens; names such as `app`, `www` and `mail` are
 reserved. Do not set the Support address to a `colliedesk.com` address of another workspace.
 
+## Sender name
+
+The **Sender name** is the name customers see in the From line of every reply, for example
+**"Acme Support" <support@example.com>**. It belongs to the email channel, not to the workspace:
+renaming the workspace does not change it.
+
+A new channel starts with the workspace name. To change it:
+
+1. Open **Settings → Email channel**. The field appears once a support address is saved.
+2. Enter the name in **Sender name** and select **Save sender name**.
+
+The next reply uses the new name, on every way a reply leaves: your own domain, the
+`via Colliedesk` address and Gmail. A name is 1 to 100 characters. Spaces at the ends are removed.
+Line breaks and other control characters are refused. Only admins can change it; other teammates
+see it. Through the API, send `sender_name` with `PUT /api/v1/channels/email`; an AI agent uses
+`colliedesk_email_channel_update`.
+
 ## Send replies from Gmail
 
 If your support address is a Gmail or Google Workspace mailbox, an admin can connect it. Replies are
@@ -84,7 +101,7 @@ On a server you run, Gmail sending needs your own Google OAuth client. See
 
 ## Send from your own domain
 
-Until your domain is verified, replies are sent as **"Your workspace via Colliedesk"** from a
+Until your domain is verified, replies are sent as **"<sender name> via Colliedesk"** from a
 `reply+…@` address on the server's sending domain, with `Reply-To` set to your support address.
 Customer replies still reach you and thread. **Settings → Email channel** shows **Replies are sent
 from …** with the current address. Verify the domain to send as your support address.

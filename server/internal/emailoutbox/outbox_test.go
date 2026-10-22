@@ -47,7 +47,7 @@ func addWorkspace(t *testing.T, pool *pgxpool.Pool, name, domainName string) fix
 		t.Fatal(err)
 	}
 	st := store.New(pool).WithOutbound(store.OutboundPolicy{Enabled: true, GmailEnabled: true})
-	if _, err := st.UpsertEmailChannel(ctx, workspace.ID, "support@"+domainName); err != nil {
+	if _, err := st.UpsertEmailChannel(ctx, workspace.ID, "support@"+domainName, nil); err != nil {
 		t.Fatal(err)
 	}
 	parsed, err := email.Parse([]byte("From: Olive Customer <olive@customer.example>\r\nTo: support@"+domainName+"\r\n"+
