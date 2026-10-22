@@ -4426,6 +4426,11 @@ components:
       properties:
         system: {type: string, description: 'Source system, for example freshdesk'}
         external_id: {type: string, description: Ticket id in the source system}
+        responder_external_id:
+          type: [string, 'null']
+          description: >-
+            Id of the source agent the ticket was assigned to, so it can be linked to a Colliedesk agent
+            later. Missing or null on imports that predate it and when the ticket had no agent.
         type: {type: [string, 'null'], description: Ticket type in the source system}
         source: {type: [string, 'null'], description: 'Channel the ticket came from: email, portal, phone, chat, feedback_widget, outbound_email or other'}
         due_at: {type: [string, 'null'], format: date-time}
@@ -4573,6 +4578,11 @@ components:
       properties:
         system: {type: string}
         external_id: {type: string}
+        author_external_id:
+          type: [string, 'null']
+          description: >-
+            Id of the source agent who wrote the item, so it can be linked to a Colliedesk agent later.
+            Missing or null on imports that predate it and when a customer wrote it.
         kind:
           type: string
           enum: [description, reply, incoming, automated_response, private_note, public_note, forward, forwarded_email, other]

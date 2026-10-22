@@ -152,8 +152,11 @@ never accepts it as a command-line argument and never prints it.
 Options:
 
 - `--api-key-env NAME`: read the key from another variable. Default `FRESHDESK_API_KEY`.
-- `--since YYYY-MM-DD`: import only tickets updated on or after this UTC date. Use it for a final
-  catch-up import just before you switch.
+- `--since YYYY-MM-DD`: list only tickets updated on or after this UTC date. Use it for a final
+  catch-up import just before you switch. It does not make a first import smaller: the ticket id
+  check still finds every ticket the list leaves out and imports it (the report warns
+  `ticket_not_listed`), so the first run into a workspace brings the whole account. On a later run
+  the tickets already imported are not checked again, so the run is shorter.
 - `--dry-run`: count only.
 - `--last-ticket-id N`: the highest ticket number you see in Freshdesk. Recommended: the ticket
   check then covers at least this far (see "How completeness is checked").
@@ -184,8 +187,7 @@ count toward the storage limit of the plan (10, 30, 20, 100 or 250 GiB). Before 
 (it reads each image once to know its size) and compares it with the room left. If they do not fit, it stops with a message that gives the bytes
 needed, the bytes free and the limit, and nothing is imported: no contact, ticket or file. Switch to a larger plan under
 **Billing > Manage billing** (Solo to Small, Small or Founding to Team; on Team or Team 25, contact us
-for more storage) and run it again, or import a smaller slice with
-`--since`.
+for more storage) and run it again.
 
 The check is the only place the limit applies to an import. An import that passes it is admitted and
 runs to the end: customer email that arrives meanwhile, or a file added in Freshdesk after the check,
