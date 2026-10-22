@@ -1905,6 +1905,252 @@ paths:
       responses:
         '200': {description: The proxy may get a certificate for this host name}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/imports:
+    get:
+      operationId: listImports
+      x-permission: workspace:import
+      description: >
+        The workspace's in-app imports and undos, newest first (at most 100). Admins only. A job never
+        shows its Freshdesk API key; `has_key` says whether the server still holds it.
+      responses:
+        '200':
+          description: Import jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/ImportJob'}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      operationId: previewImport
+      x-permission: workspace:import
+      description: >
+        Starts an import from Freshdesk by reading the account in the background, before anything is
+        written (`state` previewing, then previewed with `preview`, or failed with `error_code`). Poll
+        `GET /api/v1/imports/{id}`. The key must be a Freshdesk admin's; it is sealed on the server,
+        never returned, and erased when the job ends or when the preview is not started within an
+        hour. A new preview discards the workspace's earlier preview. An agent token below the admin
+        tier is refused with 403 `credentials_need_admin_token` and nothing is stored: an agent request
+        would keep the key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ImportInput'}
+      responses:
+        '202':
+          description: The preview job, still previewing
+          content: {application/json: {schema: {$ref: '#/components/schemas/ImportJob'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/imports/{id}:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getImport
+      x-permission: workspace:import
+      description: State, progress and preview of one import or undo; the report is at `/report`.
+      responses:
+        '200':
+          description: Import job
+          content: {application/json: {schema: {$ref: '#/components/schemas/ImportJob'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/imports/{id}/start:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: startImport
+      x-permission: workspace:import
+      description: >
+        Imports a previewed account: first the tickets updated in the last `recent_days` (newest first,
+        so the team can work on them), then the whole account with its reconcile report. 409
+        `import_running` when the workspace already has an import or undo queued, running or waiting;
+        409 `import_state` when the job is not previewed, or was previewed more than an hour ago.
+      responses:
+        '200':
+          description: The queued import
+          content: {application/json: {schema: {$ref: '#/components/schemas/ImportJob'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/imports/{id}/cancel:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: cancelImport
+      x-permission: workspace:import
+      description: >
+        Stops a job. A preview is discarded; a running import stops within a minute (`cancel_requested`
+        until then). What was imported stays: `POST /api/v1/imports/{id}/undo` removes it. The key is
+        erased.
+      responses:
+        '200':
+          description: The job
+          content: {application/json: {schema: {$ref: '#/components/schemas/ImportJob'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/imports/{id}/key:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    put:
+      operationId: setImportKey
+      x-permission: workspace:import
+      description: >
+        Gives a job in `waiting_key` (the server restarted without a key ring, or its keys changed) the
+        Freshdesk API key again; it goes on where it stopped. Refused to agent tokens below the admin
+        tier like `POST /api/v1/imports`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [api_key]
+              properties:
+                api_key: {type: string, minLength: 1, maxLength: 200, writeOnly: true}
+      responses:
+        '200':
+          description: The queued job
+          content: {application/json: {schema: {$ref: '#/components/schemas/ImportJob'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/imports/{id}/report:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - name: format
+        in: query
+        schema: {type: string, enum: [json, markdown], default: json}
+    get:
+      operationId: getImportReport
+      x-permission: workspace:import
+      description: >
+        The reconcile report of the import (`status` OK, FAILED or UNVERIFIED), or while only the
+        recent tickets are in, the interim report (`status` INTERIM, never OK; no Markdown yet). For an
+        undo, what it removed. `format=markdown` answers the report as a Markdown file to download.
+        404 `report_not_ready` before there is one.
+      responses:
+        '200':
+          description: The report
+          content:
+            application/json:
+              schema: {type: object, additionalProperties: true}
+            text/markdown:
+              schema: {type: string}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/imports/{id}/undo:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: undoImport
+      x-permission: workspace:import
+      description: >
+        Queues an undo of an import that ended (finished, failed or cancelled): it removes what that
+        Freshdesk account brought into the workspace, as `collie import undo` does, and keeps what the
+        team changed since. Every agent token's call waits for a person's approval.
+      responses:
+        '202':
+          description: The undo job, queued
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - {$ref: '#/components/schemas/ImportJob'}
+                  - {$ref: '#/components/schemas/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/imports/{id}/people:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: listImportPeople
+      x-permission: workspace:import
+      description: >
+        The agents of the import's Freshdesk account and the Colliedesk agent each is linked to. A link
+        makes that agent the author of their imported replies and the assignee of the imported tickets
+        they held; the preview links the agents whose email matches, and accepting an invite links the
+        ones with the invited email. 409 `import_state` before the preview read the account.
+      responses:
+        '200':
+          description: Freshdesk agents
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/ImportPerson'}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/imports/{id}/people/{externalId}/link:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - name: externalId
+        in: path
+        required: true
+        schema: {type: string, pattern: '^[0-9]{1,20}$'}
+        description: The Freshdesk agent id
+    put:
+      operationId: linkImportPerson
+      x-permission: workspace:import
+      description: >
+        Links a Freshdesk agent to an active agent of this workspace, replacing an earlier link. Their
+        imported replies get that author and the imported tickets assigned to them, unless someone
+        reassigned them since, that assignee, within seconds (`pending` until then). Timestamps do not
+        change. `DELETE` takes the link back.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [agent_id]
+              properties:
+                agent_id: {type: string, format: uuid}
+      responses:
+        '200':
+          description: The Freshdesk agent
+          content: {application/json: {schema: {$ref: '#/components/schemas/ImportPerson'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: unlinkImportPerson
+      x-permission: workspace:import
+      description: >
+        Takes a link back: the imported replies show the Freshdesk name again and the imported tickets the
+        link assigned lose that assignee, unless someone reassigned them since.
+      responses:
+        '200':
+          description: The Freshdesk agent
+          content: {application/json: {schema: {$ref: '#/components/schemas/ImportPerson'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/export:
     get:
       operationId: exportWorkspace
@@ -3537,6 +3783,138 @@ components:
       description: Resource not found in this workspace
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   schemas:
+    ImportPerson:
+      type: object
+      required: [external_id, name, email, active, linked_agent_id, linked_by_email, pending, updated_at]
+      properties:
+        external_id: {type: string, description: The Freshdesk agent id}
+        name: {type: string}
+        email: {type: string}
+        active: {type: boolean, description: An active agent in Freshdesk}
+        linked_agent_id: {type: [string, 'null'], format: uuid}
+        linked_by_email: {type: boolean, description: 'Linked because the emails match, not by a person'}
+        pending: {type: boolean, description: The link changed and the imported replies and tickets are still being moved}
+        updated_at: {type: string, format: date-time}
+    ImportOptions:
+      type: object
+      additionalProperties: false
+      properties:
+        recent_days:
+          type: integer
+          minimum: 0
+          maximum: 365
+          description: The tickets updated in these last days are imported first, newest first; 0 skips that pass. Default 90.
+        include_personal_canned_responses:
+          type: boolean
+          description: Also import canned responses from personal folders; they become shared with the whole workspace.
+        help_center_portal:
+          type: integer
+          minimum: 0
+          description: On an account with several portals, the portal whose published articles stay published.
+    ImportInput:
+      type: object
+      additionalProperties: false
+      required: [source, domain, api_key]
+      properties:
+        source: {type: string, enum: [freshdesk]}
+        domain: {type: string, minLength: 1, maxLength: 255, description: 'Your <account>.freshdesk.com address'}
+        api_key: {type: string, minLength: 1, maxLength: 200, writeOnly: true, description: 'A Freshdesk admin''s API key (Profile settings > API key)'}
+        options: {$ref: '#/components/schemas/ImportOptions'}
+    ImportProgress:
+      type: object
+      required: [step, done, total, api_calls, updated_at]
+      properties:
+        step: {type: string, description: 'The importer step, for example importing tickets'}
+        done: {type: integer}
+        total: {type: integer, description: 0 when the step does not know its total}
+        rate_limit_until: {type: string, format: date-time, description: Set while the import waits for the Freshdesk rate limit}
+        api_calls: {type: integer, description: Freshdesk requests of this run so far}
+        eta_seconds: {type: integer, description: The rest of the step at the pace of the last five minutes; missing when unknown}
+        updated_at: {type: string, format: date-time}
+    ImportPreview:
+      type: object
+      description: >-
+        What a few reads of the account tell before anything is written. Freshdesk has no ticket count:
+        tickets_outside_archive is its search total, which leaves archived tickets out, and archived
+        tickets can have ids above highest_listed_ticket_id; neither is an upper bound.
+      required: [domain, account_id, source, agents, companies, contacts, tickets_outside_archive, highest_listed_ticket_id, archive, canned_responses, knowledge_base, rate_limit_per_minute, api_calls, checked_at]
+      properties:
+        domain: {type: string}
+        account_id: {type: integer}
+        source: {type: string}
+        agents:
+          type: array
+          items:
+            type: object
+            required: [id, name, email, active]
+            properties:
+              id: {type: integer}
+              name: {type: string}
+              email: {type: string}
+              active: {type: boolean}
+        companies: {type: integer}
+        contacts: {type: [integer, 'null'], description: null when Freshdesk search is unavailable}
+        tickets_outside_archive: {type: [integer, 'null']}
+        highest_listed_ticket_id: {type: integer}
+        archive: {$ref: '#/components/schemas/ImportAccess'}
+        canned_responses: {$ref: '#/components/schemas/ImportAccess'}
+        knowledge_base: {$ref: '#/components/schemas/ImportAccess'}
+        rate_limit_per_minute: {type: integer, description: X-Ratelimit-Total; 0 when Freshdesk sent none}
+        api_calls: {type: integer}
+        checked_at: {type: string, format: date-time}
+    ImportAccess:
+      type: string
+      enum: [readable, none, refused, unknown]
+      description: >-
+        Whether the key can read this part: none means the account has none; refused (403) for the
+        archive means the report can be UNVERIFIED at best.
+    ImportJob:
+      type: object
+      required: [id, kind, source, domain, account_source, undo_of, state, phase, options, preview, progress, status, error_code, error_message, imported_conversations, has_key, has_interim_report, has_report, cancel_requested, next_run_at, created_by, created_at, started_at, finished_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [import, undo]}
+        source: {type: string, enum: [freshdesk]}
+        domain: {type: string}
+        account_source: {type: [string, 'null'], description: 'The Freshdesk account, freshdesk:account:<id>, known after the preview'}
+        undo_of: {type: [string, 'null'], format: uuid, description: The import an undo removes}
+        state:
+          type: string
+          enum: [previewing, previewed, queued, running, retry_wait, waiting_key, finished, failed, cancelled, discarded]
+        phase: {type: string, enum: [preview, recent, full, undo]}
+        options: {$ref: '#/components/schemas/ImportOptions'}
+        preview:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/ImportPreview'}
+        progress:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/ImportProgress'}
+        status: {type: [string, 'null'], enum: [OK, FAILED, UNVERIFIED, null], description: The reconcile status of a finished import}
+        error_code:
+          type: [string, 'null']
+          description: >-
+            Why a job failed or waits: freshdesk_key_rejected, freshdesk_needs_admin_key,
+            freshdesk_plan_no_api (the Freshdesk Free plan, or an ended trial of a higher plan, has no
+            API calls), freshdesk_unavailable, import_running_elsewhere, retrying_failed_items,
+            storage_cap, knowledge_base_limit, key_unavailable, no_progress or import_error.
+        error_message: {type: [string, 'null']}
+        imported_conversations:
+          type: [integer, 'null']
+          description: >-
+            How many conversations of the Freshdesk account were in the workspace when the import ended
+            (what an undo removes, less what the team changed since); null while it runs and for an undo.
+        has_key: {type: boolean, description: The server still holds the Freshdesk API key of this job}
+        has_interim_report: {type: boolean}
+        has_report: {type: boolean}
+        cancel_requested: {type: boolean}
+        next_run_at: {type: [string, 'null'], format: date-time, description: When a job in retry_wait runs again}
+        created_by: {type: [string, 'null'], format: uuid}
+        created_at: {type: string, format: date-time}
+        started_at: {type: [string, 'null'], format: date-time}
+        finished_at: {type: [string, 'null'], format: date-time}
+        updated_at: {type: string, format: date-time}
     AgentRequestStatus:
       type: string
       enum: [pending, approved, failed, rejected, cancelled, expired]
@@ -4585,6 +4963,11 @@ components:
       properties:
         system: {type: string, description: 'Source system, for example freshdesk'}
         external_id: {type: string, description: Ticket id in the source system}
+        responder_external_id:
+          type: [string, 'null']
+          description: >-
+            Id of the source agent the ticket was assigned to, so it can be linked to a Colliedesk agent
+            later. Missing or null on imports that predate it and when the ticket had no agent.
         type: {type: [string, 'null'], description: Ticket type in the source system}
         source: {type: [string, 'null'], description: 'Channel the ticket came from: email, portal, phone, chat, feedback_widget, outbound_email or other'}
         due_at: {type: [string, 'null'], format: date-time}
@@ -4732,6 +5115,11 @@ components:
       properties:
         system: {type: string}
         external_id: {type: string}
+        author_external_id:
+          type: [string, 'null']
+          description: >-
+            Id of the source agent who wrote the item, so it can be linked to a Colliedesk agent later.
+            Missing or null on imports that predate it and when a customer wrote it.
         kind:
           type: string
           enum: [description, reply, incoming, automated_response, private_note, public_note, forward, forwarded_email, other]

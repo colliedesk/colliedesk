@@ -198,6 +198,23 @@ var tokenTiers = map[string]TokenAccess{
 	"POST " + gmailPath:   approvalRequired,
 	"DELETE " + gmailPath: approvalRequired,
 
+	// Imports read and write the whole workspace: admin. An undo deletes what an import brought in, so
+	// every token asks a person. The two routes that take a Freshdesk key are refused below admin
+	// (credentialRoutes) rather than filed: an agent request keeps its body.
+	"GET /api/v1/imports":              tier(auth.ScopeAdmin),
+	"POST /api/v1/imports":             tier(auth.ScopeAdmin),
+	"GET /api/v1/imports/{id}":         tier(auth.ScopeAdmin),
+	"POST /api/v1/imports/{id}/start":  tier(auth.ScopeAdmin),
+	"POST /api/v1/imports/{id}/cancel": tier(auth.ScopeAdmin),
+	"PUT /api/v1/imports/{id}/key":     tier(auth.ScopeAdmin),
+	"GET /api/v1/imports/{id}/report":  tier(auth.ScopeAdmin),
+	"POST /api/v1/imports/{id}/undo":   approvalRequired,
+	// A link only changes who wrote imported replies and holds imported tickets, and is taken back
+	// the same way.
+	"GET /api/v1/imports/{id}/people":                      tier(auth.ScopeAdmin),
+	"PUT /api/v1/imports/{id}/people/{externalId}/link":    tier(auth.ScopeAdmin),
+	"DELETE /api/v1/imports/{id}/people/{externalId}/link": tier(auth.ScopeAdmin),
+
 	"GET /api/v1/config": notForPeople,
 	// Google's redirect after consent: it finishes only with the session cookie of the person who started.
 	"GET " + gmailCallbackPath:                      notForPeople,
@@ -244,8 +261,20 @@ func (a *API) gateToken(response http.ResponseWriter, request *http.Request, rou
 		writeFilesNeedApproval(response)
 		return true
 	}
+	if credentialRoutes[route.Method+" "+route.Pattern] {
+		writeError(response, http.StatusForbidden, "credentials_need_admin_token",
+			"This call carries another helpdesk's API key, which must never be kept in an agent request for approval. Use an agent token of the admin tier, or let an admin do it in Settings.")
+		return true
+	}
 	a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, nil, "")
 	return true
+}
+
+// credentialRoutes carry another helpdesk's API key: a token below their tier is refused, never filed,
+// because an agent request stores the call's body (and the export carries it).
+var credentialRoutes = map[string]bool{
+	"POST /api/v1/imports":         true,
+	"PUT /api/v1/imports/{id}/key": true,
 }
 
 // kbFileRoutes carry a video's bytes or start, finish or cancel an upload of them: a file never waits

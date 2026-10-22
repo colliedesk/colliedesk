@@ -88,6 +88,8 @@ button:hover:not(:disabled) { background: var(--surface-2); border-color: var(--
   min-height: auto; border: 0; background: none; box-shadow: none; padding: 0; color: var(--accent-text); text-decoration: underline;
   text-underline-offset: 2px;
 }
+/* Reload page is the only way back from a part that failed: a finger must hit it too. */
+@media (pointer: coarse) { .part-reload { min-height: var(--touch); } }
 .link-button:hover:not(:disabled), .link-action:hover:not(:disabled) { background: none; color: var(--accent-hover); }
 
 /* Touch screens keep 44 px targets; a mouse gets the denser 32 px controls. */
