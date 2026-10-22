@@ -266,9 +266,10 @@ published.
 
 ### Brand
 
-An admin sets the help center's brand through the API (`PUT /api/v1/help-center/theme`) or an AI
-agent (`colliedesk_help_center_theme_update`). Every page shows it on the next visit (see
-[what visitors see](#what-visitors-see)). A brand has:
+An admin sets the help center's brand in **Settings → Help center → Brand**, through the API
+(`PUT /api/v1/help-center/theme`) or an AI agent (`colliedesk_help_center_theme_update`). Every page
+shows it on the next visit (see [what visitors see](#what-visitors-see)). Agents who are not admins
+see the saved brand and its preview, without the controls. A brand has:
 
 - **Logo** and **favicon**: images of the [media library](#media-library), outside its trash, with
   the logo's text for screen readers (empty uses the title). An image the help center uses is kept
@@ -294,6 +295,25 @@ with its ratio and the nearest color that passes, for example "Text on the backg
 needs 4.5:1. #767676 passes." `POST /api/v1/help-center/theme/check` (`colliedesk_help_center_theme_check`)
 runs the same checks without saving. A field left out of a save goes back to its default, so send
 the whole brand. Every save changes `content_version`.
+
+In Settings:
+
+- **Logo** and **Browser tab icon**: **Upload** adds an image to the media library and uses it;
+  **Choose from library** picks one already there; **Remove** goes back to none.
+- **Colors**: type `#rrggbb` or use the color picker. An empty color uses the default, which shows
+  greyed in the field. Under each color is its contrast; one that would be refused says why and
+  which color passes. **Reset** clears one color; **Reset to default look** clears the whole brand
+  in the form (nothing changes until you save).
+- **Save brand** saves it. A refused save shows each message under its field and moves the focus to
+  the first one.
+
+**Preview** shows the home page or an article with the brand being edited, at desktop or phone
+width, about 300 ms after you stop typing, before anything is saved. It is the real page built from
+your collections and published articles (never drafts), also while the help center is off; with
+nothing published, the article page shows a sample text. Links in the preview do not open, and the
+preview runs no script. `POST /api/v1/help-center/theme/preview` gives the same page as one HTML
+document, and `colliedesk_help_center_theme_check` with `preview` (`home` or `article`) gives it to an
+AI agent. Each person may ask for 600 previews a minute.
 
 ## Public help center
 

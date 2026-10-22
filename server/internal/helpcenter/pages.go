@@ -2,6 +2,7 @@ package helpcenter
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
@@ -238,8 +239,8 @@ func (v view) card(n *node, articles []articleLink) collectionCard {
 	return card
 }
 
-func (s *Site) loadTree(request *http.Request, v view) (tree, error) {
-	collections, err := s.config.Store.HelpCenterCollections(request.Context(), v.site.WorkspaceID)
+func (s *Site) loadTree(ctx context.Context, v view) (tree, error) {
+	collections, err := s.config.Store.HelpCenterCollections(ctx, v.site.WorkspaceID)
 	if err != nil {
 		return tree{}, err
 	}
@@ -250,10 +251,19 @@ func (s *Site) home(response http.ResponseWriter, request *http.Request, v view)
 	if fresh(response, request, v.etag) {
 		return
 	}
-	t, err := s.loadTree(request, v)
+	data, err := s.homePage(request.Context(), v)
 	if err != nil {
 		s.writeError(response, err)
 		return
+	}
+	s.writePage(response, request, v, http.StatusOK, s.pages.render("home", data))
+}
+
+// homePage is what the home page shows: the top collections with their first articles.
+func (s *Site) homePage(ctx context.Context, v view) (page, error) {
+	t, err := s.loadTree(ctx, v)
+	if err != nil {
+		return page{}, err
 	}
 	roots := visible(t.roots)
 	byCollection := map[string][]articleLink{}
@@ -262,10 +272,9 @@ func (s *Site) home(response http.ResponseWriter, request *http.Request, v view)
 		for index, root := range roots {
 			ids[index] = root.ID
 		}
-		articles, err := s.config.Store.HelpCenterArticles(request.Context(), v.site.WorkspaceID, ids, 0, homeArticles)
+		articles, err := s.config.Store.HelpCenterArticles(ctx, v.site.WorkspaceID, ids, 0, homeArticles)
 		if err != nil {
-			s.writeError(response, err)
-			return
+			return page{}, err
 		}
 		for _, article := range articles {
 			byCollection[article.CollectionID] = append(byCollection[article.CollectionID], v.articleLinks([]domain.PublicKBArticle{article}, 0)...)
@@ -276,7 +285,7 @@ func (s *Site) home(response http.ResponseWriter, request *http.Request, v view)
 	for _, root := range roots {
 		data.Collections = append(data.Collections, v.card(root, byCollection[root.ID]))
 	}
-	s.writePage(response, request, v, http.StatusOK, s.pages.render("home", data))
+	return data, nil
 }
 
 func (s *Site) collection(response http.ResponseWriter, request *http.Request, v view, path string) {
@@ -292,7 +301,7 @@ func (s *Site) collection(response http.ResponseWriter, request *http.Request, v
 	if fresh(response, request, v.etag) {
 		return
 	}
-	t, err := s.loadTree(request, v)
+	t, err := s.loadTree(request.Context(), v)
 	if err != nil {
 		s.writeError(response, err)
 		return
@@ -368,19 +377,33 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 		http.Redirect(response, request, v.base+articlePath(article.Number, article.Slug), http.StatusMovedPermanently)
 		return
 	}
-	t, err := s.loadTree(request, v)
+	data, plain, err := s.articlePage(request.Context(), v, article)
 	if err != nil {
 		s.writeError(response, err)
 		return
 	}
-	neighbours, err := s.config.Store.HelpCenterArticles(request.Context(), v.site.WorkspaceID, []string{article.CollectionID}, 0, articleNeighbours)
+	if plain {
+		// The next visit may get the rendered page under the same ETag.
+		response.Header().Del("ETag")
+		response.Header().Set("Cache-Control", "no-store")
+	}
+	s.writePage(response, request, v, http.StatusOK, s.pages.render("article", data))
+}
+
+// articlePage is what an article's page shows. plain is true when it shows the text as written because
+// rendering took too long.
+func (s *Site) articlePage(ctx context.Context, v view, article domain.PublicKBArticle) (data page, plain bool, err error) {
+	t, err := s.loadTree(ctx, v)
 	if err != nil {
-		s.writeError(response, err)
-		return
+		return page{}, false, err
+	}
+	neighbours, err := s.config.Store.HelpCenterArticles(ctx, v.site.WorkspaceID, []string{article.CollectionID}, 0, articleNeighbours)
+	if err != nil {
+		return page{}, false, err
 	}
 	rendered := s.renders.article(v.site.WorkspaceID, article.Number, v.base, article.BodyMD, article.Videos...)
 	collection := t.byID[article.CollectionID]
-	data := s.page(v, article.Title, v.crumbs(collection))
+	data = s.page(v, article.Title, v.crumbs(collection))
 	data.Heading, data.Body = article.Title, rendered.body
 	data.Description, data.Canonical = rendered.description, v.address+articlePath(article.Number, article.Slug)
 	updated := article.UpdatedAt
@@ -389,12 +412,7 @@ func (s *Site) article(response http.ResponseWriter, request *http.Request, v vi
 		data.CollectionName, data.Collection = collection.Name, v.collectionURL(collection)
 	}
 	data.Neighbours = v.articleLinks(neighbours, article.Number)
-	if rendered.plain {
-		// The next visit may get the rendered page under the same ETag.
-		response.Header().Del("ETag")
-		response.Header().Set("Cache-Control", "no-store")
-	}
-	s.writePage(response, request, v, http.StatusOK, s.pages.render("article", data))
+	return data, rendered.plain, nil
 }
 
 func (s *Site) search(response http.ResponseWriter, request *http.Request, v view) {
@@ -422,7 +440,7 @@ func (s *Site) search(response http.ResponseWriter, request *http.Request, v vie
 		}
 		var t tree
 		if len(articles) > 0 {
-			if t, err = s.loadTree(request, v); err != nil {
+			if t, err = s.loadTree(request.Context(), v); err != nil {
 				s.writeError(response, err)
 				return
 			}

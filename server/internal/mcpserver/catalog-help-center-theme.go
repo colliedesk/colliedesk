@@ -9,14 +9,17 @@ const (
 		`"primary":` + themeColorSchema + `,"header":` + themeColorSchema + `,"header_text":` + themeColorSchema + `,"background":` + themeColorSchema + `,` +
 		`"text":` + themeColorSchema + `,"link":` + themeColorSchema + `,"footer":` + themeColorSchema + `}}`
 
-	themeInputSchema = `{"type":"object","additionalProperties":false,"properties":{` +
-		`"logo_media_id":{"type":["string","null"],"description":"An image of the media library (colliedesk_kb_media_list), outside its trash unless it is the logo the theme already has."},` +
+	themeInputSchema = `{"type":"object","additionalProperties":false,"properties":{` + themeInputProperties + `}}`
+	// The check takes the theme and, to render a page with it, preview.
+	themeCheckInputSchema = `{"type":"object","additionalProperties":false,"properties":{` + themeInputProperties +
+		`,"preview":{"type":"string","enum":["home","article"],"description":"Also render this page of the help center with the theme, as the settings card shows it: html is a whole document with inline style and no script."}}}`
+	themeInputProperties = `"logo_media_id":{"type":["string","null"],"description":"An image of the media library (colliedesk_kb_media_list), outside its trash unless it is the logo the theme already has."},` +
 		`"favicon_media_id":{"type":["string","null"],"description":"An image of the media library for the browser tab."},` +
 		`"logo_alt":{"type":["string","null"],"maxLength":200,"description":"What the logo says, for screen readers; empty uses the title."},` +
 		`"linkback_url":{"type":["string","null"],"maxLength":2000,"description":"Your website, absolute http or https."},` +
 		`"contact_url":{"type":["string","null"],"maxLength":2000,"description":"An https address, or mailto: and one plain email address (no name, no ?subject= or ?bcc=, no %-encoding)."},` +
 		`"contact_phone":{"type":["string","null"],"maxLength":40,"description":"Digits, spaces and + - ( )."},` +
-		themeColors + `,"body_font":` + themeFontSchema + `,"heading_font":` + themeFontSchema + `}}`
+		themeColors + `,"body_font":` + themeFontSchema + `,"heading_font":` + themeFontSchema
 
 	themeCheckSchema = `{"type":"object","required":["pair","field","foreground","background","ratio","required","passes","suggestion"],"properties":{` +
 		`"pair":{"type":"string"},"field":{"type":"string"},"foreground":{"type":"string"},"background":{"type":"string"},` +
@@ -50,11 +53,12 @@ func helpCenterThemeCheckSpec() Spec {
 		Name:  "colliedesk_help_center_theme_check",
 		Title: "Check a help center brand without saving it",
 		Description: `Check a candidate brand the way colliedesk_help_center_theme_update would, and save nothing. ` + themeContrastRule +
-			`ok is false when a pair fails; fields then says, per color, its ratio and the nearest color that passes. A field of the wrong shape or a logo that is not a library image is an error.` + "\n\nTier: read.",
+			`ok is false when a pair fails; fields then says, per color, its ratio and the nearest color that passes. A field of the wrong shape or a logo that is not a library image is an error. ` +
+			`With preview (home or article), html also holds that page rendered with the theme from the workspace's published articles, the way the settings card shows it.` + "\n\nTier: read.",
 		Tier: "read", ReadOnly: true,
-		REST:   []string{"POST /api/v1/help-center/theme/check"},
-		Input:  themeInputSchema,
-		Output: `{"type":"object","required":["ok","checks","fields"],"properties":{"ok":{"type":"boolean"},"checks":{"type":"array","items":` + themeCheckSchema + `},"fields":{"type":"object","additionalProperties":{"type":"string"}}}}`,
+		REST:   []string{"POST /api/v1/help-center/theme/check", "POST /api/v1/help-center/theme/preview"},
+		Input:  themeCheckInputSchema,
+		Output: `{"type":"object","required":["ok","checks","fields"],"properties":{"ok":{"type":"boolean"},"checks":{"type":"array","items":` + themeCheckSchema + `},"fields":{"type":"object","additionalProperties":{"type":"string"}},"html":{"type":"string"}}}`,
 		run:    helpCenterThemeCheck,
 	}
 }
@@ -85,6 +89,18 @@ func helpCenterThemeGet(c *call, _ map[string]any) (any, error) {
 
 func helpCenterThemeCheck(c *call, arguments map[string]any) (any, error) {
 	var checked map[string]any
+	if page, ok := arguments["preview"]; ok {
+		theme := make(map[string]any, len(arguments))
+		for field, value := range arguments {
+			if field != "preview" {
+				theme[field] = value
+			}
+		}
+		if err := c.send(http.MethodPost, "/api/v1/help-center/theme/preview", map[string]any{"page": page, "theme": theme}, &checked); err != nil {
+			return nil, err
+		}
+		return checked, nil
+	}
 	if err := c.send(http.MethodPost, "/api/v1/help-center/theme/check", arguments, &checked); err != nil {
 		return nil, err
 	}

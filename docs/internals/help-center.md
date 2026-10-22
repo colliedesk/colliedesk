@@ -173,6 +173,23 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   delaying others' first visits to the 1 s fallback. Chosen over rendering on write, which still
   needs the same guard for older articles and would add a migration and a render to every write path.
 
+- **The brand preview is the real page, rendered by the server and shown without scripts.**
+  `POST /api/v1/help-center/theme/preview` runs `Site.Preview`: the same templates, `homePage` and
+  `articlePage` as the public pages, from the workspace's live collections and published articles
+  (lowest article number, or a fixed sample), with the candidate theme; nothing is stored, so there
+  is no draft table or token to clean up. A theme not saved has no hashed brand sheet, so the
+  document carries `site.css` and the brand sheet inline, after its own meta policy
+  (`default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'none'; form-action
+  'none'; base-uri 'none'`); the templates keep no inline style. Its links and media point below
+  `/api/v1/kb` (images at `/api/v1/kb/images/<id>`, the logo at `/api/v1/kb/media/<id>`), which serve
+  the session's own workspace whether the help center is on or off. The web app shows it in
+  `<iframe sandbox="allow-same-origin" srcdoc>`, never with `allow-scripts`, and puts a document in
+  the frame only when it holds that policy; same origin lets the images load with the session and
+  lets the page stop link clicks inside the frame. The logo and favicon are checked like a save
+  (`media_not_found` for another workspace's id). Previews count against the help center page
+  limiter under a per-person key (600 a minute); the form waits 300 ms after the last change, keeps
+  one request in flight and drops an answer for a theme that is no longer the latest.
+
 ## Traps
 
 - **goldmark has quadratic paths, and every visit renders.** Measured on 100,000 characters: one line

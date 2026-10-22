@@ -136,6 +136,7 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/help-center":                                    tier(auth.ScopeRead),
 	"GET /api/v1/help-center/theme":                              tier(auth.ScopeRead),
 	"POST /api/v1/help-center/theme/check":                       tier(auth.ScopeRead),
+	"POST /api/v1/help-center/theme/preview":                     tier(auth.ScopeRead),
 	"POST /api/v1/conversations":                                 tier(auth.ScopeSend),
 	"GET /api/v1/conversations/{id}":                             tier(auth.ScopeRead),
 	"PATCH /api/v1/conversations/{id}":                           tier(auth.ScopeDraft),

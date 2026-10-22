@@ -3385,6 +3385,39 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '422': {$ref: '#/components/responses/ThemeInvalid'}
+  /api/v1/help-center/theme/preview:
+    post:
+      operationId: previewHelpCenterTheme
+      x-permission: conversations:read
+      description: >
+        Render a page of the help center with a candidate theme, saving nothing: the real page templates,
+        the workspace's live collections and published articles (never drafts), also while the help center
+        is off. `page` `article` shows the published article with the lowest number, or a sample text when
+        nothing is published. The answer is one self-contained HTML document for an
+        `<iframe sandbox="allow-same-origin" srcdoc>`: its style is inline and its own policy
+        (`default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'none'`) runs no
+        script; images load from the session's knowledge base routes. Contrast is answered as in
+        `/theme/check` (200 with `ok` false), so the person sees why Save would refuse; a theme of the
+        wrong shape or a logo that is not an image of the library is 422 as on PUT. Each person may ask
+        for 600 previews a minute (429 with `Retry-After` beyond).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/HelpCenterThemePreviewInput'}
+      responses:
+        '200':
+          description: The page and the checks of the candidate
+          content: {application/json: {schema: {$ref: '#/components/schemas/HelpCenterThemePreview'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/ThemeInvalid'}
+        '429':
+          description: Too many previews in the last minute; try again after `Retry-After` seconds.
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
 components:
   securitySchemes:
     bearerAuth: {type: http, scheme: bearer}
@@ -4527,6 +4560,26 @@ components:
       type: object
       required: [ok, checks, fields]
       properties:
+        ok: {type: boolean, description: True when every pair passes and the theme can be saved.}
+        checks:
+          type: array
+          items: {$ref: '#/components/schemas/ThemeContrastCheck'}
+        fields:
+          type: object
+          description: 'One message per failing color, keyed like colors.text; empty when ok.'
+          additionalProperties: {type: string}
+    HelpCenterThemePreviewInput:
+      type: object
+      additionalProperties: false
+      required: [page, theme]
+      properties:
+        page: {type: string, enum: [home, article], description: The page to render.}
+        theme: {$ref: '#/components/schemas/HelpCenterThemeInput'}
+    HelpCenterThemePreview:
+      type: object
+      required: [html, ok, checks, fields]
+      properties:
+        html: {type: string, description: 'A whole HTML document with inline style and its own Content-Security-Policy; it holds no script.'}
         ok: {type: boolean, description: True when every pair passes and the theme can be saved.}
         checks:
           type: array

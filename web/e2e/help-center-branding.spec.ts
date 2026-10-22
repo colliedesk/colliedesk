@@ -105,3 +105,59 @@ test('help center branding: a brand set through the API shows on every page, lig
   }));
   expect.soft(scrollWidth, 'page width at 320 px').toBeLessThanOrEqual(clientWidth);
 });
+
+// counted wraps the person's clicks and typed inputs, so the test can hold the path to a branded help
+// center to a number of steps a person would take.
+function counted(page: Page) {
+  const steps = { clicks: 0, typed: 0 };
+  return {
+    steps,
+    click: async (target: ReturnType<Page['getByRole']>) => { steps.clicks++; await target.click(); },
+    fill: async (target: ReturnType<Page['getByRole']>, value: string) => { steps.typed++; await target.fill(value); },
+    upload: async (button: ReturnType<Page['getByRole']>, file: { name: string; mimeType: string; buffer: Buffer }) => {
+      const chooser = page.waitForEvent('filechooser');
+      steps.clicks++;
+      await button.click();
+      steps.typed++;
+      await (await chooser).setFiles(file);
+    },
+  };
+}
+
+test('help center branding: from Settings to a branded public page takes at most 6 clicks and 2 typed inputs, with a live preview that runs nothing', async ({ page, context }) => {
+  const { slug } = await helpCenter(page, 'time-to-branded');
+  const person = counted(page);
+  const started = Date.now();
+
+  await person.click(page.getByRole('link', { name: 'Settings' }));
+  const brand = page.getByRole('region', { name: 'Brand' });
+  await person.upload(brand.getByRole('button', { name: 'Upload logo' }), { name: 'acme-logo.png', mimeType: 'image/png', buffer: logoPNG });
+  await expect(brand.getByRole('img', { name: 'Logo' })).toBeVisible();
+  await person.fill(brand.getByRole('textbox', { name: 'Primary color', exact: true }), '#0b5cad');
+
+  // The preview is the real page with the candidate brand: the logo loads from the library with the
+  // session, inside a frame that runs no script and follows no link.
+  const frame = brand.locator('iframe[title="Preview of the help center"]');
+  await expect(frame).toHaveAttribute('sandbox', 'allow-same-origin');
+  await expect(frame).toHaveAttribute('srcdoc', /--accent:#0b5cad;/);
+  await expect(frame).toHaveAttribute('srcdoc', /script-src 'none'/);
+  const inside = page.frameLocator('iframe[title="Preview of the help center"]');
+  await expect(inside.getByRole('banner').getByRole('img', { name: 'Acme help' })).toHaveJSProperty('naturalWidth', 4);
+  // Not a step to the branded page, so not counted: a link in the preview leaves the page where it is.
+  await inside.getByRole('link', { name: 'Guides' }).first().click();
+  await expect(inside.getByRole('heading', { name: 'How can we help?' })).toBeVisible();
+
+  await person.click(brand.getByRole('button', { name: 'Save brand' }));
+  await expect(brand.getByText('Saved. Live on the next page load.')).toBeVisible();
+  const opened = context.waitForEvent('page');
+  await person.click(page.getByRole('link', { name: `${servers.main}/help/${slug}` }));
+  const site = await opened;
+  const masthead = site.getByRole('banner');
+  await expect(masthead.getByRole('img', { name: 'Acme help' })).toHaveJSProperty('naturalWidth', 4);
+  await expect(site.getByRole('button', { name: 'Search', exact: true })).toHaveCSS('background-color', 'rgb(11, 92, 173)');
+
+  const elapsed = Date.now() - started;
+  console.log(`time-to-branded: ${person.steps.clicks} clicks, ${person.steps.typed} typed inputs, ${elapsed} ms`);
+  expect(person.steps.clicks, 'clicks from Settings to the branded page').toBeLessThanOrEqual(6);
+  expect(person.steps.typed, 'typed inputs from Settings to the branded page').toBeLessThanOrEqual(2);
+});

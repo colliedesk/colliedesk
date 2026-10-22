@@ -128,6 +128,15 @@ On 2026-10-20 the first bundle was 203,268 bytes of 204,800. Plan and billing, t
 
 On 2026-10-21 the reply box got **Articles** (link a help center article in a reply). Its first version kept the button, its strings, the link format and the extended saved reply picker in the first bundle: 201,985 → 202,563 (+578). The saved reply picker and the articles picker then moved together into one lazy part, `reply-pickers` (1.7 KB gzip, plus a 4.0 KB chunk of the API calls and strings it shares with the knowledge base pages), which the composer starts loading when it mounts; the first bundle keeps the two buttons and the part's loading and failure states: 201,776 bytes (−209 against 201,985), CSS 14,267 → 14,317.
 
+On 2026-10-22 the help center card got its brand settings and preview. They are a chunk of their own
+(`help-center-theme-form`, 5.9 KB gzip, 0.8 KB CSS) that the card asks for when its own chunk runs,
+by a plain `import()`: through `ui/lazy-part`, or with its CSS in the card's chunk, the first bundle
+would have had to export `lazyPart` to it or list one more file to preload. The library picker
+comes from `kb-chunk` when someone opens it, so it adds no shared chunk. The first bundle holds the
+same modules and went from 203,371 to 203,370–203,372 bytes across builds (the content hashes of the
+chunk names it preloads compress differently; the refusal's `detail` moved from `ConflictError` to
+`InvalidRequestError`, so a 422 keeps its field messages, at no cost). Its CSS stayed at 14,413.
+
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
 
 ## Reply box lists (saved replies, articles)
