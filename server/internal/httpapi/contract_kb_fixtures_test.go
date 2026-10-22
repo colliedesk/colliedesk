@@ -133,6 +133,8 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/kb/articles/{id}/restore":                    {"/api/v1/kb/articles/" + kb.trashArticleID + "/restore", map[string]any{"updated_at": kb.trashArticleSeen}, admin, 200, ""},
 		"GET /api/v1/kb/articles/{id}/versions":                    {"/api/v1/kb/articles/" + kb.versionArticleID + "/versions", nil, admin, 200, ""},
 		"POST /api/v1/kb/articles/{id}/versions/{version}/restore": {"/api/v1/kb/articles/" + kb.versionArticleID + "/versions/1/restore", map[string]any{"updated_at": kb.versionArticleSeen}, admin, 200, ""},
+		"POST /api/v1/kb/articles/{id}/ai-exclusion":               {"/api/v1/kb/articles/" + kb.articleID + "/ai-exclusion", nil, admin, 200, ""},
+		"DELETE /api/v1/kb/articles/{id}/ai-exclusion":             {"/api/v1/kb/articles/" + kb.versionArticleID + "/ai-exclusion", nil, admin, 200, ""},
 		"POST /api/v1/kb/images":                                   {path: kbImagesPath, token: admin, status: 201},
 		"GET /api/v1/kb/images/{id}":                               {path: "/api/v1/kb/images/" + kb.imageID, token: admin, status: 200},
 		"GET /api/v1/kb/media":                                     {path: "/api/v1/kb/media?usage=unused&sort=largest", token: admin, status: 200},

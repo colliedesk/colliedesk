@@ -30,7 +30,7 @@ export const summary = (n: number, title: string, status: 'draft' | 'published' 
 });
 
 export const article = (fields: Record<string, unknown> = {}) => ({
-  ...summary(7, 'Reset your password'), id: ids.article, body_md: 'Open **Settings**.', has_source_html: false, translations: [], deleted_at: null, ...fields,
+  ...summary(7, 'Reset your password'), id: ids.article, body_md: 'Open **Settings**.', has_source_html: false, translations: [], deleted_at: null, ai_exclusion: null, ...fields,
 });
 
 export const me = {

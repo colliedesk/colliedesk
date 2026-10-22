@@ -131,6 +131,9 @@ type KBArticle struct {
 	UpdatedAt        time.Time       `json:"updated_at"`
 	DeletedAt        *time.Time      `json:"deleted_at"`
 	DeletedByAgentID *string         `json:"deleted_by_agent_id"`
+	// AIExcludedAt is set while AI may not read the article (in any language), by AIExcludedByAgentID.
+	AIExcludedAt        *time.Time `json:"ai_excluded_at"`
+	AIExcludedByAgentID *string    `json:"ai_excluded_by_agent_id"`
 }
 
 // KBArticleVersion is one version of an article: what it said after a change and who made it.

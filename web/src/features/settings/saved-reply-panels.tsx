@@ -62,7 +62,7 @@ function FoldedText({ text, label }: { text: string; label: string }) {
 // A version as the history shows it: who changed what, and the title and text after the change. Saved
 // replies and knowledge base articles both have one.
 export type HistoryVersion = Pick<SavedReplyChange, 'version' | 'restored_from_version' | 'changed_by' | 'token' | 'agent_request_id' | 'created_at'>
-  & { kind: SavedReplyChange['kind'] | 'import' | 'media_replace'; title: string };
+  & { kind: SavedReplyChange['kind'] | 'import' | 'media_replace' | 'ai_exclude' | 'ai_include'; title: string };
 
 interface HistoryProps<V extends HistoryVersion> {
   title: string;

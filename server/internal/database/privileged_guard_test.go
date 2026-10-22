@@ -32,6 +32,7 @@ var privilegedCallSites = []string{
 	"internal/importjobs/store.go: PrivilegeImportJobClaim",
 	"internal/retention/service.go: PrivilegeRetention",
 	"internal/store/agent-requests.go: PrivilegeAgentRequestPrune",
+	"internal/store/ai-retrieval.go: PrivilegeAIRetrievalQueue",
 	"internal/store/billing-reconcile.go: PrivilegeBillingReconcile",
 	"internal/store/email-channels.go: PrivilegeInboundSecret",
 	"internal/store/email-inbound.go: PrivilegeReplyToken",

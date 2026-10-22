@@ -63,9 +63,13 @@ type restKBArticle struct {
 	Translations  []struct {
 		Locale string `json:"locale"`
 	} `json:"translations"`
-	DeletedAt *string     `json:"deleted_at"`
-	DeletedBy *restPerson `json:"deleted_by"`
-	PurgesAt  string      `json:"purges_at"`
+	DeletedAt   *string     `json:"deleted_at"`
+	DeletedBy   *restPerson `json:"deleted_by"`
+	PurgesAt    string      `json:"purges_at"`
+	AIExclusion *struct {
+		At string      `json:"at"`
+		By *restPerson `json:"by"`
+	} `json:"ai_exclusion"`
 }
 
 type kbTitle struct {
@@ -113,7 +117,14 @@ type kbArticleOut struct {
 	TeamText      teamText             `json:"team_text"`
 	InTrash       bool                 `json:"in_trash"`
 	HasSourceHTML bool                 `json:"has_source_html"`
+	AIExclusion   *kbAIExclusionOut    `json:"ai_exclusion"`
 	Translations  []string             `json:"translations"`
+}
+
+// kbAIExclusionOut is since when, and by whom, AI may not read an article.
+type kbAIExclusionOut struct {
+	At string  `json:"at"`
+	By *string `json:"by"`
 }
 
 func kbArticleView(article restKBArticle) map[string]any {
@@ -122,6 +133,12 @@ func kbArticleView(article restKBArticle) map[string]any {
 		InTrash: article.DeletedAt != nil, HasSourceHTML: article.HasSourceHTML, Translations: []string{}}
 	for _, translation := range article.Translations {
 		out.Translations = append(out.Translations, translation.Locale)
+	}
+	if article.AIExclusion != nil {
+		out.AIExclusion = &kbAIExclusionOut{At: article.AIExclusion.At}
+		if article.AIExclusion.By != nil {
+			out.AIExclusion.By = &article.AIExclusion.By.Name
+		}
 	}
 	return map[string]any{"article": out}
 }
@@ -387,6 +404,29 @@ func kbArticleUndelete(c *call, arguments map[string]any) (any, error) {
 		return nil, err
 	}
 	return kbArticleView(restored), nil
+}
+
+func kbArticleAIExclude(c *call, arguments map[string]any) (any, error) {
+	return kbArticleAIExclusion(c, arguments, http.MethodPost)
+}
+
+func kbArticleAIInclude(c *call, arguments map[string]any) (any, error) {
+	return kbArticleAIExclusion(c, arguments, http.MethodDelete)
+}
+
+func kbArticleAIExclusion(c *call, arguments map[string]any, method string) (any, error) {
+	args, err := decodeArguments[struct {
+		ID string `json:"article_id"`
+	}](arguments)
+	if err != nil {
+		return nil, err
+	}
+	c.forArticle(args.ID)
+	var article restKBArticle
+	if err := c.send(method, kbArticlePath(args.ID, "/ai-exclusion"), nil, &article); err != nil {
+		return nil, err
+	}
+	return kbArticleView(article), nil
 }
 
 func kbArticleHistory(c *call, arguments map[string]any) (any, error) {

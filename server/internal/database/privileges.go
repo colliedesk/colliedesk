@@ -80,4 +80,8 @@ const (
 	// rows a dead process left started. Only task ids, workspace ids and claim tokens leave the claim;
 	// each task is then read, run and recorded in its own workspace.
 	PrivilegeAIJobClaim Privilege = "ai-job-claim"
+	// PrivilegeAIRetrievalQueue lists the workspaces that have knowledge base articles or conversations
+	// queued for AI retrieval to build. Only workspace ids leave the transaction; each is built in its
+	// own scope.
+	PrivilegeAIRetrievalQueue Privilege = "ai-retrieval-queue"
 )
