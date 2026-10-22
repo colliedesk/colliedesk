@@ -99,6 +99,18 @@ func parseAllowance(value string) (*Allowance, error) {
 	return allowance, nil
 }
 
+// estimateMicroUSD is the most a call of model with that many tokens in and out can cost: a model
+// without a declared price, like a refusal fallback, at the highest declared prices.
+func estimateMicroUSD(prices map[string]Price, model string, input, output int64) int64 {
+	price, ok := prices[model]
+	if !ok {
+		for _, each := range prices {
+			price = Price{Input: max(price.Input, each.Input), Output: max(price.Output, each.Output)}
+		}
+	}
+	return int64(math.Ceil(float64(input)*price.Input + float64(output)*price.Output))
+}
+
 // costMicroUSD prices every hop of an answer at its own model's price. A model without a declared
 // price (a refusal fallback the operator did not list) is charged the highest declared price of each
 // kind, so an allowance is never exceeded by a model nobody priced; known is false then.

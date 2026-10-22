@@ -209,32 +209,30 @@ func TestAutomaticTasksStopAtTheDailyLimitAndPeopleDoNot(t *testing.T) {
 
 func TestTheServerProviderStopsAtTheMonthlyAllowance(t *testing.T) {
 	server := *testServer
-	server.Allowance = &ai.Allowance{PerWorkspace: 0.0001} // 100 micro-dollars: one call of 70, then refused
+	// 1,100 micro-dollars; each call holds about 1,006 while it runs and costs 70: two fit, one after
+	// the other, and the third no longer does.
+	server.Allowance = &ai.Allowance{PerWorkspace: 0.0011}
 	q := newQueueEnv(t, func(config *ai.Config) { config.Server = &server })
 	q.turnOn(t, q.a, ai.SlotDraft)
 	first := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
 	q.tick(t)
-	// One at a time: two calls running at once may both start under the allowance (the docs say the
-	// last calls of a month can go slightly past), so the test must not depend on their order.
 	second := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
 	q.tick(t)
 	third := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
 	q.tick(t)
-	if state, _ := q.state(t, first); state != ai.TaskDone {
-		t.Fatalf("first = %s", state)
-	}
-	// 70 of 100 spent: the second starts and spends 70 more; the third is refused.
-	if state, _ := q.state(t, second); state != ai.TaskDone {
-		t.Fatalf("second = %s", state)
+	for _, id := range []string{first, second} {
+		if state, _ := q.state(t, id); state != ai.TaskDone {
+			t.Fatalf("task %s = %s", id, state)
+		}
 	}
 	if state, code := q.state(t, third); state != ai.TaskFailed || code != ai.CodeAllowanceReached {
-		t.Fatalf("third = %s %s, want refused once the allowance was spent", state, code)
+		t.Fatalf("third = %s %s, want refused once what is left cannot pay for a call", state, code)
 	}
 	if n := q.count(t, `SELECT count(*) FROM ai_usage WHERE workspace_id=$1`, q.a.id); n > 2 {
 		t.Fatalf("%d calls went out; a refused task sends nothing", n)
 	}
 	settings, _ := q.service.Settings(context.Background(), q.a.id)
-	if settings.Allowance == nil || settings.Allowance.LimitMicroUSD != 100 || settings.Allowance.UsedMicroUSD < 70 ||
+	if settings.Allowance == nil || settings.Allowance.LimitMicroUSD != 1100 || settings.Allowance.UsedMicroUSD != 140 ||
 		!settings.Allowance.ResetsAt.Equal(time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)) {
 		t.Fatalf("allowance = %+v", settings.Allowance)
 	}
@@ -425,6 +423,48 @@ func TestTheMinuteLimitLooksAcrossMidnight(t *testing.T) {
 	}
 	if state, _ := q.state(t, after); state != ai.TaskQueued {
 		t.Fatalf("20 seconds after midnight, within the minute = %s, want queued", state)
+	}
+}
+
+func TestCallsRunningAtOnceNeverPassTheAllowance(t *testing.T) {
+	server := *testServer
+	// 1,500 micro-dollars. One test call reserves about 1,006 (100 tokens out at 10, a few in at 2) and
+	// costs 70: two that start together must not both fit.
+	server.Allowance = &ai.Allowance{PerWorkspace: 0.0015}
+	q := newQueueEnv(t, func(config *ai.Config) { config.Server = &server })
+	q.turnOn(t, q.a, ai.SlotDraft)
+	// Each call waits (up to a second) for the other to be in flight, so both run at once when both
+	// are let through.
+	var inFlight sync.WaitGroup
+	inFlight.Add(2)
+	q.fake.Answer = func(request aiprovider.Request) (aiprovider.Response, error) {
+		inFlight.Done()
+		waited := make(chan struct{})
+		go func() { inFlight.Wait(); close(waited) }()
+		select {
+		case <-waited:
+		case <-time.After(time.Second):
+		}
+		usage := aiprovider.Usage{Reported: true, InputTokens: 10, OutputTokens: 5}
+		return aiprovider.Response{Text: "ok", Stop: aiprovider.StopDone, Model: request.Model, Usage: usage, Hops: []aiprovider.Hop{{Model: request.Model, Usage: usage}}}, nil
+	}
+	first := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
+	second := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
+	q.tick(t)
+	done, refused := 0, 0
+	for _, id := range []string{first, second} {
+		switch state, code := q.state(t, id); {
+		case state == ai.TaskDone:
+			done++
+		case state == ai.TaskFailed && code == ai.CodeAllowanceReached:
+			refused++
+		}
+	}
+	if done != 1 || refused != 1 {
+		t.Fatalf("done %d, refused %d: two calls started together both fit an allowance that holds one", done, refused)
+	}
+	if n := q.count(t, `SELECT count(*) FROM ai_usage WHERE workspace_id=$1 AND status='started'`, q.a.id); n != 0 {
+		t.Fatalf("%d calls still hold a reservation", n)
 	}
 }
 

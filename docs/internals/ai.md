@@ -174,9 +174,15 @@ the admission, so two workers cannot both take the last place.
 served model's price from `AI_SERVER_PRICES` (unknown model: the highest declared price of each kind,
 and a log line), and stored: a price change never rewrites history. `Metered` sums the month (UTC) and
 refuses a server call once the allowance (`AI_SERVER_MONTHLY_ALLOWANCE`; on the cloud per active agent,
-another amount for a trial) is spent, before writing a usage row: no call, no row. Calls still running
-have no cost yet, so concurrent calls can pass the allowance by what they cost together (at most 2 per
-workspace).
+another amount for a trial) cannot pay for the call, before writing a usage row: no call, no row.
+
+A call holds its most possible cost while it runs (`reserved_micro_usd`: its text at one token per 3
+bytes, plus 500 for a schema, and all of `MaxOutput`, at the model's price or the highest declared).
+The check and the hold are one step under a per-workspace advisory lock, and the month's sum counts
+running calls at their hold and finished ones at their cost. Without the hold, calls started at once
+(several workers or servers) each saw the same balance and could pass it by what they all cost
+together, with no bound (`TestCallsRunningAtOnceNeverPassTheAllowance`). Now the allowance is passed
+only when a call costs more than its hold: a refusal fallback answering with an extra hop.
 
 ## Reply drafts
 

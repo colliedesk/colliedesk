@@ -388,6 +388,8 @@ type AIUsage struct {
 	TaskID            *string         `json:"task_id"`
 	Automatic         bool            `json:"automatic"`
 	CostMicroUSD      *int64          `json:"cost_micro_usd"`
+	// ReservedMicroUSD is the most the call could cost, held against the allowance while it ran.
+	ReservedMicroUSD *int64 `json:"reserved_micro_usd"`
 }
 
 // AIDraft is one AI reply draft and how it ended. Its text and prompt are empty 90 days after it ended.
