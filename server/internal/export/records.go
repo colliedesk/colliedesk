@@ -313,6 +313,77 @@ type ImportPerson struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
+// AIProvider is a provider the workspace added for its AI features. It never holds the key: a
+// restored workspace enters its keys again.
+type AIProvider struct {
+	ID             string    `json:"id"`
+	Kind           string    `json:"kind"`
+	Label          string    `json:"label"`
+	BaseURL        *string   `json:"base_url"`
+	AuthKind       string    `json:"auth_kind"`
+	KeyHint        *string   `json:"key_hint"`
+	Models         []string  `json:"models"`
+	CheckStatus    string    `json:"check_status"`
+	CheckErrorCode *string   `json:"check_error_code"`
+	CheckedAt      time.Time `json:"checked_at"`
+	CreatedBy      *string   `json:"created_by"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// AISlot is one AI feature's setting: where it runs, the model, on or off, and who consented.
+type AISlot struct {
+	Slot        string     `json:"slot"`
+	UsesServer  bool       `json:"uses_server"`
+	ProviderID  *string    `json:"provider_id"`
+	Model       *string    `json:"model"`
+	Effort      string     `json:"effort"`
+	Enabled     bool       `json:"enabled"`
+	ConsentedBy *string    `json:"consented_by"`
+	ConsentedAt *time.Time `json:"consented_at"`
+	UpdatedBy   *string    `json:"updated_by"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
+// AISettingsEvent is one change to the AI settings.
+type AISettingsEvent struct {
+	ID            string          `json:"id"`
+	Kind          string          `json:"kind"`
+	ActorAgentID  *string         `json:"actor_agent_id"`
+	ActorTokenID  *string         `json:"actor_token_id"`
+	ProviderID    *string         `json:"provider_id"`
+	ProviderLabel *string         `json:"provider_label"`
+	Slot          *string         `json:"slot"`
+	Detail        json.RawMessage `json:"detail"`
+	CreatedAt     time.Time       `json:"created_at"`
+}
+
+// AIUsage is one call to an AI provider. No prompt and no answer is ever stored.
+type AIUsage struct {
+	ID                string          `json:"id"`
+	Feature           string          `json:"feature"`
+	BilledTo          string          `json:"billed_to"`
+	ProviderID        *string         `json:"provider_id"`
+	ProviderKind      string          `json:"provider_kind"`
+	ProviderLabel     string          `json:"provider_label"`
+	Model             string          `json:"model"`
+	Status            string          `json:"status"`
+	ErrorCode         *string         `json:"error_code"`
+	StopReason        *string         `json:"stop_reason"`
+	ServedModel       *string         `json:"served_model"`
+	InputTokens       *int64          `json:"input_tokens"`
+	OutputTokens      *int64          `json:"output_tokens"`
+	CacheReadTokens   *int64          `json:"cache_read_tokens"`
+	CacheWriteTokens  *int64          `json:"cache_write_tokens"`
+	Hops              json.RawMessage `json:"hops"`
+	ProviderRequestID *string         `json:"provider_request_id"`
+	ActorAgentID      *string         `json:"actor_agent_id"`
+	ActorTokenID      *string         `json:"actor_token_id"`
+	StartedAt         time.Time       `json:"started_at"`
+	FinishedAt        *time.Time      `json:"finished_at"`
+	LatencyMS         *int            `json:"latency_ms"`
+}
+
 // Attachment describes one file. Path is its location in the archive; StorageKey is where the
 // server reads the bytes from and never leaves the server.
 type Attachment struct {
@@ -368,7 +439,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, AIProvider*, AISlot*, AISettingsEvent*, AIUsage*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -390,6 +461,10 @@ type Sink interface {
 	AgentRequest(AgentRequest) error
 	ImportJob(ImportJob) error
 	ImportPerson(ImportPerson) error
+	AIProvider(AIProvider) error
+	AISlot(AISlot) error
+	AISettingsEvent(AISettingsEvent) error
+	AIUsage(AIUsage) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error
 	EndConversation(timeEntries []domain.TimeEntry) error

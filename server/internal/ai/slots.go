@@ -1,0 +1,314 @@
+package ai
+
+import (
+	"context"
+	"errors"
+	"slices"
+	"time"
+
+	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
+	"github.com/jackc/pgx/v5"
+)
+
+type slotRow struct {
+	slot        string
+	usesServer  bool
+	providerID  *string
+	model       *string
+	effort      string
+	enabled     bool
+	consentedBy *string
+	consentedAt *time.Time
+	updatedBy   *string
+	updatedAt   *time.Time
+}
+
+func (r slotRow) source() string {
+	switch {
+	case r.usesServer:
+		return SourceServer
+	case r.providerID != nil:
+		return SourceProvider
+	}
+	return SourceNone
+}
+
+func readSlots(ctx context.Context, tx pgx.Tx, workspaceID string, lock bool) (map[string]slotRow, error) {
+	query := `SELECT slot,uses_server,provider_id::text,model,effort,enabled,consented_by::text,consented_at,updated_by::text,updated_at
+		FROM ai_slots WHERE workspace_id=$1`
+	if lock {
+		query += ` FOR UPDATE`
+	}
+	rows, err := tx.Query(ctx, query, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	list, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (slotRow, error) {
+		var r slotRow
+		err := row.Scan(&r.slot, &r.usesServer, &r.providerID, &r.model, &r.effort, &r.enabled, &r.consentedBy, &r.consentedAt, &r.updatedBy, &r.updatedAt)
+		return r, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	slots := map[string]slotRow{}
+	for _, r := range list {
+		slots[r.slot] = r
+	}
+	return slots, nil
+}
+
+// view turns a row (or its absence: off, nothing chosen) into what the API shows, with whether it
+// can run now. A slot on the server's provider stops when the operator removes it or the model.
+func (s *Service) view(slot string, row slotRow, found bool) Slot {
+	view := Slot{Slot: slot, Source: SourceNone, Effort: string(aiprovider.EffortLow)}
+	if !found {
+		return view
+	}
+	view.Source, view.ProviderID, view.Model, view.Effort, view.Enabled = row.source(), row.providerID, row.model, row.effort, row.enabled
+	view.ConsentedBy, view.ConsentedAt, view.UpdatedBy, view.UpdatedAt = row.consentedBy, utcPointer(row.consentedAt), row.updatedBy, utcPointer(row.updatedAt)
+	view.Active = row.enabled
+	if row.enabled && row.usesServer {
+		reason := ""
+		switch {
+		case s.config.Server == nil || len(s.config.Server.ModelsFor(slot)) == 0:
+			reason = OffServerProviderMissing
+		case row.model != nil && !slices.Contains(s.config.Server.ModelsFor(slot), *row.model):
+			reason = OffModelNotOffered
+		}
+		if reason != "" {
+			view.Active, view.OffReason = false, &reason
+		}
+	}
+	return view
+}
+
+func utcPointer(at *time.Time) *time.Time {
+	if at == nil {
+		return nil
+	}
+	utc := at.UTC()
+	return &utc
+}
+
+// Settings reads everything Settings → AI shows.
+func (s *Service) Settings(ctx context.Context, workspaceID string) (Settings, error) {
+	settings := Settings{Providers: []Provider{}, Slots: []Slot{}, Events: []Event{}, ProviderLimit: MaxProviders,
+		CanStoreKeys: s.config.Keys.Configured(), AllowPrivateBaseURLs: s.config.AllowPrivateBaseURLs}
+	if server := s.config.Server; server != nil {
+		settings.Server = &Server{Kind: string(server.Kind), Label: server.Label, Models: server.Models}
+	}
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT `+providerColumns+` FROM ai_providers WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
+		if err != nil {
+			return err
+		}
+		settings.Providers, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (Provider, error) { return scanProvider(row) })
+		if err != nil {
+			return err
+		}
+		slots, err := readSlots(ctx, tx, workspaceID, false)
+		if err != nil {
+			return err
+		}
+		for _, slot := range Slots {
+			row, found := slots[slot]
+			settings.Slots = append(settings.Slots, s.view(slot, row, found))
+			if found && row.providerID != nil {
+				for index := range settings.Providers {
+					if settings.Providers[index].ID == *row.providerID {
+						settings.Providers[index].UsedBy = append(settings.Providers[index].UsedBy, slot)
+					}
+				}
+			}
+		}
+		events, err := tx.Query(ctx, `SELECT e.id::text,e.kind,e.actor_agent_id::text,COALESCE(NULLIF(a.display_name,''),a.email),e.actor_token_id IS NOT NULL,
+				e.provider_id::text,e.provider_label,e.slot,e.detail,e.created_at
+			FROM ai_settings_events e LEFT JOIN agents a ON a.workspace_id=e.workspace_id AND a.id=e.actor_agent_id
+			WHERE e.workspace_id=$1 ORDER BY e.created_at DESC,e.seq DESC LIMIT $2`, workspaceID, eventsShown)
+		if err != nil {
+			return err
+		}
+		settings.Events, err = pgx.CollectRows(events, func(row pgx.CollectableRow) (Event, error) {
+			var e Event
+			err := row.Scan(&e.ID, &e.Kind, &e.ActorAgentID, &e.ActorName, &e.ViaToken, &e.ProviderID, &e.ProviderLabel, &e.Slot, &e.Detail, &e.CreatedAt)
+			e.CreatedAt = e.CreatedAt.UTC()
+			return e, err
+		})
+		return err
+	})
+	if settings.Providers == nil {
+		settings.Providers = []Provider{}
+	}
+	if settings.Events == nil {
+		settings.Events = []Event{}
+	}
+	return settings, err
+}
+
+func (s *Service) withUses(ctx context.Context, workspaceID string, provider Provider) (Provider, error) {
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT slot FROM ai_slots WHERE workspace_id=$1 AND provider_id=$2 ORDER BY slot`, workspaceID, provider.ID)
+		if err != nil {
+			return err
+		}
+		uses, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			return err
+		}
+		// Display order, not alphabetical.
+		provider.UsedBy = []string{}
+		for _, slot := range Slots {
+			if slices.Contains(uses, slot) {
+				provider.UsedBy = append(provider.UsedBy, slot)
+			}
+		}
+		return nil
+	})
+	return provider, err
+}
+
+// SetSlot sets one feature. Turning it on, or moving it to another provider while it is on, records
+// the actor's consent: the feature's data goes to that provider from now on.
+func (s *Service) SetSlot(ctx context.Context, workspaceID string, actor Actor, slot string, input SlotInput) (Slot, error) {
+	if !slices.Contains(Slots, slot) {
+		return Slot{}, ErrNotFound
+	}
+	effort := aiprovider.Effort(input.Effort)
+	if input.Effort == "" {
+		effort = aiprovider.EffortLow
+	}
+	if !effort.Valid() {
+		return Slot{}, invalid("effort is low, medium or high.")
+	}
+	now := s.now().UTC()
+	var result Slot
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		next := slotRow{slot: slot, effort: string(effort), enabled: input.Enabled}
+		label := ""
+		switch input.Source {
+		case SourceServer:
+			models := s.config.Server.ModelsFor(slot)
+			if len(models) == 0 {
+				return ErrNoServerProvider
+			}
+			next.usesServer = true
+			model := input.Model
+			if model == "" {
+				model = models[0]
+			}
+			if !slices.Contains(models, model) {
+				return invalid("The server's provider offers %v for this feature.", models)
+			}
+			next.model = &model
+			label = s.config.Server.Label
+		case SourceProvider:
+			if err := lockProviders(ctx, tx, workspaceID); err != nil {
+				return err
+			}
+			provider, err := loadProvider(ctx, tx, workspaceID, input.ProviderID, false)
+			if errors.Is(err, ErrNotFound) {
+				return invalid("Pick one of this workspace's providers (provider_id).")
+			}
+			if err != nil {
+				return err
+			}
+			model := input.Model
+			if model == "" {
+				model = provider.Models[0]
+			}
+			if !slices.Contains(provider.Models, model) {
+				return invalid("Pick one of the provider's models: %v.", provider.Models)
+			}
+			next.providerID, next.model = &provider.ID, &model
+			label = provider.Label
+		case SourceNone, "":
+			if input.Enabled {
+				return invalid("Pick a provider before turning the feature on.")
+			}
+		default:
+			return invalid("source is server, provider or none.")
+		}
+		slots, err := readSlots(ctx, tx, workspaceID, true)
+		if err != nil {
+			return err
+		}
+		current, found := slots[slot]
+		sameRecipient := found && current.usesServer == next.usesServer && equalPointer(current.providerID, next.providerID)
+		next.consentedBy, next.consentedAt = current.consentedBy, current.consentedAt
+		if next.enabled && !(found && current.enabled && sameRecipient) {
+			next.consentedBy, next.consentedAt = stringPointer(actor.AgentID), &now
+		}
+		updatedBy := nullable(actor.AgentID)
+		var row slotRow
+		err = tx.QueryRow(ctx, `INSERT INTO ai_slots(workspace_id,slot,uses_server,provider_id,model,effort,enabled,consented_by,consented_at,updated_by,updated_at)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+			ON CONFLICT (workspace_id,slot) DO UPDATE SET uses_server=EXCLUDED.uses_server,provider_id=EXCLUDED.provider_id,model=EXCLUDED.model,
+				effort=EXCLUDED.effort,enabled=EXCLUDED.enabled,consented_by=EXCLUDED.consented_by,consented_at=EXCLUDED.consented_at,
+				updated_by=EXCLUDED.updated_by,updated_at=EXCLUDED.updated_at
+			RETURNING slot,uses_server,provider_id::text,model,effort,enabled,consented_by::text,consented_at,updated_by::text,updated_at`,
+			workspaceID, slot, next.usesServer, next.providerID, next.model, next.effort, next.enabled, next.consentedBy, next.consentedAt, updatedBy, now).
+			Scan(&row.slot, &row.usesServer, &row.providerID, &row.model, &row.effort, &row.enabled, &row.consentedBy, &row.consentedAt, &row.updatedBy, &row.updatedAt)
+		if err != nil {
+			return err
+		}
+		result = s.view(slot, row, true)
+		from := map[string]any{"enabled": false, "source": SourceNone}
+		if found {
+			from = s.slotDetail(ctx, tx, workspaceID, current)
+		}
+		to := s.slotDetail(ctx, tx, workspaceID, row)
+		if found && equalDetail(from, to) {
+			return nil
+		}
+		providerID := ""
+		if row.providerID != nil {
+			providerID = *row.providerID
+		}
+		return addEvent(ctx, tx, workspaceID, "slot_changed", actor, providerID, label, slot, map[string]any{"from": from, "to": to}, now)
+	})
+	return result, err
+}
+
+func (s *Service) slotDetail(ctx context.Context, tx pgx.Tx, workspaceID string, row slotRow) map[string]any {
+	detail := map[string]any{"enabled": row.enabled, "source": row.source(), "effort": row.effort}
+	if row.model != nil {
+		detail["model"] = *row.model
+	}
+	switch {
+	case row.usesServer && s.config.Server != nil:
+		detail["provider_label"] = s.config.Server.Label
+	case row.providerID != nil:
+		var label string
+		if tx.QueryRow(ctx, `SELECT label FROM ai_providers WHERE workspace_id=$1 AND id=$2`, workspaceID, *row.providerID).Scan(&label) == nil {
+			detail["provider_label"] = label
+		}
+	}
+	return detail
+}
+
+func equalDetail(a, b map[string]any) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for key, value := range a {
+		if b[key] != value {
+			return false
+		}
+	}
+	return true
+}
+
+func equalPointer(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func stringPointer(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
+}

@@ -42,6 +42,7 @@ export const messages = {
   getStartedExplanation: 'Bring your customers in: connect the address they already write to, or move your history over.',
   connectEmail: 'Connect your support email',
   importFreshdesk: 'Import from Freshdesk',
+  aiSettings: 'AI',
   importFreshdeskURL: 'https://colliedesk.com/docs/import-freshdesk',
   inviteTeam: 'Invite your team',
   connectAIAgent: 'Connect an AI agent',

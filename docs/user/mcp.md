@@ -164,6 +164,11 @@ with `billing` and leave a note with a summary."
 | `colliedesk_import_undo_request` | Asks to remove what an import brought in | `read` |
 | `colliedesk_import_people_list` | Lists the agents of an import's Freshdesk account and who each is linked to | `admin` |
 | `colliedesk_import_person_link`, `colliedesk_import_person_unlink` | Links a Freshdesk agent to a Colliedesk agent (their imported replies and tickets follow), or takes the link back | `admin` |
+| `colliedesk_ai_settings_get` | Shows the [AI settings](ai.md): providers (never a key), each feature's provider and model, and the change history | `read` |
+| `colliedesk_ai_provider_add`, `colliedesk_ai_provider_key_set` | Adds an AI provider, or replaces its key, after a billed check of the first model. The key passes through the conversation: refused below `admin` so it never waits in a request | `admin` |
+| `colliedesk_ai_provider_update`, `colliedesk_ai_provider_check` | Renames an AI provider or changes its base URL or models; runs a check | `admin` |
+| `colliedesk_ai_provider_remove` | Deletes an AI provider and erases its key; its features turn off. Cannot be undone | `admin` |
+| `colliedesk_ai_slot_set_request` | Asks to set an AI feature: its provider and model, on or off | `read` |
 | `colliedesk_problem_report` | Sends a problem report to the team that runs the server, with the request ids of failed calls | `read` |
 
 Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the

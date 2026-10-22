@@ -142,14 +142,22 @@ var routeTiers = map[string]string{
 	"GET /api/v1/mail-image":                                     "person",
 	"POST /api/v1/agent-requests/{id}/approve":                   "person",
 	"POST /api/v1/agent-requests/{id}/reject":                    "person",
+	"GET /api/v1/ai":                                             "read",
+	"POST /api/v1/ai/providers":                                  "admin",
+	"PATCH /api/v1/ai/providers/{id}":                            "admin",
+	"PUT /api/v1/ai/providers/{id}/key":                          "admin",
+	"POST /api/v1/ai/providers/{id}/check":                       "admin",
+	"PUT /api/v1/ai/slots/{slot}":                                "approval",
+	"DELETE /api/v1/ai/providers/{id}":                           "admin",
 }
 
 // kbFileRouteKeys carry video bytes; like an image upload, a lower tier is refused, not filed.
 var kbFileRouteKeys = map[string]bool{"POST /api/v1/kb/media-uploads": true, "PUT /api/v1/kb/media-uploads/{id}": true,
 	"DELETE /api/v1/kb/media-uploads/{id}": true, "POST /api/v1/kb/media-uploads/{id}/complete": true, "PUT /api/v1/kb/media/{id}/poster": true}
 
-// credentialRouteKeys carry another helpdesk's API key; a lower tier is refused, not filed.
-var credentialRouteKeys = map[string]bool{"POST /api/v1/imports": true, "PUT /api/v1/imports/{id}/key": true}
+// credentialRouteKeys carry another service's API key; a lower tier is refused, not filed.
+var credentialRouteKeys = map[string]bool{"POST /api/v1/imports": true, "PUT /api/v1/imports/{id}/key": true,
+	"POST /api/v1/ai/providers": true, "PUT /api/v1/ai/providers/{id}/key": true}
 
 func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
 	fixture := newContractFixture(t)

@@ -113,12 +113,12 @@ test('settings is split into your account and the workspace, with a link to ever
   const nav = screen.getByRole('navigation', { name: 'Settings sections' });
   const links = within(nav).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')]);
   expect(links).toEqual([
-    ['Profile', '#profile-heading'], ['Preferences', '#preferences-heading'],
+    ['Profile', '#profile-heading'], ['Preferences', '#preferences-heading'], ['AI', '/settings/ai'],
     ['General', '#general-heading'], ['Team', '#team-heading'], ['Invites', '#invites-heading'], ['Sessions', '#sessions-heading'],
     ['Export all data', '#export-heading'], ['Import from Freshdesk', '/settings/import-freshdesk'],
   ]);
-  // The import has its own page; every other link is a section of this one.
-  for (const [, href] of links.slice(0, -1)) expect(document.getElementById(href!.slice(1))).not.toBeNull();
+  // AI and the import have their own pages; every other link is a section of this one.
+  for (const [, href] of links.filter(([, href]) => href!.startsWith('#'))) expect(document.getElementById(href!.slice(1))).not.toBeNull();
 });
 
 test('an agent gets no workspace-only sections or links', () => {

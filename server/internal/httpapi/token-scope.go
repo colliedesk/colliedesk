@@ -216,6 +216,16 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/imports/{id}/people":                      tier(auth.ScopeAdmin),
 	"PUT /api/v1/imports/{id}/people/{externalId}/link":    tier(auth.ScopeAdmin),
 	"DELETE /api/v1/imports/{id}/people/{externalId}/link": tier(auth.ScopeAdmin),
+	// AI settings show no key, so reading them is read. Providers are admin; the two routes that carry
+	// a provider key are credential routes. Setting a feature decides whether ticket data leaves for a
+	// provider, so every token's call waits for a person.
+	"GET /api/v1/ai":                       tier(auth.ScopeRead),
+	"POST /api/v1/ai/providers":            tier(auth.ScopeAdmin),
+	"PATCH /api/v1/ai/providers/{id}":      tier(auth.ScopeAdmin),
+	"PUT /api/v1/ai/providers/{id}/key":    tier(auth.ScopeAdmin),
+	"POST /api/v1/ai/providers/{id}/check": tier(auth.ScopeAdmin),
+	"DELETE /api/v1/ai/providers/{id}":     tier(auth.ScopeAdmin),
+	"PUT /api/v1/ai/slots/{slot}":          approvalRequired,
 
 	"GET /api/v1/config": notForPeople,
 	// Google's redirect after consent: it finishes only with the session cookie of the person who started.
@@ -265,18 +275,21 @@ func (a *API) gateToken(response http.ResponseWriter, request *http.Request, rou
 	}
 	if credentialRoutes[route.Method+" "+route.Pattern] {
 		writeError(response, http.StatusForbidden, "credentials_need_admin_token",
-			"This call carries another helpdesk's API key, which must never be kept in an agent request for approval. Use an agent token of the admin tier, or let an admin do it in Settings.")
+			"This call carries another service's API key, which must never be kept in an agent request for approval. Use an agent token of the admin tier, or let an admin do it in Settings.")
 		return true
 	}
 	a.fileAgentRequest(response, request, route, who, domain.AgentRequestAction, nil, "")
 	return true
 }
 
-// credentialRoutes carry another helpdesk's API key: a token below their tier is refused, never filed,
-// because an agent request stores the call's body (and the export carries it).
+// credentialRoutes carry another service's API key (a helpdesk to import from, an AI provider): a token
+// below their tier is refused, never filed, because an agent request stores the call's body (and the
+// export carries it).
 var credentialRoutes = map[string]bool{
-	"POST /api/v1/imports":         true,
-	"PUT /api/v1/imports/{id}/key": true,
+	"POST /api/v1/imports":              true,
+	"PUT /api/v1/imports/{id}/key":      true,
+	"POST /api/v1/ai/providers":         true,
+	"PUT /api/v1/ai/providers/{id}/key": true,
 }
 
 // kbFileRoutes carry a video's bytes or start, finish or cancel an upload of them: a file never waits

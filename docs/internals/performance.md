@@ -153,6 +153,8 @@ On 2026-10-22 the in-app Freshdesk import (#97) brought the first bundle to 203,
 
 On 2026-10-22 presence (issue #101: who else has a conversation open) first kept its list marks, the lines under the conversation title and the tab's heartbeat in the first bundle and went over the gate (204,929). They moved to one lazy part, `presence-view`, loaded once a conversation is open (after the ticket's own requests) or somebody else is on a listed one; the first bundle keeps the two small hooks, the API calls and the schemas: 204,078 bytes, CSS 14,641, before Settings moved out; with it, 197,547.
 
+On 2026-10-22 Settings → AI (#89: AI providers and features) became its own lazy part, `ai-route` (9,400 bytes gzip plus 2,380 bytes of CSS), with its strings, schemas and calls. The first bundle keeps the menu link, the route and the `ai` field of the public config: 198,143 → 198,290 bytes (+147), CSS unchanged at 15,444. The page asks for nothing before it opens, and no inbox or conversation request waits for an AI provider.
+
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
 
 ## Reply box lists (saved replies, articles)
