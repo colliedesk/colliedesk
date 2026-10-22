@@ -133,7 +133,7 @@ func (s *Store) ClaimAIDraft(ctx context.Context, workspaceID string, lease time
 		if err != nil {
 			return nil, err
 		}
-		if job.Sources, job.Cut, err = wholeArticles(ctx, tx, workspaceID, job.Sources, aiDraftWholeArticles); err != nil {
+		if job.Cut, err = cutArticles(ctx, tx, workspaceID, job.Sources); err != nil {
 			return nil, err
 		}
 		if job.Index, err = aiArticleIndex(ctx, tx, workspaceID); err != nil {

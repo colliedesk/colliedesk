@@ -666,38 +666,35 @@ func TestAHighDraftTheReviewWouldNotSendAsWrittenDropsBelowHighWithWhatToFix(t *
 	}
 }
 
-func TestADraftReadsItsArticlesWholeAndIsNeverHighOnAnArticleItSawOnlyInPart(t *testing.T) {
-	desk := newAIDesk(t, "Draft Whole")
+func TestADraftIsNeverHighOnAnArticleItSawOnlyInPart(t *testing.T) {
+	desk := newAIDesk(t, "Draft Cut")
 	collection := kbCollection(t, desk.api, desk.admin, map[string]any{"name": "Long"}).ID
 	bigKB(t, desk.api, desk.admin, collection)
-	filler := strings.Repeat("Background about invoices and how they are numbered and stored for the year. ", 110)
-	kbArticle(t, desk.api, desk.admin, map[string]any{"collection_id": collection, "title": "Invoice export guide",
-		"body_md": "Export invoices from Billing.\n\n" + filler + "\n\nThe ZIP holds 200 invoices at most: CAVEAT-AT-THE-END.", "status": "published"})
-	huge := strings.Repeat("Exhaustive reference about invoice export fields and their meaning in detail. ", 330)
-	hugeArticle := kbArticle(t, desk.api, desk.admin, map[string]any{"collection_id": collection, "title": "Invoice export field reference",
-		"body_md": "Invoice export fields.\n\n" + huge, "status": "published"})
+	huge := strings.Repeat("Exhaustive reference about invoice export fields and their meaning in detail. ", 120)
+	kbArticle(t, desk.api, desk.admin, map[string]any{"collection_id": collection, "title": "Invoice export field reference",
+		"body_md": "Invoice export fields.\n\n" + huge + "\n\nCAVEAT-AT-THE-END.", "status": "published"})
+	cite := func(prompt, title string) int {
+		for i, part := range strings.Split(prompt, `<source id="S`)[1:] {
+			if strings.HasPrefix(strings.SplitN(part, "title=", 2)[1], `"`+title+`"`) {
+				return i + 1
+			}
+		}
+		return 0
+	}
 	var prompt string
 	desk.fake.Answer = func(request aiprovider.Request) (aiprovider.Response, error) {
 		prompt = request.Messages[0].Text
-		// Cite the source that is the huge article.
-		for i, part := range strings.Split(prompt, `<source id="S`)[1:] {
-			if strings.HasPrefix(strings.SplitN(part, "title=", 2)[1], `"Invoice export field reference"`) {
-				text := fmt.Sprintf(`{"action":"answer","reply":"Fields are listed in Billing.","claims":[{"text":"x","source":"S%d"}],"confidence":"high","risks":[],"handoff_reason":"","triage":{"tags":[],"priority":"normal","reason":"x"}}`, i+1)
-				return aiprovider.Response{Text: text, JSON: text, Stop: aiprovider.StopDone, Model: "test-model", Hops: []aiprovider.Hop{{Model: "test-model"}}}, nil
-			}
-		}
-		return highAnswer("Export invoices from Billing."), nil
+		text := fmt.Sprintf(`{"action":"answer","reply":"Fields are listed in Billing.","claims":[{"text":"x","source":"S%d"}],"confidence":"high","risks":[],"handoff_reason":"","triage":{"tags":[],"priority":"normal","reason":"x"}}`,
+			cite(prompt, "Invoice export field reference"))
+		return aiprovider.Response{Text: text, JSON: text, Stop: aiprovider.StopDone, Model: "test-model", Hops: []aiprovider.Hop{{Model: "test-model"}}}, nil
 	}
-	conversation := desk.email(t, "a@customer.example", "Invoice export", "How do I export invoices and what do the invoice export fields mean?")
+	conversation := desk.email(t, "a@customer.example", "Invoice export fields", "What do the invoice export fields mean?")
 	desk.run(t)
-	if !strings.Contains(prompt, "CAVEAT-AT-THE-END") {
-		t.Errorf("an article of about 9,000 characters did not reach the model whole")
+	if cite(prompt, "Invoice export field reference") == 0 || strings.Contains(prompt, "CAVEAT-AT-THE-END") {
+		t.Fatalf("want the long article shown as an excerpt without its end")
 	}
 	draft := desk.draft(t, desk.admin, conversation).Draft
-	if !strings.Contains(prompt, "Invoice export field reference") {
-		t.Fatalf("the huge article was not shown at all")
-	}
 	if draft.Confidence == nil || *draft.Confidence == "high" || !slices.Contains(draft.ConfidenceReasons, "source_cut") {
-		t.Errorf("draft citing an article shown in part = %v %v, want below high with source_cut (article %s)", draft.Confidence, draft.ConfidenceReasons, hugeArticle.ID)
+		t.Errorf("draft citing an article shown in part = %v %v, want below high with source_cut", draft.Confidence, draft.ConfidenceReasons)
 	}
 }
