@@ -439,6 +439,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{id}/presence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Says that the caller has this conversation open, and whether its reply box holds a reply not sent yet (`writing`; the text itself is never sent). The answer lists the other people and AI agents who have it open, so one call both announces and reads. A browser tab calls it every `heartbeat_seconds` while the conversation is open; a row not renewed in time disappears on its own (15 seconds for viewing, 150 seconds with a reply not sent yet, 2 minutes for an agent token, which does not call on a schedule). `client_id` names one tab: a person with two tabs open has two rows and is listed once. Changes nothing a customer or a teammate wrote, so the read tier is enough for an agent token. */
+        put: operations["putConversationPresence"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/presence/{clientId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                clientId: components["schemas"]["PresenceClientID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Says that the caller closed the conversation in the tab `clientId` (or, for an agent token, stopped working on it). Only the caller's own row is removed; another person's row, an unknown `clientId` or one already gone answer 204 the same, so calling it twice is harmless. A browser sends it with `fetch` `keepalive` when the tab closes. */
+        delete: operations["deleteConversationPresence"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inbox/activity": {
         parameters: {
             query?: never;
@@ -2807,6 +2846,49 @@ export interface components {
             page: number;
             page_size: number;
         };
+        /** @description A random id a browser tab makes when the page loads (not stored across reloads), or a fixed name an agent token picks. */
+        PresenceClientID: string;
+        PresenceUpdate: {
+            client_id: components["schemas"]["PresenceClientID"];
+            /** @description The reply box (not a private note) holds text that is not sent yet. */
+            writing: boolean;
+            /**
+             * @description The reply text changed since the last call; keeps `edited_at` current.
+             * @default false
+             */
+            edited: boolean;
+            /**
+             * @description The tab is in the background; the answer then asks for fewer calls.
+             * @default false
+             */
+            hidden: boolean;
+        };
+        ConversationViewer: {
+            /** Format: uuid */
+            agent_id: string;
+            /** @description Display name, or the email when there is none */
+            name: string;
+            /** @description A reply not sent yet is open in one of their tabs. */
+            writing: boolean;
+            /**
+             * Format: date-time
+             * @description When that reply was started; null when not writing.
+             */
+            writing_since: string | null;
+            /**
+             * Format: date-time
+             * @description When that reply last changed; a reply untouched for minutes is a draft left open, not someone typing. Null when not writing.
+             */
+            edited_at: string | null;
+            /** @description The agent token an AI agent has the conversation open with, acting as `agent_id`; null for a person. */
+            agent_token: null | components["schemas"]["MessageAgentToken"];
+        };
+        ConversationPresence: {
+            /** @description Everyone else who has the conversation open, once per person and per agent token, people first then by name. The caller's own tabs are left out. */
+            viewers: components["schemas"]["ConversationViewer"][];
+            /** @description Call again after this many seconds to stay listed. */
+            heartbeat_seconds: number;
+        };
         InboxActivity: {
             /** Format: date-time */
             now: string;
@@ -4356,6 +4438,62 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putConversationPresence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresenceUpdate"];
+            };
+        };
+        responses: {
+            /** @description The others who have the conversation open */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationPresence"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteConversationPresence: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                clientId: components["schemas"]["PresenceClientID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's row for this tab is gone */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["WorkspaceLocked"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
     };

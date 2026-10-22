@@ -170,6 +170,8 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"DELETE /api/v1/conversations/{id}/tags/{tagId}":             {"/api/v1/conversations/" + f.conversationID + "/tags/" + f.updateTagID, nil, admin, 200, ""},
 		"GET /api/v1/conversations/{id}/messages":                    {"/api/v1/conversations/" + f.conversationID + "/messages", nil, admin, 200, ""},
 		"POST /api/v1/conversations/{id}/messages":                   {"/api/v1/conversations/" + f.conversationID + "/messages", map[string]any{"kind": "note", "body": "Contract"}, admin, 201, ""},
+		"PUT /api/v1/conversations/{id}/presence":                    {"/api/v1/conversations/" + f.conversationID + "/presence", map[string]any{"client_id": "contract-tab", "writing": true}, admin, 200, ""},
+		"DELETE /api/v1/conversations/{id}/presence/{clientId}":      {"/api/v1/conversations/" + f.conversationID + "/presence/contract-tab", nil, admin, 204, ""},
 		"GET /api/v1/contacts":                                       {"/api/v1/contacts", nil, admin, 200, ""},
 		"POST /api/v1/contacts":                                      {"/api/v1/contacts", map[string]any{"name": "Created", "email": "created@contract.example.com"}, admin, 201, ""},
 		"GET /api/v1/contacts/{id}":                                  {"/api/v1/contacts/" + f.contactID, nil, admin, 200, ""},

@@ -90,6 +90,8 @@ var routeTiers = map[string]string{
 	"GET /api/v1/conversations/{id}/messages":                    "read",
 	"POST /api/v1/conversations/{id}/messages":                   "draft",
 	"GET /api/v1/conversations/{id}/time-entries":                "read",
+	"PUT /api/v1/conversations/{id}/presence":                    "read",
+	"DELETE /api/v1/conversations/{id}/presence/{clientId}":      "read",
 	"POST /api/v1/conversations/{id}/messages/{messageId}/retry": "send",
 	"GET /api/v1/attachments/{id}":                               "read",
 	"GET /api/v1/contacts":                                       "read",

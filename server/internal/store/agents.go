@@ -209,6 +209,7 @@ func (s *Store) deactivateAgent(ctx context.Context, tx pgx.Tx, workspaceID, age
 	}{
 		{"deactivate agent", `UPDATE agents SET deactivated_at=$3 WHERE workspace_id=$1 AND id=$2`, []any{workspaceID, agentID, now}},
 		{"revoke sessions", `UPDATE sessions SET revoked_at=$3 WHERE workspace_id=$1 AND agent_id=$2 AND revoked_at IS NULL`, []any{workspaceID, agentID, now}},
+		{"remove presence", `DELETE FROM conversation_presence WHERE workspace_id=$1 AND agent_id=$2`, []any{workspaceID, agentID}},
 		// The conversations are locked in id order, after the agent row, so a bulk update that locks them
 		// in the same order cannot deadlock with this one.
 		{"lock conversations", `SELECT id FROM conversations WHERE workspace_id=$1 AND assignee_id=$2 AND ` + openAssigned + ` ORDER BY id FOR NO KEY UPDATE`, []any{workspaceID, agentID}},
