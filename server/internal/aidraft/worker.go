@@ -176,6 +176,9 @@ func (w *Worker) write(ctx context.Context, job *store.AIDraftJob) error {
 	if err != nil {
 		return w.Store.FailAIDraft(ctx, job.WorkspaceID, job.DraftID, job.Attempt, code, retryable, retryAfter)
 	}
+	if err := w.review(ctx, job, in, &result); err != nil {
+		return errors.Join(err, w.Store.FailAIDraft(ctx, job.WorkspaceID, job.DraftID, job.Attempt, "store_error", true, retryBase))
+	}
 	_, err = w.Store.FinishAIDraft(ctx, job.WorkspaceID, job.DraftID, job.Attempt, toDomain(result, response.Model))
 	if errors.Is(err, domain.ErrAIDraftNotFound) {
 		// The conversation was deleted, or another worker claimed the draft again: nothing to write.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -57,16 +58,39 @@ type aiDesk struct {
 	secret  string
 	article kbArticleView
 	fake    *aiprovider.Fake
+	review  *reviewer
 	worker  *aidraft.Worker
+}
+
+// reviewer answers the review of a high-confidence draft (a request whose schema asks for "sendable")
+// and hands every other request to the fake, so tests count only drafts and choices there.
+type reviewer struct {
+	*aiprovider.Fake
+	// verdict is the review's JSON; empty approves the draft as written.
+	verdict string
+	calls   int
+}
+
+func (r *reviewer) Complete(ctx context.Context, request aiprovider.Request) (aiprovider.Response, error) {
+	if properties, ok := request.Schema["properties"].(map[string]any); ok && properties["sendable"] != nil {
+		r.calls++
+		text := r.verdict
+		if text == "" {
+			text = `{"sendable":true,"missing":[],"unsupported":[]}`
+		}
+		return aiprovider.Response{Text: text, JSON: text, Stop: aiprovider.StopDone, Model: request.Model, Hops: []aiprovider.Hop{{Model: request.Model}}}, nil
+	}
+	return r.Fake.Complete(ctx, request)
 }
 
 func newAIDesk(t *testing.T, name string) aiDesk {
 	t.Helper()
 	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.AI = true })
 	fake := &aiprovider.Fake{}
+	review := &reviewer{Fake: fake}
 	// The worker uses the API's store, as serve does.
-	desk := aiDesk{api: api, service: service, pool: pool, fake: fake,
-		worker: &aidraft.Worker{Store: api.(*httpapi.Server).AIStore(), Provider: fake, Settings: aidraft.Settings{Model: "test-model", Effort: aiprovider.EffortLow}}}
+	desk := aiDesk{api: api, service: service, pool: pool, fake: fake, review: review,
+		worker: &aidraft.Worker{Store: api.(*httpapi.Server).AIStore(), Provider: review, Settings: aidraft.Settings{Model: "test-model", Effort: aiprovider.EffortLow}}}
 	return desk.sibling(t, name)
 }
 
@@ -487,8 +511,8 @@ func TestAnArticleTheSearchMissesIsChosenFromTheWorkspacesOwnArticleList(t *test
 		t.Fatalf("draft = %+v", draft)
 	}
 	var features string
-	if err := desk.pool.QueryRow(context.Background(), `SELECT string_agg(feature, ',' ORDER BY id) FROM ai_usage`).Scan(&features); err != nil || features != "select,draft" {
-		t.Errorf("metered features = %q %v, want select,draft", features, err)
+	if err := desk.pool.QueryRow(context.Background(), `SELECT string_agg(feature, ',' ORDER BY id) FROM ai_usage`).Scan(&features); err != nil || features != "select,draft,review" {
+		t.Errorf("metered features = %q %v, want select,draft,review", features, err)
 	}
 }
 
@@ -605,5 +629,39 @@ func TestAskingForNewDraftsIsRateLimited(t *testing.T) {
 	}
 	if !limited {
 		t.Error("61 requests for a new draft in a row were all accepted")
+	}
+}
+
+func TestAHighDraftTheReviewWouldNotSendAsWrittenDropsBelowHighWithWhatToFix(t *testing.T) {
+	desk := newAIDesk(t, "Draft Review")
+	desk.fake.Answer = func(aiprovider.Request) (aiprovider.Response, error) {
+		return highAnswer("Annual plans are refundable within 30 days."), nil
+	}
+	desk.review.verdict = `{"sendable":false,"missing":["the refund takes 5 to 10 business days to reach the card"],"unsupported":[]}`
+	conversation := desk.email(t, "a@customer.example", "Refund", "Refund? How long does it take?")
+	desk.run(t)
+	draft := desk.draft(t, desk.admin, conversation).Draft
+	if draft.Confidence == nil || *draft.Confidence != "medium" || !slices.Contains(draft.ConfidenceReasons, "review_flagged") {
+		t.Fatalf("draft = %v %v, want medium with review_flagged", draft.Confidence, draft.ConfidenceReasons)
+	}
+	var handoff *string
+	if err := desk.pool.QueryRow(context.Background(), `SELECT handoff_reason FROM ai_drafts WHERE id=$1`, draft.ID).Scan(&handoff); err != nil || handoff == nil ||
+		!strings.Contains(*handoff, "5 to 10 business days") {
+		t.Errorf("handoff reason = %v %v, want what the review found missing", handoff, err)
+	}
+	var reviews int
+	if err := desk.pool.QueryRow(context.Background(), `SELECT count(*) FROM ai_usage WHERE ai_draft_id=$1 AND feature='review'`, draft.ID).Scan(&reviews); err != nil || reviews != 1 {
+		t.Errorf("metered reviews = %d %v, want 1", reviews, err)
+	}
+	// A draft below high is not reviewed: the review only guards what may go out on its own.
+	desk.fake.Answer = func(aiprovider.Request) (aiprovider.Response, error) {
+		text := `{"action":"handoff","reply":"","claims":[],"confidence":"low","risks":["account_specific_data"],"handoff_reason":"Needs the invoice.","triage":{"tags":[],"priority":"normal","reason":"x"}}`
+		return aiprovider.Response{Text: text, JSON: text, Stop: aiprovider.StopDone, Model: "test-model", Hops: []aiprovider.Hop{{Model: "test-model"}}}, nil
+	}
+	calls := desk.review.calls
+	desk.email(t, "b@customer.example", "Invoice", "Why was I charged twice?")
+	desk.run(t)
+	if desk.review.calls != calls {
+		t.Errorf("a handoff was reviewed")
 	}
 }
