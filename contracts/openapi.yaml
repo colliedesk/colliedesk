@@ -2324,7 +2324,9 @@ paths:
         person approves. Without `slug` one is made from the name. The slug is unique among the
         collections of the same parent outside the trash (409 `duplicate_slug`). A parent in the trash,
         or one already three levels deep, is 400. A workspace holds at most 1,000 collections,
-        counting the ones in the trash (409 `kb_limit`).
+        counting the ones in the trash (409 `kb_limit`). Without `position`, or with 0, it goes after
+        its siblings once they were ordered by hand (`PUT /api/v1/kb/order`); until then it stays 0 and
+        falls in by name.
       requestBody:
         required: true
         content:
@@ -2420,7 +2422,7 @@ paths:
         Take a collection out of the trash. Send its `updated_at` as the trash shows it (409
         `changed_elsewhere`). 409 `parent_in_trash` when its parent is in the trash (restore that
         first), 409 `duplicate_slug` when a sibling took its slug meanwhile. 404 when it is not in the
-        trash.
+        trash. Among siblings ordered by hand it comes back last; otherwise it falls in by name.
       requestBody:
         required: true
         content:
@@ -2454,8 +2456,9 @@ paths:
         were read). A parent that is not a collection of this workspace outside the trash is 404. The
         help center, the article list of a collection and the reply box's article picker follow the
         order on their next load. Positions become 1, 2, 3 in the order given; `updated_at` does not
-        change. After an order by hand, a new or moved article goes last. Any agent may set it, and a
-        `send` agent token; a lower tier files an agent request.
+        change, and an order that moves nothing leaves `content_version` as it is. After an order by
+        hand, a new, moved, imported or restored item goes last. Any agent may set it, and a `send`
+        agent token; a lower tier files an agent request.
       requestBody:
         required: true
         content:
@@ -2513,8 +2516,10 @@ paths:
         next `number` of the workspace, which never changes and is never reused, so the address
         `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the
         title. The text holds at most 100,000 characters and is never cut; a workspace holds at most
-        2,000 articles, counting the ones in the trash (409 `kb_limit`). A `send` agent token may
-        create one; a lower tier files an agent request (at most 64 KiB of JSON).
+        2,000 articles, counting the ones in the trash (409 `kb_limit`). In a collection ordered by
+        hand (`PUT /api/v1/kb/order`) it goes last; until then its `position` is 0 and it falls in by
+        title. A `send` agent token may create one; a lower tier files an agent request (at most 64 KiB
+        of JSON).
       requestBody:
         required: true
         content:
@@ -2627,7 +2632,8 @@ paths:
         Take an article out of the trash, as it was when deleted (a published article is published
         again). Send its `updated_at` as the trash shows it (409 `changed_elsewhere`). 409
         `collection_in_trash` when its collection is in the trash (restore that first). 404 when it is
-        not in the trash.
+        not in the trash. In a collection ordered by hand it comes back last; otherwise it falls in by
+        title.
       requestBody:
         required: true
         content:
@@ -4214,7 +4220,7 @@ components:
         slug: {type: string, minLength: 1, maxLength: 120, description: 'Lowercase letters, digits and hyphens in any script; made from the name when left out.'}
         description: {type: string, maxLength: 2000}
         parent_id: {type: [string, 'null'], format: uuid}
-        position: {type: integer, minimum: 0, maximum: 1000000}
+        position: {type: integer, minimum: 0, maximum: 1000000, description: 'Its place among its siblings. Left out or 0: after the last sibling once they were ordered by hand, else 0 (by name).'}
     KBCollection:
       type: object
       required: [id, parent_id, name, slug, description, position, article_count, created_at, updated_at]

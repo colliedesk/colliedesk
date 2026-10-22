@@ -1247,7 +1247,7 @@ export interface paths {
         /** @description The knowledge base collections of the workspace that are not in the trash, as a flat list ordered by parent, position and name. A collection sits at most three levels deep (category, folder, subfolder). `article_count` counts its articles outside the trash, drafts included. */
         get: operations["listKBCollections"];
         put?: never;
-        /** @description Any agent may create one, and a `send` agent token; a lower tier files an agent request a person approves. Without `slug` one is made from the name. The slug is unique among the collections of the same parent outside the trash (409 `duplicate_slug`). A parent in the trash, or one already three levels deep, is 400. A workspace holds at most 1,000 collections, counting the ones in the trash (409 `kb_limit`). */
+        /** @description Any agent may create one, and a `send` agent token; a lower tier files an agent request a person approves. Without `slug` one is made from the name. The slug is unique among the collections of the same parent outside the trash (409 `duplicate_slug`). A parent in the trash, or one already three levels deep, is 400. A workspace holds at most 1,000 collections, counting the ones in the trash (409 `kb_limit`). Without `position`, or with 0, it goes after its siblings once they were ordered by hand (`PUT /api/v1/kb/order`); until then it stays 0 and falls in by name. */
         post: operations["createKBCollection"];
         delete?: never;
         options?: never;
@@ -1303,7 +1303,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Take a collection out of the trash. Send its `updated_at` as the trash shows it (409 `changed_elsewhere`). 409 `parent_in_trash` when its parent is in the trash (restore that first), 409 `duplicate_slug` when a sibling took its slug meanwhile. 404 when it is not in the trash. */
+        /** @description Take a collection out of the trash. Send its `updated_at` as the trash shows it (409 `changed_elsewhere`). 409 `parent_in_trash` when its parent is in the trash (restore that first), 409 `duplicate_slug` when a sibling took its slug meanwhile. 404 when it is not in the trash. Among siblings ordered by hand it comes back last; otherwise it falls in by name. */
         post: operations["restoreKBCollection"];
         delete?: never;
         options?: never;
@@ -1319,7 +1319,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Set by hand the order of what sits directly under one parent: its collections and, under a collection, its articles (drafts included). `parent_id` null is the top, which holds collections only (`article_ids` is then empty). The lists must name every collection and article outside the trash under that parent, each once, and nothing else; otherwise nothing changes and the answer is 409 `order_stale` with the lists as they are now in `error.collection_ids` and `error.article_ids` (someone added, moved or deleted one since they were read). A parent that is not a collection of this workspace outside the trash is 404. The help center, the article list of a collection and the reply box's article picker follow the order on their next load. Positions become 1, 2, 3 in the order given; `updated_at` does not change. After an order by hand, a new or moved article goes last. Any agent may set it, and a `send` agent token; a lower tier files an agent request. */
+        /** @description Set by hand the order of what sits directly under one parent: its collections and, under a collection, its articles (drafts included). `parent_id` null is the top, which holds collections only (`article_ids` is then empty). The lists must name every collection and article outside the trash under that parent, each once, and nothing else; otherwise nothing changes and the answer is 409 `order_stale` with the lists as they are now in `error.collection_ids` and `error.article_ids` (someone added, moved or deleted one since they were read). A parent that is not a collection of this workspace outside the trash is 404. The help center, the article list of a collection and the reply box's article picker follow the order on their next load. Positions become 1, 2, 3 in the order given; `updated_at` does not change, and an order that moves nothing leaves `content_version` as it is. After an order by hand, a new, moved, imported or restored item goes last. Any agent may set it, and a `send` agent token; a lower tier files an agent request. */
         put: operations["setKBOrder"];
         post?: never;
         delete?: never;
@@ -1338,7 +1338,7 @@ export interface paths {
         /** @description Knowledge base articles outside the trash, without their text, in pages. Without `q` the order is `sort`: `recent` puts the most recently updated first; `manual` is the help center's order (collections in their order, a collection's own articles before those of its collections, and in each collection by `position`, then title, then number). `sort` is `manual` with `collection_id` and `recent` without it, unless given. With `q` the articles whose title or text hold every word of `q` as a word or the start of a word (or whose title holds `q`) come first by relevance. Words are split the same way in the query and the text, with no language rules, so a word inside another word, and text in scripts written without spaces (Chinese, Japanese, Thai), are found only when they start a word or match the title. */
         get: operations["listKBArticles"];
         put?: never;
-        /** @description Write an article in Markdown. It starts as a draft unless `status` is `published`. It gets the next `number` of the workspace, which never changes and is never reused, so the address `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the title. The text holds at most 100,000 characters and is never cut; a workspace holds at most 2,000 articles, counting the ones in the trash (409 `kb_limit`). A `send` agent token may create one; a lower tier files an agent request (at most 64 KiB of JSON). */
+        /** @description Write an article in Markdown. It starts as a draft unless `status` is `published`. It gets the next `number` of the workspace, which never changes and is never reused, so the address `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the title. The text holds at most 100,000 characters and is never cut; a workspace holds at most 2,000 articles, counting the ones in the trash (409 `kb_limit`). In a collection ordered by hand (`PUT /api/v1/kb/order`) it goes last; until then its `position` is 0 and it falls in by title. A `send` agent token may create one; a lower tier files an agent request (at most 64 KiB of JSON). */
         post: operations["createKBArticle"];
         delete?: never;
         options?: never;
@@ -1395,7 +1395,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Take an article out of the trash, as it was when deleted (a published article is published again). Send its `updated_at` as the trash shows it (409 `changed_elsewhere`). 409 `collection_in_trash` when its collection is in the trash (restore that first). 404 when it is not in the trash. */
+        /** @description Take an article out of the trash, as it was when deleted (a published article is published again). Send its `updated_at` as the trash shows it (409 `changed_elsewhere`). 409 `collection_in_trash` when its collection is in the trash (restore that first). 404 when it is not in the trash. In a collection ordered by hand it comes back last; otherwise it falls in by title. */
         post: operations["restoreKBArticle"];
         delete?: never;
         options?: never;
@@ -2445,6 +2445,7 @@ export interface components {
             description?: string;
             /** Format: uuid */
             parent_id?: string | null;
+            /** @description Its place among its siblings. Left out or 0: after the last sibling once they were ordered by hand, else 0 (by name). */
             position?: number;
         };
         KBCollection: {

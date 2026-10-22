@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/domain"
@@ -72,29 +71,44 @@ func cleanKBOrder(order *domain.KBOrder) error {
 	return nil
 }
 
-// readKBOrder reads what sits under parent (nil: the top) outside the trash, in its current order.
+// readKBOrder reads what sits under parent (nil: the top) outside the trash, in its current order, and
+// locks those rows FOR NO KEY UPDATE: the articles first, then the collections, the order every write
+// that moves an article takes them in (the article's row, then the collection it goes to). A row that
+// moved away or went to the trash while this read waited for it is left out, so the order is stale.
 func readKBOrder(ctx context.Context, tx pgx.Tx, workspaceID string, parent *string) (domain.KBOrder, error) {
 	order := domain.KBOrder{ParentID: parent}
-	rows, err := tx.Query(ctx, `SELECT id::text FROM kb_collections WHERE workspace_id=$1 AND parent_id IS NOT DISTINCT FROM $2::uuid AND deleted_at IS NULL
-		ORDER BY `+kbCollectionOrder, workspaceID, parent)
+	rows, err := tx.Query(ctx, `SELECT id::text FROM kb_articles WHERE workspace_id=$1 AND collection_id=$2::uuid AND deleted_at IS NULL
+		ORDER BY `+kbArticleOrder+` FOR NO KEY UPDATE`, workspaceID, parent)
 	if err != nil {
 		return order, err
 	}
-	if order.CollectionIDs, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
+	if order.ArticleIDs, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
 		return order, err
 	}
-	rows, err = tx.Query(ctx, `SELECT id::text FROM kb_articles WHERE workspace_id=$1 AND collection_id=$2::uuid AND deleted_at IS NULL
-		ORDER BY `+kbArticleOrder, workspaceID, parent)
+	rows, err = tx.Query(ctx, `SELECT id::text FROM kb_collections WHERE workspace_id=$1 AND parent_id IS NOT DISTINCT FROM $2::uuid AND deleted_at IS NULL
+		ORDER BY `+kbCollectionOrder+` FOR NO KEY UPDATE`, workspaceID, parent)
 	if err != nil {
 		return order, err
 	}
-	order.ArticleIDs, err = pgx.CollectRows(rows, pgx.RowTo[string])
+	order.CollectionIDs, err = pgx.CollectRows(rows, pgx.RowTo[string])
 	return order, err
 }
 
 // sameMembers reports whether a and b hold the same ids; neither repeats one.
 func sameMembers(a, b []string) bool {
-	return len(a) == len(b) && !slices.ContainsFunc(a, func(id string) bool { return !slices.Contains(b, id) })
+	if len(a) != len(b) {
+		return false
+	}
+	in := make(map[string]struct{}, len(a))
+	for _, id := range a {
+		in[id] = struct{}{}
+	}
+	for _, id := range b {
+		if _, ok := in[id]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // SetKBOrder gives the collections and articles directly under order.ParentID the positions 1, 2, 3 in
@@ -127,14 +141,23 @@ func (s *Store) SetKBOrder(ctx context.Context, workspaceID string, order domain
 		if !sameMembers(current.CollectionIDs, order.CollectionIDs) || !sameMembers(current.ArticleIDs, order.ArticleIDs) {
 			return domain.KBOrder{}, &domain.KBOrderStaleError{Current: current}
 		}
+		// The rows are locked and checked above; the parent filter keeps even a missed race from placing a
+		// row that sits elsewhere. Articles first, as they were locked.
+		moved := int64(0)
 		for _, table := range []struct {
-			name string
-			ids  []string
-		}{{"kb_collections", order.CollectionIDs}, {"kb_articles", order.ArticleIDs}} {
-			if _, err := tx.Exec(ctx, `UPDATE `+table.name+` t SET position=o.place FROM unnest($2::uuid[]) WITH ORDINALITY o(id, place)
-				WHERE t.workspace_id=$1 AND t.id=o.id AND t.position<>o.place`, workspaceID, table.ids); err != nil {
+			name, parent string
+			ids          []string
+		}{{"kb_articles", "collection_id=$3::uuid", order.ArticleIDs}, {"kb_collections", "parent_id IS NOT DISTINCT FROM $3::uuid", order.CollectionIDs}} {
+			tag, err := tx.Exec(ctx, `UPDATE `+table.name+` t SET position=o.place FROM unnest($2::uuid[]) WITH ORDINALITY o(id, place)
+				WHERE t.workspace_id=$1 AND t.id=o.id AND t.`+table.parent+` AND t.deleted_at IS NULL AND t.position<>o.place`, workspaceID, table.ids, order.ParentID)
+			if err != nil {
 				return domain.KBOrder{}, err
 			}
+			moved += tag.RowsAffected()
+		}
+		// An order that moves nothing leaves the cached help center pages valid.
+		if moved == 0 {
+			return order, nil
 		}
 		return order, bumpKB(ctx, tx, workspaceID)
 	})

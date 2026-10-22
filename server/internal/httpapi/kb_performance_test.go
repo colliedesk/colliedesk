@@ -17,7 +17,9 @@ import (
 // seedKBBudget gives a workspace a collection and count articles of about 9,000 characters, 20 of
 // them at 100,000 characters (the longest text allowed). The words come from a vocabulary of 20,000,
 // about what a help center's articles use. Half the articles have a position set by hand, scattered,
-// so the ordered lists sort on position and title together.
+// so the ordered lists sort on position and title together. Beside the collection "Budget" stands a
+// tree of 80 collections, three levels deep and partly ordered by hand, holding every 25th article, so
+// the help center's depth-first order (kbTreeOrder) sorts a real tree.
 func seedKBBudget(t *testing.T, ctx context.Context, exec func(sql string, args ...any) error, workspaceName string, count int) {
 	t.Helper()
 	// 100 distinct texts, each article taking one and a word of its own, keep the seed quick; reading a
@@ -34,6 +36,22 @@ func seedKBBudget(t *testing.T, ctx context.Context, exec func(sql string, args 
 		FROM c, generate_series(1,$2::int) g JOIN t ON t.n = g % 100`, workspaceName, count)
 	if err != nil {
 		t.Fatalf("seed knowledge base of %s: %v", workspaceName, err)
+	}
+	if err := exec(`WITH w AS (SELECT id FROM workspaces WHERE name=$1),
+		top AS (INSERT INTO kb_collections(workspace_id,name,slug,position) SELECT w.id,'Topic '||n,'topic-'||n,9-n FROM w, generate_series(1,8) n
+			RETURNING id,workspace_id,position),
+		mid AS (INSERT INTO kb_collections(workspace_id,parent_id,name,slug,position)
+			SELECT top.workspace_id,top.id,'Section '||k,'section-'||k,CASE WHEN top.position%2=0 THEN 4-k ELSE 0 END FROM top, generate_series(1,3) k
+			RETURNING id,workspace_id)
+		INSERT INTO kb_collections(workspace_id,parent_id,name,slug) SELECT mid.workspace_id,mid.id,'Part '||j,'part-'||j FROM mid, generate_series(1,2) j`,
+		workspaceName); err != nil {
+		t.Fatalf("seed knowledge base tree of %s: %v", workspaceName, err)
+	}
+	if err := exec(`WITH w AS (SELECT id FROM workspaces WHERE name=$1),
+		tree AS (SELECT c.id, row_number() OVER (ORDER BY c.id) - 1 AS place FROM kb_collections c, w WHERE c.workspace_id=w.id AND c.slug<>'budget')
+		UPDATE kb_articles a SET collection_id=tree.id FROM w, tree
+		WHERE a.workspace_id=w.id AND a.number%25=0 AND tree.place=(a.number/25)%80`, workspaceName); err != nil {
+		t.Fatalf("spread articles over the tree of %s: %v", workspaceName, err)
 	}
 }
 
@@ -113,7 +131,7 @@ func TestMain(m *testing.M) {
 // articles of the collection and the published ones in the help center's order, each at the largest page.
 func TestKnowledgeBaseSearchLatencyBudget(t *testing.T) {
 	api, pool, token, _ := sharedKBBudget(t)
-	collection := queryString(t, pool, `SELECT c.id::text FROM kb_collections c JOIN workspaces w ON w.id=c.workspace_id WHERE w.name='KB Budget A'`)
+	collection := queryString(t, pool, `SELECT c.id::text FROM kb_collections c JOIN workspaces w ON w.id=c.workspace_id WHERE w.name='KB Budget A' AND c.slug='budget'`)
 	word := queryString(t, pool, `SELECT substr(md5('1234'),1,6)`)
 	other := queryString(t, pool, `SELECT substr(md5('777'),1,5)`)
 	paths := map[string]string{

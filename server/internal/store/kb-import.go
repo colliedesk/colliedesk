@@ -25,7 +25,8 @@ type KBImportCollection struct {
 	CreatedAt, UpdatedAt time.Time
 }
 
-// ImportKBCollection adds a collection with the source's timestamps.
+// ImportKBCollection adds a collection with the source's timestamps, after its siblings once they were
+// ordered by hand.
 func ImportKBCollection(ctx context.Context, tx pgx.Tx, workspaceID string, input KBImportCollection) (string, error) {
 	clean := KBCollectionInput{Name: input.Name, Description: input.Description, ParentID: input.ParentID}
 	if err := cleanKBCollection(&clean); err != nil {
@@ -37,8 +38,8 @@ func ImportKBCollection(ctx context.Context, tx pgx.Tx, workspaceID string, inpu
 	insert := func(slug string) (string, error) {
 		return kbSavepoint(ctx, tx, func(sub pgx.Tx) (string, error) {
 			var id string
-			err := sub.QueryRow(ctx, `INSERT INTO kb_collections(workspace_id,parent_id,name,slug,description,source_meta,created_at,updated_at)
-				VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id::text`,
+			err := sub.QueryRow(ctx, `INSERT INTO kb_collections(workspace_id,parent_id,name,slug,description,source_meta,created_at,updated_at,position)
+				VALUES($1,$2,$3,$4,$5,$6,$7,$8,`+kbCollectionEnd(`$2::uuid`, `NULL::uuid`)+`) RETURNING id::text`,
 				workspaceID, input.ParentID, clean.Name, slug, clean.Description, input.SourceMeta, input.CreatedAt, input.UpdatedAt).Scan(&id)
 			return id, err
 		})
@@ -83,7 +84,8 @@ func publishedAt(input KBImportArticle) *time.Time {
 	return &at
 }
 
-// ImportKBArticle adds an article with the next number and its first version, of kind import.
+// ImportKBArticle adds an article with the next number and its first version, of kind import; it goes
+// last in a collection ordered by hand.
 func ImportKBArticle(ctx context.Context, tx pgx.Tx, workspaceID string, input KBImportArticle) (string, error) {
 	if err := cleanKBImportArticle(&input); err != nil {
 		return "", err
@@ -97,8 +99,8 @@ func ImportKBArticle(ctx context.Context, tx pgx.Tx, workspaceID string, input K
 	}
 	var id string
 	if err := tx.QueryRow(ctx, `INSERT INTO kb_articles(workspace_id,collection_id,number,title,slug,body_md,status,published_at,author_agent_id,
-			source_meta,source_html,created_at,updated_at)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id::text`,
+			source_meta,source_html,created_at,updated_at,position)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,`+kbArticleEnd(`$2::uuid`)+`) RETURNING id::text`,
 		workspaceID, input.CollectionID, number, input.Title, domain.Slugify(input.Title, "article"), input.BodyMD, input.Status, publishedAt(input),
 		input.AuthorAgentID, input.SourceMeta, input.SourceHTML, input.CreatedAt, input.UpdatedAt).Scan(&id); err != nil {
 		return "", fmt.Errorf("import knowledge base article: %w", err)
@@ -128,9 +130,14 @@ func KBArticleImportedLast(ctx context.Context, tx pgx.Tx, workspaceID, id strin
 
 // ReimportKBArticle writes the source's newer article over an imported one, as a new version of
 // kind import, only while no one changed it in Colliedesk since the last import. The article row is
-// locked first, so an edit cannot land between the check and the write.
+// locked before the check, so an edit cannot land between the check and the write; the knowledge base
+// lock comes before it, as for every write that may place an article: one moved to another folder goes
+// last there once that collection was ordered by hand.
 func ReimportKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string, input KBImportArticle) (string, error) {
 	if err := cleanKBImportArticle(&input); err != nil {
+		return "", err
+	}
+	if err := lockKB(ctx, tx, workspaceID); err != nil {
 		return "", err
 	}
 	var live bool
@@ -151,7 +158,8 @@ func ReimportKBArticle(ctx context.Context, tx pgx.Tx, workspaceID, id string, i
 	if err := checkKBCollection(ctx, tx, workspaceID, input.CollectionID); err != nil {
 		return "", err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE kb_articles SET collection_id=$3,title=$4,slug=$5,body_md=$6,status=$7,published_at=$8,author_agent_id=$9,
+	if _, err := tx.Exec(ctx, `UPDATE kb_articles SET position=CASE WHEN collection_id<>$3::uuid THEN `+kbArticleEnd(`$3::uuid`)+` ELSE position END,
+			collection_id=$3,title=$4,slug=$5,body_md=$6,status=$7,published_at=$8,author_agent_id=$9,
 			source_meta=$10,source_html=$11,created_at=$12,updated_at=$13 WHERE workspace_id=$1 AND id=$2`,
 		workspaceID, id, input.CollectionID, input.Title, domain.Slugify(input.Title, "article"), input.BodyMD, input.Status, publishedAt(input),
 		input.AuthorAgentID, input.SourceMeta, input.SourceHTML, input.CreatedAt, input.UpdatedAt); err != nil {

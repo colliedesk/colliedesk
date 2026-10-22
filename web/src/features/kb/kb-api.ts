@@ -76,13 +76,14 @@ const json = <O extends Operation>(value: RequestBody<O>): string => JSON.string
 const noContent = z.undefined();
 
 // sort is the order without q: recent (the default without collection_id) or manual, the help center's.
-export type ArticleQuery = { q?: string; status?: KBArticleStatus; collection_id?: string; sort?: 'recent' | 'manual'; cursor?: string };
+// limit is the page size, 1 to 200 (50 when left out).
+export type ArticleQuery = { q?: string; status?: KBArticleStatus; collection_id?: string; sort?: 'recent' | 'manual'; limit?: number; cursor?: string };
 
 // query is called with a variable, never an object literal, inside a path: the gate that checks every path
 // the web app calls is a route (web_routes_test.go) reads a path up to its first closing brace.
-function query(values: Record<string, string | undefined>): string {
+function query(values: Record<string, string | number | undefined>): string {
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(values)) if (value) params.set(key, value);
+  for (const [key, value] of Object.entries(values)) if (value) params.set(key, String(value));
   const text = params.toString();
   return text ? `?${text}` : '';
 }

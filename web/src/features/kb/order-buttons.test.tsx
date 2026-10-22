@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
-import { OrderAnnouncement, OrderButtons, moveInOrder, sendMove } from './order-buttons';
+import { OrderAnnouncement, OrderButtons, OrderGoneError, moveInOrder, sendMove } from './order-buttons';
 import { json, serve } from './kb.test.fixture';
 
 afterEach(() => { vi.unstubAllGlobals(); });
@@ -9,7 +9,7 @@ afterEach(() => { vi.unstubAllGlobals(); });
 const rows = [{ id: 'a', name: 'Alpha' }, { id: 'b', name: 'Bravo' }, { id: 'c', name: 'Charlie' }];
 
 // List is a list ordered with the buttons, as the knowledge base page shows one.
-function List({ onMove, more = false }: { onMove: (ids: string[], step: number) => Promise<void>; more?: boolean }) {
+function List({ onMove, more = false }: { onMove: (ids: string[], step: number) => Promise<unknown>; more?: boolean }) {
   const [ids, setIds] = useState(rows.map((row) => row.id));
   const [message, setMessage] = useState('');
   return (
@@ -101,4 +101,22 @@ test('a refusal other than a stale order is not sent again', async () => {
   const calls = serve({ 'PUT /api/v1/kb/order': () => json(404, { error: { code: 'not_found', message: 'The parent collection was not found.' } }) });
   await expect(sendMove(parent, { collection_ids: [], article_ids: [a, b] }, 'article_ids', a, 1)).rejects.toThrow();
   expect(calls).toHaveLength(1);
+});
+
+test('a row someone else moved away or deleted is not sent again, and the move says so', async () => {
+  const calls = serve({
+    'PUT /api/v1/kb/order': () => json(409, { error: { code: 'order_stale', message: 'Something moved.', collection_ids: [], article_ids: [a, c] } }),
+  });
+  await expect(sendMove(parent, { collection_ids: [], article_ids: [a, b, c] }, 'article_ids', b, -1)).rejects.toBeInstanceOf(OrderGoneError);
+  expect(calls).toHaveLength(1);
+  // A list read without the row never goes out at all.
+  await expect(sendMove(parent, { collection_ids: [], article_ids: [a, c] }, 'article_ids', b, 1)).rejects.toBeInstanceOf(OrderGoneError);
+  expect(calls).toHaveLength(1);
+});
+
+test('a move whose row is gone reads out why instead of a place', async () => {
+  render(<List onMove={() => Promise.reject(new OrderGoneError())} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Move Bravo up' }));
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Bravo is no longer in this list: someone else moved or deleted it.'));
+  expect(screen.getByRole('status')).not.toHaveTextContent('place 0');
 });

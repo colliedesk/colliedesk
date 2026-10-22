@@ -425,7 +425,7 @@ func (s *Store) UpdateKBArticle(ctx context.Context, workspaceID string, actor A
 			return domain.KBArticle{}, err
 		}
 	}
-	return s.changeKBArticle(ctx, workspaceID, actor, id, seen, domain.KBArticleEdited, nil, func(tx pgx.Tx) error {
+	return s.changeKBArticle(ctx, workspaceID, actor, id, seen, domain.KBArticleEdited, nil, change.CollectionID != nil, func(tx pgx.Tx) error {
 		if change.CollectionID != nil {
 			if err := checkKBCollection(ctx, tx, workspaceID, *change.CollectionID); err != nil {
 				return err
@@ -446,7 +446,7 @@ func (s *Store) RestoreKBArticleVersion(ctx context.Context, workspaceID string,
 	if !savedReplyID.MatchString(id) {
 		return domain.KBArticle{}, domain.ErrKBArticleNotFound
 	}
-	return s.changeKBArticle(ctx, workspaceID, actor, id, seen, domain.KBArticleRestored, &version, func(tx pgx.Tx) error {
+	return s.changeKBArticle(ctx, workspaceID, actor, id, seen, domain.KBArticleRestored, &version, false, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE kb_articles a SET title=v.title, slug=v.slug, body_md=v.body_md, updated_at=clock_timestamp() FROM kb_article_versions v
 			WHERE a.workspace_id=$1 AND a.id=$2 AND v.workspace_id=a.workspace_id AND v.article_id=a.id AND v.version=$3`, workspaceID, id, version)
 		if err == nil && tag.RowsAffected() == 0 {
@@ -456,9 +456,17 @@ func (s *Store) RestoreKBArticleVersion(ctx context.Context, workspaceID string,
 	})
 }
 
-// changeKBArticle locks a live, unchanged article, runs write and records the version of kind.
-func (s *Store) changeKBArticle(ctx context.Context, workspaceID string, actor Actor, id string, seen time.Time, kind string, restoredFrom *int, write func(pgx.Tx) error) (domain.KBArticle, error) {
+// changeKBArticle locks a live, unchanged article, runs write and records the version of kind. A write
+// that places the article (places) takes the knowledge base lock first, before the article's row: the
+// place it computes then sees every order committed before it, and SetKBOrder, which takes the same lock
+// first, never holds a row this write waits for.
+func (s *Store) changeKBArticle(ctx context.Context, workspaceID string, actor Actor, id string, seen time.Time, kind string, restoredFrom *int, places bool, write func(pgx.Tx) error) (domain.KBArticle, error) {
 	article, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBArticle, error) {
+		if places {
+			if err := lockKB(ctx, tx, workspaceID); err != nil {
+				return domain.KBArticle{}, err
+			}
+		}
 		if err := kbLiveAndCurrent(ctx, tx, `kb_articles`, workspaceID, id, seen, domain.ErrKBArticleNotFound); err != nil {
 			return domain.KBArticle{}, err
 		}
@@ -478,7 +486,7 @@ func (s *Store) DeleteKBArticle(ctx context.Context, workspaceID string, actor A
 	if !savedReplyID.MatchString(id) {
 		return domain.ErrKBArticleNotFound
 	}
-	_, err := s.changeKBArticle(ctx, workspaceID, actor, id, seen, domain.KBArticleDeleted, nil, func(tx pgx.Tx) error {
+	_, err := s.changeKBArticle(ctx, workspaceID, actor, id, seen, domain.KBArticleDeleted, nil, false, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `UPDATE kb_articles SET deleted_at=$3, deleted_by_agent_id=$4, updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2`,
 			workspaceID, id, s.now(), optionalID(actor.AgentID))
 		return err
@@ -486,13 +494,18 @@ func (s *Store) DeleteKBArticle(ctx context.Context, workspaceID string, actor A
 	return err
 }
 
-// UndeleteKBArticle takes an article out of the trash as it was: domain.ErrKBCollectionInTrash while
-// its collection is in the trash.
+// UndeleteKBArticle takes an article out of the trash as it was, except for its place: in a collection
+// ordered by hand it goes last, else it falls in by title. domain.ErrKBCollectionInTrash while its
+// collection is in the trash.
 func (s *Store) UndeleteKBArticle(ctx context.Context, workspaceID string, actor Actor, id string, seen time.Time) (domain.KBArticle, error) {
 	if !savedReplyID.MatchString(id) {
 		return domain.KBArticle{}, domain.ErrKBArticleNotFound
 	}
 	article, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.KBArticle, error) {
+		// Placed like a moved article: the lock first, then the rows.
+		if err := lockKB(ctx, tx, workspaceID); err != nil {
+			return domain.KBArticle{}, err
+		}
 		if err := kbTrashedAndCurrent(ctx, tx, `kb_articles`, workspaceID, id, seen, domain.ErrKBArticleNotFound); err != nil {
 			return domain.KBArticle{}, err
 		}
@@ -505,8 +518,8 @@ func (s *Store) UndeleteKBArticle(ctx context.Context, workspaceID string, actor
 		if !collectionLive {
 			return domain.KBArticle{}, domain.ErrKBCollectionInTrash
 		}
-		if _, err := tx.Exec(ctx, `UPDATE kb_articles SET deleted_at=NULL, deleted_by_agent_id=NULL, updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2`,
-			workspaceID, id); err != nil {
+		if _, err := tx.Exec(ctx, `UPDATE kb_articles a SET deleted_at=NULL, deleted_by_agent_id=NULL, position=`+kbArticleEnd(`a.collection_id`)+`,
+			updated_at=clock_timestamp() WHERE a.workspace_id=$1 AND a.id=$2`, workspaceID, id); err != nil {
 			return domain.KBArticle{}, err
 		}
 		if err := addKBArticleVersion(ctx, tx, workspaceID, id, actor, domain.KBArticleUndeleted, nil); err != nil {

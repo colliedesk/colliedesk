@@ -68,6 +68,7 @@ export const kbMessages = {
   moveNameDown: (name: string) => `Move ${name} down`,
   moved: (name: string, place: number, total: number) => `Moved ${name} to place ${place} of ${total}.`,
   moveFailed: (name: string) => `${name} could not be moved. Try again.`,
+  moveGone: (name: string) => `${name} is no longer in this list: someone else moved or deleted it.`,
   // Editor
   backToList: 'Knowledge base',
   newArticleHeading: 'New article',

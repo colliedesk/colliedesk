@@ -386,8 +386,9 @@ func (s *Store) DeleteKBCollection(ctx context.Context, workspaceID string, acto
 	return kbCollectionError("delete", err)
 }
 
-// UndeleteKBCollection takes a collection out of the trash: domain.ErrKBParentInTrash while its parent
-// is in the trash, domain.ErrKBDuplicateSlug when a sibling took its slug.
+// UndeleteKBCollection takes a collection out of the trash, last among its siblings once they were
+// ordered by hand: domain.ErrKBParentInTrash while its parent is in the trash, domain.ErrKBDuplicateSlug
+// when a sibling took its slug.
 func (s *Store) UndeleteKBCollection(ctx context.Context, workspaceID string, actor Actor, id string, seen time.Time) (domain.KBCollection, error) {
 	if !savedReplyID.MatchString(id) {
 		return domain.KBCollection{}, domain.ErrKBCollectionNotFound
@@ -415,8 +416,8 @@ func (s *Store) UndeleteKBCollection(ctx context.Context, workspaceID string, ac
 			}
 		}
 		collection, err := kbSavepoint(ctx, tx, func(sub pgx.Tx) (domain.KBCollection, error) {
-			if _, err := sub.Exec(ctx, `UPDATE kb_collections SET deleted_at=NULL, deleted_by_agent_id=NULL, updated_at=clock_timestamp() WHERE workspace_id=$1 AND id=$2`,
-				workspaceID, id); err != nil {
+			if _, err := sub.Exec(ctx, `UPDATE kb_collections c SET deleted_at=NULL, deleted_by_agent_id=NULL, position=`+kbCollectionEnd(`c.parent_id`, `c.id`)+`,
+				updated_at=clock_timestamp() WHERE c.workspace_id=$1 AND c.id=$2`, workspaceID, id); err != nil {
 				return domain.KBCollection{}, err
 			}
 			return readKBCollection(ctx, sub, workspaceID, id)

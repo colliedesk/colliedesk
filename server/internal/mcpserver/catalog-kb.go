@@ -86,7 +86,8 @@ func kbCollectionCreateSpec() Spec {
 		Tier: "send",
 		REST: []string{"POST /api/v1/kb/collections"},
 		Input: `{"type":"object","additionalProperties":false,"required":["name"],"properties":{"name":{"type":"string","minLength":1,"maxLength":200},` + kbSlugProperty + `,` +
-			`"description":{"type":"string","maxLength":2000},"parent_id":{"type":"string",` + uuid + `},"position":{"type":"integer","minimum":0,"maximum":1000000}}}`,
+			`"description":{"type":"string","maxLength":2000},"parent_id":{"type":"string",` + uuid + `},"position":{"type":"integer","minimum":0,"maximum":1000000,` +
+			`"description":"Its place among its siblings. Left out or 0: after the last sibling once they were ordered by hand (colliedesk_kb_order_set), else by name."}}}`,
 		Output: kbCollectionOutput,
 		run:    kbCollectionCreate,
 	}

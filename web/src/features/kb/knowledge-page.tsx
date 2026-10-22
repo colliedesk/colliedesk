@@ -20,7 +20,8 @@ import { KBDialog, KBHead } from './kb-ui';
 import { Icon } from './editor/icons';
 import { buildTree, flatten, indent, maxDepth, reason } from './kb-tree';
 import type { TreeNode } from './kb-tree';
-import { OrderAnnouncement, OrderButtons, useOrderMoves } from './order-buttons';
+import { OrderAnnouncement, OrderButtons, allArticleIds, useOrderMoves } from './order-buttons';
+import type { Step } from './order-buttons';
 
 export interface KnowledgeSearch {
   collection?: string;
@@ -107,12 +108,38 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
     }
   };
   const items = articles.data?.pages.flatMap((page) => page.items) ?? [];
-  // A collection's whole list, unfiltered, is its order: only then can a row move.
-  const moves = useOrderMoves(refresh);
+  // A collection's whole list, unfiltered, is its order: only then can a row move. A row that cannot be
+  // shown after its move leaves the focus on the list's heading.
+  const focusHeading = () => document.getElementById('kb-articles-heading')?.focus();
+  const moves = useOrderMoves(refresh, focusHeading);
   const ordered = selected && !search.q && !search.status ? selected : undefined;
   const articleIds = items.map((article) => article.id);
-  const siblings = selected ? nodes.find((node) => node.collection.id === selected.collection.parent_id)?.children ?? tree : [];
+  const parent = selected ? nodes.find((node) => node.collection.id === selected.collection.parent_id) : undefined;
+  const siblings = selected ? parent?.children ?? tree : [];
   const siblingIds = siblings.map((node) => node.collection.id);
+  // An order names every article of the parent: the page has a collection's articles only while it is the
+  // one shown, and maybe a page of them, so the rest is read first (the top holds none, an empty parent
+  // needs no read). A list that went stale meanwhile is completed by the server's answer (sendMove).
+  const moveCollection = (node: TreeNode, step: Step) => moves.send(node.collection.parent_id, async () => ({
+    collection_ids: siblingIds,
+    article_ids: parent && parent.collection.article_count > 0 ? await allArticleIds(parent.collection.id) : [],
+  }), 'collection_ids', node.collection.id, step);
+  const moveArticle = async (collection: TreeNode, id: string, step: Step) => {
+    const loaded = articleIds.length;
+    const saved = await moves.send(collection.collection.id, async () => ({
+      collection_ids: collection.children.map((node) => node.collection.id),
+      article_ids: articles.hasNextPage ? await allArticleIds(collection.collection.id) : articleIds,
+    }), 'article_ids', id, step);
+    // Moved past the loaded rows: load the next page so the row (and the focus on it) comes back.
+    if (saved.indexOf(id) >= loaded) {
+      const next = await articles.fetchNextPage();
+      if (!next.data?.pages.some((page) => page.items.some((item) => item.id === id))) {
+        moves.focus.current = null;
+        focusHeading();
+      }
+    }
+    return saved;
+  };
   const names = new Map(nodes.map((node) => [node.collection.id, node.collection.name]));
   const noCollections = collections.isSuccess && nodes.length === 0;
   const total = nodes.reduce((sum, node) => sum + node.collection.article_count, 0);
@@ -153,7 +180,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
             onForm={(next) => { setProblem(undefined); setConfirming(false); setForm(next); }} onSave={save}
             onConfirm={setConfirming} onDelete={() => void remove(selected.collection)}
             order={siblingIds.length > 1 && <OrderButtons text ids={siblingIds} id={selected.collection.id} name={selected.collection.name} busy={moves.moving} onAnnounce={moves.announce}
-              onMove={(_next, step) => moves.send(selected.collection.parent_id, { collection_ids: siblingIds, article_ids: [] }, 'collection_ids', selected.collection.id, step)} />} />}
+              focus={moves.focus} onMove={(_next, step) => moveCollection(selected, step)} />} />}
           {!selected && <h2 id="kb-articles-heading" className="sr-only">{kbMessages.allArticles}</h2>}
           <div className="kb-list-tools" role="search">
             {nodes.length > 0 && <span className="kb-phone-collections">
@@ -188,8 +215,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
               {items.map((article) => <ArticleRow key={article.id} article={article} timezone={timezone} isPublic={publicNow}
                 collection={names.get(article.collection_id)}
                 order={ordered && <OrderButtons ids={articleIds} id={article.id} name={article.title} more={articles.hasNextPage} busy={moves.moving} onAnnounce={moves.announce}
-                  onMove={(_next, step) => moves.send(ordered.collection.id, { collection_ids: ordered.children.map((node) => node.collection.id), article_ids: articleIds },
-                    'article_ids', article.id, step)} />}
+                  focus={moves.focus} onMove={(_next, step) => moveArticle(ordered, article.id, step)} />}
                 onOpen={() => void navigate({ to: '/knowledge/articles/$articleId', params: { articleId: article.id } })} />)}
               {articles.hasNextPage && <li className="kb-more-row"><button type="button" className="kb-more" disabled={articles.isFetchingNextPage} onClick={() => void articles.fetchNextPage()}>
                 {articles.isFetchingNextPage ? messages.loading : kbMessages.loadMore}</button></li>}
@@ -221,7 +247,7 @@ function CollectionHead({ node, tree, form, confirming, problem, onForm, onSave,
   return (
     <div className="kb-collection-head">
       <div className="kb-collection-title">
-        <h2 id="kb-articles-heading">{collection.name}</h2>
+        <h2 id="kb-articles-heading" tabIndex={-1}>{collection.name}</h2>
         {collection.description && <p className="muted-copy">{collection.description}</p>}
       </div>
       {problem && <p role="alert" className="error-copy">{problem}</p>}

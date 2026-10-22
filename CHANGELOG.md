@@ -39,6 +39,8 @@ API changes in the email view (the full notes will be on the releases page):
   `order_stale` with the current lists. Article answers have a new required field, `position`.
   `GET /kb/articles` takes `sort` (`recent` or `manual`); with `collection_id` and no `q` it now lists the
   collection's articles in their order (by title until ordered by hand) instead of most recently updated first.
+  Under a parent ordered by hand, `POST /kb/collections` without `position` or with 0 puts the collection
+  last (an explicit 0 used to be kept); a created, moved, imported or restored article or collection goes last too.
 
 ## 0.0.1
 

@@ -42,11 +42,14 @@ box's **Articles** list use.
   the collections beside it (in the same collection, or at the top).
 
 The buttons are reached with `Tab` like any other, and a screen reader hears where the row went
-("Moved Billing to place 2 of 5."). Once a collection is ordered by hand, a new article or one moved
-into it goes last. A new collection goes after the others once they are ordered. If someone added,
-moved or deleted an article there a moment before, Colliedesk takes their change into account and
-moves yours again; if that fails too, the page says so and nothing changes. The order is not part of
-an article's history, so restoring a version or taking an article out of the trash does not move it.
+("Moved Billing to place 2 of 5."). Once a collection is ordered by hand, an article that is new,
+moved into it, brought in by an import or taken out of the trash goes last. In the same way a
+collection that is new, imported or taken out of the trash goes after the others once they are
+ordered; until then it falls in by name. If someone added, moved or deleted an article there a moment
+before, Colliedesk takes their change into account and moves yours again; if that fails too, the page
+says so and nothing changes. If someone else moved or deleted the very row you moved, the page says
+so and shows the list as it is now. The order is not part of an article's history, so restoring a
+version does not move an article.
 
 ## Find an article
 
