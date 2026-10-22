@@ -562,3 +562,23 @@ func TestAnImportThatStopsSaysHowManyConversationsItBroughtIn(t *testing.T) {
 		t.Fatalf("imported conversations = %v", got.ImportedConversations)
 	}
 }
+
+func TestAJobStartedInThisProcessRunsWithoutWaitingForTheNextTick(t *testing.T) {
+	e := newEnv(t, true)
+	w := importjobs.NewWorker(importjobs.WorkerOptions{DB: e.db, Keys: e.keys, Interval: time.Hour, Heartbeat: 20 * time.Millisecond, Flush: 10 * time.Millisecond, Lease: time.Minute})
+	previewed := make(chan struct{}, 1)
+	importjobs.StubImporter(w, nil, func(context.Context, freshdesk.Options) (*freshdesk.PreviewResult, error) {
+		previewed <- struct{}{}
+		return &freshdesk.PreviewResult{Source: "freshdesk:account:777", Agents: []freshdesk.PreviewAgent{}}, nil
+	}, nil)
+	ctx, stop := context.WithCancel(context.Background())
+	defer stop()
+	go w.Run(ctx)
+	time.Sleep(100 * time.Millisecond) // the first tick, with nothing to do
+	e.preview(t, e.a)
+	select {
+	case <-previewed:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the preview waited for the next tick (an hour)")
+	}
+}

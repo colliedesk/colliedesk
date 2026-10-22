@@ -115,6 +115,9 @@ test('a preview that ended without starting does not hide the import before it, 
   expect(currentJob([refused, done])?.id).toBe(done.id);
   expect(currentJob([refused, done], refused.id)?.id).toBe(refused.id);
   expect(currentJob([refused])?.id).toBe(refused.id);
+  // The preview asked for became the import, and its undo is newer: the undo leads.
+  const undo = job({ id: '33333333-3333-4333-8333-333333333333', kind: 'undo', phase: 'undo', state: 'finished', undo_of: done.id });
+  expect(currentJob([undo, done], done.id)?.id).toBe(undo.id);
 });
 
 test('the page is about the import still open, else the newest', () => {

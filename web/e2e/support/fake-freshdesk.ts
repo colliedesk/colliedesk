@@ -78,8 +78,13 @@ export class FakeFreshdesk {
     this.filesURL = await listen(this.files, this.options.fixed ? ports.freshdeskFiles : 0);
   }
 
+  // stop also drops open connections: the server's importer keeps them alive, and close() alone waits
+  // for them to go idle (about a minute and a half).
   async stop(): Promise<void> {
-    await Promise.all([this.api, this.files].map((server) => new Promise((resolve) => server?.close(resolve))));
+    await Promise.all([this.api, this.files].map((server) => new Promise((resolve) => {
+      server?.close(resolve);
+      server?.closeAllConnections();
+    })));
   }
 
   // env is what the e2e importer build reads to reach this fake (cmd/collie/e2e_freshdesk.go).

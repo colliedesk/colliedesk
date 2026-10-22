@@ -152,13 +152,23 @@ type Keys struct {
 	instance string
 	mu       sync.Mutex
 	memory   map[string]string
+	// wakeups tells the worker of this process that a job is due now, so it does not wait for its tick.
+	wakeups chan struct{}
 }
 
 // NewKeys returns the key store of this process.
 func NewKeys(ring tokenseal.Keys) *Keys {
 	raw := make([]byte, 12)
 	_, _ = rand.Read(raw)
-	return &Keys{ring: ring, instance: hex.EncodeToString(raw), memory: map[string]string{}}
+	return &Keys{ring: ring, instance: hex.EncodeToString(raw), memory: map[string]string{}, wakeups: make(chan struct{}, 1)}
+}
+
+// wake tells this process's worker that a job is due; it never blocks.
+func (k *Keys) wake() {
+	select {
+	case k.wakeups <- struct{}{}:
+	default:
+	}
 }
 
 // Sealed reports whether keys survive a restart.
