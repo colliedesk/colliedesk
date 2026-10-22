@@ -42,6 +42,8 @@ interface ReplyComposerProps {
   timezone?: string;
   // Reply drafts are on: the box offers Draft with AI for this conversation. agentId finds the person's own drafts.
   aiDraftsFor?: string;
+  // Reply drafts are off: the box says so, with the way to turn them on (canManage) or whom to ask.
+  aiDraftsOff?: boolean;
   agentId?: string;
 }
 
@@ -75,7 +77,7 @@ export const aiDraftPart = lazyPart(() => import('./ai-draft-part'));
 // A reply named a draft that was discarded, expired or replaced meanwhile: it goes without the draft.
 const draftGone = (error: unknown) => error instanceof ConflictError && error.detail?.code === 'ai_draft_not_ready';
 
-export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, timezone = 'UTC', aiDraftsFor, agentId }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited, latestReplyNumber, timezone = 'UTC', aiDraftsFor, aiDraftsOff = false, agentId }: ReplyComposerProps) {
   const [kind, setKind] = useState<Kind>('outgoing');
   const [body, setBody] = useState('');
   const [problem, setProblem] = useState<string>();
@@ -99,6 +101,9 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
   const [picking, setPicking] = useState<Picker | null>(null);
   const pickers = replyPickersPart.use();
   const [assist, setAssist] = useState(false);
+  // A draft is being written in the open panel: the button says so and keeps the panel (and its Stop) open.
+  const [drafting, setDrafting] = useState(false);
+  const [offNote, setOffNote] = useState(false);
   // The AI draft the reply was written from, until it is sent or the box is emptied.
   const [aiDraft, setAIDraft] = useState<string>();
   // What the draft put in the box that the conversation does not hold: shown until it is sent or the box is emptied.
@@ -239,13 +244,14 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
           : <pickers.module.ArticleLinkPicker box={field} onInsert={insertText} onClose={closePicker} canManage={canManage} />)}
         {assist && aiDraftsFor && !disabled && (assistPart.status === 'error' ? <div className="saved-reply-picker"><PartUnavailable /></div>
           : assistPart.status === 'loading' ? <div className="saved-reply-picker"><p className="saved-reply-empty" role="status">{messages.loadingList}</p></div>
-          : <assistPart.module.AIDraftPanel conversationId={aiDraftsFor} agentId={agentId} hasText={Boolean(body.trim())} onUse={applyDraft}
+          : <assistPart.module.AIDraftPanel conversationId={aiDraftsFor} agentId={agentId} hasText={Boolean(body.trim())} onUse={applyDraft} canManage={canManage} onWriting={setDrafting}
             onClose={() => { setAssist(false); field.current?.focus(); }} />)}
         {conflict && <Part part={presenceViewPart} failed={<p role="alert" className="composer-notice">{conflict.message}</p>}
           render={(view) => <view.ReplyConflict replies={conflict.newer} timezone={timezone}
             onSendAnyway={() => { mark.current = conflict.latest; submit(); }}
             onEdit={() => { mark.current = conflict.latest; setConflict(undefined); field.current?.focus(); }} />} />}
         {problem && <p role="alert" className="composer-notice">{problem}</p>}
+        {offNote && !aiDraftsFor && <p role="status" className="composer-notice">{messages.aiDraftsOffAgent}</p>}
         {showCc && <CcField value={cc} onChange={setCcEdited} disabled={disabled || sending} onSend={submit} onBlockingChange={setCcBlocking} />}
         <AttachmentPicker files={files} onChange={setFiles} limits={attachmentLimits} disabled={disabled || sending} />
         <div className="composer-actions">
@@ -257,10 +263,17 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('articles')}>
             <BookIcon /><span className="tool-label">{messages.articles}</span></button>
           {aiDraftsFor && (
-            <button type="button" className="saved-reply-button" disabled={disabled} aria-expanded={assist} onClick={() => setAssist((open) => !open)}>
-              <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span>
+            <button type="button" className="saved-reply-button" disabled={disabled} aria-expanded={assist} aria-disabled={assist && drafting ? true : undefined}
+              onClick={() => { if (!(assist && drafting)) setAssist((open) => !open); }}>
+              <SparklesIcon /><span className="tool-label">{assist && drafting ? messages.drafting : messages.draftWithAI}</span>
               {assistPart.status === 'ready' && !assist && !aiDraft && <assistPart.module.DraftStatus conversationId={aiDraftsFor} agentId={agentId} />}</button>
           )}
+          {!aiDraftsFor && aiDraftsOff && (canManage
+            ? <a className="saved-reply-button" href="/settings/ai" target="_blank" rel="noopener" title={messages.aiDraftsOffAdmin}>
+                <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span>
+                <span className="sr-only">{messages.aiDraftsOffAdmin}</span></a>
+            : <button type="button" className="saved-reply-button" aria-disabled="true" title={messages.aiDraftsOffAgent} onClick={() => setOffNote((shown) => !shown)}>
+                <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span></button>)}
           {kind === 'outgoing' && !showCc && (
             <button type="button" className="cc-button" disabled={disabled} aria-expanded={false} title={messages.ccToggleTitle}
               onClick={() => { focusCc.current = true; setCcOpen(true); }}>{messages.ccToggle}</button>

@@ -152,6 +152,8 @@
 .message-kind { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--text-3); font-size: var(--fs-label); }
 .message-note .message-kind { color: var(--note-text); font-weight: 600; }
 .message-kind svg { width: 12px; height: 12px; }
+.ai-chip { display: inline-flex; align-items: center; gap: 2px; border-radius: 999px; background: var(--accent-soft); color: var(--text-2); padding: 0 6px; font-weight: 600; }
+.ai-off-label { margin-left: var(--space-1); color: var(--text-3); font-size: var(--fs-label); }
 .message-meta time { color: var(--text-3); font-size: var(--fs-label); white-space: nowrap; }
 .markdown-body { line-height: 1.6; overflow-wrap: anywhere; }
 .markdown-body p + p { margin-top: var(--space-3); }

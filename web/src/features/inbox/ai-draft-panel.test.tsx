@@ -149,3 +149,36 @@ test('the button says nothing about a draft once it is in the box, and follows a
   fireEvent.click(await screen.findByRole('button', { name: 'Use draft' }));
   expect(screen.getByRole('button', { name: 'Draft with AI' })).toBeInTheDocument();
 });
+
+test('a draft that failed for its key offers an admin the AI settings, and Try again asks with the same prompt', async () => {
+  const fetch = serve((url, init) => init?.method === 'POST'
+    ? draft({ status: 'queued', text: null, prompt: 'Offer a refund' })
+    : url.includes('?wait=') ? draft({ status: 'failed', text: null, error_code: 'auth', prompt: 'Offer a refund' }) : { items: [] });
+  render(wrap(<AIDraftPanel conversationId={conversation} agentId={agent} hasText={false} canManage onUse={vi.fn()} onClose={vi.fn()} />));
+  fireEvent.change(await screen.findByLabelText('What should the reply say? (optional)'), { target: { value: 'Offer a refund' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Write draft' }));
+  expect(await screen.findByRole('link', { name: 'Open AI settings' })).toHaveAttribute('href', '/settings/ai');
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  await vi.waitFor(() => expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2));
+  const posts = fetch.mock.calls.filter(([, init]) => init?.method === 'POST');
+  expect(JSON.parse(String(posts[1][1]?.body))).toEqual({ prompt: 'Offer a refund' });
+});
+
+test('while a draft is written the button says so and keeps the panel open', async () => {
+  serve((url, init) => init?.method === 'POST' ? draft({ status: 'queued', text: null })
+    : url.includes('?wait=') ? new Promise<Response>(() => {}) : { items: [] });
+  render(wrap(<ReplyComposer onSubmit={vi.fn()} aiDraftsFor={conversation} agentId={agent} />));
+  fireEvent.click(screen.getByRole('button', { name: /^Draft with AI/ }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Write draft' }));
+  const button = await screen.findByRole('button', { name: 'Drafting…' });
+  fireEvent.click(button);
+  expect(screen.getByRole('region', { name: 'Draft with AI' })).toBeInTheDocument();
+});
+
+test('when reply drafts are off, an agent is told whom to ask and an admin gets the way to turn them on', () => {
+  const { rerender } = render(wrap(<ReplyComposer onSubmit={vi.fn()} aiDraftsOff />));
+  fireEvent.click(screen.getByRole('button', { name: /Draft with AI/ }));
+  expect(screen.getByRole('status')).toHaveTextContent('Ask an admin to turn them on in Settings → AI.');
+  rerender(wrap(<ReplyComposer onSubmit={vi.fn()} aiDraftsOff canManage />));
+  expect(screen.getByRole('link', { name: /Draft with AI.*Turn them on in Settings/ })).toHaveAttribute('href', '/settings/ai');
+});

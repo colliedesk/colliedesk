@@ -42,7 +42,7 @@ test('a reply sent from a draft says which token asked and who approved it', () 
   const sent: Message = {
     id: '66666666-6666-4666-8666-666666666666', conversation_id: conversation.id, author_agent_id: '77777777-7777-4777-8777-777777777777',
     author_name: null, agent_token: { id: '33333333-3333-4333-8333-333333333333', label: 'Claude drafts', scope: 'draft', agent_name: 'Ada Admin' },
-    ai_draft_id: null, agent_request_id: draft.id, kind: 'outgoing', body: 'Try turning it off and on.', body_html: null, origin: null, attachments: [], cc: [],
+    ai_draft_id: null, ai_draft_outcome: null, agent_request_id: draft.id, kind: 'outgoing', body: 'Try turning it off and on.', body_html: null, origin: null, attachments: [], cc: [],
     created_at: '2026-10-17T09:05:00Z', delivery: null, reply_number: null, email: null,
   };
   render(<TimelinePanel conversation={conversation} items={[sent]} timezone="UTC" agentNames={new Map([['77777777-7777-4777-8777-777777777777', 'Bo Agent']])} />);
@@ -52,7 +52,7 @@ test('a reply sent from a draft says which token asked and who approved it', () 
 test('a reply whose draft a person rewrote says it came from an agent draft and who wrote the final text', () => {
   const rewritten: Message = {
     id: '88888888-8888-4888-8888-888888888888', conversation_id: conversation.id, author_agent_id: '77777777-7777-4777-8777-777777777777',
-    author_name: null, agent_token: null, ai_draft_id: null, agent_request_id: draft.id, kind: 'outgoing', body: 'My own words.', body_html: null, origin: null,
+    author_name: null, agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: draft.id, kind: 'outgoing', body: 'My own words.', body_html: null, origin: null,
     attachments: [], cc: [], created_at: '2026-10-17T09:05:00Z', delivery: null, reply_number: null, email: null,
   };
   render(<TimelinePanel conversation={conversation} items={[rewritten]} timezone="UTC" agentNames={new Map([['77777777-7777-4777-8777-777777777777', 'Bo Agent']])} />);

@@ -277,7 +277,7 @@ func TestADraftEndsAsItWasUsed(t *testing.T) {
 		http.StatusConflict, "ai_draft_not_ready")
 	d.run(t)
 	sent := request(t, d.api, http.MethodPost, "/api/v1/conversations/"+d.conversationA+"/messages", map[string]any{"kind": "outgoing", "body": text, "ai_draft_id": pending.ID}, d.adminA, nil)
-	if sent.Code != http.StatusCreated || !strings.Contains(sent.Body.String(), `"ai_draft_id":"`+pending.ID+`"`) {
+	if sent.Code != http.StatusCreated || !strings.Contains(sent.Body.String(), `"ai_draft_id":"`+pending.ID+`"`) || !strings.Contains(sent.Body.String(), `"ai_draft_outcome":"sent_unchanged"`) {
 		t.Fatalf("send from the draft: %d %s", sent.Code, sent.Body.String())
 	}
 	if got, similarity := outcome(pending.ID); got != "sent_unchanged" || similarity != "1.000" {

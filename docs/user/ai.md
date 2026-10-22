@@ -70,7 +70,8 @@ meanwhile is dropped without calling anyone. A locked workspace runs none.
 
 ## Reply drafts
 
-With **Reply drafts** on, the reply box of a conversation has **Draft with AI**. Say what the reply
+With **Reply drafts** on, the reply box of a conversation has **Draft with AI**; while they are off it
+says **Off**, and takes an admin to **Settings > AI** (others are told to ask an admin). Say what the reply
 should say (optional, up to 2,000 characters: "offer a refund", "ask for the order number"), or leave
 it empty for a reply to the customer's newest message. You keep working while it is written; the
 conversation never waits for the model.
@@ -92,7 +93,9 @@ it.
 
 Colliedesk keeps how each draft ended (sent nearly as written, sent edited, discarded, replaced,
 expired), so a team can see whether drafts help, and an article's **Used by AI** box says how many
-drafts used it this month. A reply sent from a draft says so on the timeline.
+drafts used it this month. A reply sent from a draft says so on the timeline: **from an AI draft, sent as written** or
+**from an AI draft, edited**. A draft that failed says why, with **Try again** (the same prompt) and,
+when a setting is the cause (the provider's key or credit, the included AI), the way to Settings > AI.
 A draft's text and prompt are erased 90 days after it ended; the numbers stay. At most 30 drafts a
 minute are asked for in a workspace.
 

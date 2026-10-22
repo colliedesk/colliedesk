@@ -5591,9 +5591,10 @@ components:
                 description: Time of the newest customer message inside the polled window, or null when the change was not a customer message.
     Message:
       type: object
-      required: [id, conversation_id, author_agent_id, author_name, agent_token, agent_request_id, ai_draft_id, kind, body, body_html, origin, attachments, cc, created_at, delivery, email, reply_number]
+      required: [id, conversation_id, author_agent_id, author_name, agent_token, agent_request_id, ai_draft_id, ai_draft_outcome, kind, body, body_html, origin, attachments, cc, created_at, delivery, email, reply_number]
       properties:
         ai_draft_id: {type: [string, 'null'], format: uuid, description: The AI draft the reply was written from.}
+        ai_draft_outcome: {type: [string, 'null'], enum: [sent_unchanged, sent_edited, null], description: 'Whether the reply kept the draft''s words (sent_unchanged, 90 % or more) or was edited; null without a draft.'}
         reply_number:
           type: [integer, 'null']
           minimum: 1
