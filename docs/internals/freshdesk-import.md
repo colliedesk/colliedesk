@@ -229,7 +229,7 @@ options for it; with their zero values the CLI behaves as before.
   agent can be linked to a Colliedesk agent after the import. Messages imported before this have no
   id; a re-run updates the conversation origin but not existing messages.
 
-
+## Knowledge base (solutions)
 
 Code: `solutions*.go`; the writes are `store/kb-import.go`, which take the same lock, limits,
 numbering and versions as the API (`docs/internals/knowledge-base.md`).
