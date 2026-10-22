@@ -142,6 +142,7 @@ export const importMessages = {
   revokeInviteLabel: (name: string) => `Revoke the invite of ${name}`,
   copyLink: 'Copy link',
   copied: 'Copied',
+  copyFailed: 'The browser did not let the page copy. Select the link and copy it.',
   inviteExpires: (when: string) => `Send it to them; it works once, until ${when}. Joining links them.`,
   movingReplies: 'Moving their imported replies…',
   peopleFailed: 'The Freshdesk agents could not be loaded.',

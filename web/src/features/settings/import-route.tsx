@@ -71,13 +71,17 @@ export function ImportRoute({ onOpenInbox, onOpenBilling }: { onOpenInbox?: () =
   const peopleChanged = { onSuccess: () => { void client.invalidateQueries({ queryKey: ['import-people'] }); } };
   const link = useMutation({ mutationFn: ({ externalId, agentId }: { externalId: string; agentId: string }) => importsApi.link(peopleJob?.id ?? '', externalId, agentId), ...peopleChanged });
   const unlink = useMutation({ mutationFn: (externalId: string) => importsApi.unlink(peopleJob?.id ?? '', externalId), ...peopleChanged });
-  // The invite's one-time link shows in the person's row: the server never shows it again.
-  const [createdInvite, setCreatedInvite] = useState<CreatedInvite>();
+  // Each invite's one-time link shows in its person's row: the server never shows it again.
+  const [createdInvites, setCreatedInvites] = useState<CreatedInvite[]>([]);
   const invite = useMutation({ mutationFn: (email: string) => api.createInvite(email, 'agent'), onSuccess: (created) => {
-    setCreatedInvite({ email: created.invite.email, url: created.url, expiresAt: created.invite.expires_at });
+    setCreatedInvites((links) => [...links.filter((link) => link.inviteId !== created.invite.id),
+      { inviteId: created.invite.id, email: created.invite.email, url: created.url, expiresAt: created.invite.expires_at }]);
     void client.invalidateQueries({ queryKey: ['invites'] });
   } });
-  const revokeInvite = useMutation({ mutationFn: api.revokeInvite, onSuccess: () => { setCreatedInvite(undefined); void client.invalidateQueries({ queryKey: ['invites'] }); } });
+  const revokeInvite = useMutation({ mutationFn: api.revokeInvite, onSuccess: (_, id) => {
+    setCreatedInvites((links) => links.filter((link) => link.inviteId !== id));
+    void client.invalidateQueries({ queryKey: ['invites'] });
+  } });
   // As for the import's own actions, only the last people action speaks.
   const peopleActions = [link, unlink, invite, revokeInvite];
   const onlyPeople = <T,>(mutation: { mutate: (value: T) => void }) => (value: T) => {
@@ -88,7 +92,7 @@ export function ImportRoute({ onOpenInbox, onOpenBilling }: { onOpenInbox?: () =
   if (!me.data) return <main className="settings-page" aria-busy="true" />;
   // The section shows once the account was read: with its agents, or with why they could not be loaded.
   const peopleSection = peopleJob && (people.isError || (people.data && people.data.items.length > 0))
-    ? <ImportPeople people={people.data?.items ?? []} agents={team.data?.items ?? []} invites={invites.data?.items ?? []} createdInvite={createdInvite}
+    ? <ImportPeople people={people.data?.items ?? []} agents={team.data?.items ?? []} invites={invites.data?.items ?? []} createdInvites={createdInvites}
       imported={peopleJob.phase !== 'preview'} timezone={me.data.timezone} failed={people.isError} onRetry={() => void people.refetch()}
       busy={peopleActions.some((mutation) => mutation.isPending)}
       onInvite={onlyPeople(invite)} onRevokeInvite={onlyPeople(revokeInvite)} onLink={(externalId, agentId) => onlyPeople(link)({ externalId, agentId })} onUnlink={onlyPeople(unlink)} />
