@@ -139,11 +139,12 @@ jobs:
       - name: Install frozen dependencies
         working-directory: web
         run: corepack pnpm install --frozen-lockfile
-      - name: Unit tests
+      # Vitest was this job's long pole (61 to 84 seconds): the other half runs on the roadmap
+      # runner. The type check runs in the e2e job, and the bundle budget after the e2e job's own
+      # Vite build of the same commit.
+      - name: Unit tests, first half
         working-directory: web
-        # The type check runs in the e2e job, and the bundle budget after the e2e job's own Vite build
-        # of the same commit: Vitest is this job's long pole.
-        run: corepack pnpm test
+        run: corepack pnpm test --shard=1/2
   e2e:
     needs: pr-verified
     if: ${{ !cancelled() && needs.pr-verified.outputs.reuse != 'true' }}
@@ -415,6 +416,18 @@ jobs:
       # while the quick gates below run; the last step waits for it.
       - name: Start the stack from compose.yaml in the background
         run: sh .github/scripts/ci-background.sh start compose-smoke sh tests/compose-smoke.sh
+      # The second half of the web app's unit tests (the web job runs the first): this runner mostly
+      # waits on the compose stack, and a pull request starts no extra job for it.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.x'
+          package-manager-cache: false
+      - name: Install frozen web dependencies
+        working-directory: web
+        run: corepack pnpm install --frozen-lockfile
+      - name: Start the second half of the unit tests in the background
+        working-directory: web
+        run: sh ../.github/scripts/ci-background.sh start vitest corepack pnpm test --shard=2/2
       - name: CI shard and elapsed-time contracts
         run: python3 tests/ci-tools-test.py
       - name: Background checks pass on their output and exit status
@@ -462,6 +475,9 @@ jobs:
           python3 -I .github/scripts/roadmap-check.py ROADMAP.md
       - name: The stack from compose.yaml reached the server
         run: sh .github/scripts/ci-background.sh wait compose-smoke
+      - name: Unit tests, second half
+        if: ${{ !cancelled() }}
+        run: sh .github/scripts/ci-background.sh wait vitest
 
   codeql:
     needs: pr-verified

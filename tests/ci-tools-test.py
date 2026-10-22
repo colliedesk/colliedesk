@@ -295,6 +295,25 @@ class PublishEdge(unittest.TestCase):
         ci = (ROOT / '.github/workflows/ci.yml').read_text()
         self.assertIsNone(re.search(r'^  publish-edge:', ci, re.M), 'ci.yml still defines publish-edge')
 
+class VitestShards(unittest.TestCase):
+    """Vitest runs in halves: the web job and the roadmap runner, which waits on the compose smoke
+    test, each run one; together they run every test file exactly once."""
+
+    def test_the_halves_cover_every_shard_once(self):
+        jobs = dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))
+        shards = {}
+        for name in ('web', 'roadmap'):
+            found = re.findall(r'corepack pnpm (?:test|exec vitest run)\b[^\n]*?--shard=(\d+)/(\d+)', '\n'.join(jobs[name]))
+            self.assertEqual(len(found), 1, name)
+            shards[name] = found[0]
+        totals = {total for _, total in shards.values()}
+        self.assertEqual(len(totals), 1, shards)
+        self.assertEqual(sorted(int(index) for index, _ in shards.values()), list(range(1, int(totals.pop()) + 1)))
+        for name, body in jobs.items():
+            if name not in shards:
+                self.assertNotRegex('\n'.join(body), r'corepack pnpm test\b|vitest run', name)
+
+
 class GoBuildCache(unittest.TestCase):
     """actions/cache tries every key on the pull request's own ref before main's. CodeQL's setup-go
     saves a build-only setup-go-* entry on that ref, so a restore key matching it shadowed main's
