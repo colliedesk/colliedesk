@@ -24,7 +24,7 @@
 
   /* Type */
   --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-display: 'Instrument Serif', Georgia, serif;   /* page titles and the sign-in promise only */
+  --font-display: 'IBM Plex Serif', Georgia, serif;   /* page titles and the sign-in promise only */
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
   --fs-ui: 14px;                     /* app body */
   --fs-label: 12px;                  /* meta, labels, kbd */
