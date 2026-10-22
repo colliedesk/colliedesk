@@ -10,7 +10,7 @@ INSERT INTO ai_tasks (id, workspace_id, kind, conversation_id, automatic, reques
     (md5('ait-beta-1')::uuid, md5('ws-beta')::uuid, 'triage', md5('conv-beta-1')::uuid, true, NULL, NULL, 'cancelled', 0,
      '2026-10-22 13:20:00+00', NULL, NULL, 'automatic_limit', '2026-10-22 13:20:00+00', NULL, '2026-10-22 13:20:00+00');
 
-UPDATE ai_usage SET task_id = md5('ait-acme-1')::uuid, automatic = true, cost_micro_usd = 42 WHERE id = md5('aiu-acme-1')::uuid;
+UPDATE ai_usage SET task_id = md5('ait-acme-1')::uuid, automatic = true, cost_micro_usd = 42, reserved_micro_usd = 1006 WHERE id = md5('aiu-acme-1')::uuid;
 
 INSERT INTO ai_automatic_limits (workspace_id, per_day, per_minute, updated_by, updated_at) VALUES
     (md5('ws-acme')::uuid, 500, 40, md5('agent-acme-admin')::uuid, '2026-10-22 13:30:00+00');

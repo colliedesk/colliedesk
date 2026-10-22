@@ -56,9 +56,9 @@ func monthStart(at time.Time) time.Time {
 	return time.Date(at.Year(), at.Month(), 1, 0, 0, 0, 0, time.UTC)
 }
 
-// allowanceLeft is the month's allowance minus what the server's provider spent for the workspace,
-// in micro-dollars, and the allowance; ok is false when the server sets none. Calls still running have
-// no cost yet, so concurrent calls can pass the allowance by up to what they cost together.
+// allowanceLeft is the month's allowance minus what the server's provider spent for the workspace and
+// what the calls still running hold (their most possible cost), in micro-dollars, and the allowance;
+// ok is false when the server sets none.
 func (s *Service) allowanceLeft(ctx context.Context, tx pgx.Tx, workspaceID string) (left, limit int64, ok bool, err error) {
 	server := s.config.Server
 	if server == nil || server.Allowance == nil {
@@ -73,7 +73,8 @@ func (s *Service) allowanceLeft(ctx context.Context, tx pgx.Tx, workspaceID stri
 	var agents int
 	var used int64
 	if err := tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM agents WHERE workspace_id=$1 AND deactivated_at IS NULL),
-			(SELECT COALESCE(sum(cost_micro_usd),0) FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND started_at>=$2)`,
+			(SELECT COALESCE(sum(CASE WHEN status='started' THEN COALESCE(reserved_micro_usd,0) ELSE COALESCE(cost_micro_usd,0) END),0)
+				FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND started_at>=$2)`,
 		workspaceID, monthStart(s.now())).Scan(&agents, &used); err != nil {
 		return 0, 0, false, err
 	}
@@ -93,37 +94,59 @@ type usageHop struct {
 // finished after it with the provider's usage, or the error code. It is the only way a provider is
 // called (TestProvidersAreCalledOnlyThroughMetered), so every attempt leaves exactly one row.
 func (s *Service) Metered(ctx context.Context, call Call, provider aiprovider.Provider, request aiprovider.Request) (aiprovider.Response, error) {
-	return s.metered(ctx, call, request.Model, func(ctx context.Context) (aiprovider.Response, error) {
+	return s.metered(ctx, call, request.Model, func() [2]int64 { i, o := estimateTokens(request); return [2]int64{i, o} }(), func(ctx context.Context) (aiprovider.Response, error) {
 		return provider.Complete(ctx, request)
 	})
+}
+
+// estimateTokens is the most a request can use: its text at one token per 3 bytes (about one per CJK
+// character, more than English uses), and all of its output.
+func estimateTokens(request aiprovider.Request) (input, output int64) {
+	size := len(request.System)
+	for _, message := range request.Messages {
+		size += len(message.Text)
+	}
+	if request.Schema != nil {
+		size += 500
+	}
+	return int64(size/3 + 1), int64(request.MaxOutput)
 }
 
 // meteredCheck is Metered for a provider check.
 func (s *Service) meteredCheck(ctx context.Context, call Call, provider aiprovider.Provider, model string) (aiprovider.Response, error) {
 	call.Feature = FeatureCheck
-	return s.metered(ctx, call, model, func(ctx context.Context) (aiprovider.Response, error) {
+	// A check is one small request: a line in, at most 256 tokens out.
+	return s.metered(ctx, call, model, [2]int64{200, 256}, func(ctx context.Context) (aiprovider.Response, error) {
 		return provider.Check(ctx, model)
 	})
 }
 
-func (s *Service) metered(ctx context.Context, call Call, model string, send func(context.Context) (aiprovider.Response, error)) (aiprovider.Response, error) {
+func (s *Service) metered(ctx context.Context, call Call, model string, tokens [2]int64, send func(context.Context) (aiprovider.Response, error)) (aiprovider.Response, error) {
 	started := s.now().UTC()
 	var usageID string
 	err := s.db.InWorkspace(ctx, call.WorkspaceID, func(tx pgx.Tx) error {
-		if call.BilledTo == BilledToServer {
+		var reserved *int64
+		if call.BilledTo == BilledToServer && s.config.Server != nil {
+			// Checked and held in one step per workspace: calls that start together each see what the
+			// others hold, so together they never pass the allowance by more than their estimates miss.
+			if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "ai-allowance:"+call.WorkspaceID); err != nil {
+				return err
+			}
+			hold := estimateMicroUSD(s.config.Server.Prices, model, tokens[0], tokens[1])
 			left, _, limited, err := s.allowanceLeft(ctx, tx, call.WorkspaceID)
 			if err != nil {
 				return err
 			}
-			if limited && left <= 0 {
+			if limited && (left <= 0 || hold > left) {
 				return ErrAllowanceReached
 			}
+			reserved = &hold
 		}
 		return tx.QueryRow(ctx, `INSERT INTO ai_usage(workspace_id,feature,billed_to,provider_id,provider_kind,provider_label,model,status,actor_agent_id,actor_token_id,
-				task_id,automatic,started_at)
-			VALUES($1,$2,$3,$4,$5,$6,$7,'started',$8,$9,$10,$11,$12) RETURNING id::text`,
+				task_id,automatic,started_at,reserved_micro_usd)
+			VALUES($1,$2,$3,$4,$5,$6,$7,'started',$8,$9,$10,$11,$12,$13) RETURNING id::text`,
 			call.WorkspaceID, call.Feature, call.BilledTo, nullable(call.ProviderID), string(call.Kind), call.Label, model,
-			nullable(call.Actor.AgentID), nullable(call.Actor.TokenID), nullable(call.TaskID), call.Automatic, started).Scan(&usageID)
+			nullable(call.Actor.AgentID), nullable(call.Actor.TokenID), nullable(call.TaskID), call.Automatic, started, reserved).Scan(&usageID)
 	})
 	if errors.Is(err, ErrAllowanceReached) {
 		return aiprovider.Response{}, err

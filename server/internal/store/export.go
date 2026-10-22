@@ -744,7 +744,7 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 	// Usage can be long: stream it.
 	usage, err := tx.Query(ctx, `SELECT id::text,feature,billed_to,provider_id::text,provider_kind,provider_label,model,status,error_code,stop_reason,served_model,
 			input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,hops,provider_request_id,actor_agent_id::text,actor_token_id::text,started_at,finished_at,latency_ms,
-			task_id::text,automatic,cost_micro_usd
+			task_id::text,automatic,cost_micro_usd,reserved_micro_usd
 		FROM ai_usage WHERE workspace_id=$1 ORDER BY started_at,id`, workspaceID)
 	if err != nil {
 		return fmt.Errorf("export AI usage: %w", err)
@@ -755,7 +755,7 @@ func exportAI(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Si
 		var hops []byte
 		if err := usage.Scan(&r.ID, &r.Feature, &r.BilledTo, &r.ProviderID, &r.ProviderKind, &r.ProviderLabel, &r.Model, &r.Status, &r.ErrorCode, &r.StopReason, &r.ServedModel,
 			&r.InputTokens, &r.OutputTokens, &r.CacheReadTokens, &r.CacheWriteTokens, &hops, &r.ProviderRequestID, &r.ActorAgentID, &r.ActorTokenID, &r.StartedAt, &r.FinishedAt, &r.LatencyMS,
-			&r.TaskID, &r.Automatic, &r.CostMicroUSD); err != nil {
+			&r.TaskID, &r.Automatic, &r.CostMicroUSD, &r.ReservedMicroUSD); err != nil {
 			return fmt.Errorf("export AI usage: %w", err)
 		}
 		r.Hops = hops
