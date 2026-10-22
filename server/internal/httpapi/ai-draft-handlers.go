@@ -3,7 +3,9 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -60,9 +62,18 @@ func (a *API) getAIDraft(response http.ResponseWriter, request *http.Request) {
 	writeJSON(response, http.StatusOK, map[string]any{"draft": draft, "available": settings.Available, "drafts_enabled": settings.DraftsEnabled})
 }
 
+// aiDraftRequestsPerHour is how many new drafts one workspace may ask for in an hour, by hand or by an
+// agent token; drafts written when customers write do not count.
+const aiDraftRequestsPerHour = 60
+
 func (a *API) requestAIDraft(response http.ResponseWriter, request *http.Request) {
 	conversationID, _, ok := aiDraftPath(response, request, false)
 	if !ok {
+		return
+	}
+	if allowed, wait := a.aiDraftRequests.allow(principal(request).Workspace.ID, a.now()); !allowed {
+		response.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+		writeError(response, http.StatusTooManyRequests, "rate_limited", fmt.Sprintf("A workspace can ask for %d new AI drafts an hour. Try again later.", aiDraftRequestsPerHour))
 		return
 	}
 	draft, err := a.store.RequestAIDraft(request.Context(), principal(request).Workspace.ID, conversationID, principal(request).Agent.ID)

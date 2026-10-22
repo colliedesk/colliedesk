@@ -28,6 +28,7 @@ const (
 	AIOutcomeSentUnchanged = "sent_unchanged"
 	AIOutcomeSentEdited    = "sent_edited"
 	AIOutcomeDiscarded     = "discarded"
+	AIOutcomeIgnored       = "ignored" // a person answered in their own words instead
 	AIOutcomeAutoSent      = "auto_sent"
 	AIOutcomeAutoCancelled = "auto_cancelled"
 )

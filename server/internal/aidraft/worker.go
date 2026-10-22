@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	// defaultLease holds a claimed draft away from other workers while its call runs.
-	defaultLease = 3 * time.Minute
+	// defaultLease holds a claimed draft away from other workers while its calls run: longer than the
+	// chooser's and the draft's timeouts together, so a live call is never claimed twice.
+	defaultLease = 4 * time.Minute
 	// defaultTimeout bounds one call; drafts take 3 to 10 seconds.
 	defaultTimeout = 90 * time.Second
 	// retryBase is the wait before a retryable failure is tried again, times the attempt.
@@ -32,7 +33,8 @@ type Worker struct {
 	Timeout time.Duration
 	// LogError hears failures that are not a draft's own (the database); nil drops them.
 	LogError func(error)
-	// MaxPerRun stops RunOnce after this many drafts; 0 writes every draft that is due.
+	// MaxPerRun is how many drafts one workspace gets in a RunOnce before the next workspace's turn;
+	// 0 writes every draft that is due.
 	MaxPerRun int
 }
 
@@ -71,7 +73,7 @@ func (w *Worker) RunOnce(ctx context.Context) (int, error) {
 		if _, err := w.Store.SendDueAutoAnswers(ctx, workspaceID); err != nil {
 			failed = append(failed, err)
 		}
-		for ctx.Err() == nil && (w.MaxPerRun == 0 || written < w.MaxPerRun) {
+		for turn := 0; ctx.Err() == nil && (w.MaxPerRun == 0 || turn < w.MaxPerRun); turn++ {
 			job, err := w.Store.ClaimAIDraft(ctx, workspaceID, w.lease())
 			if err != nil {
 				failed = append(failed, err)
@@ -147,7 +149,7 @@ var (
 func (w *Worker) write(ctx context.Context, job *store.AIDraftJob) error {
 	in := JobInput(job)
 	if err := w.choose(ctx, job, &in); err != nil {
-		return err
+		return errors.Join(err, w.Store.FailAIDraft(ctx, job.WorkspaceID, job.DraftID, job.Attempt, "store_error", true, retryBase))
 	}
 	call, cancel := context.WithTimeout(ctx, w.timeout())
 	result, response, err := Draft(call, w.Provider, in, w.Settings)
@@ -169,17 +171,21 @@ func (w *Worker) write(ctx context.Context, job *store.AIDraftJob) error {
 		code, retryable = string(aiprovider.CodeOf(err)), true
 	}
 	if meterErr := w.meter(ctx, job, "draft", w.Settings.Model, response, code); meterErr != nil {
-		return meterErr
+		return errors.Join(meterErr, w.Store.FailAIDraft(ctx, job.WorkspaceID, job.DraftID, job.Attempt, "store_error", true, retryBase))
 	}
 	if err != nil {
-		return w.Store.FailAIDraft(ctx, job.WorkspaceID, job.DraftID, code, retryable, retryAfter)
+		return w.Store.FailAIDraft(ctx, job.WorkspaceID, job.DraftID, job.Attempt, code, retryable, retryAfter)
 	}
-	_, err = w.Store.FinishAIDraft(ctx, job.WorkspaceID, job.DraftID, toDomain(result, response.Model))
+	_, err = w.Store.FinishAIDraft(ctx, job.WorkspaceID, job.DraftID, job.Attempt, toDomain(result, response.Model))
 	if errors.Is(err, domain.ErrAIDraftNotFound) {
-		// The conversation was deleted while the model wrote; nothing is left to write to.
+		// The conversation was deleted, or another worker claimed the draft again: nothing to write.
 		return nil
 	}
-	return err
+	if err != nil {
+		// Tried again until the draft has used its attempts, never forever.
+		return errors.Join(err, w.Store.FailAIDraft(ctx, job.WorkspaceID, job.DraftID, job.Attempt, "store_error", true, retryBase))
+	}
+	return nil
 }
 
 // meter stores one row per model that ran in the attempt (a fallback bills two), or one row with the

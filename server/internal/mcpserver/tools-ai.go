@@ -40,7 +40,10 @@ func aiDraftUpdate(c *call, arguments map[string]any) (any, error) {
 	path := "/api/v1/conversations/" + url.PathEscape(args.ConversationID) + "/ai-draft"
 	if args.Action != "request_new" {
 		suffix, ok := aiDraftActions[args.Action]
-		if !ok || args.DraftID == "" {
+		if !ok {
+			return nil, errors.New("action must be request_new, discard, apply_triage or cancel_auto_answer")
+		}
+		if args.DraftID == "" {
 			return nil, errors.New("draft_id is required for " + args.Action + ": read it with colliedesk_ai_draft_get")
 		}
 		path += "/" + url.PathEscape(args.DraftID) + suffix

@@ -19,7 +19,7 @@ export const aiDraftSchema = z.object({
   action: z.enum(['answer', 'clarify', 'handoff']).nullable(), body: z.string().nullable(), confidence: z.enum(['high', 'medium', 'low']).nullable(),
   confidence_reasons: z.array(z.string()), handoff_reason: z.string().nullable(), topic_article_id: z.string().uuid().nullable(),
   sources: z.array(aiDraftSourceSchema), triage: aiTriageSchema.nullable(), triage_applied_at: nullableDate,
-  outcome: z.enum(['sent_unchanged', 'sent_edited', 'discarded', 'auto_sent', 'auto_cancelled']).nullable(), similarity: z.number().nullable(),
+  outcome: z.enum(['sent_unchanged', 'sent_edited', 'discarded', 'ignored', 'auto_sent', 'auto_cancelled']).nullable(), similarity: z.number().nullable(),
   auto_send_at: nullableDate, error_code: z.string().nullable(), model: z.string().nullable(), created_at: z.string().datetime(), ready_at: nullableDate,
 }) satisfies z.ZodType<Generated<'AIDraft'>>;
 export type AIDraft = z.infer<typeof aiDraftSchema>;

@@ -3441,8 +3441,11 @@ export interface components {
             triage: null | components["schemas"]["AITriage"];
             /** Format: date-time */
             triage_applied_at: string | null;
-            /** @enum {string|null} */
-            outcome: "sent_unchanged" | "sent_edited" | "discarded" | "auto_sent" | "auto_cancelled" | null;
+            /**
+             * @description What a person did with it; ignored is a reply in their own words instead. Null for a draft an agent token sent.
+             * @enum {string|null}
+             */
+            outcome: "sent_unchanged" | "sent_edited" | "discarded" | "ignored" | "auto_sent" | "auto_cancelled" | null;
             /** @description How close the sent reply is to the draft. */
             similarity: number | null;
             /** Format: date-time */
@@ -5168,6 +5171,16 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            /** @description The workspace asked for 60 new drafts in the last hour; nothing was queued */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     discardAIDraft: {

@@ -206,6 +206,7 @@ func (w *Worker) compose(item store.Delivery, from mail.Address, copies []string
 		ReplyToName: item.SenderName,
 		ToName:      item.ContactName, ToAddress: item.ContactEmail, Cc: copies, Subject: item.Subject, Body: item.Body,
 		MessageID: item.EmailMessageID, InReplyTo: item.InReplyTo, References: item.References, Date: w.options.Now(), Opening: item.Opening,
+		AutoReplied: item.AutoReplied,
 	})
 }
 

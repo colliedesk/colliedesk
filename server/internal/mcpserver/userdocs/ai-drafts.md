@@ -25,11 +25,15 @@ Open a conversation. Under the timeline, **AI draft** shows:
 
 **Send** sends the reply as it is. **Edit** changes it first. **Discard** throws it away. **Apply**
 adds the suggested tags and sets the priority; undo them like any other change. **Write a new draft**
-or **Ask AI for a draft** asks again, for example after you published a missing article.
+or **Ask AI for a draft** asks again, for example after you published a missing article (60 times an
+hour per workspace at most).
 
 A draft is never written from: private notes, unpublished or trashed articles, articles you excluded
 from AI ([knowledge base](knowledge-base.md)), another workspace's data. Customer names, emails,
 companies and long numbers from past conversations are masked before a model reads them.
+
+A draft whose reply holds a link or an email address that no source contains is never rated "From your
+knowledge base" either.
 
 The risks that keep a draft from "From your knowledge base": a refund or an exception, the customer's
 own account or order, account access or security, a legal matter or formal complaint, an upset
@@ -44,13 +48,17 @@ when all of these hold:
 2. the knowledge base article it rests on has a record: at least **10** of its drafts were reviewed by a
    person (sent or discarded), and at least **90 %** of those were sent with small changes at most
    (the sent reply shares 85 % of its words, in order, with the draft). Both numbers are settings;
-3. the newest public message is still the customer's.
+3. the newest public message is still the customer's, the conversation is open, and that message is
+   email that passed DMARC at your mail relay. Web form messages and mail that failed or skipped the
+   check are never answered on their own: anyone can type an address into a form or forge a From line.
 
 It waits **5 minutes** first (a setting). The card shows **Sends on its own at …** with **Stop**, which
 keeps it as a draft for a person. A reply from anyone, a new message from the customer, or turning
 auto-answer off stops it too. A reply sent on its own says **Answered by AI on its own** on the
 timeline, and the conversation moves to **Pending**. Answers sent on their own never count toward a
-topic's record, so auto-answer cannot earn its own trust.
+topic's record, so auto-answer cannot earn its own trust, and neither do replies an AI agent sends
+through MCP. A reply a person writes in their own words while a draft was ready counts as a miss for
+that draft's article, as a discard does.
 
 **Settings → AI drafts** lists each article's record (reviewed, sent as drafted, earned or not) and the
 last 30 days: drafts, how many were sent unchanged, edited or discarded, sent on their own, and tokens.

@@ -165,7 +165,9 @@ type API struct {
 	providerChecks *webFormLimiter
 	// problemReports limits the problem reports one agent may file per hour.
 	problemReports *webFormLimiter
-	polar          *polar.Client
+	// aiDraftRequests limits the new AI drafts one workspace may ask for per hour: each costs a model call.
+	aiDraftRequests *webFormLimiter
+	polar           *polar.Client
 	// resend verifies sending domains through the provider; nil when RESEND_API_KEY is not set.
 	resend   *resend.Client
 	founding foundingState
@@ -194,6 +196,10 @@ type Server struct {
 	http.Handler
 	api *API
 }
+
+// AIStore is the store the AI draft worker must use: the API's own, so an answer sent on its own
+// follows the same outbound policy, plan limits and clock as a reply a person sends.
+func (s *Server) AIStore() *store.Store { return s.api.store }
 
 // RefreshFounding counts the Founding slots at Polar and closes Founding when they are used up. It
 // does nothing when billing is off.
@@ -224,6 +230,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		domainChecks:    newWindowLimiter(tokenDomainChecksPerHour, webFormMaxKeys, time.Hour),
 		providerChecks:  newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
 		problemReports:  newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
+		aiDraftRequests: newWindowLimiter(aiDraftRequestsPerHour, webFormMaxKeys, time.Hour),
 		helpCenterPages: newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
 		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()).WithAI(config.AI)}

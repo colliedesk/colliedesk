@@ -1017,6 +1017,11 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+        '429':
+          description: The workspace asked for 60 new drafts in the last hour; nothing was queued
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/conversations/{id}/ai-draft/{draftId}/discard:
     parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/AIDraftID'}]
     post:
@@ -5297,7 +5302,7 @@ components:
             - {type: 'null'}
             - {$ref: '#/components/schemas/AITriage'}
         triage_applied_at: {type: [string, 'null'], format: date-time}
-        outcome: {type: [string, 'null'], enum: [sent_unchanged, sent_edited, discarded, auto_sent, auto_cancelled, null]}
+        outcome: {type: [string, 'null'], enum: [sent_unchanged, sent_edited, discarded, ignored, auto_sent, auto_cancelled, null], description: 'What a person did with it; ignored is a reply in their own words instead. Null for a draft an agent token sent.'}
         similarity: {type: [number, 'null'], minimum: 0, maximum: 1, description: How close the sent reply is to the draft.}
         auto_send_at: {type: [string, 'null'], format: date-time}
         error_code: {type: [string, 'null'], description: 'The last failure: a provider error code (auth, rate_limited, ...), invalid_answer or refused.'}

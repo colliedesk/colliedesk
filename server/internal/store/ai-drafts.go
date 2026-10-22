@@ -152,11 +152,12 @@ func (s *Store) UpdateAISettings(ctx context.Context, workspaceID, agentID strin
 
 // supersedeAIDrafts retires the conversation's drafts that are still waiting for someone: a newer one
 // replaces them. A scheduled answer is stopped, so it never goes out after the customer wrote again or
-// a person replied.
-func supersedeAIDrafts(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) error {
+// a person replied. ignored says a person answered in their own words: a ready draft they passed over
+// counts against its topic, as a discarded one does.
+func supersedeAIDrafts(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, ignored bool) error {
 	_, err := tx.Exec(ctx, `UPDATE ai_drafts SET status=CASE WHEN status='scheduled' THEN 'cancelled' ELSE 'superseded' END,
-			outcome=CASE WHEN status='scheduled' THEN 'auto_cancelled' ELSE outcome END
-		WHERE workspace_id=$1 AND conversation_id=$2 AND status IN ('queued','ready','scheduled')`, workspaceID, conversationID)
+			outcome=CASE WHEN status='scheduled' THEN 'auto_cancelled' WHEN status='ready' AND $3 THEN 'ignored' ELSE outcome END
+		WHERE workspace_id=$1 AND conversation_id=$2 AND status IN ('queued','ready','scheduled')`, workspaceID, conversationID, ignored)
 	if err != nil {
 		return fmt.Errorf("supersede AI drafts: %w", err)
 	}
@@ -173,7 +174,7 @@ func (s *Store) queueAIDraft(ctx context.Context, tx pgx.Tx, workspaceID, conver
 	if err != nil || !settings.DraftsEnabled {
 		return err
 	}
-	if err := supersedeAIDrafts(ctx, tx, workspaceID, conversationID); err != nil {
+	if err := supersedeAIDrafts(ctx, tx, workspaceID, conversationID, false); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO ai_drafts(workspace_id,conversation_id,message_id) VALUES($1,$2,$3)`, workspaceID, conversationID, messageID); err != nil {
@@ -203,7 +204,7 @@ func (s *Store) RequestAIDraft(ctx context.Context, workspaceID, conversationID,
 		if !exists {
 			return domain.AIDraft{}, domain.ErrAIDraftNotFound
 		}
-		if err := supersedeAIDrafts(ctx, tx, workspaceID, conversationID); err != nil {
+		if err := supersedeAIDrafts(ctx, tx, workspaceID, conversationID, false); err != nil {
 			return domain.AIDraft{}, err
 		}
 		var id string
@@ -318,10 +319,13 @@ func (s *Store) ApplyAITriage(ctx context.Context, workspaceID, conversationID, 
 }
 
 // recordAIDraftUse links a reply to the draft it came from and records how much the person changed
-// it. Any other reply by a person answers the customer, so the conversation's open drafts are retired.
-func recordAIDraftUse(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID, draftID, sent string, automatic bool) error {
+// it. Any other reply answers the customer, so the conversation's open drafts are retired. Only what a
+// person does counts toward a topic's record: a reply an agent token sends records no outcome.
+func recordAIDraftUse(ctx context.Context, tx pgx.Tx, workspaceID, conversationID, messageID, sent string, actor Actor) error {
+	draftID, automatic := actor.AIDraftID, actor.AutoAnswer
+	person := actor.TokenID == "" && actor.AgentID != "" && !automatic
 	if draftID == "" {
-		return supersedeAIDrafts(ctx, tx, workspaceID, conversationID)
+		return supersedeAIDrafts(ctx, tx, workspaceID, conversationID, person)
 	}
 	var body *string
 	var status string
@@ -336,10 +340,13 @@ func recordAIDraftUse(ctx context.Context, tx pgx.Tx, workspaceID, conversationI
 		return domain.ErrAIDraftState
 	}
 	similarity := domain.ReplySimilarity(*body, sent)
-	status, outcome := domain.AIDraftUsed, domain.AIOutcomeSentEdited
-	if automatic {
+	status, outcome := domain.AIDraftUsed, any(domain.AIOutcomeSentEdited)
+	switch {
+	case automatic:
 		status, outcome = domain.AIDraftAutoSent, domain.AIOutcomeAutoSent
-	} else if similarity >= 0.999 {
+	case !person:
+		outcome = nil
+	case similarity >= 0.999:
 		outcome = domain.AIOutcomeSentUnchanged
 	}
 	if _, err := tx.Exec(ctx, `UPDATE messages SET ai_draft_id=$3 WHERE workspace_id=$1 AND id=$2`, workspaceID, messageID, draftID); err != nil {
@@ -389,7 +396,7 @@ const aiTopicRecordQuery = `SELECT topic_article_id,
 		count(*)::int AS reviewed,
 		(count(*) FILTER (WHERE outcome IN ('sent_unchanged','sent_edited') AND similarity >= ` + aiAcceptedSimilaritySQL + `))::int AS accepted
 	FROM ai_drafts WHERE workspace_id=$1 AND confidence='high' AND topic_article_id IS NOT NULL
-		AND outcome IN ('sent_unchanged','sent_edited','discarded')
+		AND outcome IN ('sent_unchanged','sent_edited','discarded','ignored')
 	GROUP BY topic_article_id`
 
 // aiAcceptedSimilaritySQL is domain.AIAcceptedSimilarity written into the query.
@@ -401,7 +408,8 @@ type AIUsageSummary struct {
 	Calls        int   `json:"calls"`
 	InputTokens  int64 `json:"input_tokens"`
 	OutputTokens int64 `json:"output_tokens"`
-	// What happened to the drafts: sent by a person unchanged or edited, discarded, sent on their own.
+	// What happened to the drafts: sent by a person unchanged or edited, discarded or passed over for
+	// a reply in the person's own words, sent on their own.
 	SentUnchanged int `json:"sent_unchanged"`
 	SentEdited    int `json:"sent_edited"`
 	Discarded     int `json:"discarded"`
@@ -419,7 +427,7 @@ func (s *Store) AIUsageSummary(ctx context.Context, workspaceID string, since ti
 		}
 		if err := tx.QueryRow(ctx, `SELECT count(*)::int,
 				(count(*) FILTER (WHERE outcome='sent_unchanged'))::int, (count(*) FILTER (WHERE outcome='sent_edited'))::int,
-				(count(*) FILTER (WHERE outcome='discarded'))::int, (count(*) FILTER (WHERE outcome='auto_sent'))::int
+				(count(*) FILTER (WHERE outcome IN ('discarded','ignored')))::int, (count(*) FILTER (WHERE outcome='auto_sent'))::int
 			FROM ai_drafts WHERE workspace_id=$1 AND created_at>=$2 AND ready_at IS NOT NULL`, workspaceID, since).Scan(&summary.Drafts,
 			&summary.SentUnchanged, &summary.SentEdited, &summary.Discarded, &summary.AutoSent); err != nil {
 			return AIUsageSummary{}, fmt.Errorf("count AI drafts: %w", err)

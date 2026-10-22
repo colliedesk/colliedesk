@@ -87,10 +87,16 @@ func (s *Store) AIDraftWorkspacesDue(ctx context.Context) ([]string, error) {
 func (s *Store) ClaimAIDraft(ctx context.Context, workspaceID string, lease time.Duration) (*AIDraftJob, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (*AIDraftJob, error) {
 		job := AIDraftJob{WorkspaceID: workspaceID}
+		// A draft that used its attempts (a worker that died mid-call, an answer that cannot be stored)
+		// fails instead of being claimed again: every claim may cost a call to the provider.
+		if _, err := tx.Exec(ctx, `UPDATE ai_drafts SET status='failed',error_code=COALESCE(error_code,'too_many_attempts')
+			WHERE workspace_id=$1 AND status='queued' AND attempts>=$2 AND next_attempt_at<=now()`, workspaceID, aiDraftMaxAttempts); err != nil {
+			return nil, fmt.Errorf("fail exhausted AI drafts: %w", err)
+		}
 		err := tx.QueryRow(ctx, `UPDATE ai_drafts SET attempts=attempts+1,next_attempt_at=now()+$2::interval WHERE id=(
-				SELECT id FROM ai_drafts WHERE workspace_id=$1 AND status='queued' AND next_attempt_at<=now()
+				SELECT id FROM ai_drafts WHERE workspace_id=$1 AND status='queued' AND next_attempt_at<=now() AND attempts<$3
 				ORDER BY next_attempt_at, created_at LIMIT 1 FOR UPDATE SKIP LOCKED)
-			RETURNING id::text,conversation_id::text,attempts`, workspaceID, lease.String()).Scan(&job.DraftID, &job.ConversationID, &job.Attempt)
+			RETURNING id::text,conversation_id::text,attempts`, workspaceID, lease.String(), aiDraftMaxAttempts).Scan(&job.DraftID, &job.ConversationID, &job.Attempt)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
@@ -161,7 +167,9 @@ func aiDraftQuery(subject string, turns []AIDraftTurn) string {
 // FinishAIDraft writes the model's draft. A draft retired while the model wrote it (the customer wrote
 // again) keeps its status. A high-confidence answer whose topic has earned it is scheduled to send on
 // its own after the workspace's delay, unless a person replied meanwhile.
-func (s *Store) FinishAIDraft(ctx context.Context, workspaceID, draftID string, result domain.AIDraftResult) (domain.AIDraft, error) {
+// attempt fences the write: a worker whose lease ran out and whose draft another worker claimed again
+// writes nothing (domain.ErrAIDraftNotFound).
+func (s *Store) FinishAIDraft(ctx context.Context, workspaceID, draftID string, attempt int, result domain.AIDraftResult) (domain.AIDraft, error) {
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.AIDraft, error) {
 		var conversationID string
 		var triage any
@@ -175,9 +183,9 @@ func (s *Store) FinishAIDraft(ctx context.Context, workspaceID, draftID string, 
 		err := tx.QueryRow(ctx, `UPDATE ai_drafts SET status=CASE WHEN status='queued' THEN 'ready' ELSE status END,
 				action=$3,body=NULLIF($4,''),confidence=$5,confidence_reasons=$6,handoff_reason=NULLIF($7,''),topic_article_id=NULLIF($8,'')::uuid,
 				sources=$9,triage=$10,model=$11,error_code=NULL,ready_at=now()
-			WHERE workspace_id=$1 AND id=$2 RETURNING conversation_id::text`,
+			WHERE workspace_id=$1 AND id=$2 AND attempts=$12 AND status IN ('queued','superseded') RETURNING conversation_id::text`,
 			workspaceID, draftID, result.Action, result.Body, result.Confidence, reasons, result.HandoffReason, result.TopicArticleID,
-			domain.SourcesJSON(result.Sources), triage, result.Model).Scan(&conversationID)
+			domain.SourcesJSON(result.Sources), triage, result.Model, attempt).Scan(&conversationID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domain.AIDraft{}, domain.ErrAIDraftNotFound
 		}
@@ -210,12 +218,17 @@ func autoAnswerAllowed(ctx context.Context, tx pgx.Tx, workspaceID, draftID, sta
 	if err != nil || !settings.DraftsEnabled || !settings.AutoAnswerEnabled {
 		return 0, false, err
 	}
+	// The newest public message must be the customer's mail the draft answers, the conversation still
+	// open, and that mail authenticated (DMARC pass at the trusted relay): an answer goes out on its own
+	// only to an address that really wrote, never to one typed into a web form or forged in a From line.
 	var topic *string
 	var waiting bool
-	err = tx.QueryRow(ctx, `SELECT d.topic_article_id::text,
-			(SELECT m.kind='incoming' FROM messages m WHERE m.workspace_id=d.workspace_id AND m.conversation_id=d.conversation_id AND m.kind IN ('incoming','outgoing')
-				ORDER BY m.created_at DESC, m.id DESC LIMIT 1) IS TRUE
-		FROM ai_drafts d WHERE d.workspace_id=$1 AND d.id=$2 AND d.status=$3 AND d.action='answer' AND d.confidence='high' AND d.body IS NOT NULL`,
+	err = tx.QueryRow(ctx, `SELECT d.topic_article_id::text, COALESCE(newest.id = d.message_id AND newest.kind='incoming'
+				AND newest.email_meta->>'authentication'='pass' AND newest.email_meta->>'via' IN ('platform','workspace'), false)
+		FROM ai_drafts d JOIN conversations c ON c.workspace_id=d.workspace_id AND c.id=d.conversation_id AND c.status='open'
+		LEFT JOIN LATERAL (SELECT m.id, m.kind, m.email_meta FROM messages m WHERE m.workspace_id=d.workspace_id AND m.conversation_id=d.conversation_id
+			AND m.kind IN ('incoming','outgoing') ORDER BY m.created_at DESC, m.id DESC LIMIT 1) newest ON true
+		WHERE d.workspace_id=$1 AND d.id=$2 AND d.status=$3 AND d.action='answer' AND d.confidence='high' AND d.body IS NOT NULL`,
 		workspaceID, draftID, status).Scan(&topic, &waiting)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, false, nil
@@ -239,12 +252,12 @@ func autoAnswerAllowed(ctx context.Context, tx pgx.Tx, workspaceID, draftID, sta
 
 // FailAIDraft records a failed call. A retryable one is tried again after retryAfter until the draft
 // has used its attempts; then, or for any other error, the draft fails with the code.
-func (s *Store) FailAIDraft(ctx context.Context, workspaceID, draftID, code string, retryable bool, retryAfter time.Duration) error {
+func (s *Store) FailAIDraft(ctx context.Context, workspaceID, draftID string, attempt int, code string, retryable bool, retryAfter time.Duration) error {
 	return s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `UPDATE ai_drafts SET error_code=$3,
-				status=CASE WHEN status<>'queued' THEN status WHEN $4 AND attempts<$5 THEN 'queued' ELSE 'failed' END,
+				status=CASE WHEN $4 AND attempts<$5 THEN 'queued' ELSE 'failed' END,
 				next_attempt_at=now()+$6::interval
-			WHERE workspace_id=$1 AND id=$2`, workspaceID, draftID, code, retryable, aiDraftMaxAttempts, retryAfter.String())
+			WHERE workspace_id=$1 AND id=$2 AND status='queued' AND attempts=$7`, workspaceID, draftID, code, retryable, aiDraftMaxAttempts, retryAfter.String(), attempt)
 		if err != nil {
 			return fmt.Errorf("record failed AI draft: %w", err)
 		}
@@ -278,12 +291,28 @@ func (s *Store) RecordAIUsage(ctx context.Context, workspaceID string, usage AIU
 func (s *Store) SendDueAutoAnswers(ctx context.Context, workspaceID string) (int, error) {
 	sent := 0
 	for {
+		var draftID string
 		done, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (bool, error) {
-			var draftID, conversationID string
-			var body *string
-			err := tx.QueryRow(ctx, `SELECT id::text,conversation_id::text,body FROM ai_drafts WHERE workspace_id=$1 AND status='scheduled' AND auto_send_at<=now()
-				ORDER BY auto_send_at LIMIT 1 FOR UPDATE SKIP LOCKED`, workspaceID).Scan(&draftID, &conversationID, &body)
+			var conversationID string
+			// Pick a due answer without locking it, then take the locks in the order every reply takes
+			// them (the conversation's reply numbers, then the draft), so a person sending at the same
+			// moment waits instead of deadlocking.
+			err := tx.QueryRow(ctx, `SELECT id::text,conversation_id::text FROM ai_drafts WHERE workspace_id=$1 AND status='scheduled' AND auto_send_at<=now()
+				ORDER BY auto_send_at LIMIT 1`, workspaceID).Scan(&draftID, &conversationID)
 			if errors.Is(err, pgx.ErrNoRows) {
+				return true, nil
+			}
+			if err != nil {
+				return false, fmt.Errorf("find scheduled AI answer: %w", err)
+			}
+			if err := lockReplyNumbers(ctx, tx, workspaceID, conversationID); err != nil {
+				return false, err
+			}
+			var body *string
+			err = tx.QueryRow(ctx, `SELECT body FROM ai_drafts WHERE workspace_id=$1 AND id=$2 AND status='scheduled' AND auto_send_at<=now()
+				FOR UPDATE SKIP LOCKED`, workspaceID, draftID).Scan(&body)
+			if errors.Is(err, pgx.ErrNoRows) {
+				// Another worker has it, or it changed meanwhile: the next pass looks again.
 				return true, nil
 			}
 			if err != nil {
@@ -299,7 +328,7 @@ func (s *Store) SendDueAutoAnswers(ctx context.Context, workspaceID string) (int
 			}
 			message, err := s.createMessage(ctx, tx, workspaceID, conversationID, Actor{AIDraftID: draftID, AutoAnswer: true}, "outgoing", *body, nil, nil)
 			if err != nil {
-				return false, err
+				return false, &autoAnswerRefused{err: err}
 			}
 			if _, err := tx.Exec(ctx, `UPDATE conversations SET status='pending',updated_at=now() WHERE workspace_id=$1 AND id=$2 AND status='open'`,
 				workspaceID, message.ConversationID); err != nil {
@@ -308,8 +337,26 @@ func (s *Store) SendDueAutoAnswers(ctx context.Context, workspaceID string) (int
 			sent++
 			return false, nil
 		})
+		var refused *autoAnswerRefused
+		if errors.As(err, &refused) {
+			// The reply could not be stored (a plan limit, a channel problem): this answer goes back to a
+			// person with the reason, and the others due still go out.
+			if markErr := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+				_, err := tx.Exec(ctx, `UPDATE ai_drafts SET status='ready',auto_send_at=NULL,error_code='auto_answer_refused' WHERE workspace_id=$1 AND id=$2`, workspaceID, draftID)
+				return err
+			}); markErr != nil {
+				return sent, errors.Join(refused.err, markErr)
+			}
+			continue
+		}
 		if err != nil || done {
 			return sent, err
 		}
 	}
 }
+
+// autoAnswerRefused is a scheduled answer whose reply could not be stored.
+type autoAnswerRefused struct{ err error }
+
+func (e *autoAnswerRefused) Error() string { return "send scheduled AI answer: " + e.err.Error() }
+func (e *autoAnswerRefused) Unwrap() error { return e.err }

@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
-	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -64,8 +64,9 @@ func newAIDesk(t *testing.T, name string) aiDesk {
 	t.Helper()
 	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.AI = true })
 	fake := &aiprovider.Fake{}
+	// The worker uses the API's store, as serve does.
 	desk := aiDesk{api: api, service: service, pool: pool, fake: fake,
-		worker: &aidraft.Worker{Store: store.New(pool).WithAI(true), Provider: fake, Settings: aidraft.Settings{Model: "test-model", Effort: aiprovider.EffortLow}}}
+		worker: &aidraft.Worker{Store: api.(*httpapi.Server).AIStore(), Provider: fake, Settings: aidraft.Settings{Model: "test-model", Effort: aiprovider.EffortLow}}}
 	return desk.sibling(t, name)
 }
 
@@ -86,15 +87,23 @@ func (d aiDesk) sibling(t *testing.T, name string) aiDesk {
 
 // highAnswer is a grounded, confident answer citing S1 (the first source shown).
 func highAnswer(reply string) aiprovider.Response {
-	text := fmt.Sprintf(`{"action":"answer","reply":%q,"claims":[{"text":"refunds within 30 days","source":"S1"}],"confidence":"high","risks":[],
-		"handoff_reason":"","triage":{"tags":["billing"],"priority":"high","reason":"Refund question"}}`, reply)
+	encoded, _ := json.Marshal(reply) // JSON escapes, as a model's answer has them (\u0000, not Go's \x00)
+	text := fmt.Sprintf(`{"action":"answer","reply":%s,"claims":[{"text":"refunds within 30 days","source":"S1"}],"confidence":"high","risks":[],
+		"handoff_reason":"","triage":{"tags":["billing"],"priority":"high","reason":"Refund question"}}`, encoded)
 	usage := aiprovider.Usage{Reported: true, InputTokens: 1200, OutputTokens: 150}
 	return aiprovider.Response{Text: text, JSON: text, Stop: aiprovider.StopDone, Model: "test-model", Usage: usage, Hops: []aiprovider.Hop{{Model: "test-model", Usage: usage}}}
 }
 
+// email delivers mail that passed DMARC at the trusted relay, as most customer mail does.
 func (d aiDesk) email(t *testing.T, from, subject, body string) string {
 	t.Helper()
-	result := inboundOK(t, d.api, d.secret, mail([]string{"From: " + from, "Subject: " + subject, fmt.Sprintf("Message-ID: <%s-%s@customer.example>", strings.ReplaceAll(subject, " ", "-"), strings.Split(from, "@")[0])}, body))
+	return d.emailWith(t, "dmarc=pass", from, subject, body)
+}
+
+func (d aiDesk) emailWith(t *testing.T, authentication, from, subject, body string) string {
+	t.Helper()
+	result := inboundOK(t, d.api, d.secret, mail([]string{"From: " + from, "Subject: " + subject, fmt.Sprintf("Message-ID: <%s-%s@customer.example>", strings.ReplaceAll(subject, " ", "-"), strings.Split(from, "@")[0]),
+		"Authentication-Results: mx.example.net; " + authentication + " header.from=customer.example"}, body))
 	if result.ConversationID == nil {
 		t.Fatalf("inbound mail opened no conversation: %+v", result)
 	}
@@ -345,7 +354,7 @@ func TestAutoAnswerSendsOnlyTopicsPeopleApprovedAndAnyoneCanStopIt(t *testing.T)
 		t.Fatalf("second scheduled draft = %+v", first)
 	}
 	inboundOK(t, desk.api, desk.secret, mail([]string{"From: e@customer.example", "Subject: Re: Refund again", "Message-ID: <follow-up-e@customer.example>",
-		"In-Reply-To: <Refund-again-e@customer.example>"}, "Also, how long does it take?"))
+		"In-Reply-To: <Refund-again-e@customer.example>", "Authentication-Results: mx.example.net; dmarc=pass header.from=customer.example"}, "Also, how long does it take?"))
 	var status, outcome string
 	if err := desk.pool.QueryRow(context.Background(), `SELECT status, COALESCE(outcome,'') FROM ai_drafts WHERE id=$1`, first.ID).Scan(&status, &outcome); err != nil ||
 		status != "cancelled" || outcome != "auto_cancelled" {
@@ -375,6 +384,17 @@ func TestAutoAnswerSendsOnlyTopicsPeopleApprovedAndAnyoneCanStopIt(t *testing.T)
 	}
 	if after := desk.draft(t, desk.admin, sent).Draft; after.Status != "auto_sent" {
 		t.Errorf("sent draft status = %s, want auto_sent", after.Status)
+	}
+	// It is delivered like a person's reply: queued for the email channel, not failed.
+	var delivery, personDelivery string
+	if err := desk.pool.QueryRow(context.Background(), `SELECT o.status FROM email_outbox o JOIN messages m ON m.id=o.message_id WHERE m.conversation_id=$1 AND m.ai_draft_id IS NOT NULL`, sent).Scan(&delivery); err != nil {
+		t.Fatalf("auto answer has no outbox row: %v", err)
+	}
+	if err := desk.pool.QueryRow(context.Background(), `SELECT o.status FROM email_outbox o JOIN messages m ON m.id=o.message_id WHERE m.author_agent_id IS NOT NULL LIMIT 1`).Scan(&personDelivery); err != nil {
+		t.Fatal(err)
+	}
+	if delivery != personDelivery || delivery == "failed" {
+		t.Errorf("auto answer delivery = %s, a person's reply = %s", delivery, personDelivery)
 	}
 	if err := desk.pool.QueryRow(context.Background(), `SELECT status FROM conversations WHERE id=$1`, sent).Scan(&status); err != nil || status != "pending" {
 		t.Errorf("conversation status = %s %v, want pending", status, err)
@@ -469,5 +489,121 @@ func TestAnArticleTheSearchMissesIsChosenFromTheWorkspacesOwnArticleList(t *test
 	var features string
 	if err := desk.pool.QueryRow(context.Background(), `SELECT string_agg(feature, ',' ORDER BY id) FROM ai_usage`).Scan(&features); err != nil || features != "select,draft" {
 		t.Errorf("metered features = %q %v, want select,draft", features, err)
+	}
+}
+
+// earnTopic has people send three drafts of the refund article unchanged and turns auto-answer on
+// with no delay, so the next high-confidence refund draft is scheduled at once.
+func (d aiDesk) earnTopic(t *testing.T) {
+	t.Helper()
+	if response := request(t, d.api, http.MethodPatch, "/api/v1/workspace/ai", map[string]any{"auto_answer_enabled": true, "auto_answer_min_reviewed": 3, "auto_answer_delay_seconds": 0}, d.admin, nil); response.Code != http.StatusOK {
+		t.Fatalf("PATCH ai settings status=%d", response.Code)
+	}
+	for i := range 3 {
+		conversation := d.email(t, fmt.Sprintf("earn%d@customer.example", i), fmt.Sprintf("Earn %d", i), "Refund?")
+		d.run(t)
+		draft := d.draft(t, d.admin, conversation).Draft
+		request(t, d.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/messages", map[string]any{"kind": "outgoing", "body": *draft.Body, "ai_draft_id": draft.ID}, d.admin, nil)
+	}
+}
+
+func TestAutoAnswerNeverAnswersMailThatFailedAuthenticationOrAWebForm(t *testing.T) {
+	desk := newAIDesk(t, "Auto Unverified")
+	desk.fake.Answer = func(aiprovider.Request) (aiprovider.Response, error) {
+		return highAnswer("Annual plans are refundable within 30 days."), nil
+	}
+	desk.earnTopic(t)
+	spoofed := desk.emailWith(t, "dmarc=fail", "victim@customer.example", "Refund spoof", "Refund?")
+	desk.run(t)
+	if draft := desk.draft(t, desk.admin, spoofed).Draft; draft.Status != "ready" {
+		t.Errorf("draft for mail that failed DMARC = %s, want ready (for a person)", draft.Status)
+	}
+	trusted := desk.email(t, "real@customer.example", "Refund real", "Refund?")
+	desk.run(t)
+	if draft := desk.draft(t, desk.admin, trusted).Draft; draft.Status != "scheduled" && draft.Status != "auto_sent" {
+		t.Errorf("draft for authenticated mail = %s, want scheduled or sent", draft.Status)
+	}
+}
+
+func TestAutoAnswerSkipsAConversationAPersonResolvedAndCountsAnIgnoredDraftAgainstItsTopic(t *testing.T) {
+	desk := newAIDesk(t, "Auto Resolved")
+	desk.fake.Answer = func(aiprovider.Request) (aiprovider.Response, error) {
+		return highAnswer("Annual plans are refundable within 30 days."), nil
+	}
+	desk.earnTopic(t)
+	if response := request(t, desk.api, http.MethodPatch, "/api/v1/workspace/ai", map[string]any{"auto_answer_delay_seconds": 3600}, desk.admin, nil); response.Code != http.StatusOK {
+		t.Fatal(response.Code)
+	}
+	conversation := desk.email(t, "z@customer.example", "Refund resolved", "Refund?")
+	desk.run(t)
+	draft := desk.draft(t, desk.admin, conversation).Draft
+	if draft.Status != "scheduled" {
+		t.Fatalf("draft = %s, want scheduled", draft.Status)
+	}
+	if _, err := desk.pool.Exec(context.Background(), `UPDATE conversations SET status='resolved' WHERE id=$1`, conversation); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := desk.pool.Exec(context.Background(), `UPDATE ai_drafts SET auto_send_at=now() WHERE id=$1`, draft.ID); err != nil {
+		t.Fatal(err)
+	}
+	desk.run(t)
+	if after := desk.draft(t, desk.admin, conversation).Draft; after.Status != "ready" {
+		t.Errorf("scheduled answer on a resolved conversation = %s, want ready", after.Status)
+	}
+	// A person who answers in their own words instead of the draft counts as a draft that missed.
+	other := desk.email(t, "y@customer.example", "Refund own words", "Refund?")
+	desk.run(t)
+	_ = desk.draft(t, desk.admin, other)
+	if response := request(t, desk.api, http.MethodPost, "/api/v1/conversations/"+other+"/ai-draft/"+desk.draft(t, desk.admin, other).Draft.ID+"/cancel-auto-answer", nil, desk.admin, nil); response.Code != http.StatusOK {
+		t.Fatal(response.Code)
+	}
+	request(t, desk.api, http.MethodPost, "/api/v1/conversations/"+other+"/messages", map[string]any{"kind": "outgoing", "body": "Let me check your plan first."}, desk.admin, nil)
+	var settings struct {
+		Topics []struct {
+			Reviewed int `json:"reviewed"`
+			Accepted int `json:"accepted"`
+		} `json:"topics"`
+	}
+	decode(t, request(t, desk.api, http.MethodGet, "/api/v1/workspace/ai", nil, desk.admin, nil), &settings)
+	if len(settings.Topics) != 1 || settings.Topics[0].Reviewed != 4 || settings.Topics[0].Accepted != 3 {
+		t.Errorf("topics = %+v, want 4 reviewed (one ignored), 3 accepted", settings.Topics)
+	}
+}
+
+func TestADraftThatCannotBeStoredStopsAfterItsAttempts(t *testing.T) {
+	desk := newAIDesk(t, "Draft NUL")
+	desk.fake.Answer = func(aiprovider.Request) (aiprovider.Response, error) {
+		return highAnswer("Refundable\u0000 within 30 days."), nil
+	}
+	conversation := desk.email(t, "a@customer.example", "Refund", "Refund?")
+	desk.run(t)
+	draft := desk.draft(t, desk.admin, conversation).Draft
+	if draft.Status != "ready" || draft.Body == nil || strings.ContainsRune(*draft.Body, 0) {
+		t.Fatalf("draft with a NUL = %+v (error %v), want ready without it", draft, draft.ErrorCode)
+	}
+	// A draft that used its attempts is never claimed again, whatever its state.
+	again := desk.email(t, "b@customer.example", "Refund b", "Refund?")
+	if _, err := desk.pool.Exec(context.Background(), `UPDATE ai_drafts SET attempts=3 WHERE conversation_id=$1`, again); err != nil {
+		t.Fatal(err)
+	}
+	calls := len(desk.fake.Requests())
+	desk.run(t)
+	if after := desk.draft(t, desk.admin, again).Draft; after.Status != "failed" || len(desk.fake.Requests()) != calls {
+		t.Errorf("draft past its attempts = %s after %d more calls, want failed and no call", after.Status, len(desk.fake.Requests())-calls)
+	}
+}
+
+func TestAskingForNewDraftsIsRateLimited(t *testing.T) {
+	desk := newAIDesk(t, "Draft Limit")
+	conversation := desk.email(t, "a@customer.example", "Refund", "Refund?")
+	limited := false
+	for range 61 {
+		if response := request(t, desk.api, http.MethodPost, "/api/v1/conversations/"+conversation+"/ai-draft", nil, desk.admin, nil); response.Code == http.StatusTooManyRequests {
+			limited = true
+			break
+		}
+	}
+	if !limited {
+		t.Error("61 requests for a new draft in a row were all accepted")
 	}
 }

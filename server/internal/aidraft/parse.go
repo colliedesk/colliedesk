@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -34,7 +35,32 @@ const (
 	ReasonUnknownSource = "unknown_source"
 	ReasonNotAnAnswer   = "not_an_answer"
 	ReasonHandoff       = "handoff"
+	// ReasonUnsourcedLink is a link or an email address in the reply that no source shown contains:
+	// the model was told to use only the sources, so it came from the customer's text or nowhere.
+	ReasonUnsourcedLink = "unsourced_link"
 )
+
+// linkPattern finds web addresses and email addresses in a reply.
+var linkPattern = regexp.MustCompile(`(?i)\bhttps?://[^\s<>()\[\]"']+|\bwww\.[^\s<>()\[\]"']+|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}`)
+
+// unsourcedLinks returns the links and addresses of the reply that appear in no source.
+func unsourcedLinks(reply string, docs []store.AIRetrievedDoc) []string {
+	var missing []string
+	for _, link := range linkPattern.FindAllString(reply, -1) {
+		link = strings.TrimRight(link, ".,;:!?")
+		found := false
+		for _, doc := range docs {
+			if strings.Contains(strings.ToLower(doc.Title+"\n"+doc.Text), strings.ToLower(link)) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			missing = append(missing, link)
+		}
+	}
+	return missing
+}
 
 // Risks the model is asked to flag. Any of them keeps a draft away from auto-answer.
 var Risks = []string{
@@ -118,7 +144,9 @@ func Parse(text string, docs []store.AIRetrievedDoc, tags []string) (Result, err
 	if err := json.Unmarshal([]byte(text), &in); err != nil {
 		return Result{}, fmt.Errorf("aidraft: the answer is not JSON: %w", err)
 	}
-	result := Result{Action: in.Action, Body: strings.TrimSpace(in.Reply), HandoffReason: strings.TrimSpace(in.HandoffReason)}
+	// PostgreSQL text cannot hold NUL; a model that writes one would otherwise fail every attempt.
+	clean := func(text string) string { return strings.TrimSpace(strings.ReplaceAll(text, "\x00", "")) }
+	result := Result{Action: in.Action, Body: clean(in.Reply), HandoffReason: clean(in.HandoffReason)}
 	switch in.Action {
 	case ActionAnswer, ActionClarify:
 		if result.Body == "" {
@@ -173,6 +201,9 @@ func Parse(text string, docs []store.AIRetrievedDoc, tags []string) (Result, err
 	if !kbCited {
 		add(ReasonNoKBSource)
 	}
+	if len(unsourcedLinks(result.Body, docs)) > 0 {
+		add(ReasonUnsourcedLink)
+	}
 	for _, risk := range in.Risks {
 		if slices.Contains(Risks, risk) {
 			add("risk:" + risk)
@@ -203,7 +234,7 @@ func cleanTriage(in *struct {
 	if in == nil {
 		return nil
 	}
-	out := &Triage{Tags: []string{}, Reason: strings.TrimSpace(in.Reason)}
+	out := &Triage{Tags: []string{}, Reason: strings.TrimSpace(strings.ReplaceAll(in.Reason, "\x00", ""))}
 	for _, name := range in.Tags {
 		for _, tag := range tags {
 			if strings.EqualFold(strings.TrimSpace(name), tag) && !slices.Contains(out.Tags, tag) {

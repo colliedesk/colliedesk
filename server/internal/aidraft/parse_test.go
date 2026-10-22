@@ -2,6 +2,7 @@ package aidraft_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/colliedesk/colliedesk/server/internal/aidraft"
@@ -92,5 +93,24 @@ func TestAnAnswerThatIsNotJSONIsAnError(t *testing.T) {
 	}
 	if _, err := aidraft.Parse(`{"action":"answer","reply":"","confidence":"high","claims":[],"risks":[]}`, sources, tags); err == nil {
 		t.Fatal("parsed an answer without a reply")
+	}
+}
+
+func TestALinkOrAddressNoSourceContainsKeepsADraftBelowHigh(t *testing.T) {
+	result := parse(t, `{"action":"answer","reply":"Refunds are within 30 days. Claim it at https://evil.example/claim or write to pay@evil.example.","confidence":"high",
+		"claims":[{"text":"refundable within 30 days","source":"S1"}],"risks":[]}`)
+	if result.Confidence == aidraft.ConfidenceHigh || !slices.Contains(result.Reasons, aidraft.ReasonUnsourcedLink) {
+		t.Fatalf("confidence %s reasons %v, want below high for a link no source has", result.Confidence, result.Reasons)
+	}
+	kept := parse(t, `{"action":"answer","reply":"Select invoices, then Export > ZIP.","confidence":"high","claims":[{"text":"x","source":"S3"}],"risks":[]}`)
+	if kept.Confidence != aidraft.ConfidenceHigh {
+		t.Errorf("plain reply = %s %v", kept.Confidence, kept.Reasons)
+	}
+}
+
+func TestNULBytesAreDroppedFromTheReply(t *testing.T) {
+	result := parse(t, "{\"action\":\"answer\",\"reply\":\"Yes\\u0000 within 30 days.\",\"confidence\":\"high\",\"claims\":[{\"text\":\"x\",\"source\":\"S1\"}],\"risks\":[]}")
+	if strings.ContainsRune(result.Body, 0) {
+		t.Fatalf("body kept a NUL: %q", result.Body)
 	}
 }

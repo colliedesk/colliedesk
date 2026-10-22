@@ -156,11 +156,6 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err != nil {
 		slog.Error("AI drafts are off", "reason", err.Error())
 	}
-	if ai.Enabled() {
-		worker := &aidraft.Worker{Store: store.NewWithDB(db).WithAI(true), Provider: ai.Provider, Settings: ai.Settings,
-			LogError: func(err error) { slog.Error("write AI drafts", "error", err) }}
-		go worker.Run(ctx, 2*time.Second)
-	}
 	kbVideoMaxBytes, err := kbVideoMaxBytesFromEnv(os.Getenv)
 	if err != nil {
 		return err
@@ -185,6 +180,12 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		apiConfig.AlertMailer = email.SMTPSender{Config: emailConfig.SMTP}
 	}
 	api := httpapi.New(pool, apiConfig)
+	if ai.Enabled() {
+		// The API's store: an answer sent on its own is queued for email under the same rules as a person's.
+		worker := &aidraft.Worker{Store: api.AIStore(), Provider: ai.Provider, Settings: ai.Settings, MaxPerRun: aiDraftsPerWorkspacePass,
+			LogError: func(err error) { slog.Error("write AI drafts", "error", err) }}
+		go worker.Run(ctx, 2*time.Second)
+	}
 	if billing.Enabled() {
 		go refreshFoundingAtStart(ctx, api)
 	}
@@ -211,6 +212,10 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		return nil
 	}
 }
+
+// aiDraftsPerWorkspacePass is how many drafts one workspace gets before the worker goes on to the
+// next, so a burst in one workspace does not hold up the others.
+const aiDraftsPerWorkspacePass = 5
 
 // refreshFoundingAtStart counts the Founding slots once so the state survives a restart. A failure
 // leaves the state unknown, which keeps Founding on offer; the next Founding webhook counts again.

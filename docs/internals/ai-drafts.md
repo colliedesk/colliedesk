@@ -50,15 +50,35 @@ also written in `aiTopicRecordQuery`). Answers sent on their own and stopped one
 record is people's judgement only. The check runs again when the answer is due: a topic whose record
 dropped, or a conversation someone replied to, sends nothing and the draft stays for a person.
 Turning drafts or auto-answer off returns every scheduled answer to `ready`. Inbound mail marked
-`Auto-Submitted` is dropped before it is stored, so auto-answer cannot loop with an autoresponder.
+`Auto-Submitted` is dropped before it is stored, and an answer sent on its own carries
+`Auto-Submitted: auto-replied`, so auto-answer cannot loop with an autoresponder.
+
+Auto-answer only answers the customer message the draft was written for, on an open conversation,
+when that message is email that passed DMARC at the trusted relay (`email_meta.authentication='pass'`,
+via the platform or the workspace's own channel). The confidence gate rests partly on what the model
+says about itself, so a customer's text could try to talk it up; the address check keeps such a draft
+from ever going out on its own to a typed or forged address, and a link or email address in a reply that
+no source contains keeps it below high. The worker sends with the API's own store (`Server.AIStore`), so
+an answer follows the same outbound policy and plan limits as a person's reply; a refused one returns to
+a person with `error_code` `auto_answer_refused` and the others still go. It takes the conversation's
+reply-number lock before the draft's row, in the same order as a person's reply, so the two never
+deadlock.
+
+A draft that a person passed over for a reply in their own words gets the outcome `ignored`, which
+counts against its topic like a discard. A reply an agent token sends from a draft records no outcome:
+the record is people's judgement only.
 
 ## Failures and metering
 
 One provider call is one `ai_usage` row per model that ran (a fallback bills two), with the error code
 when it failed; tokens are NULL when the provider did not report them. A retryable error (rate limit,
-overload, timeout, server error) or an answer that is not the JSON asked for is tried again after 30 s
-times the attempt, three attempts at most; any other error fails the draft with its code, and a person
-can ask again.
+overload, timeout, server error), an answer that is not the JSON asked for, or a failure to store the
+result is tried again after 30 s times the attempt, three attempts at most: a claim never takes a draft
+that used its attempts, and fails it instead. Writes are fenced by the attempt, so a worker whose lease
+ran out writes nothing over the next one's result. The lease (4 minutes) is longer than the chooser's
+and the draft's timeouts together. Each workspace gets five drafts per pass before the next one's turn,
+and a workspace may ask for 60 new drafts an hour by hand or through an agent token. A spending cap per
+workspace is not built yet: it waits for the decision on the price of hosted AI usage.
 
 ## Measuring
 

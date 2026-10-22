@@ -48,8 +48,9 @@ CREATE TABLE ai_drafts (
     triage_applied_by_agent_id uuid,
     model text,
     error_code text,
-    -- What a person did with it: used (sent, see similarity), discarded, cancelled a scheduled answer.
-    outcome text CHECK (outcome IN ('sent_unchanged', 'sent_edited', 'discarded', 'auto_sent', 'auto_cancelled')),
+    -- What a person did with it: sent it (see similarity), discarded it, answered in their own words
+    -- instead (ignored), or what auto-answer did. A reply sent by an agent token records none.
+    outcome text CHECK (outcome IN ('sent_unchanged', 'sent_edited', 'discarded', 'ignored', 'auto_sent', 'auto_cancelled')),
     -- How close the sent reply is to the draft, 0 to 1.
     similarity real CHECK (similarity BETWEEN 0 AND 1),
     decided_by_agent_id uuid,

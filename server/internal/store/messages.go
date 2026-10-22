@@ -195,7 +195,7 @@ func (s *Store) createMessage(ctx context.Context, tx pgx.Tx, workspaceID, conve
 		if err := s.enqueueReply(ctx, tx, workspaceID, conversationID, messageID, cc); err != nil {
 			return domain.Message{}, err
 		}
-		if err := recordAIDraftUse(ctx, tx, workspaceID, conversationID, messageID, actor.AIDraftID, body, actor.AutoAnswer); err != nil {
+		if err := recordAIDraftUse(ctx, tx, workspaceID, conversationID, messageID, body, actor); err != nil {
 			return domain.Message{}, err
 		}
 	}
