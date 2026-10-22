@@ -56,10 +56,7 @@ func seedAIRetrievalBudget(t *testing.T, pool *pgxpool.Pool, workspaceName strin
 // with more resolved conversations than the search window and the knowledge base at its cap, in two
 // workspaces, with 16 words of which two match every text or half of them.
 func TestAIRetrievalLatencyBudget(t *testing.T) {
-	probe := time.Now()
 	_, pool, _, _ := sharedKBBudget(t)
-	t.Logf("PROBE start=%s shared=%s", probe.Format(time.RFC3339Nano), time.Since(probe))
-	defer func() { t.Errorf("PROBE end=%s total=%s", time.Now().Format(time.RFC3339Nano), time.Since(probe)) }()
 	started := time.Now()
 	seedAIRetrievalBudget(t, pool, "KB Budget A", 5200)
 	seedAIRetrievalBudget(t, pool, "KB Budget B", 300)
