@@ -37,14 +37,14 @@ test('a ready draft shows what to check, what is missing and its sources, and go
   const onUse = vi.fn();
   render(wrap(<AIDraftPanel conversationId={conversation} agentId={agent} hasText onUse={onUse} onClose={vi.fn()} />));
   expect(await screen.findByText('Hi Ada, open tray two.')).toBeInTheDocument();
-  expect(screen.getByRole('note')).toHaveTextContent('Check before sending');
-  expect(screen.getByRole('note')).toHaveTextContent('grace@other.example');
+  expect(screen.getByRole('alert')).toHaveTextContent('Check before sending');
+  expect(screen.getByRole('alert')).toHaveTextContent('grace@other.example');
   expect(screen.getByText(/Which printer model\?/)).toBeInTheDocument();
   expect(screen.getByRole('link', { name: /Printer paper jams/ })).toHaveAttribute('href', `/knowledge/articles/${article}`);
   fireEvent.click(screen.getByRole('button', { name: 'Insert below' }));
-  expect(onUse).toHaveBeenCalledWith('Hi Ada, open tray two.', 'below', draft().id);
+  expect(onUse).toHaveBeenCalledWith('Hi Ada, open tray two.', 'below', draft().id, ['grace@other.example']);
   fireEvent.click(screen.getByRole('button', { name: 'Replace' }));
-  expect(onUse).toHaveBeenLastCalledWith('Hi Ada, open tray two.', 'replace', draft().id);
+  expect(onUse).toHaveBeenLastCalledWith('Hi Ada, open tray two.', 'replace', draft().id, ['grace@other.example']);
 });
 
 test('asking for a draft sends the prompt and shows it being written until it is ready', async () => {
@@ -82,9 +82,11 @@ test('the reply box offers Draft with AI only where drafts are on, and a reply f
   const { rerender } = render(wrap(<ReplyComposer onSubmit={onSubmit} />));
   expect(screen.queryByRole('button', { name: 'Draft with AI' })).not.toBeInTheDocument();
   rerender(wrap(<ReplyComposer onSubmit={onSubmit} aiDraftsFor={conversation} agentId={agent} />));
-  fireEvent.click(screen.getByRole('button', { name: 'Draft with AI' }));
+  fireEvent.click(screen.getByRole('button', { name: /^Draft with AI/ }));
   fireEvent.click(await screen.findByRole('button', { name: 'Use draft' }));
   expect(screen.getByLabelText('Message body')).toHaveValue('Hi Ada, open tray two.');
+  // What to check stays above the box until the reply is sent.
+  expect(screen.getByRole('alert')).toHaveTextContent('grace@other.example');
   fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Hi Ada, open tray two please.' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
   expect(onSubmit).toHaveBeenCalledWith('outgoing', 'Hi Ada, open tray two please.', [], [], undefined, draft().id);
@@ -95,7 +97,7 @@ test('a reply whose draft is gone meanwhile is sent without it', async () => {
   const { ConflictError } = await import('../../api/client');
   const onSubmit = vi.fn().mockRejectedValueOnce(new ConflictError('gone', { code: 'ai_draft_not_ready' })).mockResolvedValue(undefined);
   render(wrap(<ReplyComposer onSubmit={onSubmit} aiDraftsFor={conversation} agentId={agent} />));
-  fireEvent.click(screen.getByRole('button', { name: 'Draft with AI' }));
+  fireEvent.click(screen.getByRole('button', { name: /^Draft with AI/ }));
   fireEvent.click(await screen.findByRole('button', { name: 'Use draft' }));
   fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
   await vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
@@ -119,4 +121,68 @@ test('a draft stopped because the feature was turned off says why', async () => 
   serve((url) => (url.includes(stopped.id) ? stopped : { items: [{ ...stopped, status: 'queued' }] }));
   render(<QueryClientProvider client={client}><AIDraftPanel conversationId={conversation} agentId={agent} hasText={false} onUse={vi.fn()} onClose={vi.fn()} /></QueryClientProvider>);
   expect(await screen.findByRole('alert')).toHaveTextContent('Reply drafts were turned off');
+});
+
+test('a draft whose reading fails stops asking instead of asking in a loop', async () => {
+  const fetch = serve((url) => (url.includes('?wait=') || url.endsWith(draft().id)
+    ? new Response(JSON.stringify({ error: { code: 'internal', message: 'boom' } }), { status: 500 })
+    : { items: [draft({ status: 'running', text: null })] }));
+  render(wrap(<AIDraftPanel conversationId={conversation} agentId={agent} hasText={false} onUse={vi.fn()} onClose={vi.fn()} />));
+  await screen.findByRole('status');
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  const reads = fetch.mock.calls.filter(([url]) => String(url).includes(draft().id)).length;
+  expect(reads).toBeLessThanOrEqual(2);
+  expect(await screen.findByRole('alert')).toHaveTextContent('The draft could not be loaded');
+});
+
+test('the button of the closed panel says a draft is ready', async () => {
+  serve(() => ({ items: [draft()] }));
+  render(wrap(<ReplyComposer onSubmit={vi.fn()} aiDraftsFor={conversation} agentId={agent} />));
+  expect(await screen.findByRole('button', { name: /^Draft with AI,\s*Draft ready$/ })).toBeInTheDocument();
+});
+
+test('the button says nothing about a draft once it is in the box, and follows a draft that became ready', async () => {
+  let ready = false;
+  serve((url) => (url.includes('?wait=') ? (ready = true, draft()) : { items: [ready ? draft() : draft({ status: 'running', text: null })] }));
+  render(wrap(<ReplyComposer onSubmit={vi.fn()} aiDraftsFor={conversation} agentId={agent} />));
+  fireEvent.click(await screen.findByRole('button', { name: /^Draft with AI/ }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Use draft' }));
+  expect(screen.getByRole('button', { name: 'Draft with AI' })).toBeInTheDocument();
+});
+
+test('a draft that failed for its key offers an admin the AI settings, and Try again asks with the same prompt', async () => {
+  const fetch = serve((url, init) => init?.method === 'POST'
+    ? draft({ status: 'queued', text: null, prompt: 'Offer a refund' })
+    : url.includes('?wait=') ? draft({ status: 'failed', text: null, error_code: 'auth', prompt: 'Offer a refund' }) : { items: [] });
+  render(wrap(<AIDraftPanel conversationId={conversation} agentId={agent} hasText={false} canManage onUse={vi.fn()} onClose={vi.fn()} />));
+  fireEvent.change(await screen.findByLabelText('What should the reply say? (optional)'), { target: { value: 'Offer a refund' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Write draft' }));
+  expect(await screen.findByRole('link', { name: 'Open AI settings' })).toHaveAttribute('href', '/settings/ai');
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  await vi.waitFor(() => expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2));
+  const posts = fetch.mock.calls.filter(([, init]) => init?.method === 'POST');
+  expect(JSON.parse(String(posts[1][1]?.body))).toEqual({ prompt: 'Offer a refund' });
+});
+
+test('while a draft is written the button says so and keeps the panel open', async () => {
+  serve((url, init) => init?.method === 'POST' ? draft({ status: 'queued', text: null })
+    : url.includes('?wait=') ? new Promise<Response>(() => {}) : { items: [] });
+  render(wrap(<ReplyComposer onSubmit={vi.fn()} aiDraftsFor={conversation} agentId={agent} />));
+  fireEvent.click(screen.getByRole('button', { name: /^Draft with AI/ }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Write draft' }));
+  const button = await screen.findByRole('button', { name: 'Drafting…' });
+  fireEvent.click(button);
+  expect(screen.getByRole('region', { name: 'Draft with AI' })).toBeInTheDocument();
+});
+
+test('when reply drafts are off, an agent is told whom to ask and an admin gets the way to turn them on', () => {
+  const { rerender } = render(wrap(<ReplyComposer onSubmit={vi.fn()} aiDraftsOff />));
+  fireEvent.click(screen.getByRole('button', { name: /Draft with AI/ }));
+  expect(screen.getByRole('status')).toHaveTextContent('Ask an admin to turn them on in Settings → AI.');
+  rerender(wrap(<ReplyComposer onSubmit={vi.fn()} aiDraftsOff canManage />));
+  const off = screen.getByRole('link', { name: 'Draft with AI (off)' });
+  expect(off).toHaveAttribute('href', '/settings/ai');
+  expect(off).toHaveAccessibleDescription('Reply drafts are off. Turn them on in Settings → AI.');
+  // The app's own Settings link stays the only link named Settings.
+  expect(screen.queryByRole('link', { name: /Settings/ })).toBeNull();
 });

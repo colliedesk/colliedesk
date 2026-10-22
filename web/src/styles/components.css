@@ -152,6 +152,10 @@
 .message-kind { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--text-3); font-size: var(--fs-label); }
 .message-note .message-kind { color: var(--note-text); font-weight: 600; }
 .message-kind svg { width: 12px; height: 12px; }
+.ai-chip { display: inline-flex; align-items: center; gap: 2px; border-radius: 999px; background: var(--accent-soft); color: var(--text-2); padding: 0 6px; font-weight: 600; }
+.ai-off-label { margin-left: var(--space-1); color: var(--text-3); font-size: var(--fs-label); }
+/* The drafts-off state is a link that looks and sizes like the tools beside it, on one line. */
+a.saved-reply-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--control, 32px); border-radius: var(--radius); font-size: var(--fs-small); font-weight: 500; white-space: nowrap; text-decoration: none; }
 .message-meta time { color: var(--text-3); font-size: var(--fs-label); white-space: nowrap; }
 .markdown-body { line-height: 1.6; overflow-wrap: anywhere; }
 .markdown-body p + p { margin-top: var(--space-3); }
@@ -188,7 +192,7 @@
 
 /* Composer: a raised card at the foot of the thread; it turns amber while it writes a private note. */
 .composer { padding: var(--space-2) var(--space-6) var(--space-4); }
-.composer-card { max-width: 46rem; margin: 0 auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); }
+.composer-card { container-type: inline-size; max-width: 46rem; margin: 0 auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-1); box-shadow: var(--shadow-2); }
 .composer-card[data-kind="note"] { border-color: var(--note-line); background: var(--note-bg); }
 /* The textarea has no ring of its own, so the card carries the focus ring in both modes. */
 .composer-card:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
@@ -226,11 +230,26 @@
 .composer-files li button { --control: 24px; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-1); }
 .composer-files li button svg { width: 12px; height: 12px; }
 .composer-attachments-problem { flex-basis: 100%; margin: 0; border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text); padding: var(--space-2) var(--space-3); font-size: var(--fs-label); }
-.composer-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); padding: 0 var(--space-2) var(--space-2); }
+.composer-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2) var(--space-3); min-width: 0; padding: 0 var(--space-2) var(--space-2); }
+/* A narrow reply box keeps every tool on screen: the tools show their icon only (the label stays their
+   accessible name) and the shortcut hint goes. */
+@container (max-width: 40rem) {
+  .composer-actions .tool-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .composer-actions .saved-reply-button kbd, .composer-actions .composer-hint { display: none; }
+}
+.composer-warning { margin: var(--space-2) var(--space-2) 0; border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text);
+  padding: var(--space-2) var(--space-3); font-size: var(--fs-small); overflow-wrap: anywhere; }
+.composer-warning strong { font-weight: 600; }
+/* While the AI draft panel is open, the reply box stays short so the panel's buttons and Send fit. */
+.composer-card:has(.ai-draft) textarea { min-height: 3.5rem; }
 .saved-reply-button { --control: 30px; margin-right: auto; border-color: transparent; background: transparent; box-shadow: none; color: var(--text-3); padding: 0 var(--space-2); }
 .saved-reply-button:hover:not(:disabled) { color: var(--text-1); }
 .saved-reply-button svg { width: 14px; height: 14px; }
 .saved-reply-button kbd { margin-left: var(--space-1); }
+.saved-reply-button .ai-draft-badge { margin-left: var(--space-1); border-radius: 999px; background: var(--accent-soft); color: var(--text-1); padding: 0 var(--space-2); font-size: var(--fs-label); }
+@media (pointer: coarse) {
+  .saved-reply-button, .cc-button { --control: var(--touch); min-width: var(--touch); justify-content: center; }
+}
 /* Saved replies and Articles sit together on the left; the last of them pushes the rest to the right. */
 .saved-reply-button:has(+ .saved-reply-button) { margin-right: 0; }
 .saved-reply-picker { display: grid; gap: var(--space-1); margin: 0 var(--space-2) var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1); padding: var(--space-2); }

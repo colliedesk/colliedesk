@@ -64,7 +64,8 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy }: MessageIte
             ? messages.draftApproved(item.agent_token.label, sender)
             : messages.writtenByAgentToken(item.agent_token.agent_name, item.agent_token.label)}</span>}
           <span className="message-kind">{item.kind === 'note' && <LockIcon />}{kindLabel(item.kind)}</span>
-          {item.ai_draft_id && <span className="message-kind"><SparklesIcon />{messages.fromAIDraft}</span>}
+          {item.ai_draft_id && <span className="message-kind message-ai"><span className="ai-chip" aria-hidden="true"><SparklesIcon />AI</span>
+            {item.ai_draft_outcome === 'sent_edited' ? messages.fromAIDraftEdited : item.ai_draft_outcome === 'sent_unchanged' ? messages.fromAIDraftUnchanged : messages.fromAIDraft}</span>}
         </div>
         <time dateTime={item.created_at}>{formatDate(item.created_at, timezone)}</time>
       </header>

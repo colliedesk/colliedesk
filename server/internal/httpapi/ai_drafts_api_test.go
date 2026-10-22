@@ -278,7 +278,7 @@ func TestADraftEndsAsItWasUsed(t *testing.T) {
 		http.StatusConflict, "ai_draft_not_ready")
 	d.run(t)
 	sent := request(t, d.api, http.MethodPost, "/api/v1/conversations/"+d.conversationA+"/messages", map[string]any{"kind": "outgoing", "body": text, "ai_draft_id": pending.ID}, d.adminA, nil)
-	if sent.Code != http.StatusCreated || !strings.Contains(sent.Body.String(), `"ai_draft_id":"`+pending.ID+`"`) {
+	if sent.Code != http.StatusCreated || !strings.Contains(sent.Body.String(), `"ai_draft_id":"`+pending.ID+`"`) || !strings.Contains(sent.Body.String(), `"ai_draft_outcome":"sent_unchanged"`) {
 		t.Fatalf("send from the draft: %d %s", sent.Code, sent.Body.String())
 	}
 	if got, similarity := outcome(pending.ID); got != "sent_unchanged" || similarity != "1.000" {
@@ -404,5 +404,18 @@ func TestAnAgentTokensDraftNeverReplacesItsPersonsDraft(t *testing.T) {
 	kbCall(t, d.api, http.MethodPost, "/api/v1/conversations/"+d.conversationA+"/messages", map[string]any{"kind": "note", "body": "noted"}, token, http.StatusCreated, nil)
 	if got := d.get(t, d.adminA, d.conversationA, mine.ID); got.Outcome != nil {
 		t.Fatalf("the person's draft after the token's note = %+v", got)
+	}
+}
+
+func TestResolvingAConversationStopsADraftStillBeingWritten(t *testing.T) {
+	d := newDraftDesk(t)
+	pending := d.ask(t, d.adminA, d.conversationA, "")
+	kbCall(t, d.api, http.MethodPatch, "/api/v1/conversations/"+d.conversationA, map[string]any{"status": "resolved"}, d.adminA, http.StatusOK, nil)
+	d.run(t)
+	if got := d.get(t, d.adminA, d.conversationA, pending.ID); got.Status != ai.DraftCancelled {
+		t.Fatalf("draft of a resolved conversation = %+v", got)
+	}
+	if len(d.draftRequests()) != 0 {
+		t.Fatal("a draft of a resolved conversation still called the provider")
 	}
 }

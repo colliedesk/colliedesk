@@ -627,7 +627,7 @@ test('the composer says when its reply box holds a reply not sent yet, and when 
 
 const lanReply = {
   id: '99999999-9999-4999-8999-999999999999', conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: '44444444-4444-4444-8444-444444444444',
-  author_name: 'Lan', agent_token: null, ai_draft_id: null, agent_request_id: null, kind: 'outgoing' as const, body: 'Your refund left today.', body_html: null, origin: null,
+  author_name: 'Lan', agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null, kind: 'outgoing' as const, body: 'Your refund left today.', body_html: null, origin: null,
   attachments: [], cc: [], created_at: '2026-10-22T09:00:00Z', delivery: null, email: null, reply_number: 3,
 };
 

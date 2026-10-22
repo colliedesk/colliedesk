@@ -50,6 +50,7 @@ type Task struct {
 	Automatic      bool
 	Actor          Actor
 	Attempts       int
+	CreatedAt      time.Time
 }
 
 // NewTask is what Enqueue needs.

@@ -85,7 +85,7 @@ test('renders message Markdown in the timeline', () => {
     conversation_id: conversation.id,
     author_agent_id: null,
     author_name: null,
-    agent_token: null, ai_draft_id: null, agent_request_id: null,
+    agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null,
     kind: 'outgoing',
     body: 'Use the **secure link**.',
     body_html: null,
@@ -119,7 +119,7 @@ test('shows the author name and attachment download links on a timeline message'
     conversation_id: conversation.id,
     author_agent_id: null,
     author_name: 'Grace Hopper',
-    agent_token: null, ai_draft_id: null, agent_request_id: null,
+    agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null,
     kind: 'incoming',
     body: 'Logs attached.',
     body_html: null,
@@ -150,7 +150,7 @@ const imported = {
   conversation_id: conversation.id,
   author_agent_id: null,
   author_name: 'Bob Former',
-  agent_token: null, ai_draft_id: null, agent_request_id: null,
+  agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null,
   kind: 'note' as const,
   body: 'Forwarding the logs',
   body_html: '<p onclick="steal()">Forwarding the <b>logs</b><img src="https://tracker.example/p.gif"></p>',
@@ -366,7 +366,7 @@ test('a delivery notice from a retry is shown above the composer', () => {
 test('the reply box starts with the people the customer copied and sends them with the reply', () => {
   const onMessage = vi.fn();
   const timeline = [{
-    id: '33333333-3333-4333-8333-333333333333', conversation_id: conversation.id, author_agent_id: null, author_name: null, agent_token: null, ai_draft_id: null, agent_request_id: null, kind: 'incoming' as const,
+    id: '33333333-3333-4333-8333-333333333333', conversation_id: conversation.id, author_agent_id: null, author_name: null, agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null, kind: 'incoming' as const,
     body: 'Adding my manager.', body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, reply_number: null,
     email: { from: 'mai@customer.example', authentication: 'pass' as const, attachments: [], original_attachment_id: null, cc: ['manager@customer.example'] },
   }];
@@ -380,7 +380,7 @@ test('the reply box starts with the people the customer copied and sends them wi
 
 test('on the hosted cloud the reply box offers no Cc from mail the workspace posted itself', () => {
   const posted = [{
-    id: '33333333-3333-4333-8333-333333333333', conversation_id: conversation.id, author_agent_id: null, author_name: null, agent_token: null, ai_draft_id: null, agent_request_id: null, kind: 'incoming' as const,
+    id: '33333333-3333-4333-8333-333333333333', conversation_id: conversation.id, author_agent_id: null, author_name: null, agent_token: null, ai_draft_id: null, ai_draft_outcome: null, agent_request_id: null, kind: 'incoming' as const,
     body: 'Adding my manager.', body_html: null, origin: null, attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, reply_number: null,
     email: { from: 'mai@customer.example', authentication: 'pass' as const, via: 'workspace' as const, attachments: [], original_attachment_id: null, cc: ['manager@customer.example'] },
   }];

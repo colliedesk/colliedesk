@@ -451,20 +451,73 @@ func TestCallsRunningAtOnceNeverPassTheAllowance(t *testing.T) {
 	first := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
 	second := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
 	q.tick(t)
-	done, refused := 0, 0
+	// One call went out; the other waited for its hold (queued again), never a second call at once.
+	done, waiting := 0, 0
 	for _, id := range []string{first, second} {
-		switch state, code := q.state(t, id); {
-		case state == ai.TaskDone:
+		switch state, _ := q.state(t, id); state {
+		case ai.TaskDone:
 			done++
-		case state == ai.TaskFailed && code == ai.CodeAllowanceReached:
-			refused++
+		case ai.TaskQueued:
+			waiting++
 		}
 	}
-	if done != 1 || refused != 1 {
-		t.Fatalf("done %d, refused %d: two calls started together both fit an allowance that holds one", done, refused)
+	if done != 1 || waiting != 1 {
+		t.Fatalf("done %d, waiting %d: two calls started together both fit an allowance that holds one", done, waiting)
+	}
+	if n := q.count(t, `SELECT count(*) FROM ai_usage WHERE workspace_id=$1`, q.a.id); n != 1 {
+		t.Fatalf("%d calls went out", n)
 	}
 	if n := q.count(t, `SELECT count(*) FROM ai_usage WHERE workspace_id=$1 AND status='started'`, q.a.id); n != 0 {
 		t.Fatalf("%d calls still hold a reservation", n)
+	}
+}
+
+func TestATaskWaitingOnlyForAnotherCallsHoldRunsOnceItIsFree(t *testing.T) {
+	server := *testServer
+	server.Allowance = &ai.Allowance{PerWorkspace: 0.0015} // holds one call (about 1,006) at a time
+	q := newQueueEnv(t, func(config *ai.Config) { config.Server = &server })
+	q.turnOn(t, q.a, ai.SlotDraft)
+	var inFlight sync.WaitGroup
+	inFlight.Add(2)
+	q.fake.Answer = func(request aiprovider.Request) (aiprovider.Response, error) {
+		inFlight.Done()
+		waited := make(chan struct{})
+		go func() { inFlight.Wait(); close(waited) }()
+		select {
+		case <-waited:
+		case <-time.After(300 * time.Millisecond):
+		}
+		usage := aiprovider.Usage{Reported: true, InputTokens: 10, OutputTokens: 5}
+		return aiprovider.Response{Text: "ok", Stop: aiprovider.StopDone, Model: request.Model, Usage: usage, Hops: []aiprovider.Hop{{Model: request.Model, Usage: usage}}}, nil
+	}
+	first := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
+	second := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
+	q.tick(t)
+	// One ran; the other only waited on its hold: it is queued again, not failed for an allowance
+	// that still has room.
+	states := map[string]int{}
+	for _, id := range []string{first, second} {
+		state, _ := q.state(t, id)
+		states[state]++
+	}
+	if states[ai.TaskDone] != 1 || states[ai.TaskQueued] != 1 {
+		t.Fatalf("states after the first tick = %v, want one done and one queued", states)
+	}
+	q.clock.Add(10 * time.Second)
+	q.tick(t)
+	for _, id := range []string{first, second} {
+		if state, code := q.state(t, id); state != ai.TaskDone {
+			t.Fatalf("task %s = %s %s once the other call finished", id, state, code)
+		}
+	}
+	// Past what is left with nothing running, a task fails at once and says so.
+	third := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
+	if _, err := q.pool.Exec(context.Background(), `UPDATE ai_usage SET cost_micro_usd=1000 WHERE workspace_id=$1`, q.a.id); err != nil {
+		t.Fatal(err)
+	}
+	q.tick(t)
+	if state, code := q.state(t, third); state != ai.TaskFailed || code != ai.CodeAllowanceReached {
+		t.Fatalf("third = %s %s", state, code)
 	}
 }
 
@@ -537,5 +590,24 @@ func TestTheAllowanceSaysAboutHowManyDraftsAreLeft(t *testing.T) {
 	settings, _ = q.service.Settings(context.Background(), q.a.id)
 	if *settings.Allowance.DraftsLeft != (1_000_000-70)/70 {
 		t.Fatalf("drafts left after one draft = %d", *settings.Allowance.DraftsLeft)
+	}
+}
+
+func TestADraftThatCouldNeverFitWhatIsLeftIsRefusedAtOnce(t *testing.T) {
+	server := *testServer
+	// 30,000 micro-dollars: a typical draft on Sonnet holds 6,000×2 + 4,000×10 = 52,000.
+	server.Allowance = &ai.Allowance{PerWorkspace: 0.03}
+	q := newQueueEnv(t, func(config *ai.Config) { config.Server = &server })
+	q.turnOn(t, q.a, ai.SlotDraft)
+	var conversation string
+	if err := q.pool.QueryRow(context.Background(), `WITH c AS (INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Ada','ada@example.com') RETURNING id)
+		INSERT INTO conversations(workspace_id,contact_id,subject) SELECT $1,id,'Hello' FROM c RETURNING id::text`, q.a.id).Scan(&conversation); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.service.CreateDraft(context.Background(), q.a.id, q.actor(q.a), conversation, ""); !errors.Is(err, ai.ErrAllowanceReached) {
+		t.Fatalf("CreateDraft = %v, want the allowance refusal before anything is queued", err)
+	}
+	if n := q.count(t, `SELECT count(*) FROM ai_tasks WHERE workspace_id=$1`, q.a.id); n != 0 {
+		t.Fatalf("%d tasks queued", n)
 	}
 }

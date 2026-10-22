@@ -79,7 +79,7 @@ export const aiMessages = {
   slotName: { triage: 'Triage suggestions', draft: 'Reply drafts' } as Record<'triage' | 'draft', string>,
   slotHelp: {
     triage: 'When a new ticket arrives, suggests tags, priority and an assignee. An agent accepts or dismisses each one.',
-    draft: 'An agent writes a short prompt; the model drafts a reply from the ticket, matching KB articles and similar solved tickets. The agent edits and sends.',
+    draft: 'Someone on your team asks for a draft, with a short prompt if they like; the model drafts a reply from the ticket, matching KB articles and similar solved tickets. They edit it and send it.',
   } as Record<'triage' | 'draft', string>,
   statusOn: 'On',
   statusOff: 'Off',

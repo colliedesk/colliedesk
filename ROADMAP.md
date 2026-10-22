@@ -46,6 +46,8 @@ Beta starts when HC Labs announces it. Before that:
 
 ## Then: AI included
 
+- Draft replies and triage from your own past replies and knowledge base, with their sources shown
+  ([#89](https://github.com/colliedesk/colliedesk/issues/89)).
 - A backtest before you pay: how drafts would have answered your own past tickets ([#99](https://github.com/colliedesk/colliedesk/issues/99)).
 - Results page and weekly report: before and after numbers measured against your imported history
   ([#100](https://github.com/colliedesk/colliedesk/issues/100)).

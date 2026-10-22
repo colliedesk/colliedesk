@@ -3828,6 +3828,11 @@ export interface components {
              * @description The AI draft the reply was written from.
              */
             ai_draft_id: string | null;
+            /**
+             * @description Whether the reply kept the draft's words (sent_unchanged, 90 % or more) or was edited; null without a draft.
+             * @enum {string|null}
+             */
+            ai_draft_outcome: "sent_unchanged" | "sent_edited" | null;
             /** @description The replies of a conversation numbered 1, 2, 3... in the order they were stored (an imported reply gets the next number whatever its time); null for a note or a customer message. */
             reply_number: number | null;
             /** Format: uuid */

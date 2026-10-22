@@ -1,4 +1,7 @@
+import { mkdtempSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { expect, test } from '@playwright/test';
 import { colliedeskAsync, psql, servers, uniqueSuffix } from './support/cli';
@@ -43,7 +46,7 @@ test('a team that imported Freshdesk drafts a reply with AI from its own solved 
   await fake.start();
   try {
     await redeemLink(page, workspace.url);
-    const imported = await colliedeskAsync(['import', 'freshdesk', '--workspace', workspace.slug, '--domain', 'acme.freshdesk.com'],
+    const imported = await colliedeskAsync(['import', 'freshdesk', '--workspace', workspace.slug, '--domain', 'acme.freshdesk.com', '--report-dir', mkdtempSync(join(tmpdir(), 'colliedesk-drafts-report-'))],
       { tags: 'e2e', env: { ...fake.env(), FRESHDESK_API_KEY: apiKey } });
     expect(imported.status, imported.stderr).toBe(0);
     // An import queues no AI work: drafts are asked for by people.
@@ -55,17 +58,34 @@ test('a team that imported Freshdesk drafts a reply with AI from its own solved 
     const { id } = await provider.json() as { id: string };
     expect((await page.request.put(`${baseURL}/api/v1/ai/slots/draft`, { headers, data: { source: 'provider', provider_id: id, enabled: true } })).status()).toBe(200);
 
+    // Four articles with long titles: a full line of sources.
+    const collection = await (await page.request.post(`${baseURL}/api/v1/kb/collections`, { headers, data: { name: 'Shipping' } })).json() as { id: string };
+    for (const title of ['Where is my parcel from Rotterdam right now', 'Parcel delays leaving the Rotterdam depot this week',
+      'Tracking numbers for parcels shipped through Rotterdam', 'Delivery times for parcels from Rotterdam to your door']) {
+      expect((await page.request.post(`${baseURL}/api/v1/kb/articles`, { headers, data: { collection_id: collection.id, title, body_md: `${title}: it arrives the next day.`, status: 'published' } })).status()).toBe(201);
+    }
     await page.reload();
     await page.getByRole('searchbox', { name: 'Search conversations' }).fill('Rotterdam');
     await page.getByRole('button', { name: /Fixture ticket 42:/ }).click();
-    await page.getByRole('button', { name: 'Draft with AI' }).click();
+    // On a phone the panel's button is on screen without scrolling.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('button', { name: /^Draft with AI/ }).click();
     const panel = page.getByRole('region', { name: 'Draft with AI' });
+    await expect(panel.getByRole('button', { name: 'Write draft' })).toBeInViewport();
+    await page.setViewportSize({ width: 1280, height: 720 });
     await panel.getByLabel('What should the reply say? (optional)').fill('Tell them where the parcel is');
     await panel.getByRole('button', { name: 'Write draft' }).click();
     // The sources are built in the background after an import; the draft waits for nothing on screen.
     await expect(panel.getByText('Hello, your parcel left Rotterdam this morning and arrives tomorrow.')).toBeVisible({ timeout: 30_000 });
     await expect(panel.getByText(/The tracking number\./)).toBeVisible();
     await expect(panel.getByRole('link').first()).toBeVisible();
+    // On a short laptop screen the draft's buttons and Send are on screen without scrolling.
+    await expect(panel.getByRole('button', { name: 'Use draft' })).toBeInViewport();
+    await expect(page.getByRole('button', { name: 'Send reply' })).toBeInViewport();
+    expect(await panel.getByRole('link').count()).toBeGreaterThanOrEqual(4);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), 'no sideways scroll with the panel open').toBeLessThanOrEqual(1280);
+    await page.setViewportSize({ width: 1024, height: 768 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), 'no sideways scroll at 1024 px').toBeLessThanOrEqual(1024);
 
     const prompt = model.prompts.at(-1) ?? '';
     expect(prompt).toContain('Tell them where the parcel is');
