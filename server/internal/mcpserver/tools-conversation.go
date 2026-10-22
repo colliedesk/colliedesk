@@ -53,9 +53,11 @@ type conversationGetOut struct {
 	MessagesTotal        int             `json:"messages_total"`
 	MessagesShown        int             `json:"messages_shown"`
 	OlderMessagesOmitted int             `json:"older_messages_omitted"`
-	Hint                 string          `json:"hint,omitempty"`
-	Timezone             string          `json:"timezone"`
-	Detail               string          `json:"detail"`
+	// Viewers are the people and other agents who have the conversation open now.
+	Viewers  []viewerOut `json:"viewers"`
+	Hint     string      `json:"hint,omitempty"`
+	Timezone string      `json:"timezone"`
+	Detail   string      `json:"detail"`
 }
 
 func conversationGet(c *call, arguments map[string]any) (any, error) {
@@ -86,6 +88,16 @@ func conversationGet(c *call, arguments map[string]any) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	var activity restActivity
+	if err := c.get("/api/v1/inbox/activity", nil, &activity); err != nil {
+		return nil, err
+	}
+	viewers := []viewerOut{}
+	for _, item := range activity.Viewing {
+		if item.ConversationID == conversation.ID {
+			viewers = viewersOut(item.Viewers)
+		}
+	}
 	contacts, err := c.contactsByID([]string{conversation.ContactID})
 	if err != nil {
 		return nil, err
@@ -106,9 +118,15 @@ func conversationGet(c *call, arguments map[string]any) (any, error) {
 		anyCut = anyCut || wasCut
 		out.Messages = append(out.Messages, view)
 	}
+	out.Viewers = viewers
+	var hints []string
 	if anyCut || out.OlderMessagesOmitted > 0 {
-		out.Hint = `Part of this conversation was left out or cut short. Call colliedesk_conversation_get again with detail=full to read every message in full.`
+		hints = append(hints, `Part of this conversation was left out or cut short. Call colliedesk_conversation_get again with detail=full to read every message in full.`)
 	}
+	if writing := writingHint(viewers); writing != "" {
+		hints = append(hints, writing)
+	}
+	out.Hint = strings.Join(hints, " ")
 	return out, nil
 }
 

@@ -965,7 +965,7 @@ paths:
         newest first; in `updated`, conversations with a customer message in the window come first, so
         a bulk change cannot push a customer reply out of the list. Send the returned `now`
         as the next `since`. A `since` older than 10 minutes is treated as 10 minutes old; an agent who
-        was away longer reloads the inbox. A list can repeat an item from the previous call (a short lookback covers conversations that committed late), so the client removes duplicates by id (`updated` items by `id` and `updated_at`). Without `since` the lists are empty and `now` is the first cursor.
+        was away longer reloads the inbox. A list can repeat an item from the previous call (a short lookback covers conversations that committed late), so the client removes duplicates by id (`updated` items by `id` and `updated_at`). Without `since` the lists are empty and `now` is the first cursor. `viewing` is not a change list: every call, with or without `since`, says who has which conversation open now.
       parameters:
         - {name: since, in: query, schema: {type: string, format: date-time}}
       responses:
@@ -4948,9 +4948,26 @@ components:
         heartbeat_seconds: {type: integer, minimum: 1, description: Call again after this many seconds to stay listed.}
     InboxActivity:
       type: object
-      required: [now, new_conversations, assigned_to_me, updated]
+      required: [now, new_conversations, assigned_to_me, updated, viewing]
       properties:
         now: {type: string, format: date-time}
+        viewing:
+          type: array
+          maxItems: 200
+          description: >-
+            Who else has a conversation open right now, on every call (the first one included), so the
+            inbox list can mark those conversations: the same viewers `PUT
+            /api/v1/conversations/{id}/presence` answers, per conversation. The caller's own tabs are left
+            out; conversations nobody else has open are not listed.
+          items:
+            type: object
+            required: [conversation_id, viewers]
+            properties:
+              conversation_id: {type: string, format: uuid}
+              viewers:
+                type: array
+                minItems: 1
+                items: {$ref: '#/components/schemas/ConversationViewer'}
         new_conversations:
           type: array
           maxItems: 50

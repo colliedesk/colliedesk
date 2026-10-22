@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { AgentRequest, Conversation, Message, OnboardingGoal, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
+import type { AgentRequest, Conversation, ConversationViewer, Message, OnboardingGoal, SavedReply, TeamMember, Tag, TimeEntry } from '../../api/schemas';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import { BulkActionBar } from './bulk-action-bar';
 import { ConversationList } from './conversation-list';
@@ -69,6 +69,8 @@ interface InboxPageProps {
   // Reply drafts AI agents left on the selected conversation, and the conversations that have one.
   replyDrafts?: AgentRequest[];
   draftConversationIds?: ReadonlySet<string>;
+  // viewers are the others who have a conversation open now, by conversation id.
+  viewers?: ReadonlyMap<string, ConversationViewer[]>;
   onSendDraft?: (draft: AgentRequest, edit?: DraftEdit) => Promise<unknown>;
   onDiscardDraft?: (draft: AgentRequest) => Promise<unknown>;
   // Customers whose name or email matches the search, shown under the filters (contact-matches.tsx).
@@ -79,7 +81,7 @@ interface InboxPageProps {
   onboardingGoal?: OnboardingGoal | null;
 }
 
-export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation, onboardingGoal }: InboxPageProps) {
+export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation, onboardingGoal }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Clearing from the empty list returns to the Open view and puts focus back on the search box.
@@ -162,7 +164,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
           failed={failed} onRetry={onRetry} onClearFilters={clearFilters} canManage={canManage} onOpenSettings={onOpenSettings}
           checkedIds={checked} onToggle={toggle} onToggleAll={toggleAll} selectAllRef={selectAll}
           toolbar={checkedIds.length > 0 && <BulkActionBar selected={conversations.filter((item) => checked.has(item.id))} agents={agents} tags={tags} currentAgentId={currentAgentId}
-            busy={bulkBusy} onApply={(changes) => void applyBulk(changes)} onClear={() => { changeSelection(new Set()); setRefocus((count) => count + 1); }} />} draftIds={draftConversationIds}
+            busy={bulkBusy} onApply={(changes) => void applyBulk(changes)} onClear={() => { changeSelection(new Set()); setRefocus((count) => count + 1); }} />} draftIds={draftConversationIds} viewers={viewers}
           grouped={(query.sort ?? 'updated_desc') === 'updated_desc'} onboardingGoal={onboardingGoal} />
       </section>
       <div className="conversation-center panel">

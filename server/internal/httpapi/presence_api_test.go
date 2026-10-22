@@ -384,6 +384,67 @@ func TestPresenceLeaveByCookieNeedsTheOrigin(t *testing.T) {
 	}
 }
 
+type viewingActivity struct {
+	Viewing []struct {
+		ConversationID string           `json:"conversation_id"`
+		Viewers        []presenceViewer `json:"viewers"`
+	} `json:"viewing"`
+}
+
+// viewingOf polls the inbox activity, without a cursor (the first poll of a page) or with one, and
+// returns who is listed on each conversation.
+func (d presenceDesk) viewingOf(t *testing.T, token, since string) map[string]string {
+	t.Helper()
+	path := "/api/v1/inbox/activity"
+	if since != "" {
+		path += "?since=" + since
+	}
+	response := request(t, d.api, http.MethodGet, path, nil, token, nil)
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET %s status=%d body=%s", path, response.Code, response.Body.String())
+	}
+	var body viewingActivity
+	decode(t, response, &body)
+	if body.Viewing == nil {
+		t.Fatalf("activity has no viewing list: %s", response.Body.String())
+	}
+	out := map[string]string{}
+	for _, item := range body.Viewing {
+		out[item.ConversationID] = viewerSummary(item.Viewers)
+	}
+	return out
+}
+
+func TestInboxActivityListsWhoHasEachConversationOpenFromTheFirstPoll(t *testing.T) {
+	d := newPresenceDesk(t)
+	contact := create(t, d.api, d.admin, "/api/v1/contacts", map[string]any{"name": "Second", "email": "second@presence.example.com"})
+	second := create(t, d.api, d.admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Second"})
+	d.put(t, d.teammate, d.conversation, "lan-tab-one", true)
+	d.put(t, d.teammate, second, "lan-tab-two", false)
+	d.put(t, d.admin, second, "admin-tab-1", false)
+	token := issueToken(t, d.api, d.admin, "Claude Code", "read")
+	d.put(t, token.Token, d.conversation, "mcp-agent", false)
+
+	want := fmt.Sprint(map[string]string{d.conversation: "Lan writing=true; admin@presence.example.com writing=false via Claude Code", second: "Lan writing=false"})
+	for _, since := range []string{"", d.clock.Now().Add(-time.Minute).Format(time.RFC3339)} {
+		if got := fmt.Sprint(d.viewingOf(t, d.admin, since)); got != want {
+			t.Fatalf("admin (since %q) sees %s, want %s", since, got, want)
+		}
+	}
+	// Lan's own tabs are hers, never listed back to her.
+	if got := fmt.Sprint(d.viewingOf(t, d.teammate, "")); got != fmt.Sprint(map[string]string{d.conversation: "admin@presence.example.com writing=false via Claude Code", second: "admin@presence.example.com writing=false"}) {
+		t.Fatalf("Lan sees %s", got)
+	}
+	// Another workspace sees none of it, and expired rows are gone.
+	if got := d.viewingOf(t, d.other, ""); len(got) != 0 {
+		t.Fatalf("other workspace sees %v", got)
+	}
+	d.clock.set(d.clock.Now().Add(3 * time.Minute))
+	if got := d.viewingOf(t, d.admin, ""); len(got) != 0 {
+		t.Fatalf("after every row expired admin sees %v", got)
+	}
+}
+
 func TestPresenceRefusesATabThatAnnouncesTooOften(t *testing.T) {
 	d := newPresenceDesk(t)
 	start := d.clock.Now()

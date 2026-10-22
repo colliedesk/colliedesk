@@ -16,6 +16,7 @@ import { messages } from '../../messages';
 import { outboundNotice } from './outbound-notice';
 import { retryRefusalText } from './refusal-text';
 import { usePendingRequests } from '../requests/use-pending-requests';
+import { useInboxViewing } from './use-inbox-activity';
 
 // errorMessage reads the message of an API error body, when the answer is one.
 function errorMessage(result: unknown): string | undefined {
@@ -141,6 +142,8 @@ export function InboxRoute() {
   const pending = usePendingRequests().data?.items;
   const drafts = useMemo(() => (pending ?? []).filter((item) => item.kind === 'reply_draft' && item.conversation_id), [pending]);
   const draftConversationIds = useMemo(() => new Set(drafts.map((item) => item.conversation_id!)), [drafts]);
+  // Who else has which conversation open, from the activity poll the app already runs: no request of its own.
+  const viewing = useInboxViewing();
   // The poll carries no body, so the open conversation reads its drafts in full.
   const draftDetails = useQueries({ queries: drafts.filter((item) => item.conversation_id === selected?.id)
     .map((item) => ({ queryKey: ['agent-requests', 'one', item.id], queryFn: () => api.agentRequest(item.id) })) });
@@ -232,7 +235,7 @@ export function InboxRoute() {
     canManage={me.data?.agent?.role === 'admin'} onOpenSettings={(to = '/settings') => void navigate({ to })}
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })}
-    replyDrafts={selectedDrafts} draftConversationIds={draftConversationIds}
+    replyDrafts={selectedDrafts} draftConversationIds={draftConversationIds} viewers={viewing}
     onSendDraft={async (draft, edit) => {
       const outcome = await api.approveAgentRequest(draft.id, edit);
       track('agent_request_decided', { decision: 'approved' });

@@ -166,11 +166,17 @@ export const sessionListSchema = z.object({ items: z.array(sessionSchema) }) sat
 export const inviteListSchema = z.object({ items: z.array(inviteSchema) }) satisfies z.ZodType<JsonResponse<'listInvites', 200>>;
 export const inviteCreatedSchema = z.object({ invite: inviteSchema, url: z.string().url() }) satisfies z.ZodType<JsonResponse<'createInvite', 201>>;
 export const conversationPageSchema = z.object({ items: z.array(conversationSchema), page: z.number(), page_size: z.number() }) satisfies z.ZodType<Generated<'ConversationPage'>>;
+export const conversationViewerSchema = z.object({
+  agent_id: z.string().uuid(), name: z.string(), writing: z.boolean(), writing_since: z.string().datetime().nullable(), edited_at: z.string().datetime().nullable(),
+  agent_token: messageAgentTokenSchema.nullable(),
+}) satisfies z.ZodType<Generated<'ConversationViewer'>>;
+export const conversationPresenceSchema = z.object({ viewers: z.array(conversationViewerSchema), heartbeat_seconds: z.number().int().positive() }) satisfies z.ZodType<Generated<'ConversationPresence'>>;
 export const inboxActivitySchema = z.object({
   now: z.string().datetime(),
   new_conversations: z.array(z.object({ id: z.string().uuid(), subject: z.string(), contact_name: z.string(), created_at: z.string().datetime() })),
   assigned_to_me: z.array(z.object({ id: z.string().uuid(), subject: z.string(), contact_name: z.string(), assigned_at: z.string().datetime() })),
   updated: z.array(z.object({ id: z.string().uuid(), subject: z.string(), contact_name: z.string(), assignee_id: z.string().uuid().nullable(), updated_at: z.string().datetime(), incoming_at: z.string().datetime().nullable() })),
+  viewing: z.array(z.object({ conversation_id: z.string().uuid(), viewers: z.array(conversationViewerSchema) })),
 }) satisfies z.ZodType<Generated<'InboxActivity'>>;
 export const messageListSchema = z.object({ items: z.array(messageSchema) }) satisfies z.ZodType<JsonResponse<'listMessages', 200>>;
 export const contactListSchema = z.object({ items: z.array(contactSchema), has_more: z.boolean().optional() }) satisfies z.ZodType<JsonResponse<'listContacts', 200>>;
@@ -192,6 +198,7 @@ export type Attachment = Generated<'Attachment'>;
 export type ConversationOrigin = Generated<'ConversationOrigin'>;
 export type MessageOrigin = Generated<'MessageOrigin'>;
 export type TimeEntry = Generated<'TimeEntry'>;
+export type ConversationViewer = Generated<'ConversationViewer'>;
 export type WorkspaceChoice = Generated<'WorkspaceChoice'>;
 export type Conversation = Generated<'Conversation'>;
 export type Contact = Generated<'Contact'>;

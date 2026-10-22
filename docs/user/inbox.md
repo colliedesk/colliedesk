@@ -107,6 +107,18 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   allow them in the browser's site settings, then reload the page. The list refresh and the title count keep working.
 - Colliedesk does not email agents about new or assigned conversations.
 
+**See who else is on a conversation**
+- A row in the list shows the initials of the teammates who have that conversation open right now,
+  three at most and then a count. Hover the initials to read the names. **Replying** next to them
+  means one of them has a reply to the customer typed and not sent yet: open the conversation before
+  you answer, so the customer does not get two replies.
+- An AI agent working through an [agent token](sessions.md#agent-tokens) shows as the teammate it acts for,
+  "via" the token's name (for example *Lan via Claude Code*).
+- Your own tabs are never shown. The marks come with the list's regular refresh, so they can be up to
+  20 seconds late; they are there as soon as the inbox opens.
+- Only the fact that a reply is being written is shared, never its text. Private notes do not count.
+- The same list is in the API: the `viewing` field of `GET /api/v1/inbox/activity`.
+
 **Change many conversations at once**
 - Tick the box at the left of a row to select it, or tick **Select all on this page**. Ticking a box
   does not open the conversation. With the keyboard, press Tab to reach a box and Space to tick it.

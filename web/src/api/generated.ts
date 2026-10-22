@@ -485,7 +485,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description What changed in the inbox after `since`: conversations created, conversations another agent assigned to the caller, and conversations that changed in any way (a new customer message, a status, assignee, priority or tag change, a reply or note). `updated` includes the caller's own changes; only `incoming_at` marks something to announce. Each list holds at most 50 items, newest first; in `updated`, conversations with a customer message in the window come first, so a bulk change cannot push a customer reply out of the list. Send the returned `now` as the next `since`. A `since` older than 10 minutes is treated as 10 minutes old; an agent who was away longer reloads the inbox. A list can repeat an item from the previous call (a short lookback covers conversations that committed late), so the client removes duplicates by id (`updated` items by `id` and `updated_at`). Without `since` the lists are empty and `now` is the first cursor. */
+        /** @description What changed in the inbox after `since`: conversations created, conversations another agent assigned to the caller, and conversations that changed in any way (a new customer message, a status, assignee, priority or tag change, a reply or note). `updated` includes the caller's own changes; only `incoming_at` marks something to announce. Each list holds at most 50 items, newest first; in `updated`, conversations with a customer message in the window come first, so a bulk change cannot push a customer reply out of the list. Send the returned `now` as the next `since`. A `since` older than 10 minutes is treated as 10 minutes old; an agent who was away longer reloads the inbox. A list can repeat an item from the previous call (a short lookback covers conversations that committed late), so the client removes duplicates by id (`updated` items by `id` and `updated_at`). Without `since` the lists are empty and `now` is the first cursor. `viewing` is not a change list: every call, with or without `since`, says who has which conversation open now. */
         get: operations["getInboxActivity"];
         put?: never;
         post?: never;
@@ -3203,6 +3203,12 @@ export interface components {
         InboxActivity: {
             /** Format: date-time */
             now: string;
+            /** @description Who else has a conversation open right now, on every call (the first one included), so the inbox list can mark those conversations: the same viewers `PUT /api/v1/conversations/{id}/presence` answers, per conversation. The caller's own tabs are left out; conversations nobody else has open are not listed. */
+            viewing: {
+                /** Format: uuid */
+                conversation_id: string;
+                viewers: components["schemas"]["ConversationViewer"][];
+            }[];
             new_conversations: {
                 /** Format: uuid */
                 id: string;
