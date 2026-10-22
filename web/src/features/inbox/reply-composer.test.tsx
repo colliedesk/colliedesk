@@ -593,3 +593,30 @@ test('in the middle of a line the article gets lines of its own, so no word stic
   fireEvent.click(await screen.findByRole('option', { name: 'Reset your password' }));
   await waitFor(() => expect(body.value).toBe('Read this guide\nReset your password\nhttps://desk.example.com/help/acme/a/7-reset-your-password\n today.'));
 });
+
+test('the composer says when its reply box holds a reply not sent yet, and when that reply changes; a private note never counts', async () => {
+  const onReplyDraft = vi.fn();
+  const onReplyEdited = vi.fn();
+  let accept: () => void = () => {};
+  const onSubmit = vi.fn(() => new Promise<void>((resolve) => { accept = resolve; }));
+  render(<ReplyComposer onSubmit={onSubmit} onReplyDraft={onReplyDraft} onReplyEdited={onReplyEdited} />);
+  expect(onReplyDraft).toHaveBeenLastCalledWith(false);
+  const body = screen.getByLabelText('Message body');
+  fireEvent.change(body, { target: { value: 'Hi' } });
+  expect(onReplyDraft).toHaveBeenLastCalledWith(true);
+  fireEvent.change(body, { target: { value: 'Hi Mai' } });
+  expect(onReplyEdited).toHaveBeenCalledTimes(2);
+  expect(onReplyDraft).toHaveBeenCalledTimes(2);
+  // The same text as a private note is not a reply to the customer.
+  fireEvent.click(screen.getByRole('button', { name: 'Private note' }));
+  expect(onReplyDraft).toHaveBeenLastCalledWith(false);
+  fireEvent.change(body, { target: { value: 'Hi Mai, note' } });
+  expect(onReplyEdited).toHaveBeenCalledTimes(2);
+  fireEvent.click(screen.getByRole('button', { name: 'Reply' }));
+  expect(onReplyDraft).toHaveBeenLastCalledWith(true);
+  // Sent: the box is empty again.
+  fireEvent.keyDown(body, { key: 'Enter', ctrlKey: true });
+  await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+  accept();
+  await waitFor(() => expect(onReplyDraft).toHaveBeenLastCalledWith(false));
+});

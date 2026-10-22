@@ -6,6 +6,7 @@ import { InboxRoute } from './inbox-route';
 import { testRouter } from './test-router';
 
 const api = vi.hoisted(() => ({
+  announcePresence: vi.fn(async (_id: string, _body: unknown): Promise<{ viewers: unknown[]; heartbeat_seconds: number }> => ({ viewers: [], heartbeat_seconds: 5 })), leavePresence: vi.fn(async () => undefined),
   me: vi.fn(), conversations: vi.fn(), conversation: vi.fn(), agents: vi.fn(), tags: vi.fn(), messages: vi.fn(), timeEntries: vi.fn(),
   updateConversation: vi.fn(), bulkUpdateConversations: vi.fn(), createMessage: vi.fn(), createTag: vi.fn(), config: vi.fn(),
   addConversationTag: vi.fn(), removeConversationTag: vi.fn(), retryDelivery: vi.fn(),
@@ -686,4 +687,38 @@ test('New conversation takes no input until the plan and the email channel are k
   expect(within(dialog).getByLabelText('Subject')).toBeDisabled();
   expect(within(dialog).getByLabelText('Message')).toBeDisabled();
   expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled();
+});
+
+test('the open ticket is announced only after its own requests and the side lists went out, and names who else is writing', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  testRouter.params = { conversationId: alpha.id };
+  try {
+    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.conversations.mockReset();
+    api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+    api.conversation.mockReset();
+    api.conversation.mockResolvedValue(alpha);
+    api.agents.mockResolvedValue({ items: [] });
+    api.tags.mockResolvedValue({ items: [] });
+    api.messages.mockReset();
+    api.messages.mockResolvedValue({ items: [] });
+    api.timeEntries.mockResolvedValue({ items: [] });
+    api.announcePresence.mockReset();
+    api.announcePresence.mockResolvedValue({ viewers: [{ agent_id: '44444444-4444-4444-8444-444444444444', name: 'Lan', writing: true,
+      writing_since: new Date().toISOString(), edited_at: new Date().toISOString(), agent_token: null }], heartbeat_seconds: 5 });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+    expect(await screen.findByText('Lan is writing a reply')).toBeInTheDocument();
+    expect(api.announcePresence).toHaveBeenCalledWith(alpha.id, expect.objectContaining({ writing: false }));
+    const first = (mock: { mock: { invocationCallOrder: number[] } }) => mock.mock.invocationCallOrder[0];
+    for (const earlier of [api.conversations, api.messages, api.timeEntries, api.agents, api.tags, api.savedReplies, api.emailChannel]) {
+      expect(first(earlier)).toBeLessThan(first(api.announcePresence));
+    }
+    // Typing a reply is said to the others (never the text).
+    fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'On its way' } });
+    await waitFor(() => expect(api.announcePresence).toHaveBeenLastCalledWith(alpha.id, expect.objectContaining({ writing: true })), { timeout: 3_000 });
+    expect(JSON.stringify(api.announcePresence.mock.calls)).not.toContain('On its way');
+  } finally {
+    testRouter.params = {};
+  }
 });

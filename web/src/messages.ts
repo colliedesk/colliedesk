@@ -472,6 +472,7 @@ export const messages = {
   writingAReply: (name: string) => `${name} (writing a reply)`,
   viewerTip: (name: string, writing: boolean) => `${name} is ${writing ? 'writing a reply' : 'viewing'}`,
   replying: 'Replying',
+  replyLeftOpen: (name: string, since: string) => `${name} has a reply not sent yet, untouched since ${since}`,
   draftRewritten: (person: string) => `from an agent draft, edited and sent by ${person}`,
   draftTo: (customer: string) => `To ${customer}`,
   theCustomer: 'the customer',

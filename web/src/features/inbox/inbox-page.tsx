@@ -70,6 +70,11 @@ interface InboxPageProps {
   draftConversationIds?: ReadonlySet<string>;
   // viewers are the others who have a conversation open now, by conversation id.
   viewers?: ReadonlyMap<string, ConversationViewer[]>;
+  // The others who have the open conversation in front of them now.
+  openViewers?: ConversationViewer[];
+  // The composer reports a reply being written (never its text), for the others to see.
+  onReplyDraft?: (writing: boolean) => void;
+  onReplyEdited?: () => void;
   onSendDraft?: (draft: AgentRequest, edit?: DraftEdit) => Promise<unknown>;
   onDiscardDraft?: (draft: AgentRequest) => Promise<unknown>;
   // Customers whose name or email matches the search, shown under the filters (contact-matches.tsx).
@@ -80,7 +85,7 @@ interface InboxPageProps {
   onboardingGoal?: OnboardingGoal | null;
 }
 
-export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation, onboardingGoal }: InboxPageProps) {
+export function InboxPage({ hosted = false, conversations = [], selected, timeline = [], timeEntries = [], agents = [], tags = [], timezone = 'UTC', attachmentLimits, savedReplies, customerName, agentName, onManageSavedReplies, savedRepliesState, onSelect, query = {}, onQuery, viewsMenu, onMessage, onUpdate, onAddTag, onRemoveTag, onCreateTag, page = 1, hasNextPage = false, onPage, onRetryDelivery, outboundNotice, deliveryNotice, filtered, nothingOpen, loading, refreshing, timelineLoading, conversationFailed, onRetryConversation, failed, onRetry, canManage, onOpenSettings, currentAgentId, onBulkUpdate, replyDrafts = [], draftConversationIds, viewers, openViewers, onReplyDraft, onReplyEdited, onSendDraft, onDiscardDraft, contactMatches, onOpenContact, onNewConversation, onboardingGoal }: InboxPageProps) {
   // Below the three-pane width the details panel opens as a drawer instead of a column.
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Clearing from the empty list returns to the Open view and puts focus back on the search box.
@@ -168,7 +173,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
       </section>
       <div className="conversation-center panel">
         <TimelinePanel conversation={selected} items={timeline} onOpenContact={onOpenContact} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
-          detailsOpen={detailsOpen} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
+          viewers={openViewers} detailsOpen={detailsOpen} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}
           {canManage && onOpenSettings && <> <button type="button" className="link-action" onClick={onOpenSettings}>{messages.openSettings}</button></>}</p>}
         {deliveryNotice && <p role="alert" className="composer-notice">{deliveryNotice}</p>}
@@ -177,7 +182,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
         {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
         <ReplyComposer key={selected?.id} disabled={!selected} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
           savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState}
-          canManage={canManage} />
+          canManage={canManage} onReplyDraft={onReplyDraft} onReplyEdited={onReplyEdited} />
       </div>
       <DetailsPanel conversation={selected} timezone={timezone} agents={agents} tags={tags} onUpdate={onUpdate}
         onAddTag={onAddTag} onRemoveTag={onRemoveTag} onCreateTag={onCreateTag} onClose={detailsOpen ? closeDetails : undefined}

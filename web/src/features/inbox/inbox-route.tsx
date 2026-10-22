@@ -16,6 +16,7 @@ import { messages } from '../../messages';
 import { outboundNotice } from './outbound-notice';
 import { retryRefusalText } from './refusal-text';
 import { usePendingRequests } from '../requests/use-pending-requests';
+import { useConversationPresence } from './use-conversation-presence';
 import { useInboxViewing } from './use-inbox-activity';
 
 // errorMessage reads the message of an API error body, when the answer is one.
@@ -200,6 +201,10 @@ export function InboxRoute() {
     onSuccess: () => client.invalidateQueries({ queryKey: ['messages', selected?.id] }) });
   const retryDelivery = useMutation({ mutationFn: ({ conversationId, messageId }: { conversationId: string; messageId: string }) => api.retryDelivery(conversationId, messageId),
     onSuccess: (retried) => client.invalidateQueries({ queryKey: ['messages', retried.conversation_id] }) });
+  // The others see that this tab has the conversation open and whether a reply is being written; the first
+  // announce waits for the requests above, so it never delays opening the ticket.
+  const [writingReply, setWritingReply] = useState(false);
+  const presence = useConversationPresence(selected?.id, writingReply);
   // A refusal belongs to the conversation it happened in; opening another one hides it.
   const retryError = retryDelivery.isError && retryDelivery.variables?.conversationId === selected?.id ? retryDelivery.error : undefined;
   const applyQuery = (next: InboxQuery) => {
@@ -236,6 +241,7 @@ export function InboxRoute() {
     onRetryDelivery={(messageId) => selected && retryDelivery.mutate({ conversationId: selected.id, messageId })}
     onCreateTag={(conversationId, name) => createTag.mutate({ conversationId, name })}
     replyDrafts={selectedDrafts} draftConversationIds={draftConversationIds} viewers={viewing}
+    openViewers={presence.viewers} onReplyDraft={setWritingReply} onReplyEdited={presence.markEdited}
     onSendDraft={async (draft, edit) => {
       const outcome = await api.approveAgentRequest(draft.id, edit);
       track('agent_request_decided', { decision: 'approved' });

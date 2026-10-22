@@ -6,7 +6,7 @@ import { requestExportLink } from './workspace-export';
 import { recordFailedCall } from '../lib/diagnostics';
 import type { operations } from './generated';
 import {
-  agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationSchema, inboxActivitySchema,
+  agentListSchema, agentSchema, contactListSchema, contactSchema, conversationPageSchema, conversationPresenceSchema, conversationSchema, inboxActivitySchema,
   cloudWorkspaceChoicesSchema, consentLinkSchema, emailChannelSettingsSchema, inboundSecretSchema, webFormSettingsSchema,
   inviteCreatedSchema, inviteListSchema, meSchema, messageListSchema, messageSchema, timeEntryListSchema,
   agentRequestListSchema, agentRequestSchema, approvedAgentRequestSchema, billingLinkSchema, bulkUpdateResultSchema, billingSchema, publicConfigSchema, redeemedSchema, savedReplyListSchema, savedReplySchema, savedReplyVersionListSchema, trashedSavedReplyListSchema, sessionListSchema, tagListSchema, tagSchema, teamMemberSchema, workspaceSchema,
@@ -92,6 +92,17 @@ async function invalidRequest(response: Response): Promise<Error> {
   return failure(response.status);
 }
 
+// TooManyRequestsError is a call repeated sooner than the server takes it (429 too_many_requests); it may
+// be sent again after retryAfterSeconds.
+export class TooManyRequestsError extends Error {
+  readonly retryAfterSeconds: number;
+  constructor(retryAfterSeconds: number) {
+    super('Too many requests');
+    this.name = 'TooManyRequestsError';
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
 function failure(status: number): Error {
   return status === 401 ? new UnauthorizedError() : new Error(`API ${status}`);
 }
@@ -118,6 +129,7 @@ async function outboundRefusal(response: Response): Promise<Error> {
     // The knowledge base's video uploads: the answer says which upload holds the place, or whose it is.
     if (['too_many_uploads', 'not_your_upload', 'server_busy', 'files_need_approval'].includes(String(code)) && typeof message === 'string' && message)
       return new ConflictError(message, { code });
+    if (code === 'too_many_requests' && response.status === 429) return new TooManyRequestsError(Number(response.headers.get('Retry-After')) || 1);
     if (code === 'trial_outbound_restricted' || code === 'trial_outbound_limit') {
       const refusedCc = Array.isArray(refused) ? refused.filter((item): item is string => typeof item === 'string') : [];
       return new OutboundRefusedError(code, typeof message === 'string' ? message : '', typeof retry === 'number' ? retry : undefined, refusedCc,
@@ -269,6 +281,11 @@ export const api = {
   bulkUpdateConversations: (ids: string[], changes: BulkConversationChanges) => request('/api/v1/conversations', bulkUpdateResultSchema, { method: 'PATCH', body: json<'bulkUpdateConversations'>({ ids, changes }) }),
   addConversationTag: (id: string, tagId: string) => request(`/api/v1/conversations/${id}/tags/${tagId}`, conversationSchema, { method: 'PUT' }),
   removeConversationTag: (id: string, tagId: string) => request(`/api/v1/conversations/${id}/tags/${tagId}`, conversationSchema, { method: 'DELETE' }),
+  // Says this tab has the conversation open (and whether a reply is being written) and answers who else has.
+  announcePresence: (id: string, body: RequestBody<'putConversationPresence'>) =>
+    request(`/api/v1/conversations/${id}/presence`, conversationPresenceSchema, { method: 'PUT', body: json<'putConversationPresence'>(body) }),
+  // keepalive lets the leave finish while the tab closes.
+  leavePresence: (id: string, clientId: string) => requestNoContent(`/api/v1/conversations/${id}/presence/${clientId}`, { method: 'DELETE', keepalive: true }),
   messages: (id: string) => request(`/api/v1/conversations/${id}/messages`, messageListSchema),
   timeEntries: (id: string) => request(`/api/v1/conversations/${id}/time-entries`, timeEntryListSchema),
   createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = [], cc: string[] = []) =>

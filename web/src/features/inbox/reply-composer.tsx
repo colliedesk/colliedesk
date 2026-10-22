@@ -29,6 +29,10 @@ interface ReplyComposerProps {
   savedRepliesState?: 'loading' | 'failed' | 'ready';
   // An admin, who can turn the help center on from the articles list while it is off.
   canManage?: boolean;
+  // Whether the box holds a reply to the customer not sent yet (never a private note), each time that
+  // changes, and each change of that reply's text: the team sees that someone is writing, never the text.
+  onReplyDraft?: (writing: boolean) => void;
+  onReplyEdited?: () => void;
 }
 
 type Kind = 'outgoing' | 'note';
@@ -56,7 +60,7 @@ const noAddresses: string[] = [];
 // starts loading it when it mounts, which is when a conversation opens: a click a moment later finds it.
 export const replyPickersPart = lazyPart(() => import('./reply-pickers'));
 
-export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses }: ReplyComposerProps) {
+export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedReplies = [], customerName, agentName, onManageSavedReplies, savedRepliesState, canManage, suggestedCc = noAddresses, onReplyDraft, onReplyEdited }: ReplyComposerProps) {
   const [kind, setKind] = useState<Kind>('outgoing');
   const [body, setBody] = useState('');
   const [problem, setProblem] = useState<string>();
@@ -112,6 +116,10 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
     caret.current = null;
   }, [body, picking]);
   useEffect(() => { if (disabled) setPicking(null); }, [disabled]);
+  const reply = kind === 'outgoing' ? body.trim() : '';
+  const writing = reply !== '';
+  useEffect(() => { onReplyDraft?.(writing); }, [writing, onReplyDraft]);
+  useEffect(() => { if (reply) onReplyEdited?.(); }, [reply, onReplyEdited]);
   // The text leaves the box only after the server accepted it; a refusal keeps it with the reason.
   // An address typed into Cc that cannot be added would otherwise be dropped from the reply unseen.
   const ccHolds = kind === 'outgoing' && showCc && ccBlocking;

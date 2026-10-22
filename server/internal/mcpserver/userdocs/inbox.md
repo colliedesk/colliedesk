@@ -116,8 +116,18 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   "via" the token's name (for example *Lan via Claude Code*).
 - Your own tabs are never shown. The marks come with the list's regular refresh, so they can be up to
   20 seconds late; they are there as soon as the inbox opens.
+- An open conversation says under its title who else has it open, within about 5 seconds: for
+  example *Lan is writing a reply · Ben is viewing*. A reply nobody changed for more than two minutes
+  shows as *Lan has a reply not sent yet, untouched since 10:02*: a draft left open in a tab, not
+  someone typing now. Times are in your timezone.
+- Your tab tells the others the same about you while the conversation is open. A tab in the
+  background stops showing you as viewing at once; with a reply typed and not sent it keeps showing
+  you as writing, so nobody answers over you. Closing the tab, opening another conversation or
+  leaving the inbox takes you off at once; a tab that stops answering (a laptop that sleeps) drops
+  off within 15 seconds, or 150 seconds with a reply typed.
 - Only the fact that a reply is being written is shared, never its text. Private notes do not count.
-- The same list is in the API: the `viewing` field of `GET /api/v1/inbox/activity`.
+- The same list is in the API: the `viewing` field of `GET /api/v1/inbox/activity`, and
+  `PUT /api/v1/conversations/{id}/presence` for one conversation.
 
 **Change many conversations at once**
 - Tick the box at the left of a row to select it, or tick **Select all on this page**. Ticking a box

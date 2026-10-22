@@ -6,6 +6,7 @@ import { testRouter } from './test-router';
 
 // The two boundaries: the API and the analytics service.
 const api = vi.hoisted(() => ({
+  announcePresence: vi.fn(async (_id: string, _body: unknown): Promise<{ viewers: unknown[]; heartbeat_seconds: number }> => ({ viewers: [], heartbeat_seconds: 5 })), leavePresence: vi.fn(async () => undefined),
   me: vi.fn(), conversations: vi.fn(), conversation: vi.fn(), agents: vi.fn(), tags: vi.fn(), messages: vi.fn(), timeEntries: vi.fn(),
   updateConversation: vi.fn(), bulkUpdateConversations: vi.fn(), config: vi.fn(),
   savedReplies: vi.fn(async () => ({ items: [] })),
