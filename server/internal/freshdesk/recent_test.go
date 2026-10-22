@@ -276,3 +276,37 @@ func TestMessagesKeepTheFreshdeskAgentIDForRelinking(t *testing.T) {
 		t.Fatalf("ticket 2 responder_external_id = %v (%v), want 102", responder, err)
 	}
 }
+
+func TestAPlanWithoutAPICallsIsNamedNotRetried(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.noAPI = true
+	if _, err := freshdesk.Preview(t.Context(), env.options()); !errors.Is(err, freshdesk.ErrPlanNoAPI) {
+		t.Fatalf("preview err = %v, want ErrPlanNoAPI", err)
+	}
+	if _, err := env.run(t, t.Context(), nil); !errors.Is(err, freshdesk.ErrPlanNoAPI) {
+		t.Fatalf("run err = %v, want ErrPlanNoAPI", err)
+	}
+	if len(env.sleeps) != 0 {
+		t.Fatalf("waited %v for a limit that never comes back", env.sleeps)
+	}
+}
+
+func TestAKeyRevokedMidRunStopsTheRunAndKeepsWhatWasImported(t *testing.T) {
+	for _, mode := range []freshdesk.Mode{freshdesk.ModeFull, freshdesk.ModeRecent} {
+		t.Run(map[freshdesk.Mode]string{freshdesk.ModeFull: "full", freshdesk.ModeRecent: "recent"}[mode], func(t *testing.T) {
+			env := newImportEnv(t)
+			env.fake.revokeKeyAfter = "/api/v2/tickets/6/conversations"
+			_, err := env.run(t, t.Context(), func(o *freshdesk.Options) {
+				if mode == freshdesk.ModeRecent {
+					o.Mode, o.Since = mode, &recentSince
+				}
+			})
+			if !errors.Is(err, freshdesk.ErrKeyRejected) {
+				t.Fatalf("err = %v, want ErrKeyRejected", err)
+			}
+			if n := env.fake.count("/api/v2/tickets/2"); n != 0 && mode == freshdesk.ModeRecent {
+				t.Fatalf("the run went on to ticket 2 (%d reads) after the key was refused", n)
+			}
+		})
+	}
+}

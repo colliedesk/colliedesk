@@ -107,6 +107,9 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 	if err := r.listSolutions(ctx); err != nil {
 		return nil, err
 	}
+	if err := r.client.fatalErr(); err != nil {
+		return nil, err
+	}
 	if err := r.kb.checkPortal(options.HelpCenterPortal); err != nil {
 		return nil, err
 	}
@@ -135,6 +138,10 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 		if err := step.run(ctx); err != nil {
 			return nil, err
 		}
+		// A step records item errors and goes on; a refused key or a plan without API calls ends the run.
+		if err := r.client.fatalErr(); err != nil {
+			return nil, err
+		}
 	}
 	return r.finish(ctx, report)
 }
@@ -148,6 +155,9 @@ func (r *run) importRecent(ctx context.Context) error {
 	}{{"loading agents", r.loadAgents}, {"loading companies", r.loadCompanies}, {"listing tickets", r.listTickets}} {
 		r.progress.phase(step.name)
 		if err := step.run(ctx); err != nil {
+			return err
+		}
+		if err := r.client.fatalErr(); err != nil {
 			return err
 		}
 	}
@@ -305,6 +315,11 @@ func numericLess(a, b string) bool {
 
 // ErrKeyRejected means Freshdesk answered 401 to the API key.
 var ErrKeyRejected = errors.New("Freshdesk rejected the API key")
+
+// ErrPlanNoAPI means Freshdesk reported an API limit of 0 calls: the Freshdesk Free plan has no API
+// (support article 225439), and an account whose trial of a higher plan ended falls back to it.
+// Waiting does not help; the account needs a plan with API calls.
+var ErrPlanNoAPI = errors.New("this Freshdesk plan has no API calls (the Free plan has none); start a trial of a higher Freshdesk plan, then import")
 
 // ErrImportRunning means another import or undo holds the workspace lock.
 var ErrImportRunning = importkit.ErrImportRunning

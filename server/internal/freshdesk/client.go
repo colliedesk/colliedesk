@@ -55,6 +55,8 @@ type client struct {
 	exhausted bool
 	// limit is the last X-Ratelimit-Total seen, 0 before any.
 	limit int
+	// fatal is the first answer that ends the whole run: the key refused (401) or a plan without API calls.
+	fatal error
 }
 
 // Reserve bounds: at least minReserve calls a minute stay with the account's other integrations, or
@@ -189,6 +191,10 @@ func (c *client) do(ctx context.Context, target string, apiCall bool) (*http.Res
 			return nil, fmt.Errorf("GET %s: network error after %d retries (%s)", redact(target), serverRetries, networkReason(err))
 		}
 		if withKey {
+			if response.Header.Get("X-Ratelimit-Total") == "0" {
+				drain(response)
+				return nil, c.fail(fmt.Errorf("GET %s: HTTP %d: %w", redact(target), response.StatusCode, ErrPlanNoAPI))
+			}
 			c.noteRemaining(response.Header.Get("X-Ratelimit-Remaining"), response.Header.Get("X-Ratelimit-Total"))
 		}
 		switch {
@@ -211,9 +217,30 @@ func (c *client) do(ctx context.Context, target string, apiCall bool) (*http.Res
 			}
 		default:
 			drain(response)
-			return nil, statusError(response.StatusCode, target, !apiCall)
+			err := statusError(response.StatusCode, target, !apiCall)
+			if errors.Is(err, ErrKeyRejected) {
+				return nil, c.fail(err)
+			}
+			return nil, err
 		}
 	}
+}
+
+// fail records err as the run's fatal error (the first one wins) and returns it.
+func (c *client) fail(err error) error {
+	c.mu.Lock()
+	if c.fatal == nil {
+		c.fatal = err
+	}
+	c.mu.Unlock()
+	return err
+}
+
+// fatalErr is the error that ends the run, nil while the key works.
+func (c *client) fatalErr() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.fatal
 }
 
 func (c *client) respectExhausted(ctx context.Context, withKey bool) error {

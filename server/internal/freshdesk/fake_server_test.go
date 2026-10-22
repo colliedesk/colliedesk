@@ -82,6 +82,11 @@ type fakeFreshdesk struct {
 	// path answers 404, an account without a knowledge base. solutionsEdit changes the fixture first.
 	solutions     bool
 	solutionsEdit func(map[string]any)
+	// noAPI answers like an account whose plan has no API calls: 429 with an X-Ratelimit-Total of 0.
+	noAPI bool
+	// revokeKeyAfter makes every API request after the first one to this path answer 401.
+	revokeKeyAfter string
+	revoked        bool
 	// remaining replaces the X-Ratelimit-Remaining of every API response (default 399 of 400).
 	remaining string
 }
@@ -131,7 +136,20 @@ func (f *fakeFreshdesk) stall(r *http.Request) {
 func (f *fakeFreshdesk) serveAPI(w http.ResponseWriter, r *http.Request) {
 	n := f.hit(r.URL.Path)
 	want := "Basic " + base64.StdEncoding.EncodeToString([]byte(testAPIKey+":X"))
-	if r.Header.Get("Authorization") != want {
+	f.mu.Lock()
+	revoked, noAPI := f.revoked, f.noAPI
+	if r.URL.Path == f.revokeKeyAfter {
+		f.revoked = true
+	}
+	f.mu.Unlock()
+	if noAPI {
+		w.Header().Set("X-Ratelimit-Total", "0")
+		w.Header().Set("X-Ratelimit-Remaining", "0")
+		w.Header().Set("Retry-After", "60")
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"message": "You have exceeded the limit of requests per minute"})
+		return
+	}
+	if r.Header.Get("Authorization") != want || revoked {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "invalid_credentials", "message": "You have to be logged in to perform this action."})
 		return
 	}

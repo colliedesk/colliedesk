@@ -217,6 +217,13 @@ options for it; with their zero values the CLI behaves as before.
   writes nothing. The ticket numbers are "at least": search leaves out archived tickets and archived
   tickets can have ids above the newest listed one. A 401 is `ErrKeyRejected`, a 403 on `/account` or
   `/agents` `ErrNeedsAdminKey`.
+- **A refused key or a plan without API calls ends the run.** A 401 (`ErrKeyRejected`) or any
+  answer with `X-Ratelimit-Total: 0` (`ErrPlanNoAPI`) stops the run at once instead of failing every
+  item or waiting for a limit that never returns; what was imported stays (undo removes it). The
+  Freshdesk Free plan has 0 API calls a minute (support article 225439); a Free account can start a
+  14-day trial of a higher plan (support article 50000010099) and import during it, and when that
+  trial ends mid-import the key stops working this way. Before this, the CLI recorded each ticket of
+  a revoked key as a failure and went on.
 - **Author ids.** Messages keep the Freshdesk agent who wrote them (`origin.author_external_id`)
   and conversations the agent they were assigned to (`origin.responder_external_id`), so a Freshdesk
   agent can be linked to a Colliedesk agent after the import. Messages imported before this have no
@@ -326,8 +333,10 @@ values for forwards and public notes, and the agent-as-requester case.
 
 For the in-app import, also check (each is handled the safe way until then):
 
-1. The error Freshdesk answers on the Free plan, which has no API calls (support article 225439).
-   Until then it is reported like any other refusal.
+1. What Freshdesk answers on the Free plan, which has no API calls (support article 225439), and
+   after a trial of a higher plan ends. The importer assumes an `X-Ratelimit-Total` of 0 (reported
+   as `ErrPlanNoAPI`), a 401 (key refused) or a 403 on `/account` (needs an admin key, or a plan
+   with the API); a 403 on every ticket is reported as item failures, so the report is FAILED.
 2. Whether `X-Ratelimit-Remaining` reflects the per-endpoint limits (Tickets List 40 a minute on
    Growth) or only the account total, and whether every plan sends `X-Ratelimit-Total`; without it
    the reserve falls back to 10 calls.

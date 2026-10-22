@@ -22,8 +22,9 @@ const (
 	AccessUnknown Access = "unknown"
 )
 
-// ErrNeedsAdminKey means Freshdesk answered 403 where the import needs an admin's API key.
-var ErrNeedsAdminKey = errors.New("the Freshdesk API key must belong to an admin")
+// ErrNeedsAdminKey means Freshdesk answered 403 where the import needs an admin's API key. Freshdesk
+// also answers 403 when the account lacks a feature, so the plan is named too.
+var ErrNeedsAdminKey = errors.New("Freshdesk refused this API key: it must belong to an admin, on a plan that includes the API")
 
 // PreviewAgent is a Freshdesk agent, for the team to invite before the import.
 type PreviewAgent struct {
