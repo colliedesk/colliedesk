@@ -33,6 +33,9 @@ export function startPresence(id: string, writing: boolean, onViewers: (viewers:
   let announced = false;
   let stopped = false;
   let sequence = 0;
+  // A change of the reply box waits for the minimum gap; the answer of the announce before must not push
+  // it back to the next heartbeat.
+  let changeWaiting = false;
   const hidden = () => document.visibilityState === 'hidden';
   const later = (ms: number) => { clearTimeout(timer); timer = setTimeout(announce, ms); };
   const leave = () => {
@@ -45,7 +48,8 @@ export function startPresence(id: string, writing: boolean, onViewers: (viewers:
     if (stopped) return;
     if (hidden() && !writingNow) { leave(); return; }
     const wait = last + minimumGap - Date.now();
-    if (wait > 0) { later(wait); return; }
+    if (wait > 0) { changeWaiting = true; later(wait); return; }
+    changeWaiting = false;
     clearTimeout(timer);
     last = Date.now();
     announced = true;
@@ -57,10 +61,11 @@ export function startPresence(id: string, writing: boolean, onViewers: (viewers:
       // The tab left while this announce was on its way: the leave may have arrived first.
       if (!announced) { void api.leavePresence(id, presenceClientId).catch(() => {}); return; }
       onViewers(result.viewers);
-      later(result.heartbeat_seconds * 1_000);
+      if (!changeWaiting) later(result.heartbeat_seconds * 1_000);
     }, (error: unknown) => {
       if (stopped || mine !== sequence || !announced) return;
-      later(error instanceof TooManyRequestsError ? error.retryAfterSeconds * 1_000 : retryAfter);
+      const pause = error instanceof TooManyRequestsError ? error.retryAfterSeconds * 1_000 : retryAfter;
+      if (!changeWaiting || pause > minimumGap) later(pause);
     });
   }
   const onPageShow = (event: PageTransitionEvent) => { if (event.persisted) announce(); };

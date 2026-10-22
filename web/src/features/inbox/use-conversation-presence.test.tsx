@@ -158,3 +158,16 @@ test('an announce the server takes later is sent again after Retry-After, not at
   expect(api.announcePresence).toHaveBeenCalledTimes(refused + 1);
   expect(announces().at(-1)).toMatchObject({ writing: true });
 });
+
+test('a change made while the previous announce is on its way still goes after the second, not at the next heartbeat', async () => {
+  api.announcePresence.mockImplementation(async (_id: string, body: { hidden?: boolean }) => {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    return { viewers: [lan], heartbeat_seconds: body.hidden ? 30 : 5 };
+  });
+  const { rerender } = renderHook(({ writing }) => useConversationPresence(one, writing), { initialProps: { writing: false } });
+  await tick(0);
+  await tick(100);
+  rerender({ writing: true });
+  await tick(1_000);
+  expect(announces().at(-1)).toMatchObject({ writing: true });
+});
