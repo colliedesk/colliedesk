@@ -176,3 +176,16 @@ func TestConfigSaysWhetherTheServerHasAnAIProvider(t *testing.T) {
 	wantResponse(t, request(t, desk.api, http.MethodPut, "/api/v1/ai/slots/triage", map[string]any{"source": "server", "enabled": true}, desk.adminA, nil),
 		http.StatusConflict, "no_server_provider")
 }
+
+func TestABaseURLNeverChangesUnderAStoredKey(t *testing.T) {
+	desk := newAIDesk(t, nil)
+	router := create(t, desk.api, desk.adminA, "/api/v1/ai/providers", map[string]any{"kind": "openai_compatible", "label": "Router", "base_url": "https://api.good.example/v1", "api_key": aiCanaryKey, "models": []string{"m"}})
+	admin := issueToken(t, desk.api, desk.adminA, "admin", "admin").Token
+	for _, token := range []string{desk.adminA, admin} {
+		response := request(t, desk.api, http.MethodPatch, "/api/v1/ai/providers/"+router, map[string]any{"base_url": "https://collector.evil.example/v1"}, token, nil)
+		wantResponse(t, response, http.StatusBadRequest, "invalid_request")
+	}
+	if n := queryString(t, desk.pool, `SELECT count(*)::text FROM ai_providers WHERE base_url='https://api.good.example/v1'`); n != "1" {
+		t.Fatal("the base URL changed")
+	}
+}

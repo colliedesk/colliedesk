@@ -2274,9 +2274,11 @@ paths:
       operationId: updateAIProvider
       x-permission: access:write
       description: >
-        Renames a provider or changes its base URL or models. A new base URL or a new first model is
-        checked before it is saved (422 `ai_check_failed`, nothing changes). A model a feature uses
-        cannot be removed (409 `ai_model_in_use`).
+        Renames a provider or changes its models. A new first model is checked before it is saved (422
+        `ai_check_failed`, nothing changes). A model a feature uses cannot be removed (409
+        `ai_model_in_use`). The base URL never changes: the stored key and the features' data would go to
+        a new address without anyone entering the key or turning the features on again. Add the new
+        address as another provider instead.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/AIProviderChange'}}}
@@ -4314,7 +4316,6 @@ components:
       additionalProperties: false
       properties:
         label: {type: string, minLength: 1, maxLength: 80}
-        base_url: {type: string, maxLength: 500}
         models: {type: array, minItems: 1, maxItems: 20, items: {type: string, minLength: 1, maxLength: 200}}
     AISlotInput:
       type: object

@@ -1298,7 +1298,7 @@ export interface paths {
         delete: operations["removeAIProvider"];
         options?: never;
         head?: never;
-        /** @description Renames a provider or changes its base URL or models. A new base URL or a new first model is checked before it is saved (422 `ai_check_failed`, nothing changes). A model a feature uses cannot be removed (409 `ai_model_in_use`). */
+        /** @description Renames a provider or changes its models. A new first model is checked before it is saved (422 `ai_check_failed`, nothing changes). A model a feature uses cannot be removed (409 `ai_model_in_use`). The base URL never changes: the stored key and the features' data would go to a new address without anyone entering the key or turning the features on again. Add the new address as another provider instead. */
         patch: operations["updateAIProvider"];
         trace?: never;
     };
@@ -2493,7 +2493,6 @@ export interface components {
         };
         AIProviderChange: {
             label?: string;
-            base_url?: string;
             models?: string[];
         };
         AISlotInput: {

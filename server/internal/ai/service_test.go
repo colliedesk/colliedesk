@@ -3,6 +3,7 @@ package ai_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -304,7 +305,7 @@ func TestRemovingAProviderTurnsItsFeaturesOffAndKeepsHistory(t *testing.T) {
 	}
 }
 
-func TestUpdateProviderChecksANewURLAndKeepsUsedModels(t *testing.T) {
+func TestUpdateProviderChecksANewFirstModelAndKeepsUsedModels(t *testing.T) {
 	e := newEnv(t, nil)
 	provider, err := e.service.AddProvider(context.Background(), e.a.id, e.actor(e.a), ai.ProviderInput{Kind: "openai_compatible", Label: "Router", BaseURL: "https://openrouter.ai/api/v1", APIKey: testKey, Models: []string{"a", "b"}})
 	if err != nil {
@@ -326,13 +327,42 @@ func TestUpdateProviderChecksANewURLAndKeepsUsedModels(t *testing.T) {
 	if len(e.fake.Requests()) != calls {
 		t.Fatal("a rename spent a check")
 	}
-	url := "https://api.openai.com/v1"
-	updated, err := e.service.UpdateProvider(context.Background(), e.a.id, e.actor(e.a), provider.ID, ai.ProviderChange{BaseURL: &url})
-	if err != nil || *updated.BaseURL != url || len(e.fake.Requests()) != calls+1 || strings.Join(updated.UsedBy, ",") != "draft" {
-		t.Fatalf("new URL: %+v %v", updated, err)
+	models = []string{"c", "b"}
+	updated, err := e.service.UpdateProvider(context.Background(), e.a.id, e.actor(e.a), provider.ID, ai.ProviderChange{Models: &models})
+	if err != nil || len(e.fake.Requests()) != calls+1 || e.fake.Requests()[calls].Model != "c" || strings.Join(updated.UsedBy, ",") != "draft" {
+		t.Fatalf("new first model: %+v %v", updated, err)
 	}
-	if spec := e.specs[len(e.specs)-1]; spec.BaseURL != url || spec.APIKey != testKey {
+	if spec := e.specs[len(e.specs)-1]; spec.BaseURL != "https://openrouter.ai/api/v1" {
 		t.Fatalf("checked %+v", spec)
+	}
+}
+
+func TestSettingAFeatureWhileItsProviderIsDeletedNeverFailsWithAServerError(t *testing.T) {
+	e := newEnv(t, nil)
+	for round := range 5 {
+		provider := e.add(t, e.a, fmt.Sprintf("Key %d", round))
+		var wait sync.WaitGroup
+		var setErr, removeErr error
+		wait.Add(2)
+		go func() {
+			defer wait.Done()
+			_, setErr = e.service.SetSlot(context.Background(), e.a.id, e.actor(e.a), ai.SlotDraft, ai.SlotInput{Source: ai.SourceProvider, ProviderID: provider.ID, Enabled: true})
+		}()
+		go func() {
+			defer wait.Done()
+			_, removeErr = e.service.RemoveProvider(context.Background(), e.a.id, e.actor(e.a), provider.ID)
+		}()
+		wait.Wait()
+		var refused *ai.InvalidError
+		if setErr != nil && !errors.As(setErr, &refused) {
+			t.Fatalf("round %d: setting the feature: %v", round, setErr)
+		}
+		if removeErr != nil {
+			t.Fatalf("round %d: removing: %v", round, removeErr)
+		}
+		if n := e.count(t, `SELECT count(*) FROM ai_slots WHERE enabled`); n != 0 {
+			t.Fatalf("round %d: a feature is on with a deleted provider", round)
+		}
 	}
 }
 

@@ -51,16 +51,15 @@ func (a *API) addAIProvider(response http.ResponseWriter, request *http.Request)
 
 func (a *API) updateAIProvider(response http.ResponseWriter, request *http.Request) {
 	var input struct {
-		Label   *string   `json:"label"`
-		BaseURL *string   `json:"base_url"`
-		Models  *[]string `json:"models"`
+		Label  *string   `json:"label"`
+		Models *[]string `json:"models"`
 	}
 	if err := decodeJSON(request, &input); err != nil {
-		writeError(response, http.StatusBadRequest, "invalid_request", "Send label, base_url or models.")
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send label or models. A provider's base URL never changes: add the new address as another provider, with its key.")
 		return
 	}
 	provider, err := a.ai.UpdateProvider(request.Context(), principal(request).Workspace.ID, aiActor(request), request.PathValue("id"),
-		ai.ProviderChange{Label: input.Label, BaseURL: input.BaseURL, Models: input.Models})
+		ai.ProviderChange{Label: input.Label, Models: input.Models})
 	if err != nil {
 		writeAIError(response, err)
 		return

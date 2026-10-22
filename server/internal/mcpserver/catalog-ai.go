@@ -70,13 +70,14 @@ func aiProviderUpdateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_ai_provider_update",
 		Title: "Change an AI provider",
-		Description: `Rename a provider or change its base URL or models. A new base URL or a new first model is checked (one billed request) before it is saved. ` +
+		Description: `Rename a provider or change its models. A new first model is checked (one billed request) before it is saved. ` +
+			`The base URL never changes: a new address is another provider, added with its key, so its features need turning on again. ` +
 			`A model a feature uses cannot be removed (ai_model_in_use).` +
 			"\n\nTier: admin.",
 		Tier: "admin", Idempotent: true,
 		REST: []string{"PATCH /api/v1/ai/providers/{id}"},
 		Input: `{"type":"object","additionalProperties":false,"required":["provider_id"],"properties":{` + aiProviderIDProperty + `,` +
-			`"label":{"type":"string","minLength":1,"maxLength":80},"base_url":{"type":"string","maxLength":500},` +
+			`"label":{"type":"string","minLength":1,"maxLength":80},` +
 			`"models":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"string","minLength":1,"maxLength":200}}}}`,
 		Output: aiProviderOutput,
 		run:    aiProviderUpdate,

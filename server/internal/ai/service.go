@@ -148,11 +148,11 @@ type ProviderInput struct {
 	Models  []string
 }
 
-// ProviderChange changes a provider; nil fields stay.
+// ProviderChange changes a provider; nil fields stay. The base URL never changes: the stored key and
+// the features' data would go to a new address without anyone entering the key or consenting again.
 type ProviderChange struct {
-	Label   *string
-	BaseURL *string
-	Models  *[]string
+	Label  *string
+	Models *[]string
 }
 
 // SlotInput sets one feature: where it runs (server, provider or none), the model, effort, on or off.
@@ -451,42 +451,28 @@ func (s *Service) read(ctx context.Context, workspaceID, id string) (stored, err
 	return row, err
 }
 
-// UpdateProvider renames a provider or changes its base URL or models. A new base URL or a new first
-// model is checked before it is saved; a model a feature uses cannot be removed.
+// UpdateProvider renames a provider or changes its models. A new first model is checked before it is
+// saved; a model a feature uses cannot be removed.
 func (s *Service) UpdateProvider(ctx context.Context, workspaceID string, actor Actor, id string, change ProviderChange) (Provider, error) {
 	row, err := s.read(ctx, workspaceID, id)
 	if err != nil {
 		return Provider{}, err
 	}
-	label, baseURL, models := row.Label, row.BaseURL, row.Models
+	label, models := row.Label, row.Models
 	if change.Label != nil {
 		if label, err = cleanLabel(*change.Label); err != nil {
 			return Provider{}, err
 		}
-	}
-	if change.BaseURL != nil {
-		if row.Kind != string(aiprovider.KindOpenAICompatible) {
-			return Provider{}, invalid("An Anthropic provider always uses the Claude API; it has no base URL.")
-		}
-		clean, err := s.cleanBaseURL(*change.BaseURL)
-		if err != nil {
-			return Provider{}, err
-		}
-		baseURL = &clean
 	}
 	if change.Models != nil {
 		if models, err = cleanModels(*change.Models); err != nil {
 			return Provider{}, err
 		}
 	}
-	urlChanged := baseURL != nil && row.BaseURL != nil && *baseURL != *row.BaseURL
-	if urlChanged || models[0] != row.Models[0] {
+	if models[0] != row.Models[0] {
 		spec, err := s.spec(workspaceID, row)
 		if err != nil {
 			return Provider{}, err
-		}
-		if baseURL != nil {
-			spec.BaseURL = *baseURL
 		}
 		call := Call{WorkspaceID: workspaceID, BilledTo: BilledToWorkspaceKey, ProviderID: id, Kind: spec.Kind, Label: label, Actor: actor}
 		if err := s.check(ctx, call, spec, models[0]); err != nil {
@@ -521,20 +507,17 @@ func (s *Service) UpdateProvider(ctx context.Context, workspaceID string, actor 
 			}
 		}
 		checked := ""
-		if urlChanged || models[0] != current.Models[0] {
-			checked = `,check_status='ok',check_error_code=NULL,checked_at=$6`
+		if models[0] != current.Models[0] {
+			checked = `,check_status='ok',check_error_code=NULL,checked_at=$5`
 		}
-		provider, err = scanProvider(tx.QueryRow(ctx, `UPDATE ai_providers SET label=$3,base_url=$4,models=$5,updated_at=$6`+checked+`
-			WHERE workspace_id=$1 AND id=$2 RETURNING `+providerColumns, workspaceID, id, label, baseURL, models, now))
+		provider, err = scanProvider(tx.QueryRow(ctx, `UPDATE ai_providers SET label=$3,models=$4,updated_at=$5`+checked+`
+			WHERE workspace_id=$1 AND id=$2 RETURNING `+providerColumns, workspaceID, id, label, models, now))
 		if err != nil {
 			return err
 		}
 		detail := map[string]any{}
 		if label != current.Label {
 			detail["label"] = map[string]any{"from": current.Label, "to": label}
-		}
-		if urlChanged {
-			detail["base_url"] = map[string]any{"from": *current.BaseURL, "to": *baseURL}
 		}
 		if !slices.Equal(models, current.Models) {
 			detail["models"] = map[string]any{"from": current.Models, "to": models}
@@ -642,6 +625,10 @@ func (s *Service) RemoveProvider(ctx context.Context, workspaceID string, actor 
 	now := s.now().UTC()
 	var turnedOff []string
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		// The same lock as SetSlot and AddProvider: a feature being set to this provider meanwhile sees it gone.
+		if err := lockProviders(ctx, tx, workspaceID); err != nil {
+			return err
+		}
 		row, err := loadProvider(ctx, tx, workspaceID, id, true)
 		if err != nil {
 			return err
