@@ -310,3 +310,17 @@ func TestAKeyRevokedMidRunStopsTheRunAndKeepsWhatWasImported(t *testing.T) {
 		})
 	}
 }
+
+func TestAnAccountThatKeepsFailingIsUnavailableNotRefused(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.failPathTimes = map[string]int{"/api/v2/agents": 100}
+	_, err := env.run(t, t.Context(), nil)
+	if !errors.Is(err, freshdesk.ErrUnavailable) || errors.Is(err, freshdesk.ErrKeyRejected) {
+		t.Fatalf("err = %v, want ErrUnavailable: the job retries it later", err)
+	}
+	env.fake.failPathTimes = nil
+	env.fake.failPathStatus = map[string]int{"/api/v2/agents": 400}
+	if _, err := env.run(t, t.Context(), nil); errors.Is(err, freshdesk.ErrUnavailable) {
+		t.Fatalf("a 400 is not worth retrying: %v", err)
+	}
+}

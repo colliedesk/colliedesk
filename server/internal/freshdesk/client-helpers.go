@@ -27,6 +27,8 @@ func statusError(status int, target string, download bool) error {
 		return fmt.Errorf("GET %s: HTTP 401: Freshdesk rejected the API key", redact(target))
 	case status == http.StatusForbidden:
 		return fmt.Errorf("GET %s: HTTP 403: %w", redact(target), errForbidden)
+	case status >= 500 || status == http.StatusTooManyRequests:
+		return fmt.Errorf("GET %s: HTTP %d: %w", redact(target), status, ErrUnavailable)
 	default:
 		return fmt.Errorf("GET %s: HTTP %d", redact(target), status)
 	}

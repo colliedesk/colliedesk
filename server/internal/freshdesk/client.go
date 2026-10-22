@@ -188,7 +188,7 @@ func (c *client) do(ctx context.Context, target string, apiCall bool) (*http.Res
 				}
 				continue
 			}
-			return nil, fmt.Errorf("GET %s: network error after %d retries (%s)", redact(target), serverRetries, networkReason(err))
+			return nil, fmt.Errorf("GET %s: network error after %d retries (%s): %w", redact(target), serverRetries, networkReason(err), ErrUnavailable)
 		}
 		if withKey {
 			if response.Header.Get("X-Ratelimit-Total") == "0" {

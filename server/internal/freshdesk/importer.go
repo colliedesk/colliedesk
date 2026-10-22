@@ -321,6 +321,10 @@ var ErrKeyRejected = errors.New("Freshdesk rejected the API key")
 // Waiting does not help; the account needs a plan with API calls.
 var ErrPlanNoAPI = errors.New("this Freshdesk plan has no API calls (the Free plan has none); start a trial of a higher Freshdesk plan, then import")
 
+// ErrUnavailable means Freshdesk kept answering 5xx or 429, or could not be reached, after the
+// client's retries. It is the only run error worth trying again later as is.
+var ErrUnavailable = errors.New("Freshdesk is unavailable")
+
 // ErrImportRunning means another import or undo holds the workspace lock.
 var ErrImportRunning = importkit.ErrImportRunning
 
