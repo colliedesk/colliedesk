@@ -28,8 +28,9 @@ const (
 const (
 	// aiRetrievalMaxTerms is how many words of a query count: the longest first, short words are the common ones.
 	aiRetrievalMaxTerms = 16
-	// aiRetrievalWindow is how many of the newest resolved conversations a search ranks.
-	aiRetrievalWindow = 20000
+	// aiRetrievalWindow is how many of the newest resolved conversations a search ranks: 20,000 took
+	// 160-280 ms with the knowledge base at its cap, past the budget (docs/internals/performance.md).
+	aiRetrievalWindow = 10000
 	// aiWholeKBTokens: a knowledge base this small (its articles' own language) is sent whole.
 	aiWholeKBTokens = 15000
 	// aiKBExcerptRunes is the most of one article a search returns, about 1,500 tokens.
@@ -95,17 +96,24 @@ func aiTerms(ctx context.Context, tx pgx.Tx, text string) ([]string, error) {
 	return terms, err
 }
 
-// aiScored ranks the candidate rows d (id, folded) by the rarity of the words they match:
-// idf = ln((N + 1) / (df + 0.5)) per word, N the candidates, df those matching the word; it stays
-// above zero, and a word in every candidate weighs almost nothing, so no stop word list is needed in any language. Words match as
-// prefixes. $2 is the query's words; the lexemes are cast, never parsed, as in kbQuery.
-const aiScored = `q AS (SELECT t AS lexeme, ('''' || replace(replace(t, '\', '\\'), '''', '''''') || ''':*')::tsquery AS query FROM unnest($2::text[]) t),
-	anyq AS (SELECT string_agg('''' || replace(replace(t, '\', '\\'), '''', '''''') || ''':*', ' | ')::tsquery AS query FROM unnest($2::text[]) t),
-	n AS (SELECT count(*)::float8 AS n FROM d),
-	m AS MATERIALIZED (SELECT d.id, d.folded FROM d, anyq WHERE d.folded @@ anyq.query),
-	hit AS MATERIALIZED (SELECT m.id, q.lexeme FROM m JOIN q ON m.folded @@ q.query),
+// aiScored ranks the candidate rows docs (a query of id, source, locale and folded) by the rarity of the words they
+// match: idf = ln((N + 1) / (df + 0.5)) per word, N the candidates, df those matching the word; it
+// stays above zero, and a word in every candidate weighs almost nothing, so no stop word list is
+// needed in any language. Words match as prefixes. $2 is the query's words; the lexemes are cast,
+// never parsed, as in kbQuery. Each vector is read once per row and only there (OFFSET 0 keeps the
+// copy from being inlined into every word's test): a vector in TOAST would be fetched again for every
+// word, and the vectors copied into a materialized CTE would spill past work_mem. Together that was
+// most of a second at 20,000 rows; folded also stays in the row when it fits (STORAGE MAIN).
+func aiScored(docs string) string {
+	return `q AS MATERIALIZED (SELECT t AS lexeme, ('''' || replace(replace(t, '\', '\\'), '''', '''''') || ''':*')::tsquery AS query FROM unnest($2::text[]) t),
+	hits AS MATERIALIZED (SELECT d.id, d.source, d.locale, ARRAY(SELECT q.lexeme FROM q WHERE v.folded @@ q.query) AS words
+		FROM (` + docs + `) d CROSS JOIN LATERAL (SELECT d.folded || ''::tsvector AS folded OFFSET 0) v),
+	n AS (SELECT count(*)::float8 AS n FROM hits),
+	hit AS (SELECT hits.id, hits.source, hits.locale, w AS lexeme FROM hits, unnest(hits.words) w),
 	df AS (SELECT lexeme, count(*)::float8 AS df FROM hit GROUP BY lexeme),
-	score AS (SELECT hit.id, sum(ln(((SELECT n FROM n) + 1) / (df.df + 0.5))) AS s FROM hit JOIN df USING (lexeme) GROUP BY hit.id)`
+	score AS (SELECT hit.id, min(hit.source::text) AS source, min(hit.locale) AS locale, sum(ln(((SELECT n FROM n) + 1) / (df.df + 0.5))) AS s
+		FROM hit JOIN df USING (lexeme) GROUP BY hit.id)`
+}
 
 // AIRetrieve returns the knowledge base articles and resolved conversations of the workspace that
 // best match the query, at most KBLimit and ConversationLimit (a small knowledge base comes whole,
@@ -128,6 +136,10 @@ func AIRetrieve(ctx context.Context, tx pgx.Tx, workspaceID string, query AIRetr
 	return append(kb, conversations...), nil
 }
 
+// aiRecheckSlack is how many more of the best rows than asked for are checked against their source,
+// so rows whose source changed since they were built (and wait in the queue) leave enough behind.
+const aiRecheckSlack = `20`
+
 // aiReadableArticle is the check of an article at search time.
 const aiReadableArticle = `a.workspace_id=d.workspace_id AND a.id=d.kb_article_id AND a.status='published' AND a.deleted_at IS NULL AND NOT a.ai_excluded`
 
@@ -145,17 +157,20 @@ func aiRetrieveKB(ctx context.Context, tx pgx.Tx, workspaceID string, terms []st
 	var err error
 	if whole {
 		// Every article in its own language, the matching ones first.
-		rows, err = tx.Query(ctx, `WITH d AS MATERIALIZED (SELECT id, folded FROM ai_retrieval_docs WHERE workspace_id=$1 AND kb_article_id IS NOT NULL AND kb_locale IS NULL), `+aiScored+`
+		rows, err = tx.Query(ctx, `WITH `+aiScored(`SELECT id, kb_article_id AS source, kb_locale AS locale, folded FROM ai_retrieval_docs WHERE workspace_id=$1 AND kb_article_id IS NOT NULL AND kb_locale IS NULL`)+`
 			SELECT d.kb_article_id::text, '', a.number, d.title, d.body, COALESCE(score.s, 0)
 			FROM ai_retrieval_docs d JOIN kb_articles a ON `+aiReadableArticle+` LEFT JOIN score ON score.id=d.id
 			WHERE d.workspace_id=$1 AND d.kb_article_id IS NOT NULL AND d.kb_locale IS NULL
 			ORDER BY COALESCE(score.s, 0) DESC, a.number`, workspaceID, terms)
 	} else {
-		rows, err = tx.Query(ctx, `WITH d AS MATERIALIZED (SELECT id, folded FROM ai_retrieval_docs WHERE workspace_id=$1 AND kb_article_id IS NOT NULL), `+aiScored+`,
-			best AS (SELECT DISTINCT ON (d.kb_article_id) d.kb_article_id, COALESCE(d.kb_locale, '') AS locale, a.number, d.title, d.body, score.s
-				FROM score JOIN ai_retrieval_docs d ON d.workspace_id=$1 AND d.id=score.id JOIN kb_articles a ON `+aiReadableArticle+`
-				ORDER BY d.kb_article_id, score.s DESC, d.kb_locale NULLS FIRST)
-			SELECT kb_article_id::text, locale, number, title, body, s FROM best ORDER BY s DESC, number LIMIT $3`, workspaceID, terms, limit)
+		// Each article once, in its best language; the text is read for the few that are returned.
+		kbSQL := `WITH ` + aiScored(`SELECT id, kb_article_id AS source, kb_locale AS locale, folded FROM ai_retrieval_docs WHERE workspace_id=$1 AND kb_article_id IS NOT NULL`) + `,
+			best AS (SELECT DISTINCT ON (source) id, s FROM score ORDER BY source, s DESC, locale NULLS FIRST),
+			top AS (SELECT id, s FROM best ORDER BY s DESC LIMIT $3 + ` + aiRecheckSlack + `)
+			SELECT d.kb_article_id::text, COALESCE(d.kb_locale, ''), a.number, d.title, d.body, top.s
+			FROM top JOIN ai_retrieval_docs d ON d.workspace_id=$1 AND d.id=top.id JOIN kb_articles a ON ` + aiReadableArticle + `
+			ORDER BY top.s DESC, a.number LIMIT $3`
+		rows, err = tx.Query(ctx, kbSQL, workspaceID, terms, limit)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("search the knowledge base for AI: %w", err)
@@ -180,12 +195,15 @@ func aiRetrieveConversations(ctx context.Context, tx pgx.Tx, workspaceID string,
 	if query.ConversationLimit <= 0 || len(terms) == 0 {
 		return nil, nil
 	}
-	rows, err := tx.Query(ctx, `WITH d AS MATERIALIZED (SELECT id, folded FROM ai_retrieval_docs
-				WHERE workspace_id=$1 AND conversation_id IS NOT NULL AND conversation_id IS DISTINCT FROM $4::uuid ORDER BY updated_at DESC LIMIT $5), `+aiScored+`
-		SELECT d.conversation_id::text, d.title, d.body, score.s
-		FROM score JOIN ai_retrieval_docs d ON d.workspace_id=$1 AND d.id=score.id
+	conversationSQL := `WITH ` + aiScored(`SELECT id, conversation_id AS source, NULL::text AS locale, folded FROM ai_retrieval_docs
+				WHERE workspace_id=$1 AND conversation_id IS NOT NULL AND conversation_id IS DISTINCT FROM $4::uuid ORDER BY updated_at DESC LIMIT $5`) + `
+,
+		top AS (SELECT id, s FROM score ORDER BY s DESC LIMIT $3 + ` + aiRecheckSlack + `)
+		SELECT d.conversation_id::text, d.title, d.body, top.s
+		FROM top JOIN ai_retrieval_docs d ON d.workspace_id=$1 AND d.id=top.id
 		JOIN conversations c ON c.workspace_id=d.workspace_id AND c.id=d.conversation_id AND c.status IN ('resolved','closed')
-		ORDER BY score.s DESC, d.updated_at DESC LIMIT $3`, workspaceID, terms, query.ConversationLimit, optionalID(query.ExcludeConversationID), aiRetrievalWindow)
+		ORDER BY top.s DESC, d.updated_at DESC LIMIT $3`
+	rows, err := tx.Query(ctx, conversationSQL, workspaceID, terms, query.ConversationLimit, optionalID(query.ExcludeConversationID), aiRetrievalWindow)
 	if err != nil {
 		return nil, fmt.Errorf("search resolved conversations for AI: %w", err)
 	}

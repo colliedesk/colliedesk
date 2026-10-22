@@ -49,6 +49,9 @@ CREATE TABLE ai_retrieval_docs (
 CREATE UNIQUE INDEX ai_retrieval_docs_article_idx ON ai_retrieval_docs(workspace_id, kb_article_id, kb_locale) NULLS NOT DISTINCT
     WHERE kb_article_id IS NOT NULL;
 CREATE UNIQUE INDEX ai_retrieval_docs_conversation_idx ON ai_retrieval_docs(workspace_id, conversation_id) WHERE conversation_id IS NOT NULL;
+-- A search reads each vector of its window where it is stored (docs/internals/ai-retrieval.md): in the
+-- row, not in TOAST, where a 5 kB vector costs a lookup for every word of the query.
+ALTER TABLE ai_retrieval_docs ALTER COLUMN folded SET STORAGE MAIN;
 -- A search reads the newest conversations of a workspace first.
 CREATE INDEX ai_retrieval_docs_recent_idx ON ai_retrieval_docs(workspace_id, updated_at DESC) WHERE conversation_id IS NOT NULL;
 
