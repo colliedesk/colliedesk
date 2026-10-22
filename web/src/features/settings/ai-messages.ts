@@ -13,7 +13,9 @@ export const aiMessages = {
   agentNoticeMore: 'To turn a feature on or off, or to change a provider, ask an admin.',
 
   consentHeading: (workspace: string) => `Turn on AI for ${workspace}`,
-  consentBody: (provider: string) => `When you turn it on, ticket messages, the customer’s name, matching knowledge base articles and short excerpts of similar solved tickets go to ${provider}. Private notes are never sent.`,
+  consentBody: (provider: string, runs: string, models: string) => `When you turn it on, ticket messages, the customer’s name, matching knowledge base articles and short excerpts of similar solved tickets go to ${provider}, ${runs}${models ? ` (${models})` : ''}. Private notes are never sent.`,
+  kindRunsAnthropic: 'which runs Anthropic’s Claude models',
+  kindRunsOther: 'an OpenAI-compatible service the server operator chose',
   consentLink: 'What is sent',
   consentLater: 'Not now',
   consentTurnOn: 'Turn on suggestions and drafts',
@@ -105,6 +107,7 @@ export const aiMessages = {
   currentKey: 'Current key',
   newKey: 'New key',
   checkAndReplace: 'Check and replace',
+  oldKeyStays: (hint: string) => `Nothing changed: ••••${hint} is still in use.`,
 
   deleteHeading: (label: string) => `Delete ${label}?`,
   deleteUsed: 'These features use it and will turn off:',
@@ -124,6 +127,8 @@ export const aiMessages = {
   eventSlotOff: (slot: string) => `turned off ${slot}`,
   eventSlotMoved: (slot: string, from: string, to: string) => `moved ${slot} from ${from} to ${to}`,
   eventSlotChanged: (slot: string) => `changed ${slot}`,
+  eventSlotModel: (slot: string, from: string, to: string) => `changed the model of ${slot} from ${from} to ${to}`,
+  eventSlotSet: (slot: string, provider: string) => `set ${slot} to ${provider}`,
   eventSlotRemoved: (slot: string, provider: string) => `${slot} turned off: ${provider} was deleted`,
 
   actionFailed: 'That did not work. Try again in a moment.',

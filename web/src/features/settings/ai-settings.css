@@ -6,7 +6,7 @@
 .ai-mono { font-family: var(--font-mono); font-size: 0.95em; }
 
 /* Tabs and the head action share a row; on a narrow screen the tabs scroll sideways with no bar. */
-.ai-tabs-row { display: flex; align-items: center; gap: var(--space-3); border-bottom: 1px solid var(--line); }
+.ai-tabs-row { display: flex; align-items: center; gap: var(--space-3); min-width: 0; border-bottom: 1px solid var(--line); }
 .ai-tabs { display: flex; flex: 1; min-width: 0; gap: var(--space-5); overflow-x: auto; scrollbar-width: none;
   mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
 .ai-tabs::-webkit-scrollbar { display: none; }
@@ -15,6 +15,7 @@
 .ai-tabs button:hover:not(:disabled) { background: transparent; color: var(--text-1); }
 .ai-tabs button[aria-selected="true"] { color: var(--text-1); box-shadow: inset 0 -2px var(--accent); }
 .ai-tabs button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+@media (pointer: coarse) { .ai-tabs button { min-height: var(--touch); } }
 .ai-count { color: var(--text-3); font-weight: 400; font-variant-numeric: tabular-nums; }
 .ai-add { display: inline-flex; align-items: center; gap: var(--space-1); flex: none; margin-bottom: var(--space-1); }
 .ai-narrow { display: none; }
@@ -108,8 +109,10 @@
 .ai-history b { color: var(--text-1); font-weight: 600; }
 .ai-help { margin: 0; padding: 0 var(--space-1); color: var(--text-3); font-size: var(--fs-small); }
 
-/* Dialogs */
-.ai-dialog { width: min(34rem, 100%); }
+/* Dialogs: the footer stays in view, the fields scroll. */
+.ai-dialog { display: flex; flex-direction: column; width: min(34rem, 100%); max-height: calc(100dvh - 24px); overflow: hidden; }
+.ai-dialog > header, .ai-dialog > footer { flex: none; }
+.ai-dialog-body { min-height: 0; overflow-y: auto; margin: 0 calc(-1 * var(--space-1)); padding: 0 var(--space-1); }
 .ai-dialog > header { display: flex; gap: var(--space-3); align-items: flex-start; }
 .ai-dialog > header > div { flex: 1; display: grid; gap: var(--space-1); }
 .ai-dialog > header p { color: var(--text-3); font-size: var(--fs-small); }
@@ -147,6 +150,10 @@
   .ai-prov-actions { grid-area: actions; }
 }
 @media (max-width: 44rem) {
+  .ai-settings > header p { display: none; }
+  .ai-nothing .ai-slots { display: none; }
+  .ai-tabs { gap: var(--space-3); }
+  .ai-count { display: none; }
   .ai-wide, .ai-long { display: none; }
   .ai-narrow { display: inline; }
   .ai-consent { grid-template-columns: 1fr; padding: var(--space-3); }
@@ -161,4 +168,8 @@
   .ai-icon-text { width: var(--touch); justify-content: center; padding: 0; }
   .ai-history li { grid-template-columns: 1fr; gap: 0; padding: var(--space-2) var(--space-3); }
   .ai-kind { grid-template-columns: 1fr; }
+}
+@media (max-width: 22rem) {
+  .ai-narrow { display: none; }
+  .ai-add { width: var(--touch); justify-content: center; padding: 0; }
 }

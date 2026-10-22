@@ -56,7 +56,7 @@ test('an agent reads the settings and cannot change them', () => {
 test('the consent banner turns both features on with the server provider, or goes away for now', () => {
   const { onConsent, onDismissConsent } = page({ showConsent: true, settings: settings({ server }) });
   const banner = screen.getByRole('region', { name: 'Turn on AI for Northwind' });
-  expect(banner).toHaveTextContent('go to Colliedesk AI');
+  expect(banner).toHaveTextContent('go to Colliedesk AI, which runs Anthropic’s Claude models (triage claude-haiku-5-5 · drafts claude-sonnet-5-5)');
   expect(banner).toHaveTextContent('Private notes are never sent');
   fireEvent.click(within(banner).getByRole('button', { name: 'Turn on suggestions and drafts' }));
   expect(onConsent).toHaveBeenCalled();
@@ -113,7 +113,21 @@ test('adding a provider checks the fields, sends them, and shows a refusal under
 
 test('a server that cannot store keys says so before anyone types one', () => {
   page({ settings: settings({ can_store_keys: false }) });
-  expect(screen.getAllByRole('button', { name: /Add provider/ })[0]).toBeDisabled();
+  fireEvent.click(screen.getAllByRole('button', { name: /Add provider/ })[0]);
+  const dialog = screen.getByRole('dialog', { name: 'Add a provider' });
+  expect(within(dialog).getByRole('alert')).toHaveTextContent('MAILBOX_TOKEN_KEYS');
+  expect(within(dialog).getByRole('button', { name: 'Check and save' })).toBeDisabled();
+});
+
+test('changing to a key that fails says the old key still works', async () => {
+  const { onSetKey } = page({ settings: settings({ providers: [provider()] }) });
+  onSetKey.mockResolvedValueOnce({ field: 'api_key', text: 'The provider refused this key.' });
+  fireEvent.click(screen.getByRole('tab', { name: /Providers/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'Change key' }));
+  const dialog = screen.getByRole('dialog', { name: 'Change the key of Team key' });
+  fireEvent.change(within(dialog).getByLabelText('New key'), { target: { value: 'sk-bad' } });
+  await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Check and replace' })); });
+  expect(within(dialog).getByText(/Nothing changed: ••••7Qx2 is still in use./)).toBeInTheDocument();
 });
 
 test('deleting a provider names the features that will turn off', async () => {
@@ -142,6 +156,7 @@ test('the history reads as sentences and never shows a key', () => {
 test('a failed check is placed under the field it is about', () => {
   expect(refusal(new ConflictError('private', { code: 'ai_check_failed', check_error_code: 'blocked_address' }))).toEqual({ field: 'base_url', text: 'private' });
   expect(refusal(new ConflictError('refused', { code: 'ai_check_failed', check_error_code: 'auth' }))).toEqual({ field: 'api_key', text: 'refused' });
+  expect(refusal(new ConflictError('no model', { code: 'ai_check_failed', check_error_code: 'model_not_found' }))).toEqual({ field: 'models', text: 'no model' });
   expect(refusal(new ConflictError('taken', { code: 'ai_provider_name_taken' }))).toEqual({ field: 'label', text: 'taken' });
   expect(refusal(new Error('API 500')).field).toBe('form');
 });

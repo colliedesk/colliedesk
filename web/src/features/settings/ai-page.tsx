@@ -55,7 +55,7 @@ export function AIPage(props: AIPageProps) {
   const ids = { tabs: useId() };
   const full = settings ? settings.providers.length >= settings.provider_limit : false;
   const tabs: { id: AITab; label: string; count?: number }[] = [
-    { id: 'features', label: m.tabFeatures }, { id: 'providers', label: m.tabProviders, count: settings?.providers.length }, { id: 'history', label: m.tabHistory },
+    { id: 'features', label: m.tabFeatures }, { id: 'providers', label: m.tabProviders, count: settings ? settings.providers.length + (settings.server ? 1 : 0) : undefined }, { id: 'history', label: m.tabHistory },
   ];
   const openAdd = () => { setTab('providers'); setDialog({ kind: 'add' }); };
   return (
@@ -79,7 +79,7 @@ export function AIPage(props: AIPageProps) {
                   {item.label}{item.count !== undefined && <span className="ai-count">{item.count}</span>}
                 </button>)}
               </div>
-              {isAdmin && <button type="button" className="ai-add" onClick={openAdd} disabled={full || !settings.can_store_keys && !settings.allow_private_base_urls}
+              {isAdmin && <button type="button" className="ai-add" aria-label={m.addProvider} onClick={openAdd} disabled={full}
                 aria-describedby={full ? 'ai-limit-why' : undefined}><PlusIcon /><span className="ai-wide">{m.addProvider}</span><span className="ai-narrow">{m.addShort}</span></button>}
             </div>
             {props.error && <p role="alert" className="error-copy">{props.error}</p>}
@@ -104,11 +104,11 @@ function Features(props: AIPageProps & { settings: AISettings; onOpenAdd: () => 
   const server = settings.server;
   const nothing = !server && settings.providers.length === 0;
   const models = (slot: AISlotName) => server?.models[slot]?.[0] ?? '';
-  return <>
+  return <div className={`ai-panel-stack${nothing ? ' ai-nothing' : ''}`}>
     {!isAdmin && <div className="ai-notice ai-notice-plain" role="note"><InfoIcon /><span><strong>{m.agentNotice}</strong> {m.agentNoticeMore}</span></div>}
     {props.showConsent && server && isAdmin && <section className="panel ai-consent" aria-labelledby="ai-consent-heading">
       <div><h2 id="ai-consent-heading">{m.consentHeading(props.workspaceName)}</h2>
-        <p>{m.consentBody(server.label)} <a href="https://github.com/colliedesk/colliedesk/blob/main/docs/user/ai.md#what-a-provider-receives" target="_blank" rel="noopener noreferrer">{m.consentLink}</a></p></div>
+        <p>{m.consentBody(server.label, server.kind === 'anthropic' ? m.kindRunsAnthropic : m.kindRunsOther, m.serverModels(models('triage'), models('draft')))} <a href="https://github.com/colliedesk/colliedesk/blob/main/docs/user/ai.md#what-a-provider-receives" target="_blank" rel="noopener noreferrer">{m.consentLink}</a></p></div>
       <div className="ai-consent-actions">
         <button type="button" onClick={props.onDismissConsent}>{m.consentLater}</button>
         <button type="button" className="primary-action" onClick={props.onConsent} disabled={Boolean(props.busySlot)}>{m.consentTurnOn}</button>
@@ -122,7 +122,7 @@ function Features(props: AIPageProps & { settings: AISettings; onOpenAdd: () => 
     {nothing && <section className="ai-empty" aria-labelledby="ai-empty-heading">
       <header><h2 id="ai-empty-heading">{m.emptyHeading}</h2><p>{m.emptyBody}</p></header>
       <div className="panel ai-way"><h3>{m.emptyOwnHeading}</h3><p>{m.emptyOwnBody}</p>
-        {isAdmin && <div className="button-row"><button type="button" className="primary-action" onClick={props.onOpenAdd} disabled={!settings.can_store_keys && !settings.allow_private_base_urls}><PlusIcon />{m.addProvider}</button></div>}</div>
+        {isAdmin && <div className="button-row"><button type="button" className="primary-action" onClick={props.onOpenAdd}><PlusIcon />{m.addProvider}</button></div>}</div>
       <div className="panel ai-way"><h3>{m.emptyOperatorHeading}</h3><p>{m.emptyOperatorBody}</p>
         <pre>{'AI_SERVER_PROVIDER=anthropic\nAI_SERVER_API_KEY=…\nAI_SERVER_MODELS=triage=…,draft=…'}</pre>
         <div className="button-row"><a className="button" href="https://github.com/colliedesk/colliedesk/blob/main/docs/self-host/environment-variables.md#ai-provider" target="_blank" rel="noopener noreferrer">{m.setupGuide}</a></div></div>
@@ -132,7 +132,7 @@ function Features(props: AIPageProps & { settings: AISettings; onOpenAdd: () => 
       {settings.slots.map((slot) => <SlotRow key={slot.slot} slot={slot} {...props} />)}
     </section>
     <div className="panel ai-sends"><InfoIcon /><span><span className="ai-long">{m.sends} </span><b>{m.sendsStrong}</b></span></div>
-  </>;
+  </div>;
 }
 
 // A choice of provider is "server" or a provider id.
@@ -245,7 +245,11 @@ function eventText(event: AIEvent): string {
   const toLabel = String(detail.to?.provider_label ?? '');
   if (!fromOn && toOn) return m.eventSlotOn(slot, toLabel);
   if (fromOn && !toOn) return m.eventSlotOff(slot);
-  if (fromOn && toOn && fromLabel && toLabel && fromLabel !== toLabel) return m.eventSlotMoved(slot, fromLabel, toLabel);
+  if (fromLabel && toLabel && fromLabel !== toLabel) return m.eventSlotMoved(slot, fromLabel, toLabel);
+  const fromModel = String(detail.from?.model ?? '');
+  const toModel = String(detail.to?.model ?? '');
+  if (fromModel && toModel && fromModel !== toModel) return m.eventSlotModel(slot, fromModel, toModel);
+  if (!fromLabel && toLabel) return m.eventSlotSet(slot, toLabel);
   return m.eventSlotChanged(slot);
 }
 
@@ -348,7 +352,7 @@ function KeyDialog({ provider, onClose, onSetKey }: { provider: AIProvider; onCl
     setBusy(true);
     const refused = await onSetKey(provider.id, key.trim());
     setBusy(false);
-    if (refused) setError(refused.text); else onClose();
+    if (refused) setError(provider.key_hint ? `${refused.text} ${m.oldKeyStays(provider.key_hint)}` : refused.text); else onClose();
   };
   return (
     <Dialog title={m.rotateHeading(provider.label)} help={m.rotateHelp} onClose={onClose} onSubmit={() => void submit()}

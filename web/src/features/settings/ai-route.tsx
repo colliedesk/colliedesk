@@ -30,7 +30,10 @@ function writeDismissed(workspaceID: string) {
 export function refusal(error: unknown): FieldError {
   if (error instanceof ConflictError) {
     const code = error.detail?.code;
-    if (code === 'ai_check_failed') return { field: error.detail?.check_error_code === 'blocked_address' ? 'base_url' : 'api_key', text: error.message };
+    if (code === 'ai_check_failed') {
+      const why = error.detail?.check_error_code;
+      return { field: why === 'blocked_address' ? 'base_url' : why === 'model_not_found' ? 'models' : 'api_key', text: error.message };
+    }
     if (code === 'ai_provider_name_taken') return { field: 'label', text: error.message };
     if (code === 'ai_checks_rate_limited') return { field: 'form', text: m.checksLimited };
   }
