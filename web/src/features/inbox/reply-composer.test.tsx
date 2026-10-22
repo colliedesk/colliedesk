@@ -677,8 +677,9 @@ test('Send anyway sends the same text with the newest reply number', async () =>
   fireEvent.keyDown(screen.getByLabelText('Message body'), { key: 'Enter', ctrlKey: true });
   await screen.findByRole('alert');
   const warning = screen.getByRole('region', { name: 'New replies' });
-  // An imported reply keeps its own time and says where it came from.
-  expect(warning).toHaveTextContent('Imported from freshdesk');
+  // An imported reply keeps its own time and says where it came from, and the title does not call it someone replying.
+  expect(screen.getByRole('alert')).toHaveTextContent('1 reply imported from Freshdesk arrived after you started writing');
+  expect(warning).toHaveTextContent('Imported from Freshdesk');
   expect(warning).toHaveTextContent('Oct 22, 9:00 AM');
   fireEvent.click(within(warning).getByRole('button', { name: 'Send anyway' }));
   await waitFor(() => expect(onSubmit).toHaveBeenLastCalledWith('outgoing', 'Refund on its way', [], [], 3));

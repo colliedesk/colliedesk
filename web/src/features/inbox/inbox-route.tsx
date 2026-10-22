@@ -255,7 +255,7 @@ export function InboxRoute() {
       } catch (error) {
         if (!(error instanceof ReplyConflictError)) throw error;
         await afterDraft(draft.conversation_id);
-        setDraftNotice(messages.draftAfterReply);
+        setDraftNotice(error.newer.length > 0 && error.newer.every((reply) => reply.origin) ? messages.draftAfterImport : messages.draftAfterReply);
         return;
       }
       track('agent_request_decided', { decision: 'approved' });

@@ -23,11 +23,16 @@ const text = {
   conflictTitle: (count: number) => `Someone replied while you were writing (${count === 1 ? '1 new reply' : `${count} new replies`}). Nothing was sent; your text is still here.`,
   newReplies: 'New replies',
   teammate: 'A teammate',
-  imported: (system: string) => `Imported from ${system}`,
+  imported: (system: string) => `Imported from ${systemName(system)}`,
+  importedTitle: (count: number, system: string) => `${count === 1 ? '1 reply' : `${count} replies`} imported from ${systemName(system)} arrived after you started writing; ${count === 1 ? 'it was' : 'they were'} written earlier, at the time shown. Nothing was sent; your text is still here.`,
   sendAnyway: 'Send anyway',
   editReply: 'Edit reply',
   fewer: 'Show fewer',
 };
+
+// The helpdesks an import comes from, by the name they go by.
+const systems: Record<string, string> = { freshdesk: 'Freshdesk', helpscout: 'Help Scout' };
+const systemName = (system: string) => systems[system] ?? system.charAt(0).toUpperCase() + system.slice(1);
 
 // A reply nobody changed for this long is a draft left open in a tab, not someone typing now.
 const typingWithin = 2 * 60_000;
@@ -122,7 +127,9 @@ export function ReplyConflict({ replies, timezone, onSendAnyway, onEdit }: { rep
   return (
     <section className="reply-conflict" aria-label={text.newReplies}>
       {/* Only the fact is read out at once; the replies are there to read, not to be read aloud whole. */}
-      <p role="alert" className="reply-conflict-title">{text.conflictTitle(replies.length)}</p>
+      {/* Replies a re-run import added are not someone answering now: the title says so when they are all there is. */}
+      <p role="alert" className="reply-conflict-title">{replies.length > 0 && replies.every((reply) => reply.origin)
+        ? text.importedTitle(replies.length, replies[0].origin!.system) : text.conflictTitle(replies.length)}</p>
       <ul tabIndex={0} aria-label={text.newReplies}>
         {replies.map((reply) => <li key={reply.id}>
           <p className="reply-conflict-by">{reply.author_name ?? text.teammate} · <time dateTime={reply.created_at}>{formatDate(reply.created_at, timezone)}</time>
