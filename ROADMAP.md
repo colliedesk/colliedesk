@@ -43,8 +43,6 @@ Beta starts when HC Labs announces it. Before that:
 - Connect a Gmail / Google Workspace or Microsoft 365 mailbox with one click (OAuth); replies
   leave from your own address. Forwarding keeps working ([#95](https://github.com/colliedesk/colliedesk/issues/95)).
 - See who is viewing or replying to a conversation ([#101](https://github.com/colliedesk/colliedesk/issues/101)).
-- One end-to-end test of the first-time path (sign up, import, first reply) on every change
-  ([#105](https://github.com/colliedesk/colliedesk/issues/105)).
 - A first team that moved from Freshdesk and works in Colliedesk every day.
 
 ## Then: AI included

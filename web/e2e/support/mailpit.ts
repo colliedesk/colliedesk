@@ -10,10 +10,12 @@ interface Summary { ID: string; MessageID: string; Subject: string; From: { Addr
 export interface DeliveredMail { id: string; subject: string; from: string; text: string; headers: Record<string, string[]> }
 
 // waitForMail polls Mailpit until a message to the address arrives and returns it with its headers.
-export async function waitForMail(to: string, timeout = 30_000): Promise<DeliveredMail> {
+// With text, only a message containing it counts: fixture addresses receive mail on every run.
+export async function waitForMail(to: string, timeout = 30_000, text = ''): Promise<DeliveredMail> {
   let found: Summary | undefined;
   await expect.poll(async () => {
-    const response = await fetch(`${mailpit.api}/api/v1/search?query=${encodeURIComponent(`to:"${to}"`)}`);
+    const query = text ? `to:"${to}" "${text}"` : `to:"${to}"`;
+    const response = await fetch(`${mailpit.api}/api/v1/search?query=${encodeURIComponent(query)}`);
     const page = await response.json() as { messages: Summary[] };
     found = page.messages[0];
     return Boolean(found);
