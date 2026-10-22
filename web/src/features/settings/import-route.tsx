@@ -45,7 +45,8 @@ export function ImportRoute({ onOpenInbox, onOpenBilling }: { onOpenInbox?: () =
   const preview = useMutation({ mutationFn: ({ domain, key }: { domain: string; key: string }) => importsApi.preview(domain, key),
     onSuccess: (created) => { setJustAsked(created.id); after.onSuccess(); } });
   const start = useMutation({ mutationFn: importsApi.start, ...after });
-  const cancel = useMutation({ mutationFn: importsApi.cancel, ...after });
+  // A discarded preview gives the page back to the import before it.
+  const cancel = useMutation({ mutationFn: importsApi.cancel, onSuccess: (job) => { if (job.id === justAsked) setJustAsked(undefined); after.onSuccess(); } });
   const setKey = useMutation({ mutationFn: ({ id, key }: { id: string; key: string }) => importsApi.setKey(id, key), ...after });
   const undo = useMutation({ mutationFn: importsApi.undo, ...after });
   // Only the last action speaks: starting one clears what an earlier one said.
