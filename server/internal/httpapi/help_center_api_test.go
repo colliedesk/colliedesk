@@ -19,7 +19,7 @@ func helpCenterSite(api http.Handler) http.Handler {
 // visit loads a public help center address with no session, from client (an IP address).
 func visit(site http.Handler, path, client string, header ...string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodGet, path, nil)
-	req.RemoteAddr = client + ":4242"
+	req.RemoteAddr, req.Host = client+":4242", testOriginHost
 	for index := 0; index+1 < len(header); index += 2 {
 		if strings.EqualFold(header[index], "Host") {
 			req.Host = header[index+1]
@@ -287,7 +287,7 @@ func TestHelpCenterPagesForbidScriptsFramingAndBranding(t *testing.T) {
 	}
 	// The workspace name stands in for an empty title.
 	wantPage(t, page, http.StatusOK, []string{"Help Safe"}, nil)
-	if response := serve(site, httptest.NewRequest(http.MethodPost, base+"/search", nil)); response.Code != http.StatusMethodNotAllowed {
+	if response := serve(site, newRequest(t, http.MethodPost, base+"/search", nil, "", nil)); response.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST status=%d, want 405", response.Code)
 	}
 }

@@ -4,6 +4,23 @@ The server listens on `127.0.0.1` only. To reach it from outside the host, put a
 front of it that terminates TLS for your domain, for example Caddy or nginx, and set `APP_ORIGIN`
 to the public address (see [environment variables](environment-variables.md)).
 
+## The Host header
+
+The proxy **must** pass the visitor's `Host` header on unchanged: the server decides from it what to
+answer. It serves the app, the API, MCP and attachments only when `Host` is `APP_ORIGIN`'s host name,
+`localhost`, or an IP address (the shipped health check calls `http://127.0.0.1:8080/`, and Caddy asks
+its certificate question on `127.0.0.1`). Every other host name belongs to the
+[help center](#help-center-host-names): a workspace's help center host name or
+[custom domain](#custom-help-center-domains) serves it, and any other name gets the help center's
+`404`, never the app. A name the server does not own therefore never shows the sign-in page, even if
+its DNS still points at the proxy.
+
+- **Caddy** keeps `Host` by default.
+- **nginx** sends the upstream's name unless told otherwise; add `proxy_set_header Host $host;` to
+  every `location` that proxies to Colliedesk. Without it, a `proxy_pass http://colliedesk:8080;` sends
+  `Host: colliedesk:8080`, and every request gets `404`.
+- **Another proxy or load balancer:** forward the original `Host`, not the address of the upstream.
+
 ## Trusted proxies
 
 Behind a reverse proxy, Colliedesk must know the proxy to read the visitor's address from
@@ -120,10 +137,10 @@ https:// {
 }
 ```
 
-Keep the proxy's `Host` header (Caddy does by default; with nginx, `proxy_set_header Host $host;`):
-the server decides from it which help center to show. On a custom domain the server answers only
-help center pages; the app, the API and MCP stay on `APP_ORIGIN`. nginx cannot get certificates on
-demand: issue one per custom domain yourself and add a `server` block for it.
+The proxy must keep the `Host` header ([the Host header](#the-host-header)): the server decides from it
+which help center to show. On a custom domain the server answers only help center pages; the app, the
+API and MCP stay on `APP_ORIGIN`. nginx cannot get certificates on demand: issue one per custom domain
+yourself and add a `server` block for it.
 
 A domain removed in Settings stops being served with the next request, on every server process:
 each page reads the domain's row. Each process remembers for up to 30 seconds which host names are

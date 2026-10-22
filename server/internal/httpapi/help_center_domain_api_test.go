@@ -316,7 +316,7 @@ func TestOldAddressesMoveToTheCustomDomain(t *testing.T) {
 			olds := []old{
 				{"desk.example.com", "/help/" + slug + "/c/guides?page=2", "https://" + host + "/c/guides?page=2"},
 				{"desk.example.com", "/help/" + slug, "https://" + host + "/"},
-				{"evil.example", "/help/" + slug + "//evil.example/x?next=https://evil.example", "https://" + host + "//evil.example/x?next=https://evil.example"},
+				{"desk.example.com", "/help/" + slug + "//evil.example/x?next=https://evil.example", "https://" + host + "//evil.example/x?next=https://evil.example"},
 				{"desk.example.com", "/help/" + slug + "/a/1-x%0d%0aSet-Cookie:%20a=b", "https://" + host + "/a/1-x%0d%0aSet-Cookie:%20a=b"},
 			}
 			if mode.domain != "" {

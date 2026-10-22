@@ -26,7 +26,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const testOrigin = "https://desk.example.com"
+const (
+	testOrigin     = "https://desk.example.com"
+	testOriginHost = "desk.example.com"
+)
 
 func testAPI(t *testing.T) (http.Handler, *auth.Service) {
 	t.Helper()
@@ -189,6 +192,8 @@ func newRequest(t *testing.T, method, path string, body any, token string, cooki
 		}
 	}
 	req := httptest.NewRequest(method, path, &data)
+	// The app answers only on APP_ORIGIN's host (helpcenter.Site.Wrap), as a browser reaches it.
+	req.Host = testOriginHost
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

@@ -67,6 +67,14 @@ test('help center custom domain: an admin sets it in Settings, the DNS check mak
   await page.getByRole('group', { name: 'Remove the custom domain?' }).getByRole('button', { name: 'Remove' }).click();
   await expect(page.getByText('No custom domain is set.')).toBeVisible();
   expect((await get(host, '/')).body).not.toContain('Domain help');
+  // A removed domain is no way into the app: its name gets the help center's 404, while the app's own
+  // address and the loopback health check still answer.
+  for (const path of ['/', '/api/v1/config', '/api/v1/auth/me']) {
+    const removed = await get(host, path);
+    expect(removed.status, path).toBe(404);
+    expect(removed.type, path).toContain('text/html');
+  }
+  expect((await get('127.0.0.1', '/api/v1/config')).status).toBe(200);
   expect((await page.request.get(`${servers.main}/help/${slug}`, { maxRedirects: 0 })).status()).toBe(200);
   expect((await page.request.get(`${servers.main}/api/v1/public/help-center/tls-ask?domain=${host}`)).status()).toBe(404);
 });

@@ -103,33 +103,32 @@ func New(config Config) *Site {
 	return site
 }
 
-// Wrap answers help center requests and passes every other request to next: a host name below the
-// help center domain, an active custom domain, a claim's CNAME target, and paths under /help/. A
-// custom domain answers only help center pages, whatever the path: the app, the API and MCP are never
-// reached on it. Requests to APP_ORIGIN's host and below HELP_CENTER_DOMAIN never look a custom domain
-// up.
+// Wrap answers help center requests and passes the others to next (the app, the API and MCP). next
+// is reached only on APP_ORIGIN's host, and on loopback and IP address hosts (health checks, the
+// reverse proxy's certificate question): there the paths under /help/ are the help center and every
+// other path goes on. Every other host name belongs to the help center: a host name below the help
+// center domain, a claim's CNAME target, or an active custom domain serve it, whatever the path, and
+// any other name, such as a custom domain just removed, gets the help center's 404. So the app, its
+// sign-in and its session never answer on a name the server does not own. Requests to APP_ORIGIN's
+// host and below HELP_CENTER_DOMAIN never look a custom domain up.
 func (s *Site) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if slug, ok := hostSlug(request.Host, s.config.Domain, s.originHost); ok {
+		host := requestHost(request.Host)
+		if slug, ok := hostSlug(host, s.config.Domain, s.originHost); ok {
 			s.serve(response, request, address{slug: slug, sub: request.URL.Path})
 			return
 		}
-		if host := requestHost(request.Host); host != "" {
-			if _, ok := claimOfHost(host, s.config.Domain); ok {
-				s.serveHost(response, request, host, true)
-				return
-			}
+		if _, ok := claimOfHost(host, s.config.Domain); ok {
+			s.serveHost(response, request, host, true)
+			return
 		}
-		if host, ok := s.customHostCandidate(request.Host); ok {
-			workspaceID, found, err := s.workspaceOfHost(request.Context(), host)
-			if err != nil {
-				s.writeError(response, err)
+		if !s.appHost(host) {
+			if candidate, ok := s.customHostCandidate(host); ok {
+				s.serveHost(response, request, candidate, false)
 				return
 			}
-			if found {
-				s.serve(response, request, address{workspaceID: workspaceID, host: host, sub: request.URL.Path})
-				return
-			}
+			s.writeNotFound(response, true)
+			return
 		}
 		if request.URL.Path == strings.TrimSuffix(pathPrefix, "/") {
 			s.writeNotFound(response, false)
@@ -142,6 +141,12 @@ func (s *Site) Wrap(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(response, request)
 	})
+}
+
+// appHost reports whether the app answers on a request's host name (requestHost): APP_ORIGIN's host,
+// localhost, or an IP address.
+func (s *Site) appHost(host string) bool {
+	return host == s.originHost || host == "localhost" || net.ParseIP(strings.Trim(host, "[]")) != nil
 }
 
 // serveHost answers a request on a host name that belongs to a workspace's help center through the

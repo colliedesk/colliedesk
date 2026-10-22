@@ -10,6 +10,13 @@ requests. This file keeps the first release.
 
 ## Unreleased
 
+**Operators: the reverse proxy must send the visitor's `Host` header.** The server now answers the app,
+the API, MCP and attachments only when the `Host` of the request is `APP_ORIGIN`'s host, `localhost` or
+an IP address (health checks, the proxy's certificate question). Every other host name gets the help
+center, or the help center's 404. Caddy keeps the `Host` header by default. With nginx, set
+`proxy_set_header Host $host;`; a proxy that rewrites it to an internal name such as `colliedesk:8080`
+now gets 404 for everything. See [running behind a proxy](docs/self-host/running-behind-proxy.md#the-host-header).
+
 API changes in the email view (the full notes will be on the releases page):
 
 - `GET /contacts/{id}` no longer embeds `conversations` (an unpaged list). It returns
