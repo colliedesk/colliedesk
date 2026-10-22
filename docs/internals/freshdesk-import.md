@@ -290,6 +290,14 @@ is gone, or its key left every ring) is taken by any worker and moves to `waitin
 different rings therefore never take each other's jobs while those are alive. Cloud sets the ring; it is shared with Gmail grants, so rotate it by
 putting a new key in front (`k2:new,k1:old`), never by replacing it.
 
+### Notice to the admins
+
+When an import ends on its own (`finished`, or `failed`), the worker mails the person who started it
+and every active admin, one message each, from `noreply@MAIL_FROM_DOMAIN` like the retention notice
+(`importjobs/notice.go`). A preview, a cancel and an undo send none. It is sent after the end is
+committed, at most once: a crash in between, or a relay failure (logged), means no mail; the page and
+the job always hold the result. Without SMTP the page alone says it. No telemetry event is added (#105).
+
 ### Freshdesk agents (import_people)
 
 The preview records the agents of the account (`import_people`, keyed by workspace, ledger source and

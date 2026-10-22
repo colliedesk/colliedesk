@@ -153,6 +153,11 @@ are linked when the account is read. **Invite** sends a Colliedesk invite to the
 they are linked by their email, before or after the import. To link someone whose email differs, choose
 the agent and select **Link**; **Unlink** takes it back. A link is applied within seconds.
 
+When an import ends on its own (complete, incomplete or stopped by an error), the admins of the
+workspace and the person who started it get an email with the result and a link to the page, on
+Colliedesk Cloud and on a server with outgoing email (`SMTP_HOST` and `MAIL_FROM_DOMAIN`). A preview and
+an import you stop yourself send none.
+
 **Stop import** stops it within a minute; what was imported stays. Start a new import to finish it, or
 undo it. Only one import or undo runs in a workspace at a time.
 

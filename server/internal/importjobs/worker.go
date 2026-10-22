@@ -52,6 +52,11 @@ type WorkerOptions struct {
 	BaseURL func(host string) string
 	// Configure changes the importer options of every run; tests and end-to-end builds point the network at a fake.
 	Configure func(*freshdesk.Options)
+	// Mailer and MailFrom send the admins a notice when an import ends; nil sends nothing.
+	Mailer   Mailer
+	MailFrom string
+	// Origin is the address of the app, for the link in the notice.
+	Origin string
 	// Workers is how many jobs run at once in this process; default 2.
 	Workers                           int
 	Interval, Lease, Heartbeat, Flush time.Duration
@@ -546,6 +551,9 @@ func (r *jobRun) end(ctx context.Context, state, status, code, message string, r
 	err := r.update(ctx, endSQL+`, report=COALESCE($9, report), report_markdown=COALESCE($10, report_markdown)`,
 		state, nullable(status), nullable(code), nullable(message), r.now(), report, markdown)
 	r.worker.options.Keys.forget(r.item.id)
+	if err == nil {
+		r.notifyAdmins(ctx, state, status, code, report)
+	}
 	return err
 }
 
