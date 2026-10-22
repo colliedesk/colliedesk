@@ -103,7 +103,7 @@ func expirePreviews(ctx context.Context, db *database.DB, now time.Time) ([]stri
 			WHERE e.id=ANY($1::uuid[]) AND p.workspace_id=e.workspace_id AND p.source=e.account_source AND NOT EXISTS (
 				SELECT 1 FROM import_jobs j WHERE j.workspace_id=p.workspace_id AND j.account_source=p.source AND j.kind='import'
 				AND (j.state IN ('previewing','previewed') OR (j.started_at IS NOT NULL AND NOT EXISTS (
-					SELECT 1 FROM import_jobs u WHERE u.workspace_id=j.workspace_id AND u.undo_of=j.id AND u.state='finished'))))`, ids)
+					SELECT 1 FROM import_jobs u WHERE u.workspace_id=j.workspace_id AND u.kind='undo' AND u.account_source=j.account_source AND u.state='finished' AND u.finished_at>=j.started_at))))`, ids)
 		return err
 	})
 	return ids, err
