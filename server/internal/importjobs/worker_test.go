@@ -582,3 +582,24 @@ func TestAJobStartedInThisProcessRunsWithoutWaitingForTheNextTick(t *testing.T) 
 		t.Fatal("the preview waited for the next tick (an hour)")
 	}
 }
+
+// The in-app import points old Freshdesk help center links at the help center exactly as the CLI
+// does: the full pass gets the server's address and help center domain.
+func TestTheFullPassGetsTheHelpCenterAddress(t *testing.T) {
+	e := newEnv(t, true)
+	e.started(t)
+	w := importjobs.NewWorker(importjobs.WorkerOptions{DB: e.db, Keys: e.keys, Interval: time.Hour, Heartbeat: 20 * time.Millisecond,
+		Flush: 10 * time.Millisecond, Lease: time.Minute, Origin: "https://desk.example.com", HelpCenterDomain: "help.example.net"})
+	var origin, domain string
+	importjobs.StubImporter(w, func(_ context.Context, o freshdesk.Options) (*freshdesk.Report, error) {
+		if o.Mode == freshdesk.ModeRecent {
+			return &freshdesk.Report{Status: freshdesk.StatusInterim, Interim: true}, nil
+		}
+		origin, domain = o.Origin, o.HelpCenterDomain
+		return &freshdesk.Report{Status: freshdesk.StatusOK}, nil
+	}, nil, nil)
+	tick(t, w)
+	if origin != "https://desk.example.com" || domain != "help.example.net" {
+		t.Fatalf("full pass got origin %q and help center domain %q", origin, domain)
+	}
+}

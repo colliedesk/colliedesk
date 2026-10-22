@@ -233,6 +233,9 @@ type Report struct {
 	// TrialExtensionError is set when the import finished but the trial could not be extended;
 	// running the same import again retries it.
 	TrialExtensionError string `json:"trial_extension_error,omitempty"`
+	// Links reports the old Freshdesk help center addresses and links (report-links.go); absent from a
+	// dry run, a recent-tickets run and an account with no knowledge base and no such link.
+	Links *LinksReport `json:"links,omitempty"`
 	// StorageCap is set by a dry run on a workspace whose cap counts imports: whether the import would be refused.
 	StorageCap *StorageCapCheck `json:"storage_cap,omitempty"`
 }

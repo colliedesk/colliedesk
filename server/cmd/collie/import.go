@@ -12,6 +12,7 @@ import (
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
+	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -28,7 +29,7 @@ var progressOutput io.Writer = os.Stderr
 
 const importUsage = "usage: collie import freshdesk --workspace <slug> --domain <account>.freshdesk.com [--api-key-env FRESHDESK_API_KEY] [--since YYYY-MM-DD] [--last-ticket-id N] [--include-personal-canned-responses] [--help-center-portal ID] [--dry-run] [--report-dir DIR]"
 
-func importCommand(ctx context.Context, pool *pgxpool.Pool, args []string, output io.Writer) error {
+func importCommand(ctx context.Context, pool *pgxpool.Pool, origin string, args []string, output io.Writer) error {
 	if len(args) > 0 && args[0] == "undo" {
 		return undoCommand(ctx, pool, args[1:], output)
 	}
@@ -45,6 +46,11 @@ func importCommand(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 	if err := database.Migrate(ctx, pool); err != nil {
 		return err
 	}
+	// Old Freshdesk help center links are pointed at the help center's address, built as the server builds it.
+	if options.HelpCenterDomain, err = helpcenter.DomainFromEnv(os.Getenv); err != nil {
+		return err
+	}
+	options.Origin = origin
 	options.Progress = progressOutput
 	if !options.DryRun {
 		storage, err := attachmentStorage()
