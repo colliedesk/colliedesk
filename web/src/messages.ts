@@ -470,6 +470,7 @@ export const messages = {
   draftWaiting: 'Draft waiting',
   draftWithAI: 'Draft with AI',
   fromAIDraft: 'from an AI draft',
+  checkBeforeSending: 'Check before sending: not in this conversation:',
   draftRewritten: (person: string) => `from an agent draft, edited and sent by ${person}`,
   draftTo: (customer: string) => `To ${customer}`,
   theCustomer: 'the customer',

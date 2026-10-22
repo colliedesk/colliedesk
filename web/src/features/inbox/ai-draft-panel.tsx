@@ -15,7 +15,7 @@ interface AIDraftPanelProps {
   agentId?: string;
   // Whether the reply box holds text: then the draft can replace it or go below it.
   hasText: boolean;
-  onUse: (draftText: string, use: DraftUse, draftId: string) => void;
+  onUse: (draftText: string, use: DraftUse, draftId: string, warnings: string[]) => void;
   onClose: () => void;
 }
 
@@ -24,6 +24,16 @@ const longPoll = 20;
 // The newest draft of this person that is still being written or waits for a decision.
 function openDraft(drafts: AIDraft[] | undefined, agentId?: string) {
   return drafts?.find((draft) => draft.requested_by_agent_id === agentId && (writing(draft) || (draft.status === 'ready' && draft.outcome === null)));
+}
+
+// DraftStatus says on the closed panel's button that the person's draft is being written or is ready,
+// after the conversation is on screen (the chunk loads after it; nothing waits for this read).
+export function DraftStatus({ conversationId, agentId }: { conversationId: string; agentId?: string }) {
+  const list = useQuery({ queryKey: ['ai-drafts', conversationId], queryFn: () => aiDraftApi.list(conversationId),
+    refetchInterval: (query) => (query.state.status !== 'error' && openDraft(query.state.data?.items, agentId) && writing(openDraft(query.state.data?.items, agentId)) ? 5000 : false) });
+  const found = openDraft(list.data?.items, agentId);
+  if (!found) return null;
+  return <span className="ai-draft-badge" role="status"><span className="sr-only">, </span>{writing(found) ? text.badgeWriting : text.badgeReady}</span>;
 }
 
 // AIDraftPanel asks for an AI draft of a reply and shows it when ready: the text, what it is missing,
@@ -79,7 +89,7 @@ export function AIDraftPanel({ conversationId, agentId, hasText, onUse, onClose 
     setAsking(true);
   };
   const use = (how: DraftUse) => {
-    if (draft?.text) onUse(draft.text, how, draft.id);
+    if (draft?.text) onUse(draft.text, how, draft.id, draft.warnings.map((warning) => warning.value));
   };
   return (
     <section className="ai-draft" aria-label={text.heading} ref={root} onKeyDown={onKey}>
@@ -122,7 +132,7 @@ function ReadyDraft({ draft, hasText, onUse, onDiscard, onAgain, busy }: { draft
   return (
     <div className="ai-draft-ready">
       {draft.warnings.length > 0 && (
-        <div className="ai-draft-check" role="note">
+        <div className="ai-draft-check" role="alert">
           <strong>{text.checkHeading}</strong>
           <span>{text.checkBody}</span>
           <ul>{draft.warnings.map((warning) => <li key={warning.kind + warning.value}><code>{warning.value}</code> <span>({text.warningKind[warning.kind] ?? warning.kind})</span></li>)}</ul>

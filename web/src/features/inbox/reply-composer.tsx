@@ -101,8 +101,10 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
   const [assist, setAssist] = useState(false);
   // The AI draft the reply was written from, until it is sent or the box is emptied.
   const [aiDraft, setAIDraft] = useState<string>();
+  // What the draft put in the box that the conversation does not hold: shown until it is sent or the box is emptied.
+  const [aiWarnings, setAIWarnings] = useState<string[]>([]);
   const assistPart = aiDraftPart.use(Boolean(aiDraftsFor));
-  useEffect(() => { if (!body.trim()) setAIDraft(undefined); }, [body]);
+  useEffect(() => { if (!body.trim()) { setAIDraft(undefined); setAIWarnings([]); } }, [body]);
   const toggle = (picker: Picker) => setPicking((open) => (open === picker ? null : picker));
   // Where the cursor goes once an inserted reply is in the box.
   const caret = useRef<number | null>(null);
@@ -136,10 +138,11 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
     caret.current = null;
   }, [body, picking]);
   useEffect(() => { if (disabled) { setPicking(null); setAssist(false); } }, [disabled]);
-  const applyDraft = (text: string, how: 'replace' | 'below', id: string) => {
+  const applyDraft = (text: string, how: 'replace' | 'below', id: string, warnings: string[] = []) => {
     setAssist(false);
     setKind('outgoing');
     setAIDraft(id);
+    setAIWarnings(warnings);
     const next = how === 'replace' || !body.trim() ? text : `${body.trimEnd()}\n\n${text}`;
     caret.current = next.length;
     setBody(next);
@@ -183,7 +186,7 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
     // Clear only what was sent: text typed while the request was in flight (a note right after a reply) stays.
     // The files go with it; files picked meanwhile stay.
     const clearSent = () => {
-      if (fromDraft) setAIDraft(undefined);
+      if (fromDraft) { setAIDraft(undefined); setAIWarnings([]); }
       setBody((current) => (current.trim() === sent ? '' : current));
       setFiles((current) => current.filter((file) => !sentFiles.includes(file)));
     };
@@ -224,6 +227,9 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
           </div>
           {kind === 'note' && <span className="composer-hint">{messages.noteHint}</span>}
         </div>
+        {aiWarnings.length > 0 && kind === 'outgoing' && (
+          <p className="composer-warning" role="alert"><strong>{messages.checkBeforeSending}</strong> {aiWarnings.join(', ')}</p>
+        )}
         <textarea ref={field} aria-label={messages.messageBody} value={body} disabled={disabled} onKeyDown={onFieldKey}
           placeholder={kind === 'note' ? messages.notePlaceholder : messages.replyPlaceholder} onChange={(event) => setBody(event.target.value)} />
         {picking && !disabled && (pickers.status === 'error' ? <div className="saved-reply-picker"><PartUnavailable /></div>
@@ -246,13 +252,14 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
           {/* Mouse down must not blur the open list, or the click would close it and open it again. */}
           <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'replies'} title={`${messages.insertSavedReply} (/)`}
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('replies')}>
-            <BookmarkIcon />{messages.insertSavedReply}<kbd aria-hidden="true">/</kbd></button>
+            <BookmarkIcon /><span className="tool-label">{messages.insertSavedReply}</span><kbd aria-hidden="true">/</kbd></button>
           <button type="button" className="saved-reply-button" disabled={disabled} aria-haspopup="dialog" aria-expanded={picking === 'articles'}
             onMouseDown={(event) => event.preventDefault()} onClick={() => toggle('articles')}>
-            <BookIcon />{messages.articles}</button>
+            <BookIcon /><span className="tool-label">{messages.articles}</span></button>
           {aiDraftsFor && (
             <button type="button" className="saved-reply-button" disabled={disabled} aria-expanded={assist} onClick={() => setAssist((open) => !open)}>
-              <SparklesIcon />{messages.draftWithAI}</button>
+              <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span>
+              {assistPart.status === 'ready' && !assist && <assistPart.module.DraftStatus conversationId={aiDraftsFor} agentId={agentId} />}</button>
           )}
           {kind === 'outgoing' && !showCc && (
             <button type="button" className="cc-button" disabled={disabled} aria-expanded={false} title={messages.ccToggleTitle}

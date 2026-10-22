@@ -37,14 +37,14 @@ test('a ready draft shows what to check, what is missing and its sources, and go
   const onUse = vi.fn();
   render(wrap(<AIDraftPanel conversationId={conversation} agentId={agent} hasText onUse={onUse} onClose={vi.fn()} />));
   expect(await screen.findByText('Hi Ada, open tray two.')).toBeInTheDocument();
-  expect(screen.getByRole('note')).toHaveTextContent('Check before sending');
-  expect(screen.getByRole('note')).toHaveTextContent('grace@other.example');
+  expect(screen.getByRole('alert')).toHaveTextContent('Check before sending');
+  expect(screen.getByRole('alert')).toHaveTextContent('grace@other.example');
   expect(screen.getByText(/Which printer model\?/)).toBeInTheDocument();
   expect(screen.getByRole('link', { name: /Printer paper jams/ })).toHaveAttribute('href', `/knowledge/articles/${article}`);
   fireEvent.click(screen.getByRole('button', { name: 'Insert below' }));
-  expect(onUse).toHaveBeenCalledWith('Hi Ada, open tray two.', 'below', draft().id);
+  expect(onUse).toHaveBeenCalledWith('Hi Ada, open tray two.', 'below', draft().id, ['grace@other.example']);
   fireEvent.click(screen.getByRole('button', { name: 'Replace' }));
-  expect(onUse).toHaveBeenLastCalledWith('Hi Ada, open tray two.', 'replace', draft().id);
+  expect(onUse).toHaveBeenLastCalledWith('Hi Ada, open tray two.', 'replace', draft().id, ['grace@other.example']);
 });
 
 test('asking for a draft sends the prompt and shows it being written until it is ready', async () => {
@@ -82,9 +82,11 @@ test('the reply box offers Draft with AI only where drafts are on, and a reply f
   const { rerender } = render(wrap(<ReplyComposer onSubmit={onSubmit} />));
   expect(screen.queryByRole('button', { name: 'Draft with AI' })).not.toBeInTheDocument();
   rerender(wrap(<ReplyComposer onSubmit={onSubmit} aiDraftsFor={conversation} agentId={agent} />));
-  fireEvent.click(screen.getByRole('button', { name: 'Draft with AI' }));
+  fireEvent.click(screen.getByRole('button', { name: /^Draft with AI/ }));
   fireEvent.click(await screen.findByRole('button', { name: 'Use draft' }));
   expect(screen.getByLabelText('Message body')).toHaveValue('Hi Ada, open tray two.');
+  // What to check stays above the box until the reply is sent.
+  expect(screen.getByRole('alert')).toHaveTextContent('grace@other.example');
   fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'Hi Ada, open tray two please.' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
   expect(onSubmit).toHaveBeenCalledWith('outgoing', 'Hi Ada, open tray two please.', [], [], undefined, draft().id);
@@ -95,7 +97,7 @@ test('a reply whose draft is gone meanwhile is sent without it', async () => {
   const { ConflictError } = await import('../../api/client');
   const onSubmit = vi.fn().mockRejectedValueOnce(new ConflictError('gone', { code: 'ai_draft_not_ready' })).mockResolvedValue(undefined);
   render(wrap(<ReplyComposer onSubmit={onSubmit} aiDraftsFor={conversation} agentId={agent} />));
-  fireEvent.click(screen.getByRole('button', { name: 'Draft with AI' }));
+  fireEvent.click(screen.getByRole('button', { name: /^Draft with AI/ }));
   fireEvent.click(await screen.findByRole('button', { name: 'Use draft' }));
   fireEvent.click(screen.getByRole('button', { name: 'Send reply' }));
   await vi.waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
@@ -131,4 +133,10 @@ test('a draft whose reading fails stops asking instead of asking in a loop', asy
   const reads = fetch.mock.calls.filter(([url]) => String(url).includes(draft().id)).length;
   expect(reads).toBeLessThanOrEqual(2);
   expect(await screen.findByRole('alert')).toHaveTextContent('The draft could not be loaded');
+});
+
+test('the button of the closed panel says a draft is ready', async () => {
+  serve(() => ({ items: [draft()] }));
+  render(wrap(<ReplyComposer onSubmit={vi.fn()} aiDraftsFor={conversation} agentId={agent} />));
+  expect(await screen.findByRole('button', { name: /^Draft with AI,\s*Draft ready$/ })).toBeInTheDocument();
 });

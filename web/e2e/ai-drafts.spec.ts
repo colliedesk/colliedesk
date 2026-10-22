@@ -1,4 +1,7 @@
+import { mkdtempSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { expect, test } from '@playwright/test';
 import { colliedeskAsync, psql, servers, uniqueSuffix } from './support/cli';
@@ -43,7 +46,7 @@ test('a team that imported Freshdesk drafts a reply with AI from its own solved 
   await fake.start();
   try {
     await redeemLink(page, workspace.url);
-    const imported = await colliedeskAsync(['import', 'freshdesk', '--workspace', workspace.slug, '--domain', 'acme.freshdesk.com'],
+    const imported = await colliedeskAsync(['import', 'freshdesk', '--workspace', workspace.slug, '--domain', 'acme.freshdesk.com', '--report-dir', mkdtempSync(join(tmpdir(), 'colliedesk-drafts-report-'))],
       { tags: 'e2e', env: { ...fake.env(), FRESHDESK_API_KEY: apiKey } });
     expect(imported.status, imported.stderr).toBe(0);
     // An import queues no AI work: drafts are asked for by people.
@@ -58,14 +61,21 @@ test('a team that imported Freshdesk drafts a reply with AI from its own solved 
     await page.reload();
     await page.getByRole('searchbox', { name: 'Search conversations' }).fill('Rotterdam');
     await page.getByRole('button', { name: /Fixture ticket 42:/ }).click();
-    await page.getByRole('button', { name: 'Draft with AI' }).click();
+    // On a phone the panel's button is on screen without scrolling.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('button', { name: /^Draft with AI/ }).click();
     const panel = page.getByRole('region', { name: 'Draft with AI' });
+    await expect(panel.getByRole('button', { name: 'Write draft' })).toBeInViewport();
+    await page.setViewportSize({ width: 1280, height: 720 });
     await panel.getByLabel('What should the reply say? (optional)').fill('Tell them where the parcel is');
     await panel.getByRole('button', { name: 'Write draft' }).click();
     // The sources are built in the background after an import; the draft waits for nothing on screen.
     await expect(panel.getByText('Hello, your parcel left Rotterdam this morning and arrives tomorrow.')).toBeVisible({ timeout: 30_000 });
     await expect(panel.getByText(/The tracking number\./)).toBeVisible();
     await expect(panel.getByRole('link').first()).toBeVisible();
+    // On a short laptop screen the draft's buttons and Send are on screen without scrolling.
+    await expect(panel.getByRole('button', { name: 'Use draft' })).toBeInViewport();
+    await expect(page.getByRole('button', { name: 'Send reply' })).toBeInViewport();
 
     const prompt = model.prompts.at(-1) ?? '';
     expect(prompt).toContain('Tell them where the parcel is');
