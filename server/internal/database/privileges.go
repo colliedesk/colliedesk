@@ -76,4 +76,8 @@ const (
 	// address, after a workspace dropped its own. Google revokes an account's whole grant to the project, so
 	// the grant is revoked only when no workspace holds it. Only a yes or no leaves the transaction.
 	PrivilegeMailboxGrantShared Privilege = "mailbox-grant-shared"
+	// PrivilegeAIRetrievalQueue lists the workspaces that have knowledge base articles or conversations
+	// queued for AI retrieval to build. Only workspace ids leave the transaction; each is built in its
+	// own scope.
+	PrivilegeAIRetrievalQueue Privilege = "ai-retrieval-queue"
 )
