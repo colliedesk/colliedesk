@@ -16,7 +16,32 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # A push to main whose files a pull request run from this repository already passed in full
+  # (an up-to-date branch merged with a merge commit) skips the test jobs below and keeps image and
+  # roadmap: GitHub Free runs 20 jobs at once for the account, and while other pull requests hold
+  # them a full main run queued past 120 seconds, so edge did not move. Any doubt runs every job.
+  pr-verified:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      reuse: ${{ steps.decide.outputs.reuse }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+      - id: decide
+        name: Did a pull request run pass on these exact files?
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/pr-verified.py --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+
   go:
+    needs: pr-verified
+    if: ${{ !cancelled() && needs.pr-verified.outputs.reuse != 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -93,6 +118,8 @@ jobs:
             /home/runner/.cache/go-build
           key: go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-${{ github.sha }}
   web:
+    needs: pr-verified
+    if: ${{ !cancelled() && needs.pr-verified.outputs.reuse != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -109,6 +136,8 @@ jobs:
         # The type check runs in the e2e job, which finishes early; Vitest was this job's long pole.
         run: corepack pnpm test && corepack pnpm exec vite build && corepack pnpm bundle:check
   e2e:
+    needs: pr-verified
+    if: ${{ !cancelled() && needs.pr-verified.outputs.reuse != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     env:
@@ -185,6 +214,8 @@ jobs:
   # The customer onboarding journeys listed in AGENTS.md. A separate job so they run in parallel
   # with the other end-to-end tests; every test runs in exactly one of the two jobs.
   onboarding:
+    needs: pr-verified
+    if: ${{ !cancelled() && needs.pr-verified.outputs.reuse != 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -420,6 +451,8 @@ jobs:
         run: sh .github/scripts/ci-background.sh wait compose-smoke
 
   codeql:
+    needs: pr-verified
+    if: ${{ !cancelled() && needs.pr-verified.outputs.reuse != 'true' }}
     permissions:
       contents: read
       security-events: write
@@ -427,7 +460,7 @@ jobs:
 
   ci-ok:
     if: ${{ !cancelled() }}
-    needs: [go, web, e2e, onboarding, image, osv-scan, roadmap, codeql]
+    needs: [pr-verified, go, web, e2e, onboarding, image, osv-scan, roadmap, codeql]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
