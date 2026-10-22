@@ -101,9 +101,13 @@ func retryAfter(header http.Header) time.Duration {
 	return 0
 }
 
-// transportError maps an error with no HTTP response. The context's own error decides between a
-// timeout and a cancellation; the original error is dropped because a URL error can carry the URL.
+// transportError maps an error with no HTTP response: a dial netguard refused, a timeout (the
+// context's own error decides) or anything else. The original error is dropped because a URL error
+// can carry the URL.
 func transportError(ctx context.Context, err error) *Error {
+	if errors.Is(err, netguard.ErrBlockedAddress) {
+		return &Error{Code: ErrorBlockedAddress}
+	}
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
 		return &Error{Code: ErrorTimeout}
 	}

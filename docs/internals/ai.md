@@ -54,7 +54,8 @@ content block. A refusal is an answer (`StopRefused`), not an error: it may be b
 ## Errors carry no text
 
 `*aiprovider.Error` has a code (`auth`, `permission`, `model_not_found`, `bad_request`, `too_large`,
-`rate_limited`, `overloaded`, `quota_exhausted`, `timeout`, `unavailable`, `invalid_response`), the
+`rate_limited`, `overloaded`, `quota_exhausted`, `timeout`, `unavailable`, `blocked_address`,
+`invalid_response`), the
 HTTP status, `retry-after` and the provider's request id. It never holds the provider's message or
 body, which can echo the prompt (customer text) or a key, and never the URL. Only rate limits,
 overload, server errors and timeouts are retryable. OpenAI answers an empty account with a 429 whose
@@ -77,7 +78,8 @@ Adapters take an `*http.Client`. `NewHTTPClient` has no response-header timeout,
 non-streaming completion sends its headers only when the whole answer is ready; the request context
 bounds the call. Redirects are not followed. A base URL a workspace admin typed is dialled through
 `netguard` (public addresses only); the server provider and a private URL the operator allowed are not
-guarded. That choice is made where the provider is built, not in the adapter.
+guarded. That choice is made where the provider is built, not in the adapter. A dial netguard refuses
+is `blocked_address`, so Settings can say the address is on a private network.
 
 ## Prompt caching
 

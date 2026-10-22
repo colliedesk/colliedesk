@@ -12,7 +12,7 @@ func TestGuardedClientRefusesPrivateAddresses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := guarded.Complete(context.Background(), draftRequest()); CodeOf(err) != ErrorUnavailable {
+	if _, err := guarded.Complete(context.Background(), draftRequest()); CodeOf(err) != ErrorBlockedAddress {
 		t.Fatalf("guarded call to loopback: %v", err)
 	}
 	if hits := len(fake.recorded(t)); hits != 0 {

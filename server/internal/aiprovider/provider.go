@@ -164,6 +164,7 @@ const (
 	ErrorQuotaExhausted  ErrorCode = "quota_exhausted"  // the provider account is out of credit
 	ErrorTimeout         ErrorCode = "timeout"          // no answer before the deadline
 	ErrorUnavailable     ErrorCode = "unavailable"      // a server error or no connection
+	ErrorBlockedAddress  ErrorCode = "blocked_address"  // the base URL reaches a private network this server does not call
 	ErrorInvalidResponse ErrorCode = "invalid_response" // the answer could not be read
 )
 
