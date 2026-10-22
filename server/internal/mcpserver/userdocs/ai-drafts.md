@@ -69,10 +69,11 @@ last 30 days: drafts, how many were sent unchanged, edited or discarded, sent on
 
 We measure drafts on a public help center of 102 real articles with customer emails written by a
 model, some vague, in other languages, or needing a person; a stronger model grades each draft against
-the article that answers it. On emails the knowledge base answers, 92 % of the drafts rated "From your
-knowledge base" were correct as written and none was wrong (79 drafts over two independent sets);
-every email that needed a person was handed over. About a third to a half of the answerable emails got
-that rating; the rest got "Check before sending". Your own numbers are in Settings once your team
+the article that answers it. On emails the knowledge base answers, none of the 100 drafts rated "From
+your knowledge base" over three sets had a wrong statement, and 90 of them could be sent exactly as
+written (87 % to 92 % per set); the others needed a detail added. Every email that needed a person was
+handed over. A third to a half of the answerable emails got that rating; the rest got "Check before
+sending". Your own numbers are in Settings once your team
 reviews drafts. The method is in [the internals](https://github.com/colliedesk/colliedesk/blob/main/docs/internals/ai-drafts.md#measuring).
 
 ## AI agents (MCP)

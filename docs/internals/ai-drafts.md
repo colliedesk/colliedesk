@@ -100,12 +100,19 @@ handoff missed; and whether it would keep the triage. It reports precision of hi
 tickets the knowledge base answers, with a 95 % Wilson lower bound, and resumes where it stopped.
 
 Results on the Hover help center (102 public articles, 15 held out of the knowledge base), Sonnet 5.5
-drafting at low effort with Haiku 5.5 choosing, Opus 5.5 grading:
+drafting at low effort with Haiku 5.5 choosing, Opus 5.5 grading, with the review:
 
 | Set | Rated high (of answerable) | Correct as written | Correct or minor edit | Wrong | Needs-a-person cases handed over | Triage kept |
 |---|---|---|---|---|---|---|
-| 138 cases (tuning set) | 49 of 95 | 45 (91.8 %) | 49 (100 %) | 0 | 28 of 28 | 94.2 % |
-| 120 new cases written by another model (holdout) | 30 of 90 | 28 (93.3 %) | 30 (100 %) | 0 | 30 of 30 | 93.3 % |
+| 138 cases (tuning set) | 44 of 95 | 40 (90.9 %) | 44 (100 %) | 0 | 28 of 28 | 94.2 % |
+| 120 cases another model wrote (first holdout) | 26 of 90 | 24 (92.3 %) | 26 (100 %) | 0 | 30 of 30 | 93.3 % |
+| 120 new cases, seen by nothing before (second holdout) | 30 of 90 | 26 (86.7 %) | 30 (100 %) | 0 | 30 of 30 | 93.3 % |
+
+Together 90 of 100 high drafts could go out as written and none was wrong. The first two rows rerun
+only the review over drafts of the same pipeline (`ai-eval -review-only`); the third is a full run.
+Results move by a few points from run to run: the model is not deterministic and the sets are small.
+That is why auto-answer is not switched on by this number but earned per article on the team's own
+reviewed drafts.
 
 Without the chooser, keyword retrieval missed the answering article for 31 of 95 questions and only 39
 were rated high. Limits: the emails are model-written, the grader is a model, one run each.
