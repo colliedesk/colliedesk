@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeAll, expect, test, vi } from 'vitest';
 import type { SavedReply } from '../../api/schemas';
+import { presenceViewPart } from './presence-part';
 
 // The moment before the lists' chunk is there: the composer is a fresh module in each test, so its chunk
 // starts unloaded, and the chunk itself is held back or refused.
@@ -13,6 +14,15 @@ const refund: SavedReply = {
   id: '22222222-2222-4222-8222-222222222222', title: 'Refund steps', body: 'We refunded you.',
   created_by_agent_id: null, created_at: '2026-10-15T00:00:00Z', updated_at: '2026-10-15T00:00:00Z', last_change: null,
 };
+
+
+// The presence chunk loads when somebody else is on a conversation, a reply is refused or a notice shows;
+// start with it there, so no test ends while it is still on its way (vitest refuses a module asked for
+// after the test environment is gone).
+beforeAll(async () => {
+  presenceViewPart.preload();
+  await import('./presence-view');
+});
 
 test('a list opened before its chunk arrived says it is loading where the list will be, then the list takes its place', async () => {
   let release: () => void = () => {};

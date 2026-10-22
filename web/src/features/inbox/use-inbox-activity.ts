@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef } from 'react';
+import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { ConversationViewer } from '../../api/schemas';
 import { api } from '../../api/client';
 import { messages } from '../../messages';
 import { currentNotificationState } from '../shell/notification-preference';
@@ -30,7 +31,7 @@ interface Alert { id: string; title: string; body: string }
 // A customer message is announced for my conversations, unassigned ones and the one I have open; a
 // teammate's conversation is otherwise theirs to answer. Items already announced as new or assigned
 // in the same poll are not announced a second time for the message that created them.
-function alerts(activity: Omit<Activity, 'updated'>, replies: Activity['updated'], agentId: string | undefined, viewing: (id: string) => boolean): Alert[] {
+function alerts(activity: Omit<Activity, 'updated' | 'viewing'>, replies: Activity['updated'], agentId: string | undefined, viewing: (id: string) => boolean): Alert[] {
   const body = (item: { subject: string; contact_name: string }) => `${item.subject} · ${item.contact_name}`;
   const assigned = activity.assigned_to_me.map((item) => ({ id: item.id, title: messages.notificationAssigned, body: body(item) }));
   const taken = new Set(assigned.map((item) => item.id));
@@ -117,4 +118,13 @@ export function useInboxActivity(enabled = true, agentId?: string) {
     document.addEventListener('visibilitychange', onVisible);
     return () => { window.removeEventListener('focus', clear); document.removeEventListener('visibilitychange', onVisible); clear(); };
   }, []);
+}
+
+const noViewing: Activity['viewing'] = [];
+
+// useInboxViewing reads who else has which conversation open from the poll useInboxActivity runs for
+// the whole app (every answer carries it, the first one included); it never polls on its own.
+export function useInboxViewing(): ReadonlyMap<string, ConversationViewer[]> {
+  const viewing = useQuery({ queryKey: ['inbox-activity'], queryFn: skipToken, select: (data: Activity) => data.viewing ?? noViewing }).data;
+  return useMemo(() => new Map((viewing ?? noViewing).map((item) => [item.conversation_id, item.viewers])), [viewing]);
 }

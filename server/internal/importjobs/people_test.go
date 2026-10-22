@@ -250,3 +250,66 @@ func TestAnUndoOfTheAccountReleasesTheAgentsOfItsEarlierStoppedImportsToo(t *tes
 		t.Fatalf("after the undo of the account %d Freshdesk agents stay (%v)", n, err)
 	}
 }
+
+// A shutdown, or the heartbeat finding the claim the end released, cancels the run right after the undo
+// ended; the agents of the account still go with it.
+func TestTheAgentsGoWithAnUndoEvenWhenTheRunIsCancelledAsItEnds(t *testing.T) {
+	e := newEnv(t, true)
+	job := e.previewWithAgents(t)
+	e.exec(t, `UPDATE import_jobs SET state='finished', status='OK', started_at=now(), sealed_key=NULL, sealed_key_id=NULL WHERE id=$1`, job.ID)
+	undo, err := e.service.Undo(context.Background(), e.a.id, e.a.agentID, job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w := e.worker(t, e.keys)
+	importjobs.StubImporter(w, nil, nil, func(_ context.Context, o freshdesk.UndoOptions) (freshdesk.UndoResult, error) {
+		cancel()
+		return freshdesk.UndoResult{Source: o.Source}, nil
+	})
+	if err := w.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	w.Wait()
+	if got := e.get(t, undo.ID); got.State != importjobs.StateFinished {
+		t.Fatalf("undo = %+v", got)
+	}
+	var n int
+	if err := e.pool.QueryRow(context.Background(), `SELECT count(*) FROM import_people WHERE workspace_id=$1`, e.a.id).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("the undo left %d Freshdesk agents (%v)", n, err)
+	}
+}
+
+// An import that ended is cancelled right after; the replies of its linked agents still get their link.
+func TestTheLinksOfAFinishedImportApplyEvenWhenTheRunIsCancelledAsItEnds(t *testing.T) {
+	e := newEnv(t, true)
+	job := e.previewWithAgents(t)
+	e.seedImported(t)
+	// Bob was linked before the import wrote his replies; nothing is pending yet.
+	e.exec(t, `UPDATE import_people SET linked_agent_id=$2, relink_pending=false WHERE workspace_id=$1 AND external_id='102'`, e.a.id, e.a.agentID)
+	if _, err := e.service.Start(context.Background(), e.a.id, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w := e.worker(t, e.keys)
+	importjobs.StubImporter(w, func(_ context.Context, o freshdesk.Options) (*freshdesk.Report, error) {
+		if o.Mode == freshdesk.ModeRecent {
+			return &freshdesk.Report{Status: freshdesk.StatusInterim, Interim: true}, nil
+		}
+		cancel()
+		return &freshdesk.Report{Status: freshdesk.StatusOK}, nil
+	}, nil, nil)
+	if err := w.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	w.Wait()
+	if got := e.get(t, job.ID); got.State != importjobs.StateFinished {
+		t.Fatalf("job = %+v", got)
+	}
+	tick(t, e.worker(t, e.keys))
+	if linked, _, _ := e.authors(t); linked != 2 {
+		t.Fatalf("%d replies of the linked agent; want 2", linked)
+	}
+}

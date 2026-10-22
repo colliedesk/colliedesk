@@ -107,6 +107,28 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   allow them in the browser's site settings, then reload the page. The list refresh and the title count keep working.
 - Colliedesk does not email agents about new or assigned conversations.
 
+**See who else is on a conversation**
+- A row in the list shows the initials of the teammates who have that conversation open right now,
+  three at most and then a count. Hover the initials to read the names. **Replying** next to them
+  means one of them has a reply to the customer typed and not sent yet: open the conversation before
+  you answer, so the customer does not get two replies.
+- An AI agent working through an [agent token](sessions.md#agent-tokens) shows as the teammate it acts for,
+  "via" the token's name (for example *Lan via Claude Code*).
+- Your own tabs are never shown. The marks come with the list's regular refresh, so they can be up to
+  20 seconds late; they are there as soon as the inbox opens.
+- An open conversation says under its title who else has it open, within about 5 seconds: for
+  example *Lan is writing a reply · Ben is viewing*. A reply nobody changed for more than two minutes
+  shows as *Lan has a reply not sent yet, untouched since 10:02*: a draft left open in a tab, not
+  someone typing now. Times are in your timezone.
+- Your tab tells the others the same about you while the conversation is open. A tab in the
+  background stops showing you as viewing at once; with a reply typed and not sent it keeps showing
+  you as writing, so nobody answers over you. Closing the tab, opening another conversation or
+  leaving the inbox takes you off at once; a tab that stops answering (a laptop that sleeps) drops
+  off within 15 seconds, or 150 seconds with a reply typed.
+- Only the fact that a reply is being written is shared, never its text. Private notes do not count.
+- The same list is in the API: the `viewing` field of `GET /api/v1/inbox/activity`, and
+  `PUT /api/v1/conversations/{id}/presence` for one conversation.
+
 **Change many conversations at once**
 - Tick the box at the left of a row to select it, or tick **Select all on this page**. Ticking a box
   does not open the conversation. With the keyboard, press Tab to reach a box and Space to tick it.
@@ -140,6 +162,14 @@ agents (`colliedesk_inbox_search`, see [MCP](mcp.md)).
   **Delivery failed** (with **Retry delivery**).
 - **Private note** is visible only to your team.
 - Messages support Markdown.
+- **Someone replied while you were writing.** When a teammate's reply (or one you sent from another
+  tab, or an AI agent's) reached the customer after you started your reply, Colliedesk does not send
+  yours. Your text stays in the box, their reply shows above it with its time (an imported reply keeps
+  its own time and says where it came from), and you choose **Send anyway** or **Edit reply**. Either
+  way you are asked about those replies once. Private notes never trigger it.
+- Approving an AI agent's [reply draft](agent-requests.md) works the same way: when someone replied
+  after the newest reply on your screen, the draft is not sent and keeps waiting; read the new reply,
+  then send the draft again if it still fits.
 - **Cc** (under the message box) copies colleagues of the customer on a reply; see [Copy other people on a reply](email-channel.md#copy-other-people-on-a-reply-cc).
 - **Insert saved reply** (or `/`) puts a [saved reply](saved-replies.md) into the box, with the customer's name and yours filled in. You can edit it before you send.
 - **Articles** puts a link to a published [knowledge base article](knowledge-base.md#link-an-article-in-a-reply) into the box: its title and its help center address on two lines.

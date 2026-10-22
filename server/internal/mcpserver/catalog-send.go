@@ -12,19 +12,23 @@ func replySendSpec() Spec {
 			`It cannot be undone: an email that left cannot be called back. ` + confirmFirst +
 			`Each call sends one more email, so never call it again to retry a call that succeeded; read the conversation first. ` +
 			`To have a person check the words first, use colliedesk_reply_draft; with a token below send this tool files the same draft for a person to send. ` +
-			`The reply is recorded as written by you through your token (written_by_agent_token). delivery says whether the email is queued.` +
+			`The reply is recorded as written by you through your token (written_by_agent_token). delivery says whether the email is queued. ` +
+			`Pass seen_reply_number, the latest_reply_number of the colliedesk_conversation_get you read: when someone replied since, nothing is sent and the error shows their reply; read the conversation again before you send. ` +
+			`When a team member has a reply to this customer open and not sent yet, the result carries a warning; say so to the user.` +
 			"\n\nTier: send.",
 		Tier: "send", Destructive: true,
-		REST: []string{"POST /api/v1/conversations/{id}/messages"},
-		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","body"],"properties":{` +
+		REST: []string{"POST /api/v1/conversations/{id}/messages", "GET /api/v1/conversations/{id}/messages", "GET /api/v1/agents", "GET /api/v1/inbox/activity"},
+		Input: `{"type":"object","additionalProperties":false,"required":["conversation_id","body","seen_reply_number"],"properties":{` +
 			`"conversation_id":{"type":"string",` + uuid + `},` +
+			`"seen_reply_number":{"type":"integer","minimum":0,"description":"latest_reply_number from the colliedesk_conversation_get you based this reply on."},` +
 			`"body":{"type":"string","minLength":1,"maxLength":20000,"description":"The reply text (Markdown)."},` +
 			`"cc":{"type":"array","maxItems":10,"items":{"type":"string","maxLength":254},"description":"Plain email addresses to copy, at most 10. The customer is always the recipient."}}}`,
 		Output: `{"type":"object","required":["conversation_id","message"],"properties":{"conversation_id":{"type":"string"},"message":{"type":"object",` +
 			`"required":["id","kind","created_at"],"properties":{"id":{"type":"string"},"kind":{"type":"string"},"created_at":{"type":"string"},"author":{"type":"string"},` +
 			`"delivery":{"type":"string","description":"queued, sent or failed; absent when the reply is not emailed (no email channel)."},` +
 			`"cc":{"type":"array","items":{"type":"string"}},` +
-			`"written_by_agent_token":{"type":"object","required":["label","scope"],"properties":{"label":{"type":"string"},"scope":{"type":"string"}}}}}}}`,
+			`"written_by_agent_token":{"type":"object","required":["label","scope"],"properties":{"label":{"type":"string"},"scope":{"type":"string"}}}}},` +
+			`"warning":{"type":"string","description":"A team member had a reply to this customer open and not sent yet."}}}`,
 		run: replySend,
 	}
 }
