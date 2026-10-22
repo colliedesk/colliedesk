@@ -107,8 +107,9 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   and below `/help/`), and `_` is never a slug.
 - **Collections are hidden unless something published is in or below them**, so a collection of
   drafts never shows its name. Collection addresses are the slug path (`/c/billing/cards`): a slug
-  is unique only among siblings. Articles in a collection are ordered by title; there is no manual
-  order yet.
+  is unique only among siblings. Collections and the articles of a collection follow the order set by
+  hand (`position`, then name or title; see `knowledge-base.md`); a reorder bumps `content_version`,
+  so cached pages and their neighbours list move with it.
 - **Search** reuses the knowledge base search (`kbQuery` and the title `ILIKE`), published only,
   best 25, and reads the first 600 characters of only those 25 for the excerpt; no `ts_headline`.
   The query is cut at 200 characters.

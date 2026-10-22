@@ -40,7 +40,12 @@ If the gate fails:
 2,000 articles of about 9,000 characters from a vocabulary of 20,000 words, 20 of them at the
 100,000-character limit) and calls the article list 50 times per path at the largest page: a two-word
 search, a short prefix, a search that matches nothing, a title search, the published articles, and
-the collections. Each path must stay at or below 100 ms p95 (about 11 ms locally). A search reads every
+the collections. Each path must stay at or below 100 ms p95 (about 11 ms locally). Half the articles have
+a position set by hand, scattered, and two more paths are called 20 times each (to spare the latency
+runner): a collection's articles in their order, and the published ones in the help center's order
+(the reply box's article list). On 2026-10-22 locally: 5–7 ms and 12–17 ms p95. The collection's list
+took 17 ms before `kb_articles_order_idx`, which lets it read one page in order instead of sorting the
+collection; the gate's run went from 5.1–5.2 s to 5.1–5.4 s, within the noise of the shared host. A search reads every
 vector of the workspace, because row-level security keeps Postgres off the GIN index; raise the cap
 only with this gate, after reading `docs/internals/knowledge-base.md`.
 

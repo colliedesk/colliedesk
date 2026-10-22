@@ -33,6 +33,20 @@ The public help center is in `help-center.md`.
 - **`content_version` moves with every write.** `bumpKB` upserts `help_centers` in the same transaction
   as each knowledge base write, so a page cached under an older version is stale even when the newest
   `updated_at` did not change (unpublishing an older article). No row means the help center is off.
+- **Order by hand is a position per sibling, 0 until set.** `kb_articles.position` (migration
+  `kb-article-position`) and `kb_collections.position` sort siblings before the name or title, so 0
+  everywhere is the title order every list had before: the migration rewrites no row. `PUT
+  /api/v1/kb/order` takes the whole list of a parent's live children (collections and, under a
+  collection, articles, drafts included) and numbers them 1..n under `lockKB`; a list that misses or
+  adds one is 409 `order_stale` with the lists as they are, never a partial order, and the web app
+  moves the row again in those lists and sends once more (a page of 50 articles, or a parent whose
+  articles it never read, is completed this way). Positions are not versioned and do not touch
+  `updated_at`, so reordering never makes someone's open edit `changed_elsewhere`. A new or moved
+  article, and a new collection without a position, goes after the last sibling only once the parent
+  was ordered (max position > 0); otherwise it stays 0 and falls in by title. Every list sorts with
+  the same keys (`kbArticleOrder`, `kbCollectionOrder` in `store/kb-order.go`); the article list
+  without a collection uses the tree's depth-first path (`kbTreeOrder`) when `sort=manual`.
+  `kb_articles_order_idx` serves a collection's list in order without sorting it.
 - **Limits:** 2,000 articles (`domain.MaxKBArticles`, the one place the cap lives) and 1,000
   collections per workspace, the trash included (it stops a create-delete loop), 100,000 characters
   per text. A longer text is refused, never cut. The article cap is what search can serve inside the

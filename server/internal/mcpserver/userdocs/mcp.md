@@ -94,7 +94,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_collection_delete` | Moves an empty collection to the trash for 30 days | `send` |
 | `colliedesk_kb_collections_trash` | Lists the collections in the trash | `read` |
 | `colliedesk_kb_collection_undelete` | Takes a collection out of the trash | `send` |
-| `colliedesk_kb_articles_search` | Lists or searches the articles, without their text, a page at a time, each with its public address (`url`) to link in a reply | `read` |
+| `colliedesk_kb_order_set` | Sets the order of the collections and articles directly in a collection (or of the collections at the top), as the help center lists them | `send` |
+| `colliedesk_kb_articles_search` | Lists or searches the articles, without their text, a page at a time, each with its public address (`url`) to link in a reply; without a search, most recently updated first or in the help center's order (`sort`), and a collection's in its order | `read` |
 | `colliedesk_kb_article_get` | Reads one article with its whole Markdown text and its public address (`url`), also from the trash | `read` |
 | `colliedesk_kb_article_create` | Writes an article, as a draft or published | `send` |
 | `colliedesk_kb_article_update` | Edits, moves, publishes or unpublishes an article; every change is a version | `send` |
