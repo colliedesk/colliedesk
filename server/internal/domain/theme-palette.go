@@ -9,10 +9,12 @@ type BrandPalette struct {
 	// Paper is the page, Surface the cards and fields on it, Ink the text, Muted secondary text and
 	// Rule the hairlines.
 	Paper, Surface, Ink, Muted, Rule RGB
-	// Accent is the primary color (buttons, focus ring) and AccentInk the text on it; AccentSoft and
-	// Tab are pale tints of it behind text.
-	Accent, AccentInk, AccentSoft, Tab RGB
-	Link                               RGB
+	// Accent is the primary color (buttons) and AccentInk the text on it, AccentHover a button under
+	// the pointer; AccentSoft and Tab are pale tints of it behind text.
+	Accent, AccentInk, AccentHover, AccentSoft, Tab RGB
+	Link                                            RGB
+	// Ring is the focus ring on the page and its cards.
+	Ring RGB
 	// Header and Footer carry their own ink, link hover color and focus ring color.
 	Header, HeaderInk, HeaderHover, HeaderRing RGB
 	Footer, FooterInk, FooterHover, FooterRing RGB
@@ -72,6 +74,20 @@ func ThemeBrandPalette(colors ThemeColors) BrandPalette {
 		Accent: p.primary, AccentInk: betterInk(p.primary, white, black), AccentSoft: tint(0.88), Tab: tint(0.94), Link: p.link,
 		Header: p.header, HeaderInk: p.headerText, Footer: p.footer, FooterInk: footerInk,
 	}
+	// The page's focus ring is drawn on the page, the cards and the tints: the primary color where it
+	// stands out 3:1 on all of them, else the link color, which reads 4.5:1 on each (the save checks it
+	// on the page; the surface and tints fall back until it does).
+	palette.Ring = p.link
+	if ContrastPasses(p.primary, p.background, ringContrast) && ContrastPasses(p.primary, surface, ringContrast) &&
+		ContrastPasses(p.primary, palette.AccentSoft, ringContrast) && ContrastPasses(p.primary, palette.Tab, ringContrast) {
+		palette.Ring = p.primary
+	}
+	// A button's hover moves the primary away from its ink, so the ink only gains contrast.
+	away := black
+	if palette.AccentInk == black {
+		away = white
+	}
+	palette.AccentHover = mixColor(p.primary, away, 0.12)
 	palette.HeaderHover, palette.HeaderRing = band(p.header, p.headerText)
 	palette.FooterHover, palette.FooterRing = band(p.footer, footerInk)
 	return palette

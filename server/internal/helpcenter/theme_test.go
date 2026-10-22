@@ -24,7 +24,7 @@ func TestBrandStyleSheetSetsTheThemeAndNothingForTheDefault(t *testing.T) {
 	}
 	sheet := string(brandCSS(brandedTheme()))
 	for _, want := range []string{
-		"--accent:#0b5cad;", "--accent-ink:#ffffff;", "--link:#0b5cad;", "--paper:#ffffff;", "--ink:#1f2328;",
+		"--accent:#0b5cad;", "--accent-ink:#ffffff;", "--accent-hover:#0a5198;", "--link:#0b5cad;", "--ring:#0b5cad;", "--paper:#ffffff;", "--ink:#1f2328;",
 		"--header:#ffffff;", "--header-ink:#16201c;", "--footer:#f6f8fa;", "--footer-ink:#16201c;",
 		`--font-body:Seravek, "Gill Sans Nova", Ubuntu, Calibri, "DejaVu Sans", source-sans-pro, sans-serif;`,
 		`--font-head:Charter, "Bitstream Charter", "Sitka Text", Cambria, serif;`,
@@ -50,5 +50,35 @@ func TestBrandStyleSheetIsNamedByItsContent(t *testing.T) {
 	theme.Colors.Link = themeValue("#0a4f94")
 	if brandSheetName(brandCSS(theme)) == name {
 		t.Fatal("another link color kept the style sheet's name")
+	}
+}
+
+// The default look's buttons keep their text readable under the pointer, in light and in dark: a
+// brightness filter would take text near 4.5:1 below it.
+func TestDefaultLookKeepsButtonTextReadableOnHover(t *testing.T) {
+	style, err := files.ReadFile("static/site.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sheet := string(style)
+	dark := sheet[strings.Index(sheet, "@media (prefers-color-scheme: dark)"):]
+	for scheme, block := range map[string]string{"light": sheet[:strings.Index(sheet, "}")], "dark": dark[:strings.Index(dark, "}")]} {
+		color := func(name string) domain.RGB {
+			match := regexp.MustCompile(`--` + name + `: (#[0-9a-f]{6});`).FindStringSubmatch(block)
+			if match == nil {
+				t.Fatalf("%s: site.css sets no --%s color", scheme, name)
+			}
+			parsed, _ := domain.ParseHexColor(match[1])
+			return parsed
+		}
+		ink := color("accent-ink")
+		for _, background := range []string{"accent", "accent-hover"} {
+			if ratio := domain.ContrastRatio(ink, color(background)); ratio < 4.5 {
+				t.Errorf("%s: button text on --%s is %.2f:1, needs 4.5:1", scheme, background, ratio)
+			}
+		}
+	}
+	if strings.Contains(sheet, "filter: brightness") {
+		t.Error("site.css still brightens a button on hover")
 	}
 }

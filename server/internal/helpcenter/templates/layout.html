@@ -38,7 +38,7 @@
 <div class="wrap masthead-row">
 <a class="brand" href="{{.Home}}">{{with .Logo}}<img class="brand-logo" src="{{.URL}}" alt="{{.Alt}}"{{if and .Width .Height}} width="{{.Width}}" height="{{.Height}}"{{end}}>{{else}}{{.SiteTitle}}{{end}}</a>
 {{- with .Website}}
-<a class="site-link" href="{{.URL}}">{{.Name}}</a>
+<a class="site-link" href="{{.URL}}" title="{{.Name}}">{{.Name}}</a>
 {{- end}}
 {{- if not .HeroSearch}}
 <form class="search search-compact" role="search" action="{{.SearchURL}}" method="get">

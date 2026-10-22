@@ -130,11 +130,21 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
 - **Every color pair the pages show reads (WCAG AA), not only the six the save checks.**
   `domain.ThemeBrandPalette` derives surface, muted, rule and the accent tints from the saved
   colors and falls back (surface to the background, muted to the text, tints to the surface) when
-  text or links would not read on them, so a derived color never refuses a save. Header and footer
-  each get their own link hover and focus ring color: the link (or primary) color where it reads on
-  the band, 4.5:1 (3:1 for the ring), else the band's ink, which the save already checks. Proved by
-  `TestBrandPaletteKeepsEveryShownPairReadable` and axe in `web/e2e/help-center-branding.spec.ts`
-  (default look and brand, light and dark).
+  text or links would not read on them, so a derived color never refuses a save. The focus ring
+  (`--ring`) is drawn on the page, the cards and the tints: it is the primary color where that
+  reaches 3:1 on all of them, else the link color (4.5:1 on each by the fallbacks above); a primary
+  that passes the save on a dark page can still fade on its lighter cards. Header and footer each
+  get their own link hover and focus ring color: the link (or primary) color where it reads on the
+  band, 4.5:1 (3:1 for the ring), else the band's ink, which the save already checks. The skip
+  link, focused, sits on the header band and takes its ring; the header's search button draws its
+  ring inside itself in its own ink, since a ring around it would cross both the field and the band.
+  A button under the pointer (`--accent-hover`) moves the primary 12% away from its ink, so the
+  button text only gains contrast; a brightness filter took text near 4.5:1 below it. Proved by
+  `TestBrandPaletteKeepsEveryShownPairReadable` (with the default look's hover by
+  `TestDefaultLookKeepsButtonTextReadableOnHover`) and `web/e2e/help-center-branding.spec.ts`:
+  axe on every page with the default look in light and dark, with the brand in light (it is light
+  only; the test proves that under dark), the rings and hover color of the header, and no sideways
+  scroll at 320 px with a long website host (the link ends in an ellipsis, its `title` holds it).
 - **Logo and favicon are public only while the theme names them** (`brand-media.go`):
   `<base>/_/logo/<id>` and `<base>/_/icon/<id>` serve the id the page's theme names in that field,
   an image of the workspace's library outside its trash (`OpenHelpCenter` joins `kb_media`, and

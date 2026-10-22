@@ -69,7 +69,7 @@ func TestHelpCenterPagesShowTheBrand(t *testing.T) {
 			brandLink,
 			`<link rel="icon" href="` + base + `/_/icon/` + icon.ID + `">`,
 			`<img class="brand-logo" src="` + base + `/_/logo/` + logo.ID + `" alt="Acme" width="2" height="2">`,
-			`<a class="site-link" href="https://acme.example/">acme.example</a>`,
+			`<a class="site-link" href="https://acme.example/" title="acme.example">acme.example</a>`,
 			`<a href="mailto:help@acme.example">help@acme.example</a>`,
 			// html/template writes + as &#43;, which a browser reads as +.
 			`<a href="tel:&#43;15550102030">&#43;1 (555) 010-2030</a>`,

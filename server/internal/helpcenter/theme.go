@@ -28,7 +28,8 @@ func brandCSS(theme domain.HelpCenterTheme) []byte {
 			color domain.RGB
 		}{
 			{"paper", p.Paper}, {"surface", p.Surface}, {"ink", p.Ink}, {"muted", p.Muted}, {"rule", p.Rule},
-			{"accent", p.Accent}, {"accent-ink", p.AccentInk}, {"accent-soft", p.AccentSoft}, {"tab", p.Tab}, {"link", p.Link},
+			{"accent", p.Accent}, {"accent-ink", p.AccentInk}, {"accent-hover", p.AccentHover}, {"accent-soft", p.AccentSoft}, {"tab", p.Tab},
+			{"link", p.Link}, {"ring", p.Ring},
 			{"header", p.Header}, {"header-ink", p.HeaderInk}, {"header-hover", p.HeaderHover}, {"header-ring", p.HeaderRing},
 			{"footer", p.Footer}, {"footer-ink", p.FooterInk}, {"footer-hover", p.FooterHover}, {"footer-ring", p.FooterRing},
 		} {

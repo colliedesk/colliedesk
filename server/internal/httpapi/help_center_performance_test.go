@@ -60,18 +60,33 @@ func TestHelpCenterPagesLatencyBudget(t *testing.T) {
 	}
 }
 
-// brandKBBudget gives workspace A of the shared fixture a full theme whose logo and favicon are one of
-// its library images, its bytes in storage, and returns that image's id.
+// brandColumns are the columns of help_centers brandKBBudget changes and puts back.
+const brandColumns = `logo_media_id, favicon_media_id, logo_alt, linkback_url, contact_url, contact_phone, color_primary, color_header,
+	color_header_text, color_background, color_text, color_link, color_footer, body_font, heading_font, content_version`
+
+// brandKBBudget gives workspace A of the shared fixture a full theme whose logo and favicon are an
+// image of its own, and returns that image's id. The cleanup removes the image and puts A's help
+// center back as it was, so the other gates on the fixture see it as seeded whatever order they run in.
 func brandKBBudget(t *testing.T, pool *pgxpool.Pool, storage attachments.Storage, slug string) string {
 	t.Helper()
 	ctx := context.Background()
 	workspaceID := queryString(t, pool, `SELECT id::text FROM workspaces WHERE slug=$1`, slug)
+	saved := queryString(t, pool, `SELECT to_jsonb(h)::text FROM help_centers h WHERE workspace_id=$1`, workspaceID)
 	object, err := storage.Put(ctx, workspaceID, bytes.NewReader(kbPNG), int64(len(kbPNG)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	logo := queryString(t, pool, `UPDATE kb_media SET storage_key=$2, sha256=$3, size=$4, content_type='image/png', width=2, height=2
-		WHERE workspace_id=$1 AND id=md5('kbm-1')::uuid RETURNING id::text`, workspaceID, object.Key, object.SHA256, object.Size)
+	logo := queryString(t, pool, `INSERT INTO kb_media(workspace_id,storage_key,sha256,size,content_type,name,width,height,inspected_at)
+		VALUES ($1,$2,$3,$4,'image/png','Budget logo',2,2,now()) RETURNING id::text`, workspaceID, object.Key, object.SHA256, object.Size)
+	t.Cleanup(func() {
+		if _, err := pool.Exec(ctx, `UPDATE help_centers SET (`+brandColumns+`) = (SELECT `+brandColumns+` FROM jsonb_populate_record(NULL::help_centers, $2::jsonb))
+			WHERE workspace_id=$1`, workspaceID, saved); err != nil {
+			t.Errorf("put the help center back: %v", err)
+		}
+		if _, err := pool.Exec(ctx, `DELETE FROM kb_media WHERE id=$1`, logo); err != nil {
+			t.Errorf("remove the logo: %v", err)
+		}
+	})
 	if _, err := pool.Exec(ctx, `UPDATE help_centers SET logo_media_id=$2, favicon_media_id=$2, logo_alt='KB Budget', linkback_url='https://budget.example/',
 		contact_url='mailto:help@budget.example', contact_phone='+1 (555) 010-2030', color_primary='#0b5cad', color_header='#0b5cad',
 		color_header_text='#ffffff', color_background='#ffffff', color_text='#1f2328', color_link='#0b5cad', color_footer='#f6f8fa',
