@@ -103,6 +103,17 @@ the last week with 2 KiB bodies. The poll selects no body (`detail=full` does). 
 marks overdue pending rows expired, then lists; both use the `(workspace_id, status, created_at)`
 index. Measured on the dev host: 3 ms. Do not widen the 20 ms.
 
+## Conversation presence budget
+
+`TestConversationPresenceLatencyBudget` holds the store call behind
+`PUT /api/v1/conversations/{id}/presence` to 20 ms p95. Every tab with a conversation open sends it
+every 5 seconds. One transaction removes the workspace's expired rows, upserts the tab's row, trims
+the person to 20 rows and reads who else has the conversation open. The fixture is three workspaces
+of ten people on 2,000 conversations, each person with three tabs and an agent token: 40 live rows in
+the timed workspace, 16 on the timed conversation, and 40 expired rows in each other workspace. Every
+statement is bounded by the workspace (`workspace_id` leads every index of `conversation_presence`).
+Measured on the dev host: 2 ms. Do not widen the 20 ms.
+
 ## Bulk conversation update budget
 
 `TestBulkUpdateOfFiftyConversationsCostsNoMoreStatementsThanOneAndStaysInBudget` runs against real PostgreSQL. It updates 50 conversations (status, assignee and a tag) through `PATCH /api/v1/conversations`. Two gates:
