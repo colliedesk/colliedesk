@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { InboxRoute } from './inbox-route';
 import { testRouter } from './test-router';
+import { presenceViewPart } from './presence-part';
 
 // The two boundaries: the API and the analytics service.
 const api = vi.hoisted(() => ({
@@ -48,6 +49,14 @@ async function open() {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);
   await screen.findByRole('button', { name: /alpha conversation/i });
 }
+
+
+// The presence chunk loads once a conversation is open; start with it there, so no test ends while it is
+// still on its way (vitest refuses a module asked for after the test environment is gone).
+beforeAll(async () => {
+  presenceViewPart.preload();
+  await import('./presence-view');
+});
 
 test('picking a conversation from the list reports conversation_opened from the list', async () => {
   await open();

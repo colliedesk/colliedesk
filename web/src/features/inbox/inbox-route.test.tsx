@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { InboxRoute } from './inbox-route';
 import { testRouter } from './test-router';
+import { presenceViewPart } from './presence-part';
 
 const api = vi.hoisted(() => ({
   announcePresence: vi.fn(async (_id: string, _body: unknown): Promise<{ viewers: unknown[]; heartbeat_seconds: number }> => ({ viewers: [], heartbeat_seconds: 5 })), leavePresence: vi.fn(async () => undefined),
@@ -34,6 +35,14 @@ const conversation = (id: string, subject: string) => ({ latest_reply_number: 0,
 
 // A ticket opened by its address must not wait for the list or for the conversation detail before it asks for
 // its messages: those three requests are independent, and a chain of them costs a round trip each.
+
+// The presence chunk loads once a conversation is open; start with it there, so no test ends while it is
+// still on its way (vitest refuses a module asked for after the test environment is gone).
+beforeAll(async () => {
+  presenceViewPart.preload();
+  await import('./presence-view');
+});
+
 test('a ticket opened by its address asks for its messages and time entries at once, before the list or the detail arrive', async () => {
   const id = '11111111-1111-4111-8111-111111111111';
   testRouter.params = { conversationId: id };
