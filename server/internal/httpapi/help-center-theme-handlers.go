@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"maps"
 	"net/http"
@@ -19,7 +20,8 @@ var themeFields = []string{"logo_media_id", "favicon_media_id", "logo_alt", "lin
 // themeColorFields are the keys of the theme's colors object (domain.ThemeColors).
 var themeColorFields = []string{"primary", "header", "header_text", "background", "text", "link", "footer"}
 
-// themeInput is the body of PUT /help-center/theme and its check. A field left out is the default.
+// themeInput is the body of PUT /help-center/theme and its check. A field left out is the default,
+// except custom_css on a save (customCSSRequired).
 type themeInput struct {
 	LogoMediaID    *string             `json:"logo_media_id"`
 	FaviconMediaID *string             `json:"favicon_media_id"`
@@ -30,8 +32,28 @@ type themeInput struct {
 	Colors         *domain.ThemeColors `json:"colors"`
 	BodyFont       *string             `json:"body_font"`
 	HeadingFont    *string             `json:"heading_font"`
-	CustomCSS      *string             `json:"custom_css"`
+	CustomCSS      sentText            `json:"custom_css"`
 }
+
+// sentText is a string field that may be null and knows whether the body named it at all.
+type sentText struct {
+	Value string
+	Sent  bool
+}
+
+func (text *sentText) UnmarshalJSON(data []byte) error {
+	text.Sent = true
+	if string(data) == "null" {
+		text.Value = ""
+		return nil
+	}
+	return json.Unmarshal(data, &text.Value)
+}
+
+// customCSSRequired answers a save without custom_css. A save replaces the whole theme, so a client that
+// does not know the field (a web page loaded before it existed, an agent request filed before it) would
+// remove the custom CSS without anyone choosing to; it must say what to keep.
+const customCSSRequired = "Send custom_css with every save: the custom CSS to keep, or null or an empty string for none."
 
 func (input themeInput) theme() domain.HelpCenterTheme {
 	theme := domain.HelpCenterTheme{LogoMediaID: input.LogoMediaID, FaviconMediaID: input.FaviconMediaID,
@@ -43,9 +65,7 @@ func (input themeInput) theme() domain.HelpCenterTheme {
 	if input.Colors != nil {
 		theme.Colors = *input.Colors
 	}
-	if input.CustomCSS != nil {
-		theme.CustomCSS = *input.CustomCSS
-	}
+	theme.CustomCSS = input.CustomCSS.Value
 	return theme
 }
 
@@ -62,13 +82,13 @@ func cleanTheme(theme domain.HelpCenterTheme) (domain.HelpCenterTheme, error) {
 	return cleaned, nil
 }
 
-func decodeTheme(response http.ResponseWriter, request *http.Request) (domain.HelpCenterTheme, bool) {
+func decodeTheme(response http.ResponseWriter, request *http.Request) (themeInput, bool) {
 	var input themeInput
 	if err := decodeJSON(request, &input); err != nil {
 		writeError(response, http.StatusBadRequest, "invalid_request", "Send the theme as a JSON object with only these fields: "+strings.Join(themeFields, ", ")+".")
-		return domain.HelpCenterTheme{}, false
+		return themeInput{}, false
 	}
-	return input.theme(), true
+	return input, true
 }
 
 // writeThemeError answers a domain.ThemeError with 422, its fields and, on contrast_too_low, every check.
@@ -108,11 +128,15 @@ func (a *API) getHelpCenterTheme(response http.ResponseWriter, request *http.Req
 }
 
 func (a *API) putHelpCenterTheme(response http.ResponseWriter, request *http.Request) {
-	theme, ok := decodeTheme(response, request)
+	input, ok := decodeTheme(response, request)
 	if !ok {
 		return
 	}
-	cleaned, err := cleanTheme(theme)
+	if !input.CustomCSS.Sent {
+		writeThemeError(response, &domain.ThemeError{Code: "validation_failed", Fields: map[string]string{"custom_css": customCSSRequired}})
+		return
+	}
+	cleaned, err := cleanTheme(input.theme())
 	if err != nil {
 		writeThemeError(response, err)
 		return
@@ -128,11 +152,11 @@ func (a *API) putHelpCenterTheme(response http.ResponseWriter, request *http.Req
 // checkHelpCenterTheme runs the checks of a save and stores nothing. Contrast is an answer here, not
 // an error, so an editor can show every pair while a person picks colors.
 func (a *API) checkHelpCenterTheme(response http.ResponseWriter, request *http.Request) {
-	theme, ok := decodeTheme(response, request)
+	input, ok := decodeTheme(response, request)
 	if !ok {
 		return
 	}
-	cleaned, err := cleanTheme(theme)
+	cleaned, err := cleanTheme(input.theme())
 	if err == nil {
 		err = a.store.CheckHelpCenterThemeMedia(request.Context(), principal(request).Workspace.ID, cleaned)
 	}

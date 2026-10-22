@@ -43,6 +43,9 @@ API changes in the email view (the full notes will be on the releases page):
   `colliedesk_help_center_theme_update` and `_check`), served after the brand on every public page;
   CSS that could load anything is 422 `custom_css_refused` with its line and column. `HelpCenterTheme`
   answers have a new required field, `custom_css`, and the export's `help-center.ndjson` carries it.
+  `PUT /help-center/theme` requires `custom_css` (null or `""` clears it): a save without it is 422
+  `validation_failed` and an agent request without it is not filed, so an older client cannot clear it.
+  The brand sheet's name is now `brand-<32 hex digits>.css`.
   Under a parent ordered by hand, `POST /kb/collections` without `position` or with 0 puts the collection
   last (an explicit 0 used to be kept); a created, moved, imported or restored article or collection goes last too.
 

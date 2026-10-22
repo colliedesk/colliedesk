@@ -15,7 +15,7 @@ func TestHelpCenterLogoIsNeverPurgedOrCalledUnused(t *testing.T) {
 	admin := createSession(t, api, service, "Theme Purge", "admin@theme-purge.example.com")
 	logo := uploadKBImage(t, api, admin, kbPNG, http.StatusCreated)
 	icon := uploadKBImage(t, api, admin, pngImage(7), http.StatusCreated)
-	kbCall(t, api, http.MethodPut, themePath, map[string]any{"logo_media_id": logo.ID, "favicon_media_id": icon.ID}, admin, http.StatusOK, nil)
+	kbCall(t, api, http.MethodPut, themePath, map[string]any{"custom_css": "", "logo_media_id": logo.ID, "favicon_media_id": icon.ID}, admin, http.StatusOK, nil)
 	var details kbMediaView
 	kbCall(t, api, http.MethodGet, "/api/v1/kb/media/"+logo.ID+"/details", nil, admin, http.StatusOK, &details)
 	if !details.Kept {

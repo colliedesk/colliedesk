@@ -27,7 +27,7 @@ func TestHelpCenterThemeSavesAgainWithTheLogoItAlreadyHasInTheTrash(t *testing.T
 		t.Fatalf("theme with a trashed logo = %+v", read)
 	}
 	resent := map[string]any{"logo_media_id": *read.LogoMediaID, "favicon_media_id": *read.FaviconMediaID, "logo_alt": read.LogoAlt,
-		"colors": map[string]any{"primary": "#7a3e00"}}
+		"colors": map[string]any{"primary": "#7a3e00"}, "custom_css": ""}
 	kbCall(t, api, http.MethodPost, themePath+"/check", resent, admin, http.StatusOK, nil)
 	// The preview accepts it too, and leaves the trashed logo out as the public pages do.
 	if shown := preview(t, api, admin, "home", resent, http.StatusOK); strings.Contains(shown.HTML, logo.ID) || !strings.Contains(shown.HTML, "--accent:#7a3e00;") {
@@ -40,8 +40,8 @@ func TestHelpCenterThemeSavesAgainWithTheLogoItAlreadyHasInTheTrash(t *testing.T
 	}
 
 	for field, body := range map[string]map[string]any{
-		"favicon_media_id": {"logo_media_id": logo.ID, "favicon_media_id": logo.ID},
-		"logo_media_id":    {"logo_media_id": other.ID, "favicon_media_id": icon.ID},
+		"favicon_media_id": {"logo_media_id": logo.ID, "favicon_media_id": logo.ID, "custom_css": ""},
+		"logo_media_id":    {"logo_media_id": other.ID, "favicon_media_id": icon.ID, "custom_css": ""},
 	} {
 		refused := themeRefused(t, kbCall(t, api, http.MethodPut, themePath, body, admin, http.StatusUnprocessableEntity, nil).Body, "media_not_found")
 		if !strings.Contains(refused.Error.Fields[field], "trash") || len(refused.Error.Fields) != 1 {
@@ -65,7 +65,7 @@ func TestHelpCenterThemeRefusesAVideoAsLogoOrFavicon(t *testing.T) {
 	data := mediaVideo(t, "h264.mp4")
 	video := uploadKBVideo(t, api, admin, data, len(data), nil)
 	for _, field := range []string{"logo_media_id", "favicon_media_id"} {
-		refused := themeRefused(t, kbCall(t, api, http.MethodPut, themePath, map[string]any{field: video.ID}, admin, http.StatusUnprocessableEntity, nil).Body, "media_not_found")
+		refused := themeRefused(t, kbCall(t, api, http.MethodPut, themePath, map[string]any{"custom_css": "", field: video.ID}, admin, http.StatusUnprocessableEntity, nil).Body, "media_not_found")
 		if !strings.Contains(refused.Error.Fields[field], "video") {
 			t.Fatalf("%s refusal fields = %v", field, refused.Error.Fields)
 		}
@@ -82,7 +82,7 @@ func TestApprovedThemeRequestChangesTheTheme(t *testing.T) {
 	api, service := testAPI(t)
 	admin := createSession(t, api, service, "Theme Approve", "admin@theme-approve.example.com")
 	send := issueToken(t, api, admin, "Writer", "send").Token
-	filed := accepted(t, api, http.MethodPut, themePath, map[string]any{"colors": map[string]any{"primary": "#0b5cad"}, "body_font": "mono"}, send)
+	filed := accepted(t, api, http.MethodPut, themePath, map[string]any{"custom_css": "", "colors": map[string]any{"primary": "#0b5cad"}, "body_font": "mono"}, send)
 	if response := approve(t, api, admin, filed.RequestID, nil); response.Code != http.StatusOK {
 		t.Fatalf("approve status=%d body=%s", response.Code, response.Body.String())
 	}
@@ -100,10 +100,10 @@ func TestThemeRequestWithAnUnexpectedNestedFieldIsNotFiled(t *testing.T) {
 	admin := createSession(t, api, service, "Theme Filing", "admin@theme-filing.example.com")
 	send := issueToken(t, api, admin, "Writer", "send").Token
 	for _, body := range []map[string]any{
-		{"colors": map[string]any{"primary": "#0b5cad", "api_key": "sk-hidden-1"}},
-		{"colors": map[string]any{"primary": map[string]any{"secret": "sk-hidden-2"}}},
-		{"logo_alt": map[string]any{"secret": "sk-hidden-3"}},
-		{"colors": []any{map[string]any{"secret": "sk-hidden-4"}}},
+		{"colors": map[string]any{"primary": "#0b5cad", "api_key": "sk-hidden-1"}, "custom_css": ""},
+		{"colors": map[string]any{"primary": map[string]any{"secret": "sk-hidden-2"}}, "custom_css": ""},
+		{"logo_alt": map[string]any{"secret": "sk-hidden-3"}, "custom_css": ""},
+		{"colors": []any{map[string]any{"secret": "sk-hidden-4"}}, "custom_css": ""},
 	} {
 		response := request(t, api, http.MethodPut, themePath, body, send, nil)
 		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "Nothing was filed") {
@@ -115,5 +115,5 @@ func TestThemeRequestWithAnUnexpectedNestedFieldIsNotFiled(t *testing.T) {
 			t.Fatalf("a stored request keeps a nested field the theme does not take: %s", item.Body)
 		}
 	}
-	accepted(t, api, http.MethodPut, themePath, map[string]any{"colors": map[string]any{"primary": "#0b5cad", "footer": nil}}, send)
+	accepted(t, api, http.MethodPut, themePath, map[string]any{"custom_css": "", "colors": map[string]any{"primary": "#0b5cad", "footer": nil}}, send)
 }

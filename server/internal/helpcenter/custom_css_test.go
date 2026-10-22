@@ -63,6 +63,23 @@ var refusedCustomCSS = []struct {
 	{"nul", "a{color:red}\x00", 1, 13, "a NUL character is not allowed"},
 	{"invalid utf-8", "a{color:red}\n\xff", 2, 1, "custom CSS must be UTF-8 text"},
 	{"byte order mark", "\ufeffa{color:red}", 1, 1, "a byte order mark is not allowed"},
+	{"control character in a string", "a::after{content:\"a\x01b\"}", 1, 20, "a control character (U+0001) is not allowed"},
+	{"delete character", "a{}\x7f", 1, 4, "a control character (U+007F) is not allowed"},
+	{"behavior after white space", `a{behavior :x}`, 1, 3, "behavior is not allowed"},
+	{"behavior before a comment", `a{ /* c */ behavior/**/:x}`, 1, 12, "behavior is not allowed"},
+	{"moz binding after a declaration", `a{color:red;-moz-binding:none}`, 1, 13, "-moz-binding is not allowed"},
+	// The tokenizer reads U+0 as a unicode range and the rest as a function with a dash before its
+	// name, which a vendor prefix would not explain; the decoded word list refuses each anyway.
+	{"image after a unicode range", `a{x:U+0-image("x")}`, 1, 9, "image( is not allowed"},
+	{"image-set after a unicode range", `a{x:U+0-image-set("x" 1x)}`, 1, 9, "image-set( is not allowed"},
+	{"cross-fade after a unicode range", `a{x:U+0-cross-fade(red,blue)}`, 1, 9, "cross-fade( is not allowed"},
+	{"src after a unicode range", `a{x:U+0-src("x")}`, 1, 9, "src( is not allowed"},
+	{"element after a unicode range", `a{x:U+0-element(#x)}`, 1, 9, "element( is not allowed"},
+	{"paint after a unicode range", `a{x:U+0-paint(x)}`, 1, 9, "paint( is not allowed"},
+	{"webkit image in a string", `a{--x:"-webkit-image(x)"}`, 1, 16, "image( is not allowed"},
+	{"moz element in a comment", `/* -moz-element(#x) */`, 1, 9, "element( is not allowed"},
+	{"cross-fade spelled with an escape in a string", `a{--x:"cross\2d fade("}`, 1, 8, "cross-fade( is not allowed"},
+	{"paint in capitals in a string", `a{--x:"PAINT("}`, 1, 8, "paint( is not allowed"},
 	{"over 32 KiB", "/*" + strings.Repeat("x", 32*1024) + "*/", 1, 32769, "custom CSS holds at most 32,768 bytes"},
 }
 
@@ -83,6 +100,11 @@ var acceptedCustomCSS = []string{
 	`.hero{width:calc(100% - var(--gap));color:rgb(0 0 0 / 50%)}`,
 	"/* the footer */\n.footer a[href^=\"https\"]:hover{text-decoration:underline}",
 	`.behavior-note{color:#333}`,
+	`.behavior{color:#333}`,
+	`.behavior:hover{color:#333}`,
+	`[data-behavior="x"]{color:#333}`,
+	"a::after{content:\"a\tb\"}",
+	"a{\tcolor:red}",
 	`h1 > a + b ~ c{margin:0 !important}`,
 }
 
@@ -146,7 +168,7 @@ func FuzzCheckCustomCSS(f *testing.F) {
 			return
 		}
 		read := strings.ToLower(decodeEscapes(css))
-		for _, banned := range []string{"url(", "@import", "image-set(", "</", "expression("} {
+		for _, banned := range []string{"url(", "@import", "image-set(", "image(", "cross-fade(", "src(", "element(", "paint(", "</", "expression("} {
 			if strings.Contains(read, banned) {
 				t.Fatalf("accepted %q, which reads as %q and holds %q", css, read, banned)
 			}
@@ -155,4 +177,21 @@ func FuzzCheckCustomCSS(f *testing.F) {
 			t.Fatalf("accepted %d bytes", len(css))
 		}
 	})
+}
+
+// An escape names a code point of up to six hex digits; anything beyond Unicode, a surrogate or zero
+// reads as U+FFFD, as CSS Syntax 3 says.
+func TestReadCSSReadsAnEscapeOutsideUnicodeAsTheReplacementCharacter(t *testing.T) {
+	for text, want := range map[string]string{
+		`\110000`: "\ufffd", `\FFFFFF`: "\ufffd", `\0`: "\ufffd", `\d800`: "\ufffd", `\DFFF`: "\ufffd",
+		`\10FFFF`: "\U0010ffff", `\41 b`: "ab", `\2d`: "-",
+	} {
+		var got strings.Builder
+		for _, r := range readCSS(text) {
+			got.WriteRune(r.r)
+		}
+		if got.String() != want {
+			t.Errorf("readCSS(%q) = %q, want %q", text, got.String(), want)
+		}
+	}
 }

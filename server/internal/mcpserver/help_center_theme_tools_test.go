@@ -2,14 +2,18 @@ package mcpserver_test
 
 import (
 	"encoding/base64"
+	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
 )
 
 func TestHelpCenterThemeToolsCheckSaveAndPropose(t *testing.T) {
 	e := newEnv(t)
 	w := e.newWorkspace("Theme Tools Desk", "admin@theme-tools.example.com")
-	low := map[string]any{"colors": map[string]any{"text": "#999999", "background": "#ffffff"}}
+	low := map[string]any{"colors": map[string]any{"text": "#999999", "background": "#ffffff"}, "custom_css": ""}
 
 	read := e.connect(w.read, "")
 	checked := e.ok(read, "colliedesk_help_center_theme_check", low)
@@ -31,7 +35,7 @@ func TestHelpCenterThemeToolsCheckSaveAndPropose(t *testing.T) {
 	}
 
 	send := e.connect(w.send, "")
-	if proposed := e.ok(send, "colliedesk_help_center_theme_update", map[string]any{"colors": map[string]any{"primary": "#0b5cad"}}); proposed["agent_request"] == nil {
+	if proposed := e.ok(send, "colliedesk_help_center_theme_update", map[string]any{"colors": map[string]any{"primary": "#0b5cad"}, "custom_css": nil}); proposed["agent_request"] == nil {
 		t.Fatalf("send token update = %v, want an agent request", proposed)
 	}
 
@@ -39,7 +43,7 @@ func TestHelpCenterThemeToolsCheckSaveAndPropose(t *testing.T) {
 	if message := e.fails(admin, "colliedesk_help_center_theme_update", low); !strings.Contains(message, "colors.text") || !strings.Contains(message, "4.5:1") {
 		t.Fatalf("low contrast update: %q", message)
 	}
-	saved := e.ok(admin, "colliedesk_help_center_theme_update", map[string]any{"colors": map[string]any{"primary": "#0B5CAD"}, "body_font": "humanist-sans"})
+	saved := e.ok(admin, "colliedesk_help_center_theme_update", map[string]any{"colors": map[string]any{"primary": "#0B5CAD"}, "body_font": "humanist-sans", "custom_css": ""})
 	if at(t, saved, "theme", "colors", "primary") != "#0b5cad" || at(t, saved, "theme", "body_font") != "humanist-sans" {
 		t.Fatalf("saved = %v", saved)
 	}
@@ -55,7 +59,7 @@ func TestHelpCenterThemeUpdateKeepsATrashedLogoItAlreadyHas(t *testing.T) {
 	w := e.newWorkspace("Theme Trashed Logo Tools", "admin@theme-trashed-logo-tools.example.com")
 	admin := e.connect(w.adminTier, "")
 	logo := at(t, e.ok(admin, "colliedesk_kb_image_upload", map[string]any{"data_base64": base64.StdEncoding.EncodeToString(kbPNG), "name": "Logo"}), "image", "id").(string)
-	e.ok(admin, "colliedesk_help_center_theme_update", map[string]any{"logo_media_id": logo, "logo_alt": "Acme"})
+	e.ok(admin, "colliedesk_help_center_theme_update", map[string]any{"logo_media_id": logo, "logo_alt": "Acme", "custom_css": ""})
 	listed := e.ok(admin, "colliedesk_kb_media_list", map[string]any{"usage": "in_use"})
 	if at(t, listed, "media", 0, "id") != logo || at(t, listed, "media", 0, "usage", "help_center", 0) != "logo" {
 		t.Fatalf("in use = %v, want the logo with usage.help_center [logo]", listed)
@@ -66,7 +70,7 @@ func TestHelpCenterThemeUpdateKeepsATrashedLogoItAlreadyHas(t *testing.T) {
 
 	theme := at(t, e.ok(admin, "colliedesk_help_center_theme_get", nil), "theme").(map[string]any)
 	update := map[string]any{"colors": map[string]any{"primary": "#7a3e00"}}
-	for _, field := range []string{"logo_media_id", "favicon_media_id", "logo_alt", "linkback_url", "contact_url", "contact_phone", "body_font", "heading_font"} {
+	for _, field := range []string{"logo_media_id", "favicon_media_id", "logo_alt", "linkback_url", "contact_url", "contact_phone", "body_font", "heading_font", "custom_css"} {
 		if value := theme[field]; value != nil {
 			update[field] = value
 		}
@@ -97,10 +101,44 @@ func TestHelpCenterThemeToolsTakeCustomCSS(t *testing.T) {
 	if saved := e.ok(admin, "colliedesk_help_center_theme_update", map[string]any{"custom_css": css}); at(t, saved, "theme", "custom_css") != css {
 		t.Fatalf("saved = %v", saved)
 	}
+	// The update replaces the whole theme, so it must say what custom CSS to keep: one without it is
+	// refused before it reaches the server and the CSS stays.
+	if message := e.fails(admin, "colliedesk_help_center_theme_update", map[string]any{"body_font": "mono"}); !strings.Contains(message, "custom_css") {
+		t.Fatalf("update without custom_css: %q", message)
+	}
 	if theme := e.ok(read, "colliedesk_help_center_theme_get", nil); at(t, theme, "theme", "custom_css") != css {
 		t.Fatalf("theme after save = %v", theme)
 	}
 	if cleared := e.ok(admin, "colliedesk_help_center_theme_update", map[string]any{"custom_css": ""}); at(t, cleared, "theme", "custom_css") != "" {
 		t.Fatalf("cleared = %v", cleared)
+	}
+}
+
+// An agent builds its call from the tool's schema: the update, which replaces the whole theme, names
+// custom_css as required (null or "" for none); the check, which saves nothing, does not.
+func TestHelpCenterThemeUpdateToolRequiresCustomCSS(t *testing.T) {
+	seen := 0
+	for _, spec := range mcpserver.Catalog() {
+		if spec.Name != "colliedesk_help_center_theme_update" && spec.Name != "colliedesk_help_center_theme_check" {
+			continue
+		}
+		seen++
+		var schema struct {
+			Required   []string                   `json:"required"`
+			Properties map[string]json.RawMessage `json:"properties"`
+		}
+		if err := json.Unmarshal([]byte(spec.Input), &schema); err != nil {
+			t.Fatalf("%s input schema: %v", spec.Name, err)
+		}
+		if want := spec.Name == "colliedesk_help_center_theme_update"; slices.Contains(schema.Required, "custom_css") != want {
+			t.Errorf("%s required = %v, want custom_css required %v", spec.Name, schema.Required, want)
+		}
+		// The limit is in bytes, which a JSON schema cannot count: no maxLength that counts characters.
+		if strings.Contains(string(schema.Properties["custom_css"]), "maxLength") || !strings.Contains(string(schema.Properties["custom_css"]), "32,768 bytes") {
+			t.Errorf("%s custom_css schema = %s", spec.Name, schema.Properties["custom_css"])
+		}
+	}
+	if seen != 2 {
+		t.Fatalf("found %d of the two theme tools", seen)
 	}
 }

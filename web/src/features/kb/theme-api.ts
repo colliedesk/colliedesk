@@ -34,6 +34,8 @@ export type HelpCenterTheme = z.infer<typeof themeSchema>;
 export type ThemeCheck = z.infer<typeof checkSchema>;
 export type ThemePreview = z.infer<typeof previewSchema>;
 export type ThemeInput = RequestBody<'putHelpCenterTheme'>;
+// A preview saves nothing, so its theme may leave custom_css out; a save may not.
+export type PreviewTheme = RequestBody<'previewHelpCenterTheme'>['theme'];
 export type PreviewPage = RequestBody<'previewHelpCenterTheme'>['page'];
 
 // ThemeInvalidError is a theme the server refused (400 or 422). fields holds one message per field, keyed
@@ -67,6 +69,6 @@ const themePath = '/api/v1/help-center/theme';
 export const themeApi = {
   get: () => send(themePath, themeSchema),
   save: (theme: ThemeInput) => send(themePath, themeSchema, { method: 'PUT', body: JSON.stringify(theme) }),
-  preview: (page: PreviewPage, theme: ThemeInput) => send('/api/v1/help-center/theme/preview', previewSchema,
+  preview: (page: PreviewPage, theme: PreviewTheme) => send('/api/v1/help-center/theme/preview', previewSchema,
     { method: 'POST', body: JSON.stringify({ page, theme } satisfies RequestBody<'previewHelpCenterTheme'>) }),
 };

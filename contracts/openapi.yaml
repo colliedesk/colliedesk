@@ -3708,7 +3708,10 @@ paths:
       x-permission: access:write
       description: >
         Replace the brand of the public help center. A field left out or null goes back to its default,
-        so send the whole theme (read it first). Admins only, and an `admin` agent token. Every color
+        so send the whole theme (read it first). `custom_css` is the exception: it is required, and null
+        or an empty string clears it; a body without it is refused (422 `validation_failed`, with
+        `fields.custom_css`) and changes nothing, so a client that does not know the field, or an agent
+        request filed before it existed, cannot remove the custom CSS. Admins only, and an `admin` agent token. Every color
         pair must meet WCAG AA (4.5:1 for text, 3:1 for the primary color against the background):
         422 `contrast_too_low` names each failing color in `fields` with a color that passes, and
         nothing is saved. A logo or favicon must be an image of the workspace's media library outside
@@ -3719,7 +3722,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/HelpCenterThemeInput'}
+            schema: {$ref: '#/components/schemas/HelpCenterThemeSave'}
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
@@ -5055,17 +5058,27 @@ components:
         heading_font: {$ref: '#/components/schemas/ThemeFont'}
         custom_css:
           type: [string, 'null']
-          maxLength: 32768
           description: >-
             CSS served after the theme's colors and fonts on every public page, for details the other
-            fields do not cover; empty or null is none. At most 32,768 bytes. Refused (422
+            fields do not cover; empty or null is none. At most 32,768 bytes of UTF-8, counted by the
+            server (a character outside ASCII takes 2 to 4 bytes; a JSON schema can only count characters,
+            so the limit is not a maxLength here). Refused (422
             `custom_css_refused`, with the line and column) when it could load anything or leave its
             style sheet: `url()` and the image functions (`image()`, `image-set()`, `cross-fade()`,
-            `element()`, `src()`, `paint()`), `expression()`, `behavior`, `-moz-binding`, at-rules other
-            than `@media`, `@supports`, `@keyframes`, `@layer` and `@container`, a backslash outside
-            quotes, `</`, `<!--`, an unbalanced bracket, an unclosed string or comment, and `url(`,
-            `@import`, `image-set(`, `expression(`, `javascript:` or `vbscript:` anywhere once escapes
-            are read. It is stored and served exactly as sent. The contrast checks do not cover it.
+            `element()`, `src()`, `paint()`), `expression()`, the properties `behavior` and
+            `-moz-binding` (a class such as `.behavior` is fine), at-rules other than `@media`,
+            `@supports`, `@keyframes`, `@layer` and `@container`, a backslash outside quotes, `</`,
+            `<!--`, a control character other than tab, newline, carriage return and form feed, an
+            unbalanced bracket, an unclosed string or comment, and `url(`, `@import`, `image-set(`,
+            `image(`, `cross-fade(`, `element(`, `src(`, `paint(`, `expression(`, `javascript:` or
+            `vbscript:` anywhere once escapes are read. It is stored and served exactly as sent. The contrast checks do not cover it.
+    HelpCenterThemeSave:
+      description: >-
+        The body of a save: the theme with `custom_css` required (null or an empty string for none), so a
+        body that leaves it out cannot remove it by accident.
+      allOf:
+        - {$ref: '#/components/schemas/HelpCenterThemeInput'}
+      required: [custom_css]
     HelpCenterTheme:
       type: object
       required: [logo_media_id, favicon_media_id, logo_alt, linkback_url, contact_url, contact_phone, colors, body_font, heading_font, custom_css, content_version, updated_at, checks]

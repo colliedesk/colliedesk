@@ -15,7 +15,7 @@ const theme = (logo: string) => ({
   logo_media_id: logo, favicon_media_id: logo, logo_alt: 'Acme',
   linkback_url: `https://${host}/`, contact_url: 'mailto:help@acme.example', contact_phone: '+1 (555) 010-2030',
   colors: { primary: '#0b5cad', header: '#0b5cad', header_text: '#ffffff', background: '#ffffff', text: '#1f2328', link: '#0b5cad', footer: '#f6f8fa' },
-  body_font: 'humanist-sans', heading_font: 'transitional-serif',
+  body_font: 'humanist-sans', heading_font: 'transitional-serif', custom_css: null,
 });
 
 // noViolations runs axe on every public page in each color scheme, and expects none.
@@ -131,6 +131,63 @@ test('help center branding: custom CSS shows on the public page under its own po
   expect((await page.request.put(themePath, { headers, data: { custom_css: '' } })).status()).toBe(200);
   await page.goto(base);
   await expect(masthead).not.toHaveCSS('border-bottom-width', '6px');
+});
+
+// Custom CSS, each accepted by the server, that tries to give the preview's links their pointer back:
+// higher specificity, a layer of its own, the link's children, a ::before box over the whole frame,
+// all:unset, and text that leaves a selector or an at-rule open before whatever follows it.
+const pointerBack = [
+  'body a{pointer-events:auto!important}',
+  '@layer x{a{pointer-events:auto!important}}',
+  'a *{pointer-events:auto}',
+  "a::before{content:'';position:fixed;inset:0;pointer-events:auto}",
+  'a{all:unset!important}',
+  'a,a *{all:unset!important;cursor:pointer}',
+  'a{color:#8b0000}x',
+  '@media print',
+];
+
+// The guarantee the preview document makes on its own, before the app can hold its links: whatever the
+// custom CSS says, a click on a link never navigates the frame. Each document is shown in a frame as the
+// app shows it (same origin, sandbox without scripts) but without the app's link listener, and clicked
+// where a person's pointer would land: on the arrow inside "Open Guides".
+test('help center branding: no custom CSS gives a link of the preview its pointer back', async ({ page }) => {
+  const { headers } = await helpCenter(page, 'inert-preview');
+  const documents: string[] = [];
+  for (const css of pointerBack) {
+    const answer = await page.request.post(`${servers.main}/api/v1/help-center/theme/preview`, { headers, data: { page: 'home', theme: { custom_css: css } } });
+    expect(answer.status(), css).toBe(200);
+    documents.push(((await answer.json()) as { html: string }).html);
+  }
+  await page.setViewportSize({ width: 1280, height: 1440 });
+  await page.evaluate((htmls) => {
+    htmls.forEach((html, index) => {
+      const frame = document.createElement('iframe');
+      frame.title = `inert ${index}`;
+      frame.setAttribute('sandbox', 'allow-same-origin');
+      frame.style.cssText = `position:fixed;left:${(index % 2) * 640}px;top:${Math.floor(index / 2) * 360}px;width:640px;height:360px;border:0;z-index:2147483647`;
+      frame.srcdoc = html;
+      document.body.append(frame);
+    });
+  }, documents);
+  const frames = await Promise.all(pointerBack.map(async (_, index) => (await page.locator(`iframe[title="inert ${index}"]`).elementHandle())!.contentFrame()));
+  for (const frame of frames) await frame!.waitForLoadState('load');
+  // A navigation is a framenavigated event of one of these frames away from about:srcdoc. Every one is
+  // recorded; after the last click the frames get 1 s, and none may have moved.
+  const navigated: string[] = [];
+  page.on('framenavigated', (changed) => {
+    if (frames.includes(changed) && changed.url() !== 'about:srcdoc') navigated.push(`${pointerBack[frames.indexOf(changed)]} → ${changed.url()}`);
+  });
+  for (const [index, frame] of frames.entries()) {
+    const arrow = frame!.locator('a.card-more span').first();
+    await arrow.scrollIntoViewIfNeeded();
+    const box = await arrow.boundingBox();
+    expect(box, pointerBack[index]).not.toBeNull();
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  }
+  await page.waitForTimeout(1_000);
+  expect(navigated, 'custom CSS whose click navigated the preview').toEqual([]);
+  for (const frame of frames) expect(frame!.url()).toBe('about:srcdoc');
 });
 
 // counted wraps the person's clicks and typed inputs, so the test can hold the path to a branded help

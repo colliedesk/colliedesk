@@ -339,15 +339,18 @@ width, about 300 ms after you stop typing, before anything is saved. It is the r
 your collections and published articles (never drafts), also while the help center is off; with
 nothing published, the article page shows a sample text, and a video in the article shows as a box
 that says it plays on the live help center. Links in the preview do not open, and the preview runs
-no script. `POST /api/v1/help-center/theme/preview` gives the same page as one HTML
+no script; custom CSS cannot change that. `POST /api/v1/help-center/theme/preview` gives the same page as one HTML
 document, and `colliedesk_help_center_theme_check` with `preview` (`home` or `article`) gives it to an
 AI agent. Each person may ask for 600 previews a minute.
 
 #### Custom CSS
 
 Custom CSS is added after the brand's colors and fonts on every public page and in the preview, so
-its rules win over them. It is saved and served exactly as written, at most 32,768 bytes. An empty
-field (or only spaces) removes it. Pages keep the same security policy: the CSS comes from the help
+its rules win over them. It is saved and served exactly as written, at most 32,768 bytes of UTF-8 (a
+letter outside ASCII takes 2 to 4 bytes; the field counts them as you type). An empty field (or only
+spaces) removes it. A save through the API must send `custom_css` (null or `""` for none): a save
+without it is refused with 422 and changes nothing, so a page or an agent that does not know the field
+cannot remove your CSS by accident. Pages keep the same security policy: the CSS comes from the help
 center's own address, in the brand's style sheet, never inline in a page.
 
 **The contrast checks do not cover custom CSS.** A color or a hidden element it sets can make a page
@@ -361,14 +364,15 @@ the field says why. These are refused:
 
 - `url()`, and the image functions `image()`, `image-set()`, `cross-fade()`, `element()`, `src()` and
   `paint()`, with or without a vendor prefix such as `-webkit-`.
-- `expression()`, `behavior` and `-moz-binding`.
+- `expression()`, and the properties `behavior` and `-moz-binding` (a class such as `.behavior` is fine).
 - Every at-rule except `@media`, `@supports`, `@keyframes`, `@layer` and `@container`. So `@import`,
   `@font-face`, `@namespace`, `@charset` and `@property` are refused.
 - A backslash outside quotes (an escape such as `u\72l(` spells `url(`).
 - `</` and `<!--` anywhere, a bracket that does not close or closes nothing, a string or comment that
-  never ends, a NUL character and a byte order mark.
-- `url(`, `@import`, `image-set(`, `expression(`, `javascript:` or `vbscript:` anywhere, also inside
-  quotes or comments, once escapes are read.
+  never ends, a NUL or other control character (a tab is fine), and a byte order mark.
+- `url(`, `@import`, `image-set(`, `image(`, `cross-fade(`, `element(`, `src(`, `paint(`,
+  `expression(`, `javascript:` or `vbscript:` anywhere, also inside quotes or comments, once escapes
+  are read.
 
 Images and fonts of your own are not possible this way. Use the logo, the favicon and the fonts above.
 

@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { themeMessages } from './help-center-theme-messages';
 import { ThemeInvalidError, themeApi } from './theme-api';
-import type { PreviewPage, ThemeInput, ThemePreview } from './theme-api';
+import type { PreviewPage, PreviewTheme, ThemePreview } from './theme-api';
 
 // The policy the server writes into every preview document. The frame holds the document only when it
 // carries exactly this one, so a preview never runs under whatever the app's own page would allow. The
@@ -25,7 +25,7 @@ export const previewDelay = 300;
 // A failure keeps the last page shown; a refusal also gives its messages by field (refused), so a field
 // can say why it is not in the preview yet. Nothing is asked while enabled is false (the saved theme is
 // still loading) or after the caller goes away.
-export function useThemePreview(page: PreviewPage, theme: ThemeInput, enabled = true) {
+export function useThemePreview(page: PreviewPage, theme: PreviewTheme, enabled = true) {
   const key = JSON.stringify({ page, theme });
   const [shown, setShown] = useState<{ key?: string; preview?: ThemePreview; error?: string; refused?: Record<string, string> }>({});
   const queue = useRef({ latest: key, due: undefined as string | undefined, busy: false, timer: 0, alive: true });
@@ -35,7 +35,7 @@ export function useThemePreview(page: PreviewPage, theme: ThemeInput, enabled = 
     const body = state.due;
     state.due = undefined;
     state.busy = true;
-    const sent = JSON.parse(body) as { page: PreviewPage; theme: ThemeInput };
+    const sent = JSON.parse(body) as { page: PreviewPage; theme: PreviewTheme };
     themeApi.preview(sent.page, sent.theme).then(
       (preview) => { if (state.alive && body === state.latest) setShown({ key: body, preview }); },
       (error: unknown) => {
@@ -73,7 +73,8 @@ export function useThemePreview(page: PreviewPage, theme: ThemeInput, enabled = 
 // A click on a link inside the preview would load that address into the frame; the preview is a picture
 // of the page, so it stays where it is. The document's own style takes pointers off its links from the
 // first paint; this listener, which lives in this page so the frame needs no script, also holds a link
-// opened from the keyboard.
+// opened from the keyboard. It can only be attached once the document has loaded, so until then the frame
+// is inert: no pointer or key reaches it.
 function holdLinks(event: { currentTarget: HTMLIFrameElement }) {
   event.currentTarget.contentDocument?.addEventListener('click', (click) => {
     if ((click.target as Element | null)?.closest?.('a, button')) click.preventDefault();
@@ -89,6 +90,8 @@ export function HelpCenterPreview({ html, pending, error, page, onPage }: {
 }) {
   const id = useId();
   const [width, setWidth] = useState<Width>('desktop');
+  // The document the frame has finished loading; any other html is still on its way in.
+  const [loaded, setLoaded] = useState<string>();
   const safe = html !== undefined && html.includes(policyMeta(window.location.origin));
   const radios = <T extends string>(name: string, legend: string, value: T, options: readonly (readonly [T, string])[], change: (next: T) => void) => (
     <fieldset className="segmented">
@@ -111,7 +114,8 @@ export function HelpCenterPreview({ html, pending, error, page, onPage }: {
         ? !error && <p className="muted-copy">{themeMessages.previewLoading}</p>
         : safe
           ? <div className="theme-preview-stage" data-width={width}>
-              <iframe title={themeMessages.previewTitle} sandbox={sandbox} srcDoc={html} onLoad={holdLinks} />
+              <iframe title={themeMessages.previewTitle} sandbox={sandbox} srcDoc={html} inert={loaded !== html}
+                onLoad={(event) => { holdLinks(event); setLoaded(html); }} />
             </div>
           : <p role="alert" className="error-copy">{themeMessages.previewFailed}</p>}
     </section>

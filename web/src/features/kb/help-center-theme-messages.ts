@@ -61,6 +61,7 @@ export const themeMessages = {
   customCSSHelp: 'Added after the brand on every public page, for details the fields above do not cover. '
     + 'Nothing may load from elsewhere: url(), @import and @font-face are refused. The contrast checks above do not cover it, so check the preview.',
   customCSSPending: (reason: string) => `Not in the preview yet: ${reason}`,
+  customCSSSize: (bytes: number, max: number) => `${bytes.toLocaleString('en-US')} of ${max.toLocaleString('en-US')} bytes`,
   previewCustomCSS: 'The preview keeps the last custom CSS it could show.',
   save: 'Save brand',
   saving: 'Saving…',

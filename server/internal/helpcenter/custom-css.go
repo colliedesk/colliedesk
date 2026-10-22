@@ -33,12 +33,16 @@ var customCSSAtRules = map[string]bool{"media": true, "supports": true, "keyfram
 var customCSSFunctions = map[string]bool{"url": true, "image": true, "image-set": true, "cross-fade": true, "element": true,
 	"src": true, "expression": true, "paint": true, "image-rect": true}
 
-// The properties of old browsers that bound script to an element.
+// The properties of old browsers that bound script to an element, refused where a property is named
+// (followed by a colon), so a class such as .behavior stays allowed.
 var customCSSProperties = map[string]bool{"behavior": true, "-moz-binding": true}
 
 // customCSSWords are refused anywhere, quotes and comments included, once escapes are read: harmless
-// there, but refusing them keeps the rule simple to state and to prove.
-var customCSSWords = []string{"url(", "@import", "image-set(", "expression(", "javascript:", "vbscript:", "</"}
+// there, but refusing them keeps the rule simple to state and to prove. The functions of
+// customCSSFunctions are here too, so their refusal does not depend on how the tokenizer splits a name:
+// it reads U+0-image( as a unicode range and a function named -image, which no vendor prefix explains.
+var customCSSWords = []string{"url(", "@import", "image-set(", "image(", "cross-fade(", "element(", "src(", "paint(", "expression(",
+	"javascript:", "vbscript:", "</"}
 
 const customCSSAtRuleList = "use @media, @supports, @keyframes, @layer or @container"
 
@@ -46,6 +50,7 @@ const customCSSAtRuleList = "use @media, @supports, @keyframes, @layer or @conta
 // anything from anywhere (url(), image functions, @import, @font-face), run script in an old browser
 // (expression(), behavior, -moz-binding) or reach past its own rules: an unbalanced brace, an
 // unclosed string or comment, </ (which would end the <style> element of the preview) or <!--. A
+// control character other than tab, newline, carriage return and form feed is refused too. A
 // backslash is allowed only inside quotes, so an escape cannot spell a refused name (u\72l(). What is
 // accepted is served byte for byte; nothing is rewritten. The help center's Content-Security-Policy
 // (img-src 'self', default-src 'none') still applies to whatever a browser reads differently.
@@ -62,6 +67,8 @@ func CheckCustomCSS(text string) error {
 			return refuseCustomCSS(text, at, "a NUL character is not allowed")
 		case r == '\ufeff':
 			return refuseCustomCSS(text, at, "a byte order mark is not allowed")
+		case r < 0x20 && !strings.ContainsRune("\t\n\r\f", r) || r == 0x7f:
+			return refuseCustomCSS(text, at, fmt.Sprintf("a control character (U+%04X) is not allowed", r))
 		}
 		at += width
 	}
@@ -81,13 +88,29 @@ type openBracket struct {
 
 var closing = map[string]string{"}": "{", ")": "(", "]": "["}
 
+// checkCustomCSSTokens reads text with the tokenizer. A tab is read as a space: CSS allows one inside
+// quotes and the tokenizer does not, and outside quotes both are white space. The text keeps its length,
+// so every place stays where it is.
 func checkCustomCSSTokens(text string) error {
 	var open []openBracket
-	tokens := scanner.New(text)
+	// previous is the last token other than white space and comments; property is a name of
+	// customCSSProperties waiting to see whether a colon follows it.
+	var previous, property *scanner.Token
+	tokens := scanner.New(strings.ReplaceAll(text, "\t", " "))
 	for {
 		token := tokens.Next()
 		refuse := func(reason string) error {
 			return &CustomCSSError{Line: token.Line, Column: token.Column, Reason: reason}
+		}
+		if token.Type != scanner.TokenS && token.Type != scanner.TokenComment {
+			if property != nil && token.Type == scanner.TokenChar && token.Value == ":" {
+				return &CustomCSSError{Line: property.Line, Column: property.Column, Reason: strings.ToLower(property.Value) + " is not allowed"}
+			}
+			property = nil
+			if token.Type == scanner.TokenIdent && customCSSProperties[strings.ToLower(token.Value)] && !followsClassOrPseudo(previous) {
+				property = token
+			}
+			previous = token
 		}
 		switch token.Type {
 		case scanner.TokenEOF:
@@ -125,10 +148,6 @@ func checkCustomCSSTokens(text string) error {
 			if !customCSSAtRules[withoutVendor(name)] {
 				return refuse("@" + name + " is not allowed; " + customCSSAtRuleList)
 			}
-		case scanner.TokenIdent:
-			if name := strings.ToLower(token.Value); customCSSProperties[name] {
-				return refuse(name + " is not allowed")
-			}
 		case scanner.TokenChar:
 			switch token.Value {
 			case "{", "(", "[":
@@ -141,6 +160,11 @@ func checkCustomCSSTokens(text string) error {
 			}
 		}
 	}
+}
+
+// followsClassOrPseudo is true after . or :, where a name is a class or a pseudo-class, not a property.
+func followsClassOrPseudo(previous *scanner.Token) bool {
+	return previous != nil && previous.Type == scanner.TokenChar && (previous.Value == "." || previous.Value == ":")
 }
 
 // withoutVendor drops a vendor prefix such as -webkit- or -moz- from a lowercase name.
@@ -207,10 +231,11 @@ func readCSS(text string) []cssRune {
 			digits++
 		}
 		if digits > at {
-			code, _ := strconv.ParseUint(text[at:digits], 16, 32)
-			r = rune(code)
-			if code == 0 || code > unicode.MaxRune || code >= 0xd800 && code <= 0xdfff {
-				r = '\ufffd'
+			// Six hex digits fit in 32 bits; the value is checked against Unicode before it becomes a rune.
+			code, err := strconv.ParseUint(text[at:digits], 16, 32)
+			r = '\ufffd'
+			if err == nil && code > 0 && code <= unicode.MaxRune && (code < 0xd800 || code > 0xdfff) {
+				r = rune(code)
 			}
 			read = append(read, cssRune{unicode.ToLower(r), start})
 			at = digits

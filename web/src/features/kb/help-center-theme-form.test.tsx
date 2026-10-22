@@ -260,3 +260,16 @@ test('the preview shows custom CSS as it is typed, and while the server refuses 
   expect(screen.getByRole('alert')).toHaveTextContent('The preview keeps the last custom CSS it could show.');
   expect((calls.filter((call) => call.method === 'POST').at(-1)?.body as { theme: { custom_css: string } }).theme.custom_css).toBe('a{background:url(x)}');
 });
+
+test('the custom CSS field counts bytes of UTF-8, as the server limits it, and marks a text over 32,768 bytes', async () => {
+  serve({ 'GET /api/v1/help-center/theme': () => json(200, saved), 'POST /api/v1/help-center/theme/preview': () => json(200, preview) });
+  open(true);
+  await screen.findByRole('textbox', { name: 'Text color' });
+  const css = screen.getByRole('textbox', { name: 'Custom CSS' });
+  expect(screen.getByText('0 of 32,768 bytes')).toBeInTheDocument();
+  // 3 + 6 + 3: each of the two CJK characters takes three bytes.
+  fireEvent.change(css, { target: { value: '/* 日本 */' } });
+  expect(screen.getByText('12 of 32,768 bytes')).not.toHaveClass('error-copy');
+  fireEvent.change(css, { target: { value: 'é'.repeat(16_385) } });
+  expect(screen.getByText('32,770 of 32,768 bytes')).toHaveClass('error-copy');
+});

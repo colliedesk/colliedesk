@@ -154,7 +154,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_web_form_get` | Shows the web form settings | `read` |
 | `colliedesk_web_form_update` | Turns the web form on or off and sets the allowed origins | `admin` |
 | `colliedesk_help_center_update` | Turns the public help center on or off and sets its title and language | `admin` |
-| `colliedesk_help_center_theme_update` | Sets the help center's brand; colors that are hard to read and custom CSS that could load anything are refused | `admin` |
+| `colliedesk_help_center_theme_update` | Sets the help center's brand; colors that are hard to read and custom CSS that could load anything are refused. `custom_css` is required (null or `""` clears it), so an update cannot remove it by leaving it out | `admin` |
 | `colliedesk_email_channel_get` | Shows the email channel, never the inbound secret | `read` |
 | `colliedesk_email_channel_update` | Connects the email channel or changes the support address or the sender name | `admin` |
 | `colliedesk_email_domain_verify` | Checks the DNS record that verifies the sending domain | `admin` |

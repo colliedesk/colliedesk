@@ -20,6 +20,10 @@ export function caretAt(textValue: string, message: string): number | undefined 
   return offset;
 }
 
+// The server's limit, in bytes of UTF-8: a character outside ASCII takes 2 to 4.
+const maxBytes = 32_768;
+const utf8 = new TextEncoder();
+
 // CustomCSSField is the Advanced part of the brand form: CSS served after the theme, admins only. It is
 // folded unless the saved brand has some; a refused save opens it (the form moves the focus there).
 // pending is the server's reason the preview leaves the text out while it is refused.
@@ -27,13 +31,15 @@ export function CustomCSSField({ value, savedHasCSS, error, pending, onChange }:
   value: string; savedHasCSS: boolean; error?: string; pending?: string; onChange: (value: string) => void;
 }) {
   const id = controlId('custom_css');
+  const bytes = utf8.encode(value).length;
   return (
     <details className="theme-advanced" open={savedHasCSS || undefined}>
       <summary>{text.advanced}</summary>
       <div className="field"><label htmlFor={id}>{text.customCSS}</label>
         <textarea id={id} rows={8} spellCheck={false} autoCapitalize="off" autoCorrect="off" value={value}
           aria-invalid={error ? true : undefined} aria-describedby={`${id}-hint`} onChange={(event) => onChange(event.target.value)} />
-        <Hint id={`${id}-hint`} help={text.customCSSHelp} error={error} warning={pending ? text.customCSSPending(pending) : undefined} /></div>
+        <Hint id={`${id}-hint`} help={text.customCSSHelp} error={error} warning={pending ? text.customCSSPending(pending) : undefined} />
+        <small className={bytes > maxBytes ? 'error-copy theme-hint' : 'muted-copy theme-hint'}>{text.customCSSSize(bytes, maxBytes)}</small></div>
     </details>
   );
 }

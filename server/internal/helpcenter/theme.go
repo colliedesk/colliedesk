@@ -70,10 +70,12 @@ func colorsSet(colors domain.ThemeColors) bool {
 	return false
 }
 
-// brandSheetName holds the sheet's hash, like site.css's, so it may be cached for good.
+// brandSheetName holds the sheet's hash, like site.css's, so it may be cached for good. An admin writes
+// every byte of the custom CSS, so the name keeps 128 bits of SHA-256: a second sheet with the same name,
+// which caches would then serve for a year in place of the first, is out of reach.
 func brandSheetName(sheet []byte) string {
 	sum := sha256.Sum256(sheet)
-	return "brand-" + hex.EncodeToString(sum[:6]) + ".css"
+	return "brand-" + hex.EncodeToString(sum[:16]) + ".css"
 }
 
 // brand is the theme of one help center as its pages show it.

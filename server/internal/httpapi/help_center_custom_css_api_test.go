@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -73,10 +74,15 @@ func TestHelpCenterCustomCSSIsServedAfterTheBrandWithTheSamePolicyAndClears(t *t
 	}
 	oldSheet := brandSheet(t, alone)
 
-	// The preview carries it too, in its inline block, before the rule that keeps links inert.
-	shown := preview(t, api, admin, "home", map[string]any{"custom_css": css}, http.StatusOK)
-	if style := previewStyle(t, shown.HTML); !strings.Contains(style, css) || strings.Index(style, css) > strings.Index(style, "pointer-events:none!important") {
-		t.Fatalf("preview style block:\n%s", style)
+	// The preview carries it in a <style> element of its own, after the one that keeps links inert, and
+	// nothing follows it there: text that leaves a selector or an at-rule open (accepted, since its
+	// brackets balance) runs into the end of the element, never into another rule.
+	for _, custom := range []string{css, "a{color:red}x", "@media print", ".a", "a{color:red}\n@media print"} {
+		shown := preview(t, api, admin, "home", map[string]any{"custom_css": custom}, http.StatusOK)
+		styles := previewStyles(t, shown.HTML)
+		if len(styles) != 2 || !strings.HasPrefix(styles[0], previewInert+"\n") || strings.Contains(styles[0], custom) || styles[1] != "\n"+custom+"\n" {
+			t.Fatalf("preview styles with custom CSS %q:\n%q", custom, styles)
+		}
 	}
 
 	// Clearing it (whitespace counts as none) removes the sheet, and the old name is the help center's 404.
@@ -141,5 +147,58 @@ func TestHelpCenterCustomCSSTokenTiers(t *testing.T) {
 	kbCall(t, api, http.MethodPut, themePath, body, adminToken, http.StatusOK, &theme)
 	if theme.CustomCSS != body["custom_css"] {
 		t.Fatalf("admin token put = %+v", theme)
+	}
+}
+
+// A save replaces the whole theme, so a body without custom_css (a web page loaded before the field
+// existed, a request an agent filed before it) would remove the custom CSS without anyone choosing to.
+// The field is required: null or "" clears it, leaving it out is refused and changes nothing.
+func TestHelpCenterThemeSaveWithoutCustomCSSIsRefusedAndKeepsIt(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "CSS Required", "admin@css-required.example.com")
+	send := issueToken(t, api, admin, "Writer", "send").Token
+	kept := ".masthead{border-bottom:2px solid #0b5cad}"
+	kbCall(t, api, http.MethodPut, themePath, map[string]any{"custom_css": kept}, admin, http.StatusOK, nil)
+
+	response := request(t, api, http.MethodPut, themePath, map[string]any{"colors": map[string]any{"primary": "#7a3e00"}}, admin, nil)
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("save without custom_css status=%d body=%s, want 422", response.Code, response.Body.String())
+	}
+	refused := themeRefused(t, response.Body, "validation_failed")
+	if want := "Send custom_css with every save: the custom CSS to keep, or null or an empty string for none."; refused.Error.Fields["custom_css"] != want || len(refused.Error.Fields) != 1 {
+		t.Fatalf("fields = %v, want custom_css %q", refused.Error.Fields, want)
+	}
+	var after themeView
+	kbCall(t, api, http.MethodGet, themePath, nil, admin, http.StatusOK, &after)
+	if after.CustomCSS != kept || after.ContentVersion != 1 || after.Colors["primary"] != nil {
+		t.Fatalf("theme after a save without custom_css = %+v", after)
+	}
+
+	// An agent's request without it is not filed.
+	unfiled := request(t, api, http.MethodPut, themePath, map[string]any{"body_font": "mono"}, send, nil)
+	if unfiled.Code != http.StatusBadRequest || !strings.Contains(unfiled.Body.String(), "custom_css") || !strings.Contains(unfiled.Body.String(), "Nothing was filed") {
+		t.Fatalf("request without custom_css status=%d body=%s, want 400 and nothing filed", unfiled.Code, unfiled.Body.String())
+	}
+	// One stored before the field existed fails on approval with the same 422 and changes nothing.
+	stale := accepted(t, api, http.MethodPut, themePath, map[string]any{"body_font": "mono", "custom_css": kept}, send)
+	if _, err := pool.Exec(context.Background(), `UPDATE agent_requests SET body = body - 'custom_css' WHERE id = $1`, stale.RequestID); err != nil {
+		t.Fatalf("make the request stale: %v", err)
+	}
+	var outcome approvedView
+	decode(t, approve(t, api, admin, stale.RequestID, nil), &outcome)
+	if outcome.Request.Status != "failed" || outcome.Request.ResultStatus == nil || *outcome.Request.ResultStatus != http.StatusUnprocessableEntity ||
+		!strings.Contains(string(outcome.Result), "custom_css") {
+		t.Fatalf("approving a request without custom_css = %+v result %s, want failed with 422", outcome.Request, outcome.Result)
+	}
+	kbCall(t, api, http.MethodGet, themePath, nil, admin, http.StatusOK, &after)
+	if after.CustomCSS != kept || after.BodyFont != nil || after.ContentVersion != 1 {
+		t.Fatalf("theme after the stale approval = %+v", after)
+	}
+
+	// null clears it, as "" does.
+	var cleared themeView
+	kbCall(t, api, http.MethodPut, themePath, map[string]any{"custom_css": nil}, admin, http.StatusOK, &cleared)
+	if cleared.CustomCSS != "" || cleared.ContentVersion != 2 {
+		t.Fatalf("theme after custom_css null = %+v", cleared)
 	}
 }
