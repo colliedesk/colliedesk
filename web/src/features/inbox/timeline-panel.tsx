@@ -1,7 +1,9 @@
 import type { RefObject } from 'react';
-import type { Conversation, Message, TimeEntry } from '../../api/schemas';
+import type { Conversation, ConversationViewer, Message, TimeEntry } from '../../api/schemas';
 import { messages } from '../../messages';
+import { Part } from '../../ui/lazy-part';
 import { MessageItem } from './message-item';
+import { presenceViewPart } from './presence-part';
 import { PriorityLabel, StatusLabel } from './conversation-labels';
 import { TimeEntriesSection } from './time-entries-section';
 
@@ -22,9 +24,11 @@ interface TimelinePanelProps {
   agentNames?: ReadonlyMap<string, string>;
   // Opens the customer's page: every conversation they had, newest first.
   onOpenContact?: (contactId: string) => void;
+  // The others who have this conversation open now, and whether one is writing a reply.
+  viewers?: ConversationViewer[];
 }
 
-export function TimelinePanel({ conversation, items, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, onToggleDetails, detailsToggleRef, agentNames, onOpenContact }: TimelinePanelProps) {
+export function TimelinePanel({ conversation, items, timeEntries = [], loading = false, loadFailed = false, onRetryLoad, timezone, onRetryDelivery, detailsOpen = false, onToggleDetails, detailsToggleRef, agentNames, onOpenContact, viewers = [] }: TimelinePanelProps) {
   return (
     <section className="timeline-panel" aria-label={messages.timeline}>
       <header className="timeline-header">
@@ -35,6 +39,7 @@ export function TimelinePanel({ conversation, items, timeEntries = [], loading =
             <a className="timeline-contact" href={`/contacts/${conversation.contact_id}`} aria-label={messages.openContact(conversation.contact_name)}
               onClick={(event) => { if (onOpenContact && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); onOpenContact(conversation.contact_id); } }}>
               {conversation.contact_name}</a></div>}
+          {conversation && viewers.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ConversationViewers viewers={viewers} timezone={timezone} />} />}
         </div>
         {conversation && onToggleDetails && <button type="button" className="details-toggle" ref={detailsToggleRef}
           aria-expanded={detailsOpen} aria-controls="conversation-details" onClick={onToggleDetails}>{messages.showDetails}</button>}

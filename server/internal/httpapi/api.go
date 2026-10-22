@@ -290,6 +290,8 @@ func Routes() []Route {
 		{http.MethodGet, "/api/v1/conversations/{id}/messages", auth.PermissionConversationsRead},
 		{http.MethodPost, "/api/v1/conversations/{id}/messages", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/conversations/{id}/time-entries", auth.PermissionConversationsRead},
+		{http.MethodPut, "/api/v1/conversations/{id}/presence", auth.PermissionConversationsRead},
+		{http.MethodDelete, "/api/v1/conversations/{id}/presence/{clientId}", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/inbox/activity", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/attachments/{id}", auth.PermissionConversationsRead},
 		{http.MethodGet, mailimage.ProxyPath, auth.PermissionConversationsRead},

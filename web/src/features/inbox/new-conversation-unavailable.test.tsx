@@ -1,18 +1,29 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { beforeAll, expect, test, vi } from 'vitest';
 import { InboxRoute } from './inbox-route';
+import { presenceViewPart } from './presence-part';
 
 const api = vi.hoisted(() => ({
+  announcePresence: vi.fn(async (_id: string, _body: unknown): Promise<{ viewers: unknown[]; heartbeat_seconds: number }> => ({ viewers: [], heartbeat_seconds: 5 })), leavePresence: vi.fn(async () => undefined),
   me: vi.fn(async () => ({ timezone: 'UTC' })), conversations: vi.fn(async () => ({ items: [], page: 1, page_size: 50 })), conversation: vi.fn(),
   agents: vi.fn(async () => ({ items: [] })), tags: vi.fn(async () => ({ items: [] })), messages: vi.fn(async () => ({ items: [] })),
   timeEntries: vi.fn(async () => ({ items: [] })), savedReplies: vi.fn(async () => ({ items: [] })), config: vi.fn(),
   emailChannel: vi.fn(async () => ({ channel: null })), contacts: vi.fn(), agentRequests: vi.fn(async () => ({ items: [] })),
 }));
-vi.mock('../../api/client', () => ({ api }));
+vi.mock('../../api/client', () => ({ api, ReplyConflictError: class extends Error {} }));
+vi.mock('./presence-api', () => ({ presenceApi: { announce: api.announcePresence, leave: api.leavePresence }, RetryLater: class extends Error {} }));
 vi.mock('@tanstack/react-router', async () => (await import('./test-router')).routerModule);
 // The window's chunk cannot be loaded: offline, or an old tab after a deploy.
 vi.mock('./new-conversation-dialog', () => { throw new Error('Failed to fetch dynamically imported module'); });
+
+
+// The presence chunk loads once a conversation is open; start with it there, so no test ends while it is
+// still on its way (vitest refuses a module asked for after the test environment is gone).
+beforeAll(async () => {
+  presenceViewPart.preload();
+  await import('./presence-view');
+});
 
 test('a window whose chunk cannot load says so, takes the focus, and closes with Escape or Close back to its button', async () => {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><InboxRoute /></QueryClientProvider>);

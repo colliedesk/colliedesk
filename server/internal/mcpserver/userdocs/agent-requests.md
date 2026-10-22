@@ -63,7 +63,8 @@ When an agent drafts a reply, the conversation is marked **Draft waiting** in th
 the draft sits above the reply box with the name of the token that wrote it and every recipient:
 the customer and anyone it copies (Cc). The same recipients are in the request's summary.
 
-- **Send** emails it to the customer, as you.
+- **Send** emails it to the customer, as you. If someone replied after the newest reply on your
+  screen, nothing is sent and the draft keeps waiting until you have read that reply.
 - **Edit** lets you change the text and untick copies first; Send then sends your version. You can
   remove a copy, never add one: to write to someone new, send your own reply.
 - **Discard** throws it away. The customer never sees it.

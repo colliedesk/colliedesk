@@ -44,7 +44,13 @@ export default defineConfig({
     // address), with a key ring as a fresh install has one.
     server(servers.main, { ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'k1:ZTJlLWluLWFwcC1pbXBvcnQta2V5LTMyLWJ5dGVzISE=' }, 'e2e'),
     server(servers.mail, { SMTP_HOST: '127.0.0.1', SMTP_PORT: mailpit.smtpPort, SMTP_STARTTLS: 'false', EMAIL_FROM_POLICY: 'any' }),
+    // The cloud server also imports in the app and sends replies by SMTP, for the golden path. Every server
+    // with a relay runs an outbox worker that sends any workspace's queued reply, and the worker picks the
+    // From line, so it uses the mail server's policy: either worker sends a reply the same way. Its key
+    // ring has its own key id, so the main server never runs a cloud import (and the other way round).
     server(servers.cloud, {
+      ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'c1:ZTJlLWNsb3VkLWltcG9ydC1rZXktMzItYnl0ZXMhISE=',
+      SMTP_HOST: '127.0.0.1', SMTP_PORT: mailpit.smtpPort, SMTP_STARTTLS: 'false', EMAIL_FROM_POLICY: 'any',
       CLOUD_AUTH_ISSUER: identity.issuer, CLOUD_AUTH_JWKS_URL: jwksURL,
       CLOUD_AUTH_AUTHORIZED_PARTIES: identity.authorizedParty, CLERK_PUBLISHABLE_KEY: identity.publishableKey,
       // The hosted cloud: billing on (so trials, the lock and sign-up exist) with the settings sign-up refuses to start without.
@@ -52,6 +58,6 @@ export default defineConfig({
       POLAR_ACCESS_TOKEN: 'polar_oat_e2e', POLAR_WEBHOOK_SECRET: 'whsec_e2e', POLAR_API_URL: 'http://127.0.0.1:9',
       POLAR_PRODUCT_TEAM_MONTHLY: 'e2e-monthly', POLAR_PRODUCT_TEAM_YEARLY: 'e2e-yearly', POLAR_PRODUCT_FOUNDING: 'e2e-founding',
       SIGNUP_HASH_KEY: 'e2e-signup-hash-key-0123456789abcdef', TRUSTED_PROXIES: '127.0.0.1/32,::1/128',
-    }),
+    }, 'e2e'),
   ],
 });

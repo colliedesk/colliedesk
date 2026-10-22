@@ -49,7 +49,7 @@ func TestReplySendEmailsTheCustomerOnlyWithASendToken(t *testing.T) {
 	if status, body := e.rest(http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "help@inbox.example.com"}, f.w.admin); status != http.StatusOK {
 		t.Fatalf("connect email: %d %v", status, body)
 	}
-	args := map[string]any{"conversation_id": f.c2, "body": "Your refund is on its way."}
+	args := map[string]any{"conversation_id": f.c2, "body": "Your refund is on its way.", "seen_reply_number": 0}
 
 	if out := requestedForTier(t, e, f.w.draft, "colliedesk_reply_send", args); at(t, out, "agent_request", "kind") != "reply_draft" {
 		t.Errorf("a draft token's reply must become a reply draft: %v", out)
@@ -64,7 +64,7 @@ func TestReplySendEmailsTheCustomerOnlyWithASendToken(t *testing.T) {
 	if kinds := messageKinds(t, e, f.w, f.c2); !slices.Equal(kinds, []string{"outgoing"}) {
 		t.Errorf("timeline kinds = %v, want one outgoing reply", kinds)
 	}
-	if message := e.fails(e.connect(f.w.send, ""), "colliedesk_reply_send", map[string]any{"conversation_id": f.otherConvID, "body": "hi"}); !strings.Contains(message, "No conversation") {
+	if message := e.fails(e.connect(f.w.send, ""), "colliedesk_reply_send", map[string]any{"conversation_id": f.otherConvID, "body": "hi", "seen_reply_number": 0}); !strings.Contains(message, "No conversation") {
 		t.Errorf("another workspace's conversation: %q", message)
 	}
 	if kinds := messageKinds(t, e, f.other, f.otherConvID); len(kinds) != 0 {

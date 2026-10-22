@@ -52,6 +52,8 @@ type restConversation struct {
 	Channel    string    `json:"channel"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
+	// LatestReplyNumber is the number of the newest reply, for seen_reply_number.
+	LatestReplyNumber int `json:"latest_reply_number"`
 }
 
 type restDelivery struct {
@@ -65,6 +67,7 @@ type restMessage struct {
 	AuthorAgentID *string   `json:"author_agent_id"`
 	AuthorName    *string   `json:"author_name"`
 	CreatedAt     time.Time `json:"created_at"`
+	ReplyNumber   *int      `json:"reply_number"`
 	AgentToken    *struct {
 		Label string `json:"label"`
 		Scope string `json:"scope"`
@@ -117,4 +120,8 @@ type restActivity struct {
 	NewConversations []restActivityItem `json:"new_conversations"`
 	AssignedToMe     []restActivityItem `json:"assigned_to_me"`
 	Updated          []restActivityItem `json:"updated"`
+	Viewing          []struct {
+		ConversationID string       `json:"conversation_id"`
+		Viewers        []restViewer `json:"viewers"`
+	} `json:"viewing"`
 }

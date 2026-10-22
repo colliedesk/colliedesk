@@ -53,11 +53,20 @@ var approvalRunsAs = map[string][2]string{
 // replayApproved runs the stored call through the API's own routes as the approving person: their
 // role, the lock and every handler check apply as if they had made the call. It returns the status,
 // the answer and whether the answer fit in domain.MaxAgentRequestBody.
-func (a *API) replayApproved(ctx context.Context, approver auth.Principal, item domain.AgentRequest) (int, []byte, bool) {
+func (a *API) replayApproved(ctx context.Context, approver auth.Principal, item domain.AgentRequest, seen *int) (int, []byte, bool) {
 	method, path := item.Method, item.Path
 	call := item.Body
 	if len(item.EditedBody) > 0 {
 		call = item.EditedBody
+	}
+	if seen != nil {
+		var fields map[string]any
+		if json.Unmarshal(call, &fields) == nil && fields != nil {
+			fields["seen_reply_number"] = *seen
+			if marked, err := json.Marshal(fields); err == nil {
+				call = marked
+			}
+		}
 	}
 	if replacement, ok := approvalRunsAs[item.Method+" "+item.Route]; ok {
 		method, path = replacement[0], replacement[1]
