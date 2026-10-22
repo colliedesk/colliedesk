@@ -83,6 +83,7 @@ type KBArticleSummary struct {
 	ID            string           `json:"id"`
 	Number        int64            `json:"number"`
 	CollectionID  string           `json:"collection_id"`
+	Position      int              `json:"position"`
 	Title         string           `json:"title"`
 	Slug          string           `json:"slug"`
 	Status        string           `json:"status"`

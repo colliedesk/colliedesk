@@ -124,3 +124,40 @@ test('while the help center is on, a published article opens on its public page'
   expect(link).toHaveAttribute('href', summary(1, 'Reset your password', 'published').url);
   expect(screen.queryByText('The help center is off.')).not.toBeInTheDocument();
 });
+
+test('a collection lists its articles in their order, and the buttons send a new one', async () => {
+  const [reset, teammate] = [summary(1, 'Reset your password', 'published'), summary(2, 'Add a teammate')];
+  const sent: { article_ids: string[] }[] = [];
+  let listed = [reset, teammate];
+  serve({
+    ...base,
+    'GET /api/v1/kb/articles': () => json(200, { items: listed, next_cursor: null }),
+    'PUT /api/v1/kb/order': (call) => {
+      const body = call.body as { article_ids: string[] };
+      sent.push(body);
+      if (body.article_ids.length) listed = body.article_ids.map((id) => [reset, teammate].find((item) => item.id === id)!);
+      return json(200, body);
+    },
+  });
+  const show = open({ collection: ids.setup });
+  fireEvent.click(await screen.findByRole('button', { name: 'Move Reset your password down' }));
+  // Setup holds Email too: the order names everything directly in it.
+  await waitFor(() => expect(sent).toEqual([{ parent_id: ids.setup, collection_ids: [ids.deep], article_ids: [teammate.id, reset.id] }]));
+  expect(await screen.findByText('Moved Reset your password to place 2 of 2.')).toHaveAttribute('aria-live', 'polite');
+  expect(await screen.findByRole('button', { name: 'Move Reset your password up' })).toHaveFocus();
+  expect(screen.queryByRole('button', { name: 'Move Reset your password down' })).not.toBeInTheDocument();
+  // The collection itself moves among the collections beside it; Setup has none.
+  expect(screen.queryByRole('button', { name: 'Move Setup up' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Move Setup down' })).not.toBeInTheDocument();
+  show({ collection: ids.billing });
+  fireEvent.click(await screen.findByRole('button', { name: 'Move Billing up' }));
+  await waitFor(() => expect(sent).toHaveLength(2));
+  expect(sent[1]).toEqual({ parent_id: null, collection_ids: [ids.billing, ids.guides], article_ids: [] });
+  // A filtered or searched list is not the whole order, and All articles has none: no buttons there.
+  show({ collection: ids.setup, status: 'draft' });
+  await screen.findByRole('heading', { name: 'Setup' });
+  expect(screen.queryByRole('button', { name: /^Move Reset your password/ })).not.toBeInTheDocument();
+  show({});
+  await screen.findByRole('link', { name: /Reset your password/ });
+  expect(screen.queryByRole('button', { name: /^Move / })).not.toBeInTheDocument();
+});

@@ -117,6 +117,7 @@ type KBCollection struct {
 type KBArticle struct {
 	ID               string          `json:"id"`
 	CollectionID     string          `json:"collection_id"`
+	Position         int             `json:"position"`
 	Number           int64           `json:"number"`
 	Title            string          `json:"title"`
 	Slug             string          `json:"slug"`

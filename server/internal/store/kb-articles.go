@@ -21,7 +21,7 @@ const kbArticleChangeColumns = `v.version,v.kind,v.restored_from_version,v.chang
 
 // kbArticleSelect reads articles a with their newest version; extra columns follow the change columns.
 func kbArticleSelect(extra, join string) string {
-	return `SELECT a.id::text,a.number,a.collection_id::text,a.title,a.slug,a.status,a.published_at,a.author_agent_id::text,a.created_at,a.updated_at,` +
+	return `SELECT a.id::text,a.number,a.collection_id::text,a.position,a.title,a.slug,a.status,a.published_at,a.author_agent_id::text,a.created_at,a.updated_at,` +
 		kbArticleChangeColumns + extra + `
 	FROM kb_articles a
 	LEFT JOIN LATERAL (SELECT * FROM kb_article_versions x WHERE x.workspace_id=a.workspace_id AND x.article_id=a.id ORDER BY x.version DESC LIMIT 1) v ON true
@@ -31,7 +31,7 @@ func kbArticleSelect(extra, join string) string {
 func scanKBSummary(row pgx.Row, extra ...any) (domain.KBArticleSummary, error) {
 	var item domain.KBArticleSummary
 	var change changeRow
-	targets := append([]any{&item.ID, &item.Number, &item.CollectionID, &item.Title, &item.Slug, &item.Status, &item.PublishedAt, &item.AuthorAgentID,
+	targets := append([]any{&item.ID, &item.Number, &item.CollectionID, &item.Position, &item.Title, &item.Slug, &item.Status, &item.PublishedAt, &item.AuthorAgentID,
 		&item.CreatedAt, &item.UpdatedAt}, change.targets()...)
 	if err := row.Scan(append(targets, extra...)...); err != nil {
 		return item, err
@@ -78,12 +78,19 @@ func (s *Store) GetKBArticle(ctx context.Context, workspaceID, id string) (domai
 	return article, kbError("get knowledge base article", err)
 }
 
+// The orders of an article list without a search: most recently updated first, or the help center's.
+const (
+	KBSortRecent = "recent"
+	KBSortManual = "manual"
+)
+
 // KBArticleFilter selects articles outside the trash. Query matches every word of Query as a word or
-// the start of one, or Query inside the title.
+// the start of one, or Query inside the title; a search orders by relevance. Without one, Sort orders
+// the list; empty is KBSortManual inside a collection and KBSortRecent otherwise.
 type KBArticleFilter struct {
-	Query, Status, CollectionID string
-	Limit                       int
-	Cursor                      string
+	Query, Status, CollectionID, Sort string
+	Limit                             int
+	Cursor                            string
 }
 
 // likePattern escapes the wildcards of ILIKE so the text matches as typed.
@@ -123,8 +130,20 @@ func (s *Store) ListKBArticles(ctx context.Context, workspaceID string, filter K
 		args = append(args, filter.CollectionID)
 		where += fmt.Sprintf(` AND a.collection_id=$%d`, len(args))
 	}
+	sort := filter.Sort
+	if sort == "" && filter.CollectionID != "" {
+		sort = KBSortManual
+	}
 	order := ` ORDER BY a.updated_at DESC, a.id DESC`
-	join := ``
+	join, with := ``, ``
+	switch {
+	case query == "" && sort == KBSortManual && filter.CollectionID != "":
+		order = ` ORDER BY a.position, lower(a.title), a.number`
+	case query == "" && sort == KBSortManual:
+		// Across collections, as the help center lists them: a collection's articles, then its collections'.
+		with, join = kbTreeOrder, ` LEFT JOIN tree k ON k.id=a.collection_id`
+		order = ` ORDER BY k.path NULLS LAST, a.position, lower(a.title), a.number`
+	}
 	if query != "" {
 		args = append(args, "%"+likePattern.Replace(query)+"%")
 		join = ` CROSS JOIN LATERAL (SELECT ` + kbQuery + ` AS q) t`
@@ -134,7 +153,7 @@ func (s *Store) ListKBArticles(ctx context.Context, workspaceID string, filter K
 		where += ` AND $2::text = ''`
 	}
 	items, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.KBArticleSummary, error) {
-		rows, err := tx.Query(ctx, kbArticleSelect(``, join)+where+order+` LIMIT $3 OFFSET $4`, args...)
+		rows, err := tx.Query(ctx, with+kbArticleSelect(``, join)+where+order+` LIMIT $3 OFFSET $4`, args...)
 		if err != nil {
 			return nil, err
 		}
@@ -361,8 +380,8 @@ func (s *Store) CreateKBArticle(ctx context.Context, workspaceID string, actor A
 			return domain.KBArticle{}, err
 		}
 		var id string
-		if err := tx.QueryRow(ctx, `INSERT INTO kb_articles(workspace_id,collection_id,number,title,slug,body_md,status,published_at,author_agent_id)
-			VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7='published' THEN clock_timestamp() END,$8) RETURNING id::text`,
+		if err := tx.QueryRow(ctx, `INSERT INTO kb_articles(workspace_id,collection_id,number,title,slug,body_md,status,published_at,author_agent_id,position)
+			VALUES($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7='published' THEN clock_timestamp() END,$8,`+kbArticleEnd(`$2::uuid`)+`) RETURNING id::text`,
 			workspaceID, input.CollectionID, number, title, input.Slug, input.BodyMD, input.Status, optionalID(actor.AgentID)).Scan(&id); err != nil {
 			return domain.KBArticle{}, err
 		}
@@ -413,6 +432,7 @@ func (s *Store) UpdateKBArticle(ctx context.Context, workspaceID string, actor A
 			}
 		}
 		_, err := tx.Exec(ctx, `UPDATE kb_articles SET title=COALESCE($3,title), slug=COALESCE($4,slug), body_md=COALESCE($5,body_md),
+			position=CASE WHEN $6::uuid IS DISTINCT FROM collection_id AND $6::uuid IS NOT NULL THEN `+kbArticleEnd(`$6::uuid`)+` ELSE position END,
 			collection_id=COALESCE($6::uuid,collection_id), status=COALESCE($7,status),
 			published_at=CASE WHEN COALESCE($7,status)='published' THEN COALESCE(published_at, clock_timestamp()) END, updated_at=clock_timestamp()
 			WHERE workspace_id=$1 AND id=$2`, workspaceID, id, change.Title, change.Slug, change.BodyMD, change.CollectionID, change.Status)

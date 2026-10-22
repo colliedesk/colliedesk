@@ -104,15 +104,16 @@ func scanPublicKBArticle(row pgx.Row, extra ...any) (domain.PublicKBArticle, err
 const publicKBArticleColumns = `a.number, a.slug, a.title, a.collection_id::text, a.published_at, a.updated_at`
 
 // helpCenterArticlesSQL lists, for each collection of workspace $1 that collections (an SQL array
-// of ids) names, its published articles by title, skipping the first $2 and keeping at most $3.
+// of ids) names, its published articles in their order (position, then title), skipping the first $2
+// and keeping at most $3.
 func helpCenterArticlesSQL(collections string) string {
 	return `SELECT ` + publicKBArticleColumns + ` FROM (
-			SELECT a.*, row_number() OVER (PARTITION BY a.collection_id ORDER BY lower(a.title), a.number) AS place
+			SELECT a.*, row_number() OVER (PARTITION BY a.collection_id ORDER BY a.position, lower(a.title), a.number) AS place
 			FROM kb_articles a WHERE ` + publishedKBArticle + ` AND a.collection_id = ANY(` + collections + `)) a
 		WHERE a.place > $2 AND a.place <= $2 + $3 ORDER BY a.collection_id, a.place`
 }
 
-// HelpCenterArticles returns, for each of the collections, its published articles by title, skipping
+// HelpCenterArticles returns, for each of the collections, its published articles in order, skipping
 // the first offset and keeping at most limit; the text is left out.
 func (s *Store) HelpCenterArticles(ctx context.Context, workspaceID string, collectionIDs []string, offset, limit int) ([]domain.PublicKBArticle, error) {
 	for _, id := range collectionIDs {

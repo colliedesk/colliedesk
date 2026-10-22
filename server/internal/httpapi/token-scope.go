@@ -99,6 +99,7 @@ var tokenTiers = map[string]TokenAccess{
 	"PATCH /api/v1/kb/collections/{id}":                          tier(auth.ScopeSend),
 	"DELETE /api/v1/kb/collections/{id}":                         tier(auth.ScopeSend),
 	"POST /api/v1/kb/collections/{id}/restore":                   tier(auth.ScopeSend),
+	"PUT /api/v1/kb/order":                                       tier(auth.ScopeSend),
 	"GET /api/v1/kb/articles":                                    tier(auth.ScopeRead),
 	"GET /api/v1/kb/articles/trash":                              tier(auth.ScopeRead),
 	"GET /api/v1/kb/articles/{id}":                               tier(auth.ScopeRead),

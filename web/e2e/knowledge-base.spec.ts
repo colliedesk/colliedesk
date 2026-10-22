@@ -221,3 +221,34 @@ test('knowledge base: a WebM uploaded in the media library plays in a published 
   expect(range.status()).toBe(206);
   expect(range.headers()['content-type']).toBe('video/webm');
 });
+
+test('knowledge base: an article moved with the keyboard keeps its new place on the help center, and the screen reader hears where it went', async ({ page }) => {
+  const suffix = `${Date.now()}-${process.pid}`;
+  const { url } = createWorkspaceWithSlug(`KB Order ${suffix}`, `admin-${suffix}@example.com`);
+  await page.goto(url);
+  await page.getByRole('button', { name: 'Continue to Colliedesk' }).click();
+  await expect(page).toHaveURL(`${servers.main}/`);
+  const headers = { Origin: servers.main };
+  expect((await page.request.put(`${servers.main}/api/v1/help-center`, { headers, data: { enabled: true, title: 'Order help', locale: 'en' } })).status()).toBe(200);
+  const created = await page.request.post(`${servers.main}/api/v1/kb/collections`, { headers, data: { name: 'Billing' } });
+  const { id: collection } = await created.json() as { id: string };
+  for (const title of ['Alpha invoices', 'Bravo refunds', 'Charlie taxes']) {
+    expect((await page.request.post(`${servers.main}/api/v1/kb/articles`, { headers, data: { collection_id: collection, title, body_md: title, status: 'published' } })).status()).toBe(201);
+  }
+
+  await page.goto(`${servers.main}/knowledge?collection=${collection}`);
+  const rows = page.locator('.kb-article-title');
+  await expect(rows).toHaveText(['Alpha invoices', 'Bravo refunds', 'Charlie taxes']);
+  await page.getByRole('button', { name: 'Move Alpha invoices down' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('Moved Alpha invoices to place 2 of 3.')).toBeAttached();
+  await expect(rows).toHaveText(['Bravo refunds', 'Alpha invoices', 'Charlie taxes']);
+  await expect(page.getByRole('button', { name: 'Move Alpha invoices down' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(rows).toHaveText(['Bravo refunds', 'Charlie taxes', 'Alpha invoices']);
+  await expect(page.getByRole('button', { name: 'Move Alpha invoices up' })).toBeFocused();
+
+  const { url: helpCenter } = await (await page.request.get(`${servers.main}/api/v1/help-center`)).json() as { url: string };
+  await page.goto(`${helpCenter}/c/billing`);
+  await expect(page.locator('main ul.index a')).toHaveText(['Bravo refunds', 'Charlie taxes', 'Alpha invoices']);
+});

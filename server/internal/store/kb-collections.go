@@ -206,7 +206,9 @@ func (s *Store) CreateKBCollection(ctx context.Context, workspaceID string, acto
 		}
 		collection, err := kbSavepoint(ctx, tx, func(sub pgx.Tx) (domain.KBCollection, error) {
 			var id string
-			if err := sub.QueryRow(ctx, `INSERT INTO kb_collections(workspace_id,parent_id,name,slug,description,position) VALUES($1,$2,$3,$4,$5,$6) RETURNING id::text`,
+			// Without a position it goes after its siblings once they were ordered by hand.
+			if err := sub.QueryRow(ctx, `INSERT INTO kb_collections(workspace_id,parent_id,name,slug,description,position)
+				VALUES($1,$2,$3,$4,$5,COALESCE(NULLIF($6,0),`+kbCollectionEnd(`$2::uuid`, `NULL::uuid`)+`)) RETURNING id::text`,
 				workspaceID, input.ParentID, input.Name, input.Slug, input.Description, input.Position).Scan(&id); err != nil {
 				return domain.KBCollection{}, err
 			}
@@ -306,7 +308,8 @@ func (s *Store) UpdateKBCollection(ctx context.Context, workspaceID string, acto
 		}
 		collection, err := kbSavepoint(ctx, tx, func(sub pgx.Tx) (domain.KBCollection, error) {
 			if _, err := sub.Exec(ctx, `UPDATE kb_collections SET name=COALESCE($3,name), slug=COALESCE($4,slug), description=COALESCE($5,description),
-				position=COALESCE($6,position), parent_id=CASE WHEN $7 THEN $8::uuid ELSE parent_id END, updated_at=clock_timestamp()
+				position=CASE WHEN $6::int IS NOT NULL THEN $6 WHEN $7 AND $8::uuid IS DISTINCT FROM parent_id THEN `+kbCollectionEnd(`$8::uuid`, `$2::uuid`)+` ELSE position END,
+				parent_id=CASE WHEN $7 THEN $8::uuid ELSE parent_id END, updated_at=clock_timestamp()
 				WHERE workspace_id=$1 AND id=$2`, workspaceID, id, change.Name, change.Slug, change.Description, change.Position, change.MoveParent, change.Parent); err != nil {
 				return domain.KBCollection{}, err
 			}

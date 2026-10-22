@@ -2440,13 +2440,47 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/order:
+    put:
+      operationId: setKBOrder
+      x-permission: conversations:write
+      description: >
+        Set by hand the order of what sits directly under one parent: its collections and, under a
+        collection, its articles (drafts included). `parent_id` null is the top, which holds
+        collections only (`article_ids` is then empty). The lists must name every collection and
+        article outside the trash under that parent, each once, and nothing else; otherwise nothing
+        changes and the answer is 409 `order_stale` with the lists as they are now in
+        `error.collection_ids` and `error.article_ids` (someone added, moved or deleted one since they
+        were read). A parent that is not a collection of this workspace outside the trash is 404. The
+        help center, the article list of a collection and the reply box's article picker follow the
+        order on their next load. Positions become 1, 2, 3 in the order given; `updated_at` does not
+        change. After an order by hand, a new or moved article goes last. Any agent may set it, and a
+        `send` agent token; a lower tier files an agent request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/KBOrder'}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: The order now
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBOrder'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/kb/articles:
     get:
       operationId: listKBArticles
       x-permission: conversations:read
       description: >
         Knowledge base articles outside the trash, without their text, in pages. Without `q` the
-        most recently updated come first. With `q` the articles whose title or text hold every word of
+        order is `sort`: `recent` puts the most recently updated first; `manual` is the help center's
+        order (collections in their order, a collection's own articles before those of its collections,
+        and in each collection by `position`, then title, then number). `sort` is `manual` with
+        `collection_id` and `recent` without it, unless given. With `q` the articles whose title or text hold every word of
         `q` as a word or the start of a word (or whose title holds `q`) come first by relevance. Words
         are split the same way in the query and the text, with no language rules, so a word inside
         another word, and text in scripts written without spaces (Chinese, Japanese, Thai), are found
@@ -2455,6 +2489,7 @@ paths:
         - {name: q, in: query, schema: {type: string, maxLength: 200}}
         - {name: status, in: query, schema: {type: string, enum: [draft, published]}}
         - {name: collection_id, in: query, description: Only the articles directly in this collection., schema: {type: string, format: uuid}}
+        - {name: sort, in: query, description: The order without `q`; ignored with `q`., schema: {type: string, enum: [recent, manual]}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
         - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string, maxLength: 200}}
       responses:
@@ -4251,13 +4286,29 @@ components:
                 label: {type: string}
         agent_request_id: {type: [string, 'null'], format: uuid, description: The approved agent request that made the change.}
         created_at: {type: string, format: date-time}
+    KBOrder:
+      type: object
+      required: [parent_id, collection_ids, article_ids]
+      properties:
+        parent_id: {type: [string, 'null'], format: uuid, description: 'The collection whose children these are; null for the top.'}
+        collection_ids:
+          type: array
+          maxItems: 1000
+          description: Its collections outside the trash, first to last.
+          items: {type: string, format: uuid}
+        article_ids:
+          type: array
+          maxItems: 2000
+          description: Its articles outside the trash, drafts included, first to last; empty at the top.
+          items: {type: string, format: uuid}
     KBArticleSummary:
       type: object
-      required: [id, number, collection_id, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url]
+      required: [id, number, collection_id, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url]
       properties:
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1, description: 'Never changes and is never reused in the workspace; the help center address is /a/<number>-<slug>.'}
         collection_id: {type: string, format: uuid}
+        position: {type: integer, minimum: 0, description: 'Its place in its collection, set with PUT /api/v1/kb/order; 0 until the collection is ordered by hand. Ties go by title, then number.'}
         title: {type: string}
         slug: {type: string}
         status: {$ref: '#/components/schemas/KBArticleStatus'}
@@ -4287,11 +4338,12 @@ components:
         updated_at: {type: string, format: date-time}
     KBArticle:
       type: object
-      required: [id, number, collection_id, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, body_md, has_source_html, translations, deleted_at]
+      required: [id, number, collection_id, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, body_md, has_source_html, translations, deleted_at]
       properties:
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1}
         collection_id: {type: string, format: uuid}
+        position: {type: integer, minimum: 0}
         title: {type: string}
         slug: {type: string}
         status: {$ref: '#/components/schemas/KBArticleStatus'}
@@ -4317,11 +4369,12 @@ components:
           items: {type: string, format: uuid}
     TrashedKBArticle:
       type: object
-      required: [id, number, collection_id, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, deleted_at, deleted_by, purges_at]
+      required: [id, number, collection_id, position, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, deleted_at, deleted_by, purges_at]
       properties:
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1}
         collection_id: {type: string, format: uuid}
+        position: {type: integer, minimum: 0}
         title: {type: string}
         slug: {type: string}
         status: {$ref: '#/components/schemas/KBArticleStatus'}
@@ -5118,6 +5171,14 @@ components:
                 Only on trial_outbound_restricted when the customer wrote first, but from another address than
                 the contact's (a contact merged into this one): the reply would go to `reply_to`, which never wrote.
             reply_to: {type: string, description: 'Only with reason contact_address_differs: the address the reply would go to.'}
+            collection_ids:
+              type: array
+              description: 'Only on order_stale: the collections under the parent now, in their current order.'
+              items: {type: string, format: uuid}
+            article_ids:
+              type: array
+              description: 'Only on order_stale: the articles under the parent now, in their current order.'
+              items: {type: string, format: uuid}
             checks:
               type: array
               description: 'Only on contrast_too_low: every color pair of the theme, passing or not.'

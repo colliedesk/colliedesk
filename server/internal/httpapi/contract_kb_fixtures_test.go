@@ -124,6 +124,7 @@ func kbContractCases(f contractFixture) map[string]contractCase {
 		"PATCH /api/v1/kb/collections/{id}":                        {"/api/v1/kb/collections/" + kb.collectionID, map[string]any{"updated_at": kb.collectionSeen, "description": "Updated"}, admin, 200, ""},
 		"DELETE /api/v1/kb/collections/{id}":                       {"/api/v1/kb/collections/" + kb.deleteCollectionID + "?updated_at=" + url.QueryEscape(kb.deleteCollectionSeen), nil, admin, 204, ""},
 		"POST /api/v1/kb/collections/{id}/restore":                 {"/api/v1/kb/collections/" + kb.trashCollectionID + "/restore", map[string]any{"updated_at": kb.trashCollectionSeen}, admin, 200, ""},
+		"PUT /api/v1/kb/order":                                     {"/api/v1/kb/order", map[string]any{"parent_id": kb.collectionID, "collection_ids": []string{}, "article_ids": []string{}}, admin, 409, ""},
 		"GET /api/v1/kb/articles":                                  {"/api/v1/kb/articles?q=contract&status=draft", nil, admin, 200, ""},
 		"POST /api/v1/kb/articles":                                 {"/api/v1/kb/articles", map[string]any{"collection_id": kb.collectionID, "title": "Created contract article", "body_md": "Hi", "status": "published"}, admin, 201, ""},
 		"GET /api/v1/kb/articles/trash":                            {"/api/v1/kb/articles/trash", nil, admin, 200, ""},

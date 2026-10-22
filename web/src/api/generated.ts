@@ -1311,6 +1311,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Set by hand the order of what sits directly under one parent: its collections and, under a collection, its articles (drafts included). `parent_id` null is the top, which holds collections only (`article_ids` is then empty). The lists must name every collection and article outside the trash under that parent, each once, and nothing else; otherwise nothing changes and the answer is 409 `order_stale` with the lists as they are now in `error.collection_ids` and `error.article_ids` (someone added, moved or deleted one since they were read). A parent that is not a collection of this workspace outside the trash is 404. The help center, the article list of a collection and the reply box's article picker follow the order on their next load. Positions become 1, 2, 3 in the order given; `updated_at` does not change. After an order by hand, a new or moved article goes last. Any agent may set it, and a `send` agent token; a lower tier files an agent request. */
+        put: operations["setKBOrder"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/articles": {
         parameters: {
             query?: never;
@@ -1318,7 +1335,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Knowledge base articles outside the trash, without their text, in pages. Without `q` the most recently updated come first. With `q` the articles whose title or text hold every word of `q` as a word or the start of a word (or whose title holds `q`) come first by relevance. Words are split the same way in the query and the text, with no language rules, so a word inside another word, and text in scripts written without spaces (Chinese, Japanese, Thai), are found only when they start a word or match the title. */
+        /** @description Knowledge base articles outside the trash, without their text, in pages. Without `q` the order is `sort`: `recent` puts the most recently updated first; `manual` is the help center's order (collections in their order, a collection's own articles before those of its collections, and in each collection by `position`, then title, then number). `sort` is `manual` with `collection_id` and `recent` without it, unless given. With `q` the articles whose title or text hold every word of `q` as a word or the start of a word (or whose title holds `q`) come first by relevance. Words are split the same way in the query and the text, with no language rules, so a word inside another word, and text in scripts written without spaces (Chinese, Japanese, Thai), are found only when they start a word or match the title. */
         get: operations["listKBArticles"];
         put?: never;
         /** @description Write an article in Markdown. It starts as a draft unless `status` is `published`. It gets the next `number` of the workspace, which never changes and is never reused, so the address `/a/<number>-<slug>` keeps working when the title changes. Without `slug` one is made from the title. The text holds at most 100,000 characters and is never cut; a workspace holds at most 2,000 articles, counting the ones in the trash (409 `kb_limit`). A `send` agent token may create one; a lower tier files an agent request (at most 64 KiB of JSON). */
@@ -2513,6 +2530,17 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        KBOrder: {
+            /**
+             * Format: uuid
+             * @description The collection whose children these are; null for the top.
+             */
+            parent_id: string | null;
+            /** @description Its collections outside the trash, first to last. */
+            collection_ids: string[];
+            /** @description Its articles outside the trash, drafts included, first to last; empty at the top. */
+            article_ids: string[];
+        };
         KBArticleSummary: {
             /** Format: uuid */
             id: string;
@@ -2520,6 +2548,8 @@ export interface components {
             number: number;
             /** Format: uuid */
             collection_id: string;
+            /** @description Its place in its collection, set with PUT /api/v1/kb/order; 0 until the collection is ordered by hand. Ties go by title, then number. */
+            position: number;
             title: string;
             slug: string;
             status: components["schemas"]["KBArticleStatus"];
@@ -2554,6 +2584,7 @@ export interface components {
             number: number;
             /** Format: uuid */
             collection_id: string;
+            position: number;
             title: string;
             slug: string;
             status: components["schemas"]["KBArticleStatus"];
@@ -2590,6 +2621,7 @@ export interface components {
             number: number;
             /** Format: uuid */
             collection_id: string;
+            position: number;
             title: string;
             slug: string;
             status: components["schemas"]["KBArticleStatus"];
@@ -3316,6 +3348,10 @@ export interface components {
                 reason?: "contact_address_differs";
                 /** @description Only with reason contact_address_differs: the address the reply would go to. */
                 reply_to?: string;
+                /** @description Only on order_stale: the collections under the parent now, in their current order. */
+                collection_ids?: string[];
+                /** @description Only on order_stale: the articles under the parent now, in their current order. */
+                article_ids?: string[];
                 /** @description Only on contrast_too_low: every color pair of the theme, passing or not. */
                 checks?: components["schemas"]["ThemeContrastCheck"][];
                 /** @description Only on contact_exists: the contact to use instead of adding one. */
@@ -6425,6 +6461,36 @@ export interface operations {
             409: components["responses"]["Conflict"];
         };
     };
+    setKBOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KBOrder"];
+            };
+        };
+        responses: {
+            /** @description The order now */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBOrder"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
     listKBArticles: {
         parameters: {
             query?: {
@@ -6432,6 +6498,8 @@ export interface operations {
                 status?: "draft" | "published";
                 /** @description Only the articles directly in this collection. */
                 collection_id?: string;
+                /** @description The order without `q`; ignored with `q`. */
+                sort?: "recent" | "manual";
                 limit?: number;
                 /** @description The next_cursor of the previous page. */
                 cursor?: string;
