@@ -681,3 +681,5 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .import-ledger { font-size: var(--fs-label); }
   .import-ledger th, .import-ledger td { padding-inline: var(--space-1); }
 }
+.import-invite-link { grid-column: 1 / -1; display: grid; gap: var(--space-1); }
+.import-invite-link input { flex: 1 1 14rem; min-width: 0; }

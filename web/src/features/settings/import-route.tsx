@@ -6,6 +6,7 @@ import type { ImportJob } from '../../api/imports';
 import { importMessages } from './import-messages';
 import { ImportPage } from './import-page';
 import { ImportPeople } from './import-people';
+import type { CreatedInvite } from './import-people';
 
 // While a job moves, the page reads it again every few seconds: one row of the server's database.
 const pollMs = 3000;
@@ -70,19 +71,27 @@ export function ImportRoute({ onOpenInbox, onOpenBilling }: { onOpenInbox?: () =
   const peopleChanged = { onSuccess: () => { void client.invalidateQueries({ queryKey: ['import-people'] }); } };
   const link = useMutation({ mutationFn: ({ externalId, agentId }: { externalId: string; agentId: string }) => importsApi.link(peopleJob?.id ?? '', externalId, agentId), ...peopleChanged });
   const unlink = useMutation({ mutationFn: (externalId: string) => importsApi.unlink(peopleJob?.id ?? '', externalId), ...peopleChanged });
-  const invite = useMutation({ mutationFn: (email: string) => api.createInvite(email, 'agent'), onSuccess: () => { void client.invalidateQueries({ queryKey: ['invites'] }); } });
+  // The invite's one-time link shows in the person's row: the server never shows it again.
+  const [createdInvite, setCreatedInvite] = useState<CreatedInvite>();
+  const invite = useMutation({ mutationFn: (email: string) => api.createInvite(email, 'agent'), onSuccess: (created) => {
+    setCreatedInvite({ email: created.invite.email, url: created.url, expiresAt: created.invite.expires_at });
+    void client.invalidateQueries({ queryKey: ['invites'] });
+  } });
+  const revokeInvite = useMutation({ mutationFn: api.revokeInvite, onSuccess: () => { setCreatedInvite(undefined); void client.invalidateQueries({ queryKey: ['invites'] }); } });
   // As for the import's own actions, only the last people action speaks.
-  const peopleActions = [link, unlink, invite];
+  const peopleActions = [link, unlink, invite, revokeInvite];
   const onlyPeople = <T,>(mutation: { mutate: (value: T) => void }) => (value: T) => {
     for (const other of peopleActions) if (other !== mutation) other.reset();
     mutation.mutate(value);
   };
   const peopleFailed = peopleActions.find((mutation) => mutation.isError)?.error;
   if (!me.data) return <main className="settings-page" aria-busy="true" />;
-  const peopleSection = peopleJob && people.data && people.data.items.length > 0
-    ? <ImportPeople people={people.data.items} agents={team.data?.items ?? []} invites={invites.data?.items ?? []}
-      failed={people.isError} busy={link.isPending || unlink.isPending || invite.isPending}
-      onInvite={onlyPeople(invite)} onLink={(externalId, agentId) => onlyPeople(link)({ externalId, agentId })} onUnlink={onlyPeople(unlink)} />
+  // The section shows once the account was read: with its agents, or with why they could not be loaded.
+  const peopleSection = peopleJob && (people.isError || (people.data && people.data.items.length > 0))
+    ? <ImportPeople people={people.data?.items ?? []} agents={team.data?.items ?? []} invites={invites.data?.items ?? []} createdInvite={createdInvite}
+      imported={peopleJob.phase !== 'preview'} timezone={me.data.timezone} failed={people.isError} onRetry={() => void people.refetch()}
+      busy={peopleActions.some((mutation) => mutation.isPending)}
+      onInvite={onlyPeople(invite)} onRevokeInvite={onlyPeople(revokeInvite)} onLink={(externalId, agentId) => onlyPeople(link)({ externalId, agentId })} onUnlink={onlyPeople(unlink)} />
     : undefined;
   const peopleError = peopleFailed ? (peopleFailed instanceof InvalidRequestError ? peopleFailed.message : importMessages.actionFailed) : undefined;
   return <ImportPage isAdmin={isAdmin} peopleSection={peopleSection} onOpenInbox={onOpenInbox} onOpenBilling={onOpenBilling} showBilling={isAdmin && config.data?.billing.enabled === true}

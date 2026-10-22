@@ -230,10 +230,10 @@ func applyLink(ctx context.Context, db *database.DB, p pendingLink) error {
 }
 
 // keptPeople is when the agents of an account stay: an import of it is being previewed, or was started
-// and not undone. $1 is the workspace, $2 the ledger source.
+// and the account was not undone since (an undo removes everything the account brought in). $1 is the workspace, $2 the ledger source.
 const keptPeople = `EXISTS (SELECT 1 FROM import_jobs j WHERE j.workspace_id=$1 AND j.account_source=$2 AND j.kind='import'
 	AND (j.state IN ('previewing','previewed') OR (j.started_at IS NOT NULL AND NOT EXISTS (
-		SELECT 1 FROM import_jobs u WHERE u.workspace_id=j.workspace_id AND u.undo_of=j.id AND u.state='finished'))))`
+		SELECT 1 FROM import_jobs u WHERE u.workspace_id=j.workspace_id AND u.kind='undo' AND u.account_source=j.account_source AND u.state='finished' AND u.finished_at>=j.started_at))))`
 
 // forgetPeople removes the agents of an account nothing imports or previews any more: after a preview
 // nobody started, or after the undo of its import. A preview reads them; it writes nothing for long.

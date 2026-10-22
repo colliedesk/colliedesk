@@ -149,8 +149,9 @@ never accepts it as a command-line argument and never prints it.
 Under **Freshdesk agents** the page lists the agents of the account. Each one linked to a Colliedesk
 agent becomes the author of their imported replies and the assignee of the imported tickets they held
 (unless someone reassigned a ticket since); the original times do not change. Agents with the same email
-are linked when the account is read. **Invite** sends a Colliedesk invite to the others: when they join,
-they are linked by their email, before or after the import. To link someone whose email differs, choose
+are linked when the account is read. **Invite** creates a one-time invite link for the others, shown
+once in their row with **Copy link** and when it expires: send it to them. When they join they are
+linked by their email, before or after the import. **Revoke invite** takes a waiting invite back. To link someone whose email differs, choose
 the agent and select **Link**; **Unlink** takes it back. A link is applied within seconds.
 
 **Stop import** stops it within a minute; what was imported stays. Start a new import to finish it, or

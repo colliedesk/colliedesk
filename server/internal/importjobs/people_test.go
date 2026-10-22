@@ -229,3 +229,24 @@ func TestTheFreshdeskAgentsGoWithAPreviewNobodyStartedAndWithAnUndo(t *testing.T
 		t.Fatalf("the undo left %d Freshdesk agents", n)
 	}
 }
+
+func TestAnUndoOfTheAccountReleasesTheAgentsOfItsEarlierStoppedImportsToo(t *testing.T) {
+	e := newEnv(t, true)
+	ctx := context.Background()
+	stopped := e.previewWithAgents(t)
+	e.exec(t, `UPDATE import_jobs SET state='cancelled', phase='full', started_at=now()-interval '1 hour', sealed_key=NULL, sealed_key_id=NULL WHERE id=$1`, stopped.ID)
+	done := e.previewWithAgents(t)
+	e.exec(t, `UPDATE import_jobs SET state='finished', status='OK', phase='full', started_at=now()-interval '30 minutes', sealed_key=NULL, sealed_key_id=NULL WHERE id=$1`, done.ID)
+	if _, err := e.service.Undo(ctx, e.a.id, e.a.agentID, done.ID); err != nil {
+		t.Fatal(err)
+	}
+	w := e.worker(t, e.keys)
+	importjobs.StubImporter(w, nil, nil, func(_ context.Context, o freshdesk.UndoOptions) (freshdesk.UndoResult, error) {
+		return freshdesk.UndoResult{Source: o.Source}, nil
+	})
+	tick(t, w)
+	var n int
+	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM import_people WHERE workspace_id=$1`, e.a.id).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("after the undo of the account %d Freshdesk agents stay (%v)", n, err)
+	}
+}
