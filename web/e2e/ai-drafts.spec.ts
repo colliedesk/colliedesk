@@ -58,6 +58,12 @@ test('a team that imported Freshdesk drafts a reply with AI from its own solved 
     const { id } = await provider.json() as { id: string };
     expect((await page.request.put(`${baseURL}/api/v1/ai/slots/draft`, { headers, data: { source: 'provider', provider_id: id, enabled: true } })).status()).toBe(200);
 
+    // Four articles with long titles: a full line of sources.
+    const collection = await (await page.request.post(`${baseURL}/api/v1/kb/collections`, { headers, data: { name: 'Shipping' } })).json() as { id: string };
+    for (const title of ['Where is my parcel from Rotterdam right now', 'Parcel delays leaving the Rotterdam depot this week',
+      'Tracking numbers for parcels shipped through Rotterdam', 'Delivery times for parcels from Rotterdam to your door']) {
+      expect((await page.request.post(`${baseURL}/api/v1/kb/articles`, { headers, data: { collection_id: collection.id, title, body_md: `${title}: it arrives the next day.`, status: 'published' } })).status()).toBe(201);
+    }
     await page.reload();
     await page.getByRole('searchbox', { name: 'Search conversations' }).fill('Rotterdam');
     await page.getByRole('button', { name: /Fixture ticket 42:/ }).click();
@@ -76,7 +82,10 @@ test('a team that imported Freshdesk drafts a reply with AI from its own solved 
     // On a short laptop screen the draft's buttons and Send are on screen without scrolling.
     await expect(panel.getByRole('button', { name: 'Use draft' })).toBeInViewport();
     await expect(page.getByRole('button', { name: 'Send reply' })).toBeInViewport();
+    expect(await panel.getByRole('link').count()).toBeGreaterThanOrEqual(4);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), 'no sideways scroll with the panel open').toBeLessThanOrEqual(1280);
+    await page.setViewportSize({ width: 1024, height: 768 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), 'no sideways scroll at 1024 px').toBeLessThanOrEqual(1024);
 
     const prompt = model.prompts.at(-1) ?? '';
     expect(prompt).toContain('Tell them where the parcel is');
