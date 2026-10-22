@@ -227,6 +227,7 @@ func (s idleSink) AISlot(export.AISlot) error                             { retu
 func (s idleSink) AISettingsEvent(export.AISettingsEvent) error           { return nil }
 func (s idleSink) AIUsage(export.AIUsage) error                           { return nil }
 func (s idleSink) AIDraft(export.AIDraft) error                           { return nil }
+func (s idleSink) AITriage(export.AITriage) error                         { return nil }
 func (s idleSink) BeginConversation(export.ConversationHead) error        { return nil }
 func (s idleSink) Message(export.Message) error                           { return nil }
 func (s idleSink) EndConversation([]domain.TimeEntry) error               { return nil }

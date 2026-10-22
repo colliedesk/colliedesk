@@ -191,3 +191,77 @@ func aiDraftDiscard(c *call, arguments map[string]any) (any, error) {
 	}
 	return map[string]any{"draft": draft}, nil
 }
+
+const aiTriageNotFound = "No AI triage suggestion with that id on this conversation. Read it with colliedesk_ai_triage_get."
+
+type aiTriageArguments struct {
+	ConversationID  string   `json:"conversation_id"`
+	SuggestionID    string   `json:"suggestion_id"`
+	TagIDs          []string `json:"tag_ids"`
+	Priority        *string  `json:"priority"`
+	AssigneeAgentID *string  `json:"assignee_agent_id"`
+}
+
+func aiTriagePath(conversationID, rest string) string {
+	return "/api/v1/conversations/" + url.PathEscape(conversationID) + "/ai-triage" + rest
+}
+
+func aiTriageGet(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[aiTriageArguments](arguments)
+	if err != nil {
+		return nil, err
+	}
+	var answer struct {
+		Suggestion json.RawMessage `json:"suggestion"`
+	}
+	if err := c.get(aiTriagePath(args.ConversationID, ""), nil, &answer); err != nil {
+		return nil, err
+	}
+	return map[string]any{"suggestion": answer.Suggestion}, nil
+}
+
+func aiTriageCreate(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[aiTriageArguments](arguments)
+	if err != nil {
+		return nil, err
+	}
+	var suggestion json.RawMessage
+	if err := c.send(http.MethodPost, aiTriagePath(args.ConversationID, ""), nil, &suggestion); err != nil {
+		return nil, err
+	}
+	return map[string]any{"suggestion": suggestion}, nil
+}
+
+func aiTriageAccept(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[aiTriageArguments](arguments)
+	if err != nil {
+		return nil, err
+	}
+	c.notFound = aiTriageNotFound
+	var body any
+	if args.TagIDs != nil || args.Priority != nil || args.AssigneeAgentID != nil {
+		tags := args.TagIDs
+		if tags == nil {
+			tags = []string{}
+		}
+		body = map[string]any{"tag_ids": tags, "priority": args.Priority, "assignee_agent_id": args.AssigneeAgentID}
+	}
+	var suggestion json.RawMessage
+	if err := c.send(http.MethodPost, aiTriagePath(args.ConversationID, "/"+url.PathEscape(args.SuggestionID)+"/accept"), body, &suggestion); err != nil {
+		return nil, err
+	}
+	return map[string]any{"suggestion": suggestion}, nil
+}
+
+func aiTriageDismiss(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[aiTriageArguments](arguments)
+	if err != nil {
+		return nil, err
+	}
+	c.notFound = aiTriageNotFound
+	var suggestion json.RawMessage
+	if err := c.send(http.MethodPost, aiTriagePath(args.ConversationID, "/"+url.PathEscape(args.SuggestionID)+"/dismiss"), nil, &suggestion); err != nil {
+		return nil, err
+	}
+	return map[string]any{"suggestion": suggestion}, nil
+}
