@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -44,12 +45,29 @@ func noHelpCenterDomain() helpCenterDomainView {
 func (a *API) helpCenterDomainView(d domain.HelpCenterDomain) helpCenterDomainView {
 	host, created := d.Hostname, d.CreatedAt
 	return helpCenterDomainView{Hostname: &host, Status: d.Status,
-		Records:   helpcenter.Records(d.Hostname, d.Token, a.config.Origin, a.config.HelpCenterDomain, d.WorkspaceSlug),
+		Records:   helpcenter.Records(d.Hostname, d.Claim, d.Token, a.config.Origin, a.config.HelpCenterDomain),
 		CreatedAt: &created, VerifiedAt: d.VerifiedAt, CheckedAt: d.CheckedAt, CheckError: d.CheckError, CertificateRequestedAt: d.CertificateRequestedAt}
 }
 
 func (a *API) resolvers() helpcenter.Resolvers {
 	return helpcenter.Resolvers{CNAME: a.config.LookupCNAME, TXT: a.config.LookupTXT}
+}
+
+// lookUpDomain asks DNS once what proves a claim of host, within timeout.
+func (a *API) lookUpDomain(ctx context.Context, host string, timeout time.Duration) helpcenter.DomainEvidence {
+	lookup, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return helpcenter.LookupDomain(lookup, a.resolvers(), host, a.config.HelpCenterDomain)
+}
+
+// checkClaim reports whether the evidence proves the workspace's claim. What DNS answered stays in the
+// server's log: the error the workspace sees only says what to set.
+func checkClaim(evidence helpcenter.DomainEvidence, workspaceID string, claim domain.HelpCenterDomain) error {
+	failure := evidence.Check(claim.Claim, claim.Token)
+	if failure != nil {
+		slog.Info("help center domain not proven", "workspace_id", workspaceID, "hostname", claim.Hostname, "dns", evidence.Detail())
+	}
+	return failure
 }
 
 // writeHelpCenterDomain answers with the workspace's custom domain as it is now.
@@ -137,10 +155,8 @@ func (a *API) checkHelpCenterDomain(response http.ResponseWriter, request *http.
 		writeError(response, http.StatusNotFound, "not_found", "No custom domain is set.")
 		return
 	}
-	lookup, cancel := context.WithTimeout(ctx, helpCenterDomainCheckTimeout)
-	failure := helpcenter.CheckDomain(lookup, a.resolvers(), current.Hostname, helpcenter.SlugHost(a.config.HelpCenterDomain, current.WorkspaceSlug), current.Token)
-	cancel()
-	_, err = a.store.RecordHelpCenterDomainCheck(ctx, who.Workspace.ID, current.Hostname, a.now(), failure, false)
+	failure := checkClaim(a.lookUpDomain(ctx, current.Hostname, helpCenterDomainCheckTimeout), who.Workspace.ID, current)
+	_, err = a.store.RecordHelpCenterDomainCheck(ctx, who.Workspace.ID, current.Claim, a.now(), failure, false)
 	a.helpCenter.ForgetDomains()
 	switch {
 	case errors.Is(err, domain.ErrHelpCenterDomainTaken):
@@ -154,6 +170,17 @@ func (a *API) checkHelpCenterDomain(response http.ResponseWriter, request *http.
 		return
 	}
 	a.writeHelpCenterDomain(response, ctx, who.Workspace.ID)
+}
+
+// certifyClaimHost reports whether the reverse proxy may get a certificate for a claim's CNAME target:
+// a claim exists and its workspace's help center is open, so the target's redirect keeps working.
+func (a *API) certifyClaimHost(ctx context.Context, claim string) (bool, error) {
+	workspaceID, found, err := a.store.HelpCenterClaim(ctx, claim)
+	if err != nil || !found {
+		return false, err
+	}
+	_, open, err := a.store.OpenHelpCenterWorkspace(ctx, workspaceID)
+	return open, err
 }
 
 // certifyCustomHost reports whether the reverse proxy may get a certificate for host: it is an
@@ -180,8 +207,7 @@ func (a *API) certifyCustomHost(ctx context.Context, host string) (bool, error) 
 		return false, nil
 	}
 	defer done()
-	lookup, cancel := context.WithTimeout(ctx, helpCenterLiveCheckTimeout)
-	defer cancel()
+	evidence := a.lookUpDomain(ctx, host, helpCenterLiveCheckTimeout)
 	for _, workspaceID := range claims {
 		claim, found, err := a.store.GetHelpCenterDomain(ctx, workspaceID)
 		if err != nil {
@@ -190,12 +216,12 @@ func (a *API) certifyCustomHost(ctx context.Context, host string) (bool, error) 
 		if !found || claim.Hostname != host || claim.Status != domain.HelpCenterDomainPending {
 			continue
 		}
-		failure := helpcenter.CheckDomain(lookup, a.resolvers(), host, helpcenter.SlugHost(a.config.HelpCenterDomain, claim.WorkspaceSlug), claim.Token)
+		failure := checkClaim(evidence, workspaceID, claim)
 		_, open, err := a.store.OpenHelpCenterWorkspace(ctx, workspaceID)
 		if err != nil {
 			return false, err
 		}
-		_, err = a.store.RecordHelpCenterDomainCheck(ctx, workspaceID, host, a.now(), failure, failure == nil && open)
+		_, err = a.store.RecordHelpCenterDomainCheck(ctx, workspaceID, claim.Claim, a.now(), failure, failure == nil && open)
 		if failure != nil || errors.Is(err, domain.ErrHelpCenterDomainTaken) || errors.Is(err, domain.ErrHelpCenterDomainMissing) {
 			continue
 		}
@@ -227,10 +253,8 @@ func (s *Server) RecheckHelpCenterDomains(ctx context.Context) (checked, failed 
 		if !found || current.Status != domain.HelpCenterDomainActive {
 			continue
 		}
-		lookup, cancel := context.WithTimeout(ctx, helpCenterRecheckTimeout)
-		failure := helpcenter.CheckDomain(lookup, a.resolvers(), current.Hostname, helpcenter.SlugHost(a.config.HelpCenterDomain, current.WorkspaceSlug), current.Token)
-		cancel()
-		if _, err := a.store.RecordHelpCenterDomainCheck(ctx, workspaceID, current.Hostname, a.now(), failure, false); err != nil && !errors.Is(err, domain.ErrHelpCenterDomainMissing) {
+		failure := checkClaim(a.lookUpDomain(ctx, current.Hostname, helpCenterRecheckTimeout), workspaceID, current)
+		if _, err := a.store.RecordHelpCenterDomainCheck(ctx, workspaceID, current.Claim, a.now(), failure, false); err != nil && !errors.Is(err, domain.ErrHelpCenterDomainMissing) {
 			problems = append(problems, err)
 			continue
 		}

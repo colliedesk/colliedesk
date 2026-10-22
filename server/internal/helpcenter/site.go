@@ -104,14 +104,21 @@ func New(config Config) *Site {
 }
 
 // Wrap answers help center requests and passes every other request to next: a host name below the
-// help center domain, an active custom domain, and paths under /help/. A custom domain answers only
-// help center pages, whatever the path: the app, the API and MCP are never reached on it. Requests to
-// APP_ORIGIN's host and below HELP_CENTER_DOMAIN never look a custom domain up.
+// help center domain, an active custom domain, a claim's CNAME target, and paths under /help/. A
+// custom domain answers only help center pages, whatever the path: the app, the API and MCP are never
+// reached on it. Requests to APP_ORIGIN's host and below HELP_CENTER_DOMAIN never look a custom domain
+// up.
 func (s *Site) Wrap(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if slug, ok := hostSlug(request.Host, s.config.Domain, s.originHost); ok {
 			s.serve(response, request, address{slug: slug, sub: request.URL.Path})
 			return
+		}
+		if host := requestHost(request.Host); host != "" {
+			if _, ok := claimOfHost(host, s.config.Domain); ok {
+				s.serveHost(response, request, host, true)
+				return
+			}
 		}
 		if host, ok := s.customHostCandidate(request.Host); ok {
 			workspaceID, found, err := s.workspaceOfHost(request.Context(), host)
@@ -137,12 +144,38 @@ func (s *Site) Wrap(next http.Handler) http.Handler {
 	})
 }
 
+// serveHost answers a request on a host name that belongs to a workspace's help center through the
+// lookup (custom-host.go): an active custom domain, or a claim's CNAME target (claim), which moves to
+// the help center's address. A name that belongs to none is the help center's 404.
+func (s *Site) serveHost(response http.ResponseWriter, request *http.Request, host string, claim bool) {
+	workspaceID, found, err := s.workspaceOfHost(request.Context(), host)
+	switch {
+	case err != nil:
+		s.writeError(response, err)
+	case !found:
+		s.writeNotFound(response, true)
+	default:
+		s.serve(response, request, address{workspaceID: workspaceID, host: host, claim: claim, sub: request.URL.Path})
+	}
+}
+
+// requestHost is a request's host name in lower case, without port or trailing dot.
+func requestHost(host string) string {
+	host = strings.ToLower(host)
+	if name, _, err := net.SplitHostPort(host); err == nil {
+		host = name
+	}
+	return strings.TrimSuffix(host, ".")
+}
+
 // address is where a request reached a help center: a slug (on its host name or below /help/), or the
-// workspace and host name of an active custom domain. base is the path prefix the help center's own
-// links start with ("" on a host name of its own) and sub the path below it.
+// workspace and host name of an active custom domain or of a claim's CNAME target (claim). base is the
+// path prefix the help center's own links start with ("" on a host name of its own) and sub the path
+// below it.
 type address struct {
 	slug              string
 	workspaceID, host string
+	claim             bool
 	base, sub         string
 }
 
@@ -206,9 +239,15 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 		return
 	}
 	switch {
+	// A claim's CNAME target is only where the custom domain's DNS points: a visitor who opens it
+	// moves to the help center's address, the custom domain once it is active.
+	case at.claim && open:
+		response.Header().Set("Cache-Control", "no-store")
+		http.Redirect(response, request, s.movedTo(request, at, site), http.StatusMovedPermanently)
+		return
 	// A custom domain removed or replaced in another process may still be remembered here; the
 	// workspace's own row decides.
-	case at.host != "" && (!open || site.CustomHost != at.host):
+	case at.host != "" && (at.claim || !open || site.CustomHost != at.host):
 		s.writeNotFound(response, true)
 		return
 	// An open help center with an active custom domain serves only there; its other addresses move.

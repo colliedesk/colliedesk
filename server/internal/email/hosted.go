@@ -26,6 +26,12 @@ var reservedSlugs = map[string]bool{
 	"webmail": true, "webmaster": true, "www": true,
 }
 
+// HelpCenterClaimLabel is the first label of a custom help center domain's CNAME target,
+// hc-<claim>.<HELP_CENTER_DOMAIN>, where the claim is 24 random hex digits; the submatch is the claim.
+// No slug may have this shape, so a claim's target is never a workspace's host name. Only the exact
+// shape is reserved: a slug such as hc-labs stays an ordinary one.
+var HelpCenterClaimLabel = regexp.MustCompile(`^hc-([0-9a-f]{24})$`)
+
 // ValidateHostedSlug reports why a workspace slug cannot be the mail subdomain of a hosted address.
 func ValidateHostedSlug(slug string) error {
 	switch {
@@ -33,7 +39,7 @@ func ValidateHostedSlug(slug string) error {
 		return errors.New("use 1 to 63 lowercase letters, digits or hyphens, starting and ending with a letter or digit")
 	case strings.HasPrefix(slug, "xn--"):
 		return errors.New("a slug cannot start with xn--")
-	case reservedSlugs[slug]:
+	case reservedSlugs[slug], HelpCenterClaimLabel.MatchString(slug):
 		return errors.New("this name is reserved")
 	}
 	return nil

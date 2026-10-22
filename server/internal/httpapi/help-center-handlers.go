@@ -53,9 +53,9 @@ func (s *Server) WrapHelpCenter(next http.Handler) http.Handler { return s.api.h
 
 // askHelpCenterCertificate answers the reverse proxy's on-demand TLS question: 200 only for a host
 // name the server serves a help center on that is open (on, workspace not locked): <slug>.<HELP_CENTER_DOMAIN>,
-// an active custom domain, or a pending one whose DNS check passes now. Every other case is the same
-// 404, so the proxy never gets a certificate for a name nobody serves, and the answer tells nothing
-// about why.
+// a claim's CNAME target hc-<claim>.<HELP_CENTER_DOMAIN> (which redirects), an active custom domain, or a
+// pending one whose DNS check passes now. Every other case is the same 404, so the proxy never gets a
+// certificate for a name nobody serves, and the answer tells nothing about why.
 func (a *API) askHelpCenterCertificate(response http.ResponseWriter, request *http.Request) {
 	name := request.URL.Query().Get("domain")
 	if len(name) > 253 {
@@ -66,6 +66,8 @@ func (a *API) askHelpCenterCertificate(response http.ResponseWriter, request *ht
 	var err error
 	if slug, ok := helpcenter.DomainSlug(name, a.config.HelpCenterDomain); ok {
 		_, open, err = a.store.OpenHelpCenter(request.Context(), slug)
+	} else if claim, ok := helpcenter.DomainClaim(name, a.config.HelpCenterDomain); ok {
+		open, err = a.certifyClaimHost(request.Context(), claim)
 	} else if host, invalid := helpcenter.CustomHost(name, a.config.Origin, a.config.HelpCenterDomain); invalid == nil {
 		open, err = a.certifyCustomHost(request.Context(), host)
 	}

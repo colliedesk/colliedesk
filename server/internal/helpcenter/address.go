@@ -77,6 +77,12 @@ func DomainSlug(name, domain string) (string, bool) {
 	return hostSlug(name, domain, "")
 }
 
+// DomainClaim returns the claim of a host name the reverse proxy asks a certificate for when it is a
+// claim's CNAME target hc-<claim>.<domain>, or false.
+func DomainClaim(name, domain string) (string, bool) {
+	return claimOfHost(requestHost(name), domain)
+}
+
 // DomainFromEnv reads HELP_CENTER_DOMAIN: the domain under which each workspace's help center gets
 // its own host name. Empty keeps every help center on <APP_ORIGIN>/help/<slug>.
 func DomainFromEnv(getenv func(string) string) (string, error) {

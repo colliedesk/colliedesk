@@ -113,11 +113,7 @@ func newCustomHosts(now func() time.Time) *customHosts {
 // valid name of at least two labels that is no IP address. Every other request goes on unchanged
 // without a lookup.
 func (s *Site) customHostCandidate(host string) (string, bool) {
-	host = strings.ToLower(host)
-	if name, _, err := net.SplitHostPort(host); err == nil {
-		host = name
-	}
-	host = strings.TrimSuffix(host, ".")
+	host = requestHost(host)
 	if host == "" || host == s.originHost || len(host) > maxHostLength || net.ParseIP(host) != nil || !email.ValidHostname(host) {
 		return "", false
 	}
@@ -130,16 +126,22 @@ func (s *Site) customHostCandidate(host string) (string, bool) {
 	return host, true
 }
 
-// workspaceOfHost returns the workspace whose help center serves on the custom host, from the cache
-// or the store. A remembered workspace is only a candidate: the page's own query confirms the domain
-// is still active for it (serve).
+// workspaceOfHost returns the workspace whose help center serves on the custom host, or whose claim
+// has the host as its CNAME target, from the cache or the store. A remembered workspace is only a
+// candidate: the page's own query confirms the domain is still active for it (serve).
 func (s *Site) workspaceOfHost(ctx context.Context, host string) (string, bool, error) {
 	if workspaceID, ok := s.hosts.byHost.get(host); ok {
 		return workspaceID, workspaceID != "", nil
 	}
+	find := s.config.Store.HelpCenterHost
+	if claim, ok := claimOfHost(host, s.config.Domain); ok {
+		find = func(ctx context.Context, _ string) (string, bool, error) {
+			return s.config.Store.HelpCenterClaim(ctx, claim)
+		}
+	}
 	generation := s.hosts.byHost.currentGeneration()
 	found, err, _ := s.hosts.lookups.Do(fmt.Sprintf("host %d %s", generation, host), func() (any, error) {
-		workspaceID, _, err := s.config.Store.HelpCenterHost(context.WithoutCancel(ctx), host)
+		workspaceID, _, err := find(context.WithoutCancel(ctx), host)
 		if err != nil {
 			return "", err
 		}

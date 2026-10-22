@@ -13,8 +13,9 @@ const (
 		`"check_error":{"type":["string","null"]},"certificate_requested_at":{"type":["string","null"]}}}`
 	helpCenterDomainOutput = `{"type":"object","required":["domain"],"properties":{"domain":` + helpCenterDomainSchema + `}}`
 
-	helpCenterDomainRule = `The domain becomes active once DNS proves the workspace owns it: a CNAME of the host name to the workspace's own <slug>.<HELP_CENTER_DOMAIN> ` +
-		`(when the server has one), or the TXT record _help-center-verify.<host name> holding the token shown in records. A or AAAA records never prove it. `
+	helpCenterDomainRule = `The domain becomes active once DNS proves the workspace owns it: a CNAME of the host name to this claim's own target hc-<claim>.<HELP_CENTER_DOMAIN> ` +
+		`shown in records (when the server has a help center domain; it never changes while the domain is set), or the TXT record _help-center-verify.<host name> ` +
+		`holding the token shown in records. A or AAAA records never prove it. `
 )
 
 func helpCenterDomainGetSpec() Spec {
@@ -35,7 +36,7 @@ func helpCenterDomainSetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_help_center_domain_set",
 		Title: "Set the help center's custom domain",
-		Description: `Set or replace the custom domain the public help center serves on. A new host name is pending with a new token; sending the current one again changes nothing. ` +
+		Description: `Set or replace the custom domain the public help center serves on. A new host name is pending with a new token and CNAME target; sending the current one again changes nothing. ` +
 			helpCenterDomainRule + `Then set the records it returns and call colliedesk_help_center_domain_check. ` +
 			`Refused: an IP address, a single label, the app's own host and names below the server's help center domain (validation_failed), ` +
 			`and a host name another workspace's help center already serves on (domain_taken). ` + belowAdmin + "\n\nTier: admin.",
@@ -67,7 +68,7 @@ func helpCenterDomainRemoveSpec() Spec {
 		Name:  "colliedesk_help_center_domain_remove",
 		Title: "Remove the help center's custom domain",
 		Description: `Remove the custom domain: the help center stops serving on it at once and its slug address serves again. ` +
-			`Setting it again needs a new check, and a new TXT token if the TXT record proved it. Removing when there is none changes nothing. ` + belowAdmin + "\n\nTier: admin.",
+			`Setting it again needs a new check with a new CNAME target and TXT token. Removing when there is none changes nothing. ` + belowAdmin + "\n\nTier: admin.",
 		Tier: "admin", Idempotent: true,
 		REST:   []string{"DELETE " + helpCenterDomainPath},
 		Input:  noArguments,

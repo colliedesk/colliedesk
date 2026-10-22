@@ -70,8 +70,8 @@ func TestHelpCenterCustomHostLatencyBudget(t *testing.T) {
 	site := helpCenterSite(api)
 	const host = "help.budget.example"
 	workspaceID := queryString(t, pool, `SELECT id::text FROM workspaces WHERE slug=$1`, slug)
-	if _, err := pool.Exec(context.Background(), `INSERT INTO help_center_domains (workspace_id, hostname, token, status, verified_at)
-		VALUES ($1, $2, md5('budget-domain'), 'active', now())`, workspaceID, host); err != nil {
+	if _, err := pool.Exec(context.Background(), `INSERT INTO help_center_domains (workspace_id, hostname, claim, token, status, verified_at)
+		VALUES ($1, $2, left(md5('budget-claim'), 24), md5('budget-domain'), 'active', now())`, workspaceID, host); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {

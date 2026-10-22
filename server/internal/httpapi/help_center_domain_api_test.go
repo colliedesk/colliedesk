@@ -79,23 +79,26 @@ func TestHelpCenterDomainIsSetCheckedAndRemoved(t *testing.T) {
 		t.Fatalf("no domain = %+v", view)
 	}
 	view = setDomain(t, api, admin, " Help.Acme.Example. ", http.StatusOK)
-	token := view.token()
+	token, target := view.token(), view.cnameTarget()
+	if !strings.HasPrefix(target, "hc-") || !strings.HasSuffix(target, ".help.example.net") || strings.Contains(target, slug) {
+		t.Fatalf("the CNAME target %q is not the claim's own", target)
+	}
 	want := []domainRecordView{
-		{"CNAME", "help.acme.example", slug + ".help.example.net", "route_and_verify"},
+		{"CNAME", "help.acme.example", target, "route_and_verify"},
 		{"TXT", "_help-center-verify.help.acme.example", token, "verify"},
 	}
 	if view.Status != "pending" || view.Hostname == nil || *view.Hostname != "help.acme.example" || len(token) != 32 || fmt.Sprint(view.Records) != fmt.Sprint(want) {
 		t.Fatalf("set = %+v, want pending help.acme.example with %+v", view, want)
 	}
-	if again := setDomain(t, api, admin, "help.acme.example", http.StatusOK); again.token() != token || again.Status != "pending" {
+	if again := setDomain(t, api, admin, "help.acme.example", http.StatusOK); again.token() != token || again.cnameTarget() != target || again.Status != "pending" {
 		t.Fatalf("setting the same name again changed it: %+v", again)
 	}
 
 	view = checkDomain(t, api, admin, http.StatusOK)
-	if view.Status != "pending" || view.CheckedAt == nil || view.CheckError == nil || !strings.Contains(*view.CheckError, slug+".help.example.net") {
+	if view.Status != "pending" || view.CheckedAt == nil || view.CheckError == nil || !strings.Contains(*view.CheckError, target) {
 		t.Fatalf("check without DNS = %+v", view)
 	}
-	dns.setCNAME("help.acme.example", slug+".help.example.net.")
+	dns.setCNAME("help.acme.example", target+".")
 	view = checkDomain(t, api, admin, http.StatusOK)
 	if view.Status != "active" || view.VerifiedAt == nil || view.CheckError != nil {
 		t.Fatalf("check with the CNAME = %+v", view)
@@ -117,8 +120,8 @@ func TestHelpCenterDomainIsSetCheckedAndRemoved(t *testing.T) {
 	}
 	kbCall(t, api, http.MethodDelete, domainPath, nil, admin, http.StatusOK, nil)
 	kbCall(t, api, http.MethodPost, domainPath+"/check", nil, admin, http.StatusNotFound, nil)
-	// A new claim of the same name gets a new token.
-	if renewed := setDomain(t, api, admin, "help.acme.example", http.StatusOK); renewed.token() == token || renewed.Status != "pending" {
+	// A new claim of the same name gets a new token and a new CNAME target.
+	if renewed := setDomain(t, api, admin, "help.acme.example", http.StatusOK); renewed.token() == token || renewed.cnameTarget() == target || renewed.Status != "pending" {
 		t.Fatalf("a removed name set again = %+v", renewed)
 	}
 }
@@ -204,9 +207,12 @@ func TestHelpCenterDomainsNeverCrossWorkspaces(t *testing.T) {
 	if alphaClaim.token() == betaClaim.token() {
 		t.Fatal("two workspaces got the same token")
 	}
-	// Beta's token and a CNAME to beta's slug host prove nothing for alpha.
+	if alphaClaim.cnameTarget() == betaClaim.cnameTarget() {
+		t.Fatal("two workspaces got the same CNAME target")
+	}
+	// Beta's token and a CNAME to beta's target prove nothing for alpha.
 	dns.set("_help-center-verify."+host, betaClaim.token())
-	dns.setCNAME(host, slugBeta+".help.example.net.")
+	dns.setCNAME(host, betaClaim.cnameTarget()+".")
 	if view := checkDomain(t, api, alpha, http.StatusOK); view.Status != "pending" {
 		t.Fatalf("alpha verified with beta's records: %+v", view)
 	}
@@ -216,8 +222,8 @@ func TestHelpCenterDomainsNeverCrossWorkspaces(t *testing.T) {
 	if view := checkDomain(t, api, beta, http.StatusOK); view.Status != "active" {
 		t.Fatalf("beta's check = %+v", view)
 	}
-	// Alpha now proves it too, but beta was first.
-	dns.setCNAME(host, slugAlpha+".help.example.net.")
+	// Alpha now proves it too, but beta was first and its TXT record still proves its claim.
+	dns.setCNAME(host, alphaClaim.cnameTarget()+".")
 	if response := kbCall(t, api, http.MethodPost, domainPath+"/check", nil, alpha, http.StatusConflict, nil); !strings.Contains(response.Body.String(), "domain_taken") {
 		t.Fatalf("alpha's check after beta = %s", response.Body.String())
 	}
@@ -354,11 +360,10 @@ func TestCustomDomainChangesEveryAddressTheServerHandsOut(t *testing.T) {
 	slugPage := visit(site, "/", "192.0.2.85", "Host", slug+".help.example.net")
 	const host = "help.address.example"
 	view := setDomain(t, api, admin, host, http.StatusOK)
-	dns.setCNAME(host, slug+".help.example.net")
+	dns.setCNAME(host, view.cnameTarget())
 	if checkDomain(t, api, admin, http.StatusOK).Status != "active" {
 		t.Fatal("not active")
 	}
-	_ = view
 	home := "https://" + host
 	articleURL := fmt.Sprintf("%s/a/%d-%s", home, article.Number, article.Slug)
 	var center struct {
@@ -431,7 +436,7 @@ func TestCertificateQuestionForCustomDomains(t *testing.T) {
 				t.Fatal("the pending name was not checked live")
 			}
 			if mode.domain != "" {
-				dns.setCNAME(host, slug+".help.example.net.")
+				dns.setCNAME(host, view.cnameTarget()+".")
 			} else {
 				dns.set("_help-center-verify."+host, view.token())
 			}
@@ -448,7 +453,7 @@ func TestCertificateQuestionForCustomDomains(t *testing.T) {
 			const second = "docs.ask.example"
 			view = setDomain(t, api, admin, second, http.StatusOK)
 			if mode.domain != "" {
-				dns.setCNAME(second, slug+".help.example.net.")
+				dns.setCNAME(second, view.cnameTarget()+".")
 			} else {
 				dns.set("_help-center-verify."+second, view.token())
 			}

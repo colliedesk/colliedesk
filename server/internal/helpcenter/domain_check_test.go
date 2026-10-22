@@ -3,6 +3,7 @@ package helpcenter
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"testing"
@@ -71,45 +72,66 @@ func (s stubResolvers) resolvers() Resolvers {
 	}
 }
 
-func TestCheckDomainProvesOwnershipOnlyByTheWorkspacesOwnCNAMEOrToken(t *testing.T) {
-	const host, slugHost, token = "help.acme.example", "acme.help.example.net", "0123456789abcdef0123456789abcdef"
+// A claim is proven only by a CNAME to its own target hc-<claim>.<domain> or by its TXT token. The
+// workspace's slug host proves nothing: a slug can be renamed and taken by another workspace.
+func TestCheckDomainProvesOwnershipOnlyByTheClaimsOwnCNAMEOrToken(t *testing.T) {
+	const host, domain, claim, token = "help.acme.example", "help.example.net", "0123456789abcdef01234567", "0123456789abcdef0123456789abcdef"
+	const target = "hc-" + claim + "." + domain
 	ctx := context.Background()
 	for name, c := range map[string]struct {
-		dns      stubResolvers
-		slugHost string
-		proven   bool
+		dns    stubResolvers
+		domain string
+		proven bool
 	}{
-		"CNAME to the slug host":                      {stubResolvers{cname: map[string]string{host: slugHost + "."}}, slugHost, true},
-		"CNAME in capitals":                           {stubResolvers{cname: map[string]string{host: "ACME.Help.Example.NET."}}, slugHost, true},
-		"CNAME to another workspace":                  {stubResolvers{cname: map[string]string{host: "beta.help.example.net."}}, slugHost, false},
-		"CNAME to a name ending like the slug host":   {stubResolvers{cname: map[string]string{host: "xacme.help.example.net."}}, slugHost, false},
-		"CNAME to the slug host under another domain": {stubResolvers{cname: map[string]string{host: slugHost + ".evil.example."}}, slugHost, false},
-		"only an A record":                            {stubResolvers{cname: map[string]string{host: host + "."}}, slugHost, false},
-		"TXT token":                                   {stubResolvers{cname: map[string]string{host: host + "."}, txt: map[string][]string{"_help-center-verify." + host: {"v=spf1 -all", " " + token + " "}}}, slugHost, true},
-		"another workspace's TXT token":               {stubResolvers{txt: map[string][]string{"_help-center-verify." + host: {"fedcba9876543210fedcba9876543210"}}}, slugHost, false},
-		"the token on the host itself":                {stubResolvers{txt: map[string][]string{host: {token}}}, slugHost, false},
-		"the token inside a longer value":             {stubResolvers{txt: map[string][]string{"_help-center-verify." + host: {"x" + token}}}, slugHost, false},
-		"CNAME without a help center domain":          {stubResolvers{cname: map[string]string{host: slugHost + "."}}, "", false},
-		"TXT without a help center domain":            {stubResolvers{txt: map[string][]string{"_help-center-verify." + host: {token}}}, "", true},
-		"nothing at all":                              {stubResolvers{}, slugHost, false},
+		"CNAME to the claim's target":              {stubResolvers{cname: map[string]string{host: target + "."}}, domain, true},
+		"CNAME in capitals":                        {stubResolvers{cname: map[string]string{host: "HC-0123456789ABCDEF01234567.Help.Example.NET."}}, domain, true},
+		"CNAME to the workspace's slug host":       {stubResolvers{cname: map[string]string{host: "acme.help.example.net."}}, domain, false},
+		"CNAME to another claim's target":          {stubResolvers{cname: map[string]string{host: "hc-fedcba9876543210fedcba98.help.example.net."}}, domain, false},
+		"CNAME to a name ending like the target":   {stubResolvers{cname: map[string]string{host: "x" + target + "."}}, domain, false},
+		"CNAME to the target under another domain": {stubResolvers{cname: map[string]string{host: target + ".evil.example."}}, domain, false},
+		"only an A record":                         {stubResolvers{cname: map[string]string{host: host + "."}}, domain, false},
+		"TXT token":                                {stubResolvers{cname: map[string]string{host: host + "."}, txt: map[string][]string{"_help-center-verify." + host: {"v=spf1 -all", " " + token + " "}}}, domain, true},
+		"another workspace's TXT token":            {stubResolvers{txt: map[string][]string{"_help-center-verify." + host: {"fedcba9876543210fedcba9876543210"}}}, domain, false},
+		"the token on the host itself":             {stubResolvers{txt: map[string][]string{host: {token}}}, domain, false},
+		"the token inside a longer value":          {stubResolvers{txt: map[string][]string{"_help-center-verify." + host: {"x" + token}}}, domain, false},
+		"CNAME to the target without a domain":     {stubResolvers{cname: map[string]string{host: target + "."}}, "", false},
+		"TXT without a help center domain":         {stubResolvers{txt: map[string][]string{"_help-center-verify." + host: {token}}}, "", true},
+		"nothing at all":                           {stubResolvers{}, domain, false},
 	} {
-		err := CheckDomain(ctx, c.dns.resolvers(), host, c.slugHost, token)
+		evidence := LookupDomain(ctx, c.dns.resolvers(), host, c.domain)
+		err := evidence.Check(claim, token)
 		if (err == nil) != c.proven {
-			t.Errorf("%s: CheckDomain error = %v, proven want %v", name, err, c.proven)
+			t.Errorf("%s: Check error = %v, proven want %v", name, err, c.proven)
 		}
 		if err != nil && !errors.Is(err, ErrDomainNotProven) {
 			t.Errorf("%s: error %v is not ErrDomainNotProven", name, err)
 		}
 	}
-	err := CheckDomain(ctx, stubResolvers{cname: map[string]string{host: "beta.help.example.net."}}.resolvers(), host, slugHost, token)
-	for _, want := range []string{host, "beta.help.example.net", slugHost, "_help-center-verify." + host} {
+	// The message says what to set, never what the server's resolver saw: that would let a tenant read
+	// the resolver's answers for any name.
+	seen := LookupDomain(ctx, stubResolvers{cname: map[string]string{host: "db.internal.example."}}.resolvers(), host, domain)
+	err := seen.Check(claim, token)
+	if err == nil || strings.Contains(err.Error(), "db.internal.example") {
+		t.Errorf("the message %q names what DNS answered", err)
+	}
+	for _, want := range []string{host + " points somewhere else", target, "_help-center-verify." + host} {
 		if err == nil || !strings.Contains(err.Error(), want) {
-			t.Errorf("the check's message %q does not name %q", err, want)
+			t.Errorf("the check's message %q does not say %q", err, want)
 		}
 	}
-	err = CheckDomain(ctx, stubResolvers{}.resolvers(), host, "", token)
-	if err == nil || strings.Contains(err.Error(), "CNAME") {
+	if detail := seen.Detail(); !strings.Contains(detail, "db.internal.example") {
+		t.Errorf("the log detail %q does not keep what DNS answered", detail)
+	}
+	if err := LookupDomain(ctx, stubResolvers{}.resolvers(), host, domain).Check(claim, token); err == nil || !strings.Contains(err.Error(), "has no CNAME record pointing at "+target) {
+		t.Errorf("without any record the message is %q", err)
+	}
+	if err := LookupDomain(ctx, stubResolvers{}.resolvers(), host, "").Check(claim, token); err == nil || strings.Contains(err.Error(), "CNAME") {
 		t.Errorf("without a help center domain the message %q must ask for the TXT record only", err)
+	}
+	// What DNS showed names the claim of the target and the TXT values, for claims of other workspaces.
+	both := LookupDomain(ctx, stubResolvers{cname: map[string]string{host: target + "."}, txt: map[string][]string{"_help-center-verify." + host: {" a ", "b"}}}.resolvers(), host, domain)
+	if both.Proof.Claim != claim || fmt.Sprint(both.Proof.Tokens) != "[a b]" {
+		t.Errorf("proof = %+v", both.Proof)
 	}
 }
 
@@ -121,26 +143,25 @@ func TestCheckDomainStopsAtItsDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	started := time.Now()
-	err := CheckDomain(ctx, slow, "help.acme.example", "acme.help.example.net", "0123456789abcdef0123456789abcdef")
-	if !errors.Is(err, ErrDomainNotProven) || time.Since(started) > time.Second {
+	err := LookupDomain(ctx, slow, "help.acme.example", "help.example.net").Check("0123456789abcdef01234567", "0123456789abcdef0123456789abcdef")
+	if !errors.Is(err, ErrDomainNotProven) || !strings.Contains(err.Error(), "DNS did not answer in time") || time.Since(started) > time.Second {
 		t.Fatalf("a hung resolver: error %v after %s", err, time.Since(started))
 	}
 }
 
 func TestDomainRecords(t *testing.T) {
-	const host, token = "help.acme.example", "0123456789abcdef0123456789abcdef"
+	const host, token, claim = "help.acme.example", "0123456789abcdef0123456789abcdef", "0123456789abcdef01234567"
 	verify := DomainRecord{Type: "TXT", Name: "_help-center-verify." + host, Value: token, Purpose: "verify"}
 	for name, c := range map[string]struct {
-		origin, domain, slug string
-		want                 []DomainRecord
+		origin, domain string
+		want           []DomainRecord
 	}{
-		"help center domain":    {"https://desk.example.com", "help.example.net", "acme", []DomainRecord{{"CNAME", host, "acme.help.example.net", "route_and_verify"}, verify}},
-		"no help center domain": {"https://desk.example.com", "", "acme", []DomainRecord{{"CNAME", host, "desk.example.com", "route"}, verify}},
-		"reserved slug":         {"https://desk.example.com", "help.example.net", "www", []DomainRecord{{"CNAME", host, "desk.example.com", "route"}, verify}},
-		"IPv4 origin":           {"http://192.0.2.10:8080", "", "acme", []DomainRecord{{"A", host, "192.0.2.10", "route"}, verify}},
-		"IPv6 origin":           {"http://[2001:db8::10]:8080", "", "acme", []DomainRecord{{"AAAA", host, "2001:db8::10", "route"}, verify}},
+		"help center domain":    {"https://desk.example.com", "help.example.net", []DomainRecord{{"CNAME", host, "hc-" + claim + ".help.example.net", "route_and_verify"}, verify}},
+		"no help center domain": {"https://desk.example.com", "", []DomainRecord{{"CNAME", host, "desk.example.com", "route"}, verify}},
+		"IPv4 origin":           {"http://192.0.2.10:8080", "", []DomainRecord{{"A", host, "192.0.2.10", "route"}, verify}},
+		"IPv6 origin":           {"http://[2001:db8::10]:8080", "", []DomainRecord{{"AAAA", host, "2001:db8::10", "route"}, verify}},
 	} {
-		got := Records(host, token, c.origin, c.domain, c.slug)
+		got := Records(host, claim, token, c.origin, c.domain)
 		if len(got) != len(c.want) {
 			t.Errorf("%s: Records = %+v, want %+v", name, got, c.want)
 			continue

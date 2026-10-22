@@ -1063,7 +1063,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description For the reverse proxy, not for people: Caddy's `on_demand_tls` asks it before getting a certificate for a host name it has never seen. It answers 200 when the workspace's help center is on and the workspace is not locked, and `domain` is either exactly one label below `HELP_CENTER_DOMAIN` whose label is that workspace's slug, or the workspace's custom domain. A custom domain answers 200 once it is active, or when it is pending and its DNS check passes now (within 2 seconds; the domain then becomes active). Live checks are bounded: a few at a time on the server and at most one per host name every 30 seconds. Every other case is the same 404; custom domains work without `HELP_CENTER_DOMAIN` too. */
+        /** @description For the reverse proxy, not for people: Caddy's `on_demand_tls` asks it before getting a certificate for a host name it has never seen. It answers 200 when the workspace's help center is on and the workspace is not locked, and `domain` is exactly one label below `HELP_CENTER_DOMAIN` whose label is that workspace's slug or the CNAME target `hc-<claim>` of its custom domain's claim (which redirects to the help center), or the workspace's custom domain. A custom domain answers 200 once it is active, or when it is pending and its DNS check passes now (within 2 seconds; the domain then becomes active). Live checks are bounded: a few at a time on the server and at most one per host name every 30 seconds. Every other case is the same 404; custom domains work without `HELP_CENTER_DOMAIN` too. */
         get: operations["askHelpCenterCertificate"];
         put?: never;
         post?: never;
@@ -2070,12 +2070,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The help center's custom domain, such as `help.example.com`: its status (`none`, `pending` until its DNS check passes, `active` once the help center serves on it), the DNS records to set, and the last check. `records` lists one record that sends the host name to Colliedesk and one that proves the workspace owns it: on a server with `HELP_CENTER_DOMAIN`, a CNAME to the workspace's own `<slug>.<HELP_CENTER_DOMAIN>` does both, and the TXT record is the alternative; without it, the TXT record proves ownership and the CNAME (or A/AAAA) record only routes. The token is in the TXT record's value; it is never exported. */
+        /** @description The help center's custom domain, such as `help.example.com`: its status (`none`, `pending` until its DNS check passes, `active` once the help center serves on it), the DNS records to set, and the last check. `records` lists one record that sends the host name to Colliedesk and one that proves the workspace owns it: on a server with `HELP_CENTER_DOMAIN`, a CNAME to the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>` does both, and the TXT record is the alternative; without it, the TXT record proves ownership and the CNAME (or A/AAAA) record only routes. The CNAME target and the token are random, made when the host name is set, and kept until it is removed or replaced; the workspace's slug proves nothing, since another workspace may take it after a rename. The token is in the TXT record's value; it is public in DNS once set, so every tier may read it, and it is never exported. */
         get: operations["getHelpCenterDomain"];
-        /** @description Set or replace the help center's custom domain. Admins only, and an `admin` agent token. A new host name is `pending` with a new token until its DNS check passes (POST /api/v1/help-center/domain/check, the reverse proxy's first certificate question, or the daily re-check); sending the current host name again changes nothing. Unicode host names are stored in their ASCII (punycode) form. Refused with 422 `validation_failed` (`fields.hostname`) for an IP address, a single label, more than 253 characters, `APP_ORIGIN`'s host, or `HELP_CENTER_DOMAIN` and the names below it; with 409 `domain_taken` when another workspace's help center already serves on it. */
+        /** @description Set or replace the help center's custom domain. Admins only, and an `admin` agent token. A new host name is `pending` with a new token until its DNS check passes (POST /api/v1/help-center/domain/check, the reverse proxy's first certificate question, or the daily re-check) with a new token and CNAME target; sending the current host name again changes nothing. Unicode host names are stored in their ASCII (punycode) form. Refused with 422 `validation_failed` (`fields.hostname`) for an IP address, a single label, more than 253 characters, `APP_ORIGIN`'s host, or `HELP_CENTER_DOMAIN` and the names below it; with 409 `domain_taken` when another workspace's help center already serves on it. */
         put: operations["putHelpCenterDomain"];
         post?: never;
-        /** @description Remove the custom domain. The help center stops serving on it with the next request to this server (other server processes within 30 seconds) and its other addresses stop redirecting there. Setting the same host name again needs a new check, and a new TXT token. Admins only, and an `admin` agent token; removing when there is none changes nothing. */
+        /** @description Remove the custom domain. The help center stops serving on it with the next request to this server (other server processes within 30 seconds) and its other addresses stop redirecting there. Setting the same host name again needs a new check, with a new CNAME target and TXT token. Admins only, and an `admin` agent token; removing when there is none changes nothing. */
         delete: operations["deleteHelpCenterDomain"];
         options?: never;
         head?: never;
@@ -2091,7 +2091,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Look up the custom domain's DNS now (at most 3 seconds) and record the result: the host name's CNAME chain ends at the workspace's own `<slug>.<HELP_CENTER_DOMAIN>`, or `_help-center-verify.<host name>` holds the token. A pending domain that passes becomes `active`; one that fails keeps its status, with `check_error` saying what was found. An active domain is never deactivated by a check; `check_error` warns instead. 409 `domain_taken` when it passes but another workspace's help center was verified on it first. 404 when no domain is set. Admins only, and an `admin` agent token; agent tokens may check 10 times an hour (429 with `Retry-After`). */
+        /** @description Look up the custom domain's DNS now (at most 3 seconds) and record the result: the host name's CNAME chain ends at the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>`, or `_help-center-verify.<host name>` holds the token. A pending domain that passes becomes `active`; one that fails keeps its status, with `check_error` saying which record to set (never what the server's DNS answered). A check counts only for the claim it looked up: when the domain is removed or set again meanwhile, it answers 409 `domain_changed`. An active domain is never deactivated by a check; `check_error` warns instead. 409 `domain_taken` when it passes but another workspace's help center was verified on it first. 404 when no domain is set. Admins only, and an `admin` agent token; agent tokens may check 10 times an hour (429 with `Retry-After`). */
         post: operations["checkHelpCenterDomain"];
         delete?: never;
         options?: never;
@@ -3245,7 +3245,7 @@ export interface components {
              * @description The last DNS check: the button, the proxy's certificate question or the daily re-check.
              */
             checked_at: string | null;
-            /** @description What the last check found when it did not pass; null after a check that passed. */
+            /** @description Which record the last check did not find when it did not pass; null after a check that passed. */
             check_error: string | null;
             /**
              * Format: date-time
