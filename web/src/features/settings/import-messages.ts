@@ -16,6 +16,9 @@ export const importMessages = {
   reading: (domain: string) => `Reading ${domain}… This takes a few seconds, up to a minute on a large account.`,
   domainMissing: 'Enter the address of your Freshdesk account, for example acme.freshdesk.com.',
   domainInvalid: 'This is not a Freshdesk address: it ends in .freshdesk.com, for example acme.freshdesk.com. Enter <account>.freshdesk.com.',
+  oldHelpCenterLabel: 'Old help center address (optional)',
+  oldHelpCenterPlaceholder: 'support.acme.com',
+  oldHelpCenterHelp: 'Only if your Freshdesk help center had a domain of its own: its links in your articles and saved replies then point at the new help center too.',
   keyMissing: 'Paste the API key of a Freshdesk admin.',
 
   foundHeading: (domain: string) => `Found in ${domain}`,

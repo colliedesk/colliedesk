@@ -215,7 +215,7 @@ func (w *Worker) importOptions(job runRow, key string, onProgress func(freshdesk
 	options := freshdesk.Options{WorkspaceSlug: job.slug, BaseURL: w.options.BaseURL(job.Domain), APIKey: key, Storage: w.options.Storage,
 		Cloud: w.options.Cloud, PlansOnSale: w.options.PlansOnSale, PaidStorageBytes: w.options.PaidStorageBytes, ReserveRateLimit: true,
 		IncludePersonalCannedResponses: job.Options.IncludePersonalCannedResponses, HelpCenterPortal: job.Options.HelpCenterPortal, OnProgress: onProgress,
-		Origin: w.options.Origin, HelpCenterDomain: w.options.HelpCenterDomain}
+		Origin: w.options.Origin, HelpCenterDomain: w.options.HelpCenterDomain, OldHelpCenterDomain: job.Options.OldHelpCenterDomain}
 	if w.options.Configure != nil {
 		w.options.Configure(&options)
 	}

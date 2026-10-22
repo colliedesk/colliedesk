@@ -47,6 +47,15 @@ test('the account is read only from a Freshdesk address and a key, and the key i
   expect(onPreview).toHaveBeenCalledWith('acme.freshdesk.com', 'secret');
 });
 
+test('the old help center address is optional and goes with the preview as a host', () => {
+  const { onPreview } = page();
+  fireEvent.change(screen.getByLabelText('Freshdesk address'), { target: { value: 'acme.freshdesk.com' } });
+  fireEvent.change(screen.getByLabelText('API key of a Freshdesk admin'), { target: { value: 'secret' } });
+  fireEvent.change(screen.getByLabelText('Old help center address (optional)'), { target: { value: ' https://Support.Acme.com/ ' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Read account' }));
+  expect(onPreview).toHaveBeenCalledWith('acme.freshdesk.com', 'secret', 'support.acme.com');
+});
+
 test('the preview shows what Freshdesk holds before anything is written, and what the key cannot read', () => {
   const { onStart } = page({ job: job({ preview: { ...preview, archive: 'refused' } }) });
   const ledger = screen.getByRole('table');

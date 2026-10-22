@@ -2126,6 +2126,8 @@ export interface components {
             include_personal_canned_responses?: boolean;
             /** @description On an account with several portals, the portal whose published articles stay published. */
             help_center_portal?: number;
+            /** @description The old Freshdesk help center's own custom domain, for example support.acme.com (an http:// or https:// prefix and a trailing slash are dropped; stored as the host). Its /support/ links in imported articles and saved replies are pointed at the new help center like the account domain's. Answers 400 when it is not a host name. */
+            old_help_center_domain?: string;
         };
         ImportInput: {
             /** @enum {string} */

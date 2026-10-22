@@ -172,6 +172,8 @@ func writeImportError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusConflict, "import_state", "The import is not in a state that allows this (a preview starts within an hour; only an ended import can be undone; only a job waiting for its key takes one).")
 	case errors.Is(err, importjobs.ErrOptions):
 		writeError(response, http.StatusBadRequest, "invalid_request", err.Error()+".")
+	case errors.Is(err, freshdesk.ErrOldHelpCenterHost):
+		writeError(response, http.StatusBadRequest, "invalid_request", "options.old_help_center_domain: "+err.Error()+".")
 	case errors.Is(err, freshdesk.ErrAccountHost):
 		writeError(response, http.StatusBadRequest, "freshdesk_domain_invalid", err.Error()+", for example acme.freshdesk.com.")
 	default:

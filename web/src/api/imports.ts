@@ -11,6 +11,7 @@ export const importOptionsSchema = z.object({
   recent_days: z.number().int().optional(),
   include_personal_canned_responses: z.boolean().optional(),
   help_center_portal: z.number().int().optional(),
+  old_help_center_domain: z.string().optional(),
 }) satisfies z.ZodType<Generated<'ImportOptions'>>;
 export const importPreviewSchema = z.object({
   domain: z.string(), account_id: z.number().int(), source: z.string(),
@@ -80,8 +81,10 @@ const json = <Operation extends 'previewImport' | 'setImportKey' | 'linkImportPe
 export const importsApi = {
   list: () => request('/api/v1/imports', importListSchema),
   get: (id: string) => request(`/api/v1/imports/${id}`, importJobSchema),
-  preview: (domain: string, apiKey: string) =>
-    request('/api/v1/imports', importJobSchema, { method: 'POST', body: json<'previewImport'>({ source: 'freshdesk', domain, api_key: apiKey }) }),
+  // oldHelpCenterDomain is the old Freshdesk help center's own domain, when it had one.
+  preview: (domain: string, apiKey: string, oldHelpCenterDomain?: string) =>
+    request('/api/v1/imports', importJobSchema, { method: 'POST', body: json<'previewImport'>({ source: 'freshdesk', domain, api_key: apiKey,
+      ...(oldHelpCenterDomain ? { options: { old_help_center_domain: oldHelpCenterDomain } } : {}) }) }),
   start: (id: string) => request(`/api/v1/imports/${id}/start`, importJobSchema, { method: 'POST' }),
   cancel: (id: string) => request(`/api/v1/imports/${id}/cancel`, importJobSchema, { method: 'POST' }),
   setKey: (id: string, apiKey: string) => request(`/api/v1/imports/${id}/key`, importJobSchema, { method: 'PUT', body: json<'setImportKey'>({ api_key: apiKey }) }),

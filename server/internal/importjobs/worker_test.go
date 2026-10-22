@@ -584,22 +584,23 @@ func TestAJobStartedInThisProcessRunsWithoutWaitingForTheNextTick(t *testing.T) 
 }
 
 // The in-app import points old Freshdesk help center links at the help center exactly as the CLI
-// does: the full pass gets the server's address and help center domain.
+// does: the full pass gets the server's address, help center domain and the old help center's domain.
 func TestTheFullPassGetsTheHelpCenterAddress(t *testing.T) {
 	e := newEnv(t, true)
-	e.started(t)
+	job := e.started(t)
+	e.exec(t, `UPDATE import_jobs SET options=options || '{"old_help_center_domain":"support.acme.com"}' WHERE id=$1`, job.ID)
 	w := importjobs.NewWorker(importjobs.WorkerOptions{DB: e.db, Keys: e.keys, Interval: time.Hour, Heartbeat: 20 * time.Millisecond,
 		Flush: 10 * time.Millisecond, Lease: time.Minute, Origin: "https://desk.example.com", HelpCenterDomain: "help.example.net"})
-	var origin, domain string
+	var origin, domain, old string
 	importjobs.StubImporter(w, func(_ context.Context, o freshdesk.Options) (*freshdesk.Report, error) {
 		if o.Mode == freshdesk.ModeRecent {
 			return &freshdesk.Report{Status: freshdesk.StatusInterim, Interim: true}, nil
 		}
-		origin, domain = o.Origin, o.HelpCenterDomain
+		origin, domain, old = o.Origin, o.HelpCenterDomain, o.OldHelpCenterDomain
 		return &freshdesk.Report{Status: freshdesk.StatusOK}, nil
 	}, nil, nil)
 	tick(t, w)
-	if origin != "https://desk.example.com" || domain != "help.example.net" {
-		t.Fatalf("full pass got origin %q and help center domain %q", origin, domain)
+	if origin != "https://desk.example.com" || domain != "help.example.net" || old != "support.acme.com" {
+		t.Fatalf("full pass got origin %q, help center domain %q and old help center domain %q", origin, domain, old)
 	}
 }

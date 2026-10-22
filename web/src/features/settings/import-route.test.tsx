@@ -60,6 +60,17 @@ test('discarding the preview just asked for gives the page back to the import be
   expect(await screen.findByRole('button', { name: 'Undo import' })).toBeInTheDocument();
 });
 
+test('the old help center address typed in the form goes with the preview', async () => {
+  imports.list.mockResolvedValue({ items: [] });
+  imports.preview.mockResolvedValue(previewed);
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ImportRoute /></QueryClientProvider>);
+  fireEvent.change(await screen.findByLabelText('Freshdesk address'), { target: { value: 'acme.freshdesk.com' } });
+  fireEvent.change(screen.getByLabelText('API key of a Freshdesk admin'), { target: { value: 'k' } });
+  fireEvent.change(screen.getByLabelText('Old help center address (optional)'), { target: { value: 'support.acme.com' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Read account' }));
+  await waitFor(() => expect(imports.preview).toHaveBeenCalledWith('acme.freshdesk.com', 'k', 'support.acme.com'));
+});
+
 test('a later people action clears what an earlier one said', async () => {
   const finished = { ...previewed, state: 'finished', phase: 'full', status: 'OK', has_report: true, imported_conversations: 1 };
   imports.list.mockResolvedValue({ items: [finished] });

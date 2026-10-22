@@ -85,6 +85,7 @@ func TestAnImportNeedsAFreshdeskAddressAndAKey(t *testing.T) {
 		{map[string]any{"source": "freshdesk", "domain": "acme.freshdesk.com", "api_key": "  "}, "freshdesk_key_missing"},
 		{map[string]any{"source": "zendesk", "domain": "acme.freshdesk.com", "api_key": "k"}, "invalid_request"},
 		{map[string]any{"source": "freshdesk", "domain": "acme.freshdesk.com", "api_key": "k", "options": map[string]any{"recent_days": 366}}, "invalid_request"},
+		{map[string]any{"source": "freshdesk", "domain": "acme.freshdesk.com", "api_key": "k", "options": map[string]any{"old_help_center_domain": "support.acme.com/support"}}, "old_help_center_domain"},
 	} {
 		response := request(t, api, http.MethodPost, "/api/v1/imports", c.body, admin, nil)
 		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), c.code) {
@@ -286,5 +287,24 @@ func TestAnotherWorkspaceCannotSeeOrLinkTheFreshdeskAgents(t *testing.T) {
 	response := request(t, api, http.MethodPut, "/api/v1/imports/"+jobs.finished+"/people/102/link", map[string]any{"agent_id": me.Agent.ID}, adminA, nil)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_agent") {
 		t.Fatalf("link to another workspace's agent: %d %s", response.Code, response.Body.String())
+	}
+}
+
+// The old help center's own domain is kept as a host, whatever shape a person typed it in.
+func TestAnImportKeepsTheOldHelpCenterAddressAsAHost(t *testing.T) {
+	api, admin, _, _, _, _ := newImportDesk(t)
+	response := request(t, api, http.MethodPost, "/api/v1/imports", map[string]any{"source": "freshdesk", "domain": "beta.freshdesk.com", "api_key": "k",
+		"options": map[string]any{"old_help_center_domain": " https://Support.Beta.example/ "}}, admin, nil)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	var job struct {
+		Options struct {
+			OldHelpCenterDomain string `json:"old_help_center_domain"`
+		}
+	}
+	decode(t, response, &job)
+	if job.Options.OldHelpCenterDomain != "support.beta.example" {
+		t.Fatalf("options = %+v", job.Options)
 	}
 }

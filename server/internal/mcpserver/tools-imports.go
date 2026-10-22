@@ -59,6 +59,7 @@ func importPreview(c *call, arguments map[string]any) (any, error) {
 		RecentDays                     *int   `json:"recent_days"`
 		IncludePersonalCannedResponses bool   `json:"include_personal_canned_responses"`
 		HelpCenterPortal               int64  `json:"help_center_portal"`
+		OldHelpCenterDomain            string `json:"old_help_center_domain"`
 	}](arguments)
 	if err != nil {
 		return nil, err
@@ -69,6 +70,9 @@ func importPreview(c *call, arguments map[string]any) (any, error) {
 	}
 	if args.HelpCenterPortal > 0 {
 		options["help_center_portal"] = args.HelpCenterPortal
+	}
+	if args.OldHelpCenterDomain != "" {
+		options["old_help_center_domain"] = args.OldHelpCenterDomain
 	}
 	return importAnswer(c, http.MethodPost, "/api/v1/imports", map[string]any{"source": "freshdesk", "domain": args.Domain, "api_key": args.APIKey, "options": options})
 }

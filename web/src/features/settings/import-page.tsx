@@ -33,7 +33,8 @@ export interface ImportPageProps {
   busy?: boolean;
   // connecting shows the form even when a job ended, for a new import.
   connecting?: boolean;
-  onPreview: (domain: string, apiKey: string) => void;
+  // oldHelpCenterDomain is the old help center's own domain, only when one was typed.
+  onPreview: (domain: string, apiKey: string, oldHelpCenterDomain?: string) => void;
   onStart: (id: string) => void;
   onCancel: (id: string) => void;
   onSetKey: (id: string, apiKey: string) => void;
@@ -105,9 +106,10 @@ function Heading({ title, help, children }: { title: string; help?: string; chil
 function ConnectForm({ onPreview, busy, initialDomain = '' }: ImportPageProps & { initialDomain?: string }) {
   const [domain, setDomain] = useState(initialDomain);
   const [key, setKey] = useState('');
+  const [oldHelpCenter, setOldHelpCenter] = useState('');
   // problem names the field that is wrong and says why, next to it.
   const [problem, setProblem] = useState<{ field: 'domain' | 'key'; text: string }>();
-  const ids = { domain: useId(), key: useId(), keyHelp: useId(), problem: useId() };
+  const ids = { domain: useId(), key: useId(), keyHelp: useId(), problem: useId(), oldHelpCenter: useId(), oldHelpCenterHelp: useId() };
   const fields = { domain: useRef<HTMLInputElement>(null), key: useRef<HTMLInputElement>(null) };
   const refuse = (field: 'domain' | 'key', text: string) => { setProblem({ field, text }); fields[field].current?.focus(); };
   const submit = (event: FormEvent) => {
@@ -117,7 +119,10 @@ function ConnectForm({ onPreview, busy, initialDomain = '' }: ImportPageProps & 
     if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?\.freshdesk\.com$/.test(host)) return refuse('domain', m.domainInvalid);
     if (!key.trim()) return refuse('key', m.keyMissing);
     setProblem(undefined);
-    onPreview(host, key.trim());
+    // The server checks it is a host name and says why when it is not.
+    const old = oldHelpCenter.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+    if (old) onPreview(host, key.trim(), old);
+    else onPreview(host, key.trim());
   };
   const invalid = (field: 'domain' | 'key') => (problem?.field === field ? { 'aria-invalid': true as const } : {});
   const describedBy = (field: 'domain' | 'key', ...more: string[]) => [...(problem?.field === field ? [ids.problem] : []), ...more].join(' ') || undefined;
@@ -132,6 +137,10 @@ function ConnectForm({ onPreview, busy, initialDomain = '' }: ImportPageProps & 
         aria-describedby={describedBy('key', ids.keyHelp)} {...invalid('key')} />
       {problem?.field === 'key' && <p id={ids.problem} role="alert" className="error-copy">{problem.text}</p>}
       <small id={ids.keyHelp} className="muted-copy">{m.keyHelp}</small>
+      <label htmlFor={ids.oldHelpCenter}>{m.oldHelpCenterLabel}</label>
+      <input id={ids.oldHelpCenter} name="old_help_center_domain" autoComplete="off" spellCheck={false} placeholder={m.oldHelpCenterPlaceholder}
+        value={oldHelpCenter} onChange={(event) => setOldHelpCenter(event.target.value)} aria-describedby={ids.oldHelpCenterHelp} />
+      <small id={ids.oldHelpCenterHelp} className="muted-copy">{m.oldHelpCenterHelp}</small>
       <div className="button-row import-actions"><button type="submit" className="primary-action" disabled={busy}>{m.readAccount}</button></div>
     </form>
     <p className="muted-copy">{m.freePlanNote}</p>
