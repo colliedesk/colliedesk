@@ -41,7 +41,7 @@ export const importMessages = {
   linksOK: 'All good',
   linksUnverified: 'Needs a look',
   linksRedirected: (redirected: number, found: number, address: string) =>
-    `${redirected.toLocaleString('en')} of ${found.toLocaleString('en')} old addresses lead to their new page on ${address}.`,
+    `${redirected.toLocaleString('en')} of ${found.toLocaleString('en')} old addresses lead to their new page${address ? ` on ${address}` : ''}.`,
   linksRewritten: (links: number, articles: number, replies: number) =>
     `${links.toLocaleString('en')} Freshdesk links in ${articles.toLocaleString('en')} ${articles === 1 ? 'article' : 'articles'} and ${replies.toLocaleString('en')} ${replies === 1 ? 'saved reply' : 'saved replies'} now point at the help center.`,
   linksReportNote: 'The report lists every address and link that does not, and why.',

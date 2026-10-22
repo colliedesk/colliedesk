@@ -173,6 +173,18 @@ test('a finished import says where the old help center addresses and links lead 
   expect(within(section).getByText('Needs a look')).toBeInTheDocument();
 });
 
+test('without a help center address the links section names none', () => {
+  const links = {
+    status: 'UNVERIFIED', detail: [], help_center: '',
+    old_addresses: { found: 4, redirected: 0, languages: [], unmapped: [] },
+    rewritten: { articles: 0, saved_replies: 0, links: 0 }, left: [],
+  };
+  page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }), report: { status: 'OK', links } });
+  const section = screen.getByRole('region', { name: 'Old help center links' });
+  expect(section).toHaveTextContent('0 of 4 old addresses lead to their new page.');
+  expect(section).not.toHaveTextContent(' on .');
+});
+
 test('an import without a knowledge base shows no links section', () => {
   page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }), report: { status: 'OK' } });
   expect(screen.queryByRole('region', { name: 'Old help center links' })).not.toBeInTheDocument();
