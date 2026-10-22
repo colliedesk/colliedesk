@@ -192,11 +192,15 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
     onSetSlot(slot.slot, input);
   };
   const stopped = slot.enabled && !slot.active;
+  const allowanceUsed = slot.enabled && slot.source === 'server' && settings.allowance !== null && settings.allowance.used_micro_usd >= settings.allowance.limit_micro_usd;
+  const paused = slot.enabled && slot.slot === 'triage' && settings.automatic.paused_until !== null;
   return (
     <div className="ai-slot">
       <div className="ai-slot-what">
         <strong>{name} {stopped ? <span className="status ai-st-err">{m.statusStopped}</span>
-          : slot.enabled ? <span className="status ai-st-ok">{m.statusOn}</span> : <span className="status ai-st-off">{m.statusOff}</span>}</strong>
+          : allowanceUsed ? <span className="status ai-st-err">{m.statusAllowanceUsed}</span>
+            : paused ? <span className="status ai-st-warn">{m.statusPaused}</span>
+              : slot.enabled ? <span className="status ai-st-ok">{m.statusOn}</span> : <span className="status ai-st-off">{m.statusOff}</span>}</strong>
         <span>{m.slotHelp[slot.slot]}</span>
       </div>
       <label className="ai-slot-provider"><span className="ai-cell-label">{m.columnProvider}</span>
@@ -225,6 +229,7 @@ function SlotRow({ slot, settings, isAdmin, busySlot, onSetSlot, onOpenAutomatic
 }
 
 function Meter({ allowance }: { allowance: NonNullable<AISettings['allowance']> }) {
+  if (allowance.limit_micro_usd === 0) return <div className="ai-meter"><strong className="ai-meter-none">{m.noneIncluded}</strong></div>;
   const used = Math.min(allowance.used_micro_usd, allowance.limit_micro_usd);
   const full = allowance.used_micro_usd >= allowance.limit_micro_usd;
   const percent = allowance.limit_micro_usd > 0 ? Math.round((used / allowance.limit_micro_usd) * 100) : 100;

@@ -83,6 +83,9 @@ export const aiMessages = {
   statusOn: 'On',
   statusOff: 'Off',
   statusStopped: 'Stopped',
+  statusAllowanceUsed: 'Stopped: allowance used',
+  statusPaused: 'Paused until tomorrow',
+  noneIncluded: 'No AI is included on this server: add your own provider.',
   offReason: {
     server_provider_missing: 'The server operator removed the server provider. Pick another provider.',
     model_not_offered: 'The server no longer offers this model. Pick another one.',

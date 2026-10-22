@@ -406,3 +406,23 @@ func TestARecordedResultNeedsTheTaskStillHeld(t *testing.T) {
 		t.Fatalf("a recorded task = %s", state)
 	}
 }
+
+func TestTheMinuteLimitLooksAcrossMidnight(t *testing.T) {
+	q := newQueueEnv(t, nil)
+	q.clock.now = time.Date(2026, 10, 22, 23, 59, 40, 0, time.UTC)
+	q.turnOn(t, q.a, ai.SlotTriage)
+	if _, err := q.service.SetAutomaticLimits(context.Background(), q.a.id, q.actor(q.a), 300, 1); err != nil {
+		t.Fatal(err)
+	}
+	before := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotTriage, Automatic: true})
+	q.tick(t)
+	q.clock.Add(40 * time.Second) // 00:00:20, the next day
+	after := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotTriage, Automatic: true})
+	q.tick(t)
+	if state, _ := q.state(t, before); state != ai.TaskDone {
+		t.Fatalf("before midnight = %s", state)
+	}
+	if state, _ := q.state(t, after); state != ai.TaskQueued {
+		t.Fatalf("20 seconds after midnight, within the minute = %s, want queued", state)
+	}
+}

@@ -189,6 +189,8 @@ test('a paused day and a used-up allowance each say what happens and what to do'
   expect(screen.getByRole('button', { name: 'Raise the daily limit' })).toBeInTheDocument();
   expect(screen.getByRole('alert')).toHaveTextContent('This month’s Colliedesk AI allowance is used up');
   expect(screen.getByRole('meter', { name: 'Allowance used this month' })).toHaveAttribute('aria-valuetext', '$9.00 of $9.00 used');
+  expect(screen.getAllByText('Stopped: allowance used')).toHaveLength(2);
+  expect(document.querySelector('.ai-st-ok')).toBeNull();
 });
 
 test('the usage tab is asked for when it opens and sums each feature', () => {
@@ -209,4 +211,15 @@ test('the usage tab is asked for when it opens and sums each feature', () => {
 test('agents do not see the usage tab', () => {
   page({ isAdmin: false });
   expect(screen.queryByRole('tab', { name: 'Usage' })).not.toBeInTheDocument();
+});
+
+test('a paused feature says so on its row', () => {
+  page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft' })],
+    automatic: { per_day: 0, per_minute: 30, used_today: 0, paused_until: '2026-10-23T00:00:00Z' } }) });
+  expect(screen.getByText('Paused until tomorrow')).toBeInTheDocument();
+});
+
+test('a server allowance of nothing reads as none included', () => {
+  page({ settings: settings({ server, allowance: { limit_micro_usd: 0, used_micro_usd: 0, resets_at: '2026-11-01T00:00:00Z' } }) });
+  expect(screen.getByText(/No AI is included on this server/)).toBeInTheDocument();
 });

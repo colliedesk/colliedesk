@@ -218,7 +218,7 @@ func (s *Service) automaticLimits(ctx context.Context, tx pgx.Tx, workspaceID st
 	now := s.now().UTC()
 	var minute int
 	if err := tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE started_at>=$2), count(*) FILTER (WHERE started_at>$3)
-		FROM ai_tasks WHERE workspace_id=$1 AND automatic AND started_at>=$2`, workspaceID, dayStart(now), now.Add(-time.Minute)).Scan(&limits.UsedToday, &minute); err != nil {
+		FROM ai_tasks WHERE workspace_id=$1 AND automatic AND started_at>=LEAST($2,$3)`, workspaceID, dayStart(now), now.Add(-time.Minute)).Scan(&limits.UsedToday, &minute); err != nil {
 		return AutomaticLimits{}, 0, err
 	}
 	if limits.UsedToday >= limits.PerDay {

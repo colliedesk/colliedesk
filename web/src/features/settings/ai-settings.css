@@ -87,6 +87,9 @@
 .ai-st-ok { --dot: var(--ok); }
 .ai-st-err { --dot: var(--danger); }
 .ai-st-off { --dot: var(--line-control); }
+.ai-st-warn { --dot: var(--pending); }
+.ai-meter-none { color: var(--text-2); font-size: var(--fs-small); font-weight: 500; }
+@media (pointer: coarse) { .ai-slot-limit .link-button { min-height: var(--touch); } }
 
 .ai-switch { justify-self: end; display: inline-flex; align-items: center; min-height: var(--touch); cursor: pointer; }
 .ai-switch input { appearance: none; position: relative; width: 34px; height: 20px; min-height: 0; margin: 0; border: 0; border-radius: var(--radius-full);
@@ -198,6 +201,8 @@
   .ai-kind { grid-template-columns: 1fr; }
 }
 @media (max-width: 22rem) {
+  .ai-tabs { gap: var(--space-1); }
+  .ai-tabs button { padding: 0 2px; }
   .ai-narrow { display: none; }
   .ai-add { width: var(--touch); justify-content: center; padding: 0; }
 }
