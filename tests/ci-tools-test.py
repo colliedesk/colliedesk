@@ -64,6 +64,32 @@ class Shards(unittest.TestCase):
         self.assertEqual(run('go-test-shard.py', '1', '2', '--parts', '1', stdin=listing).stdout.strip(), whole)
         self.assertNotEqual(run('go-test-shard.py', '1', '2', '--parts', '0', stdin=listing).returncode, 0)
 
+    def test_latency_fixtures_split_over_their_own_runners_with_the_kb_seed_on_one(self):
+        latency = ['TestHelpCenterPagesLatencyBudget', 'TestKnowledgeBaseSearchLatencyBudget',
+                   'TestKBMediaLibraryLatencyBudget', 'TestInboxListLatencyBudget',
+                   'TestStorageUsageStaysFastWithAHugeAttachmentTable', 'TestTrialCapStaysFast']
+        listing = self.listing + 'TestDelta\n' + '\n'.join(latency) + '\n'
+        shards = []
+        for shard in range(1, 5):
+            result = run('go-test-shard.py', str(shard), '4', '--latency-shards', '2', '--parts', '3', stdin=listing)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            shards.append(result.stdout.split())
+        for name in ['TestAlpha', 'TestBeta', 'TestGamma', 'TestDelta', 'FuzzBytes', 'ExampleClient'] + latency:
+            hits = [i for i, patterns in enumerate(shards) if any(re.search(p, name) for p in patterns)]
+            self.assertEqual(len(hits), 1, name)
+            self.assertEqual(hits[0] >= 2, name in latency, name)
+        # One process on each latency runner, so a gate never measures beside another test binary
+        # of its own shard; the tests that build the shared knowledge-base seed stay together.
+        self.assertEqual([len(patterns) for patterns in shards[2:]], [1, 1])
+        for name in latency[:3]:
+            self.assertRegex(name, shards[2][0])
+        for name in latency[3:]:
+            self.assertRegex(name, shards[3][0])
+
+    def test_latency_shards_leave_at_least_one_regular_shard(self):
+        for args in (('1', '2', '--latency-shards', '2'), ('1', '3', '--latency-shards', '0')):
+            self.assertNotEqual(run('go-test-shard.py', *args, stdin=self.listing).returncode, 0, args)
+
     def test_empty_inventory_and_invalid_shards_fail_closed(self):
         for args, listing in [(('0', '3'), self.listing), (('4', '3'), self.listing),
                               (('1', '0'), self.listing), (('1', '3'), '? pkg [no test files]')]:

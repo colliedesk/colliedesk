@@ -106,8 +106,9 @@ jobs:
           SHARDS: ${{ strategy.job-total }}
         run: |
           go test -list . ./... > "$RUNNER_TEMP/go-test-list.txt"
-          # Three go test processes per regular shard (go-test-shard.py says why); one on the latency shard.
-          python3 ../.github/scripts/go-test-shard.py "$SHARD" "$SHARDS" --parts 3 < "$RUNNER_TEMP/go-test-list.txt" > "$RUNNER_TEMP/go-test-patterns.txt"
+          # Six regular shards of three go test processes each, and two latency shards of one process
+          # each (go-test-shard.py says why).
+          python3 ../.github/scripts/go-test-shard.py "$SHARD" "$SHARDS" --parts 3 --latency-shards 2 < "$RUNNER_TEMP/go-test-list.txt" > "$RUNNER_TEMP/go-test-patterns.txt"
           pids=()
           while IFS= read -r pattern; do
             go test -count=1 -run "$pattern" ./... &

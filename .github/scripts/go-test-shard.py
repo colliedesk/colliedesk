@@ -9,11 +9,15 @@ parser.add_argument('shard', type=int)
 parser.add_argument('total', type=int)
 parser.add_argument('--parts', type=int, default=1,
                     help='print a regular shard as this many disjoint patterns, one per line')
+parser.add_argument('--latency-shards', type=int, default=1,
+                    help='how many of the last shards run the latency fixtures')
 args = parser.parse_args()
 if not 1 <= args.shard <= args.total:
     parser.error('shard must be between 1 and total')
 if args.parts < 1:
     parser.error('parts must be at least 1')
+if args.total > 1 and not 1 <= args.latency_shards < args.total:
+    parser.error('latency shards must be at least 1 and leave a regular shard')
 names = sorted({line.strip() for line in sys.stdin
                 if re.fullmatch(r'(Test|Example|Fuzz)\w*', line.strip())})
 if not names:
@@ -26,16 +30,26 @@ if not names:
 TIMED = ('LatencyBudget', 'StaysInBudget', 'StaysFast')
 latency = [name for name in names if any(marker in name for marker in TIMED)]
 regular = [name for name in names if name not in latency]
+# httpapi runs its gates one after another (66 seconds on one runner in CI), so they spread over
+# several latency runners. The gates that build the shared knowledge-base seed (sharedKBBudget in
+# httpapi) stay on the first, so the seed is built once; the others take turns on the rest.
+KB_SEED = ('HelpCenterPages', 'KnowledgeBase', 'KBMedia')
+kb = [name for name in latency if any(marker in name for marker in KB_SEED)]
+rest = [name for name in latency if name not in kb]
+regular_total = args.total - args.latency_shards
 if args.total == 1:
     selected = names
-elif args.shard == args.total:
+elif args.shard <= regular_total:
+    selected = regular[args.shard - 1::regular_total]
+elif args.latency_shards == 1:
     selected = latency
 else:
-    selected = regular[args.shard - 1::args.total - 1]
+    index = args.shard - regular_total - 1
+    selected = kb if index == 0 else rest[index - 1::args.latency_shards - 1]
 # A regular shard's tests mostly wait on PostgreSQL, one test at a time in each package binary, and
-# httpapi takes most of the shard: the job runs one go test per part at once. The latency shard is
-# never split, so its gates still measure with nothing else running.
-parts = args.parts if args.shard < args.total else 1
+# httpapi takes most of the shard: the job runs one go test per part at once. A latency shard is
+# never split, so its gates still measure with no other test binary of the shard beside them.
+parts = args.parts if args.shard <= regular_total else 1
 for part in range(parts):
     chosen = selected[part::parts]
     # Anchors prevent a selected TestFoo from also running TestFooBar on another shard.
