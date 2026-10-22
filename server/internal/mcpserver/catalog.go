@@ -47,6 +47,8 @@ func Catalog() []Spec {
 		workspaceSettingsGetSpec(), workspaceSettingsUpdateSpec(), workspaceRenameSpec(), myTimezoneSetSpec(), myDisplayNameSetSpec(), teamMemberUpdateSpec(),
 		invitesListSpec(), inviteCreateSpec(), inviteRevokeSpec(), sessionsListSpec(), sessionRevokeSpec(),
 		helpCenterUpdateSpec(), helpCenterThemeUpdateSpec(), webFormGetSpec(), webFormUpdateSpec(), emailChannelGetSpec(), emailChannelUpdateSpec(), emailDomainVerifySpec(), billingGetSpec(),
+		importsListSpec(), importGetSpec(), importPreviewSpec(), importStartSpec(), importCancelSpec(), importKeySetSpec(), importReportSpec(), importUndoRequestSpec(),
+		importPeopleListSpec(), importPersonLinkSpec(), importPersonUnlinkSpec(),
 	}
 }
 

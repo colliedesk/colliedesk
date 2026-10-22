@@ -291,6 +291,45 @@ type AgentRequest struct {
 	SavedReplyBefore json.RawMessage `json:"saved_reply_before"`
 }
 
+// ImportJob is an import from another helpdesk run inside the app, or its undo. It never holds the
+// API key of the other helpdesk; the preview, progress and reports are as the job saved them.
+type ImportJob struct {
+	ID            string          `json:"id"`
+	Kind          string          `json:"kind"`
+	Source        string          `json:"source"`
+	Domain        string          `json:"domain"`
+	AccountSource *string         `json:"account_source"`
+	UndoOf        *string         `json:"undo_of"`
+	State         string          `json:"state"`
+	Phase         string          `json:"phase"`
+	Options       json.RawMessage `json:"options"`
+	Preview       json.RawMessage `json:"preview"`
+	InterimReport json.RawMessage `json:"interim_report"`
+	Report        json.RawMessage `json:"report"`
+	Status        *string         `json:"status"`
+	ErrorCode     *string         `json:"error_code"`
+	ErrorMessage  *string         `json:"error_message"`
+	CreatedBy     *string         `json:"created_by"`
+	CreatedAt     time.Time       `json:"created_at"`
+	StartedAt     *time.Time      `json:"started_at"`
+	FinishedAt    *time.Time      `json:"finished_at"`
+}
+
+// ImportPerson is an agent of an imported Freshdesk account and the agent of the workspace it is
+// linked to (the author of their imported replies).
+type ImportPerson struct {
+	Source         string    `json:"source"`
+	ExternalID     string    `json:"external_id"`
+	Name           string    `json:"name"`
+	Email          string    `json:"email"`
+	Active         bool      `json:"active"`
+	LinkedAgentID  *string   `json:"linked_agent_id"`
+	LinkedByEmail  bool      `json:"linked_by_email"`
+	ChosenByPerson bool      `json:"chosen_by_person"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
 // Attachment describes one file. Path is its location in the archive; StorageKey is where the
 // server reads the bytes from and never leaves the server.
 type Attachment struct {
@@ -346,7 +385,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -366,6 +405,8 @@ type Sink interface {
 	KBMediaReplacement(KBMediaReplacement) error
 	HelpCenter(HelpCenter) error
 	AgentRequest(AgentRequest) error
+	ImportJob(ImportJob) error
+	ImportPerson(ImportPerson) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error
 	EndConversation(timeEntries []domain.TimeEntry) error

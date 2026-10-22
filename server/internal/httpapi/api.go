@@ -18,6 +18,7 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
+	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/mailimage"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/resend"
@@ -46,7 +47,10 @@ type Config struct {
 	Email     email.Config
 	// Google is the operator's OAuth client for connecting Gmail; with a setting missing, Gmail cannot be
 	// connected and the settings name what is missing.
-	Google      google.Config
+	Google google.Config
+	// ImportKeys holds the Freshdesk keys of in-app imports; the worker of the process shares it. Nil
+	// makes one from Google.Keys (tests).
+	ImportKeys  *importjobs.Keys
 	Attachments attachments.Storage
 	// MailImages fetches the remote images of incoming email for the image proxy; nil uses the
 	// production fetcher (public addresses only). MailImageConcurrency caps fetches running at once
@@ -168,6 +172,8 @@ type API struct {
 	// kbUploadStart lets one upload start at a time, so each disk check counts the uploads started
 	// before it (the server runs as one process).
 	kbUploadStart sync.Mutex
+	// imports starts and reads in-app imports; the worker in `collie serve` runs them.
+	imports *importjobs.Service
 	// mux serves every route; an approved agent request is replayed through it as the approver.
 	mux *http.ServeMux
 }
@@ -219,6 +225,12 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale())}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)
+	importKeys := config.ImportKeys
+	if importKeys == nil {
+		importKeys = importjobs.NewKeys(config.Google.Keys)
+	}
+	api.imports = importjobs.NewService(db, importKeys)
+	api.imports.SetClock(clock)
 	api.mailImageSigner = mailimage.NewSigner(api.mailImageKey())
 	api.mailImageFetcher = config.MailImages
 	if api.mailImageFetcher == nil {
@@ -388,6 +400,18 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/agent-requests/{id}/reject", auth.PermissionAuthenticated},
 		{http.MethodPost, "/api/v1/agent-requests/{id}/cancel", auth.PermissionAuthenticated},
 		{http.MethodPost, problemReportPath, auth.PermissionAuthenticated},
+		// The order is the contract fixture's: each case finds its job in the state it needs.
+		{http.MethodGet, "/api/v1/imports", auth.PermissionWorkspaceImport},
+		{http.MethodGet, "/api/v1/imports/{id}", auth.PermissionWorkspaceImport},
+		{http.MethodPut, "/api/v1/imports/{id}/key", auth.PermissionWorkspaceImport},
+		{http.MethodPost, "/api/v1/imports/{id}/cancel", auth.PermissionWorkspaceImport},
+		{http.MethodPost, "/api/v1/imports/{id}/start", auth.PermissionWorkspaceImport},
+		{http.MethodPost, "/api/v1/imports", auth.PermissionWorkspaceImport},
+		{http.MethodGet, "/api/v1/imports/{id}/report", auth.PermissionWorkspaceImport},
+		{http.MethodPost, "/api/v1/imports/{id}/undo", auth.PermissionWorkspaceImport},
+		{http.MethodGet, "/api/v1/imports/{id}/people", auth.PermissionWorkspaceImport},
+		{http.MethodPut, "/api/v1/imports/{id}/people/{externalId}/link", auth.PermissionWorkspaceImport},
+		{http.MethodDelete, "/api/v1/imports/{id}/people/{externalId}/link", auth.PermissionWorkspaceImport},
 	}
 }
 

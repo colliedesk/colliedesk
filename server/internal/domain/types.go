@@ -135,25 +135,29 @@ const (
 
 // ConversationOrigin records where an imported conversation came from.
 type ConversationOrigin struct {
-	System             string     `json:"system"`
-	ExternalID         string     `json:"external_id"`
-	Type               *string    `json:"type"`
-	Source             *string    `json:"source"`
-	DueAt              *time.Time `json:"due_at"`
-	FirstResponseDueAt *time.Time `json:"first_response_due_at"`
-	CC                 []string   `json:"cc"`
-	ForwardedTo        []string   `json:"forwarded_to"`
+	System     string `json:"system"`
+	ExternalID string `json:"external_id"`
+	// ResponderExternalID is the source agent the ticket was assigned to, for linking them later.
+	ResponderExternalID *string    `json:"responder_external_id,omitempty"`
+	Type                *string    `json:"type"`
+	Source              *string    `json:"source"`
+	DueAt               *time.Time `json:"due_at"`
+	FirstResponseDueAt  *time.Time `json:"first_response_due_at"`
+	CC                  []string   `json:"cc"`
+	ForwardedTo         []string   `json:"forwarded_to"`
 }
 
 // MessageOrigin records where an imported message came from and who it was addressed to.
 type MessageOrigin struct {
-	System     string   `json:"system"`
-	ExternalID string   `json:"external_id"`
-	Kind       string   `json:"kind"`
-	From       *string  `json:"from"`
-	To         []string `json:"to"`
-	CC         []string `json:"cc"`
-	BCC        []string `json:"bcc"`
+	System     string `json:"system"`
+	ExternalID string `json:"external_id"`
+	// AuthorExternalID is the source agent who wrote the item, for linking them later; nil for a customer.
+	AuthorExternalID *string  `json:"author_external_id,omitempty"`
+	Kind             string   `json:"kind"`
+	From             *string  `json:"from"`
+	To               []string `json:"to"`
+	CC               []string `json:"cc"`
+	BCC              []string `json:"bcc"`
 }
 
 type TimeEntry struct {

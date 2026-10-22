@@ -69,6 +69,32 @@ const targetExists = `CASE i.entity
 // tags it created that nothing else uses. A conversation that gained a
 // message after the import is kept with its ledger rows, so work done in
 // Colliedesk is never lost and a later import does not duplicate it.
+// Markdown is the undo as a person reads it: what was removed, and what stayed because the team
+// changed it since the import.
+func (u UndoResult) Markdown() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Freshdesk import undone\n\n- Source: %s\n- Conversations removed: %d\n- Contacts removed: %d\n- Tags removed: %d\n- Saved replies removed: %d\n- Stored files removed: %d\n",
+		u.Source, u.Conversations, u.Contacts, u.Tags, u.SavedReplies, u.Files)
+	fmt.Fprintf(&b, "- Knowledge base removed: %d articles, %d collections, %d images\n", u.KBArticles, u.KBCollections, u.KBImages)
+	kept := []struct {
+		what string
+		ids  []string
+	}{
+		{"Conversations kept because they have messages written after the import (Freshdesk ticket ids)", u.KeptConversationTickets},
+		{"Saved replies kept because an agent edited them (Freshdesk canned response ids)", u.KeptSavedReplies},
+		{"Articles kept because they were changed in Colliedesk (Freshdesk article ids)", u.KeptKBArticles},
+	}
+	for _, item := range kept {
+		if len(item.ids) > 0 {
+			fmt.Fprintf(&b, "- %s: %s\n", item.what, strings.Join(item.ids, ", "))
+		}
+	}
+	if u.KeptKBImages > 0 {
+		fmt.Fprintf(&b, "- Images kept because a person kept them in the media library: %d\n", u.KeptKBImages)
+	}
+	return b.String()
+}
+
 func Undo(ctx context.Context, pool *pgxpool.Pool, storage attachments.Storage, options UndoOptions) (UndoResult, error) {
 	db := database.New(pool)
 	workspaceID, err := db.WorkspaceIDBySlug(ctx, options.WorkspaceSlug)
