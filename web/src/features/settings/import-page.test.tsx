@@ -173,6 +173,16 @@ test('a finished import says where the old help center addresses and links lead 
   expect(within(section).getByText('Needs a look')).toBeInTheDocument();
 });
 
+test('links rewritten in translations are counted where they were', () => {
+  const links = {
+    status: 'OK', detail: [], help_center: 'https://acme.help.example.net',
+    old_addresses: { found: 4, redirected: 4, languages: ['es'], unmapped: [] },
+    rewritten: { articles: 2, translations: 1, saved_replies: 0, links: 4 }, left: [],
+  };
+  page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }), report: { status: 'OK', links } });
+  expect(screen.getByRole('region', { name: 'Old help center links' })).toHaveTextContent('4 Freshdesk links in 2 articles, 1 translation and 0 saved replies now point at the help center.');
+});
+
 test('without a help center address the links section names none', () => {
   const links = {
     status: 'UNVERIFIED', detail: [], help_center: '',

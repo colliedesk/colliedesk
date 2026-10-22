@@ -52,7 +52,7 @@ const countSchema = z.object({ source: z.number(), imported: z.number(), failed:
 const linksSchema = z.object({
   status: z.string(), detail: z.array(z.string()).nullable().optional(), help_center: z.string(),
   old_addresses: z.object({ found: z.number(), redirected: z.number() }).passthrough(),
-  rewritten: z.object({ articles: z.number(), saved_replies: z.number(), links: z.number() }),
+  rewritten: z.object({ articles: z.number(), translations: z.number().optional(), saved_replies: z.number(), links: z.number() }),
   left: z.array(z.object({ entity: z.string(), freshdesk_id: z.string(), url: z.string(), reason: z.string() })).nullable().optional(),
 }).passthrough();
 export const importReportSchema = z.object({

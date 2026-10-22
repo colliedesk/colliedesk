@@ -59,13 +59,22 @@ func (r *run) rewriteFreshdeskLinks(ctx context.Context) error {
 	}
 	report := &LinksReport{HelpCenter: site.address, OldAddresses: r.oldAddresses(targets, site.open), Left: []LeftLink{}}
 	found := false
+	// Each query reads the item's Freshdesk id (an article's and the language for a translation), its
+	// id (the article's for a translation), the language, the text and whether it is unchanged since
+	// the import. A translation follows its article: unchanged while the newest article version is the import's.
+	newestIsImport := `COALESCE((SELECT v.kind='import' FROM kb_article_versions v WHERE v.workspace_id=a.workspace_id AND v.article_id=a.id
+		ORDER BY v.version DESC LIMIT 1), false)`
 	for _, item := range []struct{ entity, sql string }{
-		{entityKBArticle, `SELECT i.source_id, a.id::text, a.body_md, COALESCE((SELECT v.kind='import' FROM kb_article_versions v
-				WHERE v.workspace_id=a.workspace_id AND v.article_id=a.id ORDER BY v.version DESC LIMIT 1), false)
+		{entityKBArticle, `SELECT i.source_id, a.id::text, '', a.body_md, ` + newestIsImport + `
 			FROM import_items i JOIN kb_articles a ON a.workspace_id=i.workspace_id AND a.id=i.target_id
 			WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_article' AND a.deleted_at IS NULL AND strpos(lower(a.body_md), '/support') > 0
 			ORDER BY length(i.source_id), i.source_id`},
-		{entitySavedReply, `SELECT i.source_id, s.id::text, s.body, s.updated_at=s.created_at
+		{entityKBTranslation, `SELECT i.source_id || ':' || t.locale, a.id::text, t.locale, t.body_md, ` + newestIsImport + `
+			FROM import_items i JOIN kb_articles a ON a.workspace_id=i.workspace_id AND a.id=i.target_id
+			JOIN kb_article_translations t ON t.workspace_id=a.workspace_id AND t.article_id=a.id
+			WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_article' AND a.deleted_at IS NULL AND strpos(lower(t.body_md), '/support') > 0
+			ORDER BY length(i.source_id), i.source_id, t.locale`},
+		{entitySavedReply, `SELECT i.source_id, s.id::text, '', s.body, s.updated_at=s.created_at
 			FROM import_items i JOIN saved_replies s ON s.workspace_id=i.workspace_id AND s.id=i.target_id
 			WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='saved_reply' AND s.deleted_at IS NULL AND strpos(lower(s.body), '/support') > 0
 			ORDER BY length(i.source_id), i.source_id`},
@@ -89,11 +98,12 @@ func (r *run) rewriteFreshdeskLinks(ctx context.Context) error {
 	return nil
 }
 
-// linkedItem is an imported article or saved reply whose text may hold old links; unchanged is true
-// while nobody changed it in Colliedesk since the import.
+// linkedItem is an imported article, translation (id is its article's, locale its language) or saved
+// reply whose text may hold old links; unchanged is true while nobody changed it in Colliedesk since
+// the import.
 type linkedItem struct {
-	sourceID, id, text string
-	unchanged          bool
+	sourceID, id, locale, text string
+	unchanged                  bool
 }
 
 func (r *run) linkedItems(ctx context.Context, sql string) ([]linkedItem, error) {
@@ -105,7 +115,7 @@ func (r *run) linkedItems(ctx context.Context, sql string) ([]linkedItem, error)
 		}
 		items, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (linkedItem, error) {
 			var item linkedItem
-			return item, row.Scan(&item.sourceID, &item.id, &item.text, &item.unchanged)
+			return item, row.Scan(&item.sourceID, &item.id, &item.locale, &item.text, &item.unchanged)
 		})
 		return err
 	})
@@ -155,12 +165,16 @@ func (r *run) rewriteItem(ctx context.Context, entity string, item linkedItem, s
 		case !written:
 			// Changed in Colliedesk between the read and the write.
 			left = append(left, LeftLink{Entity: entity, FreshdeskID: item.sourceID, URL: "(all links of this item)", Reason: LinkChangedInColliedesk})
-		case entity == entityKBArticle:
-			report.Rewritten.Articles++
-			report.Rewritten.Links += rewritten
 		default:
-			report.Rewritten.SavedReplies++
 			report.Rewritten.Links += rewritten
+			switch entity {
+			case entityKBArticle:
+				report.Rewritten.Articles++
+			case entityKBTranslation:
+				report.Rewritten.Translations++
+			default:
+				report.Rewritten.SavedReplies++
+			}
 		}
 	}
 	report.Left = append(report.Left, left...)
@@ -170,9 +184,12 @@ func (r *run) rewriteItem(ctx context.Context, entity string, item linkedItem, s
 func (r *run) writeLinks(ctx context.Context, entity string, item linkedItem, text string) (bool, error) {
 	var written bool
 	err := r.db.InWorkspace(ctx, r.workspaceID, func(tx pgx.Tx) (err error) {
-		if entity == entityKBArticle {
+		switch entity {
+		case entityKBArticle:
 			written, err = store.RewriteImportedKBArticleBody(ctx, tx, r.workspaceID, item.id, item.text, text)
-		} else {
+		case entityKBTranslation:
+			written, err = store.RewriteImportedKBTranslationBody(ctx, tx, r.workspaceID, item.id, item.locale, item.text, text)
+		default:
 			written, err = store.RewriteImportedSavedReplyBody(ctx, tx, r.workspaceID, item.id, item.text, text)
 		}
 		return err

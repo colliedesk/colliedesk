@@ -366,3 +366,78 @@ func TestOldHelpCenterHostReadsWhatAPersonTypes(t *testing.T) {
 		}
 	}
 }
+
+// withTranslationLinks makes the Spanish translation of article 101 link an imported article and one
+// nobody can import, below the portal's /es/ prefix.
+func (e *importEnv) withTranslationLinks() *importEnv {
+	api := e.fake.api.URL
+	e.withLinks()
+	links := e.fake.solutionsEdit
+	e.editSolutions(func(fixture map[string]any) {
+		links(fixture)
+		translation := fixture["translations"].(map[string]any)["es"].(map[string]any)["11"].([]any)[0].(map[string]any)
+		translation["description"] = `<p>Lea <a href="` + api + `/es/support/solutions/articles/104-use-the-api">la guía</a> y <a href="` + api + `/es/support/solutions/articles/999">otra</a>.</p>`
+	})
+	return e
+}
+
+func (e *importEnv) translationBody(t *testing.T, freshdeskID, locale string) string {
+	t.Helper()
+	var body string
+	if err := e.pool.QueryRow(context.Background(), `SELECT t.body_md FROM kb_article_translations t JOIN kb_articles a ON a.workspace_id=t.workspace_id AND a.id=t.article_id
+		WHERE t.workspace_id=$1 AND a.source_meta->>'freshdesk_id'=$2 AND t.locale=$3`, e.workspaceID, freshdeskID, locale).Scan(&body); err != nil {
+		t.Fatal(err)
+	}
+	return body
+}
+
+// Translations follow the article's rule: rewritten while nobody changed the article in Colliedesk,
+// listed otherwise, and never skipped without a word.
+func TestImportPointsLinksInTranslationsAtTheHelpCenter(t *testing.T) {
+	env := newImportEnv(t).withTranslationLinks()
+	env.setHelpCenter(t, true)
+	report := env.linkRun(t)
+	api := env.fake.api.URL
+	guide := fmt.Sprintf("%s/a/%d-use-the-api", helpCenterAddress, env.articleNumber(t, "104"))
+	if body := env.translationBody(t, "101", "es"); body != "Lea [la guía]("+guide+") y [otra]("+api+"/es/support/solutions/articles/999)." {
+		t.Errorf("translation = %q", body)
+	}
+	if want := (freshdesk.LinkRewrites{Articles: 2, Translations: 1, SavedReplies: 1, Links: 6}); report.Links.Rewritten != want {
+		t.Errorf("rewritten = %+v, want %+v", report.Links.Rewritten, want)
+	}
+	found := false
+	for _, link := range report.Links.Left {
+		if link.Entity == "kb_translation" && link.FreshdeskID == "101:es" && link.URL == api+"/es/support/solutions/articles/999" && link.Reason == freshdesk.LinkNotImported {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the translation's unimported link is not listed: %+v", report.Links.Left)
+	}
+	before := env.versions(t)
+	if again := env.linkRun(t); again.Links.Rewritten != (freshdesk.LinkRewrites{}) || env.versions(t) != before {
+		t.Errorf("rerun rewrote again: %+v", again.Links.Rewritten)
+	}
+}
+
+// Once a person changes the article, its translations are left and listed too.
+func TestImportLeavesTheTranslationsOfAChangedArticleAndListsThem(t *testing.T) {
+	changed := newImportEnv(t).withTranslationLinks()
+	changed.linkRun(t)
+	article := changed.kbArticles(t, changed.workspaceID)["101"]
+	changed.editArticle(t, article.ID, article.Body+"\n\nEdited here.")
+	changed.setHelpCenter(t, true)
+	second := changed.linkRun(t)
+	if body := changed.translationBody(t, "101", "es"); !strings.Contains(body, changed.fake.api.URL+"/es/support/solutions/articles/104-use-the-api") {
+		t.Errorf("the translation of a changed article was rewritten: %q", body)
+	}
+	left := 0
+	for _, link := range second.Links.Left {
+		if link.Entity == "kb_translation" && link.Reason == freshdesk.LinkChangedInColliedesk {
+			left++
+		}
+	}
+	if left != 2 {
+		t.Errorf("translation links left as changed = %d, want 2: %+v", left, second.Links.Left)
+	}
+}

@@ -38,16 +38,18 @@ type UnmappedAddress struct {
 	Reason string `json:"reason"`
 }
 
-// LinkRewrites counts what this run pointed at the new help center: articles and saved replies
-// changed, and links in them. A rerun finds them already pointing there and counts nothing.
+// LinkRewrites counts what this run pointed at the new help center: articles, translations and saved
+// replies changed, and links in them. A rerun finds them already pointing there and counts nothing.
 type LinkRewrites struct {
 	Articles     int `json:"articles"`
+	Translations int `json:"translations"`
 	SavedReplies int `json:"saved_replies"`
 	Links        int `json:"links"`
 }
 
 // LeftLink is a Freshdesk help center link left as written in an imported article (entity
-// kb_article) or saved reply (saved_reply), by the item's Freshdesk id.
+// kb_article), translation (kb_translation, Freshdesk id "<article id>:<language>") or saved reply
+// (saved_reply), by the item's Freshdesk id.
 type LeftLink struct {
 	Entity      string `json:"entity"`
 	FreshdeskID string `json:"freshdesk_id"`
@@ -133,8 +135,8 @@ func writeLinks(b *strings.Builder, l *LinksReport) {
 		languages = ", each also below /" + strings.Join(l.OldAddresses.Languages, "/, /") + "/"
 	}
 	fmt.Fprintf(b, "%d old addresses of the Freshdesk help center%s: %d redirect to a public page.\n", l.OldAddresses.Found, languages, l.OldAddresses.Redirected)
-	fmt.Fprintf(b, "Links pointed at the help center by this run: %d, in %d article(s) and %d saved reply(ies). Left as written: %d.\n",
-		l.Rewritten.Links, l.Rewritten.Articles, l.Rewritten.SavedReplies, len(l.Left))
+	fmt.Fprintf(b, "Links pointed at the help center by this run: %d, in %d article(s), %d translation(s) and %d saved reply(ies). Left as written: %d.\n",
+		l.Rewritten.Links, l.Rewritten.Articles, l.Rewritten.Translations, l.Rewritten.SavedReplies, len(l.Left))
 	for _, detail := range l.Detail {
 		fmt.Fprintf(b, "- %s\n", detail)
 	}
