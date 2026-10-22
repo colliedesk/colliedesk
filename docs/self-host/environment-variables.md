@@ -19,7 +19,8 @@ service of `compose.yaml`.
 | `KB_VIDEO_MAX_BYTES` | `209715200` (200 MiB) | The largest knowledge base video the server takes. Videos go up in parts of 8 MiB (see [running behind a proxy](running-behind-proxy.md#large-uploads)) and their files stay in `ATTACHMENTS_DIR` like attachments. |
 | `PROBLEM_REPORT_WORKSPACE` | empty | Send problem reports to a workspace on this server. See [problem reports](#problem-reports). |
 | `SMTP_*`, `EMAIL_FROM_POLICY`, `MAIL_FROM_*`, `EMAIL_TRUSTED_AUTHSERV_ID` | | Outgoing and incoming email. See [configuring email](email.md). |
-| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `MAILBOX_TOKEN_KEYS` | empty | Replies sent through a connected Gmail mailbox. See [send replies through Gmail](email.md#send-replies-through-gmail). |
+| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | empty | Replies sent through a connected Gmail mailbox. See [send replies through Gmail](email.md#send-replies-through-gmail). |
+| `MAILBOX_TOKEN_KEYS` | set by the installer on new installs; empty on older ones | Key ring that encrypts the stored Gmail access and the Freshdesk API key of an import running in the app: `k1:` followed by 32 random bytes in base64 (`k1:$(openssl rand -base64 32)`). Without it an import keeps its key in memory only, and after a restart someone enters the key again. Keep a copy; to change it, put the new key first (`k2:<new>,k1:<old>`), never replace it. See [send replies through Gmail](email.md#send-replies-through-gmail). |
 
 ## Usage report
 

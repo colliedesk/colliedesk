@@ -1,7 +1,7 @@
 # Presence: who has a conversation open
 
 Decisions and traps behind `PUT` / `DELETE /api/v1/conversations/{id}/presence` and the
-`conversation_presence` table (migration `20261022093123-conversation-presence`), issue #101.
+`conversation_presence` table (migration `20261022140000-conversation-presence`), issue #101.
 
 ## A poll, not a push channel
 

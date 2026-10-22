@@ -8,8 +8,9 @@ import "time"
 type fdAgent struct {
 	ID      int64 `json:"id"`
 	Contact struct {
-		Name  string `json:"name"`
-		Email string `json:"email"`
+		Name   string `json:"name"`
+		Email  string `json:"email"`
+		Active bool   `json:"active"`
 	} `json:"contact"`
 }
 

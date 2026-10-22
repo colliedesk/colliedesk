@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { Link, Navigate, Outlet, createRootRoute, redirect, createRoute, createRouter, useRouterState } from '@tanstack/react-router';
+import { Link, Navigate, Outlet, createRootRoute, redirect, createRoute, createRouter, useRouterState, useNavigate } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
 import { ContactsPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
@@ -9,7 +9,6 @@ import { RequestsRoute } from './features/requests/requests-route';
 import { usePendingRequests } from './features/requests/use-pending-requests';
 import { RedeemRoute } from './features/auth/redeem-route';
 import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent } from './features/settings/checkout-intent';
-import { SettingsRoute } from './features/settings/settings-route';
 import { SettingsNavLinkContext } from './features/settings/settings-nav';
 import type { NavItem } from './features/settings/settings-nav';
 import { AppShell } from './features/shell/app-shell';
@@ -24,7 +23,10 @@ import { resetProductAnalytics, useProductAnalytics } from './lib/product-analyt
 import { inboxQueryFromSearch } from './lib/inbox-query';
 
 // Billing, the locked screen and the trial survey are seen by few sessions, so they load from their own chunks.
+// Settings is its own chunk: the rail link starts loading it on hover and focus, and the inbox never waits for it.
+const settingsRoutePart = lazyPart(() => import('./features/settings/settings-route'));
 const billingRoutePart = lazyPart(() => import('./features/settings/billing-route'));
+const importRoutePart = lazyPart(() => import('./features/settings/import-route'));
 const lockedRoutePart = lazyPart(() => import('./features/shell/locked-route'));
 const trialSurveyPart = lazyPart(() => import('./features/shell/trial-survey'));
 
@@ -79,7 +81,8 @@ function AppLayout() {
         {waiting > 0 && <span className="rail-badge" aria-hidden="true">{waiting > 99 ? '99+' : waiting}</span>}</Link>
       <Link to="/knowledge" className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
         onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>
-      <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}><SettingsIcon /><span className="rail-label" aria-hidden="true">{messages.settings}</span></Link>
+      <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}
+        onPointerEnter={settingsRoutePart.preload} onFocus={settingsRoutePart.preload}><SettingsIcon /><span className="rail-label" aria-hidden="true">{messages.settings}</span></Link>
     </>}>
     <Outlet />
   </AppShell></SettingsNavLinkContext.Provider>;
@@ -159,7 +162,18 @@ const articleRoute = createRoute({
     return <Part part={kbPart} failed={kbFailed} render={({ ArticleRoute }) => <ArticleRoute key={articleId} articleId={articleId} />} />;
   },
 });
-const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsRoute });
+// While the chunk loads the page keeps its frame and title, so a slow network shows Settings at once and
+// nothing jumps when the sections arrive. A chunk that cannot load says so, with Reload page: a browser
+// keeps a failed import failed until the page loads again.
+function SettingsPage() {
+  const part = settingsRoutePart.use();
+  if (part.status === 'ready') return <part.module.SettingsRoute />;
+  return <main className="settings-page" aria-busy={part.status === 'loading'}>
+    <header><h1>{messages.settings}</h1><p>{messages.settingsDescription}</p></header>
+    {part.status === 'error' ? <PartUnavailable /> : <p role="status" className="muted-copy">{messages.loadingList}</p>}
+  </main>;
+}
+const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage });
 const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: RequestsRoute });
 const billingRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -185,6 +199,15 @@ const billingRoute = createRoute({
     return <Part part={billingRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ BillingRoute }) => <BillingRoute checkoutReturned={checkoutReturned} />} />;
   },
 });
+const importRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/import-freshdesk',
+  component: function Import() {
+    const navigate = useNavigate();
+    return <Part part={importRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ImportRoute }) => <ImportRoute onOpenInbox={() => void navigate({ to: '/' })}
+      onOpenBilling={() => void navigate({ to: '/settings/billing', search: { checkout: '' } })} />} />;
+  },
+});
 const signInRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sign-in',
@@ -201,7 +224,7 @@ const signInRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, signInRoute]);
+export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, importRoute, signInRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {
