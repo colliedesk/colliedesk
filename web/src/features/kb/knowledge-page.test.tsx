@@ -97,7 +97,7 @@ test('the trash restores an article with the version it shows', async () => {
   const calls = serve({ ...base,
     'GET /api/v1/kb/articles/trash': () => json(200, { items: [trashed], next_cursor: null }),
     'GET /api/v1/kb/collections/trash': () => json(200, { items: [] }),
-    'POST /api/v1/kb/articles/00000000-0000-4000-8000-000000000009/restore': () => json(200, { ...trashed, body_md: '', has_source_html: false, translations: [], deleted_at: null }) });
+    'POST /api/v1/kb/articles/00000000-0000-4000-8000-000000000009/restore': () => json(200, { ...trashed, body_md: '', has_source_html: false, translations: [], deleted_at: null, ai_exclusion: null }) });
   open();
   fireEvent.click(await screen.findByRole('button', { name: 'Trash' }));
   const panel = await screen.findByRole('region', { name: 'Deleted articles' });

@@ -133,7 +133,7 @@ export const messages = {
   restoreSavedReplyName: (title: string) => `Restore ${title}`,
   savedReplyDaysLeft: (days: number) => (days === 1 ? '1 day left' : `${days} days left`),
   savedReplyDeletedBy: (person: string) => `Deleted by ${person}`,
-  savedReplyChangeVerb: { baseline: 'State before history', create: 'Created', edit: 'Edited', delete: 'Deleted', restore: 'Restored', undelete: 'Restored from the trash', import: 'Imported', media_replace: 'Replaced an image or video' } as const,
+  savedReplyChangeVerb: { baseline: 'State before history', create: 'Created', edit: 'Edited', delete: 'Deleted', restore: 'Restored', undelete: 'Restored from the trash', import: 'Imported', media_replace: 'Replaced an image or video', ai_exclude: 'Excluded from AI', ai_include: 'Let AI use it again' } as const,
   savedReplyRestoredVersion: (version: number) => `Version ${version} restored`,
   savedReplyChangeBy: (what: string, person: string) => `${what} by ${person}`,
   savedReplyChangeVia: (text: string, token: string) => `${text} via ${token}`,

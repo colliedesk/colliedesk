@@ -257,6 +257,15 @@ span.kb-article-open { opacity: 0.35; }
 .kb-side-box .field small { font-size: var(--fs-label); }
 .kb-side-box .button-link { justify-self: start; }
 .kb-side-status { display: grid; gap: 4px; color: var(--text-2); font-size: var(--fs-small); }
+/* AI marks have no colour of their own: a mono "AI" chip (docs/internals/ai-retrieval.md). */
+.kb-ai-box h3 { display: flex; align-items: center; gap: var(--space-2); }
+.kb-ai-box button { justify-self: start; }
+.kb-ai-chip { display: inline-flex; align-items: center; height: 18px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-1); padding: 0 5px; color: var(--text-2); font: 600 10.5px/1 var(--font-mono); letter-spacing: 0.04em; text-transform: none; }
+.kb-ai-note { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface-0); padding: var(--space-2) var(--space-3); color: var(--text-2); font-size: var(--fs-small); }
+.kb-ai-note > svg { flex: none; }
+.kb-ai-note > span { flex: 1 1 20rem; min-width: 0; }
+.kb-ai-note strong { color: var(--text-1); font-weight: 600; }
+.kb-ai-note > button { margin-left: auto; }
 .kb-alt-warn { display: grid; gap: var(--space-2); border: 1px solid var(--note-line); border-radius: var(--radius-lg); background: var(--note-bg); color: var(--note-text); padding: var(--space-3); font-size: var(--fs-small); }
 .kb-alt-warn ul, .kb-alt-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
 .kb-alt-warn li, .kb-alt-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }

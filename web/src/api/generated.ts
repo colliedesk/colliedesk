@@ -1602,6 +1602,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/kb/articles/{id}/ai-exclusion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Keep the article away from AI, in every language: reply drafts and triage suggestions no longer read or quote it, from this call on. People and the help center still see it. The change is a version of the article (kind `ai_exclude`, who and when), and `ai_exclusion` says since when and by whom; the text and `updated_at` do not change, so nobody's open edit is refused. Excluding an excluded article changes nothing. Undo with DELETE. */
+        post: operations["excludeKBArticleFromAI"];
+        /** @description Let AI read the article again (a version of kind `ai_include`). A published article is found again within seconds. Including an article that is not excluded changes nothing. */
+        delete: operations["includeKBArticleInAI"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/kb/articles/{id}/versions": {
         parameters: {
             query?: never;
@@ -2789,10 +2809,10 @@ export interface components {
         KBArticleChange: {
             version: number;
             /**
-             * @description restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone.
+             * @description restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone; ai_exclude, ai_include: AI was kept away from the article, or let read it again (the text did not change).
              * @enum {string}
              */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace";
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include";
             /** @description The version a restore copied. */
             restored_from_version: number | null;
             /** @description The person who made the change (or approved the agent request that made it); null for an import or a removed person. */
@@ -2839,6 +2859,12 @@ export interface components {
              */
             url: string;
         };
+        KBArticleAIExclusion: {
+            /** Format: date-time */
+            at: string;
+            /** @description Who excluded it; null when that person was removed. */
+            by: null | components["schemas"]["SavedReplyPerson"];
+        };
         KBArticleTranslation: {
             locale: string;
             title: string;
@@ -2879,6 +2905,8 @@ export interface components {
              * @description Set while the article is in the trash.
              */
             deleted_at: string | null;
+            /** @description Null while AI may read the article (when it is published); set while it is excluded from AI. */
+            ai_exclusion: null | components["schemas"]["KBArticleAIExclusion"];
             /** @description Only in the answer to a save: ids the text names that no item of the media library has (it was purged, or never existed), shown as "Media no longer exists". The save went through. */
             missing_media?: string[];
         };
@@ -2917,7 +2945,7 @@ export interface components {
         KBArticleVersion: {
             version: number;
             /** @enum {string} */
-            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace";
+            kind: "create" | "edit" | "delete" | "restore" | "undelete" | "import" | "media_replace" | "ai_exclude" | "ai_include";
             restored_from_version: number | null;
             changed_by: null | components["schemas"]["SavedReplyPerson"];
             token: null | {
@@ -7290,6 +7318,58 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+        };
+    };
+    excludeKBArticleFromAI: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The article, excluded from AI */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    includeKBArticleInAI: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The article, readable by AI */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KBArticle"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listKBArticleVersions: {

@@ -7,6 +7,7 @@ import { messages } from '../../messages';
 import { RouterLink } from '../../ui/router-link';
 import { Part, PartUnavailable } from '../../ui/lazy-part';
 import { SavedReplyHistory } from '../settings/saved-reply-panels';
+import { ArticleAIBox, ArticleAINote } from './article-ai';
 import type { EditorHandle, UploadHooks, ViewMode } from './editor/codemirror-editor';
 import { editorPart } from './editor-part';
 import { kbApi } from './kb-api';
@@ -362,6 +363,14 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     void refresh();
   };
 
+  // Excluding from AI or including again changes neither the text nor updated_at, so an edit in progress stays.
+  const aiChanged = (changed: KBArticle, text: string) => {
+    setBase(changed);
+    client.setQueryData(['kb-article', changed.id], changed);
+    setNotice(text);
+    void refresh();
+  };
+
   const status = base?.status ?? 'draft';
   const heading = base ? kbMessages.editArticleHeading(base.title) : kbMessages.newArticleHeading;
   const phone = usePhone();
@@ -415,6 +424,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         {isPublic === false && <RouterLink className="button-link" href="/settings#help-center-heading" onFollow={() => void navigate({ to: '/settings', hash: 'help-center-heading' })}>
           <Icon name="globe" />{kbMessages.turnOnHelpCenter}</RouterLink>}
       </section>
+      {base && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
       {missing.length > 0 && <section className="kb-alt-warn" aria-labelledby={`${id}-alt-warn`}>
         <strong id={`${id}-alt-warn`}>{kbMessages.imagesWithoutAlt(missing.length)}</strong>
         <span>{kbMessages.imagesWithoutAltHelp}</span>
@@ -462,7 +472,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           </span>
         </>}
       </header>
-      {(conflict || problem || tooLong || uploading > 0 || imageProblems.length > 0 || base?.has_source_html) && <div className="kb-editor-notes">
+      {(conflict || problem || tooLong || uploading > 0 || imageProblems.length > 0 || base?.has_source_html || base?.ai_exclusion) && <div className="kb-editor-notes">
+        {base?.ai_exclusion && <ArticleAINote article={base} onChanged={aiChanged} />}
         {conflict && <div role="alert" className="warning-note kb-conflict">
           <p>{kbMessages.changedElsewhere}</p>
           <div className="button-row">
@@ -545,10 +556,10 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
       {altFor && <AltDialog image={altFor} library={missingNames[missing.findIndex((each) => each.markdown === altFor.markdown)]?.data}
         onSave={(alt) => { handle?.replace(altFor.markdown, altFor.markdown.replace(/^!\[\s*\]/, `![${alt.replace(/[[\]\\\n]/g, ' ')}]`)); setAltFor(undefined); }}
         onClose={() => setAltFor(undefined)} />}
-      {/* key: a save or a restore adds a version, so an open history loads again. */}
+      {/* key: a save, a restore or an AI exclusion adds a version, so an open history loads again. */}
       {base && historyOpen && <KBDialog title={kbMessages.versionHistory} className="kb-history" phone="full" closeLabel={kbMessages.closeHistory}
         onClose={() => setHistoryOpen(false)}>
-        <SavedReplyHistory<KBArticleVersion> key={base.updated_at} title={base.title} timezone={timezone} load={(before) => kbApi.versions(base.id, before)}
+        <SavedReplyHistory<KBArticleVersion> key={`${base.updated_at}-${base.last_change?.version}`} title={base.title} timezone={timezone} load={(before) => kbApi.versions(base.id, before)}
           text={(version) => version.body_md} changes={versionChanges} failedMessage={kbMessages.articleActionFailed}
           onRestore={restoreVersion} onClose={() => setHistoryOpen(false)} />
       </KBDialog>}
