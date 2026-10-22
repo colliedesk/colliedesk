@@ -59,16 +59,18 @@ func Compose(message Outgoing) ([]byte, error) {
 			fmt.Fprintf(&buffer, "%s: %s\r\n", name, value)
 		}
 	}
+	// A long non-Latin name encodes to many encoded words; folded between them, every line stays
+	// under the 998-byte limit of RFC 5322.
 	from := &mail.Address{Name: cleanLine(message.FromName), Address: message.FromAddress}
-	header("From", from.String())
-	header("To", (&mail.Address{Name: cleanLine(message.ToName), Address: message.ToAddress}).String())
+	header("From", foldEncodedWords(from.String()))
+	header("To", foldEncodedWords((&mail.Address{Name: cleanLine(message.ToName), Address: message.ToAddress}).String()))
 	header("Cc", strings.Join(message.Cc, ", "))
 	if message.ReplyTo != "" {
 		name := from.Name
 		if message.ReplyToName != "" {
 			name = cleanLine(message.ReplyToName)
 		}
-		header("Reply-To", (&mail.Address{Name: name, Address: message.ReplyTo}).String())
+		header("Reply-To", foldEncodedWords((&mail.Address{Name: name, Address: message.ReplyTo}).String()))
 	}
 	header("Subject", foldEncodedWords(mime.QEncoding.Encode("utf-8", subjectFor(message))))
 	header("Date", message.Date.UTC().Format(time.RFC1123Z))

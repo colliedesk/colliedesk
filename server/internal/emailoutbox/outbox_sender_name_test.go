@@ -85,3 +85,31 @@ func assertSenderName(t *testing.T, parsed *mail.Message, wantFrom string) {
 		t.Error("the workspace name reached the customer")
 	}
 }
+
+// A sender name with Vietnamese diacritics reaches the customer exactly, in From and in Reply-To.
+func TestAVietnameseSenderNameIsReadBackExactly(t *testing.T) {
+	const name = "Hỗ trợ khách hàng"
+	f := newFixture(t)
+	f.exec(t, `UPDATE email_channels SET sender_name=$2,domain_verified_at=now() WHERE workspace_id=$1`, f.workspaceID, name)
+	server := startSMTPServer(t)
+	clock := time.Now().UTC().Add(time.Second)
+	worker := newWorker(f, server, &clock, func(options *emailoutbox.Options) {
+		options.FromPolicy, options.MailFromDomain = email.FromPolicyVerified, "mail.colliedesk.test"
+	})
+	reply := f.write(t, "outgoing", "Xin chào.")
+	process(t, worker)
+	received := server.mail()
+	if len(received) != 1 {
+		t.Fatalf("want one mail, got %d (delivery %+v)", len(received), f.delivery(t, reply.ID))
+	}
+	parsed, err := mail.ReadMessage(strings.NewReader(received[0].Data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"From", "Reply-To"} {
+		address, err := mail.ParseAddress(parsed.Header.Get(field))
+		if err != nil || address.Name != name {
+			t.Errorf("%s=%q read back as %+v (err %v), want the name %q", field, parsed.Header.Get(field), address, err, name)
+		}
+	}
+}
