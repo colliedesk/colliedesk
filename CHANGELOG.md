@@ -31,6 +31,9 @@ API changes in the email view (the full notes will be on the releases page):
   mail does not change until an admin edits it; replies no longer use the workspace name.
 - New route `PATCH /workspace/name` (admin) renames the workspace: 1 to 100 characters, no control
   characters. It does not change any email channel's `sender_name`.
+- New operator command `collie email sender-name [--by <name>] <workspace slug> <name>` sets a sender
+  name that the brand check of Colliedesk Cloud refuses through the API, for the brand's owner. It
+  checks the name as the API does and skips only the brand check.
 
 ## 0.0.1
 

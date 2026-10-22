@@ -282,7 +282,8 @@ and billing are both configured, so a self-hosted server never offers it. Code:
   a whole word, never a substring). A real business named like a brand (`Apple Orchard`) is
   refused too: it contacts us and an operator creates the workspace with the CLI, which has no
   such check. Digit-for-letter spellings (`paypa1`) are not caught. The same check runs on
-  `PATCH /workspace/slug` when billing is on.
+  `PATCH /workspace/slug` and on `sender_name` in `PUT /channels/email` when billing is on. For a sender
+  name the operator's escape hatch is `collie email sender-name`, which skips only this check.
 - **Slug.** Derived from the name (runs of hyphens collapse, so it can never start with the reserved
   `xn--`); every candidate is checked as a hosted label; if it is taken, reserved for mail (`support`, `help`) or empty it
   becomes `<base>-<4 hex>`, tried up to twice more, then 409 `slug_unavailable`.

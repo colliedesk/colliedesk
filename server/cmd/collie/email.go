@@ -11,15 +11,18 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const emailUsage = "usage: collie email resume <workspace slug> | collie email release-domain [--by <name>] <domain>"
+const emailUsage = "usage: collie email resume <workspace slug> | collie email release-domain [--by <name>] <domain>" +
+	" | collie email sender-name [--by <name>] <workspace slug> <name>"
 
 // emailCommand is the operator's side of the email controls. Admins cannot lift a sending pause
 // themselves, because the pause exists when their own mail drew complaints, nor take a domain away from
-// the workspace that holds it verified.
+// the workspace that holds it verified. The operator also sets a sender name the hosted cloud refuses
+// through the API because it names a brand, for the brand's genuine owner.
 func emailCommand(ctx context.Context, pool *pgxpool.Pool, args []string, output io.Writer) error {
 	if len(args) == 0 {
 		return errors.New(emailUsage)
@@ -32,6 +35,8 @@ func emailCommand(ctx context.Context, pool *pgxpool.Pool, args []string, output
 		return resumeEmail(ctx, pool, args[1], output)
 	case "release-domain":
 		return releaseDomain(ctx, pool, args[1:], output)
+	case "sender-name":
+		return setSenderName(ctx, pool, args[1:], output)
 	}
 	return errors.New(emailUsage)
 }
@@ -81,5 +86,50 @@ func releaseDomain(ctx context.Context, pool *pgxpool.Pool, args []string, outpu
 	slog.Warn("verified email domain released", "domain", name, "workspace", released.WorkspaceID, "slug", released.Slug, "provider_domain", released.ProviderDomainID, "by", operator)
 	_, err = fmt.Fprintf(output, "Released %s from workspace %s (by %s). Its provider domain is queued for deletion and that workspace sends from the platform address now. The owner can verify the domain.\n",
 		name, released.Slug, operator)
+	return err
+}
+
+// setSenderName sets the name customers see in the From line of the workspace's replies. It checks the
+// name as the API does but not against the brand denylist: the operator has confirmed the workspace owns
+// the brand.
+func setSenderName(ctx context.Context, pool *pgxpool.Pool, args []string, output io.Writer) error {
+	flags := flag.NewFlagSet("email sender-name", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	by := flags.String("by", "", "who makes the change (default: the operating system user)")
+	if err := flags.Parse(args); err != nil || flags.NArg() != 2 {
+		return errors.New(emailUsage)
+	}
+	slug := flags.Arg(0)
+	name, ok := domain.NormalizeHeaderName(flags.Arg(1))
+	if !ok {
+		return errors.New("the sender name must be 1 to 100 characters without line breaks or other control characters")
+	}
+	operator, err := operatorName(*by)
+	if err != nil {
+		return err
+	}
+	workspaceID, err := database.New(pool).WorkspaceIDBySlug(ctx, slug)
+	if err != nil {
+		return err
+	}
+	data := store.New(pool)
+	before, err := data.GetEmailChannel(ctx, workspaceID)
+	if err != nil {
+		return err
+	}
+	noChannel := fmt.Errorf("workspace %s has no email channel; an admin saves a support address first", slug)
+	if before == nil {
+		return noChannel
+	}
+	channel, err := data.SetEmailSenderName(ctx, workspaceID, name)
+	if errors.Is(err, store.ErrEmailChannelMissing) {
+		return noChannel
+	}
+	if err != nil {
+		return err
+	}
+	slog.Warn("email sender name set by the operator", "workspace", workspaceID, "slug", slug, "from", before.SenderName, "to", channel.SenderName, "by", operator)
+	_, err = fmt.Fprintf(output, "Sender name of %s changed from %q to %q (by %s). The next reply uses it.\n",
+		slug, before.SenderName, channel.SenderName, operator)
 	return err
 }
