@@ -146,8 +146,9 @@ func update(ctx context.Context, db *database.DB, item claimed, sql string, args
 	return updateAnd(ctx, db, item, nil, sql, args...)
 }
 
-// updateAnd is update with more writes in the same transaction, made only while the claim holds.
-func updateAnd(ctx context.Context, db *database.DB, item claimed, also func(pgx.Tx) error, sql string, args ...any) error {
+// updateAnd is update with more writes in the same transaction, made only while the claim holds. also
+// gets the context the transaction runs under.
+func updateAnd(ctx context.Context, db *database.DB, item claimed, also func(context.Context, pgx.Tx) error, sql string, args ...any) error {
 	return db.InWorkspace(ctx, item.workspaceID, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE import_jobs SET `+sql+` WHERE workspace_id=$1 AND id=$2 AND claim_token=$3`,
 			append([]any{item.workspaceID, item.id, item.token}, args...)...)
@@ -158,7 +159,7 @@ func updateAnd(ctx context.Context, db *database.DB, item claimed, also func(pgx
 			return errLeaseLost
 		}
 		if also != nil {
-			return also(tx)
+			return also(ctx, tx)
 		}
 		return nil
 	})

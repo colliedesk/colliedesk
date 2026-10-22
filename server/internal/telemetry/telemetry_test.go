@@ -458,6 +458,24 @@ func fixture(t *testing.T, db *database.DB) (acme, beta string) {
 	exec(`INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,sender_name) VALUES($1,'support@beta.example','token','Beta')`, b.ID)
 	exec(`INSERT INTO web_form_channels(workspace_id,enabled) VALUES($1,false)`, a.ID)
 	exec(`INSERT INTO import_items(workspace_id,source,entity,source_id,status) VALUES($1,'freshdesk:account:42','ticket','1','done')`, a.ID)
+	// Acme's first import report was ready 1 hour 30 minutes 20 seconds after sign-up; a later import
+	// does not move it. A preview, a failed import, an import still running, a report being retried
+	// (retry_wait) and an undo ended earlier, but none is an import report ready. Beta's came 2 days 5 seconds after
+	// its sign-up: each workspace counts from its own.
+	job := func(workspaceID, kind, state, status, finished string) {
+		exec(`INSERT INTO import_jobs(workspace_id,kind,source,domain,state,phase,status,undo_of,finished_at)
+			SELECT w.id,$2::text,'freshdesk','acme.freshdesk.com',$3::text,CASE $2::text WHEN 'undo' THEN 'undo' ELSE 'full' END,NULLIF($4,''),
+				CASE $2::text WHEN 'undo' THEN (SELECT id FROM import_jobs WHERE workspace_id=w.id AND kind='import' AND state='finished' ORDER BY finished_at LIMIT 1) END,
+				w.created_at+NULLIF($5,'')::interval
+			FROM workspaces w WHERE w.id=$1`, workspaceID, kind, state, status, finished)
+	}
+	job(a.ID, "import", "previewed", "", "")
+	job(a.ID, "import", "failed", "", "10 minutes")
+	job(a.ID, "import", "retry_wait", "", "")
+	job(a.ID, "import", "finished", "UNVERIFIED", "1 hour 30 minutes 20 seconds")
+	job(a.ID, "import", "finished", "OK", "3 hours")
+	job(a.ID, "undo", "finished", "", "5 minutes")
+	job(b.ID, "import", "finished", "FAILED", "2 days 5 seconds")
 	return a.ID, b.ID
 }
 
@@ -497,6 +515,11 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 	db := newDB(t)
 	acme, beta := fixture(t, db)
 	execSQL(t, db, `UPDATE web_form_channels SET enabled = true WHERE workspace_id = $1`, acme)
+	// Gamma signed up and has imported nothing yet.
+	gamma, _, err := auth.NewWithDB(db, "https://help.acme.com").CreateWorkspace(context.Background(), "Gamma Desk", "owner-g@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
 	recorded := &capture{}
 	server := recorded.server(t)
 
@@ -513,8 +536,8 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 	if err := json.Unmarshal(recorded.bodyAt(t, "POST /batch/"), &sent); err != nil {
 		t.Fatal(err)
 	}
-	if sent.APIKey != "phc_test" || len(sent.Batch) != 2 {
-		t.Fatalf("batch = key %q with %d events, want phc_test with 2", sent.APIKey, len(sent.Batch))
+	if sent.APIKey != "phc_test" || len(sent.Batch) != 3 {
+		t.Fatalf("batch = key %q with %d events, want phc_test with 3", sent.APIKey, len(sent.Batch))
 	}
 	byWorkspace := map[string]heartbeat{}
 	for _, event := range sent.Batch {
@@ -541,7 +564,8 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 			"replies_7d": float64(1), "replies_30d": float64(2), "ai_agent_replies_7d": float64(1),
 			"conversations_open": float64(1), "conversations_created_7d": float64(1),
 			"email_channel": false, "web_form": true, "tokens_active": float64(1), "freshdesk_import": true,
-			"workspace_name": "Acme Support", "workspace_slug": "acme-support",
+			"time_to_first_result_seconds": float64(5420),
+			"workspace_name":               "Acme Support", "workspace_slug": "acme-support",
 		},
 		beta: {
 			"plan": "team", "trial_days_left": nil, "days_since_created": float64(45),
@@ -549,8 +573,10 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 			"replies_7d": float64(0), "replies_30d": float64(0), "ai_agent_replies_7d": float64(0),
 			"conversations_open": float64(0), "conversations_created_7d": float64(0),
 			"email_channel": true, "web_form": false, "tokens_active": float64(0), "freshdesk_import": false,
-			"workspace_name": "Beta Help", "workspace_slug": "beta-help",
+			"time_to_first_result_seconds": float64(172805),
+			"workspace_name":               "Beta Help", "workspace_slug": "beta-help",
 		},
+		gamma.ID: {"freshdesk_import": false, "time_to_first_result_seconds": nil, "workspace_name": "Gamma Desk"},
 	}
 	for id, fields := range want {
 		event, ok := byWorkspace[id]
@@ -566,7 +592,7 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 			t.Errorf("workspace %s realm/version/$process_person_profile = %#v/%#v/%#v", id, event.Properties["realm"], event.Properties["version"], event.Properties["$process_person_profile"])
 		}
 		// The fields are exactly the ones docs/user/telemetry.md lists; a new one needs the docs first.
-		const listed = "$process_person_profile,agents_active_30d,agents_active_7d,agents_total,ai_agent_replies_7d,conversations_created_7d,conversations_open,days_since_created,email_channel,freshdesk_import,plan,realm,replies_30d,replies_7d,tokens_active,trial_days_left,version,web_form,workspace_name,workspace_slug"
+		const listed = "$process_person_profile,agents_active_30d,agents_active_7d,agents_total,ai_agent_replies_7d,conversations_created_7d,conversations_open,days_since_created,email_channel,freshdesk_import,plan,realm,replies_30d,replies_7d,time_to_first_result_seconds,tokens_active,trial_days_left,version,web_form,workspace_name,workspace_slug"
 		if got := keys(event.Properties); got != listed {
 			t.Errorf("workspace %s property keys = %s, want %s", id, got, listed)
 		}
