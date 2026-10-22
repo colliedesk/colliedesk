@@ -214,20 +214,21 @@ func TestTheServerProviderStopsAtTheMonthlyAllowance(t *testing.T) {
 	q.turnOn(t, q.a, ai.SlotDraft)
 	first := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
 	q.tick(t)
+	// One at a time: two calls running at once may both start under the allowance (the docs say the
+	// last calls of a month can go slightly past), so the test must not depend on their order.
 	second := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
+	q.tick(t)
 	third := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
 	q.tick(t)
 	if state, _ := q.state(t, first); state != ai.TaskDone {
 		t.Fatalf("first = %s", state)
 	}
-	refused := 0
-	for _, id := range []string{second, third} {
-		if state, code := q.state(t, id); state == ai.TaskFailed && code == ai.CodeAllowanceReached {
-			refused++
-		}
+	// 70 of 100 spent: the second starts and spends 70 more; the third is refused.
+	if state, _ := q.state(t, second); state != ai.TaskDone {
+		t.Fatalf("second = %s", state)
 	}
-	if refused == 0 {
-		t.Fatal("no task was refused once the allowance was spent")
+	if state, code := q.state(t, third); state != ai.TaskFailed || code != ai.CodeAllowanceReached {
+		t.Fatalf("third = %s %s, want refused once the allowance was spent", state, code)
 	}
 	if n := q.count(t, `SELECT count(*) FROM ai_usage WHERE workspace_id=$1`, q.a.id); n > 2 {
 		t.Fatalf("%d calls went out; a refused task sends nothing", n)
