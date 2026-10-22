@@ -34,3 +34,22 @@ test('a later action clears what an earlier one said', async () => {
   await waitFor(() => expect(imports.cancel).toHaveBeenCalled());
   await waitFor(() => expect(screen.queryByText(/already queued/)).not.toBeInTheDocument());
 });
+
+test('discarding the preview just asked for gives the page back to the import before it', async () => {
+  const done = { ...previewed, id: '22222222-2222-4222-8222-222222222222', state: 'finished', phase: 'full', status: 'OK', has_report: true, imported_conversations: 3 };
+  const fresh = { ...previewed, imported_conversations: null };
+  imports.list.mockResolvedValueOnce({ items: [done] }).mockResolvedValue({ items: [fresh, done] });
+  imports.report.mockResolvedValue({ status: 'OK' });
+  imports.preview.mockResolvedValue(fresh);
+  imports.cancel.mockImplementation(async () => {
+    imports.list.mockResolvedValue({ items: [{ ...fresh, state: 'discarded' }, done] });
+    return { ...fresh, state: 'discarded' };
+  });
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ImportRoute /></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: 'New import' }));
+  fireEvent.change(screen.getByLabelText('Freshdesk address'), { target: { value: 'acme.freshdesk.com' } });
+  fireEvent.change(screen.getByLabelText('API key of a Freshdesk admin'), { target: { value: 'k' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Read account' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Discard' }));
+  expect(await screen.findByRole('button', { name: 'Undo import' })).toBeInTheDocument();
+});
