@@ -452,17 +452,40 @@ func TestPresenceRefusesATabThatAnnouncesTooOften(t *testing.T) {
 	if response := request(t, d.api, http.MethodPut, presencePath(d.conversation), body, d.teammate, nil); response.Code != http.StatusOK {
 		t.Fatalf("first announce status=%d", response.Code)
 	}
-	// A token, or a script, calling again at once writes nothing: 429 with Retry-After, the row as it was.
+	// A token, or a script, repeating itself at once writes nothing: 429 with Retry-After, the row as it was.
 	d.clock.set(start.Add(1900 * time.Millisecond))
-	writing := map[string]any{"client_id": "lan-tab-one", "writing": true}
-	response := request(t, d.api, http.MethodPut, presencePath(d.conversation), writing, d.teammate, nil)
+	response := request(t, d.api, http.MethodPut, presencePath(d.conversation), body, d.teammate, nil)
 	if response.Code != http.StatusTooManyRequests || response.Header().Get("Retry-After") != "2" || !strings.Contains(response.Body.String(), "too_many_requests") {
 		t.Fatalf("announce after 1.9 s status=%d retry=%q body=%s", response.Code, response.Header().Get("Retry-After"), response.Body.String())
 	}
-	var seen time.Time
-	var since *time.Time
-	if err := d.pool.QueryRow(context.Background(), `SELECT seen_at,writing_since FROM conversation_presence WHERE client_id='lan-tab-one'`).Scan(&seen, &since); err != nil || !seen.Equal(start) || since != nil {
-		t.Fatalf("row after the refused announce: seen %v writing %v err %v", seen, since, err)
+	row := func() (time.Time, *time.Time) {
+		var seen time.Time
+		var since *time.Time
+		if err := d.pool.QueryRow(context.Background(), `SELECT seen_at,writing_since FROM conversation_presence WHERE client_id='lan-tab-one'`).Scan(&seen, &since); err != nil {
+			t.Fatal(err)
+		}
+		return seen, since
+	}
+	if seen, since := row(); !seen.Equal(start) || since != nil {
+		t.Fatalf("row after the refused announce: seen %v writing %v", seen, since)
+	}
+	// Starting a reply is said at once, even right after a heartbeat; flipping it back and forth in a loop
+	// is not: within half a second the change is refused too.
+	writing := map[string]any{"client_id": "lan-tab-one", "writing": true}
+	d.clock.set(start.Add(600 * time.Millisecond))
+	if response := request(t, d.api, http.MethodPut, presencePath(d.conversation), writing, d.teammate, nil); response.Code != http.StatusOK {
+		t.Fatalf("starting a reply 0.6 s after a heartbeat status=%d", response.Code)
+	}
+	if seen, since := row(); !seen.Equal(start.Add(600*time.Millisecond)) || since == nil {
+		t.Fatalf("row after the reply started: seen %v writing %v", seen, since)
+	}
+	d.clock.set(start.Add(1000 * time.Millisecond))
+	if response := request(t, d.api, http.MethodPut, presencePath(d.conversation), body, d.teammate, nil); response.Code != http.StatusTooManyRequests {
+		t.Fatalf("ending it 0.4 s later status=%d, want 429", response.Code)
+	}
+	d.clock.set(start.Add(1200 * time.Millisecond))
+	if response := request(t, d.api, http.MethodPut, presencePath(d.conversation), body, d.teammate, nil); response.Code != http.StatusOK {
+		t.Fatalf("ending it 0.6 s later status=%d", response.Code)
 	}
 	// Opening another conversation is a new place, not a repeat; and 2 seconds later the same one is fine.
 	contact := create(t, d.api, d.admin, "/api/v1/contacts", map[string]any{"name": "Second", "email": "second@presence.example.com"})

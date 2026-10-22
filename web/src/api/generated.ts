@@ -449,7 +449,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** @description Says that the caller has this conversation open, and whether its reply box holds a reply not sent yet (`writing`; the text itself is never sent). The answer lists the other people and AI agents who have it open, so one call both announces and reads. A browser tab calls it every `heartbeat_seconds` while the conversation is open; a row not renewed in time disappears on its own (15 seconds for viewing, 150 seconds with a reply not sent yet, 2 minutes for an agent token, which does not call on a schedule). `client_id` names one tab: a person with two tabs open has two rows and is listed once. Changes nothing a customer or a teammate wrote, so the read tier is enough for an agent token. */
+        /** @description Says that the caller has this conversation open, and whether its reply box holds a reply not sent yet (`writing`; the text itself is never sent). The answer lists the other people and AI agents who have it open, so one call both announces and reads. A browser tab calls it every `heartbeat_seconds` while the conversation is open; a row not renewed in time disappears on its own (15 seconds for viewing, 150 seconds with a reply not sent yet, 2 minutes for an agent token, which does not call on a schedule). `client_id` names one tab: a person with two tabs open has two rows and is listed once. One tab announces one conversation at most every 2 seconds, and a call that starts or ends a reply (`writing` changes) at most every half second: a quicker call is answered 429 `too_many_requests` with `Retry-After` and changes nothing. Changes nothing a customer or a teammate wrote, so the read tier is enough for an agent token. */
         put: operations["putConversationPresence"];
         post?: never;
         delete?: never;
@@ -4476,6 +4476,16 @@ export interface operations {
             402: components["responses"]["WorkspaceLocked"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description This tab announced this conversation too recently (2 seconds, half a second to start or end a reply); nothing changed */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     deleteConversationPresence: {
