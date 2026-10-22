@@ -221,3 +221,36 @@ test('knowledge base: a WebM uploaded in the media library plays in a published 
   expect(range.status()).toBe(206);
   expect(range.headers()['content-type']).toBe('video/webm');
 });
+
+test('knowledge base: an article excluded from AI says since when and by whom, keeps it after a reload, shows it in the history, and lets AI read it again', async ({ page }) => {
+  const suffix = `${Date.now()}-${process.pid}`;
+  const { url } = createWorkspaceWithSlug(`KB AI ${suffix}`, `admin-${suffix}@example.com`);
+  await page.goto(url);
+  await page.getByRole('button', { name: 'Continue to Colliedesk' }).click();
+  await expect(page).toHaveURL(`${servers.main}/`);
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Knowledge' }).click();
+  const newCollection = page.getByRole('form', { name: 'New collection' });
+  await newCollection.getByRole('textbox', { name: 'Name' }).fill('Billing');
+  await newCollection.getByRole('button', { name: 'Create collection' }).click();
+  await page.getByRole('link', { name: 'New article' }).click();
+  await page.getByRole('textbox', { name: 'Title' }).fill('Internal refund rules');
+  await page.getByRole('textbox', { name: 'Text (Markdown)' }).click();
+  await page.keyboard.type('Refunds above 100 need a second approval.');
+  await page.getByRole('button', { name: 'Save and publish' }).click();
+  await expect(page).toHaveURL(/\/knowledge\/articles\/[0-9a-f-]{36}$/);
+
+  const box = page.getByRole('region', { name: 'Used by AI' });
+  await expect(box).toContainText('Drafts and suggestions can quote this article.');
+  await box.getByRole('button', { name: 'Exclude from AI' }).click();
+  await expect(box).toContainText(/Off for this article since .+, by /);
+  await expect(page.getByText('AI does not read this article.')).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Used by AI' }).getByRole('button', { name: 'Let AI use it again' })).toBeVisible();
+  await page.getByRole('button', { name: 'More article actions' }).click();
+  await page.getByRole('menuitem', { name: 'Version history' }).click();
+  await expect(page.getByRole('dialog', { name: 'Version history' })).toContainText('Excluded from AI');
+  await page.getByRole('button', { name: 'Close history' }).click();
+  await page.locator('.kb-ai-note').getByRole('button', { name: 'Let AI use it again' }).click();
+  await expect(page.getByRole('region', { name: 'Used by AI' }).getByRole('button', { name: 'Exclude from AI' })).toBeVisible();
+  await expect(page.getByText('AI does not read this article.')).toHaveCount(0);
+});
