@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { beforeAll, expect, test, vi } from 'vitest';
 import type { Message } from '../../api/schemas';
 import { agentRequest } from '../requests/request.test.fixture';
 import { InboxPage } from './inbox-page';
 import { TimelinePanel } from './timeline-panel';
+import { presenceViewPart } from './presence-part';
 
 const conversation = { latest_reply_number: 0,
   id: '22222222-2222-4222-8222-222222222222', contact_id: '55555555-5555-4555-8555-555555555555', contact_name: 'Mai Linh',
@@ -12,6 +13,15 @@ const conversation = { latest_reply_number: 0,
 };
 const draft = agentRequest({ kind: 'reply_draft', method: 'POST', body: { kind: 'outgoing', body: 'Try turning it off and on.' },
   requested_by: { ...agentRequest().requested_by, token_label: 'Claude drafts', token_scope: 'draft' } });
+
+
+// The presence chunk loads when somebody else is on a conversation, a reply is refused or a notice shows;
+// start with it there, so no test ends while it is still on its way (vitest refuses a module asked for
+// after the test environment is gone).
+beforeAll(async () => {
+  presenceViewPart.preload();
+  await import('./presence-view');
+});
 
 test('the inbox marks a conversation with a waiting draft and shows the draft above the composer', async () => {
   const onSendDraft = vi.fn().mockResolvedValue(undefined);
