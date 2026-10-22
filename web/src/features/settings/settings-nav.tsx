@@ -4,7 +4,7 @@ import { track } from '../../lib/product-analytics';
 import type { SettingsSection } from '../../lib/product-analytics';
 import { messages } from '../../messages';
 
-export type SettingsPath = '/settings' | '/settings/billing';
+export type SettingsPath = '/settings' | '/settings/billing' | '/settings/import-freshdesk';
 export interface NavItem { label: string; to: SettingsPath; hash?: string; current?: boolean }
 interface NavGroup { label: string; items: NavItem[] }
 
@@ -28,7 +28,7 @@ const plainLink: RenderLink = (item, page) =>
 // The app provides router links here; without a router (unit tests) the nav uses plain anchors.
 export const SettingsNavLinkContext = createContext<RenderLink>(plainLink);
 
-interface Shown { general: boolean; team: boolean; email: boolean; webForm: boolean; savedReplies: boolean; helpCenter?: boolean; exportData: boolean; billing: boolean }
+interface Shown { general: boolean; team: boolean; email: boolean; webForm: boolean; savedReplies: boolean; helpCenter?: boolean; exportData: boolean; billing: boolean; importData?: boolean }
 
 // settingsNavGroups lists what this person can see: their own account, then the shared workspace.
 export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] {
@@ -45,6 +45,7 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
       ...section(messages.savedReplies, 'saved-replies-heading', shown.savedReplies),
       ...section(messages.helpCenter, 'help-center-heading', shown.helpCenter),
       ...section(messages.exportHeading, 'export-heading', shown.exportData),
+      ...(shown.importData ? [{ label: messages.importFreshdesk, to: '/settings/import-freshdesk' as const, current: page === '/settings/import-freshdesk' }] : []),
       ...(shown.billing ? [{ label: messages.planAndBilling, to: '/settings/billing' as const, current: page === '/settings/billing' }] : []),
     ] },
   ];
