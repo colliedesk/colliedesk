@@ -65,8 +65,10 @@ const (
 	// LinkChangedInColliedesk: the article or saved reply holding the link was changed in Colliedesk
 	// after the import, so the import leaves its text alone.
 	LinkChangedInColliedesk = "changed_in_colliedesk"
-	// LinkHelpCenterOff: the help center is off (or the server's address is unknown), so no link is rewritten.
+	// LinkHelpCenterOff: the help center is off, so no link is rewritten.
 	LinkHelpCenterOff = "help_center_off"
+	// LinkNoServerAddress: the run did not know the server's address (APP_ORIGIN), so no link is rewritten.
+	LinkNoServerAddress = "no_server_address"
 	// LinkWriteFailed: the new text could not be written (for example it would pass the length limit).
 	LinkWriteFailed = "write_failed"
 )
@@ -76,6 +78,7 @@ var linkReasons = map[string]string{
 	LinkNotPublic:           "a draft, in the trash, or a collection with nothing published",
 	LinkChangedInColliedesk: "changed in Colliedesk after the import, so left as it is",
 	LinkHelpCenterOff:       "the help center is off",
+	LinkNoServerAddress:     "the server's address (APP_ORIGIN) was not set for this run",
 	LinkWriteFailed:         "the new text could not be saved",
 }
 
@@ -84,7 +87,7 @@ func (l *LinksReport) finish(open bool, origin bool) {
 	l.Status, l.Detail = StatusOK, []string{}
 	switch {
 	case !origin:
-		l.Detail = append(l.Detail, "The server's address (APP_ORIGIN) is unknown to this run, so no link was rewritten.")
+		l.Detail = append(l.Detail, "The server's address (APP_ORIGIN) was not set for this run, so no link was rewritten: set APP_ORIGIN as the server has it, then run the import again.")
 	case !open:
 		l.Detail = append(l.Detail, "The help center is off, so no old address redirects and no link was rewritten: turn the help center on, then run the import again.")
 	}

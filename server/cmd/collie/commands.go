@@ -72,7 +72,7 @@ func run(ctx context.Context, args []string, output io.Writer, databaseURL, orig
 	case "serve":
 		return serve(ctx, pool, origin, args[1:])
 	case "import":
-		return importCommand(ctx, pool, origin, args[1:], output)
+		return importCommand(ctx, pool, args[1:], output)
 	case "trial":
 		return trialCommand(ctx, pool, args[1:], output)
 	case "plan":

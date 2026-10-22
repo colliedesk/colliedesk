@@ -182,6 +182,8 @@ func (r *run) resolveLink(text string, start int, raw string, site linkSite, tar
 	switch {
 	case !ok:
 		return "", "", false
+	case !site.origin:
+		return "", LinkNoServerAddress, true
 	case !site.open:
 		return "", LinkHelpCenterOff, true
 	case old.Kind == helpcenter.LegacyHome:

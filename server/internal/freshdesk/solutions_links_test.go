@@ -237,3 +237,33 @@ func TestUndoRemovesRewrittenArticlesAndSavedReplies(t *testing.T) {
 		}
 	}
 }
+
+// Without the server's address (APP_ORIGIN unset where the import runs) no link is rewritten, even
+// with the help center on, and the report says why rather than blaming the help center.
+func TestImportWithoutTheServerAddressRewritesNoLinkAndSaysWhy(t *testing.T) {
+	env := newImportEnv(t).withLinks()
+	env.setHelpCenter(t, true)
+	report, err := env.run(t, context.Background(), nil)
+	if err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	api := env.fake.api.URL
+	if body := env.kbArticles(t, env.workspaceID)["101"].Body; !strings.Contains(body, api+"/support/solutions/articles/104-use-the-api") {
+		t.Fatalf("links were rewritten without the server's address:\n%s", body)
+	}
+	links := report.Links
+	if links == nil || links.Status != freshdesk.StatusUnverified || links.Rewritten != (freshdesk.LinkRewrites{}) {
+		t.Fatalf("links = %+v", links)
+	}
+	if detail := strings.Join(links.Detail, " "); !strings.Contains(detail, "APP_ORIGIN") || strings.Contains(detail, "turn the help center on") {
+		t.Errorf("detail = %q", detail)
+	}
+	for _, link := range links.Left {
+		if link.Reason != freshdesk.LinkNoServerAddress {
+			t.Errorf("left %s %s %s: reason %s, want %s", link.Entity, link.FreshdeskID, link.URL, link.Reason, freshdesk.LinkNoServerAddress)
+		}
+	}
+	if len(links.Left) == 0 {
+		t.Error("no link was listed as left")
+	}
+}

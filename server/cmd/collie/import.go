@@ -29,7 +29,7 @@ var progressOutput io.Writer = os.Stderr
 
 const importUsage = "usage: collie import freshdesk --workspace <slug> --domain <account>.freshdesk.com [--api-key-env FRESHDESK_API_KEY] [--since YYYY-MM-DD] [--last-ticket-id N] [--include-personal-canned-responses] [--help-center-portal ID] [--dry-run] [--report-dir DIR]"
 
-func importCommand(ctx context.Context, pool *pgxpool.Pool, origin string, args []string, output io.Writer) error {
+func importCommand(ctx context.Context, pool *pgxpool.Pool, args []string, output io.Writer) error {
 	if len(args) > 0 && args[0] == "undo" {
 		return undoCommand(ctx, pool, args[1:], output)
 	}
@@ -46,11 +46,13 @@ func importCommand(ctx context.Context, pool *pgxpool.Pool, origin string, args 
 	if err := database.Migrate(ctx, pool); err != nil {
 		return err
 	}
-	// Old Freshdesk help center links are pointed at the help center's address, built as the server builds it.
+	// Old Freshdesk help center links are pointed at the help center's address, built as the server
+	// builds it. The origin is APP_ORIGIN as set, never the local default other commands fall back to:
+	// without it the import rewrites no link and says so, instead of writing a local address for good.
 	if options.HelpCenterDomain, err = helpcenter.DomainFromEnv(os.Getenv); err != nil {
 		return err
 	}
-	options.Origin = origin
+	options.Origin = strings.TrimSpace(os.Getenv("APP_ORIGIN"))
 	options.Progress = progressOutput
 	if !options.DryRun {
 		storage, err := attachmentStorage()
