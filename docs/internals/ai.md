@@ -178,6 +178,33 @@ another amount for a trial) is spent, before writing a usage row: no call, no ro
 have no cost yet, so concurrent calls can pass the allowance by what they cost together (at most 2 per
 workspace).
 
+## Reply drafts
+
+1. **The draft's state is its task's.** `ai_drafts.status` is only `pending`, `ready` or `cancelled`;
+   a pending draft reads as its task (`queued`, `running`, `failed`, `cancelled`). A pending draft whose
+   task is gone (the restore script drops `ai_tasks`) reads as failed with `restored`, never as a draft
+   that waits forever. Do not copy the task's state into the draft: two rows to keep in step.
+2. **The prompt holds no instruction from data.** The system turn is Colliedesk's text only. The
+   conversation, articles and past tickets go in the user turn inside `<untrusted_customer_content>`,
+   `<kb_article>` and `<past_conversation>`, with `<` and `>` replaced so a message cannot close its
+   section; the person's request is the only `<agent_request>`. Private notes are never read.
+3. **Sources come from the database.** The model answers with `source_ids` (`kb1`, `past2`) that name
+   what the prompt offered; an id it was not offered is dropped, and the title, number and link come
+   from the retrieval rows. Warnings list emails, numbers of six digits or more and other customers'
+   names in the draft that the conversation, subject and prompt do not hold.
+4. **Refused before queueing.** `POST` answers 409 `ai_feature_off`, 402 `ai_allowance_reached` and 429
+   `ai_drafts_rate_limited` (30 a minute in a workspace, under an advisory lock) at once: a looping
+   token must not fill the queue or a workspace's own key, which no allowance bounds.
+5. **How it ended.** A reply that names `ai_draft_id` locks the draft (this conversation's, ready,
+   undecided) before the insert, so another workspace's or conversation's id never reaches the
+   foreign key, and records `sent_unchanged` (word similarity ≥ 0.9) or `sent_edited`. A reply sent
+   without it discards the sender's ready drafts; a new draft supersedes the old; resolving or closing
+   discards (trigger); the worker's sweep expires a ready draft after 7 days and erases text and prompt
+   90 days after a draft ended. A web client whose draft went meanwhile sends the reply again without
+   the id: losing the metric is better than refusing a reply. `DraftOutcomes` counts them for #100.
+6. **Drafts left.** The allowance shows about how many drafts what is left pays for, at the workspace's
+   average draft cost over 30 days, or a typical draft (6,000 tokens in, 500 out) before its first.
+
 ## Testing
 
 `aiprovider.Fake` records every `Request` and answers from a script, without a network. Feature tests

@@ -599,6 +599,7 @@ paths:
                 body: {type: string, minLength: 1, description: Markdown source}
                 cc: {$ref: '#/components/schemas/CopiedAddresses'}
                 seen_reply_number: {type: integer, minimum: 0, description: 'The newest reply number the sender had seen; 0 when there was none.'}
+                ai_draft_id: {type: string, format: uuid, description: 'The AI draft this reply was written from (outgoing replies sent directly only): the draft records how close the reply stayed to it. 409 ai_draft_not_ready when it is not this conversation''s ready, undecided draft.'}
                 draft:
                   type: boolean
                   description: >-
@@ -614,6 +615,7 @@ paths:
                 kind: {type: string, enum: [outgoing, note]}
                 body: {type: string, minLength: 1, description: Markdown source}
                 cc: {$ref: '#/components/schemas/CopiedAddresses'}
+                ai_draft_id: {type: string, format: uuid}
                 files:
                   type: array
                   maxItems: 10
@@ -2433,6 +2435,96 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/conversations/{id}/ai-drafts:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: createAIDraft
+      x-permission: conversations:write
+      description: >
+        Asks for an AI draft of a reply, with an optional prompt (what the reply should say). The draft is
+        written in the background (202, `status` queued); read it with `GET …/ai-drafts/{draftId}?wait=`.
+        It uses the conversation (never its private notes), matching knowledge base articles and similar
+        solved tickets, and is plain text a person edits and sends: the AI never sends. The person's
+        earlier draft on the conversation is replaced. 409 `ai_feature_off` when reply drafts are off, 402
+        `ai_allowance_reached` when the server's provider spent this month's allowance, 429
+        `ai_drafts_rate_limited` past 30 drafts a minute in the workspace.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                prompt: {type: string, maxLength: 2000}
+      responses:
+        '202':
+          description: The draft, queued; or an agent request when the token is below the draft tier
+          content: {application/json: {schema: {oneOf: [{$ref: '#/components/schemas/AIDraft'}, {$ref: '#/components/schemas/AgentRequestAccepted'}]}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/PlanLimitReached'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429': {$ref: '#/components/responses/AIChecksRateLimited'}
+    get:
+      operationId: listAIDrafts
+      x-permission: conversations:read
+      description: The conversation's newest AI drafts (at most 20), newest first, with how each ended.
+      responses:
+        '200':
+          description: AI drafts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/AIDraft'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/conversations/{id}/ai-drafts/{draftId}:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: draftId, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getAIDraft
+      x-permission: conversations:read
+      description: >
+        One AI draft. With `wait` (1 to 20 seconds) the answer waits while the draft is queued or running,
+        and comes back as soon as it is ready, failed or cancelled.
+      parameters:
+        - {name: wait, in: query, required: false, schema: {type: integer, minimum: 0, maximum: 20}}
+      responses:
+        '200':
+          description: The draft
+          content: {application/json: {schema: {$ref: '#/components/schemas/AIDraft'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/conversations/{id}/ai-drafts/{draftId}/discard:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: draftId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: discardAIDraft
+      x-permission: conversations:write
+      description: >
+        Stops a draft still being written (`status` cancelled, which does not count as discarded: nobody
+        saw it) or discards a ready one (`outcome` discarded); again on a draft already stopped or discarded
+        it changes nothing. 409 `ai_draft_decided` once it was sent or replaced.
+      responses:
+        '200':
+          description: The draft
+          content: {application/json: {schema: {$ref: '#/components/schemas/AIDraft'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/export:
     get:
       operationId: exportWorkspace
@@ -4367,8 +4459,9 @@ components:
         paused_until: {type: [string, 'null'], format: date-time, description: 'When today''s limit is used up: the next UTC midnight.'}
     AIAllowance:
       type: object
-      required: [limit_micro_usd, used_micro_usd, resets_at]
+      required: [limit_micro_usd, used_micro_usd, resets_at, drafts_left]
       properties:
+        drafts_left: {type: [integer, 'null'], minimum: 0, description: 'About how many reply drafts what is left pays for, at the workspace''s average cost of a draft over 30 days (before its first, a typical one); null when no price is known.'}
         limit_micro_usd: {type: integer, description: 'This month''s allowance of the server''s provider, in millionths of a US dollar.'}
         used_micro_usd: {type: integer, description: Spent so far; calls still running are not counted yet.}
         resets_at: {type: string, format: date-time, description: The first instant of the next UTC month.}
@@ -4393,6 +4486,46 @@ components:
               input_tokens: {type: integer}
               output_tokens: {type: integer}
               cost_micro_usd: {type: [integer, 'null'], description: 'Only for the server''s provider.'}
+    AIDraft:
+      type: object
+      required: [id, conversation_id, status, error_code, prompt, text, missing_info, sources, warnings, model, outcome, similarity, sent_message_id, requested_by_agent_id, created_at, ready_at, decided_at]
+      properties:
+        id: {type: string, format: uuid}
+        conversation_id: {type: string, format: uuid}
+        status: {type: string, enum: [queued, running, ready, failed, cancelled]}
+        error_code: {type: [string, 'null'], description: 'Why a draft failed or stopped: feature_off, ai_allowance_reached, refused, too_long, empty_answer, a provider error code, restored, cancelled…'}
+        prompt: {type: string, description: What the person asked for; erased 90 days after the draft ended.}
+        text: {type: [string, 'null'], description: 'The draft, plain text; null until ready, and 90 days after it ended.'}
+        missing_info: {type: [string, 'null'], description: What the draft needs that the sources did not say.}
+        sources:
+          type: array
+          description: The articles and solved conversations the draft used, named from the database.
+          items:
+            type: object
+            required: [kind, id, title]
+            properties:
+              kind: {type: string, enum: [kb_article, conversation]}
+              id: {type: string, format: uuid}
+              locale: {type: string}
+              number: {type: integer}
+              title: {type: string}
+        warnings:
+          type: array
+          description: An email address, a number or another customer's name in the draft that this conversation does not hold. Check before sending.
+          items:
+            type: object
+            required: [kind, value]
+            properties:
+              kind: {type: string, enum: [email, number, name]}
+              value: {type: string}
+        model: {type: [string, 'null']}
+        outcome: {type: [string, 'null'], enum: [sent_unchanged, sent_edited, discarded, superseded, expired, null]}
+        similarity: {type: [number, 'null'], description: 'How close the sent reply stayed to the draft, 0 to 1 by words; 0.9 and above is sent_unchanged.'}
+        sent_message_id: {type: [string, 'null'], format: uuid}
+        requested_by_agent_id: {type: [string, 'null'], format: uuid}
+        created_at: {type: string, format: date-time}
+        ready_at: {type: [string, 'null'], format: date-time}
+        decided_at: {type: [string, 'null'], format: date-time}
     AISettings:
       type: object
       required: [server, providers, slots, events, provider_limit, can_store_keys, allow_private_base_urls, automatic, allowance]
@@ -4695,8 +4828,15 @@ components:
       description: Where the person heard of Colliedesk.
     Me:
       type: object
-      required: [agent, workspace, timezone, scope, plan, onboarding_goal]
+      required: [agent, workspace, timezone, scope, plan, onboarding_goal, ai_features]
       properties:
+        ai_features:
+          type: object
+          description: Which AI features can run now in the workspace (on, with a working provider); the web app offers only those.
+          required: [triage, draft]
+          properties:
+            triage: {type: boolean}
+            draft: {type: boolean}
         agent: {$ref: '#/components/schemas/Agent'}
         workspace: {$ref: '#/components/schemas/Workspace'}
         timezone: {type: string}
@@ -5450,8 +5590,9 @@ components:
                 description: Time of the newest customer message inside the polled window, or null when the change was not a customer message.
     Message:
       type: object
-      required: [id, conversation_id, author_agent_id, author_name, agent_token, agent_request_id, kind, body, body_html, origin, attachments, cc, created_at, delivery, email, reply_number]
+      required: [id, conversation_id, author_agent_id, author_name, agent_token, agent_request_id, ai_draft_id, kind, body, body_html, origin, attachments, cc, created_at, delivery, email, reply_number]
       properties:
+        ai_draft_id: {type: [string, 'null'], format: uuid, description: The AI draft the reply was written from.}
         reply_number:
           type: [integer, 'null']
           minimum: 1

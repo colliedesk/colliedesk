@@ -135,7 +135,7 @@ async function outboundRefusal(response: Response): Promise<Error> {
     const { code, message, retry_after_seconds: retry, refused_cc: refused, reply_to: replyTo } = body.error ?? {};
     if (code === 'storage_limit_reached' && typeof message === 'string' && message) return new AttachmentStorageError(message);
     // The knowledge base's video uploads: the answer says which upload holds the place, or whose it is.
-    if (['too_many_uploads', 'not_your_upload', 'server_busy', 'files_need_approval', 'ai_checks_rate_limited'].includes(String(code)) && typeof message === 'string' && message)
+    if (['too_many_uploads', 'not_your_upload', 'server_busy', 'files_need_approval', 'ai_checks_rate_limited', 'ai_drafts_rate_limited'].includes(String(code)) && typeof message === 'string' && message)
       return new ConflictError(message, { code });
     if (code === 'trial_outbound_restricted' || code === 'trial_outbound_limit') {
       const refusedCc = Array.isArray(refused) ? refused.filter((item): item is string => typeof item === 'string') : [];
@@ -198,10 +198,11 @@ type OptionalBody<Operation extends keyof operations> =
   NonNullable<operations[Operation]['requestBody']> extends { content: { 'application/json': infer Body } } ? Body : never;
 const optionalJson = <Operation extends keyof operations>(value: OptionalBody<Operation>): string => JSON.stringify(value);
 
-function messageForm(kind: string, body: string, files: File[], cc: string[], seen?: number): FormData {
+function messageForm(kind: string, body: string, files: File[], cc: string[], seen?: number, aiDraft?: string): FormData {
   const form = new FormData();
   form.append('kind', kind);
   form.append('body', body);
+  if (aiDraft) form.append('ai_draft_id', aiDraft);
   // Before the files: a reply refused for a newer one stores none of them.
   if (seen !== undefined) form.append('seen_reply_number', String(seen));
   // The server reads the copied addresses before the files, so a refusal costs no upload.
@@ -293,10 +294,11 @@ export const api = {
   messages: (id: string) => request(`/api/v1/conversations/${id}/messages`, messageListSchema),
   timeEntries: (id: string) => request(`/api/v1/conversations/${id}/time-entries`, timeEntryListSchema),
   // seen is the newest reply number the sender had seen when they started writing (409 ReplyConflictError when older).
-  createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = [], cc: string[] = [], seen?: number) =>
+  // aiDraft names the AI draft a reply was written from.
+  createMessage: (id: string, kind: RequestBody<'createMessage'>['kind'], body: string, files: File[] = [], cc: string[] = [], seen?: number, aiDraft?: string) =>
     request(`/api/v1/conversations/${id}/messages`, messageSchema, { method: 'POST',
-      body: files.length > 0 ? messageForm(kind, body, files, cc, seen)
-        : json<'createMessage'>({ kind, body, ...(cc.length > 0 ? { cc } : {}), ...(seen === undefined ? {} : { seen_reply_number: seen }) }) }),
+      body: files.length > 0 ? messageForm(kind, body, files, cc, seen, aiDraft)
+        : json<'createMessage'>({ kind, body, ...(cc.length > 0 ? { cc } : {}), ...(seen === undefined ? {} : { seen_reply_number: seen }), ...(aiDraft ? { ai_draft_id: aiDraft } : {}) }) }),
   contacts: (search = '') => request(`/api/v1/contacts?search=${encodeURIComponent(search)}`, contactListSchema),
   createContact: (name: string, email: string) => request('/api/v1/contacts', contactSchema, { method: 'POST', body: json<'createContact'>({ name, email }) }),
   agents: () => request('/api/v1/agents', agentListSchema),

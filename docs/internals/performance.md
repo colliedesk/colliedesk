@@ -72,6 +72,15 @@ case. Five warm-up searches, then 20 timed: 50–65 ms locally beside the other 
 window was cut twice instead of raising the budget: 20,000 conversations took 160–280 ms locally, and
 10,000 took 210 ms p95 on the CI runner. If this gate fails, cut the window again.
 
+## AI draft read budget
+
+`TestAIDraftReadLatencyBudget` holds the reads the reply box polls, `ai.Service.GetDraft` and
+`ListDrafts`, to 20 ms p95 in the store, like the other per-conversation reads. Two workspaces with
+20,000 drafts and 20,000 tasks each, 200 of them on the conversation read: about 1–2 ms locally. A
+draft's own wait (`?wait=` up to 20 s) is a loop of these reads in short transactions, never a held
+connection. The draft itself is written in the background: its sources are the AI retrieval budget
+above, and the model's time belongs to no screen.
+
 ## Media library budget
 
 `TestKBMediaLibraryLatencyBudget` reads the knowledge base search budget's fixture, to which

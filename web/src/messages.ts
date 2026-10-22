@@ -468,6 +468,8 @@ export const messages = {
   discardDraft: 'Discard',
   draftSendFailed: 'The draft could not be sent. Try again, or edit it.',
   draftWaiting: 'Draft waiting',
+  draftWithAI: 'Draft with AI',
+  fromAIDraft: 'from an AI draft',
   draftRewritten: (person: string) => `from an agent draft, edited and sent by ${person}`,
   draftTo: (customer: string) => `To ${customer}`,
   theCustomer: 'the customer',

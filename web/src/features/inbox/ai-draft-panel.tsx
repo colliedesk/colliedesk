@@ -1,0 +1,153 @@
+import { useEffect, useRef, useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { aiDraftApi, writing } from './ai-draft-api';
+import type { AIDraft } from './ai-draft-api';
+import { aiDraftMessages as text } from './ai-draft-messages';
+import { BookIcon, InboxIcon, SparklesIcon, XIcon } from '../../ui/icons';
+import './ai-draft.css';
+
+export type DraftUse = 'replace' | 'below';
+
+interface AIDraftPanelProps {
+  conversationId: string;
+  // The person's own drafts are theirs to pick up again; a teammate's are not shown.
+  agentId?: string;
+  // Whether the reply box holds text: then the draft can replace it or go below it.
+  hasText: boolean;
+  onUse: (draftText: string, use: DraftUse, draftId: string) => void;
+  onClose: () => void;
+}
+
+const longPoll = 20;
+
+// The newest draft of this person that is still being written or waits for a decision.
+function openDraft(drafts: AIDraft[] | undefined, agentId?: string) {
+  return drafts?.find((draft) => draft.requested_by_agent_id === agentId && (writing(draft) || (draft.status === 'ready' && draft.outcome === null)));
+}
+
+// AIDraftPanel asks for an AI draft of a reply and shows it when ready: the text, what it is missing,
+// what to check before sending, and its sources. It never sends; the person puts the text in the box.
+export function AIDraftPanel({ conversationId, agentId, hasText, onUse, onClose }: AIDraftPanelProps) {
+  const client = useQueryClient();
+  const list = useQuery({ queryKey: ['ai-drafts', conversationId], queryFn: () => aiDraftApi.list(conversationId) });
+  const [activeId, setActiveId] = useState<string>();
+  const [asking, setAsking] = useState(false);
+  const [prompt, setPrompt] = useState('');
+  const found = openDraft(list.data?.items, agentId);
+  const id = asking ? undefined : activeId ?? found?.id;
+  const initial = list.data?.items.find((draft) => draft.id === id);
+  // While a draft is written, one request waits for it (up to 20 s) and the next starts when it returns.
+  const current = useQuery({
+    queryKey: ['ai-draft', conversationId, id], enabled: Boolean(id),
+    queryFn: () => aiDraftApi.get(conversationId, id!, writing(client.getQueryData<AIDraft>(['ai-draft', conversationId, id]) ?? initial) ? longPoll : 0),
+    initialData: initial, refetchInterval: (query) => (writing(query.state.data) ? 1 : false), refetchOnWindowFocus: false,
+  });
+  const draft = id ? current.data : undefined;
+  const ask = useMutation({
+    mutationFn: () => aiDraftApi.create(conversationId, prompt.trim()),
+    onSuccess: (created) => {
+      client.setQueryData(['ai-draft', conversationId, created.id], created);
+      setActiveId(created.id);
+      setAsking(false);
+      void client.invalidateQueries({ queryKey: ['ai-drafts', conversationId] });
+    },
+  });
+  const discard = useMutation({
+    mutationFn: (target: AIDraft) => aiDraftApi.discard(conversationId, target.id),
+    onSuccess: (changed) => {
+      client.setQueryData(['ai-draft', conversationId, changed.id], changed);
+      void client.invalidateQueries({ queryKey: ['ai-drafts', conversationId] });
+      setActiveId(undefined);
+      setAsking(true);
+    },
+  });
+  const root = useRef<HTMLElement>(null);
+  const field = useRef<HTMLTextAreaElement>(null);
+  const showForm = !id && !list.isPending;
+  useEffect(() => { if (showForm) field.current?.focus(); }, [showForm]);
+  const onKey = (event: ReactKeyboardEvent) => {
+    if (event.key === 'Escape') { event.preventDefault(); onClose(); }
+  };
+  const onPromptKey = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); if (!ask.isPending) ask.mutate(); }
+  };
+  const again = () => {
+    setPrompt(draft?.prompt ?? prompt);
+    setActiveId(undefined);
+    setAsking(true);
+  };
+  const use = (how: DraftUse) => {
+    if (draft?.text) onUse(draft.text, how, draft.id);
+  };
+  return (
+    <section className="ai-draft" aria-label={text.heading} ref={root} onKeyDown={onKey}>
+      <header className="ai-draft-head">
+        <SparklesIcon /><h3>{text.heading}</h3>
+        <button type="button" className="icon-button" aria-label={text.close} title={text.close} onClick={onClose}><XIcon /></button>
+      </header>
+      {list.isError && !id && <p role="alert" className="ai-draft-problem">{text.loadFailed}</p>}
+      {showForm && (
+        <form className="ai-draft-form" onSubmit={(event) => { event.preventDefault(); ask.mutate(); }}>
+          <label htmlFor={`ai-draft-prompt-${conversationId}`}>{text.promptLabel}</label>
+          <textarea id={`ai-draft-prompt-${conversationId}`} ref={field} rows={2} maxLength={2000} value={prompt} placeholder={text.promptPlaceholder}
+            onChange={(event) => setPrompt(event.target.value)} onKeyDown={onPromptKey} />
+          <div className="ai-draft-row">
+            <span className="ai-draft-count" aria-hidden="true">{text.promptCount(prompt.length)}</span>
+            <button type="submit" className="primary-action" disabled={ask.isPending}>{text.write}</button>
+          </div>
+          {ask.isError && <p role="alert" className="ai-draft-problem">{ask.error instanceof Error && ask.error.message ? ask.error.message : text.failed(null)}</p>}
+        </form>
+      )}
+      {draft && writing(draft) && (
+        <div className="ai-draft-row ai-draft-writing">
+          <span role="status"><span className="ai-draft-pulse" aria-hidden="true" />{text.writing}</span>
+          <button type="button" disabled={discard.isPending} onClick={() => discard.mutate(draft)}>{text.stop}</button>
+        </div>
+      )}
+      {draft && (draft.status === 'failed' || draft.status === 'cancelled' || (draft.status === 'ready' && draft.outcome !== null)) && (
+        <div className="ai-draft-row">
+          <p role="alert" className="ai-draft-problem">{text.failed(draft.status === 'cancelled' ? draft.error_code ?? 'cancelled' : draft.error_code)}</p>
+          <button type="button" onClick={again}>{text.again}</button>
+        </div>
+      )}
+      {draft?.status === 'ready' && draft.outcome === null && draft.text && <ReadyDraft draft={draft} hasText={hasText} onUse={use} onDiscard={() => discard.mutate(draft)} onAgain={again} busy={discard.isPending} />}
+    </section>
+  );
+}
+
+function ReadyDraft({ draft, hasText, onUse, onDiscard, onAgain, busy }: { draft: AIDraft; hasText: boolean; onUse: (how: DraftUse) => void; onDiscard: () => void; onAgain: () => void; busy: boolean }) {
+  return (
+    <div className="ai-draft-ready">
+      {draft.warnings.length > 0 && (
+        <div className="ai-draft-check" role="note">
+          <strong>{text.checkHeading}</strong>
+          <span>{text.checkBody}</span>
+          <ul>{draft.warnings.map((warning) => <li key={warning.kind + warning.value}><code>{warning.value}</code> <span>({text.warningKind[warning.kind] ?? warning.kind})</span></li>)}</ul>
+        </div>
+      )}
+      <p className="ai-draft-text" tabIndex={0}>{draft.text}</p>
+      {draft.missing_info && <p className="ai-draft-missing"><strong>{text.missingInfo}:</strong> {draft.missing_info}</p>}
+      <div className="ai-draft-sources">
+        <span>{text.sources}</span>
+        {draft.sources.length === 0 ? <span className="ai-draft-quiet">{text.noSources}</span> : (
+          <ul>{draft.sources.map((source) => (
+            <li key={source.kind + source.id}>
+              <a href={source.kind === 'kb_article' ? `/knowledge/articles/${source.id}` : `/conversations/${source.id}`} target="_blank" rel="noopener">
+                {source.kind === 'kb_article' ? <BookIcon /> : <InboxIcon />}
+                <span className="sr-only">{source.kind === 'kb_article' ? text.article : text.ticket}: </span>{source.title}
+              </a>
+            </li>
+          ))}</ul>
+        )}
+      </div>
+      <p className="ai-draft-quiet">{text.editable}</p>
+      <div className="ai-draft-actions">
+        <button type="button" className="primary-action" title={hasText ? text.replaceTitle : undefined} onClick={() => onUse('replace')}>{hasText ? text.replace : text.useDraft}</button>
+        {hasText && <button type="button" onClick={() => onUse('below')}>{text.insertBelow}</button>}
+        <button type="button" disabled={busy} onClick={onDiscard}>{text.discard}</button>
+        <button type="button" className="ai-draft-again" onClick={onAgain}>{text.again}</button>
+      </div>
+    </div>
+  );
+}

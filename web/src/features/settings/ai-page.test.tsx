@@ -184,7 +184,8 @@ test('the automatic runs are shown on triage and changed by an admin', async () 
 test('a paused day and a used-up allowance each say what happens and what to do', () => {
   page({ settings: settings({ server, slots: [slot({ source: 'server', model: 'claude-haiku-5-5', enabled: true, active: true }), slot({ slot: 'draft', source: 'server', model: 'claude-sonnet-5-5', enabled: true, active: true })],
     automatic: { per_day: 300, per_minute: 30, used_today: 300, paused_until: '2026-10-23T00:00:00Z' },
-    allowance: { limit_micro_usd: 9_000_000, used_micro_usd: 9_000_000, resets_at: '2026-11-01T00:00:00Z' } }) });
+    allowance: { limit_micro_usd: 9_000_000, used_micro_usd: 9_000_000, resets_at: '2026-11-01T00:00:00Z', drafts_left: 0 } }) });
+  expect(screen.queryByText(/drafts left/)).not.toBeInTheDocument();
   expect(screen.getByRole('status')).toHaveTextContent('Today’s limit of 300 is reached');
   expect(screen.getByRole('button', { name: 'Raise the daily limit' })).toBeInTheDocument();
   expect(screen.getByRole('alert')).toHaveTextContent('This month’s Colliedesk AI allowance is used up');
@@ -220,6 +221,11 @@ test('a paused feature says so on its row', () => {
 });
 
 test('a server allowance of nothing reads as none included', () => {
-  page({ settings: settings({ server, allowance: { limit_micro_usd: 0, used_micro_usd: 0, resets_at: '2026-11-01T00:00:00Z' } }) });
+  page({ settings: settings({ server, allowance: { limit_micro_usd: 0, used_micro_usd: 0, resets_at: '2026-11-01T00:00:00Z', drafts_left: 0 } }) });
   expect(screen.getByText(/No AI is included on this server/)).toBeInTheDocument();
+});
+
+test('the allowance says about how many reply drafts are left', () => {
+  page({ settings: settings({ server, allowance: { limit_micro_usd: 9_000_000, used_micro_usd: 2_000_000, resets_at: '2026-11-01T00:00:00Z', drafts_left: 1240 } }) });
+  expect(screen.getByText('About 1,240 reply drafts left')).toBeInTheDocument();
 });

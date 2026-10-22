@@ -5,7 +5,7 @@ import { formatBytes } from '../../lib/format-bytes';
 import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { Avatar } from '../../ui/avatar';
-import { LockIcon, PaperclipIcon } from '../../ui/icons';
+import { LockIcon, PaperclipIcon, SparklesIcon } from '../../ui/icons';
 import { EmailFrame } from './email-frame';
 import { PlainTextBody } from './plain-text-body';
 
@@ -64,6 +64,7 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy }: MessageIte
             ? messages.draftApproved(item.agent_token.label, sender)
             : messages.writtenByAgentToken(item.agent_token.agent_name, item.agent_token.label)}</span>}
           <span className="message-kind">{item.kind === 'note' && <LockIcon />}{kindLabel(item.kind)}</span>
+          {item.ai_draft_id && <span className="message-kind"><SparklesIcon />{messages.fromAIDraft}</span>}
         </div>
         <time dateTime={item.created_at}>{formatDate(item.created_at, timezone)}</time>
       </header>

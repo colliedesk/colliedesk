@@ -49,6 +49,7 @@ func Catalog() []Spec {
 		importsListSpec(), importGetSpec(), importPreviewSpec(), importStartSpec(), importCancelSpec(), importKeySetSpec(), importReportSpec(), importUndoRequestSpec(),
 		importPeopleListSpec(), importPersonLinkSpec(), importPersonUnlinkSpec(),
 		aiSettingsGetSpec(), aiProviderAddSpec(), aiProviderUpdateSpec(), aiProviderKeySetSpec(), aiProviderCheckSpec(), aiProviderRemoveSpec(), aiSlotSetRequestSpec(), aiUsageGetSpec(), aiAutomaticLimitsSetSpec(),
+		aiDraftCreateSpec(), aiDraftGetSpec(), aiDraftsListSpec(), aiDraftDiscardSpec(),
 	}
 }
 

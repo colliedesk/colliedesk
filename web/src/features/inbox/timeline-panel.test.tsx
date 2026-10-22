@@ -5,7 +5,7 @@ import { TimelinePanel } from './timeline-panel';
 import { presenceViewPart } from './presence-part';
 
 const base = { reply_number: null, conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, body_html: null, origin: null,
-  attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null, agent_token: null, agent_request_id: null };
+  attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null, agent_token: null, ai_draft_id: null, agent_request_id: null };
 const incoming: Message = {
   ...base, id: '22222222-2222-4222-8222-222222222222', kind: 'incoming', body: 'Please help.',
   email: { from: 'ceo@customer.example', authentication: 'fail', attachments: [{ filename: 'invoice.pdf', content_type: 'application/pdf' }], original_attachment_id: null },
@@ -85,7 +85,7 @@ test('names the agent token that wrote a message and leaves a person\'s message 
   const written: Message = {
     ...base, id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', kind: 'outgoing', body: 'Your refund is on its way.',
     author_agent_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-    agent_token: { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', label: 'Support bot', scope: 'send', agent_name: 'Ada Admin' }, agent_request_id: null,
+    agent_token: { id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', label: 'Support bot', scope: 'send', agent_name: 'Ada Admin' }, ai_draft_id: null, agent_request_id: null,
   };
   render(<TimelinePanel items={[written, note]} timezone="UTC" />);
   const [byToken, byPerson] = screen.getAllByRole('article');

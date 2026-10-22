@@ -5,7 +5,7 @@ import { MessageItem } from './message-item';
 
 const base: Message = { reply_number: null,
   id: '22222222-2222-4222-8222-222222222222', conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: 'Vic Customer',
-  agent_token: null, agent_request_id: null, kind: 'incoming', body: 'Plain version of the newsletter', body_html: null, origin: null,
+  agent_token: null, ai_draft_id: null, agent_request_id: null, kind: 'incoming', body: 'Plain version of the newsletter', body_html: null, origin: null,
   attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null,
   email: { from: 'vic@customer.example', authentication: 'pass', attachments: [], original_attachment_id: null, cc: [] },
 };

@@ -68,8 +68,8 @@ func (s *Service) Usage(ctx context.Context, workspaceID string, month time.Time
 		if err != nil || !limited {
 			return err
 		}
-		usage.Allowance = &AllowanceView{LimitMicroUSD: limit, UsedMicroUSD: limit - left, ResetsAt: month.AddDate(0, 1, 0)}
-		return nil
+		usage.Allowance, err = s.allowanceView(ctx, tx, workspaceID, left, limit, month.AddDate(0, 1, 0))
+		return err
 	})
 	if usage.Rows == nil {
 		usage.Rows = []UsageRow{}

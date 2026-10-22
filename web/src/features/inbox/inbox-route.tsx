@@ -197,9 +197,12 @@ export function InboxRoute() {
     void client.invalidateQueries({ queryKey: ['tags'] });
     addTag.mutate({ conversationId: variables.conversationId, tagId: tag.id });
   } });
-  const message = useMutation({ mutationFn: ({ kind, body, files, cc, seen }: { kind: 'outgoing' | 'note'; body: string; files?: File[]; cc?: string[]; seen?: number }) =>
-    api.createMessage(selected!.id, kind, body, files, cc, seen),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['messages', selected?.id] }),
+  const message = useMutation({ mutationFn: ({ kind, body, files, cc, seen, aiDraft }: { kind: 'outgoing' | 'note'; body: string; files?: File[]; cc?: string[]; seen?: number; aiDraft?: string }) =>
+    api.createMessage(selected!.id, kind, body, files, cc, seen, aiDraft),
+    onSuccess: (_sent, { aiDraft }) => {
+      if (aiDraft) void client.invalidateQueries({ queryKey: ['ai-drafts', selected?.id] });
+      return client.invalidateQueries({ queryKey: ['messages', selected?.id] });
+    },
     // A reply refused for a newer one: the timeline shows it at once.
     onError: (error) => { if (error instanceof ReplyConflictError) void client.invalidateQueries({ queryKey: ['messages', selected?.id] }); } });
   const retryDelivery = useMutation({ mutationFn: ({ conversationId, messageId }: { conversationId: string; messageId: string }) => api.retryDelivery(conversationId, messageId),
@@ -229,7 +232,7 @@ export function InboxRoute() {
     onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
-    onMessage={(kind, body, files, cc, seen) => message.mutateAsync({ kind, body, files, cc, seen })}
+    onMessage={(kind, body, files, cc, seen, aiDraft) => message.mutateAsync({ kind, body, files, cc, seen, aiDraft })} aiDrafts={me.data?.ai_features?.draft}
     savedReplies={savedReplies.data?.items} customerName={selected?.contact_name} agentName={agentSignatureName(me.data?.agent)}
     savedRepliesState={savedReplies.isPending ? 'loading' : savedReplies.isError ? 'failed' : 'ready'}
     // A new tab, so the draft and the files in this reply box stay where they are.

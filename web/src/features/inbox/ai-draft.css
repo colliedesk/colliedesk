@@ -1,0 +1,38 @@
+/* The AI draft panel under the reply box. Loaded with its lazy part; scrollbars follow base.css. */
+.ai-draft { display: grid; gap: var(--space-2); margin: 0 var(--space-2) var(--space-2); border: 1px solid var(--line); border-radius: var(--radius); background: var(--accent-soft);
+  padding: var(--space-2) var(--space-3); min-width: 0; }
+.ai-draft-head { display: flex; align-items: center; gap: var(--space-2); }
+.ai-draft-head > svg { flex: none; color: var(--text-3); }
+.ai-draft-head h3 { flex: 1; margin: 0; font-size: var(--fs-small); font-weight: 600; }
+.ai-draft-form { display: grid; gap: var(--space-1); }
+.ai-draft-form label { color: var(--text-2); font-size: var(--fs-small); }
+.ai-draft-form textarea { min-height: 3.5rem; resize: vertical; background: var(--surface-1); }
+.ai-draft-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.ai-draft-count { color: var(--text-3); font-size: var(--fs-label); font-variant-numeric: tabular-nums; }
+.ai-draft-writing > span { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-2); font-size: var(--fs-small); }
+.ai-draft-pulse { width: 8px; height: 8px; border-radius: 999px; background: var(--accent); animation: ai-draft-pulse 1.2s ease-in-out infinite; }
+@keyframes ai-draft-pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .ai-draft-pulse { animation: none; } }
+.ai-draft-problem { flex: 1 1 16rem; margin: 0; color: var(--danger); font-size: var(--fs-small); }
+.ai-draft-ready { display: grid; gap: var(--space-2); min-width: 0; }
+.ai-draft-text { max-height: 16rem; margin: 0; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-1);
+  padding: var(--space-2) var(--space-3); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-draft-text:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ai-draft-missing { margin: 0; color: var(--text-2); font-size: var(--fs-small); }
+.ai-draft-check { display: grid; gap: 2px; border: 1px solid var(--note-line); border-radius: var(--radius); background: var(--note-bg); color: var(--note-text);
+  padding: var(--space-2) var(--space-3); font-size: var(--fs-small); }
+.ai-draft-check ul { margin: 0; padding-left: var(--space-4); }
+.ai-draft-check code { font-family: var(--font-mono); overflow-wrap: anywhere; }
+.ai-draft-sources { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; color: var(--text-3); font-size: var(--fs-small); }
+.ai-draft-sources ul { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); margin: 0; padding: 0; list-style: none; min-width: 0; }
+.ai-draft-sources a { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); overflow-wrap: anywhere; }
+.ai-draft-sources a > svg { flex: none; width: 14px; height: 14px; }
+.ai-draft-quiet { margin: 0; color: var(--text-3); font-size: var(--fs-small); }
+.ai-draft-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ai-draft-again { margin-left: auto; }
+@media (pointer: coarse) {
+  .ai-draft button, .ai-draft-sources a { min-height: var(--touch); }
+}
+@media (max-width: 480px) {
+  .ai-draft-again { margin-left: 0; }
+}

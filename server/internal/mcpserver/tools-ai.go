@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strconv"
 )
 
 const aiProviderNotFound = "No AI provider with that id in this workspace. List them with colliedesk_ai_settings_get."
@@ -117,4 +118,76 @@ func aiAutomaticLimitsSet(c *call, arguments map[string]any) (any, error) {
 		return nil, err
 	}
 	return map[string]any{"automatic": limits}, nil
+}
+
+const aiDraftNotFound = "No AI draft with that id on this conversation. List them with colliedesk_ai_drafts_list."
+
+type aiDraftArguments struct {
+	ConversationID string `json:"conversation_id"`
+	DraftID        string `json:"draft_id"`
+	Prompt         string `json:"prompt"`
+	Wait           int    `json:"wait"`
+}
+
+func aiDraftsPath(conversationID, rest string) string {
+	return "/api/v1/conversations/" + url.PathEscape(conversationID) + "/ai-drafts" + rest
+}
+
+func aiDraftCreate(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[aiDraftArguments](arguments)
+	if err != nil {
+		return nil, err
+	}
+	var draft json.RawMessage
+	if err := c.send(http.MethodPost, aiDraftsPath(args.ConversationID, ""), map[string]any{"prompt": args.Prompt}, &draft); err != nil {
+		return nil, err
+	}
+	return map[string]any{"draft": draft}, nil
+}
+
+func aiDraftGet(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[aiDraftArguments](arguments)
+	if err != nil {
+		return nil, err
+	}
+	c.notFound = aiDraftNotFound
+	query := url.Values{}
+	if args.Wait > 0 {
+		query.Set("wait", strconv.Itoa(min(args.Wait, 20)))
+	}
+	var draft json.RawMessage
+	if err := c.get(aiDraftsPath(args.ConversationID, "/"+url.PathEscape(args.DraftID)), query, &draft); err != nil {
+		return nil, err
+	}
+	return map[string]any{"draft": draft}, nil
+}
+
+func aiDraftsList(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[aiDraftArguments](arguments)
+	if err != nil {
+		return nil, err
+	}
+	var list struct {
+		Items []json.RawMessage `json:"items"`
+	}
+	if err := c.get(aiDraftsPath(args.ConversationID, ""), nil, &list); err != nil {
+		return nil, err
+	}
+	if list.Items == nil {
+		list.Items = []json.RawMessage{}
+	}
+	return map[string]any{"drafts": list.Items}, nil
+}
+
+func aiDraftDiscard(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[aiDraftArguments](arguments)
+	if err != nil {
+		return nil, err
+	}
+	c.notFound = aiDraftNotFound
+	var draft json.RawMessage
+	if err := c.send(http.MethodPost, aiDraftsPath(args.ConversationID, "/"+url.PathEscape(args.DraftID)+"/discard"), nil, &draft); err != nil {
+		return nil, err
+	}
+	return map[string]any{"draft": draft}, nil
 }

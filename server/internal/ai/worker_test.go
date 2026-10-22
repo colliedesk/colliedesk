@@ -50,7 +50,7 @@ func newQueueEnv(t *testing.T, mutate func(*ai.Config)) *queueEnv {
 		q.mu.Lock()
 		q.runs = append(q.runs, run.Task)
 		q.mu.Unlock()
-		_, err := run.Complete(ctx, aiprovider.Request{System: "test", Messages: []aiprovider.Message{{Role: aiprovider.RoleUser, Text: "hello"}}, MaxOutput: 100})
+		_, err := run.Metered(ctx, aiprovider.Request{System: "test", Messages: []aiprovider.Message{{Role: aiprovider.RoleUser, Text: "hello"}}, MaxOutput: 100})
 		return err
 	})
 	q.worker.Handle(ai.SlotDraft, handler)
@@ -313,7 +313,7 @@ func TestAStoppingProcessPutsItsTaskBackWithoutCountingIt(t *testing.T) {
 	ctx, stop := context.WithCancel(context.Background())
 	q.worker.Handle(ai.SlotDraft, ai.HandlerFunc(func(callCtx context.Context, run *ai.Run) error {
 		stop()
-		_, err := run.Complete(callCtx, aiprovider.Request{Messages: []aiprovider.Message{{Role: aiprovider.RoleUser, Text: "hi"}}, MaxOutput: 10})
+		_, err := run.Metered(callCtx, aiprovider.Request{Messages: []aiprovider.Message{{Role: aiprovider.RoleUser, Text: "hi"}}, MaxOutput: 10})
 		return err
 	}))
 	id := q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
@@ -424,5 +424,77 @@ func TestTheMinuteLimitLooksAcrossMidnight(t *testing.T) {
 	}
 	if state, _ := q.state(t, after); state != ai.TaskQueued {
 		t.Fatalf("20 seconds after midnight, within the minute = %s, want queued", state)
+	}
+}
+
+func TestUndecidedDraftsExpireAndOldDraftTextIsErased(t *testing.T) {
+	q := newQueueEnv(t, nil)
+	ctx := context.Background()
+	var conversation string
+	if err := q.pool.QueryRow(ctx, `WITH c AS (INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Ada','ada@example.com') RETURNING id)
+		INSERT INTO conversations(workspace_id,contact_id,subject) SELECT $1,id,'Hello' FROM c RETURNING id::text`, q.a.id).Scan(&conversation); err != nil {
+		t.Fatal(err)
+	}
+	now := q.clock.Now()
+	draft := func(status string, created time.Time, ready, decided *time.Time, outcome *string) string {
+		var id string
+		if err := q.pool.QueryRow(ctx, `INSERT INTO ai_drafts(workspace_id,conversation_id,status,prompt,text,created_at,ready_at,decided_at,outcome)
+			VALUES($1,$2,$3,'say hi','Hello Ada',$4,$5,$6,$7) RETURNING id::text`, q.a.id, conversation, status, created, ready, decided, outcome).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	at := func(d time.Duration) *time.Time { v := now.Add(-d); return &v }
+	discarded := "discarded"
+	day := 24 * time.Hour
+	stale := draft("ready", now.Add(-8*day), at(8*day), nil, nil)
+	fresh := draft("ready", now.Add(-day), at(day), nil, nil)
+	old := draft("ready", now.Add(-100*day), at(100*day), at(91*day), &discarded)
+	recent := draft("ready", now.Add(-100*day), at(100*day), at(30*day), &discarded)
+	cancelled := draft("cancelled", now.Add(-91*day), nil, nil, nil)
+	q.tick(t)
+	state := func(id string) string {
+		var outcome, text *string
+		if err := q.pool.QueryRow(ctx, `SELECT outcome, text FROM ai_drafts WHERE id=$1`, id).Scan(&outcome, &text); err != nil {
+			t.Fatal(err)
+		}
+		result := "-"
+		if outcome != nil {
+			result = *outcome
+		}
+		if text == nil {
+			return result + " erased"
+		}
+		return result + " kept"
+	}
+	for id, want := range map[string]string{stale: "expired kept", fresh: "- kept", old: "discarded erased", recent: "discarded kept", cancelled: "- erased"} {
+		if got := state(id); got != want {
+			t.Fatalf("draft %s = %q, want %q", id, got, want)
+		}
+	}
+	if n := q.count(t, `SELECT count(*) FROM ai_drafts WHERE text_cleared_at IS NOT NULL AND prompt=''`); n != 2 {
+		t.Fatalf("erased prompts = %d", n)
+	}
+}
+
+func TestTheAllowanceSaysAboutHowManyDraftsAreLeft(t *testing.T) {
+	server := *testServer
+	server.Allowance = &ai.Allowance{PerWorkspace: 1} // 1,000,000 micro-dollars
+	q := newQueueEnv(t, func(config *ai.Config) { config.Server = &server })
+	settings, err := q.service.Settings(context.Background(), q.a.id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Before the first draft, a typical one on Sonnet's prices: 6,000×2 + 500×10 = 17,000.
+	if settings.Allowance == nil || settings.Allowance.DraftsLeft == nil || *settings.Allowance.DraftsLeft != 58 {
+		t.Fatalf("allowance before any draft = %+v", settings.Allowance)
+	}
+	q.turnOn(t, q.a, ai.SlotDraft)
+	q.enqueue(t, q.a, ai.NewTask{Kind: ai.SlotDraft})
+	q.tick(t)
+	// Then the workspace's own: one draft of 70 micro-dollars.
+	settings, _ = q.service.Settings(context.Background(), q.a.id)
+	if *settings.Allowance.DraftsLeft != (1_000_000-70)/70 {
+		t.Fatalf("drafts left after one draft = %d", *settings.Allowance.DraftsLeft)
 	}
 }

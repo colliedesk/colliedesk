@@ -20,6 +20,7 @@ export const aiMessages = {
   allowanceUsedBody: (resets: string) => `Features on it stop until ${resets}. Add your own provider to keep them running.`,
   allowanceUsed: (used: string, limit: string) => `${used} of ${limit} used`,
   resets: (day: string) => `resets ${day}`,
+  draftsLeft: (n: number) => `About ${n.toLocaleString('en')} reply ${n === 1 ? 'draft' : 'drafts'} left`,
   includedUsed: 'Allowance used this month',
   thisMonth: 'This month',
   month: 'Month',
