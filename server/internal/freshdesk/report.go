@@ -16,8 +16,9 @@ const (
 	// StatusUnverified: nothing failed, but the expected totals could not be
 	// confirmed from an independent source, so completeness is not proven.
 	StatusUnverified = "UNVERIFIED"
-	// StatusInterim is the report of a ModeRecent run: a slice of recent tickets, with the account-wide
-	// steps and checks left to the full run that follows. It never proves completeness.
+	// StatusInterim is the report of a ModeRecent run in which nothing failed: a slice of recent
+	// tickets, with the account-wide steps and checks left to the full run that follows. It never proves
+	// completeness. A slice with a failure is FAILED, with Interim still true.
 	StatusInterim = "INTERIM"
 )
 
@@ -205,7 +206,7 @@ type Report struct {
 	Domain    string `json:"domain"`
 	Workspace string `json:"workspace"`
 	DryRun    bool   `json:"dry_run"`
-	// Interim is true for a ModeRecent run (status INTERIM).
+	// Interim is true for a ModeRecent run (status INTERIM, or FAILED when an item failed).
 	Interim      bool             `json:"interim"`
 	Since        *time.Time       `json:"since"`
 	StartedAt    time.Time        `json:"started_at"`

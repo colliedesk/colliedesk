@@ -193,7 +193,7 @@ options for it; with their zero values the CLI behaves as before.
 
 - **`Mode: ModeRecent`** imports the tickets the list returns for `Since`, newest updated first, and
   nothing account-wide: no knowledge base, no contact or saved-reply list, no id probe, no totals.
-  Its report is `INTERIM` (`interim: true`), never OK. The job then runs `ModeFull`, the same run as
+  Its report is `INTERIM` (`interim: true`), never OK, or FAILED when an item failed. The job then runs `ModeFull`, the same run as
   the CLI, which skips the recent tickets by the re-run rule and alone can report OK. The probe is
   left out on purpose: it imports every ticket the list does not return (`ticket_not_listed`), so a
   first `Run` with `Since` imports the whole account and the recent tickets come last. The list is

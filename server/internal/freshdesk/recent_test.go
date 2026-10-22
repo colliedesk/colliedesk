@@ -324,3 +324,15 @@ func TestAnAccountThatKeepsFailingIsUnavailableNotRefused(t *testing.T) {
 		t.Fatalf("a 400 is not worth retrying: %v", err)
 	}
 }
+
+func TestARecentPassWithAFailedTicketIsFailedNotInterim(t *testing.T) {
+	env := newImportEnv(t)
+	env.fake.failPathStatus = map[string]int{"/api/v2/tickets/6/conversations": 400}
+	report, err := env.run(t, t.Context(), func(o *freshdesk.Options) { o.Mode, o.Since = freshdesk.ModeRecent, &recentSince })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Status != freshdesk.StatusFailed || !report.Interim || len(report.Failures) == 0 {
+		t.Fatalf("status=%s interim=%v failures=%v missing=%v: a slice with a failure is FAILED", report.Status, report.Interim, report.Failures, report.Missing)
+	}
+}
