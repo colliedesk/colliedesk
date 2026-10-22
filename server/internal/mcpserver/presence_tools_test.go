@@ -59,3 +59,26 @@ func TestConversationPresenceToolStaysInItsWorkspace(t *testing.T) {
 		t.Fatalf("the other workspace lists %v", viewers)
 	}
 }
+
+func TestConversationGetSaysWhoElseHasItOpen(t *testing.T) {
+	e := newEnv(t)
+	f := seedInbox(t, e)
+	session := e.connect(f.w.read, "")
+	out := e.ok(session, "colliedesk_conversation_get", map[string]any{"conversation_id": f.c2})
+	if viewers := at(t, out, "viewers").([]any); len(viewers) != 0 {
+		t.Fatalf("nobody has it open, viewers = %v", viewers)
+	}
+	viewersOf(t, e, f.w, f.c2, true)
+	out = e.ok(session, "colliedesk_conversation_get", map[string]any{"conversation_id": f.c2})
+	viewers := at(t, out, "viewers").([]any)
+	if len(viewers) != 1 || at(t, viewers, 0, "name") != "Ada Admin" || at(t, viewers, 0, "writing") != true {
+		t.Fatalf("viewers = %v, want Ada Admin writing", viewers)
+	}
+	if hint, _ := out["hint"].(string); !strings.Contains(hint, "Ada Admin") || !strings.Contains(hint, "colliedesk_reply_draft") {
+		t.Errorf("hint %q must say who is writing", out["hint"])
+	}
+	// Another conversation is not affected.
+	if viewers := at(t, e.ok(session, "colliedesk_conversation_get", map[string]any{"conversation_id": f.c1}), "viewers").([]any); len(viewers) != 0 {
+		t.Fatalf("c1 viewers = %v", viewers)
+	}
+}

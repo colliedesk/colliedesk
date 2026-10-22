@@ -13,6 +13,6 @@ function hue(name: string): number {
   return hues[sum % hues.length];
 }
 
-export function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' }) {
+export function Avatar({ name, size = 'md' }: { name: string; size?: 'xs' | 'sm' | 'md' }) {
   return <span className={`avatar avatar-${size}`} aria-hidden="true" style={{ '--avatar-hue': hue(name) } as React.CSSProperties}>{initials(name)}</span>;
 }

@@ -54,7 +54,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_whoami` | Shows the workspace, the team member, the token tier and the tools you can use | any |
 | `colliedesk_inbox_search` | Lists conversations in pages by any [inbox filter](inbox.md#filter-and-sort) or a saved view, in any of the inbox orders | `read` |
 | `colliedesk_inbox_activity` | Lists what changed since the last call: new conversations, conversations assigned to you, conversations that changed | `read` |
-| `colliedesk_conversation_get` | Reads one conversation with its messages, attachment ids and customer | `read` |
+| `colliedesk_conversation_get` | Reads one conversation with its messages, attachment ids and customer, and who else has it open | `read` |
 | `colliedesk_conversation_presence` | Shows the team that the agent is working on a conversation (as "your name via the token label", for 2 minutes), lists who else has it open and warns when someone has a reply not sent yet; `leave` takes it off the list | `read` |
 | `colliedesk_time_entries_list` | Lists the time logged on a conversation, with the total | `read` |
 | `colliedesk_attachment_get` | Reads an attachment: name, size, type, and the text of a plain text file | `read` |

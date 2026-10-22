@@ -117,4 +117,8 @@ type restActivity struct {
 	NewConversations []restActivityItem `json:"new_conversations"`
 	AssignedToMe     []restActivityItem `json:"assigned_to_me"`
 	Updated          []restActivityItem `json:"updated"`
+	Viewing          []struct {
+		ConversationID string       `json:"conversation_id"`
+		Viewers        []restViewer `json:"viewers"`
+	} `json:"viewing"`
 }

@@ -91,31 +91,77 @@ func (s *Store) LeavePresence(ctx context.Context, workspaceID, conversationID, 
 	return err
 }
 
-// queueViewers lists who has the conversation open, once per person and once per agent token, people
-// first. The caller's own rows are left out, and so are a person's other tabs when the person asks;
-// an agent token does see the tabs of the person it acts as, who may be writing a reply. Deactivated
-// people and signed-out sessions are not listed even before their rows expire.
-func queueViewers(batch *pgx.Batch, workspaceID, conversationID string, who PresenceCaller, now time.Time) {
-	batch.Queue(`SELECT p.agent_id::text,COALESCE(NULLIF(a.display_name,''),a.email),
+// viewersSQL lists who has a conversation open, once per person and once per agent token, people
+// first, with the conversation id first in each row. The caller's own rows are left out, and so are a
+// person's other tabs when the person asks; an agent token does see the tabs of the person it acts
+// as, who may be writing a reply. Deactivated people and signed-out sessions are not listed even
+// before their rows expire. $1 workspace, $2 caller session, $3 caller agent, $4 now, $5 caller is a
+// token; where narrows it further.
+func viewersSQL(where string) string {
+	return `SELECT p.conversation_id::text,p.agent_id::text,COALESCE(NULLIF(a.display_name,''),a.email),
 			min(p.writing_since),max(p.edited_at),t.id::text,t.label,t.scope
 		FROM conversation_presence p
 		JOIN agents a ON a.workspace_id=p.workspace_id AND a.id=p.agent_id AND a.deactivated_at IS NULL
-		JOIN sessions s ON s.workspace_id=p.workspace_id AND s.id=p.session_id AND s.revoked_at IS NULL AND s.expires_at>$5
+		JOIN sessions s ON s.workspace_id=p.workspace_id AND s.id=p.session_id AND s.revoked_at IS NULL AND s.expires_at>$4
 		LEFT JOIN sessions t ON t.workspace_id=s.workspace_id AND t.id=s.id AND s.scope IS NOT NULL
-		WHERE p.workspace_id=$1 AND p.conversation_id=$2 AND p.expires_at>$5 AND p.session_id<>$3
-			AND NOT (NOT $6 AND p.agent_id=$4 AND s.scope IS NULL)
-		GROUP BY p.agent_id,a.display_name,a.email,t.id,t.label,t.scope
-		ORDER BY t.id IS NOT NULL,2,t.label,p.agent_id,t.id`, workspaceID, conversationID, who.SessionID, who.AgentID, now, who.Token)
+		WHERE p.workspace_id=$1 AND p.expires_at>$4 AND p.session_id<>$2
+			AND NOT (NOT $5 AND p.agent_id=$3 AND s.scope IS NULL)` + where + `
+		GROUP BY p.conversation_id,p.agent_id,a.display_name,a.email,t.id,t.label,t.scope
+		ORDER BY p.conversation_id,t.id IS NOT NULL,3,t.label,p.agent_id,t.id`
+}
+
+func queueViewers(batch *pgx.Batch, workspaceID, conversationID string, who PresenceCaller, now time.Time) {
+	batch.Queue(viewersSQL(` AND p.conversation_id=$6`), workspaceID, who.SessionID, who.AgentID, now, who.Token, conversationID)
+}
+
+// ConversationViewing is who has one conversation open, for the markers of the inbox list.
+type ConversationViewing struct {
+	ConversationID string                      `json:"conversation_id"`
+	Viewers        []domain.ConversationViewer `json:"viewers"`
+}
+
+// inboxViewingLimit caps the conversations the activity poll lists as open; a team of ten has far fewer.
+const inboxViewingLimit = 200
+
+// queueInboxViewing lists who has each conversation of the workspace open, for the activity poll.
+func queueInboxViewing(batch *pgx.Batch, workspaceID string, who PresenceCaller, now time.Time) {
+	batch.Queue(viewersSQL(` AND p.conversation_id IN (
+			SELECT q.conversation_id FROM conversation_presence q WHERE q.workspace_id=$1 AND q.expires_at>$4
+			GROUP BY q.conversation_id ORDER BY max(q.seen_at) DESC LIMIT $6)`), workspaceID, who.SessionID, who.AgentID, now, who.Token, inboxViewingLimit)
+}
+
+func collectInboxViewing(rows pgx.Rows) ([]ConversationViewing, error) {
+	viewers, conversations, err := scanViewers(rows)
+	if err != nil {
+		return nil, err
+	}
+	out := []ConversationViewing{}
+	for index, viewer := range viewers {
+		if index == 0 || conversations[index] != conversations[index-1] {
+			out = append(out, ConversationViewing{ConversationID: conversations[index], Viewers: []domain.ConversationViewer{}})
+		}
+		last := &out[len(out)-1]
+		last.Viewers = append(last.Viewers, viewer)
+	}
+	return out, nil
 }
 
 func collectViewers(rows pgx.Rows) ([]domain.ConversationViewer, error) {
+	viewers, _, err := scanViewers(rows)
+	return viewers, err
+}
+
+// scanViewers reads the rows of viewersSQL and the conversation of each.
+func scanViewers(rows pgx.Rows) ([]domain.ConversationViewer, []string, error) {
 	defer rows.Close()
 	viewers := []domain.ConversationViewer{}
+	conversations := []string{}
 	for rows.Next() {
 		var viewer domain.ConversationViewer
+		var conversationID string
 		var tokenID, label, scope *string
-		if err := rows.Scan(&viewer.AgentID, &viewer.Name, &viewer.WritingSince, &viewer.EditedAt, &tokenID, &label, &scope); err != nil {
-			return nil, fmt.Errorf("scan viewer: %w", err)
+		if err := rows.Scan(&conversationID, &viewer.AgentID, &viewer.Name, &viewer.WritingSince, &viewer.EditedAt, &tokenID, &label, &scope); err != nil {
+			return nil, nil, fmt.Errorf("scan viewer: %w", err)
 		}
 		viewer.Writing = viewer.WritingSince != nil
 		if viewer.Writing {
@@ -126,9 +172,10 @@ func collectViewers(rows pgx.Rows) ([]domain.ConversationViewer, error) {
 			viewer.AgentToken = &domain.MessageToken{ID: *tokenID, Label: *label, Scope: *scope, AgentName: viewer.Name}
 		}
 		viewers = append(viewers, viewer)
+		conversations = append(conversations, conversationID)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list viewers: %w", err)
+		return nil, nil, fmt.Errorf("list viewers: %w", err)
 	}
-	return viewers, nil
+	return viewers, conversations, nil
 }

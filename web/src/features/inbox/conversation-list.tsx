@@ -1,9 +1,10 @@
 import { Fragment, useEffect, useRef } from 'react';
 import type { ReactNode, Ref } from 'react';
-import type { Conversation, OnboardingGoal } from '../../api/schemas';
+import type { Conversation, ConversationViewer, OnboardingGoal } from '../../api/schemas';
 import { dayGroup, formatDate, formatShortDate } from '../../lib/format-date';
 import { useNow } from '../../lib/use-now';
 import { messages } from '../../messages';
+import { Avatar } from '../../ui/avatar';
 import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
 import { PriorityLabel, StatusLabel } from './conversation-labels';
 
@@ -35,6 +36,8 @@ interface ConversationListProps {
   toolbar?: ReactNode;
   // draftIds are the conversations with a reply draft an AI agent left for a person to send.
   draftIds?: ReadonlySet<string>;
+  // viewers are the others who have a conversation open now, by conversation id (the activity poll).
+  viewers?: ReadonlyMap<string, ConversationViewer[]>;
   // grouped splits the rows under Today and Earlier; only the latest-activity order keeps the groups contiguous.
   grouped?: boolean;
   // onboardingGoal is what the team said it wants first at sign-up; its step leads the get-started list.
@@ -57,9 +60,24 @@ function getStartedSteps(goal: OnboardingGoal | null | undefined, canManage: boo
 }
 
 const visibleTags = 2;
+const visibleViewers = 3;
+
+// ViewerStack marks a row with the initials of the others who have it open, and a word when one of them
+// is writing a reply. The row's accessible name carries the same in words.
+function ViewerStack({ viewers }: { viewers: ConversationViewer[] }) {
+  const tip = viewers.map((viewer) => messages.viewerTip(messages.viewerName(viewer), viewer.writing)).join(' · ');
+  return <>
+    <span className="viewer-stack" data-tip={tip} aria-hidden="true">
+      {viewers.slice(0, visibleViewers).map((viewer) => <Avatar key={`${viewer.agent_id}:${viewer.agent_token?.id ?? ''}`} name={viewer.name} size="xs" />)}
+      {viewers.length > visibleViewers && <span className="viewer-more">+{viewers.length - visibleViewers}</span>}
+    </span>
+    {viewers.some((viewer) => viewer.writing) && <span className="badge badge-replying" aria-hidden="true">{messages.replying}</span>}
+    <span className="sr-only">{messages.openNow(viewers.map((viewer) => (viewer.writing ? messages.writingAReply(messages.viewerName(viewer)) : messages.viewerName(viewer))))}</span>
+  </>;
+}
 
 export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
-  failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds, grouped = true, onboardingGoal }: ConversationListProps) {
+  failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds, viewers, grouped = true, onboardingGoal }: ConversationListProps) {
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
   const now = useNow(timezone);
   const settled = !loading && !failed;
@@ -113,6 +131,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
         const group = dayGroup(item.updated_at, timezone, now);
         const startsGroup = grouped && (index === 0 || group !== dayGroup(items[index - 1].updated_at, timezone, now));
         const full = formatDate(item.updated_at, timezone, now);
+        const open = viewers?.get(item.id);
         return (
           <Fragment key={item.id}>
           {startsGroup && <h2 className="group-label">{messages.dayGroups[group]}</h2>}
@@ -130,6 +149,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
               <StatusLabel status={item.status} />
               <PriorityLabel priority={item.priority} />
               {draftIds?.has(item.id) && <span className="badge badge-draft">{messages.draftWaiting}</span>}
+              {open && open.length > 0 && <ViewerStack viewers={open} />}
               {item.tags.slice(0, visibleTags).map((tag) => <span className="tag-pill" key={tag.id}>{tag.name}</span>)}
               {item.tags.length > visibleTags && <span className="tag-pill">+{item.tags.length - visibleTags}</span>}
             </span>

@@ -15,8 +15,7 @@ func (a *API) inboxActivity(response http.ResponseWriter, request *http.Request)
 		}
 		since = &parsed
 	}
-	identity := principal(request)
-	activity, err := a.store.InboxActivity(request.Context(), identity.Workspace.ID, identity.Agent.ID, since)
+	activity, err := a.store.InboxActivity(request.Context(), principal(request).Workspace.ID, presenceCaller(request), since)
 	if err != nil {
 		writeStoreError(response, err)
 		return
