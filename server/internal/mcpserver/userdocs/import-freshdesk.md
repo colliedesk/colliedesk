@@ -1,10 +1,11 @@
 # Import from Freshdesk
 
-`collie import freshdesk` copies a Freshdesk account into a Colliedesk workspace through the
-Freshdesk API. It ends with a reconcile report that compares what Freshdesk holds with what
-Colliedesk now holds. If anything is missing, the report says **FAILED** and lists the Freshdesk
-ids. If the totals could not be confirmed, it says **UNVERIFIED**. Both end with a non-zero exit
-code. Run the same command again to retry: finished items are never copied twice.
+Colliedesk copies a Freshdesk account into a workspace through the Freshdesk API: in the app under
+**Settings > Import from Freshdesk** (admins, no terminal needed), or with the `collie import freshdesk`
+command on your own server. Both end with a reconcile report that compares what Freshdesk holds with
+what Colliedesk now holds. If anything is missing, the report says **FAILED** and lists the Freshdesk
+ids. If the totals could not be confirmed, it says **UNVERIFIED**. Run the import again to retry:
+finished items are never copied twice. Your Freshdesk account is not changed.
 
 ## What is imported
 
@@ -117,8 +118,9 @@ may lack the right), the status is `UNVERIFIED`.
 
 1. Create the Colliedesk workspace (on your own server, see
    [self-host](../self-host/README.md)).
-2. Invite your team first. Replies by an agent link to that agent only when a Colliedesk agent
-   with the same email exists.
+2. Invite your team. With the CLI, replies by an agent link to that agent only when a Colliedesk
+   agent with the same email exists when you run it. In the app you can also invite them from the
+   import page, before or after the import: joining links them (see "Import in the app").
 3. Get a Freshdesk API key from an **admin** account with access to all tickets. The import reads
    the account id (View Account), which needs an admin key:
    1. Sign in to Freshdesk.
@@ -127,6 +129,64 @@ may lack the right), the status is `UNVERIFIED`.
 
 The key gives read access to the whole account. Keep it in an environment variable. Colliedesk
 never accepts it as a command-line argument and never prints it.
+
+## Import in the app
+
+1. Open **Settings > Import from Freshdesk** (admins only; an empty inbox links to it).
+2. Enter your `<account>.freshdesk.com` address and the API key of a Freshdesk **admin** (see
+   "Before you start"), then select **Read account**. Colliedesk reads the account and shows what it
+   found: tickets, contacts, companies and agents, and whether the key can read archived tickets,
+   canned responses and the knowledge base. Nothing is written yet. Freshdesk does not count archived
+   tickets ahead of time, so the ticket number is "at least".
+3. Select **Start import** within the hour. The tickets updated in the last 90 days come first, newest
+   first: once they are in, the page says so and your team can work on them while older and archived
+   tickets, contacts, saved replies and the knowledge base follow. The page shows the step, the counts,
+   an estimate of the time left, and when it waits for the Freshdesk API limit. You can leave the page
+   or sign out: the import runs on the server and survives a restart.
+4. At the end the page shows the result, **In Freshdesk** next to **In Colliedesk** for each kind of
+   data, with **Download report** for the Markdown report. **Undo import** removes what it brought in.
+
+Under **Freshdesk agents** the page lists the agents of the account. Each one linked to a Colliedesk
+agent becomes the author of their imported replies and the assignee of the imported tickets they held
+(unless someone reassigned a ticket since); the original times do not change. Agents with the same email
+are linked when the account is read. **Invite** creates a one-time invite link for the others, shown
+once in their row with **Copy link** and when it expires: send it to them. When they join they are
+linked by their email, before or after the import. **Revoke invite** takes a waiting invite back. To link someone whose email differs, choose
+the agent and select **Link**; **Unlink** takes it back. A link is applied within seconds.
+
+When an import ends on its own (complete, incomplete or stopped by an error), the admins of the
+workspace and the person who started it get an email with the result and a link to the page, on
+Colliedesk Cloud and on a server with outgoing email (`SMTP_HOST` and `MAIL_FROM_DOMAIN`). A preview and
+an import you stop yourself send none.
+
+**Stop import** stops it within a minute; what was imported stays. Start a new import to finish it, or
+undo it. Only one import or undo runs in a workspace at a time.
+
+## Import through the API or an AI agent
+
+Everything the page does, an admin's API session or an AI agent with an admin token can do. The server reads the account, imports the tickets updated in the last 90 days first
+(newest first, so your team can work on them), then the whole account, and ends with the same
+reconcile report. It leaves a fifth of your Freshdesk API limit to your other Freshdesk apps.
+
+1. `POST /api/v1/imports` with `{"source": "freshdesk", "domain": "<account>.freshdesk.com",
+   "api_key": "..."}` (MCP: `colliedesk_import_preview`) reads the account and writes nothing. Poll
+   `GET /api/v1/imports/{id}` until `state` is `previewed`: `preview` has the counts and says whether
+   the key can read the archive (if not, the report can be UNVERIFIED at best).
+2. `POST /api/v1/imports/{id}/start` (`colliedesk_import_start`) within an hour imports it.
+   `progress` shows the step, the counts and an estimate; `cancel` stops it.
+3. `GET /api/v1/imports/{id}/report` (`colliedesk_import_report`) is the report; add
+   `?format=markdown` to download it. `POST /api/v1/imports/{id}/undo` removes what the import
+   brought in (an agent token's undo waits for a person's approval).
+
+The key is encrypted on the server and erased when the import ends. An agent token below the admin
+tier cannot send it: the call is refused instead of waiting for approval, so the key is never stored
+in a request. If the server restarted without `MAILBOX_TOKEN_KEYS` (see
+[environment variables](../self-host/environment-variables.md)), the import waits in `waiting_key`
+until you give it the key again (`PUT /api/v1/imports/{id}/key`).
+
+The Freshdesk Free plan has no API calls, so it cannot be imported this way: start a 14-day trial of a
+higher Freshdesk plan, then import. If the trial ends during the import, it stops with
+`freshdesk_plan_no_api` and keeps what it imported.
 
 ## Run the import
 
@@ -152,8 +212,11 @@ never accepts it as a command-line argument and never prints it.
 Options:
 
 - `--api-key-env NAME`: read the key from another variable. Default `FRESHDESK_API_KEY`.
-- `--since YYYY-MM-DD`: import only tickets updated on or after this UTC date. Use it for a final
-  catch-up import just before you switch.
+- `--since YYYY-MM-DD`: list only tickets updated on or after this UTC date. Use it for a final
+  catch-up import just before you switch. It does not make a first import smaller: the ticket id
+  check still finds every ticket the list leaves out and imports it (the report warns
+  `ticket_not_listed`), so the first run into a workspace brings the whole account. On a later run
+  the tickets already imported are not checked again, so the run is shorter.
 - `--dry-run`: count only.
 - `--last-ticket-id N`: the highest ticket number you see in Freshdesk. Recommended: the ticket
   check then covers at least this far (see "How completeness is checked").
@@ -184,8 +247,7 @@ count toward the storage limit of the plan (10, 30, 20, 100 or 250 GiB). Before 
 (it reads each image once to know its size) and compares it with the room left. If they do not fit, it stops with a message that gives the bytes
 needed, the bytes free and the limit, and nothing is imported: no contact, ticket or file. Switch to a larger plan under
 **Billing > Manage billing** (Solo to Small, Small or Founding to Team; on Team or Team 25, contact us
-for more storage) and run it again, or import a smaller slice with
-`--since`.
+for more storage) and run it again.
 
 The check is the only place the limit applies to an import. An import that passes it is admitted and
 runs to the end: customer email that arrives meanwhile, or a file added in Freshdesk after the check,

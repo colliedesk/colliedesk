@@ -34,6 +34,8 @@ func (a *API) routeSpecs() []routeSpec {
 		a.createExportLink, a.downloadExport,
 		a.listAgentRequests, a.getAgentRequest, a.approveAgentRequest, a.rejectAgentRequest, a.cancelAgentRequest,
 		a.createProblemReport,
+		a.listImports, a.getImport, a.setImportKey, a.cancelImport, a.startImport, a.previewImport, a.getImportReport, a.undoImport,
+		a.listImportPeople, a.linkImportPerson, a.unlinkImportPerson,
 	}
 	result := make([]routeSpec, len(routes))
 	for index := range routes {
