@@ -87,8 +87,6 @@
 .signin-brand-lockup { display: flex; align-items: center; gap: var(--space-3); font-size: 24px; letter-spacing: -0.01em; }
 .signin-brand-lockup .logo-mark { width: 64px; height: 64px; }
 .wordmark { display: block; width: auto; }
-.wordmark-collie { fill: var(--on-brand-panel); }
-.wordmark-desk { fill: var(--on-brand-panel-2); }
 .signin-tagline { max-width: 26rem; font: 400 36px/1.12 var(--font-display); letter-spacing: -0.01em; }
 .signin-footnote { margin-top: auto; color: var(--on-brand-panel-2); font-size: var(--fs-small); }
 .signin-brand .signin-footnote { margin-top: var(--space-8); }

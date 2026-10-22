@@ -107,7 +107,7 @@ focus `#f0b44c`. Every text pair is at least 4.5:1; focus rings and input border
 
 Owner decision 22/10/2026, chosen from concepts that pair a collie trait with a help desk object.
 Source of every asset: `plans/261015-0932-colliedesk-brand-directions/logo-options/build-assets.py`
-in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and site wordmark).
+in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and both wordmark files).
 
 - **Mark** (`web/src/ui/logo.tsx`, `LogoMark`): a collie in profile wearing a support headset. Wedge
   muzzle, tipped ear, white ruff, the mic running along the muzzle. Greys only (ink and paper). The white
@@ -115,7 +115,8 @@ in the HC Labs workspace (it writes the favicon, `.ico`, apple-touch icon and si
 - **Favicon** (`web/public/favicon.svg`, `.ico`): a shepherd's crook drawn as a question mark, with a
   sheep for the dot. The headset collie turns to noise at 16 px; the crook stays legible. Same tile.
   `apple-touch-icon.png` (180 px) uses the mark, full bleed.
-- **Wordmark** (`LogoWordmark`, and `public/logo-wordmark.svg` on the site): outlined IBM Plex Sans,
+- **Wordmark** (`LogoWordmark` reads `web/public/wordmark-on-dark.svg`, kept out of the JS bundle; the
+  site uses `public/logo-wordmark.svg`): outlined IBM Plex Sans,
   "collie" 700 and "desk" 400. The second "l" is tipped forward like a collie ear. Use the outlined
   version, never retype it in a font. In running text write "Colliedesk".
 - Do not recolour, outline, rotate, glow or put a gradient on the mark. Do not put the bare mark
