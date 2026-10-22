@@ -1,9 +1,12 @@
 package httpapi_test
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
 )
 
 func senderName(t *testing.T, api http.Handler, token string) string {
@@ -88,10 +91,65 @@ func TestSenderNamesStayInTheirOwnWorkspace(t *testing.T) {
 	if status, body := putChannel(t, api, adminB, map[string]any{"support_address": "help@sender-scope-b.example.com", "sender_name": "B Support"}); status != http.StatusOK {
 		t.Fatalf("B status=%d body=%s", status, body)
 	}
+	if status, body := putChannel(t, api, adminB, map[string]any{"sender_name": "B Team"}); status != http.StatusOK {
+		t.Fatalf("B sender name alone status=%d body=%s", status, body)
+	}
 	if got := senderName(t, api, adminA); got != "Sender Scope A" {
 		t.Fatalf("workspace A sender name = %q after B changed its own", got)
 	}
-	if got := senderName(t, api, adminB); got != "B Support" {
+	if got := senderName(t, api, adminB); got != "B Team" {
 		t.Fatalf("workspace B sender name = %q", got)
+	}
+}
+
+// Saving only the sender name never touches the address: a stale address in a browser tab or a typo
+// in an agent's call cannot reset domain verification or retire the provider domain.
+func TestSavingOnlyTheSenderNameKeepsTheAddressAndItsVerification(t *testing.T) {
+	api, service, pool, _ := testAPIWithConfig(t, nil)
+	admin := createSession(t, api, service, "Keep Address", "admin@keep-address.example.com")
+	if status, body := putChannel(t, api, admin, map[string]any{"sender_name": "Keep Support"}); status != http.StatusBadRequest || !strings.Contains(body, "support address") {
+		t.Fatalf("sender name before the channel is connected: status=%d body=%s, want 400 asking for the address", status, body)
+	}
+	if status, body := putChannel(t, api, admin, map[string]any{"support_address": "help@keep-address.example.com"}); status != http.StatusOK {
+		t.Fatalf("connect status=%d body=%s", status, body)
+	}
+	workspace := workspaceID(t, api, admin)
+	if _, err := pool.Exec(context.Background(), `UPDATE email_channels SET domain_verified_at='2026-10-20T08:00:00Z',provider_domain_id='pd-keep-address' WHERE workspace_id=$1`, workspace); err != nil {
+		t.Fatal(err)
+	}
+
+	status, body := putChannel(t, api, admin, map[string]any{"sender_name": " Keep Support "})
+	if status != http.StatusOK || !strings.Contains(body, `"sender_name":"Keep Support"`) || !strings.Contains(body, `"support_address":"help@keep-address.example.com"`) {
+		t.Fatalf("sender name alone: status=%d body=%s", status, body)
+	}
+	row := queryString(t, pool, `SELECT support_address||' '||domain_verified_at::text||' '||COALESCE(provider_domain_id,'none')||' '||
+		(SELECT count(*) FROM email_provider_domain_trash WHERE workspace_id=$1)::text FROM email_channels WHERE workspace_id=$1`, workspace)
+	if want := "help@keep-address.example.com 2026-10-20 08:00:00+00 pd-keep-address 0"; row != want {
+		t.Fatalf("after saving the sender name: %q, want %q", row, want)
+	}
+	if status, body := putChannel(t, api, admin, map[string]any{}); status != http.StatusBadRequest {
+		t.Fatalf("an empty body status=%d body=%s, want 400", status, body)
+	}
+}
+
+// email_channel_saved counts a workspace connecting email or moving it to a new address; renaming the
+// sender is not activation.
+func TestOnlyConnectingOrMovingTheChannelCountsAsSavingIt(t *testing.T) {
+	funnel := &recordingFunnel{}
+	api, service, _, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.Funnel = funnel })
+	admin := createSession(t, api, service, "Counted Desk", "admin@counted-desk.example.com")
+	steps := []map[string]any{
+		{"support_address": "help@counted-desk.example.com"},
+		{"sender_name": "Counted Support"},
+		{"support_address": "help@counted-desk.example.com", "sender_name": "Counted Team"},
+		{"support_address": "support@counted-desk.example.com"},
+	}
+	for _, body := range steps {
+		if status, text := putChannel(t, api, admin, body); status != http.StatusOK {
+			t.Fatalf("PUT %v status=%d body=%s", body, status, text)
+		}
+	}
+	if got := len(funnel.named("email_channel_saved")); got != 2 {
+		t.Fatalf("email_channel_saved recorded %d times, want 2 (connect and the new address)", got)
 	}
 }

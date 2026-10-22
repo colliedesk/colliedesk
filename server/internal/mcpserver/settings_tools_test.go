@@ -5,6 +5,9 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/polar"
 )
 
 // joinTeam invites email with the agent role through REST and redeems the link, as a person would.
@@ -113,6 +116,11 @@ func TestAdminTierRunsTheWorkspaceThroughTheTools(t *testing.T) {
 	if message := e.fails(session, "colliedesk_email_channel_update", map[string]any{"support_address": "help@settings-tools.example.com", "sender_name": "Two\nlines"}); !strings.Contains(message, "sender_name") {
 		t.Errorf("a sender name with a line break: %q", message)
 	}
+	// The sender name alone: the address stays as it is.
+	nameOnly := e.ok(session, "colliedesk_email_channel_update", map[string]any{"sender_name": "Settings Team"})
+	if at(t, nameOnly, "email_channel", "sender_name") != "Settings Team" || at(t, nameOnly, "email_channel", "support_address") != "help@settings-tools.example.com" {
+		t.Fatalf("sender name alone = %v", nameOnly)
+	}
 	if message := e.fails(session, "colliedesk_email_domain_verify", nil); !strings.Contains(message, "TXT record") {
 		t.Errorf("verify without the DNS record: %q", message)
 	}
@@ -185,5 +193,36 @@ func TestSettingsToolsStayInTheirWorkspace(t *testing.T) {
 	}
 	if status, _ := e.rest(http.MethodGet, "/api/v1/auth/me", nil, other.admin); status != http.StatusOK {
 		t.Fatalf("the other workspace's session was revoked: %d", status)
+	}
+}
+
+// The tools run through the REST handlers, so the cloud refuses a brand in the sender name and the
+// workspace name for an AI agent as it does for a person; a self-hosted server accepts it.
+func TestTheCloudRefusesBrandNamesThroughTheTools(t *testing.T) {
+	cloud := newEnvWith(t, func(config *httpapi.Config) {
+		config.Billing = polar.Config{AccessToken: "token-for-test", WebhookSecret: "secret-for-test", APIURL: "http://127.0.0.1:1"}
+	})
+	w := cloud.newWorkspace("Brand Tools Desk", "admin@brand-tools.example.com")
+	session := cloud.connect(w.adminTier, "")
+	cloud.ok(session, "colliedesk_email_channel_update", map[string]any{"support_address": "help@brand-tools.example.com"})
+	if message := cloud.fails(session, "colliedesk_email_channel_update", map[string]any{"support_address": "help@brand-tools.example.com", "sender_name": "Pay Pal Support"}); !strings.Contains(message, "not available") {
+		t.Errorf("a brand sender name on the cloud: %q", message)
+	}
+	if message := cloud.fails(session, "colliedesk_workspace_rename", map[string]any{"name": "Pay Pal Support"}); !strings.Contains(message, "not available") {
+		t.Errorf("a brand workspace name on the cloud: %q", message)
+	}
+	if got := cloud.ok(session, "colliedesk_email_channel_get", nil); at(t, got, "email_channel", "sender_name") != "Brand Tools Desk" {
+		t.Fatalf("a refused sender name was stored: %v", got)
+	}
+
+	selfHosted := newEnv(t)
+	own := selfHosted.newWorkspace("Brand Tools Self", "admin@brand-tools-self.example.com")
+	mine := selfHosted.connect(own.adminTier, "")
+	updated := selfHosted.ok(mine, "colliedesk_email_channel_update", map[string]any{"support_address": "help@brand-tools-self.example.com", "sender_name": "Pay Pal Support"})
+	if at(t, updated, "email_channel", "sender_name") != "Pay Pal Support" {
+		t.Fatalf("self-hosted sender name = %v", updated)
+	}
+	if renamed := selfHosted.ok(mine, "colliedesk_workspace_rename", map[string]any{"name": "Pay Pal Support"}); at(t, renamed, "workspace", "name") != "Pay Pal Support" {
+		t.Fatalf("self-hosted rename = %v", renamed)
 	}
 }

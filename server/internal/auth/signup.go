@@ -24,8 +24,8 @@ const (
 	SignupsPerIP      = 3
 	SignupIPWindow    = 24 * time.Hour
 	signupIPRetention = 30 * 24 * time.Hour
-	minNameLength     = 2
-	maxNameLength     = 60
+	minNameLength     = domain.MinWorkspaceNameRunes
+	maxNameLength     = domain.MaxWorkspaceNameRunes
 	maxSlugBase       = 50
 )
 

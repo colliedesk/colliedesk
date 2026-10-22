@@ -304,6 +304,7 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getEmailChannel"];
+        /** @description Connect the email channel, change its support address, change its sender name, or both. Send only `sender_name` to rename the sender of a connected channel: the address, its domain verification and its sending domain stay as they are. */
         put: operations["putEmailChannel"];
         post?: never;
         /** @description Disconnect the email channel. Conversations and messages stay; the inbound secret stops working. */
@@ -637,7 +638,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** @description Rename the workspace. The name labels the workspace for the team (the workspace switcher, Settings); customers never see it: every email channel keeps its own `sender_name`. Spaces at the ends are removed; a name is 1 to 100 characters without line breaks or other control characters (400 otherwise). */
+        /** @description Rename the workspace. The team sees the name in the workspace switcher and Settings. Customers see it as the help center title while the help center has no title of its own; replies never carry it, because every email channel keeps its own `sender_name`. Spaces at the ends are removed; a name is 2 to 60 characters without line breaks or other control characters (400 otherwise). On Colliedesk Cloud a name with a well-known brand in it is refused (422), as at sign-up. */
         patch: operations["updateWorkspaceName"];
         trace?: never;
     };
@@ -4117,9 +4118,12 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** Format: email */
-                    support_address: string;
-                    /** @description The name customers see in the From line of every reply. Spaces at the ends are removed; 1 to 100 characters without line breaks or other control characters (400 otherwise). Leave it out to keep the current name; a new channel starts with the workspace name. */
+                    /**
+                     * Format: email
+                     * @description Required to connect the channel. Leave it out to keep the current address; a changed address loses its domain verification.
+                     */
+                    support_address?: string;
+                    /** @description The name customers see in the From line of every reply. Spaces at the ends are removed; 1 to 100 characters without line breaks or other control characters (400 otherwise). On Colliedesk Cloud a name with a well-known brand in it is refused (422). Leave it out to keep the current name; a new channel starts with the workspace name. */
                     sender_name?: string;
                 };
             };
@@ -4130,6 +4134,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            422: components["responses"]["NameNotAllowed"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -4810,6 +4815,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            422: components["responses"]["NameNotAllowed"];
         };
     };
     updateWorkspaceSlug: {

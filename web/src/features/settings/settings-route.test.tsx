@@ -6,7 +6,7 @@ import { SettingsRoute } from './settings-route';
 const api = vi.hoisted(() => ({
   me: vi.fn(), sessions: vi.fn(), invites: vi.fn(), emailChannel: vi.fn(), agents: vi.fn(), updateAgent: vi.fn(),
   createInvite: vi.fn(), revokeInvite: vi.fn(), revokeSession: vi.fn(), updateWorkspaceTimezone: vi.fn(), updateWorkspaceName: vi.fn(), updateAgentTimezone: vi.fn(),
-  saveEmailChannel: vi.fn(), updateWorkspaceSlug: vi.fn(), rotateEmailSecret: vi.fn(), verifyEmailDomain: vi.fn(), disconnectEmailChannel: vi.fn(),
+  saveEmailChannel: vi.fn(), saveEmailSenderName: vi.fn(), updateWorkspaceSlug: vi.fn(), rotateEmailSecret: vi.fn(), verifyEmailDomain: vi.fn(), disconnectEmailChannel: vi.fn(),
   exportWorkspace: vi.fn(), config: vi.fn(), webForm: vi.fn(), saveWebForm: vi.fn(),
   savedReplies: vi.fn(), createSavedReply: vi.fn(), updateSavedReply: vi.fn(), deleteSavedReply: vi.fn(),
   connectGmail: vi.fn(), disconnectGmail: vi.fn(),
@@ -50,7 +50,7 @@ test('an admin renames the workspace in General and the new name is read back', 
   api.updateWorkspaceName.mockResolvedValue({ id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Gamma Desk', timezone: 'UTC' });
   const field = await screen.findByRole('textbox', { name: 'Workspace name' });
   expect(field).toHaveValue('Beta Desk');
-  expect(field).toHaveAccessibleDescription(/customers do not see it/i);
+  expect(field).toHaveAccessibleDescription(/help center title.*sender name/i);
   const before = api.me.mock.calls.length;
   fireEvent.change(field, { target: { value: ' Gamma Desk ' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save workspace name' }));
@@ -179,13 +179,14 @@ test('Connect Gmail sends the browser to Google, and the outcome it comes back w
   }
 });
 
-test('saving the sender name keeps the support address and sends the trimmed name', async () => {
-  api.saveEmailChannel.mockResolvedValue(withChannel);
+test('saving the sender name sends only the trimmed name, never the address this page loaded', async () => {
+  api.saveEmailSenderName.mockResolvedValue(withChannel);
   show('admin', [], withChannel);
   const field = await screen.findByRole('textbox', { name: 'Sender name' });
   fireEvent.change(field, { target: { value: ' Colliedesk Support ' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save sender name' }));
-  await waitFor(() => expect(api.saveEmailChannel).toHaveBeenCalledWith('support@example.com', 'Colliedesk Support'));
+  await waitFor(() => expect(api.saveEmailSenderName).toHaveBeenCalledWith('Colliedesk Support'));
+  expect(api.saveEmailChannel).not.toHaveBeenCalled();
 });
 
 test('Settings has a Help center section in its nav, for every agent', async () => {

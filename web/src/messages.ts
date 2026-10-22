@@ -212,7 +212,7 @@ export const messages = {
   general: 'General',
   generalDescription: 'The workspace name and the default timezone for everyone who has not chosen their own.',
   saveWorkspaceName: 'Save workspace name',
-  workspaceNameHelp: 'Your team sees this name in Colliedesk. Customers do not see it: each email channel has its own sender name.',
+  workspaceNameHelp: 'Your team sees this name in Colliedesk. Customers see it as the help center title while the help center has no title of its own. Replies use each email channel\'s sender name, not this name.',
   preferences: 'Preferences',
   preferencesDescription: 'Saved in this browser only.',
   thisDevice: 'This device',

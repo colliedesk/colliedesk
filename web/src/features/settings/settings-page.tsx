@@ -81,7 +81,7 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
             <div className="section-heading"><h2 id="general-heading">{messages.general}</h2><p>{messages.generalDescription}</p></div>
             <div className="settings-body">
               <NameForm label={messages.workspaceName} saveLabel={messages.saveWorkspaceName} hint={messages.workspaceNameHelp}
-                value={workspaceName} canManage save={workspaceNameSave} onSave={onSetWorkspaceName} />
+                value={workspaceName} canManage save={workspaceNameSave} onSave={onSetWorkspaceName} minLength={2} maxLength={60} />
               <TimezoneSelect label={messages.workspaceTimezone} value={workspaceTimezone} save={workspaceTimezoneSave} onChange={(value) => onSetWorkspaceTimezone?.(value)} />
             </div>
           </section>}

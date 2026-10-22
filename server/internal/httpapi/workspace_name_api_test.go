@@ -42,7 +42,14 @@ func TestAnAdminRenamesTheWorkspaceAndEveryoneSeesTheNewName(t *testing.T) {
 		}
 	}
 
-	invalid := []any{"", "   ", strings.Repeat("x", 101), "Acme\r\nDesk", "Tab\tname", "Spoof ‮gnp", 42, nil}
+	// The same length rule as sign-up: 2 to 60 characters.
+	if status, body := renameWorkspace(t, api, admin, map[string]any{"name": strings.Repeat("é", 60)}); status != http.StatusOK {
+		t.Fatalf("a 60-character name status=%d body=%s", status, body)
+	}
+	if status, body := renameWorkspace(t, api, admin, map[string]any{"name": "Rename Desk"}); status != http.StatusOK {
+		t.Fatalf("rename back status=%d body=%s", status, body)
+	}
+	invalid := []any{"", "   ", "A", " B ", strings.Repeat("x", 61), "Acme\r\nDesk", "Tab\tname", "Spoof ‮gnp", 42, nil}
 	for _, value := range invalid {
 		status, body := renameWorkspace(t, api, admin, map[string]any{"name": value})
 		if status != http.StatusBadRequest || !strings.Contains(body, `"code":"invalid_request"`) || !strings.Contains(body, "name") {

@@ -50,9 +50,16 @@ A new channel starts with the workspace name. To change it:
 
 The next reply uses the new name, on every way a reply leaves: your own domain, the
 `via Colliedesk` address and Gmail. A name is 1 to 100 characters. Spaces at the ends are removed.
-Line breaks and other control characters are refused. Only admins can change it; other teammates
-see it. Through the API, send `sender_name` with `PUT /api/v1/channels/email`; an AI agent uses
-`colliedesk_email_channel_update`.
+Line breaks and other control characters are refused. On Colliedesk Cloud a name with a well-known
+brand in it (for example "PayPal Support") is refused, as at sign-up; contact us if it is your own
+brand. Only admins can change it; other teammates see it.
+
+Saving the sender name changes only the name. The support address, its domain verification and the
+sending domain stay as they are.
+
+Through the API, send `PUT /api/v1/channels/email` with `{"sender_name": "Acme Support"}` alone. The
+address stays. Send `support_address` too only to change the address. An AI agent uses
+`colliedesk_email_channel_update` the same way.
 
 ## Send replies from Gmail
 

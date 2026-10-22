@@ -138,7 +138,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_workspace_slug_change_request` | Asks to change the workspace address | `read` |
 | `colliedesk_workspace_settings_get` | Shows the workspace name, address and timezone, and your own timezone | `read` |
 | `colliedesk_workspace_settings_update` | Sets the workspace timezone | `admin` |
-| `colliedesk_workspace_rename` | Renames the workspace (customers never see this name) | `admin` |
+| `colliedesk_workspace_rename` | Renames the workspace (replies never carry this name; it is the help center title while the help center has none) | `admin` |
 | `colliedesk_my_timezone_set` | Sets or clears your own timezone | `draft` |
 | `colliedesk_my_display_name_set` | Sets or clears your own display name | `draft` |
 | `colliedesk_team_member_update` | Renames, deactivates or reactivates an agent; making someone an admin or changing an admin always waits for approval | `admin` |

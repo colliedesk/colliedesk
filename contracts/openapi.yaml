@@ -662,15 +662,23 @@ paths:
     put:
       operationId: putEmailChannel
       x-permission: access:write
+      description: >
+        Connect the email channel, change its support address, change its sender name, or both. Send only
+        `sender_name` to rename the sender of a connected channel: the address, its domain verification and
+        its sending domain stay as they are.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [support_address]
               properties:
-                support_address: {type: string, format: email}
+                support_address:
+                  type: string
+                  format: email
+                  description: >
+                    Required to connect the channel. Leave it out to keep the current address; a changed
+                    address loses its domain verification.
                 sender_name:
                   type: string
                   minLength: 1
@@ -678,6 +686,7 @@ paths:
                   description: >
                     The name customers see in the From line of every reply. Spaces at the ends are removed;
                     1 to 100 characters without line breaks or other control characters (400 otherwise).
+                    On Colliedesk Cloud a name with a well-known brand in it is refused (422).
                     Leave it out to keep the current name; a new channel starts with the workspace name.
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
@@ -685,6 +694,7 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/NameNotAllowed'}
         '500': {$ref: '#/components/responses/InternalError'}
     delete:
       operationId: deleteEmailChannel
@@ -1239,9 +1249,11 @@ paths:
       operationId: updateWorkspaceName
       x-permission: access:write
       description: >
-        Rename the workspace. The name labels the workspace for the team (the workspace switcher, Settings);
-        customers never see it: every email channel keeps its own `sender_name`. Spaces at the ends are
-        removed; a name is 1 to 100 characters without line breaks or other control characters (400 otherwise).
+        Rename the workspace. The team sees the name in the workspace switcher and Settings. Customers see it
+        as the help center title while the help center has no title of its own; replies never carry it,
+        because every email channel keeps its own `sender_name`. Spaces at the ends are removed; a name is
+        2 to 60 characters without line breaks or other control characters (400 otherwise). On Colliedesk
+        Cloud a name with a well-known brand in it is refused (422), as at sign-up.
       requestBody:
         required: true
         content:
@@ -1250,7 +1262,7 @@ paths:
               type: object
               required: [name]
               properties:
-                name: {type: string, minLength: 1, maxLength: 100}
+                name: {type: string, minLength: 2, maxLength: 60}
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
@@ -1259,6 +1271,7 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/NameNotAllowed'}
   /api/v1/workspace/slug:
     patch:
       operationId: updateWorkspaceSlug

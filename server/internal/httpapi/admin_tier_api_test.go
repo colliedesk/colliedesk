@@ -170,6 +170,8 @@ func TestSettingsRequestsSayWhatChangesFromWhatToWhat(t *testing.T) {
 		{http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "new@settings-summary.example.com"}, []string{"old@settings-summary.example.com → new@settings-summary.example.com"}},
 		{http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "old@settings-summary.example.com", "sender_name": "Summary Support"},
 			[]string{"sender name: Settings Summary → Summary Support"}},
+		{http.MethodPut, "/api/v1/channels/email", map[string]any{"sender_name": "Only Name"},
+			[]string{"Change the email channel's sender name: Settings Summary → Only Name"}},
 	}
 	for _, item := range cases {
 		filed := accepted(t, api, item.method, item.path, item.body, send)

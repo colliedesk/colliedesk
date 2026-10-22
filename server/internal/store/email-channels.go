@@ -116,6 +116,22 @@ func (s *Store) UpsertEmailChannel(ctx context.Context, workspaceID, supportAddr
 	return channel, nil
 }
 
+// SetEmailSenderName changes only the name customers see. The address, its domain verification and the
+// provider domain stay. ErrEmailChannelMissing when email is not connected.
+func (s *Store) SetEmailSenderName(ctx context.Context, workspaceID, senderName string) (domain.EmailChannel, error) {
+	channel, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.EmailChannel, error) {
+		return scanChannel(tx.QueryRow(ctx, `UPDATE email_channels SET sender_name=$2,updated_at=now() WHERE workspace_id=$1 RETURNING `+channelColumns,
+			workspaceID, senderName))
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.EmailChannel{}, ErrEmailChannelMissing
+	}
+	if err != nil {
+		return domain.EmailChannel{}, fmt.Errorf("save sender name: %w", err)
+	}
+	return channel, nil
+}
+
 // ErrDomainRecordMissing means the verification TXT record was not found with the expected value.
 var ErrDomainRecordMissing = errors.New("domain verification record not found")
 

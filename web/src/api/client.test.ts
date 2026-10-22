@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { api, ConflictError, PlanLimitError, SeatPausedError, WorkspaceLockedError } from './client';
+import { api, ConflictError, InvalidRequestError, PlanLimitError, SeatPausedError, WorkspaceLockedError } from './client';
 import { AttachmentsTooLargeError, AttachmentStorageError } from './attachments-error';
 import { NotAnAgentError, SignupError } from './cloud-signup';
 import { ExportRefusedError } from './workspace-export';
@@ -18,6 +18,17 @@ test('402 workspace_locked becomes a WorkspaceLockedError that is still a plan l
   const error = await api.tags().catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(WorkspaceLockedError);
   expect(error).toBeInstanceOf(PlanLimitError);
+});
+
+// A refused brand name says why, so Settings can show it next to the name field.
+test.each([
+  ['sender name', () => api.saveEmailSenderName('Pay Pal Support')],
+  ['workspace name', () => api.updateWorkspaceName('Pay Pal Support')],
+])('a %s refused as a brand carries the server message', async (_, call) => {
+  fetchMock.mockResolvedValue(reply(422, apiError('name_not_allowed', 'This name is not available.')));
+  const error = await call().catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(InvalidRequestError);
+  expect((error as Error).message).toBe('This name is not available.');
 });
 
 test('another 402 stays an ordinary plan limit', async () => {

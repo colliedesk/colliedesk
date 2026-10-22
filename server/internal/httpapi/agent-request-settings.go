@@ -65,7 +65,7 @@ func (a *API) summarizeSettingsRequest(ctx context.Context, request *http.Reques
 		RoleCeiling    string   `json:"role_ceiling"`
 		Enabled        *bool    `json:"enabled"`
 		AllowedOrigins []string `json:"allowed_origins"`
-		SupportAddress string   `json:"support_address"`
+		SupportAddress *string  `json:"support_address"`
 		SenderName     *string  `json:"sender_name"`
 	}
 	_ = json.Unmarshal(body, &call)
@@ -118,11 +118,14 @@ func (a *API) summarizeSettingsRequest(ctx context.Context, request *http.Reques
 		if channel, err := a.store.GetEmailChannel(ctx, who.Workspace.ID); err == nil && channel != nil {
 			before, beforeName = channel.SupportAddress, channel.SenderName
 		}
-		summary := fmt.Sprintf("Change the email channel's support address: %s → %s", before, call.SupportAddress)
-		if call.SenderName != nil {
-			summary += "; sender name: " + beforeName + " → " + *call.SenderName
+		var changes []string
+		if call.SupportAddress != nil {
+			changes = append(changes, fmt.Sprintf("support address: %s → %s", before, *call.SupportAddress))
 		}
-		return summary
+		if call.SenderName != nil {
+			changes = append(changes, "sender name: "+beforeName+" → "+*call.SenderName)
+		}
+		return "Change the email channel's " + strings.Join(changes, "; ")
 	case "POST /api/v1/channels/email/domain-verification":
 		if channel, err := a.store.GetEmailChannel(ctx, who.Workspace.ID); err == nil && channel != nil {
 			return "Check the DNS record that verifies " + channel.Domain + " for sending"
