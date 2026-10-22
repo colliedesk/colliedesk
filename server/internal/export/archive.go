@@ -31,12 +31,12 @@ const (
 // error, because a ZIP entry is written in one piece.
 var recordFiles = []string{"agents.ndjson", "contacts.ndjson", "contact-merges.ndjson", "tags.ndjson", "saved-replies.ndjson", "saved-reply-versions.ndjson", "saved-views.ndjson",
 	"kb-collections.ndjson", "kb-articles.ndjson", "kb-article-versions.ndjson", "kb-article-translations.ndjson", "kb-images.ndjson", "kb-videos.ndjson", "kb-media-replacements.ndjson", "help-center.ndjson",
-	"agent-requests.ndjson", "import-jobs.ndjson", "conversations.ndjson"}
+	"agent-requests.ndjson", "import-jobs.ndjson", "import-people.ndjson", "conversations.ndjson"}
 
 var countKeys = map[string]string{
 	"agents.ndjson": "agents", "contacts.ndjson": "contacts", "contact-merges.ndjson": "contact_merges", "tags.ndjson": "tags", "saved-replies.ndjson": "saved_replies", "saved-reply-versions.ndjson": "saved_reply_versions", "saved-views.ndjson": "saved_views",
 	"kb-collections.ndjson": "kb_collections", "kb-articles.ndjson": "kb_articles", "kb-article-versions.ndjson": "kb_article_versions",
-	"kb-article-translations.ndjson": "kb_article_translations", "kb-images.ndjson": "kb_images", "kb-videos.ndjson": "kb_videos", "kb-media-replacements.ndjson": "kb_media_replacements", "help-center.ndjson": "help_center", "agent-requests.ndjson": "agent_requests", "import-jobs.ndjson": "import_jobs", "conversations.ndjson": "conversations",
+	"kb-article-translations.ndjson": "kb_article_translations", "kb-images.ndjson": "kb_images", "kb-videos.ndjson": "kb_videos", "kb-media-replacements.ndjson": "kb_media_replacements", "help-center.ndjson": "help_center", "agent-requests.ndjson": "agent_requests", "import-jobs.ndjson": "import_jobs", "import-people.ndjson": "import_people", "conversations.ndjson": "conversations",
 }
 
 // Opener reads stored attachment bytes; attachments.Storage satisfies it.
@@ -174,6 +174,10 @@ func (w *Writer) AgentRequest(record AgentRequest) error {
 
 func (w *Writer) ImportJob(record ImportJob) error {
 	return w.record("import-jobs.ndjson", record)
+}
+
+func (w *Writer) ImportPerson(record ImportPerson) error {
+	return w.record("import-people.ndjson", record)
 }
 
 // Conversation writes a whole conversation at once; the store streams with the three calls below.

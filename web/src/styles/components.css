@@ -654,6 +654,14 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 @media (prefers-reduced-motion: no-preference) {
   .import-phases li { transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
 }
+.import-people { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; font-size: var(--fs-small); }
+.import-people li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2) var(--space-4); align-items: center; border-bottom: 1px solid var(--line); padding-bottom: var(--space-3); }
+.import-people .button-row { grid-column: 1 / -1; }
+.import-person { display: grid; min-width: 0; }
+.import-person-name { font-weight: 600; color: var(--text-1); }
+.import-person .muted-copy { overflow-wrap: anywhere; }
+.import-person-state { color: var(--text-3); }
+.import-person-state[data-linked] { color: var(--ok); }
 /* Help under the import's fields and counts stays readable: at least the label size. */
 .import-page small { font-size: var(--fs-label); }
 /* A link that leads on (Open the inbox) looks like the button next to it. */
@@ -673,3 +681,5 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
   .import-ledger { font-size: var(--fs-label); }
   .import-ledger th, .import-ledger td { padding-inline: var(--space-1); }
 }
+.import-invite-link { grid-column: 1 / -1; display: grid; gap: var(--space-1); }
+.import-invite-link input { flex: 1 1 14rem; min-width: 0; }

@@ -88,6 +88,9 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string, sink ex
 	if err := exportImportJobs(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
+	if err := exportImportPeople(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
 	return exportConversations(ctx, tx, workspaceID, sink)
 }
 
@@ -303,6 +306,27 @@ func exportImportJobs(ctx context.Context, tx pgx.Tx, workspaceID string, sink e
 		}
 	}
 	return rowsError("export import jobs", rows)
+}
+
+func exportImportPeople(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	rows, err := tx.Query(ctx, `SELECT source,external_id,name,email,active,linked_agent_id::text,linked_by_email,chosen_by_person,created_at,updated_at
+		FROM import_people WHERE workspace_id=$1 ORDER BY source,external_id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export import people: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var record export.ImportPerson
+		if err := rows.Scan(&record.Source, &record.ExternalID, &record.Name, &record.Email, &record.Active, &record.LinkedAgentID, &record.LinkedByEmail,
+			&record.ChosenByPerson, &record.CreatedAt, &record.UpdatedAt); err != nil {
+			return fmt.Errorf("export import people: %w", err)
+		}
+		record.CreatedAt, record.UpdatedAt = domain.UTC(record.CreatedAt), domain.UTC(record.UpdatedAt)
+		if err := sink.ImportPerson(record); err != nil {
+			return err
+		}
+	}
+	return rowsError("export import people", rows)
 }
 
 func rowsError(what string, rows pgx.Rows) error {

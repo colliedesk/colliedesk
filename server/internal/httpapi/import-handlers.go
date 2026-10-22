@@ -124,8 +124,46 @@ func (a *API) undoImport(response http.ResponseWriter, request *http.Request) {
 	writeJSON(response, http.StatusAccepted, job)
 }
 
+func (a *API) listImportPeople(response http.ResponseWriter, request *http.Request) {
+	people, err := a.imports.People(request.Context(), principal(request).Workspace.ID, request.PathValue("id"))
+	if err != nil {
+		writeImportError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, map[string]any{"items": people})
+}
+
+func (a *API) linkImportPerson(response http.ResponseWriter, request *http.Request) {
+	var input struct {
+		AgentID string `json:"agent_id"`
+	}
+	if err := decodeJSON(request, &input); err != nil || input.AgentID == "" {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send agent_id, the Colliedesk agent to link.")
+		return
+	}
+	person, err := a.imports.Link(request.Context(), principal(request).Workspace.ID, request.PathValue("id"), request.PathValue("externalId"), input.AgentID)
+	if err != nil {
+		writeImportError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, person)
+}
+
+func (a *API) unlinkImportPerson(response http.ResponseWriter, request *http.Request) {
+	person, err := a.imports.Unlink(request.Context(), principal(request).Workspace.ID, request.PathValue("id"), request.PathValue("externalId"))
+	if err != nil {
+		writeImportError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, person)
+}
+
 func writeImportError(response http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, importjobs.ErrNoPeople):
+		writeError(response, http.StatusConflict, "import_state", err.Error()+"; wait for the preview.")
+	case errors.Is(err, importjobs.ErrAgent):
+		writeError(response, http.StatusBadRequest, "invalid_agent", "Link to an active agent of this workspace.")
 	case errors.Is(err, importjobs.ErrNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "No import with that id in this workspace.")
 	case errors.Is(err, importjobs.ErrActive):

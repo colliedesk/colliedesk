@@ -3,8 +3,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { ImportRoute } from './import-route';
 
-const { api, InvalidRequestError } = vi.hoisted(() => ({ api: { me: vi.fn(), config: vi.fn() }, InvalidRequestError: class extends Error {} }));
-const imports = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn(), preview: vi.fn(), start: vi.fn(), cancel: vi.fn(), setKey: vi.fn(), report: vi.fn(), undo: vi.fn() }));
+const { api, InvalidRequestError } = vi.hoisted(() => ({
+  api: { me: vi.fn(), config: vi.fn(), agents: vi.fn(), invites: vi.fn(), createInvite: vi.fn(), revokeInvite: vi.fn() }, InvalidRequestError: class extends Error {},
+}));
+const imports = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn(), preview: vi.fn(), start: vi.fn(), cancel: vi.fn(), setKey: vi.fn(), report: vi.fn(), undo: vi.fn(),
+  people: vi.fn(), link: vi.fn(), unlink: vi.fn() }));
 vi.mock('../../api/client', () => ({ api, InvalidRequestError }));
 vi.mock('../../api/imports', async (original) => ({ ...(await original<typeof import('../../api/imports')>()), importsApi: imports }));
 
@@ -21,6 +24,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.me.mockResolvedValue({ agent: { id: 'a', email: 'sam@example.com', display_name: '', role: 'admin', timezone_override: null }, workspace: { id: 'w', slug: 's', name: 'S', timezone: 'UTC' }, timezone: 'UTC' });
   api.config.mockResolvedValue({ billing: { enabled: false } });
+  imports.people.mockResolvedValue({ items: [] });
+  api.agents.mockResolvedValue({ items: [] });
+  api.invites.mockResolvedValue({ items: [] });
 });
 
 test('a later action clears what an earlier one said', async () => {
@@ -52,4 +58,25 @@ test('discarding the preview just asked for gives the page back to the import be
   fireEvent.click(screen.getByRole('button', { name: 'Read account' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Discard' }));
   expect(await screen.findByRole('button', { name: 'Undo import' })).toBeInTheDocument();
+});
+
+test('a later people action clears what an earlier one said', async () => {
+  const finished = { ...previewed, state: 'finished', phase: 'full', status: 'OK', has_report: true, imported_conversations: 1 };
+  imports.list.mockResolvedValue({ items: [finished] });
+  imports.report.mockResolvedValue({ status: 'OK' });
+  imports.people.mockResolvedValue({ items: [
+    { external_id: '102', name: 'Bob', email: 'bob@old.example', active: false, linked_agent_id: null, linked_by_email: false, pending: false, updated_at: '2026-10-22T08:00:00Z' }] });
+  imports.link.mockResolvedValue({});
+  const sam = { id: '33333333-3333-4333-8333-333333333333', email: 'sam@acme.example', display_name: 'Sam', role: 'admin', timezone_override: null,
+    deactivated_at: null, last_active_at: null, open_conversations: 0 };
+  api.agents.mockResolvedValue({ items: [sam] });
+  api.invites.mockResolvedValue({ items: [] });
+  api.createInvite.mockRejectedValue(new InvalidRequestError('No seat left for an invite'));
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ImportRoute /></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Invite Bob' }));
+  expect(await screen.findByText('No seat left for an invite')).toBeInTheDocument();
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Link Bob to' }), { target: { value: sam.id } });
+  fireEvent.click(screen.getByRole('button', { name: 'Link Bob to the chosen agent' }));
+  await waitFor(() => expect(imports.link).toHaveBeenCalled());
+  await waitFor(() => expect(screen.queryByText('No seat left for an invite')).not.toBeInTheDocument());
 });

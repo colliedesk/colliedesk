@@ -298,6 +298,21 @@ type ImportJob struct {
 	FinishedAt    *time.Time      `json:"finished_at"`
 }
 
+// ImportPerson is an agent of an imported Freshdesk account and the agent of the workspace it is
+// linked to (the author of their imported replies).
+type ImportPerson struct {
+	Source         string    `json:"source"`
+	ExternalID     string    `json:"external_id"`
+	Name           string    `json:"name"`
+	Email          string    `json:"email"`
+	Active         bool      `json:"active"`
+	LinkedAgentID  *string   `json:"linked_agent_id"`
+	LinkedByEmail  bool      `json:"linked_by_email"`
+	ChosenByPerson bool      `json:"chosen_by_person"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
 // Attachment describes one file. Path is its location in the archive; StorageKey is where the
 // server reads the bytes from and never leaves the server.
 type Attachment struct {
@@ -353,7 +368,7 @@ type Conversation struct {
 }
 
 // Sink receives the records of one workspace in archive order: Workspace, then Agent*, Contact*,
-// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
+// ContactMerge*, Tag*, SavedReply*, SavedReplyVersion*, SavedView*, AgentRequest*, ImportJob*, ImportPerson*, then per conversation BeginConversation, Message*, EndConversation. A conversation is
 // streamed message by message because one thread can be larger than any sensible page. Writer is the Sink that builds the archive.
 type Sink interface {
 	Workspace(domain.Workspace) error
@@ -374,6 +389,7 @@ type Sink interface {
 	HelpCenter(HelpCenter) error
 	AgentRequest(AgentRequest) error
 	ImportJob(ImportJob) error
+	ImportPerson(ImportPerson) error
 	BeginConversation(ConversationHead) error
 	Message(Message) error
 	EndConversation(timeEntries []domain.TimeEntry) error

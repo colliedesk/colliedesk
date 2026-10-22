@@ -95,7 +95,15 @@ func expirePreviews(ctx context.Context, db *database.DB, now time.Time) ([]stri
 		if err != nil {
 			return fmt.Errorf("expire import previews: %w", err)
 		}
-		ids, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		if ids, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil || len(ids) == 0 {
+			return err
+		}
+		// The Freshdesk agents those previews read go with them, unless an import of the account keeps them.
+		_, err = tx.Exec(ctx, `DELETE FROM import_people p USING import_jobs e
+			WHERE e.id=ANY($1::uuid[]) AND p.workspace_id=e.workspace_id AND p.source=e.account_source AND NOT EXISTS (
+				SELECT 1 FROM import_jobs j WHERE j.workspace_id=p.workspace_id AND j.account_source=p.source AND j.kind='import'
+				AND (j.state IN ('previewing','previewed') OR (j.started_at IS NOT NULL AND NOT EXISTS (
+					SELECT 1 FROM import_jobs u WHERE u.workspace_id=j.workspace_id AND u.kind='undo' AND u.account_source=j.account_source AND u.state='finished' AND u.finished_at>=j.started_at))))`, ids)
 		return err
 	})
 	return ids, err
@@ -135,6 +143,11 @@ var errLeaseLost = errors.New("import job lease was lost")
 
 // update runs one write of a claimed job; it fails with errLeaseLost when the claim is gone.
 func update(ctx context.Context, db *database.DB, item claimed, sql string, args ...any) error {
+	return updateAnd(ctx, db, item, nil, sql, args...)
+}
+
+// updateAnd is update with more writes in the same transaction, made only while the claim holds.
+func updateAnd(ctx context.Context, db *database.DB, item claimed, also func(pgx.Tx) error, sql string, args ...any) error {
 	return db.InWorkspace(ctx, item.workspaceID, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE import_jobs SET `+sql+` WHERE workspace_id=$1 AND id=$2 AND claim_token=$3`,
 			append([]any{item.workspaceID, item.id, item.token}, args...)...)
@@ -143,6 +156,9 @@ func update(ctx context.Context, db *database.DB, item claimed, sql string, args
 		}
 		if tag.RowsAffected() == 0 {
 			return errLeaseLost
+		}
+		if also != nil {
+			return also(tx)
 		}
 		return nil
 	})

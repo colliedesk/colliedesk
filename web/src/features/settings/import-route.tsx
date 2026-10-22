@@ -5,6 +5,8 @@ import { importReportSchema, importsApi, undoReportSchema } from '../../api/impo
 import type { ImportJob } from '../../api/imports';
 import { importMessages } from './import-messages';
 import { ImportPage } from './import-page';
+import { ImportPeople } from './import-people';
+import type { CreatedInvite } from './import-people';
 
 // While a job moves, the page reads it again every few seconds: one row of the server's database.
 const pollMs = 3000;
@@ -59,11 +61,48 @@ export function ImportRoute({ onOpenInbox, onOpenBilling }: { onOpenInbox?: () =
   const failed = all.find((mutation) => mutation.isError)?.error;
   const error = failed ? (failed instanceof InvalidRequestError ? failed.message : importMessages.actionFailed) : undefined;
   const busy = all.some((mutation) => mutation.isPending);
+  // The Freshdesk agents of the account the page is about, once the preview read it.
+  const peopleJob = job && job.kind === 'import' && job.account_source && !connecting && job.state !== 'discarded' ? job : undefined;
+  const people = useQuery({
+    queryKey: ['import-people', peopleJob?.id], queryFn: () => importsApi.people(peopleJob?.id ?? ''), enabled: isAdmin && Boolean(peopleJob),
+    refetchInterval: (query) => (query.state.data?.items.some((person) => person.pending) ? pollMs : false),
+  });
+  const team = useQuery({ queryKey: ['agents'], queryFn: api.agents, enabled: isAdmin && Boolean(peopleJob) });
+  const invites = useQuery({ queryKey: ['invites'], queryFn: api.invites, enabled: isAdmin && Boolean(peopleJob) });
+  const peopleChanged = { onSuccess: () => { void client.invalidateQueries({ queryKey: ['import-people'] }); } };
+  const link = useMutation({ mutationFn: ({ externalId, agentId }: { externalId: string; agentId: string }) => importsApi.link(peopleJob?.id ?? '', externalId, agentId), ...peopleChanged });
+  const unlink = useMutation({ mutationFn: (externalId: string) => importsApi.unlink(peopleJob?.id ?? '', externalId), ...peopleChanged });
+  // Each invite's one-time link shows in its person's row: the server never shows it again.
+  const [createdInvites, setCreatedInvites] = useState<CreatedInvite[]>([]);
+  const invite = useMutation({ mutationFn: (email: string) => api.createInvite(email, 'agent'), onSuccess: (created) => {
+    setCreatedInvites((links) => [...links.filter((link) => link.inviteId !== created.invite.id),
+      { inviteId: created.invite.id, email: created.invite.email, url: created.url, expiresAt: created.invite.expires_at }]);
+    void client.invalidateQueries({ queryKey: ['invites'] });
+  } });
+  const revokeInvite = useMutation({ mutationFn: api.revokeInvite, onSuccess: (_, id) => {
+    setCreatedInvites((links) => links.filter((link) => link.inviteId !== id));
+    void client.invalidateQueries({ queryKey: ['invites'] });
+  } });
+  // As for the import's own actions, only the last people action speaks.
+  const peopleActions = [link, unlink, invite, revokeInvite];
+  const onlyPeople = <T,>(mutation: { mutate: (value: T) => void }) => (value: T) => {
+    for (const other of peopleActions) if (other !== mutation) other.reset();
+    mutation.mutate(value);
+  };
+  const peopleFailed = peopleActions.find((mutation) => mutation.isError)?.error;
   if (!me.data) return <main className="settings-page" aria-busy="true" />;
-  return <ImportPage isAdmin={isAdmin} onOpenInbox={onOpenInbox} onOpenBilling={onOpenBilling} showBilling={isAdmin && config.data?.billing.enabled === true}
+  // The section shows once the account was read: with its agents, or with why they could not be loaded.
+  const peopleSection = peopleJob && (people.isError || (people.data && people.data.items.length > 0))
+    ? <ImportPeople people={people.data?.items ?? []} agents={team.data?.items ?? []} invites={invites.data?.items ?? []} createdInvites={createdInvites}
+      imported={peopleJob.phase !== 'preview'} timezone={me.data.timezone} failed={people.isError} onRetry={() => void people.refetch()}
+      busy={peopleActions.some((mutation) => mutation.isPending)}
+      onInvite={onlyPeople(invite)} onRevokeInvite={onlyPeople(revokeInvite)} onLink={(externalId, agentId) => onlyPeople(link)({ externalId, agentId })} onUnlink={onlyPeople(unlink)} />
+    : undefined;
+  const peopleError = peopleFailed ? (peopleFailed instanceof InvalidRequestError ? peopleFailed.message : importMessages.actionFailed) : undefined;
+  return <ImportPage isAdmin={isAdmin} peopleSection={peopleSection} onOpenInbox={onOpenInbox} onOpenBilling={onOpenBilling} showBilling={isAdmin && config.data?.billing.enabled === true}
     job={job} report={reportReady && parsed.success && job?.kind !== 'undo' ? importReportSchema.parse(report.data) : undefined}
     undoReport={reportReady && parsed.success && job?.kind === 'undo' ? undoReportSchema.parse(report.data) : undefined} history={items} timezone={me.data?.timezone ?? 'UTC'}
-    loadFailed={imports.isError} error={error} busy={busy} connecting={connecting}
+    loadFailed={imports.isError} error={error ?? peopleError} busy={busy} connecting={connecting}
     onPreview={(domain, key) => only(preview)({ domain, key })} onStart={only(start)} onCancel={only(cancel)}
     onSetKey={(id, key) => only(setKey)({ id, key })} onUndo={only(undo)}
     onNewImport={() => { for (const mutation of all) mutation.reset(); setConnecting(true); }} />;

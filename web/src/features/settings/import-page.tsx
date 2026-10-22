@@ -23,6 +23,8 @@ export interface ImportPageProps {
   // undoReport is what an undo job removed.
   undoReport?: UndoReport;
   history: ImportJob[];
+  // peopleSection lists the Freshdesk agents of the account, once it was read.
+  peopleSection?: ReactNode;
   timezone: string;
   loadFailed?: boolean;
   // error is the answer of the last action that failed.
@@ -60,6 +62,7 @@ export function ImportPage(props: ImportPageProps) {
             <section className="settings-card" aria-labelledby="import-current-heading">
               <Current {...props} />
             </section>
+            {props.peopleSection}
             {shownHistory(history, job).length > 0 && <History {...props} />}
           </>}
         </div>
