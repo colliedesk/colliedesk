@@ -460,20 +460,22 @@ func fixture(t *testing.T, db *database.DB) (acme, beta string) {
 	exec(`INSERT INTO import_items(workspace_id,source,entity,source_id,status) VALUES($1,'freshdesk:account:42','ticket','1','done')`, a.ID)
 	// Acme's first import report was ready 1 hour 30 minutes 20 seconds after sign-up; a later import
 	// and its undo do not move it. A preview, a failed import, an import still running and a report
-	// being retried (retry_wait) came earlier but are no report ready. Beta never imported in the app.
-	job := func(kind, state, status, finished string) {
+	// being retried (retry_wait) came earlier but are no report ready. Beta's came 2 days 5 seconds after
+	// its sign-up: each workspace counts from its own.
+	job := func(workspaceID, kind, state, status, finished string) {
 		exec(`INSERT INTO import_jobs(workspace_id,kind,source,domain,state,phase,status,undo_of,finished_at)
 			SELECT w.id,$2::text,'freshdesk','acme.freshdesk.com',$3::text,CASE $2::text WHEN 'undo' THEN 'undo' ELSE 'full' END,NULLIF($4,''),
 				CASE $2::text WHEN 'undo' THEN (SELECT id FROM import_jobs WHERE workspace_id=w.id AND kind='import' AND state='finished' ORDER BY finished_at LIMIT 1) END,
 				w.created_at+NULLIF($5,'')::interval
-			FROM workspaces w WHERE w.id=$1`, a.ID, kind, state, status, finished)
+			FROM workspaces w WHERE w.id=$1`, workspaceID, kind, state, status, finished)
 	}
-	job("import", "previewed", "", "")
-	job("import", "failed", "", "10 minutes")
-	job("import", "retry_wait", "", "")
-	job("import", "finished", "UNVERIFIED", "1 hour 30 minutes 20 seconds")
-	job("import", "finished", "OK", "3 hours")
-	job("undo", "finished", "", "2 hours")
+	job(a.ID, "import", "previewed", "", "")
+	job(a.ID, "import", "failed", "", "10 minutes")
+	job(a.ID, "import", "retry_wait", "", "")
+	job(a.ID, "import", "finished", "UNVERIFIED", "1 hour 30 minutes 20 seconds")
+	job(a.ID, "import", "finished", "OK", "3 hours")
+	job(a.ID, "undo", "finished", "", "2 hours")
+	job(b.ID, "import", "finished", "FAILED", "2 days 5 seconds")
 	return a.ID, b.ID
 }
 
@@ -513,6 +515,11 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 	db := newDB(t)
 	acme, beta := fixture(t, db)
 	execSQL(t, db, `UPDATE web_form_channels SET enabled = true WHERE workspace_id = $1`, acme)
+	// Gamma signed up and has imported nothing yet.
+	gamma, _, err := auth.NewWithDB(db, "https://help.acme.com").CreateWorkspace(context.Background(), "Gamma Desk", "owner-g@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
 	recorded := &capture{}
 	server := recorded.server(t)
 
@@ -529,8 +536,8 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 	if err := json.Unmarshal(recorded.bodyAt(t, "POST /batch/"), &sent); err != nil {
 		t.Fatal(err)
 	}
-	if sent.APIKey != "phc_test" || len(sent.Batch) != 2 {
-		t.Fatalf("batch = key %q with %d events, want phc_test with 2", sent.APIKey, len(sent.Batch))
+	if sent.APIKey != "phc_test" || len(sent.Batch) != 3 {
+		t.Fatalf("batch = key %q with %d events, want phc_test with 3", sent.APIKey, len(sent.Batch))
 	}
 	byWorkspace := map[string]heartbeat{}
 	for _, event := range sent.Batch {
@@ -558,7 +565,7 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 			"conversations_open": float64(1), "conversations_created_7d": float64(1),
 			"email_channel": false, "web_form": true, "tokens_active": float64(1), "freshdesk_import": true,
 			"time_to_first_result_seconds": float64(5420),
-			"workspace_name": "Acme Support", "workspace_slug": "acme-support",
+			"workspace_name":               "Acme Support", "workspace_slug": "acme-support",
 		},
 		beta: {
 			"plan": "team", "trial_days_left": nil, "days_since_created": float64(45),
@@ -566,9 +573,10 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 			"replies_7d": float64(0), "replies_30d": float64(0), "ai_agent_replies_7d": float64(0),
 			"conversations_open": float64(0), "conversations_created_7d": float64(0),
 			"email_channel": true, "web_form": false, "tokens_active": float64(0), "freshdesk_import": false,
-			"time_to_first_result_seconds": nil,
-			"workspace_name": "Beta Help", "workspace_slug": "beta-help",
+			"time_to_first_result_seconds": float64(172805),
+			"workspace_name":               "Beta Help", "workspace_slug": "beta-help",
 		},
+		gamma.ID: {"freshdesk_import": false, "time_to_first_result_seconds": nil, "workspace_name": "Gamma Desk"},
 	}
 	for id, fields := range want {
 		event, ok := byWorkspace[id]

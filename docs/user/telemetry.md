@@ -70,7 +70,7 @@ anything written in a conversation):
 | `web_form` | `true` | Whether the workspace has the web form on |
 | `tokens_active` | `1` | Agent tokens that are not revoked or expired |
 | `freshdesk_import` | `true` | Whether the workspace has records of a Freshdesk import |
-| `time_to_first_result_seconds` | `5420` | How long a new team waited to see a first result: whole seconds from the workspace's creation (the sign-up) to the first [import in the app](import-freshdesk.md#import-in-the-app) whose reconcile report was ready (`OK`, `FAILED` or `UNVERIFIED`). Empty until then. Only a duration: no account, name or count from the import. Undoing the import does not change it |
+| `time_to_first_result_seconds` | `5420` | How long a new team waited to see a first result: whole seconds from the workspace's creation (the sign-up) to the first [import in the app](import-freshdesk.md#import-in-the-app) whose reconcile report was ready (`OK`, `FAILED` or `UNVERIFIED`). Empty until then, and for a workspace imported only with the command line, which records no such moment. Only a duration: no account, name or count from the import. Undoing the import does not change it. It always ends at the import report; a later first result (such as an AI backtest) gets a field of its own |
 
 Each batch sent is logged as `workspace snapshots sent`. A failed send is logged as `usage report
 not sent` and never stops the server; the day's report is not retried.
