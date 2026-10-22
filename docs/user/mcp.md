@@ -155,6 +155,15 @@ with `billing` and leave a note with a summary."
 | `colliedesk_email_channel_update` | Connects the email channel or changes the support address or the sender name | `admin` |
 | `colliedesk_email_domain_verify` | Checks the DNS record that verifies the sending domain | `admin` |
 | `colliedesk_billing_get` | Shows the plan, trial and seats on the hosted cloud | `admin` |
+| `colliedesk_import_preview` | Reads a Freshdesk account before importing it, without writing anything. Takes a Freshdesk admin's API key, which passes through the conversation: refused below `admin` so it never waits in a request | `admin` |
+| `colliedesk_import_start` | Starts a previewed import: recent tickets first, then the whole account | `admin` |
+| `colliedesk_imports_list`, `colliedesk_import_get` | Lists imports, or shows one with its progress and why it failed or waits | `admin` |
+| `colliedesk_import_cancel` | Stops an import or discards a preview; what was imported stays | `admin` |
+| `colliedesk_import_key_set` | Gives an import waiting for its Freshdesk key the key again | `admin` |
+| `colliedesk_import_report` | Reads the reconcile report of an import (JSON or Markdown) | `admin` |
+| `colliedesk_import_undo_request` | Asks to remove what an import brought in | `read` |
+| `colliedesk_import_people_list` | Lists the agents of an import's Freshdesk account and who each is linked to | `admin` |
+| `colliedesk_import_person_link`, `colliedesk_import_person_unlink` | Links a Freshdesk agent to a Colliedesk agent (their imported replies and tickets follow), or takes the link back | `admin` |
 | `colliedesk_problem_report` | Sends a problem report to the team that runs the server, with the request ids of failed calls | `read` |
 
 Tools marked "Cannot be undone" carry the MCP `destructiveHint`, and their descriptions tell the

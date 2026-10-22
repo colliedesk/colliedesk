@@ -128,6 +128,17 @@ var routeTiers = map[string]string{
 	"GET /api/v1/agent-requests/{id}":                            "read",
 	"POST /api/v1/agent-requests/{id}/cancel":                    "read",
 	"POST /api/v1/support/problem-reports":                       "read",
+	"GET /api/v1/imports":                                        "admin",
+	"GET /api/v1/imports/{id}":                                   "admin",
+	"PUT /api/v1/imports/{id}/key":                               "admin",
+	"POST /api/v1/imports/{id}/cancel":                           "admin",
+	"POST /api/v1/imports/{id}/start":                            "admin",
+	"POST /api/v1/imports":                                       "admin",
+	"GET /api/v1/imports/{id}/report":                            "admin",
+	"POST /api/v1/imports/{id}/undo":                             "approval",
+	"GET /api/v1/imports/{id}/people":                            "admin",
+	"PUT /api/v1/imports/{id}/people/{externalId}/link":          "admin",
+	"DELETE /api/v1/imports/{id}/people/{externalId}/link":       "admin",
 	"GET /api/v1/mail-image":                                     "person",
 	"POST /api/v1/agent-requests/{id}/approve":                   "person",
 	"POST /api/v1/agent-requests/{id}/reject":                    "person",
@@ -136,6 +147,9 @@ var routeTiers = map[string]string{
 // kbFileRouteKeys carry video bytes; like an image upload, a lower tier is refused, not filed.
 var kbFileRouteKeys = map[string]bool{"POST /api/v1/kb/media-uploads": true, "PUT /api/v1/kb/media-uploads/{id}": true,
 	"DELETE /api/v1/kb/media-uploads/{id}": true, "POST /api/v1/kb/media-uploads/{id}/complete": true, "PUT /api/v1/kb/media/{id}/poster": true}
+
+// credentialRouteKeys carry another helpdesk's API key; a lower tier is refused, not filed.
+var credentialRouteKeys = map[string]bool{"POST /api/v1/imports": true, "PUT /api/v1/imports/{id}/key": true}
 
 func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
 	fixture := newContractFixture(t)
@@ -172,6 +186,10 @@ func TestEveryRouteIsOpenToTokensOnlyFromItsTier(t *testing.T) {
 				// Bytes never wait for approval: a lower tier is refused, not filed.
 				if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "files_need_approval") {
 					t.Errorf("%s with a %s token: status=%d body=%s, want 403 files_need_approval", key, tier, response.Code, response.Body.String())
+				}
+			case credentialRouteKeys[key] && tierRank[tier] < tierRank[want]:
+				if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "credentials_need_admin_token") {
+					t.Errorf("%s with a %s token: status=%d body=%s, want 403 credentials_need_admin_token", key, tier, response.Code, response.Body.String())
 				}
 			case want == "person":
 				if response.Code != http.StatusForbidden || !strings.Contains(response.Body.String(), "person_only") {

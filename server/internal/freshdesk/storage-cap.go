@@ -60,6 +60,30 @@ func (r *run) guardStorage(ctx context.Context) error {
 	return nil
 }
 
+// guardSliceStorage is guardStorage for a ModeRecent run: on a capped plan it sizes only the listed
+// slice, before the slice's first write, so recent tickets arrive without sizing the whole account
+// first. The full run that follows sizes the rest with guardStorage before its own first write; when
+// that does not fit, the slice stays imported and the full run is refused (see
+// docs/internals/freshdesk-import.md, "In-app import").
+func (r *run) guardSliceStorage(ctx context.Context) error {
+	if _, ok, err := r.cappedRoom(ctx); err != nil || !ok {
+		return err
+	}
+	r.progress.phase("sizing attachments")
+	needed, _, err := r.sizeRefs(ctx)
+	if err != nil {
+		return err
+	}
+	room, ok, err := r.cappedRoom(ctx)
+	if err != nil || !ok {
+		return err
+	}
+	if room.Used+needed > room.Limit {
+		return &StorageCapError{Plan: room.Plan, Needed: needed, Used: room.Used, Limit: room.Limit, Upgrade: room.Upgrade}
+	}
+	return nil
+}
+
 // checkDryRunStorage fills the report of a dry run on a capped workspace with what the real run
 // would do, using the tickets the dry run already listed.
 func (r *run) checkDryRunStorage(ctx context.Context, report *Report) error {
@@ -86,11 +110,14 @@ func (r *run) checkDryRunStorage(ctx context.Context, report *Report) error {
 // the run so that nothing is written and the real run starts clean.
 func (r *run) sizeIncomingAttachments(ctx context.Context) (int64, error) {
 	options := r.opts
-	options.DryRun, options.Progress = true, nil
+	options.DryRun, options.Progress, options.OnProgress = true, nil, nil
 	probe, err := newRun(ctx, r.db, options)
 	if err != nil {
 		return 0, err
 	}
+	// Its steps reach the callback, not the operator's lines, and count toward the run's API calls.
+	probe.progress = r.progress.silent()
+	probe.client.progress = probe.progress
 	probe.ledger.source = r.ledger.source
 	if err := probe.listTickets(ctx); err != nil {
 		return 0, err

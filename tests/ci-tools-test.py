@@ -1,9 +1,11 @@
 """Public CLI contracts for CI partitioning and its whole-phase clock."""
 import json
+import os
 import pathlib
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -136,6 +138,59 @@ class Budget(unittest.TestCase):
                                     '--now', '2026-10-19T13:00:00Z').returncode, 0)
 
 
+FAKE_GH = '''import json, os, sys
+responses = json.loads(os.environ['FAKE_GH_RESPONSES'])
+path = sys.argv[-1]
+if sys.argv[1] != 'api' or path not in responses:
+    sys.exit('fake gh: no response for ' + ' '.join(sys.argv[1:]))
+print(json.dumps(responses[path]))
+'''
+
+
+class PrVerified(unittest.TestCase):
+    """A push to main whose tree a same-repository pull request run already passed in full is not
+    tested again; any other push, and any doubt, runs every job."""
+    repo, merge, head, base = 'colliedesk/colliedesk', 'm' * 40, 'h' * 40, 'b' * 40
+    runs = f'repos/{repo}/actions/workflows/ci.yml/runs?event=pull_request&status=success&head_sha={head}'
+
+    def decide(self, responses):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = pathlib.Path(tmp) / 'gh.py'
+            fake.write_text(FAKE_GH)
+            env = {**os.environ, 'PR_VERIFIED_GH': f'{sys.executable} {fake}',
+                   'FAKE_GH_RESPONSES': json.dumps(responses)}
+            return subprocess.run([sys.executable, str(ROOT / '.github/scripts/pr-verified.py'),
+                                   '--repo', self.repo, '--sha', self.merge],
+                                  text=True, capture_output=True, env=env)
+
+    def responses(self, head_tree='T', run_repo=repo, runs=1):
+        return {
+            f'repos/{self.repo}/git/commits/{self.merge}': {
+                'tree': {'sha': 'T'}, 'parents': [{'sha': self.base}, {'sha': self.head}]},
+            f'repos/{self.repo}/git/commits/{self.head}': {'tree': {'sha': head_tree}, 'parents': [{'sha': self.base}]},
+            self.runs: {'workflow_runs': [{'html_url': 'https://github.com/run/1', 'conclusion': 'success',
+                                           'head_repository': {'full_name': run_repo}}] * runs},
+        }
+
+    def test_merge_of_a_passed_up_to_date_pull_request_is_not_tested_again(self):
+        result = self.decide(self.responses())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, 'reuse=true\n')
+        self.assertIn('https://github.com/run/1', result.stderr)
+
+    def test_anything_else_runs_every_job(self):
+        single_parent = self.responses()
+        single_parent[f'repos/{self.repo}/git/commits/{self.merge}']['parents'] = [{'sha': self.base}]
+        for name, responses in [('tree differs: the branch was behind main', self.responses(head_tree='U')),
+                                ('no passed pull request run', self.responses(runs=0)),
+                                ('the passed run came from a fork', self.responses(run_repo='someone/colliedesk')),
+                                ('a direct push, not a merge', single_parent),
+                                ('the API did not answer', {})]:
+            result = self.decide(responses)
+            self.assertEqual(result.returncode, 0, name + ': ' + result.stderr)
+            self.assertEqual(result.stdout, 'reuse=false\n', name)
+
+
 # GitHub Free runs at most 20 GitHub-hosted jobs at once for the whole account, across every repo.
 # A pull request's jobs that start together must stay under it, with a slot left for another
 # repository's job, or the last ones queue and that wait counts toward the 120-second CI clock.
@@ -160,11 +215,15 @@ def workflow_jobs(path):
 
 
 def runners(path):
-    """How many runners a workflow's jobs without needs ask for at the same moment."""
+    """How many runners a pull request's jobs ask for at the same moment: jobs without needs, and
+    jobs that need only pr-verified, which pull requests skip at once."""
     total = 0
     for _, body in workflow_jobs(path):
         text = '\n'.join(body)
-        if re.search(r'^    needs:', text, re.M):
+        needs = re.search(r'^    needs:\s*(.*)$', text, re.M)
+        if needs and needs.group(1).strip() != 'pr-verified':
+            continue
+        if re.search(r"^    if: github.event_name == 'push'\s*$", text, re.M):
             continue
         local = re.search(r'^    uses: \./(\S+)', text, re.M)
         if local:
@@ -189,6 +248,10 @@ class RunnerConcurrency(unittest.TestCase):
 
     def test_matrix_sizes_are_counted(self):
         self.assertEqual(runners(ROOT / '.github/workflows/codeql.yml'), 3)
+
+    def test_jobs_behind_pr_verified_count_and_push_only_jobs_do_not(self):
+        # 8 Go shards, web, e2e, 2 onboarding, image, osv-scan, roadmap, 3 CodeQL; not pr-verified.
+        self.assertEqual(runners(ROOT / '.github/workflows/ci.yml'), 18)
 
 
 class PublishEdge(unittest.TestCase):

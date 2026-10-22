@@ -284,3 +284,17 @@ test('the Colliedesk logo at the top of the rail goes back to the inbox from any
   await waitFor(() => expect(router.state.location.pathname).toBe('/'));
   expect(within(rail).getByRole('link', { name: 'Inbox' })).toHaveAttribute('aria-current', 'page');
 });
+
+test('Settings shows its title at once while its own chunk loads, then the sections', async () => {
+  serve({
+    '/api/v1/auth/me': () => json(200, meBody('agent', trialPlan)),
+    '/api/v1/config': () => json(200, config),
+    '/api/v1/inbox/activity': () => json(200, { now: '2026-10-15T10:00:00Z', new_conversations: [], assigned_to_me: [], updated: [] }),
+  });
+  open('/settings');
+  const title = await screen.findByRole('heading', { level: 1, name: 'Settings' });
+  expect(title).toBeInTheDocument();
+  // The sections arrive with the chunk; the title stays where it was.
+  await waitFor(() => expect(document.querySelector('.settings-page[aria-busy="true"]')).toBeNull());
+  expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toBeInTheDocument();
+});

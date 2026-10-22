@@ -42,6 +42,9 @@ func (r *run) reconcile(ctx context.Context, report *Report) (*Report, error) {
 		report.Status = StatusDryRun
 	case len(report.Missing) > 0 || len(report.Failures) > 0:
 		report.Status = StatusFailed
+	case r.opts.Mode == ModeRecent:
+		// Nothing failed in the slice, but only the full run that follows can prove the account complete.
+		report.Status = StatusInterim
 	case !report.Verification.Tickets.Verified || !report.Verification.Contacts.Verified || !report.Verification.SavedReplies.Verified ||
 		!report.Verification.KnowledgeBase.Verified:
 		report.Status = StatusUnverified

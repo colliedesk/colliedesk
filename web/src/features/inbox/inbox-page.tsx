@@ -4,6 +4,7 @@ import type { AgentRequest, Conversation, ConversationViewer, Message, Onboardin
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import { BulkActionBar } from './bulk-action-bar';
 import { ConversationList } from './conversation-list';
+import type { SettingsTarget } from './conversation-list';
 import { DetailsPanel } from './details-panel';
 import { InboxFilters } from './inbox-filters';
 
@@ -61,7 +62,7 @@ interface InboxPageProps {
   failed?: boolean;
   onRetry?: () => void;
   canManage?: boolean;
-  onOpenSettings?: () => void;
+  onOpenSettings?: (to?: SettingsTarget) => void;
   currentAgentId?: string;
   // onBulkUpdate resolves when every listed conversation changed, and rejects when none did.
   onBulkUpdate?: (ids: string[], changes: BulkConversationChanges) => Promise<unknown>;
@@ -175,7 +176,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
         <TimelinePanel conversation={selected} items={timeline} onOpenContact={onOpenContact} timeEntries={timeEntries} loading={timelineLoading} loadFailed={conversationFailed} onRetryLoad={onRetryConversation} timezone={timezone} onRetryDelivery={onRetryDelivery} agentNames={agentNames}
           viewers={openViewers} detailsOpen={detailsOpen} detailsToggleRef={detailsToggle} onToggleDetails={() => (detailsOpen ? closeDetails() : setDetailsOpen(true))} />
         {outboundNotice && <p role="status" className="composer-notice">{outboundNotice}
-          {canManage && onOpenSettings && <> <button type="button" className="link-action" onClick={onOpenSettings}>{messages.openSettings}</button></>}</p>}
+          {canManage && onOpenSettings && <> <button type="button" className="link-action" onClick={() => onOpenSettings()}>{messages.openSettings}</button></>}</p>}
         {deliveryNotice && <p role="alert" className="composer-notice">{deliveryNotice}</p>}
         {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft} customer={customerName}
           onSend={(edit) => onSendDraft?.(draft, edit) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}

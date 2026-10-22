@@ -27,7 +27,8 @@ interface ConversationListProps {
   onRetry?: () => void;
   onClearFilters?: () => void;
   canManage?: boolean;
-  onOpenSettings?: () => void;
+  // onOpenSettings opens a settings page in the app: Settings, or the import page.
+  onOpenSettings?: (to?: SettingsTarget) => void;
   // checkedIds are the rows ticked for a bulk action; ticking never opens the conversation.
   checkedIds?: ReadonlySet<string>;
   onToggle?: (id: string) => void;
@@ -52,6 +53,8 @@ const firstStep: Partial<Record<OnboardingGoal, Step>> = { leave_helpdesk: 'impo
 
 // getStartedSteps lists the steps this agent can take, the goal's step first. The settings steps stay
 // admin-only; a goal whose step this agent cannot take recommends nothing.
+export type SettingsTarget = '/settings' | '/settings/import-freshdesk';
+
 function getStartedSteps(goal: OnboardingGoal | null | undefined, canManage: boolean): { steps: Step[]; recommended?: Step } {
   const lead = goal ? firstStep[goal] : undefined;
   const steps = (['connect', 'import', 'invite'] as Step[]).filter((step) => canManage || step === 'import');
@@ -78,15 +81,17 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
   useEffect(() => {
     if (selectAll.current) selectAll.current.indeterminate = checkedCount > 0 && !allChecked;
   }, [checkedCount, allChecked]);
-  const settingsLink = (label: string) => <a href="/settings" onClick={(event) => {
+  const settingsLink = (label: string, to: SettingsTarget = '/settings') => <a href={to} onClick={(event) => {
     if (!onOpenSettings) return;
     event.preventDefault();
-    onOpenSettings();
+    onOpenSettings(to);
   }}>{label}</a>;
   const getStarted = getStartedSteps(onboardingGoal, canManage);
   const stepLink: Record<Step, ReactNode> = {
     connect: settingsLink(messages.connectEmail),
-    import: <a href={messages.importFreshdeskURL} target="_blank" rel="noreferrer">{messages.importFreshdesk}</a>,
+    // An admin imports in the app; an agent reads how, to ask an admin.
+    import: canManage ? settingsLink(messages.importFreshdesk, '/settings/import-freshdesk')
+      : <a href={messages.importFreshdeskURL} target="_blank" rel="noreferrer">{messages.importFreshdesk}</a>,
     invite: settingsLink(messages.inviteTeam),
     mcp: <a href={messages.mcpURL} target="_blank" rel="noreferrer">{messages.connectAIAgent}</a>,
   };

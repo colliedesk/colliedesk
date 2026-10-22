@@ -115,9 +115,10 @@ test('settings is split into your account and the workspace, with a link to ever
   expect(links).toEqual([
     ['Profile', '#profile-heading'], ['Preferences', '#preferences-heading'],
     ['General', '#general-heading'], ['Team', '#team-heading'], ['Invites', '#invites-heading'], ['Sessions', '#sessions-heading'],
-    ['Export all data', '#export-heading'],
+    ['Export all data', '#export-heading'], ['Import from Freshdesk', '/settings/import-freshdesk'],
   ]);
-  for (const [, href] of links) expect(document.getElementById(href!.slice(1))).not.toBeNull();
+  // The import has its own page; every other link is a section of this one.
+  for (const [, href] of links.slice(0, -1)) expect(document.getElementById(href!.slice(1))).not.toBeNull();
 });
 
 test('an agent gets no workspace-only sections or links', () => {
@@ -125,6 +126,7 @@ test('an agent gets no workspace-only sections or links', () => {
   const nav = screen.getByRole('navigation', { name: 'Settings sections' });
   expect(within(nav).queryByRole('link', { name: 'General' })).not.toBeInTheDocument();
   expect(within(nav).queryByRole('link', { name: 'Export all data' })).not.toBeInTheDocument();
+  expect(within(nav).queryByRole('link', { name: 'Import from Freshdesk' })).not.toBeInTheDocument();
   expect(screen.queryByRole('combobox', { name: 'Workspace timezone' })).not.toBeInTheDocument();
 });
 
