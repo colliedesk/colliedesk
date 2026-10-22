@@ -56,9 +56,11 @@ removes the workspace's expired rows and the person's oldest rows past 20.
 
 One tab announces one conversation at most every 2 seconds: the upsert only updates a row on another
 conversation or one renewed at least 2 seconds ago, and an announce that updates nothing is answered
-429 with `Retry-After`. A script or agent token calling in a loop therefore writes each row at most
-every 2 seconds, and the cap of 20 rows per person bounds the rows a loop over new tab ids can keep.
-The web app waits at least 2 seconds between two announces; the MCP tool waits out one 429 itself.
+429 with `Retry-After`. Starting or ending a reply is let through after half a second instead: the
+others must see it at once, not at the next heartbeat. A script or agent token calling in a loop
+therefore writes each row at most twice a second, and the cap of 20 rows per person bounds the rows a
+loop over new tab ids can keep. The MCP tool waits out one 429 itself; the web app spaces its
+announces and calls again after `Retry-After`.
 
 A deactivated person's rows are deleted in the deactivation transaction; reads also skip deactivated
 people and revoked or expired sessions, so a signed-out tab disappears before its row expires.

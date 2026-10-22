@@ -22,6 +22,10 @@ const (
 	// PresenceMinInterval is the shortest time between two announces of one tab on one conversation; a
 	// quicker one is refused (ErrPresenceTooSoon), so no caller writes a row more often.
 	PresenceMinInterval = 2 * time.Second
+	// PresenceMinChangeInterval is the shorter time after which an announce that starts or ends a reply
+	// is taken anyway: the others must see it at once, and a loop flipping it still writes a row at most
+	// twice a second.
+	PresenceMinChangeInterval = 500 * time.Millisecond
 )
 
 // ErrPresenceConversationNotFound is a conversation that is not in the caller's workspace.
