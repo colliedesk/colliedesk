@@ -59,6 +59,18 @@ per run that made the `simple` parser quadratic (`_a`, `~/`, `a1@`, `a-1-`, `a-a
 write must stay at or below 200 ms (10–25 ms locally; unnormalized, seconds to tens of seconds). A
 3-second statement timeout makes a regression fail instead of hanging the run.
 
+## AI retrieval budget
+
+`TestAIRetrievalLatencyBudget` holds `store.AIRetrieve` (the knowledge base and the resolved
+conversations an AI draft or triage suggestion may quote, `docs/internals/ai-retrieval.md`) to 200 ms
+p95 warm. No screen waits for it: it runs inside a background AI task, before the provider is called.
+The fixture is one workspace with 12,000 resolved conversations of about 3,500 characters (more than
+the 10,000 a search ranks) and 2,000 published articles of about 9,000 characters (20 at 100,000),
+already built, and a second smaller workspace. The query has 16 words, one in every text and one in
+half of them, the worst case. Five warm-up searches, then 20 timed: 80–130 ms locally beside the other
+latency gates. A window of 20,000 conversations took 160–280 ms, so the window was cut, not the budget
+raised; if this gate fails, cut the window again.
+
 ## Media library budget
 
 `TestKBMediaLibraryLatencyBudget` reads the knowledge base search budget's fixture, to which
