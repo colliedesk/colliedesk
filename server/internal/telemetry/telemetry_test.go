@@ -459,8 +459,8 @@ func fixture(t *testing.T, db *database.DB) (acme, beta string) {
 	exec(`INSERT INTO web_form_channels(workspace_id,enabled) VALUES($1,false)`, a.ID)
 	exec(`INSERT INTO import_items(workspace_id,source,entity,source_id,status) VALUES($1,'freshdesk:account:42','ticket','1','done')`, a.ID)
 	// Acme's first import report was ready 1 hour 30 minutes 20 seconds after sign-up; a later import
-	// and its undo do not move it. A preview, a failed import, an import still running and a report
-	// being retried (retry_wait) came earlier but are no report ready. Beta's came 2 days 5 seconds after
+	// does not move it. A preview, a failed import, an import still running, a report being retried
+	// (retry_wait) and an undo ended earlier, but none is an import report ready. Beta's came 2 days 5 seconds after
 	// its sign-up: each workspace counts from its own.
 	job := func(workspaceID, kind, state, status, finished string) {
 		exec(`INSERT INTO import_jobs(workspace_id,kind,source,domain,state,phase,status,undo_of,finished_at)
@@ -474,7 +474,7 @@ func fixture(t *testing.T, db *database.DB) (acme, beta string) {
 	job(a.ID, "import", "retry_wait", "", "")
 	job(a.ID, "import", "finished", "UNVERIFIED", "1 hour 30 minutes 20 seconds")
 	job(a.ID, "import", "finished", "OK", "3 hours")
-	job(a.ID, "undo", "finished", "", "2 hours")
+	job(a.ID, "undo", "finished", "", "5 minutes")
 	job(b.ID, "import", "finished", "FAILED", "2 days 5 seconds")
 	return a.ID, b.ID
 }
