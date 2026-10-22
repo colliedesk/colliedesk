@@ -44,7 +44,7 @@ test('help center custom domain: an admin sets it in Settings, the DNS check mak
 
   // Before the record exists the check says what it found; once the owner adds it, the check passes.
   await page.getByRole('button', { name: 'Check now' }).click();
-  await expect(page.getByText(/Last check: _help-center-verify\./)).toBeVisible();
+  await expect(page.getByText(/Last check: The TXT record _help-center-verify\./)).toBeVisible();
   setDNS({ txt: { [`_help-center-verify.${host}`]: [token] } });
   await page.getByRole('button', { name: 'Check now' }).click();
   await expect(page.getByRole('status').filter({ hasText: `The help center is served on ${host}.` })).toBeVisible();
