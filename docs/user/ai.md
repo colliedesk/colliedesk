@@ -91,7 +91,8 @@ counted. A draft nobody used for 7 days expires, and resolving or closing the co
 it.
 
 Colliedesk keeps how each draft ended (sent nearly as written, sent edited, discarded, replaced,
-expired), so a team can see whether drafts help. A reply sent from a draft says so on the timeline.
+expired), so a team can see whether drafts help, and an article's **Used by AI** box says how many
+drafts used it this month. A reply sent from a draft says so on the timeline.
 A draft's text and prompt are erased 90 days after it ended; the numbers stay. At most 30 drafts a
 minute are asked for in a workspace.
 

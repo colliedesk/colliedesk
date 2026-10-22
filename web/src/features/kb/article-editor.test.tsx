@@ -499,7 +499,7 @@ test('on a phone a saved draft offers Publish in the bottom bar, and Details ope
 });
 
 test('an article is excluded from AI and let back without touching an edit in progress, and says since when and by whom', async () => {
-  const shown = article({ status: 'published', published_at: '2026-10-02T00:00:00Z' });
+  const shown = { ...article({ status: 'published', published_at: '2026-10-02T00:00:00Z' }), ai_drafts_this_month: 12 };
   const excluded = { ...shown, ai_exclusion: { at: '2026-10-22T09:00:00Z', by: { agent_id: me.agent.id, name: 'Mai Tran' } },
     last_change: { ...shown.last_change, version: 2, kind: 'ai_exclude' } };
   const calls = serve({ ...base, 'GET /api/v1/kb/articles/55555555-5555-4555-8555-555555555555': () => json(200, shown),
@@ -509,6 +509,7 @@ test('an article is excluded from AI and let back without touching an edit in pr
   open({ articleId: ids.article });
   const box = await screen.findByRole('region', { name: 'Used by AI' });
   expect(within(box).getByText('When AI is on, reply drafts and suggestions can quote this article.')).toBeInTheDocument();
+  expect(within(box).getByText('Used in 12 AI drafts this month.')).toBeInTheDocument();
   fireEvent.change(screen.getByRole('textbox', { name: 'Text (Markdown)' }), { target: { value: 'Open **Settings**, then Security.' } });
   await settle();
   within(box).getByRole('button', { name: 'Exclude from AI' }).focus();

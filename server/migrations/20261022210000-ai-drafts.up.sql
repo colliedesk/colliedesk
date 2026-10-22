@@ -50,6 +50,19 @@ CREATE INDEX ai_drafts_undecided ON ai_drafts(ready_at) WHERE status = 'ready' A
 CREATE INDEX ai_drafts_text_due ON ai_drafts((COALESCE(decided_at, created_at)))
     WHERE text_cleared_at IS NULL AND (decided_at IS NOT NULL OR status <> 'ready');
 
+-- The knowledge base articles a draft used, for "used in N drafts this month" on the article: a
+-- containment search on ai_drafts.sources cannot use an index under row-level security.
+CREATE TABLE ai_draft_sources (
+    workspace_id uuid NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    draft_id uuid NOT NULL,
+    kb_article_id uuid NOT NULL,
+    created_at timestamptz NOT NULL,
+    PRIMARY KEY (workspace_id, draft_id, kb_article_id),
+    FOREIGN KEY (workspace_id, draft_id) REFERENCES ai_drafts(workspace_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (workspace_id, kb_article_id) REFERENCES kb_articles(workspace_id, id) ON DELETE CASCADE
+);
+CREATE INDEX ai_draft_sources_article ON ai_draft_sources(workspace_id, kb_article_id, created_at);
+
 -- A reply sent from a draft names it, so the timeline can say so and the outcome is exact.
 ALTER TABLE messages ADD COLUMN ai_draft_id uuid;
 ALTER TABLE messages ADD FOREIGN KEY (workspace_id, ai_draft_id) REFERENCES ai_drafts(workspace_id, id) ON DELETE SET NULL (ai_draft_id);
@@ -75,6 +88,15 @@ BEGIN
     IF app_role IS NULL THEN
         RAISE EXCEPTION 'row-level security is not set up in this schema';
     END IF;
+    ALTER TABLE ai_draft_sources ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE ai_draft_sources FORCE ROW LEVEL SECURITY;
+    EXECUTE format($policy$CREATE POLICY workspace_isolation ON ai_draft_sources FOR ALL TO %1$I
+        USING (workspace_id = (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid))
+        WITH CHECK (workspace_id = (SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid))$policy$, app_role);
+    EXECUTE format($policy$CREATE POLICY privileged_access ON ai_draft_sources FOR ALL TO %1$I
+        USING ((SELECT current_setting('app.privileged', true) = 'on'))
+        WITH CHECK ((SELECT current_setting('app.privileged', true) = 'on'))$policy$, current_user);
+    EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON ai_draft_sources TO %I', app_role);
     ALTER TABLE ai_drafts ENABLE ROW LEVEL SECURITY;
     ALTER TABLE ai_drafts FORCE ROW LEVEL SECURITY;
     EXECUTE format($policy$CREATE POLICY workspace_isolation ON ai_drafts FOR ALL TO %1$I

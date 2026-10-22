@@ -3311,6 +3311,8 @@ export interface components {
             updated_at: string;
         };
         KBArticle: {
+            /** @description Only when one article is read (GET): the AI reply drafts this UTC month that used it as a source. */
+            ai_drafts_this_month?: number;
             /** Format: uuid */
             id: string;
             number: number;

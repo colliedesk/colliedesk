@@ -271,9 +271,15 @@ func (s *Service) runDraft(ctx context.Context, run *Run) error {
 	encodedWarnings, _ := json.Marshal(warnings)
 	missing := strings.TrimSpace(answer.MissingInfo)
 	return run.Record(ctx, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `UPDATE ai_drafts SET status='ready',text=$3,missing_info=$4,sources=$5,warnings=$6,model=$7,ready_at=$8
+		tag, err := tx.Exec(ctx, `UPDATE ai_drafts SET status='ready',text=$3,missing_info=$4,sources=$5,warnings=$6,model=$7,ready_at=$8
 			WHERE workspace_id=$1 AND id=$2 AND status='pending'`, run.Task.WorkspaceID, c.draftID, reply, nullable(missing), encodedSources, encodedWarnings,
 			nullable(response.Model), s.now().UTC())
+		if err != nil || tag.RowsAffected() == 0 {
+			return err
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO ai_draft_sources(workspace_id,draft_id,kb_article_id,created_at)
+			SELECT d.workspace_id,d.id,(s->>'id')::uuid,d.created_at FROM ai_drafts d, jsonb_array_elements(d.sources) s
+			WHERE d.workspace_id=$1 AND d.id=$2 AND s->>'kind'='kb_article' ON CONFLICT DO NOTHING`, run.Task.WorkspaceID, c.draftID)
 		return err
 	})
 }

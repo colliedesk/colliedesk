@@ -31,6 +31,8 @@ const summarySchema = z.object(summaryFields) satisfies z.ZodType<Generated<'KBA
 export const kbArticleSchema = z.object({
   ...summaryFields, body_md: z.string(), has_source_html: z.boolean(), deleted_at: nullableDate,
   ai_exclusion: z.object({ at: z.string().datetime(), by: personSchema.nullable() }).nullable(),
+  // Only when one article is read: the AI reply drafts this month that used it.
+  ai_drafts_this_month: z.number().int().optional(),
   translations: z.array(z.object({ locale: z.string(), title: z.string(), body_md: z.string(), updated_at: z.string().datetime() })),
 }) satisfies z.ZodType<Generated<'KBArticle'>>;
 const trashedArticleSchema = z.object({

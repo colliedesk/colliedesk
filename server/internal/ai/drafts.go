@@ -330,3 +330,13 @@ func (s *Service) DraftOutcomes(ctx context.Context, workspaceID string, from, t
 	})
 	return counts, err
 }
+
+// ArticleDraftsThisMonth counts the drafts asked for this UTC month that used the article as a source.
+func (s *Service) ArticleDraftsThisMonth(ctx context.Context, workspaceID, articleID string) (int, error) {
+	var n int
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT count(*) FROM ai_draft_sources WHERE workspace_id=$1 AND kb_article_id=$2 AND created_at>=$3`,
+			workspaceID, articleID, monthStart(s.now())).Scan(&n)
+	})
+	return n, err
+}

@@ -191,7 +191,9 @@ workspace).
 3. **Sources come from the database.** The model answers with `source_ids` (`kb1`, `past2`) that name
    what the prompt offered; an id it was not offered is dropped, and the title, number and link come
    from the retrieval rows. Warnings list emails, numbers of six digits or more and other customers'
-   names in the draft that the conversation, subject and prompt do not hold.
+   names in the draft that the conversation, subject and prompt do not hold. The articles a ready draft
+   used are also rows of `ai_draft_sources`, for the article's monthly count: a containment search on
+   `ai_drafts.sources` cannot use an index under row-level security (non-leakproof operator).
 4. **Refused before queueing.** `POST` answers 409 `ai_feature_off`, 402 `ai_allowance_reached` and 429
    `ai_drafts_rate_limited` (30 a minute in a workspace, under an advisory lock) at once: a looping
    token must not fill the queue or a workspace's own key, which no allowance bounds.

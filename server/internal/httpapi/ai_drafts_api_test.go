@@ -169,6 +169,11 @@ func TestADraftIsWrittenFromItsOwnWorkspaceAndNamesItsSourcesFromTheDatabase(t *
 	if n := queryString(t, d.pool, `SELECT count(*)::text FROM ai_usage u JOIN ai_drafts r ON r.task_id=u.task_id WHERE r.id=$1 AND u.feature='draft' AND u.status='ok'`, draft.ID); n != "1" {
 		t.Fatalf("metered calls of the draft = %s", n)
 	}
+	// The article says it was used; B's admin cannot read A's article at all.
+	if body := request(t, d.api, http.MethodGet, "/api/v1/kb/articles/"+d.articleA, nil, d.adminA, nil).Body.String(); !strings.Contains(body, `"ai_drafts_this_month":1`) {
+		t.Fatalf("article = %s", body)
+	}
+	wantResponse(t, request(t, d.api, http.MethodGet, "/api/v1/kb/articles/"+d.articleA, nil, d.adminB, nil), http.StatusNotFound, "not_found")
 }
 
 func TestDraftRoutesNeverCrossWorkspaces(t *testing.T) {
