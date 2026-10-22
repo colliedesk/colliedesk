@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -91,7 +92,7 @@ func conversationPresence(c *call, arguments map[string]any) (any, error) {
 		Viewers          []restViewer `json:"viewers"`
 		HeartbeatSeconds int          `json:"heartbeat_seconds"`
 	}
-	if err := c.send(http.MethodPut, path, map[string]any{"client_id": presenceClientID, "writing": args.Writing}, &answer); err != nil {
+	if err := c.announce(path, map[string]any{"client_id": presenceClientID, "writing": args.Writing}, &answer); err != nil {
 		return nil, err
 	}
 	viewers := viewersOut(answer.Viewers)
@@ -100,4 +101,27 @@ func conversationPresence(c *call, arguments map[string]any) (any, error) {
 		out["hint"] = hint
 	}
 	return out, nil
+}
+
+// announce sends the presence of the token. The server takes one announce of a conversation every
+// 2 seconds; a model that calls again sooner (writing true right after a read) waits for it once
+// instead of failing.
+func (c *call) announce(path string, body, into any) error {
+	err := c.rest.do(c.ctx, c.token, http.MethodPut, path, nil, body, into)
+	if failure, ok := err.(*restError); ok && failure.Status == http.StatusTooManyRequests {
+		wait := 2 * time.Second
+		if seconds, parsed := strconv.Atoi(failure.RetryAfter); parsed == nil && seconds > 0 && seconds < 2 {
+			wait = time.Duration(seconds) * time.Second
+		}
+		select {
+		case <-c.ctx.Done():
+			return c.ctx.Err()
+		case <-time.After(wait):
+		}
+		err = c.rest.do(c.ctx, c.token, http.MethodPut, path, nil, body, into)
+	}
+	if err == nil {
+		c.wrote = true
+	}
+	return c.refuse(err, c.notFound)
 }

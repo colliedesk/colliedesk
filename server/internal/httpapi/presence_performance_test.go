@@ -39,7 +39,9 @@ func TestConversationPresenceLatencyBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	data := store.New(pool)
+	// Each timed announce is a heartbeat: the clock moves past the minimum interval between two.
+	clock := time.Now().UTC()
+	data := store.New(pool).WithClock(func() time.Time { clock = clock.Add(domain.PresenceMinInterval); return clock })
 	caller := store.PresenceCaller{AgentID: target.agents[0], SessionID: target.sessions[0]}
 	announce := func() ([]domain.ConversationViewer, time.Duration) {
 		started := time.Now()

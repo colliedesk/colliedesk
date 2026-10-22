@@ -19,10 +19,17 @@ const (
 	PresenceTokenTTL = 2 * time.Minute
 	// PresenceMaxPerAgent caps the rows of one person (tabs and tokens); the oldest go first.
 	PresenceMaxPerAgent = 20
+	// PresenceMinInterval is the shortest time between two announces of one tab on one conversation; a
+	// quicker one is refused (ErrPresenceTooSoon), so no caller writes a row more often.
+	PresenceMinInterval = 2 * time.Second
 )
 
 // ErrPresenceConversationNotFound is a conversation that is not in the caller's workspace.
 var ErrPresenceConversationNotFound = errors.New("conversation not found")
+
+// ErrPresenceTooSoon is an announce of a tab on the conversation it announced less than
+// PresenceMinInterval ago. Nothing changed.
+var ErrPresenceTooSoon = errors.New("presence announced too soon")
 
 // ConversationViewer is one person, or one agent token acting as a person, with a conversation open.
 // WritingSince and EditedAt are set while a reply not sent yet is open in one of their tabs.

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +18,13 @@ var presenceClientPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{8,64}$`)
 func writePresenceError(response http.ResponseWriter, err error) {
 	if errors.Is(err, domain.ErrPresenceConversationNotFound) {
 		writeError(response, http.StatusNotFound, "not_found", "The conversation was not found.")
+		return
+	}
+	if errors.Is(err, domain.ErrPresenceTooSoon) {
+		seconds := int(domain.PresenceMinInterval / time.Second)
+		response.Header().Set("Retry-After", strconv.Itoa(seconds))
+		writeError(response, http.StatusTooManyRequests, "too_many_requests",
+			"This tab announced this conversation less than "+strconv.Itoa(seconds)+" seconds ago. Nothing changed; announce again after Retry-After.")
 		return
 	}
 	writeStoreError(response, err)
