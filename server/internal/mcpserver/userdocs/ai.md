@@ -119,8 +119,8 @@ part, or dismissed.
 2. **Included AI.** The server's provider can come with a monthly allowance (on Colliedesk Cloud,
    included in your plan). When it is used up, features on the server's provider stop until the first
    day of the next month (UTC), and Settings says so; your own providers keep working. **Settings > AI >
-   Usage** shows what is used. Calls still running are counted when they finish, so the last calls of a
-   month can go slightly past the allowance.
+   Usage** shows what is used. A call that starts sets aside the most it can cost, so calls running at
+   the same time never spend more than is left; the last few cents of a month can stay unused.
 
 ## History and usage
 

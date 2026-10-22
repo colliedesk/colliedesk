@@ -39,6 +39,8 @@ CREATE INDEX ai_tasks_conversation ON ai_tasks(workspace_id, conversation_id, ki
 ALTER TABLE ai_usage ADD COLUMN task_id uuid;
 ALTER TABLE ai_usage ADD COLUMN automatic boolean NOT NULL DEFAULT false;
 ALTER TABLE ai_usage ADD COLUMN cost_micro_usd bigint CHECK (cost_micro_usd >= 0);
+-- What a call on the server's provider may cost at most, held against the allowance while it runs.
+ALTER TABLE ai_usage ADD COLUMN reserved_micro_usd bigint CHECK (reserved_micro_usd >= 0);
 ALTER TABLE ai_usage ADD FOREIGN KEY (workspace_id, task_id) REFERENCES ai_tasks(workspace_id, id) ON DELETE SET NULL (task_id);
 CREATE INDEX ai_usage_task ON ai_usage(workspace_id, task_id) WHERE task_id IS NOT NULL;
 -- The worker's sweep looks for calls left started on every tick; the table only grows.
