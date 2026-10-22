@@ -19,13 +19,14 @@ import (
 // be refused on approval anyway.
 var settingsFields = map[string][]string{
 	"PATCH /api/v1/workspace/timezone":                {"timezone"},
+	"PATCH /api/v1/workspace/name":                    {"name"},
 	"PATCH /api/v1/agents/me/timezone":                {"timezone"},
 	"PATCH /api/v1/agents/me/display-name":            {"display_name"},
 	"PATCH /api/v1/agents/{id}":                       {"display_name", "role", "active", "reassign_to"},
 	"POST /api/v1/auth/invites":                       {"email", "role_ceiling"},
 	"DELETE /api/v1/auth/invites/{id}":                {},
 	"PUT /api/v1/channels/web-form":                   {"enabled", "allowed_origins"},
-	"PUT /api/v1/channels/email":                      {"support_address"},
+	"PUT /api/v1/channels/email":                      {"support_address", "sender_name"},
 	"POST /api/v1/channels/email/domain-verification": {},
 	"DELETE /api/v1/auth/sessions/{id}":               {},
 	"GET /api/v1/billing":                             {},
@@ -55,6 +56,7 @@ func settingsBodyProblem(route Route, body json.RawMessage) string {
 func (a *API) summarizeSettingsRequest(ctx context.Context, request *http.Request, route Route, who auth.Principal, body json.RawMessage) string {
 	var call struct {
 		Timezone       *string  `json:"timezone"`
+		Name           *string  `json:"name"`
 		DisplayName    *string  `json:"display_name"`
 		Role           *string  `json:"role"`
 		Active         *bool    `json:"active"`
@@ -63,13 +65,16 @@ func (a *API) summarizeSettingsRequest(ctx context.Context, request *http.Reques
 		RoleCeiling    string   `json:"role_ceiling"`
 		Enabled        *bool    `json:"enabled"`
 		AllowedOrigins []string `json:"allowed_origins"`
-		SupportAddress string   `json:"support_address"`
+		SupportAddress *string  `json:"support_address"`
+		SenderName     *string  `json:"sender_name"`
 	}
 	_ = json.Unmarshal(body, &call)
 	id := request.PathValue("id")
 	switch route.Method + " " + route.Pattern {
 	case "PATCH /api/v1/workspace/timezone":
 		return fmt.Sprintf("Change the workspace timezone: %s → %s", who.Workspace.Timezone, orNone(call.Timezone, "(none)"))
+	case "PATCH /api/v1/workspace/name":
+		return fmt.Sprintf("Change the workspace name: %s → %s", who.Workspace.Name, orNone(call.Name, "(none)"))
 	case "PATCH /api/v1/agents/me/timezone":
 		before := "the workspace timezone"
 		if who.Agent.TimezoneOverride != nil {
@@ -109,11 +114,18 @@ func (a *API) summarizeSettingsRequest(ctx context.Context, request *http.Reques
 		}
 		return "Change the web form: " + strings.Join(changes, "; ")
 	case "PUT /api/v1/channels/email":
-		before := "not connected"
+		before, beforeName := "not connected", who.Workspace.Name
 		if channel, err := a.store.GetEmailChannel(ctx, who.Workspace.ID); err == nil && channel != nil {
-			before = channel.SupportAddress
+			before, beforeName = channel.SupportAddress, channel.SenderName
 		}
-		return fmt.Sprintf("Change the email channel's support address: %s → %s", before, call.SupportAddress)
+		var changes []string
+		if call.SupportAddress != nil {
+			changes = append(changes, fmt.Sprintf("support address: %s → %s", before, *call.SupportAddress))
+		}
+		if call.SenderName != nil {
+			changes = append(changes, "sender name: "+beforeName+" → "+*call.SenderName)
+		}
+		return "Change the email channel's " + strings.Join(changes, "; ")
 	case "POST /api/v1/channels/email/domain-verification":
 		if channel, err := a.store.GetEmailChannel(ctx, who.Workspace.ID); err == nil && channel != nil {
 			return "Check the DNS record that verifies " + channel.Domain + " for sending"

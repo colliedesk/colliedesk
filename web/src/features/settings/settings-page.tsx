@@ -3,6 +3,7 @@ import type { Invite, Session } from '../../api/schemas';
 import { messages } from '../../messages';
 import { DisplayNameField } from './display-name-field';
 import { InvitesSection } from './invites-section';
+import { NameForm } from './name-form';
 import { PreferencesSection } from './preferences-section';
 import type { SaveState } from './save-feedback';
 import { SessionsSection } from './sessions-section';
@@ -16,6 +17,9 @@ interface SettingsPageProps {
   canCreateInvites?: boolean;
   canManageWorkspace?: boolean;
   workspaceTimezone?: string;
+  workspaceName?: string;
+  workspaceNameSave?: SaveState;
+  onSetWorkspaceName?: (name: string) => void;
   timezoneOverride?: string | null;
   // email and displayName are the person signed in; an empty name shows the email.
   email?: string;
@@ -52,7 +56,7 @@ interface SettingsPageProps {
 // workspace shares. A section nav jumps to each; it lists only the sections this person can see,
 // plus Plan and billing (its own page) for admins of a billed workspace.
 export function SettingsPage({ sessions, invites, timezone, canCreateInvites = false, canManageWorkspace = false,
-  workspaceTimezone = 'UTC', timezoneOverride = null, email, displayName = '', onSetDisplayName, displayNameSave, createdInviteUrl, onCreateInvite, onRevokeInvite,
+  workspaceTimezone = 'UTC', workspaceName = '', workspaceNameSave, onSetWorkspaceName, timezoneOverride = null, email, displayName = '', onSetDisplayName, displayNameSave, createdInviteUrl, onCreateInvite, onRevokeInvite,
   onRevokeSession, onSetWorkspaceTimezone, onSetAgentTimezone, loading = false, error, workspaceTimezoneSave, personalTimezoneSave, inviteError, teamSection, emailSection, savedRepliesSection, webFormSection, helpCenterSection, exportSection, showBilling = false }: SettingsPageProps) {
   return (
     <main className="settings-page panel">
@@ -76,6 +80,8 @@ export function SettingsPage({ sessions, invites, timezone, canCreateInvites = f
           {canManageWorkspace && <section className="settings-card" aria-labelledby="general-heading">
             <div className="section-heading"><h2 id="general-heading">{messages.general}</h2><p>{messages.generalDescription}</p></div>
             <div className="settings-body">
+              <NameForm label={messages.workspaceName} saveLabel={messages.saveWorkspaceName} hint={messages.workspaceNameHelp}
+                value={workspaceName} canManage save={workspaceNameSave} onSave={onSetWorkspaceName} minLength={2} maxLength={60} />
               <TimezoneSelect label={messages.workspaceTimezone} value={workspaceTimezone} save={workspaceTimezoneSave} onChange={(value) => onSetWorkspaceTimezone?.(value)} />
             </div>
           </section>}

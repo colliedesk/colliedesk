@@ -48,7 +48,7 @@ export class SeatPausedError extends PlanLimitError {
   }
 }
 
-// InvalidRequestError means the server refused the input (HTTP 400); its message says what to fix.
+// InvalidRequestError means the server refused the input (HTTP 400 or 422); its message says what to fix.
 export class InvalidRequestError extends Error {
   constructor(message: string) {
     super(message);
@@ -153,7 +153,8 @@ export async function request<T>(path: string, schema: z.ZodType<T>, init?: Requ
   if (response.status === 402) throw await planLimitFailure(response);
   if (response.status === 413) throw await tooLarge(response);
   if (response.status === 507) throw await diskFull(response);
-  if (response.status === 400 || response.status === 409) throw await invalidRequest(response);
+  // 422 is a name refused on the hosted cloud (name_not_allowed); its message says what to do.
+  if (response.status === 400 || response.status === 409 || response.status === 422) throw await invalidRequest(response);
   if (response.status === 403 || response.status === 429 || response.status === 503) throw await outboundRefusal(response);
   if (!response.ok) throw failure(response.status);
   // 204 has no body: a call that expects one passes a schema that accepts undefined.
@@ -224,7 +225,10 @@ async function errorCode(response: Response): Promise<unknown> {
 
 export const api = {
   emailChannel: () => request('/api/v1/channels/email', emailChannelSettingsSchema),
+  // Without sender_name the channel keeps its name; a new channel starts with the workspace name.
   saveEmailChannel: (support_address: string) => request('/api/v1/channels/email', emailChannelSettingsSchema, { method: 'PUT', body: json<'putEmailChannel'>({ support_address }) }),
+  // Only the name: the server keeps the address, so a stale page cannot move the channel.
+  saveEmailSenderName: (sender_name: string) => request('/api/v1/channels/email', emailChannelSettingsSchema, { method: 'PUT', body: json<'putEmailChannel'>({ sender_name }) }),
   disconnectEmailChannel: () => requestNoContent('/api/v1/channels/email', { method: 'DELETE' }),
   webForm: () => request('/api/v1/channels/web-form', webFormSettingsSchema),
   saveWebForm: (enabled: boolean, allowed_origins: string[]) => request('/api/v1/channels/web-form', webFormSettingsSchema, { method: 'PUT', body: json<'putWebForm'>({ enabled, allowed_origins }) }),
@@ -246,6 +250,7 @@ export const api = {
   }),
   me: () => request('/api/v1/auth/me', meSchema),
   updateWorkspaceTimezone: (timezone: RequestBody<'updateWorkspaceTimezone'>['timezone']) => request('/api/v1/workspace/timezone', workspaceSchema, { method: 'PATCH', body: json<'updateWorkspaceTimezone'>({ timezone }) }),
+  updateWorkspaceName: (name: RequestBody<'updateWorkspaceName'>['name']) => request('/api/v1/workspace/name', workspaceSchema, { method: 'PATCH', body: json<'updateWorkspaceName'>({ name }) }),
   updateWorkspaceSlug: (slug: RequestBody<'updateWorkspaceSlug'>['slug']) => request('/api/v1/workspace/slug', workspaceSchema, { method: 'PATCH', body: json<'updateWorkspaceSlug'>({ slug }) }),
   updateAgentTimezone: (timezone: RequestBody<'updateAgentTimezone'>['timezone']) => request('/api/v1/agents/me/timezone', agentSchema, { method: 'PATCH', body: json<'updateAgentTimezone'>({ timezone }) }),
   updateAgentDisplayName: (display_name: RequestBody<'updateAgentDisplayName'>['display_name']) => request('/api/v1/agents/me/display-name', agentSchema, { method: 'PATCH', body: json<'updateAgentDisplayName'>({ display_name }) }),

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/store"
 )
@@ -23,8 +22,7 @@ func (a *API) updateWorkspaceSlug(response http.ResponseWriter, request *http.Re
 		writeError(response, http.StatusBadRequest, "invalid_request", "Invalid slug: "+err.Error()+".")
 		return
 	}
-	if _, denied := domain.DeniedBrand(input.Slug); denied && a.limits {
-		writeError(response, http.StatusUnprocessableEntity, "name_not_allowed", brandNameMessage)
+	if a.refuseBrand(response, input.Slug) {
 		return
 	}
 	workspace, err := a.store.UpdateWorkspaceSlug(request.Context(), principal(request).Workspace.ID, input.Slug)

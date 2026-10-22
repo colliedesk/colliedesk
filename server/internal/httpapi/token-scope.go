@@ -172,6 +172,7 @@ var tokenTiers = map[string]TokenAccess{
 	"PATCH /api/v1/agents/me/display-name":            tier(auth.ScopeDraft),
 	"GET /api/v1/billing":                             tier(auth.ScopeAdmin),
 	"PATCH /api/v1/workspace/timezone":                tier(auth.ScopeAdmin),
+	"PATCH /api/v1/workspace/name":                    tier(auth.ScopeAdmin),
 	"PATCH /api/v1/agents/{id}":                       tier(auth.ScopeAdmin),
 	"DELETE /api/v1/auth/invites/{id}":                tier(auth.ScopeAdmin),
 	"PUT /api/v1/channels/web-form":                   tier(auth.ScopeAdmin),

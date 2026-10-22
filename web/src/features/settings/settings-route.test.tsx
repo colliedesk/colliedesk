@@ -5,8 +5,8 @@ import { SettingsRoute } from './settings-route';
 
 const api = vi.hoisted(() => ({
   me: vi.fn(), sessions: vi.fn(), invites: vi.fn(), emailChannel: vi.fn(), agents: vi.fn(), updateAgent: vi.fn(),
-  createInvite: vi.fn(), revokeInvite: vi.fn(), revokeSession: vi.fn(), updateWorkspaceTimezone: vi.fn(), updateAgentTimezone: vi.fn(),
-  saveEmailChannel: vi.fn(), updateWorkspaceSlug: vi.fn(), rotateEmailSecret: vi.fn(), verifyEmailDomain: vi.fn(), disconnectEmailChannel: vi.fn(),
+  createInvite: vi.fn(), revokeInvite: vi.fn(), revokeSession: vi.fn(), updateWorkspaceTimezone: vi.fn(), updateWorkspaceName: vi.fn(), updateAgentTimezone: vi.fn(),
+  saveEmailChannel: vi.fn(), saveEmailSenderName: vi.fn(), updateWorkspaceSlug: vi.fn(), rotateEmailSecret: vi.fn(), verifyEmailDomain: vi.fn(), disconnectEmailChannel: vi.fn(),
   exportWorkspace: vi.fn(), config: vi.fn(), webForm: vi.fn(), saveWebForm: vi.fn(),
   savedReplies: vi.fn(), createSavedReply: vi.fn(), updateSavedReply: vi.fn(), deleteSavedReply: vi.fn(),
   connectGmail: vi.fn(), disconnectGmail: vi.fn(),
@@ -45,10 +45,24 @@ test('an admin finds Export all data in Settings', async () => {
   expect(await screen.findByRole('button', { name: 'Export all data' })).toBeInTheDocument();
 });
 
+test('an admin renames the workspace in General and the new name is read back', async () => {
+  show('admin');
+  api.updateWorkspaceName.mockResolvedValue({ id: '22222222-2222-4222-8222-222222222222', slug: 'beta-desk', name: 'Gamma Desk', timezone: 'UTC' });
+  const field = await screen.findByRole('textbox', { name: 'Workspace name' });
+  expect(field).toHaveValue('Beta Desk');
+  expect(field).toHaveAccessibleDescription(/help center title.*sender name/i);
+  const before = api.me.mock.calls.length;
+  fireEvent.change(field, { target: { value: ' Gamma Desk ' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save workspace name' }));
+  await waitFor(() => expect(api.updateWorkspaceName).toHaveBeenCalledWith('Gamma Desk'));
+  await waitFor(() => expect(api.me.mock.calls.length).toBeGreaterThan(before));
+});
+
 test('an agent does not see Export all data', async () => {
   show('agent');
   await screen.findByRole('heading', { name: 'Sessions' });
   expect(screen.queryByRole('button', { name: 'Export all data' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('textbox', { name: 'Workspace name' })).not.toBeInTheDocument();
 });
 
 test('an admin deactivates a teammate and the lists reload', async () => {
@@ -140,7 +154,7 @@ test('signing out this device from Sessions reloads who is signed in, so the sig
 
 const withChannel = {
   channel: {
-    support_address: 'support@example.com', secret_set: true, secret_rotated_at: '2026-10-14T09:00:00Z', domain: 'example.com', domain_verified_at: null,
+    support_address: 'support@example.com', sender_name: 'Acme Support', secret_set: true, secret_rotated_at: '2026-10-14T09:00:00Z', domain: 'example.com', domain_verified_at: null,
     dns_record_name: '_colliedesk.example.com', dns_record_value: 'colliedesk-verification=abc', dns_records: [], dns_records_expired_at: null,
     created_at: '2026-10-14T08:00:00Z', updated_at: '2026-10-14T09:00:00Z',
   },
@@ -163,6 +177,16 @@ test('Connect Gmail sends the browser to Google, and the outcome it comes back w
   } finally {
     Object.defineProperty(window, 'location', { configurable: true, value: original });
   }
+});
+
+test('saving the sender name sends only the trimmed name, never the address this page loaded', async () => {
+  api.saveEmailSenderName.mockResolvedValue(withChannel);
+  show('admin', [], withChannel);
+  const field = await screen.findByRole('textbox', { name: 'Sender name' });
+  fireEvent.change(field, { target: { value: ' Colliedesk Support ' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save sender name' }));
+  await waitFor(() => expect(api.saveEmailSenderName).toHaveBeenCalledWith('Colliedesk Support'));
+  expect(api.saveEmailChannel).not.toHaveBeenCalled();
 });
 
 test('Settings has a Help center section in its nav, for every agent', async () => {

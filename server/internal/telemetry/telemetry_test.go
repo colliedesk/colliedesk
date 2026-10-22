@@ -455,7 +455,7 @@ func fixture(t *testing.T, db *database.DB) (acme, beta string) {
 	exec(`INSERT INTO workspace_billing(workspace_id,plan,polar_subscription_id,polar_customer_id,status,current_period_end,source_modified_at)
 		VALUES($1,'team','sub_beta','cus_beta','active',now() + interval '20 days',now())`, b.ID)
 
-	exec(`INSERT INTO email_channels(workspace_id,support_address,domain_verification_token) VALUES($1,'support@beta.example','token')`, b.ID)
+	exec(`INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,sender_name) VALUES($1,'support@beta.example','token','Beta')`, b.ID)
 	exec(`INSERT INTO web_form_channels(workspace_id,enabled) VALUES($1,false)`, a.ID)
 	exec(`INSERT INTO import_items(workspace_id,source,entity,source_id,status) VALUES($1,'freshdesk:account:42','ticket','1','done')`, a.ID)
 	return a.ID, b.ID

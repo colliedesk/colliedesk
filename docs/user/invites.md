@@ -23,7 +23,7 @@ Roles:
 | Role | Can do |
 |---|---|
 | Agent | Work conversations, contacts and tags; manage own sessions and timezone |
-| Admin | Everything an agent can, plus invites, all sessions and the workspace timezone |
+| Admin | Everything an agent can, plus invites, all sessions, the workspace name and the workspace timezone |
 
 ## Agent limit on the hosted cloud
 

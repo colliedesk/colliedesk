@@ -100,6 +100,7 @@ var routeTiers = map[string]string{
 	"DELETE /api/v1/contacts/{id}/merges/{mergeId}":              "send",
 	"GET /api/v1/agents":                                         "read",
 	"PATCH /api/v1/workspace/timezone":                           "admin",
+	"PATCH /api/v1/workspace/name":                               "admin",
 	"PATCH /api/v1/workspace/slug":                               "approval",
 	"PATCH /api/v1/agents/me/timezone":                           "draft",
 	"PATCH /api/v1/agents/me/display-name":                       "draft",

@@ -304,6 +304,7 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getEmailChannel"];
+        /** @description Connect the email channel, change its support address, change its sender name, or both. Send only `sender_name` to rename the sender of a connected channel: the address, its domain verification and its sending domain stay as they are. */
         put: operations["putEmailChannel"];
         post?: never;
         /** @description Disconnect the email channel. Conversations and messages stay; the inbound secret stops working. */
@@ -622,6 +623,23 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateWorkspaceTimezone"];
+        trace?: never;
+    };
+    "/api/v1/workspace/name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Rename the workspace. The team sees the name in the workspace switcher and Settings. Customers see it as the help center title while the help center has no title of its own; replies never carry it, because every email channel keeps its own `sender_name`. Spaces at the ends are removed; a name is 2 to 60 characters without line breaks or other control characters (400 otherwise). On Colliedesk Cloud a name with a well-known brand in it is refused (422), as at sign-up. */
+        patch: operations["updateWorkspaceName"];
         trace?: never;
     };
     "/api/v1/workspace/slug": {
@@ -2948,6 +2966,8 @@ export interface components {
         EmailChannel: {
             /** Format: email */
             support_address: string;
+            /** @description The name customers see in the From line of every reply this channel sends (with " via Colliedesk" while the domain is not verified) and in Reply-To. Renaming the workspace does not change it. */
+            sender_name: string;
             secret_set: boolean;
             /** @description Records to publish when the server verifies domains through its email provider (`domain_verification` is `provider`), with the provider's last reported status for each. Empty when it uses the TXT record above, or before the provider has created the domain. */
             dns_records: components["schemas"]["EmailDNSRecord"][];
@@ -4098,8 +4118,13 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** Format: email */
-                    support_address: string;
+                    /**
+                     * Format: email
+                     * @description Required to connect the channel. Leave it out to keep the current address; a changed address loses its domain verification.
+                     */
+                    support_address?: string;
+                    /** @description The name customers see in the From line of every reply. Spaces at the ends are removed; 1 to 100 characters without line breaks or other control characters (400 otherwise). On Colliedesk Cloud a name with a well-known brand in it is refused (422). Leave it out to keep the current name; a new channel starts with the workspace name. */
+                    sender_name?: string;
                 };
             };
         };
@@ -4109,6 +4134,7 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+            422: components["responses"]["NameNotAllowed"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -4759,6 +4785,37 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    updateWorkspaceName: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Renamed workspace */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workspace"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["NameNotAllowed"];
         };
     };
     updateWorkspaceSlug: {

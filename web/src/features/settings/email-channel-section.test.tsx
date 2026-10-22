@@ -19,7 +19,7 @@ const disconnected: EmailChannelSettings = {
 const connected: EmailChannelSettings = {
   ...disconnected,
   channel: {
-    support_address: 'support@example.com', secret_set: true, secret_rotated_at: '2026-10-14T09:00:00Z',
+    support_address: 'support@example.com', sender_name: 'Acme Support', secret_set: true, secret_rotated_at: '2026-10-14T09:00:00Z',
     domain: 'example.com', domain_verified_at: null, dns_record_name: '_colliedesk.example.com', dns_record_value: 'colliedesk-verification=abc123', dns_records: [], dns_records_expired_at: null,
     created_at: '2026-10-14T08:00:00Z', updated_at: '2026-10-14T09:00:00Z',
   },
@@ -43,6 +43,28 @@ test('connects a support address and shows the inbound URL', () => {
   fireEvent.change(screen.getByRole('textbox', { name: /support address/i }), { target: { value: 'help@example.com' } });
   fireEvent.click(screen.getByRole('button', { name: /save support address/i }));
   expect(onSave).toHaveBeenCalledWith('help@example.com');
+});
+
+test('shows the sender name customers see and saves a new one', () => {
+  const onSaveSenderName = vi.fn();
+  render(<EmailChannelSection settings={connected} timezone="UTC" canManage onSaveSenderName={onSaveSenderName} />);
+  const field = screen.getByRole('textbox', { name: 'Sender name' });
+  expect(field).toHaveValue('Acme Support');
+  expect(field).toHaveAccessibleDescription(/customers see this name in the from line/i);
+  fireEvent.change(field, { target: { value: '  Colliedesk Support ' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save sender name' }));
+  expect(onSaveSenderName).toHaveBeenCalledWith('Colliedesk Support');
+});
+
+test('a teammate who is not an admin reads the sender name without editing it', () => {
+  render(<EmailChannelSection settings={connected} timezone="UTC" canManage={false} />);
+  expect(screen.queryByRole('textbox', { name: 'Sender name' })).not.toBeInTheDocument();
+  expect(screen.getByText('Acme Support')).toBeInTheDocument();
+});
+
+test('asks for a sender name only once a support address is connected', () => {
+  render(<EmailChannelSection settings={disconnected} timezone="UTC" canManage />);
+  expect(screen.queryByRole('textbox', { name: 'Sender name' })).not.toBeInTheDocument();
 });
 
 test('rotates the inbound secret, shows it once and disconnects', () => {

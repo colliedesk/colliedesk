@@ -118,7 +118,7 @@ export const emailDnsRecordSchema = z.object({
   record: z.string(), type: z.string(), name: z.string(), value: z.string(), priority: z.number().int().nullable(), status: z.string(),
 }) satisfies z.ZodType<Generated<'EmailDNSRecord'>>;
 export const emailChannelSchema = z.object({
-  support_address: z.string().email(), secret_set: z.boolean(), secret_rotated_at: nullableDate,
+  support_address: z.string().email(), sender_name: z.string(), secret_set: z.boolean(), secret_rotated_at: nullableDate,
   domain: z.string(), domain_verified_at: nullableDate, dns_record_name: z.string(), dns_record_value: z.string(),
   dns_records: z.array(emailDnsRecordSchema), dns_records_expired_at: nullableDate, created_at: z.string().datetime(), updated_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'EmailChannel'>>;

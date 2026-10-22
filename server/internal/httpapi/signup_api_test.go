@@ -340,6 +340,49 @@ func TestSlugRenameRefusesBrandsOnTheCloudOnly(t *testing.T) {
 	wantResponse(t, request(t, selfHosted.api, http.MethodPatch, "/api/v1/workspace/slug", map[string]any{"slug": "paypal-help"}, selfHosted.adminA, nil), http.StatusOK, "")
 }
 
+// The sender name goes into the From line of every reply, so the cloud refuses a brand there the way
+// it does at sign-up; a self-hosted server lets its operator name the channel freely.
+func TestSenderNameRefusesBrandsOnTheCloudOnly(t *testing.T) {
+	cloud := newLimitsFixture(t, true)
+	for _, name := range []string{"Pay Pal Support", "PayPal", "G-O-O-G-L-E Help"} {
+		response := request(t, cloud.api, http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "support@limits-alpha.example.com", "sender_name": name}, cloud.adminA, nil)
+		wantResponse(t, response, http.StatusUnprocessableEntity, "name_not_allowed")
+		if !strings.Contains(response.Body.String(), "This name is not available") {
+			t.Errorf("sender name %q: body=%s, want the sign-up message", name, response.Body.String())
+		}
+	}
+	if got := senderName(t, cloud.api, cloud.adminA); got != "Limits Alpha" {
+		t.Fatalf("a refused sender name was stored: %q", got)
+	}
+	wantResponse(t, request(t, cloud.api, http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "support@limits-alpha.example.com", "sender_name": "Pineapple Support"}, cloud.adminA, nil), http.StatusOK, "")
+
+	selfHosted := newLimitsFixture(t, false)
+	wantResponse(t, request(t, selfHosted.api, http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "support@limits-alpha.example.com", "sender_name": "Pay Pal Support"}, selfHosted.adminA, nil), http.StatusOK, "")
+	if got := senderName(t, selfHosted.api, selfHosted.adminA); got != "Pay Pal Support" {
+		t.Fatalf("self-hosted sender name = %q", got)
+	}
+}
+
+// The workspace name is the help center title when the help center has none, and a new email channel
+// starts with it: the cloud refuses a brand on rename as it does at sign-up.
+func TestWorkspaceRenameRefusesBrandsOnTheCloudOnly(t *testing.T) {
+	cloud := newLimitsFixture(t, true)
+	for _, name := range []string{"Pay Pal Support", "pay pal", "G-O-O-G-L-E"} {
+		response := request(t, cloud.api, http.MethodPatch, "/api/v1/workspace/name", map[string]any{"name": name}, cloud.adminA, nil)
+		wantResponse(t, response, http.StatusUnprocessableEntity, "name_not_allowed")
+		if !strings.Contains(response.Body.String(), "This name is not available") {
+			t.Errorf("workspace name %q: body=%s, want the sign-up message", name, response.Body.String())
+		}
+	}
+	if got := workspaceName(t, cloud.api, cloud.adminA); got != "Limits Alpha" {
+		t.Fatalf("a refused workspace name was stored: %q", got)
+	}
+	wantResponse(t, request(t, cloud.api, http.MethodPatch, "/api/v1/workspace/name", map[string]any{"name": "Pineapple Studio"}, cloud.adminA, nil), http.StatusOK, "")
+
+	selfHosted := newLimitsFixture(t, false)
+	wantResponse(t, request(t, selfHosted.api, http.MethodPatch, "/api/v1/workspace/name", map[string]any{"name": "Pay Pal Support"}, selfHosted.adminA, nil), http.StatusOK, "")
+}
+
 // The web app offers "Create a workspace" only where the server would accept it: cloud sign-in and
 // billing both configured.
 func TestConfigAdvertisesSignupOnlyWhereItExists(t *testing.T) {

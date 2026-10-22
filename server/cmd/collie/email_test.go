@@ -71,15 +71,15 @@ func TestEmailResumeRejectsBadInput(t *testing.T) {
 // holdDomain makes the workspace the provider-verified holder of the domain.
 func (e *trialEnv) holdDomain(domain, providerID string) {
 	e.t.Helper()
-	if _, err := e.pool.Exec(context.Background(), `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,provider_domain_id,domain_verified_at)
-		VALUES($1,$2,'token',$3,now())`, e.workspaceID, "support@"+domain, providerID); err != nil {
+	if _, err := e.pool.Exec(context.Background(), `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,provider_domain_id,domain_verified_at,sender_name)
+		VALUES($1,$2,'token',$3,now(),'Support')`, e.workspaceID, "support@"+domain, providerID); err != nil {
 		e.t.Fatal(err)
 	}
 }
 
 func (e *trialEnv) tryVerifyDomain(domain, providerID string) error {
-	_, err := e.pool.Exec(context.Background(), `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,provider_domain_id,domain_verified_at)
-		VALUES($1,$2,'token',$3,now())`, e.workspaceID, "support@"+domain, providerID)
+	_, err := e.pool.Exec(context.Background(), `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,provider_domain_id,domain_verified_at,sender_name)
+		VALUES($1,$2,'token',$3,now(),'Support')`, e.workspaceID, "support@"+domain, providerID)
 	return err
 }
 

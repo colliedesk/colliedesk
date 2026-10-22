@@ -24,8 +24,8 @@ const (
 	SignupsPerIP      = 3
 	SignupIPWindow    = 24 * time.Hour
 	signupIPRetention = 30 * 24 * time.Hour
-	minNameLength     = 2
-	maxNameLength     = 60
+	minNameLength     = domain.MinWorkspaceNameRunes
+	maxNameLength     = domain.MaxWorkspaceNameRunes
 	maxSlugBase       = 50
 )
 
@@ -129,8 +129,8 @@ func connectHostedEmailTx(ctx context.Context, tx pgx.Tx, workspace domain.Works
 	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token) VALUES($1,$2,$3)`,
-		workspace.ID, address, token); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,sender_name) VALUES($1,$2,$3,$4)`,
+		workspace.ID, address, token, domain.DefaultSenderName(workspace.Name, workspace.Slug)); err != nil {
 		return fmt.Errorf("connect hosted email: %w", err)
 	}
 	return nil

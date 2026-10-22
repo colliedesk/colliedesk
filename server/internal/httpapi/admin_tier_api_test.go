@@ -162,11 +162,16 @@ func TestSettingsRequestsSayWhatChangesFromWhatToWhat(t *testing.T) {
 		want         []string
 	}{
 		{http.MethodPatch, "/api/v1/workspace/timezone", map[string]any{"timezone": "Asia/Tokyo"}, []string{"workspace timezone", "UTC → Asia/Tokyo"}},
+		{http.MethodPatch, "/api/v1/workspace/name", map[string]any{"name": "Summary Desk"}, []string{"workspace name", "Settings Summary → Summary Desk"}},
 		{http.MethodPatch, "/api/v1/agents/" + agentID, map[string]any{"active": false}, []string{"agent@settings-summary.example.com", "deactivate"}},
 		{http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "new@settings-summary.example.com", "role_ceiling": "agent"}, []string{"new@settings-summary.example.com", "agent"}},
 		{http.MethodDelete, "/api/v1/auth/invites/" + inviteID, nil, []string{"pending@settings-summary.example.com"}},
 		{http.MethodPut, "/api/v1/channels/web-form", map[string]any{"enabled": true, "allowed_origins": []string{"https://shop.example.com"}}, []string{"off → on", "https://shop.example.com"}},
 		{http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "new@settings-summary.example.com"}, []string{"old@settings-summary.example.com → new@settings-summary.example.com"}},
+		{http.MethodPut, "/api/v1/channels/email", map[string]any{"support_address": "old@settings-summary.example.com", "sender_name": "Summary Support"},
+			[]string{"sender name: Settings Summary → Summary Support"}},
+		{http.MethodPut, "/api/v1/channels/email", map[string]any{"sender_name": "Only Name"},
+			[]string{"Change the email channel's sender name: Settings Summary → Only Name"}},
 	}
 	for _, item := range cases {
 		filed := accepted(t, api, item.method, item.path, item.body, send)

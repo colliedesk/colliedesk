@@ -4,6 +4,7 @@ import { formatDate } from '../../lib/format-date';
 import { messages } from '../../messages';
 import { lazyPart, PartUnavailable } from '../../ui/lazy-part';
 import type { GmailReturn } from './gmail-return';
+import { NameForm } from './name-form';
 import { useSaveFeedback } from './save-feedback';
 import type { SaveState } from './save-feedback';
 
@@ -19,8 +20,10 @@ interface EmailChannelSectionProps {
   workspaceSlug?: string;
   createdSecret?: string;
   addressSave?: SaveState;
+  senderNameSave?: SaveState;
   slugSave?: SaveState;
   onSave?: (address: string) => void;
+  onSaveSenderName?: (name: string) => void;
   onSaveSlug?: (slug: string) => void;
   onRotate?: () => void;
   onDisconnect?: () => void;
@@ -35,7 +38,7 @@ interface EmailChannelSectionProps {
   gmailReturned?: GmailReturn;
 }
 
-export function EmailChannelSection({ settings, timezone, canManage, workspaceSlug, createdSecret, addressSave, slugSave, onSave, onSaveSlug, onRotate, onDisconnect, onVerifyDomain, verifyError, verifyPending,
+export function EmailChannelSection({ settings, timezone, canManage, workspaceSlug, createdSecret, addressSave, senderNameSave, slugSave, onSave, onSaveSenderName, onSaveSlug, onRotate, onDisconnect, onVerifyDomain, verifyError, verifyPending,
   onConnectGmail, onDisconnectGmail, gmailPending, gmailError, gmailReturned }: EmailChannelSectionProps) {
   const channel = settings?.channel ?? null;
   // A connected Gmail account sends by itself; a broken one says so in its own block.
@@ -84,6 +87,8 @@ export function EmailChannelSection({ settings, timezone, canManage, workspaceSl
               {addressFeedback.status}
             </form>
           : <p><strong>{messages.supportAddress}: </strong><span>{channel ? channel.support_address : messages.emailNotConnected}</span></p>}
+        {channel && <NameForm label={messages.senderName} saveLabel={messages.saveSenderName} hint={messages.senderNameHelp}
+          value={channel.sender_name} canManage={canManage} save={senderNameSave} onSave={onSaveSenderName} />}
         {hostedAddress && <div className="email-channel-forwarding">
           <label className="invite-link"><span className="field-label">{messages.forwardingAddress}</span><input readOnly value={hostedAddress} /></label>
           <span className="button-row"><button type="button" onClick={copyAddress}>{messages.copyForwardingAddress}</button>{copied && <span role="status">{messages.addressCopied}</span>}</span>

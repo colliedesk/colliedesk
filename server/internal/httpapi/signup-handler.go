@@ -15,6 +15,17 @@ const (
 	brandNameMessage = "This name is not available. Choose another name, or contact us if it is your own brand."
 )
 
+// refuseBrand answers 422 and reports true when name contains a denied brand on the hosted cloud,
+// where a workspace's names end up in mail headers, its subdomain and its help center. A self-hosted
+// server names things as its operator likes.
+func (a *API) refuseBrand(response http.ResponseWriter, name string) bool {
+	if _, denied := domain.DeniedBrand(name); denied && a.limits {
+		writeError(response, http.StatusUnprocessableEntity, "name_not_allowed", brandNameMessage)
+		return true
+	}
+	return false
+}
+
 // signUpCloud starts a trial: a person whose email the identity provider verified names a workspace
 // and becomes its admin. A server without both cloud sign-in and billing answers 404. The response is the redeemed session, as for cloud sign-in.
 func (a *API) signUpCloud(response http.ResponseWriter, request *http.Request) {

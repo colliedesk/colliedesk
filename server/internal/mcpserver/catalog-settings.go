@@ -25,6 +25,7 @@ const (
 		`"allowed_origins":{"type":"array","items":{"type":"string"}},"submit_path":{"type":"string"}}}`
 
 	emailChannelSchema = `{"type":"object","required":["connected"],"properties":{"connected":{"type":"boolean"},"support_address":{"type":"string"},` +
+		`"sender_name":{"type":"string","description":"The name customers see in the From line of every reply (with \" via Colliedesk\" while the domain is not verified)."},` +
 		`"inbound_secret_set":{"type":"boolean","description":"The secret itself is never shown to an agent."},"inbound_url":{"type":"string"},"hosted_address":{"type":["string","null"]},` +
 		`"domain":{"type":"string"},"domain_verified":{"type":"boolean"},"dns_record_name":{"type":"string"},"dns_record_value":{"type":"string"},` +
 		`"smtp_configured":{"type":"boolean"},"sending_from":{"type":["string","null"]},` +
@@ -58,6 +59,21 @@ func workspaceSettingsUpdateSpec() Spec {
 		Input:  `{"type":"object","additionalProperties":false,"required":["timezone"],"properties":{"timezone":{"type":"string","minLength":1,"maxLength":64}}}`,
 		Output: `{"type":"object","required":["workspace"],"properties":{"workspace":{"type":"object","properties":{"name":{"type":"string"},"slug":{"type":"string"},"timezone":{"type":"string"}}}}}`,
 		run:    workspaceSettingsUpdate,
+	}
+}
+
+func workspaceRenameSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_workspace_rename",
+		Title: "Rename the workspace",
+		Description: `Set the workspace name (2 to 60 characters, no line breaks). The team sees it in Colliedesk; customers see it as the help center title while the help center ` +
+			`has no title of its own. Replies never carry it: each email channel sends with its own sender name (colliedesk_email_channel_update), and renaming the workspace ` +
+			`does not change it. On Colliedesk Cloud a name with a well-known brand in it is refused. It is safe to repeat. ` + belowAdmin + "\n\nTier: admin.",
+		Tier: "admin", Idempotent: true,
+		REST:   []string{"PATCH /api/v1/workspace/name"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["name"],"properties":{"name":{"type":"string","minLength":2,"maxLength":60,"description":"Spaces at the ends are removed."}}}`,
+		Output: `{"type":"object","required":["workspace"],"properties":{"workspace":{"type":"object","properties":{"name":{"type":"string"},"slug":{"type":"string"},"timezone":{"type":"string"}}}}}`,
+		run:    workspaceRename,
 	}
 }
 
@@ -220,11 +236,15 @@ func emailChannelUpdateSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_email_channel_update",
 		Title: "Connect or change the email channel",
-		Description: `Set the support address customers write to (a plain address such as support@example.com). It connects the channel when it is not connected. ` +
-			`A new domain needs verifying again (colliedesk_email_domain_verify). It is safe to repeat. ` + belowAdmin + "\n\nTier: admin.",
+		Description: `Set the support address customers write to (a plain address such as support@example.com), the sender name customers see in the From line, or both. ` +
+			`support_address connects the channel when it is not connected; a new domain needs verifying again (colliedesk_email_domain_verify). ` +
+			`To rename the sender only, send sender_name alone: the address and its domain verification stay. A new channel starts with the workspace name as its sender name. ` +
+			`On Colliedesk Cloud a name with a well-known brand in it is refused. It is safe to repeat. ` + belowAdmin + "\n\nTier: admin.",
 		Tier: "admin", Idempotent: true,
-		REST:   []string{"PUT /api/v1/channels/email"},
-		Input:  `{"type":"object","additionalProperties":false,"required":["support_address"],"properties":{"support_address":{"type":"string","minLength":3,"maxLength":254}}}`,
+		REST: []string{"PUT /api/v1/channels/email"},
+		Input: `{"type":"object","additionalProperties":false,"minProperties":1,"properties":{"support_address":{"type":"string","minLength":3,"maxLength":254,` +
+			`"description":"Required to connect the channel; leave it out to keep the current address."},` +
+			`"sender_name":{"type":"string","minLength":1,"maxLength":100,"description":"Spaces at the ends are removed; no line breaks or other control characters. Leave it out to keep the current name."}}}`,
 		Output: `{"type":"object","required":["email_channel"],"properties":{"email_channel":` + emailChannelSchema + `}}`,
 		run:    emailChannelUpdate,
 	}
