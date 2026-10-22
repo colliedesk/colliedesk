@@ -10,7 +10,7 @@ interface ChatRequest {
 
 // FakeAI answers the OpenAI-compatible chat completions API the way a model would for an AI draft:
 // the article chooser gets no articles (the knowledge base is sent whole), a draft cites the first
-// source. It keeps every prompt, so a test can check what left Colliedesk.
+// source, and the review of a high draft approves it. It keeps every prompt, so a test can check what left Colliedesk.
 export class FakeAI {
   readonly prompts: string[] = [];
   private server?: Server;
@@ -23,8 +23,10 @@ export class FakeAI {
       request.on('end', () => {
         const chat = JSON.parse(body) as ChatRequest;
         this.prompts.push(chat.messages.map((message) => message.content).join('\n'));
-        const choosing = Boolean(chat.response_format?.json_schema?.schema?.properties?.articles);
-        const content = JSON.stringify(choosing ? { articles: [] } : {
+        const properties = chat.response_format?.json_schema?.schema?.properties ?? {};
+        const choosing = Boolean(properties.articles);
+        // The review of a high draft approves it as written.
+        const content = JSON.stringify(properties.sendable ? { sendable: true, blocking: [], optional: [] } : choosing ? { articles: [] } : {
           action: 'answer', reply: this.reply, claims: [{ text: this.reply, source: 'S1' }], confidence: 'high', risks: [], handoff_reason: '',
           triage: { tags: [], priority: 'normal', reason: 'How-to question' },
         });
