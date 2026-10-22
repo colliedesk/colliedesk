@@ -2011,6 +2011,8 @@ export interface components {
             /** @description Why a job failed or waits: freshdesk_key_rejected, freshdesk_needs_admin_key, freshdesk_plan_no_api (the Freshdesk Free plan, or an ended trial of a higher plan, has no API calls), freshdesk_unavailable, import_running_elsewhere, retrying_failed_items, storage_cap, knowledge_base_limit, key_unavailable, no_progress or import_error. */
             error_code: string | null;
             error_message: string | null;
+            /** @description How many conversations of the Freshdesk account were in the workspace when the import ended (what an undo removes, less what the team changed since); null while it runs and for an undo. */
+            imported_conversations: number | null;
             /** @description The server still holds the Freshdesk API key of this job */
             has_key: boolean;
             has_interim_report: boolean;

@@ -620,3 +620,56 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 @media (max-width: 22rem) {
   .status-tabs { mask-image: linear-gradient(to right, transparent, #000 var(--space-4), #000 calc(100% - var(--space-4)), transparent); }
 }
+
+/* Settings → Import from Freshdesk. The ledger is the page's one table: what Freshdesk holds against what
+   Colliedesk holds, row by row, the way the reconcile report compares them. Numbers line up in mono. */
+.import-connect { display: grid; gap: var(--space-2); max-width: 28rem; }
+.import-connect label { font-weight: 600; font-size: var(--fs-small); }
+.import-connect label:not(:first-child) { margin-top: var(--space-2); }
+.import-connect .button-row { margin-top: var(--space-2); }
+.import-ledger { width: 100%; max-width: 34rem; border-collapse: collapse; font-size: var(--fs-small); }
+.import-ledger th, .import-ledger td { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); text-align: left; }
+.import-ledger thead th { color: var(--text-3); font-weight: 500; font-size: var(--fs-label); letter-spacing: var(--track-label); text-transform: uppercase; }
+.import-ledger td, .import-ledger thead th:not(:first-child) { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.import-ledger tbody th { font-weight: 500; color: var(--text-1); }
+.import-ledger tr[data-short] td:last-child { color: var(--danger); font-weight: 600; }
+.import-report { margin: 0; display: grid; gap: var(--space-2); }
+.import-phases { display: flex; gap: var(--space-2); margin: 0; padding: 0; list-style: none; font-size: var(--fs-small); }
+.import-phases li { flex: 1; border-top: 3px solid var(--surface-3); padding-top: var(--space-2); color: var(--text-3); }
+.import-phases li[data-state="done"] { border-color: var(--ok); color: var(--text-2); }
+.import-phases li[data-state="current"] { border-color: var(--accent); color: var(--text-1); font-weight: 600; }
+.import-ready { margin: 0; border-left: 3px solid var(--ok); border-radius: var(--radius-sm); background: var(--ok-soft); padding: var(--space-2) var(--space-3); color: var(--text-1); }
+.import-status { margin: 0; }
+.import-status[data-status="FAILED"] { color: var(--danger); }
+.import-confirm { display: grid; gap: var(--space-2); flex-basis: 100%; border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-3); }
+.import-confirm p { margin: 0; }
+.import-history { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; font-size: var(--fs-small); }
+.import-history li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--space-3); align-items: baseline; }
+.import-history li > span:first-child { overflow-wrap: anywhere; }
+@media (max-width: 40rem) {
+  .import-ledger th, .import-ledger td { padding-inline: var(--space-2); }
+  .import-history li { grid-template-columns: minmax(0, 1fr) auto; }
+  .import-history time { grid-column: 1 / -1; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .import-phases li { transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+}
+/* Help under the import's fields and counts stays readable: at least the label size. */
+.import-page small { font-size: var(--fs-label); }
+/* A link that leads on (Open the inbox) looks like the button next to it. */
+.import-page a.button { min-height: var(--control, 32px); display: inline-flex; align-items: center; border: 1px solid var(--line-control); border-radius: var(--radius);
+  padding: 0 var(--space-3); font-size: var(--fs-small); font-weight: 600; text-decoration: none; }
+.import-page a.button.primary-action { border-color: var(--accent); color: var(--on-accent); }
+/* On a phone the actions of the import stay at the bottom of the screen, whatever the table above
+   them holds: nothing to scroll to before starting, stopping or confirming. */
+@media (max-width: 40rem) {
+  .import-page .import-actions { position: sticky; bottom: 0; z-index: 1; border-top: 1px solid var(--line);
+    background: var(--surface-1); padding: var(--space-2) 0 calc(var(--space-2) + env(safe-area-inset-bottom)); }
+}
+.import-page details p { overflow-wrap: anywhere; }
+.import-page .section-heading p { overflow-wrap: anywhere; }
+/* At 320 px a seven-digit count and its neighbours still fit the screen. */
+@media (max-width: 22.5rem) {
+  .import-ledger { font-size: var(--fs-label); }
+  .import-ledger th, .import-ledger td { padding-inline: var(--space-1); }
+}

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { Link, Navigate, Outlet, createRootRoute, redirect, createRoute, createRouter, useRouterState } from '@tanstack/react-router';
+import { Link, Navigate, Outlet, createRootRoute, redirect, createRoute, createRouter, useRouterState, useNavigate } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
 import { ContactsPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
@@ -25,6 +25,7 @@ import { inboxQueryFromSearch } from './lib/inbox-query';
 
 // Billing, the locked screen and the trial survey are seen by few sessions, so they load from their own chunks.
 const billingRoutePart = lazyPart(() => import('./features/settings/billing-route'));
+const importRoutePart = lazyPart(() => import('./features/settings/import-route'));
 const lockedRoutePart = lazyPart(() => import('./features/shell/locked-route'));
 const trialSurveyPart = lazyPart(() => import('./features/shell/trial-survey'));
 
@@ -185,6 +186,15 @@ const billingRoute = createRoute({
     return <Part part={billingRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ BillingRoute }) => <BillingRoute checkoutReturned={checkoutReturned} />} />;
   },
 });
+const importRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/settings/import-freshdesk',
+  component: function Import() {
+    const navigate = useNavigate();
+    return <Part part={importRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ImportRoute }) => <ImportRoute onOpenInbox={() => void navigate({ to: '/' })}
+      onOpenBilling={() => void navigate({ to: '/settings/billing', search: { checkout: '' } })} />} />;
+  },
+});
 const signInRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sign-in',
@@ -201,7 +211,7 @@ const signInRoute = createRoute({
   },
 });
 
-export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, signInRoute]);
+export const routeTree = rootRoute.addChildren([inboxRoute, conversationRoute, contactRoute, knowledgeRoute, mediaRoute, unusedMediaRoute, mediaTrashRoute, newArticleRoute, articleRoute, settingsRoute, requestsRoute, billingRoute, importRoute, signInRoute]);
 export const router = createRouter({ routeTree });
 
 declare module '@tanstack/react-router' {

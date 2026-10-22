@@ -98,6 +98,7 @@ func (s *Service) Preview(ctx context.Context, workspaceID, agentID, domain, api
 	s.keys.forget(discarded...)
 	if err == nil {
 		s.keys.keep(job.ID, apiKey)
+		s.keys.wake()
 	}
 	return s.withKey(job), err
 }
@@ -236,6 +237,7 @@ func (s *Service) SetKey(ctx context.Context, workspaceID, id, apiKey string) (J
 		return Job{}, err
 	}
 	s.keys.keep(id, apiKey)
+	s.keys.wake()
 	return s.withKey(job), nil
 }
 
@@ -278,6 +280,9 @@ func (s *Service) transition(ctx context.Context, workspaceID, id string, query 
 	})
 	if uniqueViolation(err) {
 		return Job{}, ErrActive
+	}
+	if err == nil {
+		s.keys.wake() // a started import or a queued undo runs now, not at the next tick
 	}
 	return s.withKey(job), err
 }

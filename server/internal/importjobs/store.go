@@ -15,14 +15,14 @@ import (
 
 // jobColumns are what a Job shows; never the key or the reports.
 const jobColumns = `id::text,kind,source,domain,account_source,undo_of::text,state,phase,options,preview,progress,status,error_code,error_message,
-	sealed_key IS NOT NULL,interim_report IS NOT NULL,report IS NOT NULL,cancel_requested_at IS NOT NULL,
+	imported_conversations,sealed_key IS NOT NULL,interim_report IS NOT NULL,report IS NOT NULL,cancel_requested_at IS NOT NULL,
 	CASE WHEN state='retry_wait' THEN next_run_at END,created_by::text,created_at,started_at,finished_at,updated_at`
 
 func scanJob(row pgx.Row) (Job, error) {
 	var job Job
 	var options, preview, progress []byte
 	err := row.Scan(&job.ID, &job.Kind, &job.Source, &job.Domain, &job.AccountSource, &job.UndoOf, &job.State, &job.Phase, &options, &preview, &progress,
-		&job.Status, &job.ErrorCode, &job.ErrorMessage, &job.HasKey, &job.HasInterimReport, &job.HasReport, &job.CancelRequested,
+		&job.Status, &job.ErrorCode, &job.ErrorMessage, &job.ImportedConversations, &job.HasKey, &job.HasInterimReport, &job.HasReport, &job.CancelRequested,
 		&job.NextRunAt, &job.CreatedBy, &job.CreatedAt, &job.StartedAt, &job.FinishedAt, &job.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Job{}, ErrNotFound
@@ -151,7 +151,9 @@ func update(ctx context.Context, db *database.DB, item claimed, sql string, args
 // endSQL ends a claimed job: terminal state, key erased, lease released. Arguments from $4: state,
 // status, error code, error message, now.
 const endSQL = `state=$4, status=$5, error_code=$6, error_message=$7, sealed_key=NULL, sealed_key_id=NULL,
-	claim_token=NULL, lease_until=NULL, cancel_requested_at=NULL, finished_at=$8, updated_at=$8`
+	claim_token=NULL, lease_until=NULL, cancel_requested_at=NULL, finished_at=$8, updated_at=$8,
+	imported_conversations=CASE WHEN kind='import' AND account_source IS NOT NULL THEN (SELECT count(*) FROM import_items i
+		WHERE i.workspace_id=import_jobs.workspace_id AND i.source=import_jobs.account_source AND i.entity='ticket' AND i.status='done') END`
 
 func nullable(value string) *string {
 	if value == "" {

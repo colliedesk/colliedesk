@@ -1,11 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:https';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Server } from 'node:https';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ports, scratchDir } from './checkout';
 
 // A local Freshdesk API v2 built from the public API documentation, serving only the documented
 // endpoints the importer reads: account, agents, companies, contacts (paged with Link headers),
@@ -38,7 +39,20 @@ const iso = (ms: number) => new Date(ms).toISOString().replace('.000Z', 'Z');
 export const ticketCreatedAt = (id: number) => iso(epoch + id * 3_600_000);
 const topics = ['refund request', 'shipping delay', 'login problem', 'invoice copy'];
 
-interface Options { apiKey: string; agentEmail: string; archiveForbidden?: boolean; cannedUnavailable?: boolean; knowledgeBase?: boolean }
+interface Options { apiKey: string; agentEmail: string; archiveForbidden?: boolean; cannedUnavailable?: boolean; knowledgeBase?: boolean; fixed?: boolean }
+
+// The main server imports in the app (`collie serve`, built with -tags e2e) from this fake at fixed
+// addresses: the server reads them once at start, while the fake starts with its test. The
+// certificate is read again by every import, so a new one per test is trusted.
+export const inAppFreshdesk = {
+  dir: join(scratchDir, 'fake-freshdesk-in-app'),
+  env(): Record<string, string> {
+    return {
+      COLLIEDESK_E2E_FRESHDESK_URL: `https://127.0.0.1:${ports.freshdeskAPI}`, COLLIEDESK_E2E_FRESHDESK_CA: join(this.dir, 'cert.pem'),
+      COLLIEDESK_E2E_FRESHDESK_DIAL: `127.0.0.1:${ports.freshdeskAPI},127.0.0.1:${ports.freshdeskFiles}`,
+    };
+  },
+};
 
 export class FakeFreshdesk {
   readonly requests = new Map<string, number>();
@@ -52,19 +66,25 @@ export class FakeFreshdesk {
   constructor(private readonly options: Options) {}
 
   async start(): Promise<void> {
-    const dir = mkdtempSync(join(tmpdir(), 'colliedesk-fake-freshdesk-'));
+    const dir = this.options.fixed ? inAppFreshdesk.dir : mkdtempSync(join(tmpdir(), 'colliedesk-fake-freshdesk-'));
+    mkdirSync(dir, { recursive: true });
     this.caPath = join(dir, 'cert.pem');
     execFileSync('openssl', ['req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-nodes', '-days', '1',
       '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1', '-keyout', join(dir, 'key.pem'), '-out', this.caPath], { stdio: 'ignore' });
     const tls = { key: readFileSync(join(dir, 'key.pem')), cert: readFileSync(this.caPath) };
     this.api = createServer(tls, (request, response) => this.serveAPI(request, response));
     this.files = createServer(tls, (request, response) => this.serveFile(request, response));
-    this.apiURL = await listen(this.api);
-    this.filesURL = await listen(this.files);
+    this.apiURL = await listen(this.api, this.options.fixed ? ports.freshdeskAPI : 0);
+    this.filesURL = await listen(this.files, this.options.fixed ? ports.freshdeskFiles : 0);
   }
 
+  // stop also drops open connections: the server's importer keeps them alive, and close() alone waits
+  // for them to go idle (about a minute and a half).
   async stop(): Promise<void> {
-    await Promise.all([this.api, this.files].map((server) => new Promise((resolve) => server?.close(resolve))));
+    await Promise.all([this.api, this.files].map((server) => new Promise((resolve) => {
+      server?.close(resolve);
+      server?.closeAllConnections();
+    })));
   }
 
   // env is what the e2e importer build reads to reach this fake (cmd/collie/e2e_freshdesk.go).
@@ -281,7 +301,7 @@ function json(response: ServerResponse, status: number, value: unknown) {
   response.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(value));
 }
 
-async function listen(server: Server): Promise<string> {
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+async function listen(server: Server, port: number): Promise<string> {
+  await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
   return `https://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }

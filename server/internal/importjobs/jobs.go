@@ -128,7 +128,10 @@ type Job struct {
 	Status        *string         `json:"status"`
 	ErrorCode     *string         `json:"error_code"`
 	ErrorMessage  *string         `json:"error_message"`
-	HasKey        bool            `json:"has_key"`
+	// ImportedConversations counts the Freshdesk tickets of the account in this workspace when the
+	// import ended, so a stopped one says what an undo would remove.
+	ImportedConversations *int `json:"imported_conversations"`
+	HasKey                bool `json:"has_key"`
 	// HasInterimReport is true once the recent pass ended.
 	HasInterimReport bool       `json:"has_interim_report"`
 	HasReport        bool       `json:"has_report"`
@@ -149,13 +152,23 @@ type Keys struct {
 	instance string
 	mu       sync.Mutex
 	memory   map[string]string
+	// wakeups tells the worker of this process that a job is due now, so it does not wait for its tick.
+	wakeups chan struct{}
 }
 
 // NewKeys returns the key store of this process.
 func NewKeys(ring tokenseal.Keys) *Keys {
 	raw := make([]byte, 12)
 	_, _ = rand.Read(raw)
-	return &Keys{ring: ring, instance: hex.EncodeToString(raw), memory: map[string]string{}}
+	return &Keys{ring: ring, instance: hex.EncodeToString(raw), memory: map[string]string{}, wakeups: make(chan struct{}, 1)}
+}
+
+// wake tells this process's worker that a job is due; it never blocks.
+func (k *Keys) wake() {
+	select {
+	case k.wakeups <- struct{}{}:
+	default:
+	}
 }
 
 // Sealed reports whether keys survive a restart.

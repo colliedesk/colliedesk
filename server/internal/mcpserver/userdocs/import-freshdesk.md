@@ -1,10 +1,11 @@
 # Import from Freshdesk
 
-`collie import freshdesk` copies a Freshdesk account into a Colliedesk workspace through the
-Freshdesk API. It ends with a reconcile report that compares what Freshdesk holds with what
-Colliedesk now holds. If anything is missing, the report says **FAILED** and lists the Freshdesk
-ids. If the totals could not be confirmed, it says **UNVERIFIED**. Both end with a non-zero exit
-code. Run the same command again to retry: finished items are never copied twice.
+Colliedesk copies a Freshdesk account into a workspace through the Freshdesk API: in the app under
+**Settings > Import from Freshdesk** (admins, no terminal needed), or with the `collie import freshdesk`
+command on your own server. Both end with a reconcile report that compares what Freshdesk holds with
+what Colliedesk now holds. If anything is missing, the report says **FAILED** and lists the Freshdesk
+ids. If the totals could not be confirmed, it says **UNVERIFIED**. Run the import again to retry:
+finished items are never copied twice. Your Freshdesk account is not changed.
 
 ## What is imported
 
@@ -128,10 +129,28 @@ may lack the right), the status is `UNVERIFIED`.
 The key gives read access to the whole account. Keep it in an environment variable. Colliedesk
 never accepts it as a command-line argument and never prints it.
 
+## Import in the app
+
+1. Open **Settings > Import from Freshdesk** (admins only; an empty inbox links to it).
+2. Enter your `<account>.freshdesk.com` address and the API key of a Freshdesk **admin** (see
+   "Before you start"), then select **Read account**. Colliedesk reads the account and shows what it
+   found: tickets, contacts, companies and agents, and whether the key can read archived tickets,
+   canned responses and the knowledge base. Nothing is written yet. Freshdesk does not count archived
+   tickets ahead of time, so the ticket number is "at least".
+3. Select **Start import** within the hour. The tickets updated in the last 90 days come first, newest
+   first: once they are in, the page says so and your team can work on them while older and archived
+   tickets, contacts, saved replies and the knowledge base follow. The page shows the step, the counts,
+   an estimate of the time left, and when it waits for the Freshdesk API limit. You can leave the page
+   or sign out: the import runs on the server and survives a restart.
+4. At the end the page shows the result, **In Freshdesk** next to **In Colliedesk** for each kind of
+   data, with **Download report** for the Markdown report. **Undo import** removes what it brought in.
+
+**Stop import** stops it within a minute; what was imported stays. Start a new import to finish it, or
+undo it. Only one import or undo runs in a workspace at a time.
+
 ## Import through the API or an AI agent
 
-An admin can also have the server run the import, without a terminal, on Colliedesk Cloud and on your
-own server alike. The server reads the account, imports the tickets updated in the last 90 days first
+Everything the page does, an admin's API session or an AI agent with an admin token can do. The server reads the account, imports the tickets updated in the last 90 days first
 (newest first, so your team can work on them), then the whole account, and ends with the same
 reconcile report. It leaves a fifth of your Freshdesk API limit to your other Freshdesk apps.
 
