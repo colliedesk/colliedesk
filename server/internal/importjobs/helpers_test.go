@@ -32,9 +32,14 @@ type env struct {
 
 func ring(t *testing.T) tokenseal.Keys {
 	t.Helper()
+	return ringWithID(t, "k1")
+}
+
+func ringWithID(t *testing.T, id string) tokenseal.Keys {
+	t.Helper()
 	raw := make([]byte, tokenseal.KeySize)
 	_, _ = rand.Read(raw)
-	keys, err := tokenseal.ParseKeys("k1:" + base64.StdEncoding.EncodeToString(raw))
+	keys, err := tokenseal.ParseKeys(id + ":" + base64.StdEncoding.EncodeToString(raw))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -52,22 +52,23 @@ type claimed struct {
 	id, workspaceID, token string
 }
 
-// claimDue leases up to limit due jobs of every workspace. A job whose key lives only in another
-// process's memory is left to that process while it may still be alive: it last leased or saved the
-// job within one lease. Only a job found running counts toward the crash-loop guard.
-func claimDue(ctx context.Context, db *database.DB, instance string, now time.Time, limit int, lease time.Duration) ([]claimed, error) {
+// claimDue leases up to limit due jobs of every workspace that this process can open the key of: sealed
+// with a key id of its ring, or held in its memory. A job no process can open (another server's memory,
+// a key that left every ring) is taken once nobody leased or saved it for one lease, and then waits for
+// its key. Only a job found running counts toward the crash-loop guard.
+func claimDue(ctx context.Context, db *database.DB, instance string, keyIDs []string, now time.Time, limit int, lease time.Duration) ([]claimed, error) {
 	var out []claimed
 	err := db.Privileged(ctx, database.PrivilegeImportJobClaim, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `WITH due AS (
 				SELECT id FROM import_jobs
 				WHERE state IN ('previewing','queued','running','retry_wait') AND next_run_at<=$1 AND (lease_until IS NULL OR lease_until<=$1)
-					AND (sealed_key IS NOT NULL OR kind='undo' OR owner_instance=$2 OR COALESCE(lease_until, updated_at+$4::interval)<=$1)
+					AND (kind='undo' OR sealed_key_id=ANY($5) OR (sealed_key IS NULL AND owner_instance=$2) OR COALESCE(lease_until, updated_at+$4::interval)<=$1)
 				ORDER BY next_run_at LIMIT $3 FOR UPDATE SKIP LOCKED)
 			UPDATE import_jobs j SET claim_token=gen_random_uuid(), lease_until=$1+$4::interval, attempts=j.attempts+1,
 				attempts_without_progress=j.attempts_without_progress+CASE WHEN j.state='running' THEN 1 ELSE 0 END,
 				state=CASE WHEN j.state='previewing' THEN 'previewing' ELSE 'running' END, updated_at=$1
 			FROM due WHERE j.id=due.id
-			RETURNING j.id::text, j.workspace_id::text, j.claim_token::text`, now, instance, limit, lease.String())
+			RETURNING j.id::text, j.workspace_id::text, j.claim_token::text`, now, instance, limit, lease.String(), keyIDs)
 		if err != nil {
 			return fmt.Errorf("claim import jobs: %w", err)
 		}

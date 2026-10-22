@@ -119,7 +119,7 @@ func (w *Worker) Tick(ctx context.Context) error {
 	if free == 0 || err != nil {
 		return err
 	}
-	jobs, err := claimDue(ctx, w.options.DB, w.options.Keys.instance, w.options.Now().UTC(), free, w.options.Lease)
+	jobs, err := claimDue(ctx, w.options.DB, w.options.Keys.instance, w.options.Keys.ring.IDs(), w.options.Now().UTC(), free, w.options.Lease)
 	for _, item := range jobs {
 		w.slots <- struct{}{}
 		w.wg.Add(1)
