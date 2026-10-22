@@ -56,6 +56,8 @@ var routeTiers = map[string]string{
 	"POST /api/v1/kb/articles/{id}/restore":                      "send",
 	"GET /api/v1/kb/articles/{id}/versions":                      "read",
 	"POST /api/v1/kb/articles/{id}/versions/{version}/restore":   "send",
+	"POST /api/v1/kb/articles/{id}/ai-exclusion":                 "send",
+	"DELETE /api/v1/kb/articles/{id}/ai-exclusion":               "send",
 	"POST /api/v1/kb/images":                                     "send",
 	"GET /api/v1/kb/images/{id}":                                 "read",
 	"GET /api/v1/kb/media":                                       "read",

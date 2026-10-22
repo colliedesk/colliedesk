@@ -341,6 +341,8 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/kb/articles/{id}/restore", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/kb/articles/{id}/versions", auth.PermissionConversationsRead},
 		{http.MethodPost, "/api/v1/kb/articles/{id}/versions/{version}/restore", auth.PermissionConversationsWrite},
+		{http.MethodPost, "/api/v1/kb/articles/{id}/ai-exclusion", auth.PermissionConversationsWrite},
+		{http.MethodDelete, "/api/v1/kb/articles/{id}/ai-exclusion", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/kb/images", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/kb/images/{id}", auth.PermissionConversationsRead},
 		{http.MethodGet, "/api/v1/kb/media", auth.PermissionConversationsRead},

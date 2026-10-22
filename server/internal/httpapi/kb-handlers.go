@@ -349,6 +349,25 @@ func (a *API) restoreKBArticle(response http.ResponseWriter, request *http.Reque
 	writeJSON(response, http.StatusOK, article)
 }
 
+func (a *API) excludeKBArticleFromAI(response http.ResponseWriter, request *http.Request) {
+	a.setKBArticleAIExcluded(response, request, true)
+}
+
+func (a *API) includeKBArticleInAI(response http.ResponseWriter, request *http.Request) {
+	a.setKBArticleAIExcluded(response, request, false)
+}
+
+func (a *API) setKBArticleAIExcluded(response http.ResponseWriter, request *http.Request, excluded bool) {
+	who := principal(request)
+	article, err := a.store.SetKBArticleAIExcluded(request.Context(), who.Workspace.ID, savedReplyActor(request.Context(), who), request.PathValue("id"), excluded)
+	if err != nil {
+		writeKBError(response, err)
+		return
+	}
+	a.addressKBArticle(request, &article.KBArticleSummary)
+	writeJSON(response, http.StatusOK, article)
+}
+
 func (a *API) listKBArticleVersions(response http.ResponseWriter, request *http.Request) {
 	limit, ok := savedReplyPage(response, request)
 	if !ok {

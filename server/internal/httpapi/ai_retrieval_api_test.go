@@ -314,3 +314,93 @@ func TestAIRetrievalNeverReturnsAnotherWorkspacesText(t *testing.T) {
 		t.Error("workspace B does not find its own documents")
 	}
 }
+
+func TestExcludingAnArticleFromAIIsAVersionThatKeepsTheTextAndCanBeUndone(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Retrieval Exclude", "admin@retrieval-exclude.example.com")
+	other := createSession(t, api, service, "Retrieval Exclude Other", "admin@retrieval-exclude-other.example.com")
+	workspace := workspaceID(t, api, admin)
+	collection := kbCollection(t, api, admin, map[string]any{"name": "Help"}).ID
+	bigKB(t, api, admin, collection)
+	article := kbArticle(t, api, admin, map[string]any{"collection_id": collection, "title": "Internal refund rules", "body_md": "Refunds above 100 need approval.", "status": "published"})
+	if _, err := pool.Exec(context.Background(), `INSERT INTO kb_article_translations(workspace_id,article_id,locale,title,body_md) VALUES($1,$2,'de','Erstattung','Erstattung Regeln')`,
+		workspace, article.ID); err != nil {
+		t.Fatal(err)
+	}
+	buildAIRetrieval(t, pool)
+	found := func(text string) bool {
+		for _, doc := range aiRetrieve(t, pool, workspace, store.AIRetrievalQuery{Text: text, KBLimit: 5}) {
+			if doc.KBArticleID == article.ID {
+				return true
+			}
+		}
+		return false
+	}
+	if !found("refund rules") || !found("Erstattung") {
+		t.Fatal("article not found before it was excluded")
+	}
+	path := "/api/v1/kb/articles/" + article.ID + "/ai-exclusion"
+	// Another workspace's admin cannot see or change it.
+	kbCall(t, api, http.MethodPost, path, nil, other, http.StatusNotFound, nil)
+	kbCall(t, api, http.MethodDelete, path, nil, other, http.StatusNotFound, nil)
+
+	var excluded struct {
+		kbArticleView
+		AIExclusion *struct {
+			At string `json:"at"`
+			By *struct {
+				Name string `json:"name"`
+			} `json:"by"`
+		} `json:"ai_exclusion"`
+	}
+	kbCall(t, api, http.MethodPost, path, nil, admin, http.StatusOK, &excluded)
+	if excluded.AIExclusion == nil || excluded.AIExclusion.By == nil || excluded.AIExclusion.By.Name == "" {
+		t.Fatalf("ai_exclusion = %+v, want since when and by whom", excluded.AIExclusion)
+	}
+	if excluded.UpdatedAt != article.UpdatedAt || excluded.BodyMD != article.BodyMD {
+		t.Errorf("excluding changed the article: updated_at %s → %s", article.UpdatedAt, excluded.UpdatedAt)
+	}
+	if excluded.LastChange == nil || excluded.LastChange.Kind != "ai_exclude" {
+		t.Errorf("last change = %+v, want an ai_exclude version", excluded.LastChange)
+	}
+	// At once, in every language, without waiting for a build.
+	if found("refund rules") || found("Erstattung") {
+		t.Error("an excluded article reached AI")
+	}
+	// An edit opened before the exclusion still saves.
+	kbCall(t, api, http.MethodPatch, "/api/v1/kb/articles/"+article.ID, map[string]any{"body_md": "Refunds above 200 need approval.", "updated_at": article.UpdatedAt}, admin, http.StatusOK, nil)
+	buildAIRetrieval(t, pool)
+	if found("refund rules") {
+		t.Error("an excluded article reached AI after an edit")
+	}
+	// Again changes nothing; no second version.
+	var versions struct {
+		Items []struct {
+			Kind string `json:"kind"`
+		} `json:"items"`
+	}
+	kbCall(t, api, http.MethodPost, path, nil, admin, http.StatusOK, nil)
+	kbCall(t, api, http.MethodGet, "/api/v1/kb/articles/"+article.ID+"/versions", nil, admin, http.StatusOK, &versions)
+	kinds := []string{}
+	for _, version := range versions.Items {
+		kinds = append(kinds, version.Kind)
+	}
+	if strings.Join(kinds, ",") != "edit,ai_exclude,create" {
+		t.Errorf("versions = %v, want edit, ai_exclude, create", kinds)
+	}
+
+	var included struct {
+		AIExclusion *struct{}        `json:"ai_exclusion"`
+		LastChange  *replyChangeView `json:"last_change"`
+	}
+	kbCall(t, api, http.MethodDelete, path, nil, admin, http.StatusOK, &included)
+	if included.AIExclusion != nil || included.LastChange == nil || included.LastChange.Kind != "ai_include" {
+		t.Errorf("after including: ai_exclusion=%v last change=%+v", included.AIExclusion, included.LastChange)
+	}
+	buildAIRetrieval(t, pool)
+	if !found("refund rules") || !found("Erstattung") {
+		t.Error("an article AI may read again is not found")
+	}
+	kbCall(t, api, http.MethodDelete, path, nil, admin, http.StatusOK, nil)
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles/00000000-0000-4000-8000-000000000000/ai-exclusion", nil, admin, http.StatusNotFound, nil)
+}

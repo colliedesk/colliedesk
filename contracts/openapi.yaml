@@ -2935,6 +2935,39 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/kb/articles/{id}/ai-exclusion:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    post:
+      operationId: excludeKBArticleFromAI
+      x-permission: conversations:write
+      description: >
+        Keep the article away from AI, in every language: reply drafts and triage suggestions no longer
+        read or quote it, from this call on. People and the help center still see it. The change is a
+        version of the article (kind `ai_exclude`, who and when), and `ai_exclusion` says since when and
+        by whom; the text and `updated_at` do not change, so nobody's open edit is refused. Excluding an
+        excluded article changes nothing. Undo with DELETE.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: The article, excluded from AI
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      operationId: includeKBArticleInAI
+      x-permission: conversations:write
+      description: >
+        Let AI read the article again (a version of kind `ai_include`). A published article is found
+        again within seconds. Including an article that is not excluded changes nothing.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: The article, readable by AI
+          content: {application/json: {schema: {$ref: '#/components/schemas/KBArticle'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/kb/articles/{id}/versions:
     parameters: [{$ref: '#/components/parameters/ID'}]
     get:
@@ -4585,8 +4618,8 @@ components:
         version: {type: integer, minimum: 1}
         kind:
           type: string
-          enum: [create, edit, delete, restore, undelete, import, media_replace]
-          description: 'restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone.'
+          enum: [create, edit, delete, restore, undelete, import, media_replace, ai_exclude, ai_include]
+          description: 'restore: an earlier version made current again; undelete: taken out of the trash; import: written by an import from another help desk; media_replace: a library item was replaced in the text, or the replacement undone; ai_exclude, ai_include: AI was kept away from the article, or let read it again (the text did not change).'
         restored_from_version: {type: [integer, 'null'], description: The version a restore copied.}
         changed_by:
           description: The person who made the change (or approved the agent request that made it); null for an import or a removed person.
@@ -4630,6 +4663,16 @@ components:
             It is the one to put in a reply. The help center shows the article there only while the
             article is published and the help center is on; a new slug is a new address, and the old
             one still leads to the article.
+    KBArticleAIExclusion:
+      type: object
+      required: [at, by]
+      properties:
+        at: {type: string, format: date-time}
+        by:
+          description: Who excluded it; null when that person was removed.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/SavedReplyPerson'}
     KBArticleTranslation:
       type: object
       required: [locale, title, body_md, updated_at]
@@ -4640,7 +4683,7 @@ components:
         updated_at: {type: string, format: date-time}
     KBArticle:
       type: object
-      required: [id, number, collection_id, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, body_md, has_source_html, translations, deleted_at]
+      required: [id, number, collection_id, title, slug, status, published_at, author_agent_id, created_at, updated_at, last_change, url, body_md, has_source_html, translations, deleted_at, ai_exclusion]
       properties:
         id: {type: string, format: uuid}
         number: {type: integer, minimum: 1}
@@ -4664,6 +4707,11 @@ components:
           description: Translations an import brought in. They are kept and exported; the help center does not show them yet.
           items: {$ref: '#/components/schemas/KBArticleTranslation'}
         deleted_at: {type: [string, 'null'], format: date-time, description: Set while the article is in the trash.}
+        ai_exclusion:
+          description: Null while AI may read the article (when it is published); set while it is excluded from AI.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/KBArticleAIExclusion'}
         missing_media:
           type: array
           description: 'Only in the answer to a save: ids the text names that no item of the media library has (it was purged, or never existed), shown as "Media no longer exists". The save went through.'
@@ -4698,7 +4746,7 @@ components:
       required: [version, kind, restored_from_version, changed_by, token, agent_request_id, created_at, title, slug, body_md, status, collection_id]
       properties:
         version: {type: integer, minimum: 1}
-        kind: {type: string, enum: [create, edit, delete, restore, undelete, import, media_replace]}
+        kind: {type: string, enum: [create, edit, delete, restore, undelete, import, media_replace, ai_exclude, ai_include]}
         restored_from_version: {type: [integer, 'null']}
         changed_by:
           oneOf:

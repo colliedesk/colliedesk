@@ -109,6 +109,8 @@ var tokenTiers = map[string]TokenAccess{
 	"DELETE /api/v1/kb/articles/{id}":                            tier(auth.ScopeSend),
 	"POST /api/v1/kb/articles/{id}/restore":                      tier(auth.ScopeSend),
 	"POST /api/v1/kb/articles/{id}/versions/{version}/restore":   tier(auth.ScopeSend),
+	"POST /api/v1/kb/articles/{id}/ai-exclusion":                 tier(auth.ScopeSend),
+	"DELETE /api/v1/kb/articles/{id}/ai-exclusion":               tier(auth.ScopeSend),
 	"POST /api/v1/kb/images":                                     tier(auth.ScopeSend),
 	"GET /api/v1/kb/images/{id}":                                 tier(auth.ScopeRead),
 	"GET /api/v1/kb/media":                                       tier(auth.ScopeRead),
