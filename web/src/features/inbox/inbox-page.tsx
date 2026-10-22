@@ -131,9 +131,19 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
     }
   };
   const copied = useMemo(() => suggestedCc(timeline, { hosted }), [timeline, hosted]);
-  // A refusal under a long timeline (a phone) is brought on screen, not left below it.
+  // A refusal under a long timeline (a phone) is brought on screen with the reply drafts below it, whose
+  // buttons are the next step, not left below the screen.
   const deliveryRef = useRef<HTMLParagraphElement>(null);
-  useEffect(() => { if (deliveryNotice) deliveryRef.current?.scrollIntoView?.({ block: 'nearest' }); }, [deliveryNotice]);
+  useEffect(() => {
+    const notice = deliveryRef.current;
+    if (!deliveryNotice || !notice) return;
+    const drafts = notice.parentElement?.querySelectorAll('.reply-draft');
+    // The code comes with the presence chunk, which an open conversation has loaded already.
+    let stop = () => {};
+    let gone = false;
+    void import('./presence-view').then(({ keepInView }) => { if (!gone) stop = keepInView(notice, drafts?.[drafts.length - 1] ?? notice); });
+    return () => { gone = true; stop(); };
+  }, [deliveryNotice]);
   // The newest reply on screen; unknown while the timeline loads, so nothing is checked against a guess.
   const latestReply = useMemo(() => timeline.reduce((latest, item) => Math.max(latest, item.reply_number ?? 0), 0), [timeline]);
   const agentNames = useMemo(() => new Map(agents.map((agent) => [agent.id, agent.display_name || agent.email])), [agents]);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ConversationViewer, Message } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
+import { keepInView } from '../../lib/keep-in-view';
 import { Avatar } from '../../ui/avatar';
 
 // Who else has a conversation open: the marks on the inbox list, the lines under the open conversation's
@@ -8,6 +9,7 @@ import { Avatar } from '../../ui/avatar';
 // open or somebody else is there, so the first bundle carries none of it.
 
 export { startPresence } from './presence-runtime';
+export { keepInView } from '../../lib/keep-in-view';
 
 const text = {
   writing: (name: string) => `${name} is writing a reply`,
@@ -129,18 +131,8 @@ export function ReplyConflict({ replies, timezone, onSendAnyway, onEdit }: { rep
   const panel = useRef<HTMLElement>(null);
   const edit = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    const reveal = () => panel.current?.scrollIntoView?.({ block: 'nearest' });
-    reveal();
     edit.current?.focus({ preventScroll: true });
-    // The timeline reloads right after the refusal and grows above the box; keep the warning in view while it settles.
-    if (typeof ResizeObserver === 'undefined') return;
-    const page = new ResizeObserver(reveal);
-    page.observe(document.body);
-    const settled = setTimeout(() => page.disconnect(), 2_000);
-    return () => {
-      clearTimeout(settled);
-      page.disconnect();
-    };
+    return keepInView(panel.current);
   }, []);
   return (
     <section className="reply-conflict" aria-label={text.newReplies} ref={panel}>
