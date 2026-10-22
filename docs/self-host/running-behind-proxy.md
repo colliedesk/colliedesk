@@ -78,3 +78,56 @@ example `acme.help.example.com`:
 Let's Encrypt issues at most 50 certificates per registered domain a week; a wildcard certificate
 (DNS challenge) avoids that limit if you serve many workspaces. Keep `APP_ORIGIN`'s own site block:
 a more specific site wins over the wildcard.
+
+## Custom help center domains
+
+A workspace can also serve its help center on a domain of its own, such as `help.example.com`
+([custom domain](../user/knowledge-base.md#custom-domain)). It works with or without
+`HELP_CENTER_DOMAIN`:
+
+- **With `HELP_CENTER_DOMAIN`**, the owner points the name with a `CNAME` to the workspace's
+  `<slug>.<HELP_CENTER_DOMAIN>`, which also proves the workspace owns it. The wildcard record of
+  `HELP_CENTER_DOMAIN` must then be `A`/`AAAA` records, not a `CNAME`: the check reads where the
+  name's `CNAME` chain ends, and a wildcard that is itself a `CNAME` makes every chain end elsewhere.
+  The owner can always use the `TXT` record instead.
+- **Without it**, the owner points the name at the server (the card shows a `CNAME` to `APP_ORIGIN`'s
+  host, or an `A`/`AAAA` record when `APP_ORIGIN` is an IP address) and proves ownership with the `TXT`
+  record `_help-center-verify.<name>`.
+
+The proxy must send every other host name to the server and get its certificate on demand. The
+server answers the `ask` with `200` only for an active custom domain whose help center is on, or a
+pending one whose DNS check passes at that moment (it then becomes active, so one DNS change is
+enough). It runs at most 4 such checks at once and at most one per name every 30 seconds; every other
+name gets `404`. With Caddy, add a catch-all site after your other sites:
+
+```caddyfile
+{
+	on_demand_tls {
+		ask http://127.0.0.1:8080/api/v1/public/help-center/tls-ask
+	}
+}
+
+desk.example.com {
+	reverse_proxy 127.0.0.1:8080
+}
+
+# Every other host name: custom help center domains. Caddy asks the server before it gets a certificate.
+https:// {
+	tls {
+		on_demand
+	}
+	reverse_proxy 127.0.0.1:8080
+}
+```
+
+Keep the proxy's `Host` header (Caddy does by default; with nginx, `proxy_set_header Host $host;`):
+the server decides from it which help center to show. On a custom domain the server answers only
+help center pages; the app, the API and MCP stay on `APP_ORIGIN`. nginx cannot get certificates on
+demand: issue one per custom domain yourself and add a `server` block for it.
+
+A domain removed in Settings stops being served with the next request, on every server process:
+each page reads the domain's row. Each process remembers for up to 30 seconds which host names are
+custom domains and which workspace's address to give out, and forgets it at once when a domain
+changes through that process. With several server processes behind one proxy, a domain that has
+just become active through one of them may therefore reach the app's sign-in page on another for up
+to 30 seconds, and API answers there may give the previous address for as long.

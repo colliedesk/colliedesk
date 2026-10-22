@@ -39,6 +39,11 @@ API changes in the email view (the full notes will be on the releases page):
   `order_stale` with the current lists. Article answers have a new required field, `position`.
   `GET /kb/articles` takes `sort` (`recent` or `manual`); with `collection_id` and no `q` it now lists the
   collection's articles in their order (by title until ordered by hand) instead of most recently updated first.
+- The help center can serve on a custom domain: `GET`, `PUT`, `DELETE /help-center/domain` and `POST
+  /help-center/domain/check` (MCP `colliedesk_help_center_domain_get`, `_set`, `_check`, `_remove`).
+  While it is active, `HelpCenter.url` and every article `url` name it, the slug addresses answer 301 to it,
+  and `tls-ask` answers for it. The export's `help-center.ndjson` has `custom_domain`, `custom_domain_status`
+  and `custom_domain_verified_at`.
 - The help center theme takes `custom_css` (`PUT /help-center/theme`, `/check`, `/preview`; MCP
   `colliedesk_help_center_theme_update` and `_check`), served after the brand on every public page;
   CSS that could load anything is 422 `custom_css_refused` with its line and column. `HelpCenterTheme`

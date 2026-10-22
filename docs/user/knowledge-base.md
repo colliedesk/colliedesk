@@ -391,12 +391,56 @@ in **Settings → Help center** (see [Help center settings](#help-center-setting
 - **Your own server:** `<server address>/help/<workspace address name>`, for example
   `https://desk.example.com/help/acme`. The server can give each workspace its own host name instead;
   see [help center host names](../self-host/running-behind-proxy.md#help-center-host-names).
+- **Your own domain**, such as `https://help.example.com`, once you set a [custom domain](#custom-domain).
+  The other two addresses then move there (301), with the rest of the address kept.
 
 An article's address is the help center address followed by `/a/<number>-<address name>`, for example
 `/a/12-reset-your-password`. A link with an old or mistyped address name still leads to the article:
 the number finds it, and the page moves to the current address. A collection's address is the path
 of address names, `/c/billing/cards`; changing one is not redirected. **Changing the workspace
 address name** (Settings → Email) changes every help center address, and old links stop working.
+
+### Custom domain
+
+The help center can answer on an address of your own domain, such as `help.example.com`. Open
+**Settings → Help center → Custom domain**. Every agent sees the domain and its state; an admin sets,
+checks and removes it.
+
+1. Type the host name in **Host name** and press **Set domain**. The card then shows the DNS records
+   to add, each with a **Copy name** and a **Copy value** button. The state is *waiting for its DNS
+   records*.
+2. At your DNS provider, add the records the card shows:
+
+   | Record | Name | Value | What it does |
+   |---|---|---|---|
+   | `CNAME` | `help.example.com` | your help center's host name, such as `acme.colliedesk.com` on Colliedesk Cloud | Sends visitors to the help center and proves the domain is yours |
+   | `TXT` | `_help-center-verify.help.example.com` | the 32-character token the card shows | Proves the domain is yours |
+
+   On Colliedesk Cloud the `CNAME` alone is enough. Add the `TXT` record as well when your DNS
+   provider cannot point this name with a `CNAME`, or flattens it into `A` records (for example a
+   proxied record on Cloudflare). On a server without help center host names, the first record points
+   at the server's own address and only sends visitors there; the `TXT` record is then required.
+3. Press **Check now**. When DNS shows a record, the state becomes *the help center is served on
+   help.example.com*. Otherwise the card says what it found under **Last check**. DNS changes can take
+   a few minutes. You can also just wait: the first visitor after the change makes the server check
+   again, and the domain goes live at that moment.
+
+The certificate (`https://`) is issued automatically the first time someone opens the address.
+
+While the domain is active, the help center answers only help center pages on it: the app, the API
+and MCP stay on the Colliedesk address. Every address Colliedesk gives out uses the domain: the link
+in Settings, the address of each article in the reply box and in the API, and the page's canonical
+link. The server checks the records again every day; if they change, the card warns under **Last
+check**, and the help center keeps serving on the domain until you remove it.
+
+- **Another workspace's help center already serves on this host name:** the domain is refused. Only
+  the first workspace that proves a host name gets it.
+- **Refused names:** an IP address, a single word such as `help`, more than 253 characters, the
+  Colliedesk address itself, and names below it. A name with accents, such as `hilfe.bücher.de`, is
+  stored in its ASCII form (`hilfe.xn--bcher-kva.de`), which is the form DNS uses.
+- **Remove domain** asks first. The help center then stops answering on the domain with the next
+  page, and its other addresses serve it again. Setting the same name again needs a new check, and a
+  new `TXT` token.
 
 ### What visitors see
 
@@ -478,7 +522,9 @@ An AI agent connected through [MCP](mcp.md), or the API with an agent token, can
 articles (`colliedesk_kb_articles_search`, `colliedesk_kb_article_get`), write, publish, delete and
 restore them, manage collections, put collections and articles in [order](#order)
 (`colliedesk_kb_order_set`, `PUT /api/v1/kb/order`), upload and read images, and read the help center settings and
-brand (`colliedesk_help_center_theme_get`, and `colliedesk_help_center_theme_check` to try one).
+brand (`colliedesk_help_center_theme_get`, and `colliedesk_help_center_theme_check` to try one) and
+its custom domain (`colliedesk_help_center_domain_get`). An admin token also sets, checks and removes
+the custom domain (`colliedesk_help_center_domain_set`, `_check`, `_remove`).
 Every article an agent reads or finds carries its public address in `url` (also in the API), so an
 agent links an article in a reply the same way a person does: the title and the address on two
 lines, from a search with `status` published while the help center is on. In
@@ -491,7 +537,7 @@ move. Deleting forever (`colliedesk_kb_media_purge`) is an admin's. An agent wit
 a video in parts (`colliedesk_kb_video_upload_start`, `_part`, `_complete`) and sets its poster
 (`colliedesk_kb_video_poster_set`); a lower tier cannot upload files.
 
-| Token tier | Read, search, history, trash | Write, publish, delete, restore, order, upload images | Turn the help center on or off, set its brand |
+| Token tier | Read, search, history, trash | Write, publish, delete, restore, order, upload images | Turn the help center on or off, set its brand and custom domain |
 |---|---|---|---|
 | `admin` | Yes | Yes, at once | Yes |
 | `send` | Yes | Yes, at once. The version names the token | Proposed for an admin to approve |

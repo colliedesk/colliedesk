@@ -258,6 +258,41 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
     a color being typed, goes to the preview as empty and its field says the shape; Save sends what
     is written. An edit clears the refusal of the fields it changes.
 
+- **Custom domains: ownership by CNAME to the workspace's own host or a TXT token, never by
+  address.** Every custom domain resolves to the same proxy, so an `A`/`AAAA` match would let any
+  workspace claim any other's domain. A claim (`help_center_domains`, one per workspace) is proven when
+  the end of the name's CNAME chain (`net.Resolver.LookupCNAME`) is exactly the workspace's
+  `<slug>.<HELP_CENTER_DOMAIN>`, or `_help-center-verify.<name>` holds its 128-bit token. Without
+  `HELP_CENTER_DOMAIN` every workspace shares the app's host, so only the token proves anything. The
+  host name is stored lower-case ASCII (Unicode goes through `idna.Lookup`), never an IP address, a
+  single label, `APP_ORIGIN`'s host or a name at or below `HELP_CENTER_DOMAIN`
+  (`helpcenter.CustomHost`). Pending claims of several workspaces coexist; the partial unique index
+  on active names makes the first verified claim win, and the loser's check answers `domain_taken`.
+  A check never deactivates: the daily re-check (`Server.RecheckHelpCenterDomains`, from `serve`) only
+  records `check_error`, so a DNS provider's hiccup cannot take a help center off line.
+- **One DNS change is enough.** `tls-ask` checks a pending name live (2 s) and activates it, so the
+  first visitor after the CNAME change gets a certificate. `helpcenter.LiveChecks` bounds those checks
+  to 4 at once and one per name every 30 s (4,096 names remembered; full of recent names it refuses),
+  and only names with a pending claim are checked at all, so `tls-ask` cannot make the server flood
+  DNS. Every refusal is the same 404.
+- **A custom host is the help center and nothing else.** `Wrap` looks a host up only when it is not
+  `APP_ORIGIN`'s host, not at or below `HELP_CENTER_DOMAIN`, a valid name of two labels or more and not
+  an IP address, before the `/help/` paths, so a custom host never reaches `/help/<other slug>`, the
+  app, the API or MCP. The lookup (`store.HelpCenterHost`, `PrivilegeHelpCenterHost`) returns only a
+  workspace id and is cached per process for 30 s in at most 4,096 entries, unknown names included,
+  with concurrent misses merged (`singleflight`); every domain write in the process clears it, and a
+  generation counter keeps a lookup that started before the clear from refilling it. The cache only
+  names a candidate: the page's own query (`OpenHelpCenterWorkspace`) reads the active domain, and a
+  host that no longer matches gets the 404, so a removal is served nowhere from the next request on.
+- **Old addresses move with a 301 built from the stored name.** The slug host and `/help/<slug>`
+  redirect (no-store) to the custom domain with the escaped path and query, while the help center is
+  open; the target never uses a host name or path prefix the request names. `tls-ask` keeps answering
+  for the slug host so the redirect keeps its certificate.
+- **One address builder.** `helpcenter.SiteURL(origin, domain, slug, custom)` gives the help center's
+  address everywhere: the API's `url` fields (through `Site.Address`, cached per workspace like the
+  hosts), article `url`s, canonical links and the ETag, which holds the address so a page cached
+  under the old one is stale.
+
 ## Traps
 
 - **goldmark has quadratic paths, and every visit renders.** Measured on 100,000 characters: one line
@@ -283,3 +318,17 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
 - **Image sizes are unknown** (not stored), so an article image can shift the text below it as it
   loads. Search and result pages carry `noindex`; other pages a canonical link and, for articles and
   collections, a description.
+
+- **A wildcard CNAME breaks the CNAME check.** The check compares where the name's chain ends; if
+  `*.<HELP_CENTER_DOMAIN>` is itself a CNAME, every chain ends at its target and no claim matches the
+  slug host. Keep the wildcard as `A`/`AAAA` records, or the owner uses the TXT record. Comparing the
+  two chains' ends instead would let any workspace claim a name CNAME'd to another's slug host.
+- **A flattened or proxied CNAME looks like an `A` record.** Cloudflare's proxied records and apex
+  CNAME flattening answer with addresses, so the chain ends at the name itself; the TXT record is the
+  way there.
+- **Cloud needs the catch-all site in its proxy.** The `https://` on-demand site of
+  `docs/self-host/running-behind-proxy.md` lives in the Cloud operator's infrastructure repository,
+  not here; without it a verified domain gets no certificate on Cloud.
+- **Other processes may lag 30 s.** A domain activated through one process reaches the app on another
+  until its negative cache entry expires, and API `url` fields there keep the previous address as
+  long. A removal is never served late (the page's query decides).

@@ -126,6 +126,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_help_center_get` | Says whether the public help center is on, its title and language | `read` |
 | `colliedesk_help_center_theme_get` | Shows the help center's brand (logo, links, colors, fonts, custom CSS) with the contrast of every color pair | `read` |
 | `colliedesk_help_center_theme_check` | Checks a brand for readable contrast without saving it, with a passing color for each that fails; with `preview`, also renders the home page or an article with it | `read` |
+| `colliedesk_help_center_domain_get` | Shows the help center's custom domain, its state, the DNS records to set and the last check | `read` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any |
 | `colliedesk_docs_search` | Searches these user guides | any |
 | `colliedesk_reply_draft` | Leaves a reply draft that a person edits, sends or discards; never emails by itself | `read` |
@@ -155,6 +156,9 @@ with `billing` and leave a note with a summary."
 | `colliedesk_web_form_update` | Turns the web form on or off and sets the allowed origins | `admin` |
 | `colliedesk_help_center_update` | Turns the public help center on or off and sets its title and language | `admin` |
 | `colliedesk_help_center_theme_update` | Sets the help center's brand; colors that are hard to read and custom CSS that could load anything are refused. `custom_css` is required (null or `""` clears it), so an update cannot remove it by leaving it out | `admin` |
+| `colliedesk_help_center_domain_set` | Sets or replaces the help center's custom domain; it waits for its DNS records | `admin` |
+| `colliedesk_help_center_domain_check` | Checks the custom domain's DNS records now; a domain that passes starts serving | `admin` |
+| `colliedesk_help_center_domain_remove` | Removes the custom domain; the help center stops answering on it at once | `admin` |
 | `colliedesk_email_channel_get` | Shows the email channel, never the inbound secret | `read` |
 | `colliedesk_email_channel_update` | Connects the email channel or changes the support address or the sender name | `admin` |
 | `colliedesk_email_domain_verify` | Checks the DNS record that verifies the sending domain | `admin` |
