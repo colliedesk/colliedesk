@@ -269,9 +269,10 @@ export function ReplyComposer({ disabled, onSubmit, attachmentLimits, savedRepli
               {assistPart.status === 'ready' && !assist && !aiDraft && <assistPart.module.DraftStatus conversationId={aiDraftsFor} agentId={agentId} />}</button>
           )}
           {!aiDraftsFor && aiDraftsOff && (canManage
-            ? <a className="saved-reply-button" href="/settings/ai" target="_blank" rel="noopener" title={messages.aiDraftsOffAdmin}>
-                <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span>
-                <span className="sr-only">{messages.aiDraftsOffAdmin}</span></a>
+            // Its name says what it is (the app's own Settings link keeps the name "Settings"); how to turn
+            // drafts on is its description.
+            ? <a className="saved-reply-button" href="/settings/ai" target="_blank" rel="noopener" aria-label={messages.aiDraftsOffName} title={messages.aiDraftsOffAdmin}>
+                <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span></a>
             : <button type="button" className="saved-reply-button" aria-disabled="true" title={messages.aiDraftsOffAgent} onClick={() => setOffNote((shown) => !shown)}>
                 <SparklesIcon /><span className="tool-label">{messages.draftWithAI}</span><span className="ai-off-label">{messages.aiDraftsOff}</span></button>)}
           {kind === 'outgoing' && !showCc && (

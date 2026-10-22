@@ -180,5 +180,9 @@ test('when reply drafts are off, an agent is told whom to ask and an admin gets 
   fireEvent.click(screen.getByRole('button', { name: /Draft with AI/ }));
   expect(screen.getByRole('status')).toHaveTextContent('Ask an admin to turn them on in Settings → AI.');
   rerender(wrap(<ReplyComposer onSubmit={vi.fn()} aiDraftsOff canManage />));
-  expect(screen.getByRole('link', { name: /Draft with AI.*Turn them on in Settings/ })).toHaveAttribute('href', '/settings/ai');
+  const off = screen.getByRole('link', { name: 'Draft with AI (off)' });
+  expect(off).toHaveAttribute('href', '/settings/ai');
+  expect(off).toHaveAccessibleDescription('Reply drafts are off. Turn them on in Settings → AI.');
+  // The app's own Settings link stays the only link named Settings.
+  expect(screen.queryByRole('link', { name: /Settings/ })).toBeNull();
 });
