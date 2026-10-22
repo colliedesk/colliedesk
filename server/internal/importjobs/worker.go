@@ -421,7 +421,7 @@ func (r *jobRun) undo(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return r.end(ctx, StateFinished, "", "", "", encoded, nil)
+	return r.end(ctx, StateFinished, "", "", "", encoded, ptr(result.Markdown()))
 }
 
 // fail turns a run error into the job's next state: retry what may pass later, end the rest.

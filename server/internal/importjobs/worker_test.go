@@ -358,7 +358,7 @@ func TestWithoutAKeyRingARestartAsksForTheKeyAgain(t *testing.T) {
 	e := newEnv(t, false)
 	job := e.started(t)
 	// The process that took the key is gone: a new one (new instance, empty memory) finds the job.
-	e.exec(t, `UPDATE import_jobs SET updated_at=now()-interval '5 minutes' WHERE id=$1`, job.ID)
+	e.exec(t, `UPDATE import_jobs SET updated_at=now()-interval '5 minutes', next_run_at=now()-interval '5 minutes' WHERE id=$1`, job.ID)
 	restarted := importjobs.NewKeys(ringless())
 	w := e.worker(t, restarted)
 	importjobs.StubImporter(w, func(context.Context, freshdesk.Options) (*freshdesk.Report, error) {
@@ -486,9 +486,39 @@ func TestAServerWhoseKeyRingCannotOpenTheKeyLeavesTheJobToOneThatCan(t *testing.
 		t.Fatalf("job = %+v: another server's ring took it", got)
 	}
 	// Left alone longer than a lease (no server holds its key any more), any worker takes it and asks for the key.
-	e.exec(t, `UPDATE import_jobs SET updated_at=now()-interval '5 minutes' WHERE id=$1`, job.ID)
+	e.exec(t, `UPDATE import_jobs SET updated_at=now()-interval '5 minutes', next_run_at=now()-interval '5 minutes' WHERE id=$1`, job.ID)
 	tick(t, other)
 	if got := e.get(t, job.ID); got.State != importjobs.StateWaitingKey {
 		t.Fatalf("orphaned job = %+v", got)
+	}
+}
+
+func TestARetryThatComesDueStaysWithTheServerThatCanOpenItsKey(t *testing.T) {
+	e := newEnv(t, true)
+	job := e.started(t)
+	e.exec(t, `UPDATE import_jobs SET state='retry_wait', updated_at=now()-interval '10 minutes', next_run_at=now()-interval '1 second' WHERE id=$1`, job.ID)
+	other := e.worker(t, importjobs.NewKeys(ringWithID(t, "k2")))
+	tick(t, other)
+	if got := e.get(t, job.ID); got.State != importjobs.StateRetryWait || !got.HasKey {
+		t.Fatalf("job = %+v: a due retry is not abandoned", got)
+	}
+}
+
+func TestAnUndoReportsWhatItRemovedInMarkdownToo(t *testing.T) {
+	e := newEnv(t, true)
+	job := e.previewed(t, e.a)
+	e.exec(t, `UPDATE import_jobs SET state='finished', status='OK', sealed_key=NULL, sealed_key_id=NULL WHERE id=$1`, job.ID)
+	undo, err := e.service.Undo(context.Background(), e.a.id, e.a.agentID, job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := e.worker(t, e.keys)
+	importjobs.StubImporter(w, nil, nil, func(_ context.Context, o freshdesk.UndoOptions) (freshdesk.UndoResult, error) {
+		return freshdesk.UndoResult{Source: o.Source, Conversations: 5, Contacts: 3, Tags: 2, SavedReplies: 1, KeptSavedReplies: []string{"9101"}}, nil
+	})
+	tick(t, w)
+	_, markdown, ok, err := e.service.Report(context.Background(), e.a.id, undo.ID)
+	if err != nil || !ok || markdown == nil || !strings.Contains(*markdown, "Conversations removed: 5") || !strings.Contains(*markdown, "9101") {
+		t.Fatalf("markdown = %v (%v, %v)", markdown, ok, err)
 	}
 }
