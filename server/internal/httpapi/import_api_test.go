@@ -221,6 +221,9 @@ func TestTheExportKeepsImportsButNeverTheirKey(t *testing.T) {
 			t.Fatalf("%s holds the Freshdesk key", name)
 		}
 	}
+	if people := ndjsonLines(t, entries["import-people.ndjson"]); len(people) != 2 || people[0]["external_id"] != "101" {
+		t.Fatalf("import-people.ndjson = %v", people)
+	}
 	lines := ndjsonLines(t, entries["import-jobs.ndjson"])
 	if len(lines) != 4 || !strings.Contains(string(entries["import-jobs.ndjson"]), jobs.finished) || !strings.Contains(string(entries["import-jobs.ndjson"]), `"report":{`) {
 		t.Fatalf("import-jobs.ndjson = %s", entries["import-jobs.ndjson"])

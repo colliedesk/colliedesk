@@ -157,3 +157,75 @@ func TestPeopleOfAnotherWorkspaceCannotBeSeenOrLinked(t *testing.T) {
 		t.Errorf("unknown Freshdesk agent: %v", err)
 	}
 }
+
+func TestAnUnlinkAPersonMadeIsNotUndoneByTheirNextSignIn(t *testing.T) {
+	e := newEnv(t, true)
+	job := e.previewWithAgents(t)
+	var email string
+	if err := e.pool.QueryRow(context.Background(), `SELECT email FROM agents WHERE id=$1`, e.a.agentID).Scan(&email); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.service.Unlink(context.Background(), e.a.id, job.ID, "101"); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := e.service.LinkByEmail(context.Background(), e.a.id, e.a.agentID, email); err != nil || n != 0 {
+		t.Fatalf("a sign-in linked %d again (%v)", n, err)
+	}
+	// After the import ran, a new preview of the account does not link them again either.
+	e.exec(t, `UPDATE import_jobs SET state='finished', status='OK', started_at=now(), sealed_key=NULL, sealed_key_id=NULL WHERE id=$1`, job.ID)
+	e.previewWithAgents(t)
+	people, _ := e.service.People(context.Background(), e.a.id, job.ID)
+	if people[0].LinkedAgentID != nil {
+		t.Fatalf("people = %+v", people)
+	}
+}
+
+func TestTheFreshdeskAgentsGoWithAPreviewNobodyStartedAndWithAnUndo(t *testing.T) {
+	e := newEnv(t, true)
+	ctx := context.Background()
+	count := func() int {
+		var n int
+		if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM import_people WHERE workspace_id=$1`, e.a.id).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	job := e.previewWithAgents(t)
+	if _, err := e.service.Cancel(ctx, e.a.id, job.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(); n != 0 {
+		t.Fatalf("a discarded preview left %d Freshdesk agents", n)
+	}
+	job = e.previewWithAgents(t)
+	e.exec(t, `UPDATE import_jobs SET updated_at=now()-interval '61 minutes' WHERE id=$1`, job.ID)
+	tick(t, e.worker(t, e.keys))
+	if n := count(); n != 0 {
+		t.Fatalf("an expired preview left %d Freshdesk agents", n)
+	}
+	job = e.previewWithAgents(t)
+	e.exec(t, `UPDATE import_jobs SET state='finished', status='OK', started_at=now(), sealed_key=NULL, sealed_key_id=NULL WHERE id=$1`, job.ID)
+	// A new preview of the same account, discarded, keeps the agents of the import.
+	other := e.previewWithAgents(t)
+	if _, err := e.service.Cancel(ctx, e.a.id, other.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(); n != 2 {
+		t.Fatalf("the agents of a finished import went with another preview: %d", n)
+	}
+	undo, err := e.service.Undo(ctx, e.a.id, e.a.agentID, job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := e.worker(t, e.keys)
+	importjobs.StubImporter(w, nil, nil, func(_ context.Context, o freshdesk.UndoOptions) (freshdesk.UndoResult, error) {
+		return freshdesk.UndoResult{Source: o.Source}, nil
+	})
+	tick(t, w)
+	if got := e.get(t, undo.ID); got.State != importjobs.StateFinished {
+		t.Fatalf("undo = %+v", got)
+	}
+	if n := count(); n != 0 {
+		t.Fatalf("the undo left %d Freshdesk agents", n)
+	}
+}

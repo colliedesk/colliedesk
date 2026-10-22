@@ -74,12 +74,28 @@ func (s *Service) Preview(ctx context.Context, workspaceID, agentID, domain, api
 	err = s.inWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `UPDATE import_jobs SET state='discarded', sealed_key=NULL, sealed_key_id=NULL, claim_token=NULL, lease_until=NULL,
 				finished_at=$2, updated_at=$2
-			WHERE workspace_id=$1 AND state IN ('previewing','previewed') RETURNING id::text`, workspaceID, now)
+			WHERE workspace_id=$1 AND state IN ('previewing','previewed') RETURNING id::text, account_source`, workspaceID, now)
 		if err != nil {
 			return fmt.Errorf("discard earlier previews: %w", err)
 		}
-		if discarded, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil {
+		type earlier struct {
+			id     string
+			source *string
+		}
+		previews, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (earlier, error) {
+			var e earlier
+			return e, row.Scan(&e.id, &e.source)
+		})
+		if err != nil {
 			return err
+		}
+		for _, preview := range previews {
+			discarded = append(discarded, preview.id)
+			if preview.source != nil {
+				if err := forgetPeople(ctx, tx, workspaceID, *preview.source); err != nil {
+					return err
+				}
+			}
 		}
 		var id string
 		if err := tx.QueryRow(ctx, `SELECT gen_random_uuid()::text`).Scan(&id); err != nil {
@@ -210,6 +226,9 @@ func (s *Service) Cancel(ctx context.Context, workspaceID, id string) (Job, erro
 	})
 	if err == nil && job.State != StateRunning {
 		s.keys.forget(id)
+	}
+	if err == nil && job.State == StateDiscarded && job.AccountSource != nil {
+		err = s.inWorkspace(ctx, workspaceID, func(tx pgx.Tx) error { return forgetPeople(ctx, tx, workspaceID, *job.AccountSource) })
 	}
 	return job, err
 }

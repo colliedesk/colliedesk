@@ -42,9 +42,9 @@ func savePeople(ctx context.Context, tx pgx.Tx, workspaceID string, preview *fre
 			SELECT $1,$2,$3,$4,$5,$6,a.id,a.id IS NOT NULL,a.id IS NOT NULL
 			FROM (SELECT 1) one LEFT JOIN agents a ON a.workspace_id=$1 AND lower(a.email)=lower($5) AND a.deactivated_at IS NULL
 			ON CONFLICT (workspace_id,source,external_id) DO UPDATE SET name=EXCLUDED.name, email=EXCLUDED.email, active=EXCLUDED.active,
-				linked_agent_id=COALESCE(import_people.linked_agent_id, EXCLUDED.linked_agent_id),
-				linked_by_email=CASE WHEN import_people.linked_agent_id IS NULL THEN EXCLUDED.linked_by_email ELSE import_people.linked_by_email END,
-				relink_pending=import_people.relink_pending OR (import_people.linked_agent_id IS NULL AND EXCLUDED.linked_agent_id IS NOT NULL),
+				linked_agent_id=CASE WHEN import_people.chosen_by_person THEN import_people.linked_agent_id ELSE COALESCE(import_people.linked_agent_id, EXCLUDED.linked_agent_id) END,
+				linked_by_email=CASE WHEN import_people.linked_agent_id IS NULL AND NOT import_people.chosen_by_person THEN EXCLUDED.linked_by_email ELSE import_people.linked_by_email END,
+				relink_pending=import_people.relink_pending OR (import_people.linked_agent_id IS NULL AND NOT import_people.chosen_by_person AND EXCLUDED.linked_agent_id IS NOT NULL),
 				updated_at=now()`,
 			workspaceID, preview.Source, strconv.FormatInt(agent.ID, 10), agent.Name, agent.Email, agent.Active)
 		if err != nil {
@@ -143,7 +143,7 @@ func (s *Service) changeLink(ctx context.Context, workspaceID, jobID, externalID
 		err = tx.QueryRow(ctx, `UPDATE import_people SET
 				relink_from=CASE WHEN relink_pending AND relink_from IS NOT NULL THEN relink_from
 					WHEN linked_agent_id IS DISTINCT FROM $4::uuid THEN linked_agent_id ELSE relink_from END,
-				linked_agent_id=$4, linked_by_email=false, relink_pending=true, updated_at=$5
+				linked_agent_id=$4, linked_by_email=false, chosen_by_person=true, relink_pending=true, updated_at=$5
 			WHERE workspace_id=$1 AND source=$2 AND external_id=$3
 			RETURNING external_id,name,email,active,linked_agent_id::text,linked_by_email,relink_pending,updated_at`,
 			workspaceID, source, externalID, agentID, s.now().UTC()).
@@ -158,12 +158,12 @@ func (s *Service) changeLink(ctx context.Context, workspaceID, jobID, externalID
 }
 
 // LinkByEmail links the Freshdesk agents with this email to an agent who just joined the workspace,
-// when no one linked them yet. It returns how many it linked.
+// when nobody linked them yet and no person chose otherwise (an unlink stays). It returns how many it linked.
 func (s *Service) LinkByEmail(ctx context.Context, workspaceID, agentID, email string) (int, error) {
 	var linked int
 	err := s.inWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE import_people SET linked_agent_id=$2, linked_by_email=true, relink_pending=true, updated_at=$4
-			WHERE workspace_id=$1 AND linked_agent_id IS NULL AND lower(email)=lower($3)`, workspaceID, agentID, email, s.now().UTC())
+			WHERE workspace_id=$1 AND linked_agent_id IS NULL AND NOT chosen_by_person AND lower(email)=lower($3)`, workspaceID, agentID, email, s.now().UTC())
 		linked = int(tag.RowsAffected())
 		return err
 	})
@@ -227,4 +227,17 @@ func applyLink(ctx context.Context, db *database.DB, p pendingLink) error {
 		_, err = tx.Exec(ctx, `UPDATE import_people SET relink_pending=false, relink_from=NULL WHERE workspace_id=$1 AND source=$2 AND external_id=$3`, args...)
 		return err
 	})
+}
+
+// keptPeople is when the agents of an account stay: an import of it is being previewed, or was started
+// and not undone. $1 is the workspace, $2 the ledger source.
+const keptPeople = `EXISTS (SELECT 1 FROM import_jobs j WHERE j.workspace_id=$1 AND j.account_source=$2 AND j.kind='import'
+	AND (j.state IN ('previewing','previewed') OR (j.started_at IS NOT NULL AND NOT EXISTS (
+		SELECT 1 FROM import_jobs u WHERE u.workspace_id=j.workspace_id AND u.undo_of=j.id AND u.state='finished'))))`
+
+// forgetPeople removes the agents of an account nothing imports or previews any more: after a preview
+// nobody started, or after the undo of its import. A preview reads them; it writes nothing for long.
+func forgetPeople(ctx context.Context, tx pgx.Tx, workspaceID, source string) error {
+	_, err := tx.Exec(ctx, `DELETE FROM import_people WHERE workspace_id=$1 AND source=$2 AND NOT `+keptPeople, workspaceID, source)
+	return err
 }

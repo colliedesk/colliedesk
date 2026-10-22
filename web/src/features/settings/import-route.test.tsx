@@ -53,3 +53,19 @@ test('discarding the preview just asked for gives the page back to the import be
   fireEvent.click(await screen.findByRole('button', { name: 'Discard' }));
   expect(await screen.findByRole('button', { name: 'Undo import' })).toBeInTheDocument();
 });
+
+test('a later people action clears what an earlier one said', async () => {
+  const finished = { ...previewed, state: 'finished', phase: 'full', status: 'OK', has_report: true, imported_conversations: 1 };
+  imports.list.mockResolvedValue({ items: [finished] });
+  imports.report.mockResolvedValue({ status: 'OK' });
+  Object.assign(imports, { people: vi.fn().mockResolvedValue({ items: [
+    { external_id: '102', name: 'Bob', email: 'bob@old.example', active: false, linked_agent_id: null, linked_by_email: false, pending: false, updated_at: '2026-10-22T08:00:00Z' }] }),
+  link: vi.fn(), unlink: vi.fn() });
+  Object.assign(api, { agents: vi.fn().mockResolvedValue({ items: [] }), invites: vi.fn().mockResolvedValue({ items: [] }),
+    createInvite: vi.fn().mockRejectedValueOnce(new InvalidRequestError('No seat left for an invite')).mockResolvedValue({}) });
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ImportRoute /></QueryClientProvider>);
+  fireEvent.click(await screen.findByRole('button', { name: 'Invite' }));
+  expect(await screen.findByText('No seat left for an invite')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Invite' }));
+  await waitFor(() => expect(screen.queryByText('No seat left for an invite')).not.toBeInTheDocument());
+});

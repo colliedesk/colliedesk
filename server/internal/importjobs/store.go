@@ -95,7 +95,15 @@ func expirePreviews(ctx context.Context, db *database.DB, now time.Time) ([]stri
 		if err != nil {
 			return fmt.Errorf("expire import previews: %w", err)
 		}
-		ids, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		if ids, err = pgx.CollectRows(rows, pgx.RowTo[string]); err != nil || len(ids) == 0 {
+			return err
+		}
+		// The Freshdesk agents those previews read go with them, unless an import of the account keeps them.
+		_, err = tx.Exec(ctx, `DELETE FROM import_people p USING import_jobs e
+			WHERE e.id=ANY($1::uuid[]) AND p.workspace_id=e.workspace_id AND p.source=e.account_source AND NOT EXISTS (
+				SELECT 1 FROM import_jobs j WHERE j.workspace_id=p.workspace_id AND j.account_source=p.source AND j.kind='import'
+				AND (j.state IN ('previewing','previewed') OR (j.started_at IS NOT NULL AND NOT EXISTS (
+					SELECT 1 FROM import_jobs u WHERE u.workspace_id=j.workspace_id AND u.undo_of=j.id AND u.state='finished'))))`, ids)
 		return err
 	})
 	return ids, err

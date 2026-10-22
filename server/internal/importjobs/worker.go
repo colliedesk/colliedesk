@@ -461,7 +461,13 @@ func (r *jobRun) undo(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return r.end(ctx, StateFinished, "", "", "", encoded, ptr(result.Markdown()))
+	if err := r.end(ctx, StateFinished, "", "", "", encoded, ptr(result.Markdown())); err != nil {
+		return err
+	}
+	// The Freshdesk agents of an undone import go with it.
+	return r.worker.options.DB.InWorkspace(context.WithoutCancel(ctx), r.item.workspaceID, func(tx pgx.Tx) error {
+		return forgetPeople(ctx, tx, r.item.workspaceID, *r.job.AccountSource)
+	})
 }
 
 // fail turns a run error into the job's next state: retry what may pass later, end the rest.

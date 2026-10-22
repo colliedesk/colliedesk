@@ -71,12 +71,18 @@ export function ImportRoute({ onOpenInbox, onOpenBilling }: { onOpenInbox?: () =
   const link = useMutation({ mutationFn: ({ externalId, agentId }: { externalId: string; agentId: string }) => importsApi.link(peopleJob?.id ?? '', externalId, agentId), ...peopleChanged });
   const unlink = useMutation({ mutationFn: (externalId: string) => importsApi.unlink(peopleJob?.id ?? '', externalId), ...peopleChanged });
   const invite = useMutation({ mutationFn: (email: string) => api.createInvite(email, 'agent'), onSuccess: () => { void client.invalidateQueries({ queryKey: ['invites'] }); } });
-  const peopleFailed = [link, unlink, invite].find((mutation) => mutation.isError)?.error;
+  // As for the import's own actions, only the last people action speaks.
+  const peopleActions = [link, unlink, invite];
+  const onlyPeople = <T,>(mutation: { mutate: (value: T) => void }) => (value: T) => {
+    for (const other of peopleActions) if (other !== mutation) other.reset();
+    mutation.mutate(value);
+  };
+  const peopleFailed = peopleActions.find((mutation) => mutation.isError)?.error;
   if (!me.data) return <main className="settings-page" aria-busy="true" />;
   const peopleSection = peopleJob && people.data && people.data.items.length > 0
     ? <ImportPeople people={people.data.items} agents={team.data?.items ?? []} invites={invites.data?.items ?? []}
       failed={people.isError} busy={link.isPending || unlink.isPending || invite.isPending}
-      onInvite={(email) => invite.mutate(email)} onLink={(externalId, agentId) => link.mutate({ externalId, agentId })} onUnlink={(externalId) => unlink.mutate(externalId)} />
+      onInvite={onlyPeople(invite)} onLink={(externalId, agentId) => onlyPeople(link)({ externalId, agentId })} onUnlink={onlyPeople(unlink)} />
     : undefined;
   const peopleError = peopleFailed ? (peopleFailed instanceof InvalidRequestError ? peopleFailed.message : importMessages.actionFailed) : undefined;
   return <ImportPage isAdmin={isAdmin} peopleSection={peopleSection} onOpenInbox={onOpenInbox} onOpenBilling={onOpenBilling} showBilling={isAdmin && config.data?.billing.enabled === true}

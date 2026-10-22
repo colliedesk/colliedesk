@@ -15,6 +15,8 @@ CREATE TABLE import_people (
     -- linked_by_email: the link was made because the emails match (at the preview, or when the
     -- invite was accepted); otherwise a person chose it.
     linked_by_email boolean NOT NULL DEFAULT false,
+    -- chosen_by_person: a person linked or unlinked them; an email match never changes that again.
+    chosen_by_person boolean NOT NULL DEFAULT false,
     relink_pending boolean NOT NULL DEFAULT false,
     relink_from uuid,
     created_at timestamptz NOT NULL DEFAULT now(),
