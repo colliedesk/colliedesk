@@ -67,11 +67,17 @@ CREATE INDEX ai_draft_sources_article ON ai_draft_sources(workspace_id, kb_artic
 ALTER TABLE messages ADD COLUMN ai_draft_id uuid;
 ALTER TABLE messages ADD FOREIGN KEY (workspace_id, ai_draft_id) REFERENCES ai_drafts(workspace_id, id) ON DELETE SET NULL (ai_draft_id);
 
--- A conversation resolved or closed discards the drafts nobody decided on.
+-- A conversation resolved or closed discards the drafts nobody decided on, and stops the ones still
+-- being written (their tasks too): no call is spent on a reply nobody will send.
 CREATE FUNCTION ai_drafts_discard_on_resolve() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     UPDATE ai_drafts SET outcome = 'discarded', decided_at = now()
         WHERE workspace_id = NEW.workspace_id AND conversation_id = NEW.id AND status = 'ready' AND outcome IS NULL;
+    WITH stopped AS (
+        UPDATE ai_drafts SET status = 'cancelled'
+            WHERE workspace_id = NEW.workspace_id AND conversation_id = NEW.id AND status = 'pending' RETURNING task_id)
+    UPDATE ai_tasks SET state = 'cancelled', error_code = 'conversation_closed', claim_token = NULL, lease_until = NULL, finished_at = now()
+        WHERE workspace_id = NEW.workspace_id AND id IN (SELECT task_id FROM stopped) AND state IN ('queued', 'running');
     RETURN NULL;
 END
 $$;

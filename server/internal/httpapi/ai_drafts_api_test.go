@@ -405,3 +405,16 @@ func TestAnAgentTokensDraftNeverReplacesItsPersonsDraft(t *testing.T) {
 		t.Fatalf("the person's draft after the token's note = %+v", got)
 	}
 }
+
+func TestResolvingAConversationStopsADraftStillBeingWritten(t *testing.T) {
+	d := newDraftDesk(t)
+	pending := d.ask(t, d.adminA, d.conversationA, "")
+	kbCall(t, d.api, http.MethodPatch, "/api/v1/conversations/"+d.conversationA, map[string]any{"status": "resolved"}, d.adminA, http.StatusOK, nil)
+	d.run(t)
+	if got := d.get(t, d.adminA, d.conversationA, pending.ID); got.Status != ai.DraftCancelled {
+		t.Fatalf("draft of a resolved conversation = %+v", got)
+	}
+	if len(d.draftRequests()) != 0 {
+		t.Fatal("a draft of a resolved conversation still called the provider")
+	}
+}

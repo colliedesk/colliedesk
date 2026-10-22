@@ -248,3 +248,24 @@ func (s *Service) allowanceView(ctx context.Context, tx pgx.Tx, workspaceID stri
 	}
 	return view, nil
 }
+
+// typicalCallFits refuses a call of that size that could not fit what is left of the allowance even
+// with nothing else running: what a person asks for is refused at once, not after it was queued.
+func (s *Service) typicalCallFits(ctx context.Context, tx pgx.Tx, workspaceID, model string, input, output int64) error {
+	if s.config.Server == nil {
+		return nil
+	}
+	left, _, limited, err := s.allowanceLeft(ctx, tx, workspaceID)
+	if err != nil || !limited {
+		return err
+	}
+	var held int64
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(sum(reserved_micro_usd),0) FROM ai_usage WHERE workspace_id=$1 AND billed_to='server' AND status='started'`,
+		workspaceID).Scan(&held); err != nil {
+		return err
+	}
+	if left+held <= 0 || estimateMicroUSD(s.config.Server.Prices, model, input, output) > left+held {
+		return ErrAllowanceReached
+	}
+	return nil
+}

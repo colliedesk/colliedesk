@@ -592,3 +592,22 @@ func TestTheAllowanceSaysAboutHowManyDraftsAreLeft(t *testing.T) {
 		t.Fatalf("drafts left after one draft = %d", *settings.Allowance.DraftsLeft)
 	}
 }
+
+func TestADraftThatCouldNeverFitWhatIsLeftIsRefusedAtOnce(t *testing.T) {
+	server := *testServer
+	// 30,000 micro-dollars: a typical draft on Sonnet holds 6,000×2 + 4,000×10 = 52,000.
+	server.Allowance = &ai.Allowance{PerWorkspace: 0.03}
+	q := newQueueEnv(t, func(config *ai.Config) { config.Server = &server })
+	q.turnOn(t, q.a, ai.SlotDraft)
+	var conversation string
+	if err := q.pool.QueryRow(context.Background(), `WITH c AS (INSERT INTO contacts(workspace_id,name,email) VALUES($1,'Ada','ada@example.com') RETURNING id)
+		INSERT INTO conversations(workspace_id,contact_id,subject) SELECT $1,id,'Hello' FROM c RETURNING id::text`, q.a.id).Scan(&conversation); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.service.CreateDraft(context.Background(), q.a.id, q.actor(q.a), conversation, ""); !errors.Is(err, ai.ErrAllowanceReached) {
+		t.Fatalf("CreateDraft = %v, want the allowance refusal before anything is queued", err)
+	}
+	if n := q.count(t, `SELECT count(*) FROM ai_tasks WHERE workspace_id=$1`, q.a.id); n != 0 {
+		t.Fatalf("%d tasks queued", n)
+	}
+}

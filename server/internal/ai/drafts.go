@@ -135,12 +135,10 @@ func (s *Service) CreateDraft(ctx context.Context, workspaceID string, actor Act
 			return err
 		}
 		if binding.call.BilledTo == BilledToServer {
-			left, _, limited, err := s.allowanceLeft(ctx, tx, workspaceID)
-			if err != nil {
+			// The same rule as the call itself, for a typical draft: refused only when it could not fit
+			// even once the calls still running give back what they hold.
+			if err := s.typicalCallFits(ctx, tx, workspaceID, binding.Model, typicalDraftInput, draftMaxOutput); err != nil {
 				return err
-			}
-			if limited && left <= 0 {
-				return ErrAllowanceReached
 			}
 		}
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, "ai-drafts:"+workspaceID); err != nil {

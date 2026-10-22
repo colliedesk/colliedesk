@@ -120,3 +120,15 @@ test('a draft stopped because the feature was turned off says why', async () => 
   render(<QueryClientProvider client={client}><AIDraftPanel conversationId={conversation} agentId={agent} hasText={false} onUse={vi.fn()} onClose={vi.fn()} /></QueryClientProvider>);
   expect(await screen.findByRole('alert')).toHaveTextContent('Reply drafts were turned off');
 });
+
+test('a draft whose reading fails stops asking instead of asking in a loop', async () => {
+  const fetch = serve((url) => (url.includes('?wait=') || url.endsWith(draft().id)
+    ? new Response(JSON.stringify({ error: { code: 'internal', message: 'boom' } }), { status: 500 })
+    : { items: [draft({ status: 'running', text: null })] }));
+  render(wrap(<AIDraftPanel conversationId={conversation} agentId={agent} hasText={false} onUse={vi.fn()} onClose={vi.fn()} />));
+  await screen.findByRole('status');
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  const reads = fetch.mock.calls.filter(([url]) => String(url).includes(draft().id)).length;
+  expect(reads).toBeLessThanOrEqual(2);
+  expect(await screen.findByRole('alert')).toHaveTextContent('The draft could not be loaded');
+});

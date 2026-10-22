@@ -41,7 +41,8 @@ export function AIDraftPanel({ conversationId, agentId, hasText, onUse, onClose 
   const current = useQuery({
     queryKey: ['ai-draft', conversationId, id], enabled: Boolean(id),
     queryFn: () => aiDraftApi.get(conversationId, id!, writing(client.getQueryData<AIDraft>(['ai-draft', conversationId, id]) ?? initial) ? longPoll : 0),
-    initialData: initial, refetchInterval: (query) => (writing(query.state.data) ? 1 : false), refetchOnWindowFocus: false,
+    initialData: initial, // A failed read stops the loop: Retry is the query's own, and a refused read must not repeat at once.
+    refetchInterval: (query) => (query.state.status === 'error' ? false : writing(query.state.data) ? 1 : false), refetchOnWindowFocus: false,
   });
   const draft = id ? current.data : undefined;
   const ask = useMutation({
@@ -87,6 +88,7 @@ export function AIDraftPanel({ conversationId, agentId, hasText, onUse, onClose 
         <button type="button" className="icon-button" aria-label={text.close} title={text.close} onClick={onClose}><XIcon /></button>
       </header>
       {list.isError && !id && <p role="alert" className="ai-draft-problem">{text.loadFailed}</p>}
+      {current.isError && id && <p role="alert" className="ai-draft-problem">{text.loadFailed}</p>}
       {showForm && (
         <form className="ai-draft-form" onSubmit={(event) => { event.preventDefault(); ask.mutate(); }}>
           <label htmlFor={`ai-draft-prompt-${conversationId}`}>{text.promptLabel}</label>
