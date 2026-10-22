@@ -3,8 +3,10 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"mime"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
@@ -47,8 +49,12 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		CC   []string `json:"cc"`
 		// Draft asks for a reply draft a person reviews, whatever the token's tier.
 		Draft bool `json:"draft"`
+		// SeenReplyNumber is the latest reply the sender had seen when they started writing; a newer one
+		// refuses the reply (409 reply_conflict). Without it nothing is checked.
+		SeenReplyNumber *int `json:"seen_reply_number"`
 	}
-	if err := decodeJSON(request, &input); err != nil || (input.Kind != "outgoing" && input.Kind != "note") || strings.TrimSpace(input.Body) == "" {
+	if err := decodeJSON(request, &input); err != nil || (input.Kind != "outgoing" && input.Kind != "note") || strings.TrimSpace(input.Body) == "" ||
+		(input.SeenReplyNumber != nil && *input.SeenReplyNumber < 0) {
 		writeError(response, http.StatusBadRequest, "invalid_request", "A reply or note body is required.")
 		return
 	}
@@ -72,7 +78,10 @@ func (a *API) createMessage(response http.ResponseWriter, request *http.Request)
 		a.writeUploadError(response, refusal)
 		return
 	}
-	item, err := a.store.CreateMessageWithCC(request.Context(), identity.Workspace.ID, request.PathValue("id"), actor, input.Kind, input.Body, cc)
+	item, err := a.store.CreateReply(request.Context(), identity.Workspace.ID, request.PathValue("id"), actor, input.Kind, input.Body, cc, input.SeenReplyNumber)
+	if a.writeReplyConflict(response, identity, err) {
+		return
+	}
 	if err != nil {
 		writeStoreError(response, err)
 		return
@@ -158,4 +167,23 @@ func messageActor(ctx context.Context, identity auth.Principal, kind string) (st
 		}
 	}
 	return actor, true
+}
+
+// writeReplyConflict answers 409 reply_conflict, with the replies the sender had not seen and the
+// latest number to send with again, and reports whether err was that refusal.
+func (a *API) writeReplyConflict(response http.ResponseWriter, identity auth.Principal, err error) bool {
+	var conflict *domain.ReplyConflictError
+	if !errors.As(err, &conflict) {
+		return false
+	}
+	if identity.Scope == "" {
+		for index := range conflict.Newer {
+			conflict.Newer[index].BodyHTML = a.presentMessageHTML(identity.Workspace.ID, conflict.Newer[index].BodyHTML)
+		}
+	}
+	writeJSON(response, http.StatusConflict, map[string]any{"error": errorBody(response, map[string]any{
+		"code": "reply_conflict", "message": "Someone replied to this conversation after you started writing. Nothing was sent: read the newer replies, " +
+			"then send again with seen_reply_number " + strconv.Itoa(conflict.Latest) + " if your reply still fits.",
+		"latest_reply_number": conflict.Latest, "newer_replies": conflict.Newer})})
+	return true
 }

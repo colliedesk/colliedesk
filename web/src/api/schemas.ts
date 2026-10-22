@@ -87,6 +87,7 @@ export const conversationSchema = z.object({
   id: z.string().uuid(), contact_id: z.string().uuid(), contact_name: z.string(), subject: z.string(),
   status: statusSchema, priority: prioritySchema, assignee_id: z.string().uuid().nullable(),
   tags: z.array(tagSchema), channel: channelSchema, origin: conversationOriginSchema.nullable(), created_at: z.string().datetime(), updated_at: z.string().datetime(),
+  latest_reply_number: z.number().int().nonnegative(),
 }) satisfies z.ZodType<Generated<'Conversation'>>;
 export const deliveryStatusSchema = z.enum(['queued', 'sent', 'failed']);
 export const messageDeliverySchema = z.object({
@@ -112,8 +113,10 @@ export const messageSchema = z.object({
   kind: z.enum(['incoming', 'outgoing', 'note']), body: z.string(),
   body_html: z.string().nullable(), origin: messageOriginSchema.nullable(),
   attachments: z.array(attachmentSchema), cc: z.array(z.string()), created_at: z.string().datetime(),
-  delivery: messageDeliverySchema.nullable(), email: incomingEmailSchema.nullable(),
+  delivery: messageDeliverySchema.nullable(), email: incomingEmailSchema.nullable(), reply_number: z.number().int().positive().nullable(),
 }) satisfies z.ZodType<Generated<'Message'>>;
+export const replyConflictSchema = z.object({ error: z.object({ code: z.literal('reply_conflict'), message: z.string(), request_id: z.string().optional(),
+  latest_reply_number: z.number().int().positive(), newer_replies: z.array(messageSchema) }) }) satisfies z.ZodType<Generated<'ReplyConflict'>>;
 export const emailDnsRecordSchema = z.object({
   record: z.string(), type: z.string(), name: z.string(), value: z.string(), priority: z.number().int().nullable(), status: z.string(),
 }) satisfies z.ZodType<Generated<'EmailDNSRecord'>>;

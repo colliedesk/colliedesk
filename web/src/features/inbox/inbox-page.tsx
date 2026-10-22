@@ -32,7 +32,8 @@ interface InboxPageProps {
   onQuery?: (query: InboxQuery) => void;
   // The saved views menu, which sits in the filter bar (the route loads it lazily with its data).
   viewsMenu?: ReactNode;
-  onMessage?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[]) => void | Promise<unknown>;
+  // seen is the newest reply number on screen when the reply was started.
+  onMessage?: (kind: 'outgoing' | 'note', body: string, files?: File[], cc?: string[], seen?: number) => void | Promise<unknown>;
   attachmentLimits?: AttachmentLimits;
   savedReplies?: SavedReply[];
   // The names the composer fills into a saved reply: the selected customer and the signed-in agent.
@@ -130,6 +131,8 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
     }
   };
   const copied = useMemo(() => suggestedCc(timeline, { hosted }), [timeline, hosted]);
+  // The newest reply on screen; unknown while the timeline loads, so nothing is checked against a guess.
+  const latestReply = useMemo(() => timeline.reduce((latest, item) => Math.max(latest, item.reply_number ?? 0), 0), [timeline]);
   const agentNames = useMemo(() => new Map(agents.map((agent) => [agent.id, agent.display_name || agent.email])), [agents]);
   const closeDetails = () => { setDetailsOpen(false); (detailsToggle.current ?? listPane.current)?.focus(); };
   // The drawer belongs to one conversation: a new selection or none closes it. Without a toggle left
@@ -181,6 +184,7 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
           onSend={(edit) => onSendDraft?.(draft, edit) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}
         {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
         <ReplyComposer key={selected?.id} disabled={!selected} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
+          latestReplyNumber={selected && !timelineLoading ? latestReply : undefined} timezone={timezone}
           savedReplies={savedReplies} customerName={customerName} agentName={agentName} onManageSavedReplies={onManageSavedReplies} savedRepliesState={savedRepliesState}
           canManage={canManage} onReplyDraft={onReplyDraft} onReplyEdited={onReplyEdited} />
       </div>

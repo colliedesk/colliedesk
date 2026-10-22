@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ConversationViewer } from '../../api/schemas';
+import type { ConversationViewer, Message } from '../../api/schemas';
 import { formatDate } from '../../lib/format-date';
 import { Avatar } from '../../ui/avatar';
 
@@ -20,6 +20,11 @@ const text = {
   replying: 'Replying',
   draftOpen: 'Draft open',
   more: (count: number) => `Show ${count} more`,
+  conflictTitle: 'Someone replied while you were writing. Nothing was sent; your text is still here.',
+  teammate: 'A teammate',
+  imported: (system: string) => `Imported from ${system}`,
+  sendAnyway: 'Send anyway',
+  editReply: 'Edit reply',
   fewer: 'Show fewer',
 };
 
@@ -105,6 +110,28 @@ export function ConversationViewers({ viewers, timezone }: { viewers: Conversati
       </ul>}
       {(hidden.length > 0 || (expanded && lines.length > shownLines)) && <button type="button" className="link-action viewer-more" aria-expanded={expanded}
         onClick={() => setExpanded((open) => !open)}>{expanded ? text.fewer : text.more(hidden.length)}</button>}
+    </div>
+  );
+}
+
+// ReplyConflict stands above the reply box when a reply was refused because someone replied after its
+// writer started: their replies by time (an imported one keeps its own time and says where it came
+// from), then Send anyway or Edit reply. Both count those replies as read, so they are asked about once.
+export function ReplyConflict({ replies, timezone, onSendAnyway, onEdit }: { replies: Message[]; timezone: string; onSendAnyway: () => void; onEdit: () => void }) {
+  return (
+    <div role="alert" className="reply-conflict">
+      <p className="reply-conflict-title">{text.conflictTitle}</p>
+      <ul>
+        {replies.map((reply) => <li key={reply.id}>
+          <p className="reply-conflict-by">{reply.author_name ?? text.teammate} · <time dateTime={reply.created_at}>{formatDate(reply.created_at, timezone)}</time>
+            {reply.origin && <> · {text.imported(reply.origin.system)}</>}</p>
+          <p className="reply-conflict-text">{reply.body}</p>
+        </li>)}
+      </ul>
+      <div className="reply-conflict-actions">
+        <button type="button" className="primary-action" onClick={onSendAnyway}>{text.sendAnyway}</button>
+        <button type="button" onClick={onEdit}>{text.editReply}</button>
+      </div>
     </div>
   );
 }

@@ -268,6 +268,8 @@ export interface paths {
          * @description Send JSON for a text-only message, or `multipart/form-data` to attach files: fields `kind` and `body` plus repeated `files` parts, each with a filename. A message carries at most `limits.outgoing_attachments_files` files and `limits.outgoing_attachments_bytes` bytes in total (both from `GET /api/v1/config`); more answers 413 and nothing is stored. A reply emails its files as attachments; a note never leaves the workspace.
          *
          *     A reply may copy other people with `cc`: at most 10 plain addresses (`name@example.com`, no display name), stored lowercase without duplicates. The conversation contact stays the only `To` recipient and is dropped from `cc`; our own support, forwarding and sending addresses are refused with 400, and so is `cc` on a note. In `multipart/form-data` send one `cc` field per address, before the files. On the trial, `cc` may name only addresses the customer wrote from or copied (customer mail through the platform forwarder that did not fail authentication, or imported history) unless the sending domain is verified; another address answers 403 `trial_outbound_restricted` with `refused_cc` listing every refused address, and nothing is stored. Each reply counts its contact and every `cc` address against the trial's 200 people a day. A retry of a failed delivery sends to the same stored list. There is no Bcc.
+         *
+         *     Every reply gets the next `reply_number` of its conversation (`latest_reply_number` of the conversation is the newest). Send `seen_reply_number`, the newest reply the sender had seen when they started writing, and a reply is refused with 409 `reply_conflict` when someone replied since: nothing is stored or sent, and the error lists `newer_replies` (oldest first by `created_at`; an imported one keeps its own time and `origin`) and `latest_reply_number`. To send anyway, send again with that number. Without `seen_reply_number` nothing is checked; a note is never checked. In `multipart/form-data`, send it before the files: a refused reply stores none.
          */
         post: operations["createMessage"];
         delete?: never;
@@ -1213,7 +1215,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description People only (an agent token gets 403 `person_only`). Runs the stored call once, as the approving person: their role, the workspace lock and every check of the route apply. The answer is 200 with the request (`approved` when the call succeeded, `failed` with `result_status` otherwise, for example 403 when the approver may not do it) and `result`, the call's own answer. When the answer holds a credential, a link or a payment page (new token, inbound secret, export, billing), `result` is shown here once and the request keeps only `result_status` and `result_note`. Approving an export (`GET /api/v1/export` or `POST /api/v1/export/link`) answers the export's one-time download link. `body` replaces the text of a reply draft; it is refused for any other request. A request that is decided or expired, or whose token was revoked, answers 409 and runs nothing; two approvals at once run the call once. A person whose role may not run the call gets 403 and the request keeps waiting (`approvable_by`). `cc` keeps only some of a reply draft's copies; it cannot add one. The approval finishes even if the approver's connection closes. */
+        /** @description People only (an agent token gets 403 `person_only`). Runs the stored call once, as the approving person: their role, the workspace lock and every check of the route apply. The answer is 200 with the request (`approved` when the call succeeded, `failed` with `result_status` otherwise, for example 403 when the approver may not do it) and `result`, the call's own answer. When the answer holds a credential, a link or a payment page (new token, inbound secret, export, billing), `result` is shown here once and the request keeps only `result_status` and `result_note`. Approving an export (`GET /api/v1/export` or `POST /api/v1/export/link`) answers the export's one-time download link. `body` replaces the text of a reply draft; it is refused for any other request. A request that is decided or expired, or whose token was revoked, answers 409 and runs nothing; two approvals at once run the call once. A person whose role may not run the call gets 403 and the request keeps waiting (`approvable_by`). `cc` keeps only some of a reply draft's copies; it cannot add one. The approval finishes even if the approver's connection closes. `seen_reply_number` is the newest reply the approving person had on screen: when someone replied since, a reply draft answers 409 `reply_conflict` like `POST .../messages` and keeps waiting, so it can be read again and approved with the new number. */
         post: operations["approveAgentRequest"];
         delete?: never;
         options?: never;
@@ -2793,6 +2795,8 @@ export interface components {
             updated_at: string;
         };
         Conversation: {
+            /** @description The reply_number of the newest reply; 0 before the first. Send it as seen_reply_number with a reply. */
+            latest_reply_number: number;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -2845,6 +2849,18 @@ export interface components {
             items: components["schemas"]["Conversation"][];
             page: number;
             page_size: number;
+        };
+        ReplyConflict: {
+            error: {
+                /** @enum {string} */
+                code: "reply_conflict";
+                message: string;
+                request_id?: string;
+                /** @description Send this as seen_reply_number to send anyway. */
+                latest_reply_number: number;
+                /** @description The replies after the sender's seen_reply_number, oldest first by created_at. */
+                newer_replies: components["schemas"]["Message"][];
+            };
         };
         /** @description A random id a browser tab makes when the page loads (not stored across reloads), or a fixed name an agent token picks. */
         PresenceClientID: string;
@@ -2931,6 +2947,8 @@ export interface components {
             }[];
         };
         Message: {
+            /** @description The replies of a conversation numbered 1, 2, 3... in the order they were stored (an imported reply gets the next number whatever its time); null for a note or a customer message. */
+            reply_number: number | null;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -3929,6 +3947,7 @@ export interface operations {
                     /** @description Markdown source */
                     body: string;
                     cc?: components["schemas"]["CopiedAddresses"];
+                    seen_reply_number?: number;
                     files?: string[];
                 };
             };
@@ -4111,6 +4130,8 @@ export interface operations {
                     /** @description Markdown source */
                     body: string;
                     cc?: components["schemas"]["CopiedAddresses"];
+                    /** @description The newest reply number the sender had seen; 0 when there was none. */
+                    seen_reply_number?: number;
                     /** @description Agent tokens only, with `kind: outgoing`: file the reply as a reply draft (202) that a person edits, sends or discards, whatever the token's tier. A token below `send` gets a draft without it, and may copy only the contact and addresses already on the conversation (400 otherwise). A person's session answers 400. */
                     draft?: boolean;
                 };
@@ -4140,6 +4161,15 @@ export interface operations {
             402: components["responses"]["WorkspaceLocked"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description A reply with `seen_reply_number` older than the conversation's latest reply (`reply_conflict`); nothing was stored or sent */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReplyConflict"];
+                };
+            };
             413: components["responses"]["AttachmentsTooLarge"];
             429: components["responses"]["TrialOutboundLimit"];
             /** @description The attachments volume is low on disk space; nothing was sent or stored */
@@ -6074,6 +6104,8 @@ export interface operations {
                     body?: string;
                     /** @description The copies to keep on a reply draft; only addresses the draft already copied (400 otherwise). */
                     cc?: string[];
+                    /** @description Reply drafts only: the newest reply number on the approver's screen. */
+                    seen_reply_number?: number;
                 };
             };
         };

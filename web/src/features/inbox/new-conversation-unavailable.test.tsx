@@ -10,7 +10,7 @@ const api = vi.hoisted(() => ({
   timeEntries: vi.fn(async () => ({ items: [] })), savedReplies: vi.fn(async () => ({ items: [] })), config: vi.fn(),
   emailChannel: vi.fn(async () => ({ channel: null })), contacts: vi.fn(), agentRequests: vi.fn(async () => ({ items: [] })),
 }));
-vi.mock('../../api/client', () => ({ api }));
+vi.mock('../../api/client', () => ({ api, ReplyConflictError: class extends Error {}, TooManyRequestsError: class extends Error {} }));
 vi.mock('@tanstack/react-router', async () => (await import('./test-router')).routerModule);
 // The window's chunk cannot be loaded: offline, or an old tab after a deploy.
 vi.mock('./new-conversation-dialog', () => { throw new Error('Failed to fetch dynamically imported module'); });

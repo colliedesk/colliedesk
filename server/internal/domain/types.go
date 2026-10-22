@@ -120,6 +120,9 @@ type Conversation struct {
 	Origin    *ConversationOrigin `json:"origin"`
 	CreatedAt time.Time           `json:"created_at"`
 	UpdatedAt time.Time           `json:"updated_at"`
+	// LatestReplyNumber is the number of the newest reply (0 before the first): a reply sent with an
+	// older seen_reply_number is refused with ReplyConflictError.
+	LatestReplyNumber int `json:"latest_reply_number"`
 }
 
 // How a conversation started (conversations.channel).
@@ -194,6 +197,20 @@ type Message struct {
 	CreatedAt time.Time        `json:"created_at"`
 	Delivery  *MessageDelivery `json:"delivery"`
 	Email     *IncomingEmail   `json:"email"`
+	// ReplyNumber numbers the replies of a conversation in the order they were stored, 1 first; nil for
+	// a note or a customer message.
+	ReplyNumber *int `json:"reply_number"`
+}
+
+// ReplyConflictError refuses a reply whose sender had seen replies up to a number older than the
+// conversation's latest: Newer are the replies after it, oldest first by time.
+type ReplyConflictError struct {
+	Latest int
+	Newer  []Message
+}
+
+func (e *ReplyConflictError) Error() string {
+	return "someone replied to this conversation after you started writing"
 }
 
 type Attachment struct {

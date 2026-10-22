@@ -19,7 +19,7 @@ const messageSelect = `SELECT m.id::text,m.conversation_id::text,m.author_agent_
 	COALESCE(m.author_name,NULLIF(aa.display_name,''),aa.email,
 		CASE WHEN m.kind='incoming' AND lower(ct.email)=lower(m.email_meta->>'from') THEN NULLIF(ct.name,'') END),
 	m.kind,m.body,m.body_html,m.origin,m.created_at,m.email_meta,m.cc,
-	o.status,o.attempts,o.last_error,o.sent_at,t.id::text,t.label,t.scope,COALESCE(NULLIF(ta.display_name,''),ta.email),m.agent_request_id::text
+	o.status,o.attempts,o.last_error,o.sent_at,t.id::text,t.label,t.scope,COALESCE(NULLIF(ta.display_name,''),ta.email),m.agent_request_id::text,m.reply_number
 	FROM messages m JOIN conversations c ON c.id=m.conversation_id AND c.workspace_id=m.workspace_id
 	LEFT JOIN agents aa ON aa.workspace_id=m.workspace_id AND aa.id=m.author_agent_id
 	LEFT JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
@@ -39,7 +39,7 @@ func scanMessage(row rowScanner) (domain.Message, error) {
 	var sentAt *time.Time
 	if err := row.Scan(&message.ID, &message.ConversationID, &message.AuthorAgentID, &message.AuthorName, &message.Kind, &message.Body,
 		&message.BodyHTML, &message.Origin, &message.CreatedAt, &meta, &message.CC, &status, &attempts, &lastError, &sentAt,
-		&tokenID, &tokenLabel, &tokenScope, &tokenAgent, &message.AgentRequestID); err != nil {
+		&tokenID, &tokenLabel, &tokenScope, &tokenAgent, &message.AgentRequestID, &message.ReplyNumber); err != nil {
 		return domain.Message{}, err
 	}
 	message.CreatedAt = domain.UTC(message.CreatedAt)
@@ -133,6 +133,15 @@ var ErrCCOnNote = errors.New("only a reply can be copied to other addresses")
 // sends to the same people. On the trial it may name only addresses the customer already wrote from
 // or copied.
 func (s *Store) CreateMessageWithCC(ctx context.Context, workspaceID, conversationID string, actor Actor, kind, body string, cc []string, files ...NewAttachment) (domain.Message, error) {
+	return s.CreateReply(ctx, workspaceID, conversationID, actor, kind, body, cc, nil, files...)
+}
+
+// CreateReply is CreateMessageWithCC for a sender who says which replies they had seen: with seen set,
+// a reply (never a note) is refused with *domain.ReplyConflictError, and nothing stored, when the
+// conversation has a reply numbered above seen. The numbering lock is held from the check to the insert
+// (taken first, as every other writer of a reply takes it before any conversation row lock), so two
+// replies sent at once with the same seen never both go.
+func (s *Store) CreateReply(ctx context.Context, workspaceID, conversationID string, actor Actor, kind, body string, cc []string, seen *int, files ...NewAttachment) (domain.Message, error) {
 	if len(cc) > 0 && kind != "outgoing" {
 		return domain.Message{}, ErrCCOnNote
 	}
@@ -144,6 +153,11 @@ func (s *Store) CreateMessageWithCC(ctx context.Context, workspaceID, conversati
 		return domain.Message{}, fmt.Errorf("begin message creation: %w", err)
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
+	if kind == "outgoing" {
+		if err := checkReplySeen(ctx, tx, workspaceID, conversationID, seen, true); err != nil {
+			return domain.Message{}, err
+		}
+	}
 	message, err := s.createMessage(ctx, tx, workspaceID, conversationID, actor, kind, body, cc, files)
 	if err != nil {
 		return domain.Message{}, err
@@ -206,4 +220,70 @@ func (s *Store) insertMessageFiles(ctx context.Context, tx pgx.Tx, workspaceID, 
 		}
 	}
 	return nil
+}
+
+// CheckReplySeen refuses early, without a lock, a reply whose sender had seen replies up to seen when
+// the conversation has a newer one, so a reply with files stores none of them. CreateReply checks
+// again under the lock.
+func (s *Store) CheckReplySeen(ctx context.Context, workspaceID, conversationID string, seen int) error {
+	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
+		return struct{}{}, checkReplySeen(ctx, tx, workspaceID, conversationID, &seen, false)
+	})
+	return err
+}
+
+// lockReplyNumbers takes the transaction-scoped advisory lock the numbering trigger takes for the
+// conversation (migration 20261022100554-reply-numbers: the same key), so no reply is numbered in it
+// until this transaction ends.
+func lockReplyNumbers(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string) error {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('reply_number:'||$1::uuid::text||':'||$2::uuid::text,0))`, workspaceID, conversationID); err != nil {
+		return fmt.Errorf("lock reply numbers: %w", err)
+	}
+	return nil
+}
+
+// latestReplyNumberSQL is the number of the newest reply of conversation $2 of workspace $1, 0 before the first.
+const latestReplyNumberSQL = `SELECT coalesce(max(reply_number),0) FROM messages WHERE workspace_id=$1 AND conversation_id=$2 AND reply_number IS NOT NULL`
+
+// checkReplySeen reads the conversation's latest reply number, after taking the numbering lock when lock
+// is set (it is then held until the reply is stored), and returns *domain.ReplyConflictError when seen is
+// set and older. A conversation that is not in the workspace is pgx.ErrNoRows.
+func checkReplySeen(ctx context.Context, tx pgx.Tx, workspaceID, conversationID string, seen *int, lock bool) error {
+	var exists bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM conversations WHERE workspace_id=$1 AND id=$2)`, workspaceID, conversationID).Scan(&exists); err != nil {
+		return fmt.Errorf("find conversation: %w", err)
+	}
+	if !exists {
+		return fmt.Errorf("find conversation: %w", pgx.ErrNoRows)
+	}
+	if lock {
+		if err := lockReplyNumbers(ctx, tx, workspaceID, conversationID); err != nil {
+			return err
+		}
+	}
+	var latest int
+	if err := tx.QueryRow(ctx, latestReplyNumberSQL, workspaceID, conversationID).Scan(&latest); err != nil {
+		return fmt.Errorf("read latest reply number: %w", err)
+	}
+	if seen == nil || latest <= *seen {
+		return nil
+	}
+	rows, err := tx.Query(ctx, messageSelect+` WHERE m.workspace_id=$1 AND m.conversation_id=$2 AND m.kind='outgoing' AND m.reply_number>$3
+		ORDER BY m.created_at,m.id`, workspaceID, conversationID, *seen)
+	if err != nil {
+		return fmt.Errorf("list newer replies: %w", err)
+	}
+	defer rows.Close()
+	newer := []domain.Message{}
+	for rows.Next() {
+		message, err := scanMessage(rows)
+		if err != nil {
+			return fmt.Errorf("scan newer reply: %w", err)
+		}
+		newer = append(newer, message)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("list newer replies: %w", err)
+	}
+	return &domain.ReplyConflictError{Latest: latest, Newer: newer}
 }

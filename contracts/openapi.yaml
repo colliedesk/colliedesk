@@ -437,6 +437,7 @@ paths:
                 subject: {type: string, minLength: 1}
                 body: {type: string, minLength: 1, description: Markdown source}
                 cc: {$ref: '#/components/schemas/CopiedAddresses'}
+                seen_reply_number: {type: integer, minimum: 0}
                 files:
                   type: array
                   maxItems: 10
@@ -577,6 +578,15 @@ paths:
         refused address, and nothing is stored. Each reply counts its contact and every `cc` address
         against the trial's 200 people a day. A retry of a
         failed delivery sends to the same stored list. There is no Bcc.
+
+
+        Every reply gets the next `reply_number` of its conversation (`latest_reply_number` of the
+        conversation is the newest). Send `seen_reply_number`, the newest reply the sender had seen when
+        they started writing, and a reply is refused with 409 `reply_conflict` when someone replied
+        since: nothing is stored or sent, and the error lists `newer_replies` (oldest first by
+        `created_at`; an imported one keeps its own time and `origin`) and `latest_reply_number`. To send
+        anyway, send again with that number. Without `seen_reply_number` nothing is checked; a note is
+        never checked. In `multipart/form-data`, send it before the files: a refused reply stores none.
       requestBody:
         required: true
         content:
@@ -588,6 +598,7 @@ paths:
                 kind: {type: string, enum: [outgoing, note]}
                 body: {type: string, minLength: 1, description: Markdown source}
                 cc: {$ref: '#/components/schemas/CopiedAddresses'}
+                seen_reply_number: {type: integer, minimum: 0, description: 'The newest reply number the sender had seen; 0 when there was none.'}
                 draft:
                   type: boolean
                   description: >-
@@ -621,6 +632,9 @@ paths:
         '402': {$ref: '#/components/responses/WorkspaceLocked'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: A reply with `seen_reply_number` older than the conversation's latest reply (`reply_conflict`); nothing was stored or sent
+          content: {application/json: {schema: {$ref: '#/components/schemas/ReplyConflict'}}}
         '413': {$ref: '#/components/responses/AttachmentsTooLarge'}
         '429': {$ref: '#/components/responses/TrialOutboundLimit'}
         '507':
@@ -2225,6 +2239,9 @@ paths:
         approvals at once run the call once. A person whose role may not run the call gets 403 and the
         request keeps waiting (`approvable_by`). `cc` keeps only some of a reply draft's copies; it
         cannot add one. The approval finishes even if the approver's connection closes.
+        `seen_reply_number` is the newest reply the approving person had on screen: when someone replied
+        since, a reply draft answers 409 `reply_conflict` like `POST .../messages` and keeps waiting, so
+        it can be read again and approved with the new number.
       requestBody:
         required: false
         content:
@@ -2239,6 +2256,7 @@ paths:
                   maxItems: 10
                   items: {type: string}
                   description: The copies to keep on a reply draft; only addresses the draft already copied (400 otherwise).
+                seen_reply_number: {type: integer, minimum: 0, description: 'Reply drafts only: the newest reply number on the approver''s screen.'}
       responses:
         '200':
           description: The decided request and the answer of its call
@@ -4461,8 +4479,9 @@ components:
         updated_at: {type: string, format: date-time}
     Conversation:
       type: object
-      required: [id, contact_id, contact_name, subject, status, priority, assignee_id, tags, channel, origin, created_at, updated_at]
+      required: [id, contact_id, contact_name, subject, status, priority, assignee_id, tags, channel, origin, created_at, updated_at, latest_reply_number]
       properties:
+        latest_reply_number: {type: integer, minimum: 0, description: 'The reply_number of the newest reply; 0 before the first. Send it as seen_reply_number with a reply.'}
         id: {type: string, format: uuid}
         contact_id: {type: string, format: uuid}
         contact_name: {type: string}
@@ -4521,6 +4540,22 @@ components:
         items: {type: array, items: {$ref: '#/components/schemas/Conversation'}}
         page: {type: integer, minimum: 1}
         page_size: {type: integer, minimum: 1}
+    ReplyConflict:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, latest_reply_number, newer_replies]
+          properties:
+            code: {type: string, enum: [reply_conflict]}
+            message: {type: string}
+            request_id: {type: string}
+            latest_reply_number: {type: integer, minimum: 1, description: Send this as seen_reply_number to send anyway.}
+            newer_replies:
+              type: array
+              description: The replies after the sender's seen_reply_number, oldest first by created_at.
+              items: {$ref: '#/components/schemas/Message'}
     PresenceClientID:
       type: string
       pattern: '^[A-Za-z0-9_-]{8,64}$'
@@ -4625,8 +4660,12 @@ components:
                 description: Time of the newest customer message inside the polled window, or null when the change was not a customer message.
     Message:
       type: object
-      required: [id, conversation_id, author_agent_id, author_name, agent_token, agent_request_id, kind, body, body_html, origin, attachments, cc, created_at, delivery, email]
+      required: [id, conversation_id, author_agent_id, author_name, agent_token, agent_request_id, kind, body, body_html, origin, attachments, cc, created_at, delivery, email, reply_number]
       properties:
+        reply_number:
+          type: [integer, 'null']
+          minimum: 1
+          description: The replies of a conversation numbered 1, 2, 3... in the order they were stored (an imported reply gets the next number whatever its time); null for a note or a customer message.
         id: {type: string, format: uuid}
         conversation_id: {type: string, format: uuid}
         author_agent_id: {type: [string, 'null'], format: uuid}

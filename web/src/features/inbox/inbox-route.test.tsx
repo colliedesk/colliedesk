@@ -15,7 +15,7 @@ const api = vi.hoisted(() => ({
   emailChannel: vi.fn(async () => ({ channel: null, inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null })),
 }));
 
-vi.mock('../../api/client', () => ({ api, InvalidRequestError: class extends Error {} }));
+vi.mock('../../api/client', () => ({ api, InvalidRequestError: class extends Error {}, ReplyConflictError: class extends Error {}, TooManyRequestsError: class extends Error {} }));
 vi.mock('../contacts/contact-api', () => ({ contactApi: { startConversation: api.createConversation, searchContacts: api.contacts }, existingContact: () => undefined }));
 const views = vi.hoisted(() => ({
   list: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })), trash: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })),
@@ -25,7 +25,7 @@ vi.mock('../../api/saved-views', () => ({ savedViewsApi: views }));
 vi.mock('@tanstack/react-router', async () => (await import('./test-router')).routerModule);
 beforeEach(() => testRouter.reset());
 
-const conversation = (id: string, subject: string) => ({
+const conversation = (id: string, subject: string) => ({ latest_reply_number: 0,
   id, contact_id: '22222222-2222-4222-8222-222222222222', contact_name: 'Mai Linh', subject,
   status: 'open' as const, priority: 'normal' as const, assignee_id: null, tags: [], channel: 'email' as const, origin: null,
   created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z',

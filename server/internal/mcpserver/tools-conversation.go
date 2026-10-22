@@ -57,7 +57,9 @@ type conversationGetOut struct {
 	Viewers  []viewerOut `json:"viewers"`
 	Hint     string      `json:"hint,omitempty"`
 	Timezone string      `json:"timezone"`
-	Detail   string      `json:"detail"`
+	// LatestReplyNumber is what colliedesk_reply_send takes as seen_reply_number.
+	LatestReplyNumber int    `json:"latest_reply_number"`
+	Detail            string `json:"detail"`
 }
 
 func conversationGet(c *call, arguments map[string]any) (any, error) {
@@ -111,7 +113,7 @@ func conversationGet(c *call, arguments map[string]any) (any, error) {
 		shown = shown[len(shown)-conciseMessages:]
 	}
 	out := conversationGetOut{Conversation: conversationRow(conversation, contact, agents, full), Messages: make([]messageOut, 0, len(shown)),
-		MessagesTotal: len(thread.Items), MessagesShown: len(shown), OlderMessagesOmitted: len(thread.Items) - len(shown), Timezone: me.Workspace.Timezone, Detail: args.Detail}
+		MessagesTotal: len(thread.Items), MessagesShown: len(shown), OlderMessagesOmitted: len(thread.Items) - len(shown), Timezone: me.Workspace.Timezone, Detail: args.Detail, LatestReplyNumber: conversation.LatestReplyNumber}
 	anyCut := false
 	for _, message := range shown {
 		view, wasCut := messageView(message, agents, full)

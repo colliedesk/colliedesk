@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
-import { api } from '../../api/client';
+import { api, ReplyConflictError } from '../../api/client';
 import type { BulkConversationChanges, UpdateConversationRequest } from '../../api/client';
 import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
@@ -197,8 +197,11 @@ export function InboxRoute() {
     void client.invalidateQueries({ queryKey: ['tags'] });
     addTag.mutate({ conversationId: variables.conversationId, tagId: tag.id });
   } });
-  const message = useMutation({ mutationFn: ({ kind, body, files, cc }: { kind: 'outgoing' | 'note'; body: string; files?: File[]; cc?: string[] }) => api.createMessage(selected!.id, kind, body, files, cc),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['messages', selected?.id] }) });
+  const message = useMutation({ mutationFn: ({ kind, body, files, cc, seen }: { kind: 'outgoing' | 'note'; body: string; files?: File[]; cc?: string[]; seen?: number }) =>
+    api.createMessage(selected!.id, kind, body, files, cc, seen),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['messages', selected?.id] }),
+    // A reply refused for a newer one: the timeline shows it at once.
+    onError: (error) => { if (error instanceof ReplyConflictError) void client.invalidateQueries({ queryKey: ['messages', selected?.id] }); } });
   const retryDelivery = useMutation({ mutationFn: ({ conversationId, messageId }: { conversationId: string; messageId: string }) => api.retryDelivery(conversationId, messageId),
     onSuccess: (retried) => client.invalidateQueries({ queryKey: ['messages', retried.conversation_id] }) });
   // The others see that this tab has the conversation open and whether a reply is being written; the first
@@ -226,7 +229,7 @@ export function InboxRoute() {
     onUpdate={(conversationId, changes) => update.mutate({ conversationId, changes })}
     onAddTag={(conversationId, tagId) => addTag.mutate({ conversationId, tagId })}
     onRemoveTag={(conversationId, tagId) => removeTag.mutate({ conversationId, tagId })}
-    onMessage={(kind, body, files, cc) => message.mutateAsync({ kind, body, files, cc })}
+    onMessage={(kind, body, files, cc, seen) => message.mutateAsync({ kind, body, files, cc, seen })}
     savedReplies={savedReplies.data?.items} customerName={selected?.contact_name} agentName={agentSignatureName(me.data?.agent)}
     savedRepliesState={savedReplies.isPending ? 'loading' : savedReplies.isError ? 'failed' : 'ready'}
     // A new tab, so the draft and the files in this reply box stay where they are.
@@ -243,7 +246,18 @@ export function InboxRoute() {
     replyDrafts={selectedDrafts} draftConversationIds={draftConversationIds} viewers={viewing}
     openViewers={presence.viewers} onReplyDraft={setWritingReply} onReplyEdited={presence.markEdited}
     onSendDraft={async (draft, edit) => {
-      const outcome = await api.approveAgentRequest(draft.id, edit);
+      // The draft goes only if no reply came after the newest one on the approver's screen; one that did
+      // leaves the draft waiting, shown in the timeline, to be read before sending again.
+      const seen = timeline.data?.items.reduce((latest, item) => Math.max(latest, item.reply_number ?? 0), 0);
+      let outcome;
+      try {
+        outcome = await api.approveAgentRequest(draft.id, seen === undefined ? edit : { ...edit, seen_reply_number: seen });
+      } catch (error) {
+        if (!(error instanceof ReplyConflictError)) throw error;
+        await afterDraft(draft.conversation_id);
+        setDraftNotice(messages.draftAfterReply);
+        return;
+      }
       track('agent_request_decided', { decision: 'approved' });
       await afterDraft(draft.conversation_id);
       // Approved but refused by the reply route (for example the trial's limits): say why, the draft is spent.

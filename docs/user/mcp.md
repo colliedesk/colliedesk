@@ -61,7 +61,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_conversation_update` | Sets status, priority, assignee and adds or removes tags in one idempotent call; a tag name that does not exist yet is created | `draft` |
 | `colliedesk_conversations_bulk_update` | Sets status, assignee and tags of up to 50 conversations at once, all or nothing | `draft` |
 | `colliedesk_note_add` | Adds a private note | `draft` |
-| `colliedesk_reply_send` | Sends a reply to the customer by email. Cannot be undone | `send` |
+| `colliedesk_reply_send` | Sends a reply to the customer by email. Cannot be undone. Takes `seen_reply_number` (from `colliedesk_conversation_get`): when someone replied since, nothing is sent and their reply is shown; warns when a teammate has a reply open | `send` |
 | `colliedesk_reply_retry` | Sends again a reply whose delivery failed. Cannot be undone | `send` |
 | `colliedesk_conversation_create` | Opens a conversation with a customer; sends nothing | `send` |
 | `colliedesk_conversation_start` | Opens a conversation and emails its first message to the customer in one step, for a customer found or one added with it (`new_contact`); nothing is stored if the email is refused. Cannot be undone | `send` |
