@@ -82,3 +82,16 @@ func TestConversationGetSaysWhoElseHasItOpen(t *testing.T) {
 		t.Fatalf("c1 viewers = %v", viewers)
 	}
 }
+
+func TestConversationPresenceToolWaitsOutAnAnnounceTooSoon(t *testing.T) {
+	e := newEnv(t)
+	f := seedInbox(t, e)
+	session := e.connect(f.w.read, "")
+	e.ok(session, "colliedesk_conversation_presence", map[string]any{"conversation_id": f.c3})
+	// At once again, now writing: the server asks for 2 seconds, the tool waits and the change lands.
+	e.ok(session, "colliedesk_conversation_presence", map[string]any{"conversation_id": f.c3, "writing": true})
+	viewers := viewersOf(t, e, f.w, f.c3, false)
+	if len(viewers) != 1 || at(t, viewers, 0, "writing") != true {
+		t.Fatalf("people see %v, want the agent writing", viewers)
+	}
+}

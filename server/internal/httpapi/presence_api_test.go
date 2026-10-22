@@ -40,13 +40,15 @@ type presenceDesk struct {
 	adminID, teammateID    string
 	conversation           string
 	otherConversation      string
+	// announced is when each tab last announced each conversation through put.
+	announced map[string]time.Time
 }
 
 func newPresenceDesk(t *testing.T) presenceDesk {
 	t.Helper()
 	clock := &testClock{now: time.Date(2026, time.October, 22, 9, 0, 0, 0, time.UTC)}
 	api, service, pool, _ := testAPIWithConfig(t, func(config *httpapi.Config) { config.Now = clock.Now })
-	d := presenceDesk{api: api, pool: pool, clock: clock}
+	d := presenceDesk{api: api, pool: pool, clock: clock, announced: map[string]time.Time{}}
 	d.admin = createSession(t, api, service, "Presence Desk", "admin@presence.example.com")
 	d.teammate = joinAsAgent(t, api, d.admin, "lan@presence.example.com")
 	if response := request(t, api, http.MethodPatch, "/api/v1/agents/me/display-name", map[string]any{"display_name": "Lan"}, d.teammate, nil); response.Code != http.StatusOK {
@@ -78,6 +80,12 @@ func presencePath(conversation string) string {
 
 func (d presenceDesk) put(t *testing.T, token, conversation, client string, writing bool) presenceAnswer {
 	t.Helper()
+	// One tab announces one conversation at most every 2 seconds; a test that calls again sooner waits.
+	key := token + "|" + conversation + "|" + client
+	if last, ok := d.announced[key]; ok && d.clock.Now().Before(last.Add(2*time.Second)) {
+		d.clock.set(last.Add(2 * time.Second))
+	}
+	d.announced[key] = d.clock.Now()
 	response := request(t, d.api, http.MethodPut, presencePath(conversation), map[string]any{"client_id": client, "writing": writing}, token, nil)
 	if response.Code != http.StatusOK {
 		t.Fatalf("PUT presence status=%d body=%s", response.Code, response.Body.String())
@@ -157,6 +165,7 @@ func TestPresenceMovesWithTheTabAndAsksHiddenTabsForFewerCalls(t *testing.T) {
 	if got := viewerSummary(d.put(t, d.admin, second, "admin-tab-1", false).Viewers); got != "Lan writing=false" {
 		t.Fatalf("second conversation lists %q", got)
 	}
+	d.clock.set(d.clock.Now().Add(2 * time.Second))
 	response := request(t, d.api, http.MethodPut, presencePath(second), map[string]any{"client_id": "lan-tab-one", "writing": true, "hidden": true}, d.teammate, nil)
 	var answer presenceAnswer
 	decode(t, response, &answer)
@@ -178,6 +187,7 @@ func TestPresenceWritingSinceStaysAndEditedAtFollowsChanges(t *testing.T) {
 	}
 	edited := started.Add(100 * time.Second)
 	d.clock.set(edited)
+	d.announced[d.teammate+"|"+d.conversation+"|lan-tab-one"] = edited
 	if response := request(t, d.api, http.MethodPut, presencePath(d.conversation), map[string]any{"client_id": "lan-tab-one", "writing": true, "edited": true}, d.teammate, nil); response.Code != http.StatusOK {
 		t.Fatalf("edited heartbeat status=%d", response.Code)
 	}
@@ -301,6 +311,7 @@ func TestAgentTokenPresenceNamesTheTokenAndLastsTwoMinutes(t *testing.T) {
 	if got := viewerSummary(d.put(t, token.Token, d.conversation, "mcp-agent", false).Viewers); got != "Lan writing=true" {
 		t.Fatalf("token sees %q", got)
 	}
+	start = d.clock.Now() // the token's row lives 2 minutes from its last announce
 	viewers := d.put(t, d.admin, d.conversation, "admin-tab-1", false).Viewers
 	if got := viewerSummary(viewers); got != "Lan writing=true; Lan writing=false via Claude Code" {
 		t.Fatalf("admin sees %q", got)
@@ -431,5 +442,36 @@ func TestInboxActivityListsWhoHasEachConversationOpenFromTheFirstPoll(t *testing
 	d.clock.set(d.clock.Now().Add(3 * time.Minute))
 	if got := d.viewingOf(t, d.admin, ""); len(got) != 0 {
 		t.Fatalf("after every row expired admin sees %v", got)
+	}
+}
+
+func TestPresenceRefusesATabThatAnnouncesTooOften(t *testing.T) {
+	d := newPresenceDesk(t)
+	start := d.clock.Now()
+	body := map[string]any{"client_id": "lan-tab-one", "writing": false}
+	if response := request(t, d.api, http.MethodPut, presencePath(d.conversation), body, d.teammate, nil); response.Code != http.StatusOK {
+		t.Fatalf("first announce status=%d", response.Code)
+	}
+	// A token, or a script, calling again at once writes nothing: 429 with Retry-After, the row as it was.
+	d.clock.set(start.Add(1900 * time.Millisecond))
+	writing := map[string]any{"client_id": "lan-tab-one", "writing": true}
+	response := request(t, d.api, http.MethodPut, presencePath(d.conversation), writing, d.teammate, nil)
+	if response.Code != http.StatusTooManyRequests || response.Header().Get("Retry-After") != "2" || !strings.Contains(response.Body.String(), "too_many_requests") {
+		t.Fatalf("announce after 1.9 s status=%d retry=%q body=%s", response.Code, response.Header().Get("Retry-After"), response.Body.String())
+	}
+	var seen time.Time
+	var since *time.Time
+	if err := d.pool.QueryRow(context.Background(), `SELECT seen_at,writing_since FROM conversation_presence WHERE client_id='lan-tab-one'`).Scan(&seen, &since); err != nil || !seen.Equal(start) || since != nil {
+		t.Fatalf("row after the refused announce: seen %v writing %v err %v", seen, since, err)
+	}
+	// Opening another conversation is a new place, not a repeat; and 2 seconds later the same one is fine.
+	contact := create(t, d.api, d.admin, "/api/v1/contacts", map[string]any{"name": "Second", "email": "second@presence.example.com"})
+	second := create(t, d.api, d.admin, "/api/v1/conversations", map[string]any{"contact_id": contact, "subject": "Second"})
+	if response := request(t, d.api, http.MethodPut, presencePath(second), writing, d.teammate, nil); response.Code != http.StatusOK {
+		t.Fatalf("moving to another conversation status=%d", response.Code)
+	}
+	d.clock.set(start.Add(4 * time.Second))
+	if response := request(t, d.api, http.MethodPut, presencePath(second), writing, d.teammate, nil); response.Code != http.StatusOK {
+		t.Fatalf("announce after 2 s status=%d", response.Code)
 	}
 }

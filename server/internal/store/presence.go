@@ -31,7 +31,8 @@ type PresenceUpdate struct {
 // AnnouncePresence records that the caller's tab has the conversation open (moving the tab's row
 // from any conversation it had open before) and returns everyone else who has it open. It also
 // removes the workspace's expired rows and the caller's person's oldest rows past
-// domain.PresenceMaxPerAgent, so the table holds only live tabs.
+// domain.PresenceMaxPerAgent, so the table holds only live tabs. A tab that announced the same
+// conversation less than domain.PresenceMinInterval ago gets domain.ErrPresenceTooSoon and changes nothing.
 func (s *Store) AnnouncePresence(ctx context.Context, workspaceID, conversationID string, who PresenceCaller, update PresenceUpdate) ([]domain.ConversationViewer, error) {
 	now := s.now()
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]domain.ConversationViewer, error) {
@@ -47,8 +48,10 @@ func (s *Store) AnnouncePresence(ctx context.Context, workspaceID, conversationI
 					WHEN p.writing_since IS NULL OR p.conversation_id<>EXCLUDED.conversation_id THEN $7 ELSE p.writing_since END,
 				edited_at=CASE WHEN NOT $6 THEN NULL
 					WHEN p.writing_since IS NULL OR p.conversation_id<>EXCLUDED.conversation_id OR $9 THEN $7 ELSE p.edited_at END,
-				seen_at=$7,expires_at=$8`,
-			workspaceID, who.SessionID, update.ClientID, who.AgentID, conversationID, update.Writing, now, now.Add(update.TTL), update.Edited)
+				seen_at=$7,expires_at=$8
+			WHERE p.conversation_id<>EXCLUDED.conversation_id OR p.seen_at<=$10`,
+			workspaceID, who.SessionID, update.ClientID, who.AgentID, conversationID, update.Writing, now, now.Add(update.TTL), update.Edited,
+			now.Add(-domain.PresenceMinInterval))
 		batch.Queue(`DELETE FROM conversation_presence WHERE workspace_id=$1 AND agent_id=$2 AND (session_id,client_id) NOT IN (
 				SELECT session_id,client_id FROM conversation_presence WHERE workspace_id=$1 AND agent_id=$2
 				ORDER BY seen_at DESC,session_id,client_id LIMIT $3)`, workspaceID, who.AgentID, domain.PresenceMaxPerAgent)
@@ -56,12 +59,17 @@ func (s *Store) AnnouncePresence(ctx context.Context, workspaceID, conversationI
 		results := tx.SendBatch(ctx, batch)
 		defer results.Close()
 		for _, step := range []string{"remove expired presence", "announce presence", "cap presence"} {
-			if _, err := results.Exec(); err != nil {
+			tag, err := results.Exec()
+			if err != nil {
 				var database *pgconn.PgError
 				if errors.As(err, &database) && database.Code == "23503" {
 					return nil, domain.ErrPresenceConversationNotFound
 				}
 				return nil, fmt.Errorf("%s: %w", step, err)
+			}
+			// The row exists, on this conversation, and was renewed less than the minimum interval ago.
+			if step == "announce presence" && tag.RowsAffected() == 0 {
+				return nil, domain.ErrPresenceTooSoon
 			}
 		}
 		rows, err := results.Query()

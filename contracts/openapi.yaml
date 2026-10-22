@@ -906,8 +906,10 @@ paths:
         `heartbeat_seconds` while the conversation is open; a row not renewed in time disappears on its
         own (15 seconds for viewing, 150 seconds with a reply not sent yet, 2 minutes for an agent
         token, which does not call on a schedule). `client_id` names one tab: a person with two tabs
-        open has two rows and is listed once. Changes nothing a customer or a teammate wrote, so the
-        read tier is enough for an agent token.
+        open has two rows and is listed once. One tab announces one conversation at most every 2
+        seconds: a quicker call is answered 429 `too_many_requests` with `Retry-After` and changes
+        nothing. Changes nothing a customer or a teammate wrote, so the read tier is enough for an
+        agent token.
       requestBody:
         required: true
         content:
@@ -924,6 +926,11 @@ paths:
         '402': {$ref: '#/components/responses/WorkspaceLocked'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '429':
+          description: This tab announced this conversation less than 2 seconds ago; nothing changed
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   /api/v1/conversations/{id}/presence/{clientId}:
     parameters:
       - {$ref: '#/components/parameters/ID'}
