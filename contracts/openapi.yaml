@@ -3715,7 +3715,7 @@ components:
         archive means the report can be UNVERIFIED at best.
     ImportJob:
       type: object
-      required: [id, kind, source, domain, account_source, undo_of, state, phase, options, preview, progress, status, error_code, error_message, has_key, has_interim_report, has_report, cancel_requested, next_run_at, created_by, created_at, started_at, finished_at, updated_at]
+      required: [id, kind, source, domain, account_source, undo_of, state, phase, options, preview, progress, status, error_code, error_message, imported_conversations, has_key, has_interim_report, has_report, cancel_requested, next_run_at, created_by, created_at, started_at, finished_at, updated_at]
       properties:
         id: {type: string, format: uuid}
         kind: {type: string, enum: [import, undo]}
@@ -3745,6 +3745,11 @@ components:
             API calls), freshdesk_unavailable, import_running_elsewhere, retrying_failed_items,
             storage_cap, knowledge_base_limit, key_unavailable, no_progress or import_error.
         error_message: {type: [string, 'null']}
+        imported_conversations:
+          type: [integer, 'null']
+          description: >-
+            How many conversations of the Freshdesk account were in the workspace when the import ended
+            (what an undo removes, less what the team changed since); null while it runs and for an undo.
         has_key: {type: boolean, description: The server still holds the Freshdesk API key of this job}
         has_interim_report: {type: boolean}
         has_report: {type: boolean}

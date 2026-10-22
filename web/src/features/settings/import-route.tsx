@@ -16,7 +16,8 @@ export function currentJob(items: ImportJob[]): ImportJob | undefined {
   return items.find((job) => open.has(job.state)) ?? items[0];
 }
 
-export function ImportRoute() {
+// onOpenInbox follows the inbox link through the router.
+export function ImportRoute({ onOpenInbox, onOpenBilling }: { onOpenInbox?: () => void; onOpenBilling?: () => void } = {}) {
   const client = useQueryClient();
   const me = useQuery({ queryKey: ['me'], queryFn: api.me });
   const config = useQuery({ queryKey: ['public-config'], queryFn: api.config });
@@ -51,7 +52,7 @@ export function ImportRoute() {
   const error = failed ? (failed instanceof InvalidRequestError ? failed.message : importMessages.actionFailed) : undefined;
   const busy = all.some((mutation) => mutation.isPending);
   if (!me.data) return <main className="settings-page" aria-busy="true" />;
-  return <ImportPage isAdmin={isAdmin} showBilling={isAdmin && config.data?.billing.enabled === true}
+  return <ImportPage isAdmin={isAdmin} onOpenInbox={onOpenInbox} onOpenBilling={onOpenBilling} showBilling={isAdmin && config.data?.billing.enabled === true}
     job={job} report={reportReady && parsed.success && job?.kind !== 'undo' ? importReportSchema.parse(report.data) : undefined}
     undoReport={reportReady && parsed.success && job?.kind === 'undo' ? undoReportSchema.parse(report.data) : undefined} history={items} timezone={me.data?.timezone ?? 'UTC'}
     loadFailed={imports.isError} error={error} busy={busy} connecting={connecting}

@@ -50,7 +50,9 @@ test('in-app freshdesk import: an admin reads the account, imports it in the bac
     // Undo asks first, then removes exactly the import.
     await page.getByRole('button', { name: 'Undo import' }).click();
     await page.getByRole('button', { name: 'Remove imported data' }).click();
-    await expect(page.getByText('Import removed: 300 conversations.')).toBeVisible({ timeout: 120_000 });
+    await expect(page.getByText(/^Import removed: 300 conversations and 120 contacts\./)).toBeVisible({ timeout: 120_000 });
+    // The way back in: a new import.
+    await expect(page.getByRole('button', { name: 'New import' })).toBeVisible();
     const after = await (await page.request.get(`${baseURL}/api/v1/conversations`)).json() as { items: unknown[] };
     expect(after.items).toHaveLength(0);
   } finally {

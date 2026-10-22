@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { track } from '../../lib/product-analytics';
 import type { SettingsSection } from '../../lib/product-analytics';
@@ -53,8 +53,13 @@ export function settingsNavGroups(shown: Shown, page: SettingsPath): NavGroup[] 
 
 export function SettingsNav({ shown, page }: { shown: Shown; page: SettingsPath }) {
   const renderLink = useContext(SettingsNavLinkContext);
+  const nav = useRef<HTMLElement>(null);
+  // On a narrow screen the links are one row that scrolls sideways: the current page is brought into it.
+  useEffect(() => {
+    nav.current?.querySelector('[aria-current="page"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [page]);
   return (
-    <nav className="settings-nav" aria-label={messages.settingsSections}>
+    <nav ref={nav} className="settings-nav" aria-label={messages.settingsSections}>
       {settingsNavGroups(shown, page).map((group) => <div key={group.label}><p className="settings-group-label">{group.label}</p>
         <ul>{group.items.map((item) => <li key={item.label} onClick={() => { const section = sectionOf(item); if (section) track('settings_section_opened', { section }); }}>{renderLink(item, page)}</li>)}</ul>
       </div>)}

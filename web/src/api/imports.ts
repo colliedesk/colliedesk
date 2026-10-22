@@ -30,6 +30,7 @@ export const importJobSchema = z.object({
   phase: z.enum(['preview', 'recent', 'full', 'undo']), options: importOptionsSchema,
   preview: importPreviewSchema.nullable(), progress: importProgressSchema.nullable(),
   status: z.enum(['OK', 'FAILED', 'UNVERIFIED']).nullable(), error_code: z.string().nullable(), error_message: z.string().nullable(),
+  imported_conversations: z.number().int().nullable(),
   has_key: z.boolean(), has_interim_report: z.boolean(), has_report: z.boolean(), cancel_requested: z.boolean(),
   next_run_at: nullableDate, created_by: z.string().uuid().nullable(), created_at: z.string().datetime(),
   started_at: nullableDate, finished_at: nullableDate, updated_at: z.string().datetime(),

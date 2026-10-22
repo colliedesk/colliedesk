@@ -128,7 +128,10 @@ type Job struct {
 	Status        *string         `json:"status"`
 	ErrorCode     *string         `json:"error_code"`
 	ErrorMessage  *string         `json:"error_message"`
-	HasKey        bool            `json:"has_key"`
+	// ImportedConversations counts the Freshdesk tickets of the account in this workspace when the
+	// import ended, so a stopped one says what an undo would remove.
+	ImportedConversations *int `json:"imported_conversations"`
+	HasKey                bool `json:"has_key"`
 	// HasInterimReport is true once the recent pass ended.
 	HasInterimReport bool       `json:"has_interim_report"`
 	HasReport        bool       `json:"has_report"`

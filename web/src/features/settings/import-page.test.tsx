@@ -15,7 +15,7 @@ const preview: ImportPreview = {
 function job(change: Partial<ImportJob> = {}): ImportJob {
   return {
     id: '11111111-1111-4111-8111-111111111111', kind: 'import', source: 'freshdesk', domain: 'acme.freshdesk.com', account_source: 'freshdesk:account:777',
-    undo_of: null, state: 'previewed', phase: 'preview', options: {}, preview, progress: null, status: null, error_code: null, error_message: null,
+    undo_of: null, state: 'previewed', phase: 'preview', options: {}, preview, progress: null, status: null, error_code: null, error_message: null, imported_conversations: null,
     has_key: true, has_interim_report: false, has_report: false, cancel_requested: false, next_run_at: null, created_by: null,
     created_at: '2026-10-22T08:00:00Z', started_at: null, finished_at: null, updated_at: '2026-10-22T08:00:00Z', ...change,
   };
@@ -55,19 +55,20 @@ test('the preview shows what Freshdesk holds before anything is written, and wha
   expect(within(ledger).queryByRole('columnheader', { name: 'In Colliedesk' })).not.toBeInTheDocument();
   expect(screen.getByText(/cannot read archived tickets/)).toBeInTheDocument();
   expect(screen.getByText(/Tickets updated in the last 90 days come first/)).toBeInTheDocument();
-  expect(screen.getByText(/at most 80 of the 100 Freshdesk API calls/)).toBeInTheDocument();
+  expect(screen.getByText(/leaves a fifth of that to your other Freshdesk apps/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Start import' }));
   expect(onStart).toHaveBeenCalledWith(job().id);
 });
 
 test('a running import shows its step, its counts and when the recent tickets are in', () => {
-  const { onCancel } = page({ job: job({ state: 'running', phase: 'full', has_interim_report: true,
+  const { onCancel } = page({ report: { status: 'INTERIM', interim: true, tickets: { source: 5, imported: 5, failed: 0 } }, job: job({ state: 'running', phase: 'full', has_interim_report: true,
     progress: { step: 'importing tickets', done: 25, total: 100, api_calls: 75, eta_seconds: 600, updated_at: '2026-10-22T08:05:00Z' } }) });
   const steps = screen.getByRole('list', { name: 'Import steps' });
   expect(within(steps).getByText('Whole account')).toHaveAttribute('aria-current', 'step');
   expect(screen.getByRole('status')).toHaveTextContent('The recent tickets are in');
-  expect(screen.getByRole('progressbar', { name: 'importing tickets' })).toHaveAttribute('aria-valuenow', '25');
-  expect(screen.getByText('importing tickets: 25 of 100')).toBeInTheDocument();
+  expect(screen.getByRole('progressbar', { name: 'Copying tickets' })).toHaveAttribute('aria-valuenow', '25');
+  expect(screen.getByText('Copying tickets: 25 of 100')).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Open the inbox' })).toHaveAttribute('href', '/');
   expect(screen.getByText(/About 10 minutes left/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Stop import' }));
   expect(onCancel).toHaveBeenCalledWith(job().id);
@@ -99,8 +100,10 @@ test('a finished import compares Freshdesk with Colliedesk, downloads its report
 });
 
 test('a plan without API calls says to start a Freshdesk trial, and the imported data can be undone', () => {
-  const { onNewImport } = page({ job: job({ state: 'failed', phase: 'full', has_interim_report: true, error_code: 'freshdesk_plan_no_api', error_message: 'this Freshdesk plan has no API calls' }) });
+  const { onNewImport } = page({ job: job({ state: 'failed', phase: 'full', has_interim_report: true, imported_conversations: 120, error_code: 'freshdesk_plan_no_api', error_message: 'this Freshdesk plan has no API calls' }) });
+  expect(screen.getByText(/120 conversations from this account are in your inbox/)).toBeInTheDocument();
   expect(screen.getByRole('alert')).toHaveTextContent('Start a 14-day trial of a higher Freshdesk plan');
+  expect(screen.getByRole('heading', { name: 'Your Freshdesk plan has no API access' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Undo import' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'New import' }));
   expect(onNewImport).toHaveBeenCalled();
@@ -112,4 +115,76 @@ test('the page is about the import still open, else the newest', () => {
   expect(currentJob([finished, waiting])?.id).toBe(waiting.id);
   expect(currentJob([finished])?.id).toBe(finished.id);
   expect(currentJob([])).toBeUndefined();
+});
+
+test('a finished step never shows a full bar, and a step of unknown size shows no bar', () => {
+  page({ job: job({ state: 'running', phase: 'full', progress: { step: 'checking ticket ids', done: 1, total: 1, api_calls: 3, updated_at: '2026-10-22T08:05:00Z' } }) });
+  expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  expect(screen.getByText('Checking ticket numbers: 1 of 1')).toBeInTheDocument();
+});
+
+test('a key Freshdesk refused while reading the account is a preview to try again, not a stopped import', () => {
+  const { onNewImport } = page({ job: job({ state: 'failed', phase: 'preview', error_code: 'freshdesk_key_rejected', account_source: null }),
+    history: [job({ id: '22222222-2222-4222-8222-222222222222', state: 'failed', phase: 'preview' })] });
+  expect(screen.getByRole('heading', { name: 'Could not read your Freshdesk account' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  expect(onNewImport).toHaveBeenCalled();
+  expect(screen.queryByRole('heading', { name: 'Earlier imports' })).not.toBeInTheDocument();
+});
+
+test('trying again keeps the address that was typed', () => {
+  page({ job: job({ state: 'failed', phase: 'preview', domain: 'beta.freshdesk.com' }), connecting: true });
+  expect(screen.getByLabelText('Freshdesk address')).toHaveValue('beta.freshdesk.com');
+});
+
+test('the undo question is brought into view with the safe answer focused', () => {
+  page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }) });
+  fireEvent.click(screen.getByRole('button', { name: 'Undo import' }));
+  expect(screen.getByRole('button', { name: 'Keep' })).toHaveFocus();
+});
+
+test('after an undo the page offers a new import, and a failed undo can be tried again', () => {
+  const undone = job({ id: '33333333-3333-4333-8333-333333333333', kind: 'undo', undo_of: job().id, state: 'finished', phase: 'undo', has_report: true });
+  const { onNewImport } = page({ job: undone, undoReport: { conversations: 300, contacts: 120 }, history: [undone, job({ state: 'finished', status: 'OK', phase: 'full' })] });
+  expect(screen.getByRole('status')).toHaveTextContent('300 conversations and 120 contacts');
+  fireEvent.click(screen.getByRole('button', { name: 'New import' }));
+  expect(onNewImport).toHaveBeenCalled();
+  expect(within(screen.getByRole('region', { name: 'Earlier imports' })).getByRole('list')).toHaveTextContent('Removed');
+});
+
+test('a failed undo can be tried again', () => {
+  const { onUndo } = page({ job: job({ id: '33333333-3333-4333-8333-333333333333', kind: 'undo', undo_of: job().id, state: 'failed', phase: 'undo' }) });
+  fireEvent.click(screen.getByRole('button', { name: 'Try undo again' }));
+  expect(onUndo).toHaveBeenCalledWith(job().id);
+});
+
+test('an import refused for storage says what to do and leads to the plan on the hosted cloud', () => {
+  page({ showBilling: true, job: job({ state: 'failed', phase: 'full', error_code: 'storage_cap', has_interim_report: true }) });
+  expect(screen.getByRole('alert')).toHaveTextContent('Move to a plan with more storage');
+  expect(within(screen.getByRole('main')).getAllByRole('link', { name: 'Plan and billing' }).at(-1)).toHaveAttribute('href', '/settings/billing');
+});
+
+test('a recent pass that found nothing says so instead of sending the team to an empty inbox', () => {
+  page({ report: { status: 'INTERIM', interim: true, tickets: { source: 0, imported: 0, failed: 0 } },
+    job: job({ state: 'running', phase: 'full', has_interim_report: true, progress: { step: 'listing tickets', done: 0, total: 0, api_calls: 9, updated_at: '2026-10-22T08:05:00Z' } }) });
+  expect(screen.getByRole('status')).toHaveTextContent('No ticket changed in the last 90 days');
+  expect(screen.queryByRole('link', { name: 'Open the inbox' })).not.toBeInTheDocument();
+});
+
+test('a stopped import with nothing in the inbox offers no undo', () => {
+  page({ job: job({ state: 'failed', phase: 'full', imported_conversations: 0, error_code: 'freshdesk_key_rejected' }) });
+  expect(screen.queryByRole('button', { name: 'Undo import' })).not.toBeInTheDocument();
+});
+
+test('a wrong address is pointed at on its field', () => {
+  page();
+  fireEvent.change(screen.getByLabelText('Freshdesk address'), { target: { value: 'acme.zendesk.com' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Read account' }));
+  const field = screen.getByLabelText('Freshdesk address');
+  expect(field).toHaveAttribute('aria-invalid', 'true');
+  expect(field).toHaveFocus();
+  expect(field).toHaveAccessibleDescription(/<account>.freshdesk.com/);
+  fireEvent.change(field, { target: { value: 'acme.freshdesk.com' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Read account' }));
+  expect(screen.getByLabelText('API key of a Freshdesk admin')).toHaveAttribute('aria-invalid', 'true');
 });

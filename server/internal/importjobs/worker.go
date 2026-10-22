@@ -231,6 +231,10 @@ func (r *jobRun) onProgress(event freshdesk.ProgressEvent) {
 	progress := Progress{Step: event.Phase, Done: event.Done, Total: event.Total, APICalls: event.APICalls, UpdatedAt: now}
 	if event.RateLimitUntil != nil {
 		progress.RateLimitUntil = event.RateLimitUntil
+		// A wait says nothing about the counts: the step keeps the ones it had.
+		if r.latest != nil && r.latest.Step == event.Phase {
+			progress.Done, progress.Total = r.latest.Done, r.latest.Total
+		}
 	} else if r.latest != nil && r.latest.RateLimitUntil != nil && r.latest.RateLimitUntil.After(now) && r.latest.Step == event.Phase {
 		progress.RateLimitUntil = r.latest.RateLimitUntil
 	}

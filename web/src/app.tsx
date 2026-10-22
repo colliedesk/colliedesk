@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { Link, Navigate, Outlet, createRootRoute, redirect, createRoute, createRouter, useRouterState } from '@tanstack/react-router';
+import { Link, Navigate, Outlet, createRootRoute, redirect, createRoute, createRouter, useRouterState, useNavigate } from '@tanstack/react-router';
 import { api, UnauthorizedError } from './api/client';
 import { ContactsPart } from './features/contacts/contact-part';
 import { InboxRoute } from './features/inbox/inbox-route';
@@ -190,7 +190,9 @@ const importRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings/import-freshdesk',
   component: function Import() {
-    return <Part part={importRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ImportRoute }) => <ImportRoute />} />;
+    const navigate = useNavigate();
+    return <Part part={importRoutePart} failed={<main className="settings-page"><PartUnavailable /></main>} render={({ ImportRoute }) => <ImportRoute onOpenInbox={() => void navigate({ to: '/' })}
+      onOpenBilling={() => void navigate({ to: '/settings/billing', search: { checkout: '' } })} />} />;
   },
 });
 const signInRoute = createRoute({

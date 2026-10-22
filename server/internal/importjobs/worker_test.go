@@ -522,3 +522,43 @@ func TestAnUndoReportsWhatItRemovedInMarkdownToo(t *testing.T) {
 		t.Fatalf("markdown = %v (%v, %v)", markdown, ok, err)
 	}
 }
+
+func TestAWaitForTheRateLimitKeepsTheCountsOfTheStep(t *testing.T) {
+	e := newEnv(t, true)
+	job := e.started(t)
+	w := e.worker(t, e.keys)
+	until := time.Now().Add(time.Minute).UTC()
+	importjobs.StubImporter(w, func(ctx context.Context, o freshdesk.Options) (*freshdesk.Report, error) {
+		o.OnProgress(freshdesk.ProgressEvent{Phase: "importing tickets", Done: 72, Total: 300, APICalls: 200})
+		o.OnProgress(freshdesk.ProgressEvent{Phase: "importing tickets", RateLimitUntil: &until, APICalls: 201})
+		time.Sleep(50 * time.Millisecond)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}, nil, nil)
+	ctx, stop := context.WithCancel(context.Background())
+	if err := w.Tick(ctx); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(120 * time.Millisecond)
+	got := e.get(t, job.ID)
+	stop()
+	w.Wait()
+	if p := got.Progress; p == nil || p.Done != 72 || p.Total != 300 || p.RateLimitUntil == nil {
+		t.Fatalf("progress = %+v", p)
+	}
+}
+
+func TestAnImportThatStopsSaysHowManyConversationsItBroughtIn(t *testing.T) {
+	e := newEnv(t, true)
+	job := e.started(t)
+	e.exec(t, `INSERT INTO import_items(workspace_id,source,entity,source_id,status) SELECT $1,'freshdesk:account:777','ticket',n::text,'done' FROM generate_series(1,7) n`, e.a.id)
+	e.exec(t, `INSERT INTO import_items(workspace_id,source,entity,source_id,status) VALUES($1,'freshdesk:account:777','ticket','8','failed')`, e.a.id)
+	w := e.worker(t, e.keys)
+	importjobs.StubImporter(w, func(context.Context, freshdesk.Options) (*freshdesk.Report, error) {
+		return nil, freshdesk.ErrKeyRejected
+	}, nil, nil)
+	tick(t, w)
+	if got := e.get(t, job.ID); got.ImportedConversations == nil || *got.ImportedConversations != 7 {
+		t.Fatalf("imported conversations = %v", got.ImportedConversations)
+	}
+}
