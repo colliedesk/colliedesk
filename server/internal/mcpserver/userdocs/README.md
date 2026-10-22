@@ -9,6 +9,7 @@ Running Colliedesk on your own server? Install, email delivery, configuration an
 - [Sign in without passwords](sign-in.md)
 - [Invite your team](invites.md)
 - [Manage your team](team.md)
+- [Workspace name](workspace.md)
 - [Work the inbox](inbox.md)
 - [Customers (contacts)](contacts.md)
 - [Email channel](email-channel.md)

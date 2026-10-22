@@ -624,6 +624,23 @@ export interface paths {
         patch: operations["updateWorkspaceTimezone"];
         trace?: never;
     };
+    "/api/v1/workspace/name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description Rename the workspace. The name labels the workspace for the team (the workspace switcher, Settings); customers never see it: every email channel keeps its own `sender_name`. Spaces at the ends are removed; a name is 1 to 100 characters without line breaks or other control characters (400 otherwise). */
+        patch: operations["updateWorkspaceName"];
+        trace?: never;
+    };
     "/api/v1/workspace/slug": {
         parameters: {
             query?: never;
@@ -4751,6 +4768,36 @@ export interface operations {
         };
         responses: {
             /** @description Updated workspace timezone */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workspace"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
+    updateWorkspaceName: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Renamed workspace */
             200: {
                 headers: {
                     [name: string]: unknown;

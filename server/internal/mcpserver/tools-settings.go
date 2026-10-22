@@ -89,6 +89,18 @@ func workspaceSettingsUpdate(c *call, arguments map[string]any) (any, error) {
 	return map[string]any{"workspace": workspace}, nil
 }
 
+func workspaceRename(c *call, arguments map[string]any) (any, error) {
+	var workspace struct {
+		Name     string `json:"name"`
+		Slug     string `json:"slug"`
+		Timezone string `json:"timezone"`
+	}
+	if err := c.send(http.MethodPatch, "/api/v1/workspace/name", map[string]any{"name": arguments["name"]}, &workspace); err != nil {
+		return nil, err
+	}
+	return map[string]any{"workspace": workspace}, nil
+}
+
 func myTimezoneSet(c *call, arguments map[string]any) (any, error) {
 	var agent struct {
 		TimezoneOverride *string `json:"timezone_override"`

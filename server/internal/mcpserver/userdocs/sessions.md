@@ -35,7 +35,7 @@ it, create a new token and revoke the old one. The agent sends it as `Authorizat
 | `read` | Read conversations, messages, contacts, tags, saved replies and the team list, and see the session and invite lists and the email channel and web form settings. No answer ever holds an invite link, a token or the inbound email secret. |
 | `draft` | Everything in `read`, plus change status, priority, assignee and tags of one conversation or several at once, create a tag, add private notes, and set your own timezone. Nothing reaches a customer. |
 | `send` | Everything in `draft`, plus send replies to customers, retry a failed reply, rename and delete tags, create contacts and conversations, and create, edit, delete and restore [saved replies](saved-replies.md#ai-agents) |
-| `admin` | Everything in `send`, plus change the workspace timezone, deactivate and reactivate agents, revoke invites, set up the web form and the email channel, verify the email domain (10 times an hour), read the plan, revoke agent tokens, and sign out your own devices. Only an admin can create it. |
+| `admin` | Everything in `send`, plus change the workspace name and timezone, deactivate and reactivate agents, revoke invites, set up the web form and the email channel, verify the email domain (10 times an hour), read the plan, revoke agent tokens, and sign out your own devices. Only an admin can create it. |
 
 Start with `read` or `draft`. Give `admin` only to an agent you trust to run the workspace.
 

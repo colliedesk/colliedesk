@@ -29,6 +29,8 @@ API changes in the email view (the full notes will be on the releases page):
   Reply-To lines of every reply. `PUT /channels/email` takes it as an optional field (1 to 100
   characters, no control characters). The upgrade sets each existing channel to its workspace name, so
   mail does not change until an admin edits it; replies no longer use the workspace name.
+- New route `PATCH /workspace/name` (admin) renames the workspace: 1 to 100 characters, no control
+  characters. It does not change any email channel's `sender_name`.
 
 ## 0.0.1
 

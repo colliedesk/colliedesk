@@ -40,6 +40,17 @@ func TestAdminTierRunsTheWorkspaceThroughTheTools(t *testing.T) {
 	if got := e.ok(session, "colliedesk_workspace_settings_get", nil); at(t, got, "workspace", "timezone") != "Europe/Berlin" || got["your_timezone"] != "Europe/Berlin" {
 		t.Fatalf("settings = %v", got)
 	}
+	workspaceRenamed := e.ok(session, "colliedesk_workspace_rename", map[string]any{"name": " Settings Tools Renamed "})
+	if at(t, workspaceRenamed, "workspace", "name") != "Settings Tools Renamed" || at(t, workspaceRenamed, "workspace", "timezone") != "Europe/Berlin" {
+		t.Fatalf("workspace rename = %v", workspaceRenamed)
+	}
+	if got := e.ok(session, "colliedesk_workspace_settings_get", nil); at(t, got, "workspace", "name") != "Settings Tools Renamed" {
+		t.Fatalf("settings after rename = %v", got)
+	}
+	if message := e.fails(session, "colliedesk_workspace_rename", map[string]any{"name": "Two\nlines"}); !strings.Contains(message, "name") {
+		t.Errorf("a workspace name with a line break: %q", message)
+	}
+	e.ok(session, "colliedesk_workspace_rename", map[string]any{"name": "Settings Tools Desk"})
 	if mine := e.ok(session, "colliedesk_my_timezone_set", map[string]any{"timezone": "Asia/Tokyo"}); mine["your_timezone"] != "Asia/Tokyo" {
 		t.Fatalf("my timezone = %v", mine)
 	}

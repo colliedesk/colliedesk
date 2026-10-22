@@ -162,6 +162,7 @@ func TestSettingsRequestsSayWhatChangesFromWhatToWhat(t *testing.T) {
 		want         []string
 	}{
 		{http.MethodPatch, "/api/v1/workspace/timezone", map[string]any{"timezone": "Asia/Tokyo"}, []string{"workspace timezone", "UTC → Asia/Tokyo"}},
+		{http.MethodPatch, "/api/v1/workspace/name", map[string]any{"name": "Summary Desk"}, []string{"workspace name", "Settings Summary → Summary Desk"}},
 		{http.MethodPatch, "/api/v1/agents/" + agentID, map[string]any{"active": false}, []string{"agent@settings-summary.example.com", "deactivate"}},
 		{http.MethodPost, "/api/v1/auth/invites", map[string]any{"email": "new@settings-summary.example.com", "role_ceiling": "agent"}, []string{"new@settings-summary.example.com", "agent"}},
 		{http.MethodDelete, "/api/v1/auth/invites/" + inviteID, nil, []string{"pending@settings-summary.example.com"}},

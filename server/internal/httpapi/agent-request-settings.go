@@ -19,6 +19,7 @@ import (
 // be refused on approval anyway.
 var settingsFields = map[string][]string{
 	"PATCH /api/v1/workspace/timezone":                {"timezone"},
+	"PATCH /api/v1/workspace/name":                    {"name"},
 	"PATCH /api/v1/agents/me/timezone":                {"timezone"},
 	"PATCH /api/v1/agents/me/display-name":            {"display_name"},
 	"PATCH /api/v1/agents/{id}":                       {"display_name", "role", "active", "reassign_to"},
@@ -55,6 +56,7 @@ func settingsBodyProblem(route Route, body json.RawMessage) string {
 func (a *API) summarizeSettingsRequest(ctx context.Context, request *http.Request, route Route, who auth.Principal, body json.RawMessage) string {
 	var call struct {
 		Timezone       *string  `json:"timezone"`
+		Name           *string  `json:"name"`
 		DisplayName    *string  `json:"display_name"`
 		Role           *string  `json:"role"`
 		Active         *bool    `json:"active"`
@@ -71,6 +73,8 @@ func (a *API) summarizeSettingsRequest(ctx context.Context, request *http.Reques
 	switch route.Method + " " + route.Pattern {
 	case "PATCH /api/v1/workspace/timezone":
 		return fmt.Sprintf("Change the workspace timezone: %s → %s", who.Workspace.Timezone, orNone(call.Timezone, "(none)"))
+	case "PATCH /api/v1/workspace/name":
+		return fmt.Sprintf("Change the workspace name: %s → %s", who.Workspace.Name, orNone(call.Name, "(none)"))
 	case "PATCH /api/v1/agents/me/timezone":
 		before := "the workspace timezone"
 		if who.Agent.TimezoneOverride != nil {

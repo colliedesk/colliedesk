@@ -62,6 +62,20 @@ func workspaceSettingsUpdateSpec() Spec {
 	}
 }
 
+func workspaceRenameSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_workspace_rename",
+		Title: "Rename the workspace",
+		Description: `Set the workspace name the team sees (1 to 100 characters, no line breaks). Customers never see it: each email channel sends with its own sender name ` +
+			`(colliedesk_email_channel_update), and renaming the workspace does not change it. It is safe to repeat. ` + belowAdmin + "\n\nTier: admin.",
+		Tier: "admin", Idempotent: true,
+		REST:   []string{"PATCH /api/v1/workspace/name"},
+		Input:  `{"type":"object","additionalProperties":false,"required":["name"],"properties":{"name":{"type":"string","minLength":1,"maxLength":100,"description":"Spaces at the ends are removed."}}}`,
+		Output: `{"type":"object","required":["workspace"],"properties":{"workspace":{"type":"object","properties":{"name":{"type":"string"},"slug":{"type":"string"},"timezone":{"type":"string"}}}}}`,
+		run:    workspaceRename,
+	}
+}
+
 func myTimezoneSetSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_my_timezone_set",

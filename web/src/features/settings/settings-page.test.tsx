@@ -152,7 +152,8 @@ test('a chosen workspace timezone is saved when the list is left, no Save button
   fireEvent.change(select, { target: { value: 'America/New_York' } });
   fireEvent.blur(select);
   expect(onSetWorkspaceTimezone).toHaveBeenCalledWith('America/New_York');
-  expect(within(general).queryByRole('button')).not.toBeInTheDocument();
+  // The only button in General saves the workspace name; the timezone needs none.
+  expect(within(general).getAllByRole('button').map((button) => button.textContent)).toEqual(['Save workspace name']);
 });
 
 test('your timezone follows the workspace until you choose one, and choosing the workspace again clears it', () => {

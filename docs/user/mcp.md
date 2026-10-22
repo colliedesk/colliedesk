@@ -19,7 +19,7 @@ private notes for your team. With a `send` token it can also reply to customers.
 | `read` | Search the inbox, follow what changed, read conversations, attachments, logged time and customers, list tags and team members, read saved replies with their history and trash, and see the workspace settings, invites, sessions, and the email and web form settings. No answer holds an invite link, a token or the inbound email secret. |
 | `draft` | Everything in `read`, plus change status, priority, assignee and tags of one or many conversations (a tag name that does not exist yet is created), add private notes, and set your own timezone. Nothing reaches a customer. |
 | `send` | Everything in `draft`, plus reply to customers, retry a failed reply, open conversations, add customers, rename or delete tags, and create, edit, delete and restore saved replies. With `read` or `draft`, a saved reply change is a proposal a person approves. |
-| `admin` | Everything in `send`, plus change the workspace timezone, deactivate and reactivate agents, revoke invites, revoke agent tokens and its owner's own sign-ins, set up the web form and the email channel, verify the email domain, and read the plan. It acts with the role of the admin who created it. |
+| `admin` | Everything in `send`, plus change the workspace name and timezone, deactivate and reactivate agents, revoke invites, revoke agent tokens and its owner's own sign-ins, set up the web form and the email channel, verify the email domain, and read the plan. It acts with the role of the admin who created it. |
 
 A tool used above its tier does not fail: Colliedesk files the call as an
 [agent request](agent-requests.md) that a person approves in **Requests**, and the tool answers
@@ -138,6 +138,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_workspace_slug_change_request` | Asks to change the workspace address | `read` |
 | `colliedesk_workspace_settings_get` | Shows the workspace name, address and timezone, and your own timezone | `read` |
 | `colliedesk_workspace_settings_update` | Sets the workspace timezone | `admin` |
+| `colliedesk_workspace_rename` | Renames the workspace (customers never see this name) | `admin` |
 | `colliedesk_my_timezone_set` | Sets or clears your own timezone | `draft` |
 | `colliedesk_my_display_name_set` | Sets or clears your own display name | `draft` |
 | `colliedesk_team_member_update` | Renames, deactivates or reactivates an agent; making someone an admin or changing an admin always waits for approval | `admin` |

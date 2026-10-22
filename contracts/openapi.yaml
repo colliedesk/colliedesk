@@ -1234,6 +1234,31 @@ paths:
         '400': {$ref: '#/components/responses/BadRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
+  /api/v1/workspace/name:
+    patch:
+      operationId: updateWorkspaceName
+      x-permission: access:write
+      description: >
+        Rename the workspace. The name labels the workspace for the team (the workspace switcher, Settings);
+        customers never see it: every email channel keeps its own `sender_name`. Spaces at the ends are
+        removed; a name is 1 to 100 characters without line breaks or other control characters (400 otherwise).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string, minLength: 1, maxLength: 100}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: Renamed workspace
+          content: {application/json: {schema: {$ref: '#/components/schemas/Workspace'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/workspace/slug:
     patch:
       operationId: updateWorkspaceSlug

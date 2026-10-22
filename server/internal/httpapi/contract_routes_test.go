@@ -178,6 +178,7 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"DELETE /api/v1/contacts/{id}/merges/{mergeId}":              {"/api/v1/contacts/" + f.contactID + "/merges/" + f.undoMergeID, nil, admin, 200, ""},
 		"GET /api/v1/agents":                                         {"/api/v1/agents", nil, admin, 200, ""},
 		"PATCH /api/v1/workspace/timezone":                           {"/api/v1/workspace/timezone", map[string]any{"timezone": "UTC"}, admin, 200, ""},
+		"PATCH /api/v1/workspace/name":                               {"/api/v1/workspace/name", map[string]any{"name": "Contract Desk"}, admin, 200, ""},
 		"PATCH /api/v1/workspace/slug":                               {"/api/v1/workspace/slug", map[string]any{"slug": "contract-desk"}, admin, 200, ""},
 		"PATCH /api/v1/agents/me/timezone":                           {"/api/v1/agents/me/timezone", map[string]any{"timezone": "UTC"}, admin, 200, ""},
 		"PATCH /api/v1/agents/me/display-name":                       {"/api/v1/agents/me/display-name", map[string]any{"display_name": "Contract Admin"}, admin, 200, ""},

@@ -163,6 +163,7 @@ var requestTitles = map[string]string{
 	"DELETE " + gmailPath:                                        "Disconnect Gmail",
 	"PATCH /api/v1/workspace/slug":                               "Change the workspace address",
 	"PATCH /api/v1/workspace/timezone":                           "Change the workspace timezone",
+	"PATCH /api/v1/workspace/name":                               "Rename the workspace",
 	"PATCH /api/v1/agents/me/timezone":                           "Change my timezone",
 	"PATCH /api/v1/agents/me/display-name":                       "Change my display name",
 	"PATCH /api/v1/agents/{id}":                                  "Change a team member",

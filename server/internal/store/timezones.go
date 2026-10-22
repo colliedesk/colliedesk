@@ -30,6 +30,19 @@ func (s *Store) UpdateWorkspaceSlug(ctx context.Context, workspaceID, slug strin
 	return workspace, nil
 }
 
+// UpdateWorkspaceName renames the workspace. Email channels keep their own sender names.
+func (s *Store) UpdateWorkspaceName(ctx context.Context, workspaceID, name string) (domain.Workspace, error) {
+	var workspace domain.Workspace
+	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `UPDATE workspaces SET name=$2 WHERE id=$1 RETURNING id::text,slug,name,timezone`, workspaceID, name).
+			Scan(&workspace.ID, &workspace.Slug, &workspace.Name, &workspace.Timezone)
+	})
+	if err != nil {
+		return domain.Workspace{}, fmt.Errorf("update workspace name: %w", err)
+	}
+	return workspace, nil
+}
+
 func (s *Store) UpdateWorkspaceTimezone(ctx context.Context, workspaceID, timezone string) (domain.Workspace, error) {
 	var workspace domain.Workspace
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
