@@ -35,7 +35,8 @@ test('lists only published articles, searches them on the server, and Enter pick
   fireEvent.keyDown(search, { key: 'Enter' });
   expect(onPick).toHaveBeenCalledExactlyOnceWith('Refund steps\nhttps://desk.example.com/help/acme/a/8-refund-steps');
   const lists = calls.filter((call) => call.path === '/api/v1/kb/articles');
-  expect(lists.every((call) => call.search.get('status') === 'published')).toBe(true);
+  // Without a search they come in the help center's order, the one the team set by hand.
+  expect(lists.every((call) => call.search.get('status') === 'published' && call.search.get('sort') === 'manual')).toBe(true);
   expect(lists.map((call) => call.search.get('q'))).toEqual([null, 'refund']);
 });
 

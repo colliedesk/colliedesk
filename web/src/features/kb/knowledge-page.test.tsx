@@ -124,3 +124,89 @@ test('while the help center is on, a published article opens on its public page'
   expect(link).toHaveAttribute('href', summary(1, 'Reset your password', 'published').url);
   expect(screen.queryByText('The help center is off.')).not.toBeInTheDocument();
 });
+
+test('a collection lists its articles in their order, and the buttons send a new one', async () => {
+  const [reset, teammate] = [summary(1, 'Reset your password', 'published'), summary(2, 'Add a teammate')];
+  const sent: { article_ids: string[] }[] = [];
+  let listed = [reset, teammate];
+  serve({
+    ...base,
+    'GET /api/v1/kb/articles': () => json(200, { items: listed, next_cursor: null }),
+    'PUT /api/v1/kb/order': (call) => {
+      const body = call.body as { article_ids: string[] };
+      sent.push(body);
+      if (body.article_ids.length) listed = body.article_ids.map((id) => [reset, teammate].find((item) => item.id === id)!);
+      return json(200, body);
+    },
+  });
+  const show = open({ collection: ids.setup });
+  fireEvent.click(await screen.findByRole('button', { name: 'Move Reset your password down' }));
+  // Setup holds Email too: the order names everything directly in it.
+  await waitFor(() => expect(sent).toEqual([{ parent_id: ids.setup, collection_ids: [ids.deep], article_ids: [teammate.id, reset.id] }]));
+  expect(await screen.findByText('Moved Reset your password to place 2 of 2.')).toHaveAttribute('aria-live', 'polite');
+  expect(await screen.findByRole('button', { name: 'Move Reset your password up' })).toHaveFocus();
+  expect(screen.queryByRole('button', { name: 'Move Reset your password down' })).not.toBeInTheDocument();
+  // The collection itself moves among the collections beside it; Setup has none.
+  expect(screen.queryByRole('button', { name: 'Move Setup up' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Move Setup down' })).not.toBeInTheDocument();
+  show({ collection: ids.billing });
+  fireEvent.click(await screen.findByRole('button', { name: 'Move Billing up' }));
+  await waitFor(() => expect(sent).toHaveLength(2));
+  expect(sent[1]).toEqual({ parent_id: null, collection_ids: [ids.billing, ids.guides], article_ids: [] });
+  // A filtered or searched list is not the whole order, and All articles has none: no buttons there.
+  show({ collection: ids.setup, status: 'draft' });
+  await screen.findByRole('heading', { name: 'Setup' });
+  expect(screen.queryByRole('button', { name: /^Move Reset your password/ })).not.toBeInTheDocument();
+  show({});
+  await screen.findByRole('link', { name: /Reset your password/ });
+  expect(screen.queryByRole('button', { name: /^Move / })).not.toBeInTheDocument();
+});
+
+const titled = (n: number, collectionId: string) => ({ ...summary(n, `Article ${n}`), collection_id: collectionId });
+
+test('moving a collection sends its parent\'s articles read in full, in one request', async () => {
+  const phone = '99999999-9999-4999-8999-999999999999';
+  const tree = [collection(ids.guides, 'Guides', null, 0), collection(ids.setup, 'Setup', ids.guides, 3), collection(ids.deep, 'Email', ids.setup), collection(phone, 'Phone', ids.setup)];
+  const [first, second, third] = [1, 2, 3].map((n) => titled(n, ids.setup));
+  const sent: unknown[] = [];
+  serve({
+    ...base,
+    'GET /api/v1/kb/collections': () => json(200, { items: tree }),
+    // Setup's articles come in two pages: the order must name all three.
+    'GET /api/v1/kb/articles': (call) => call.search.get('collection_id') !== ids.setup ? json(200, { items: [], next_cursor: null })
+      : call.search.get('cursor') === 'next' ? json(200, { items: [third], next_cursor: null }) : json(200, { items: [first, second], next_cursor: 'next' }),
+    'PUT /api/v1/kb/order': (call) => { sent.push(call.body); return json(200, call.body); },
+  });
+  open({ collection: ids.deep });
+  fireEvent.click(await screen.findByRole('button', { name: 'Move Email down' }));
+  expect(await screen.findByText('Moved Email to place 2 of 2.')).toBeInTheDocument();
+  expect(sent).toEqual([{ parent_id: ids.setup, collection_ids: [phone, ids.deep], article_ids: [first.id, second.id, third.id] }]);
+});
+
+test('a row moved down past the loaded page is loaded and keeps the focus', async () => {
+  const rows = [1, 2, 3].map((n) => titled(n, ids.setup));
+  let order = rows.map((row) => row.id);
+  const sent: unknown[] = [];
+  const byId = (id: string) => rows.find((row) => row.id === id)!;
+  serve({
+    ...base,
+    // Two rows a page, as 50 are on the real one; limit=200 reads the whole collection.
+    'GET /api/v1/kb/articles': (call) => {
+      if (call.search.get('limit') === '200') return json(200, { items: order.map(byId), next_cursor: null });
+      return call.search.get('cursor') === 'next' ? json(200, { items: order.slice(2).map(byId), next_cursor: null })
+        : json(200, { items: order.slice(0, 2).map(byId), next_cursor: 'next' });
+    },
+    'PUT /api/v1/kb/order': (call) => {
+      sent.push(call.body);
+      order = (call.body as { article_ids: string[] }).article_ids;
+      return json(200, call.body);
+    },
+  });
+  open({ collection: ids.setup });
+  const down = await screen.findByRole('button', { name: 'Move Article 2 down' });
+  down.focus();
+  fireEvent.click(down);
+  expect(await screen.findByText('Moved Article 2 to place 3 of 3.')).toBeInTheDocument();
+  expect(sent).toEqual([{ parent_id: ids.setup, collection_ids: [ids.deep], article_ids: [rows[0].id, rows[2].id, rows[1].id] }]);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Move Article 2 up' })).toHaveFocus());
+});

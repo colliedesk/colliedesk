@@ -25,8 +25,9 @@ const (
 	kbUpdatedAtProperty    = `"updated_at":{"type":"string","format":"date-time","maxLength":40,"description":"The updated_at as you last read it. If someone saved it since, nothing changes and you are told to read it again."}`
 	kbSlugProperty         = `"slug":{"type":"string","minLength":1,"maxLength":120,"description":"Lowercase letters and digits of any script joined by hyphens. Changing it changes the help center address; old addresses are not redirected."}`
 
-	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","status","slug","published_at","updated_at","last_change","url","team_text"],"properties":{` +
+	kbArticleRowSchema = `{"type":"object","required":["id","number","collection_id","position","status","slug","published_at","updated_at","last_change","url","team_text"],"properties":{` +
 		`"id":{"type":"string"},"number":{"type":"integer","description":"Never changes; the help center address is /a/<number>-<slug>."},"collection_id":{"type":"string"},` +
+		`"position":{"type":"integer","description":"Its place in its collection, set with colliedesk_kb_order_set; 0 until the collection is ordered by hand (then by title)."},` +
 		`"status":{"type":"string","enum":["draft","published"]},"slug":{"type":"string"},"published_at":{"type":["string","null"]},"updated_at":{"type":"string"},` +
 		`"last_change":` + savedReplyChangeSchema + `,"url":{"type":"string","description":"` + kbURLDescription + `"},"team_text":{"type":"object","required":["title"],"properties":{"title":{"type":"string"}}}}}`
 
@@ -85,7 +86,8 @@ func kbCollectionCreateSpec() Spec {
 		Tier: "send",
 		REST: []string{"POST /api/v1/kb/collections"},
 		Input: `{"type":"object","additionalProperties":false,"required":["name"],"properties":{"name":{"type":"string","minLength":1,"maxLength":200},` + kbSlugProperty + `,` +
-			`"description":{"type":"string","maxLength":2000},"parent_id":{"type":"string",` + uuid + `},"position":{"type":"integer","minimum":0,"maximum":1000000}}}`,
+			`"description":{"type":"string","maxLength":2000},"parent_id":{"type":"string",` + uuid + `},"position":{"type":"integer","minimum":0,"maximum":1000000,` +
+			`"description":"Its place among its siblings. Left out or 0: after the last sibling once they were ordered by hand (colliedesk_kb_order_set), else by name."}}}`,
 		Output: kbCollectionOutput,
 		run:    kbCollectionCreate,
 	}
@@ -140,14 +142,15 @@ func kbArticlesSearchSpec() Spec {
 		Name:  "colliedesk_kb_articles_search",
 		Title: "Search knowledge base articles",
 		Description: `List or search the articles outside the trash, without their text, one page at a time. With query, articles whose title or text hold every word of it as a word or the start of one ` +
-			`(or whose title holds it) come first by relevance; without it the most recently updated come first. Filter by status or collection_id. ` +
+			`(or whose title holds it) come first by relevance. Without it the order is sort: recent (most recently updated first) or manual (the help center's order, set with colliedesk_kb_order_set; ` +
+			`collections in their order, each with its own articles before those of its collections). With collection_id the default is manual, otherwise recent. Filter by status or collection_id. ` +
 			`Words are matched with no language rules: a word inside another word, or text in scripts written without spaces (Chinese, Japanese, Thai), is found only where it starts a word or in the title. ` +
 			`Read one whole with colliedesk_kb_article_get. For the next page pass next_cursor as cursor. ` +
 			`Each article has its public address (url); to link one in a reply, search with status published.` + "\n\n" + kbTextNotice + "\n\nTier: read.",
 		Tier: "read", ReadOnly: true,
 		REST: []string{"GET /api/v1/kb/articles"},
 		Input: `{"type":"object","additionalProperties":false,"properties":{"query":{"type":"string","maxLength":200},"status":{"type":"string","enum":["draft","published"]},` +
-			`"collection_id":{"type":"string",` + uuid + `},` + pageLimitProperty + `,"cursor":{"type":"string","maxLength":200,"description":"The next_cursor of the previous page."}}}`,
+			`"collection_id":{"type":"string",` + uuid + `},"sort":{"type":"string","enum":["recent","manual"]},` + pageLimitProperty + `,"cursor":{"type":"string","maxLength":200,"description":"The next_cursor of the previous page."}}}`,
 		Output: `{"type":"object","required":["articles","next_cursor"],"properties":{"articles":{"type":"array","items":` + kbArticleRowSchema + `},` +
 			`"next_cursor":{"type":["string","null"],"description":"Null on the last page."}}}`,
 		run: kbArticlesSearch,

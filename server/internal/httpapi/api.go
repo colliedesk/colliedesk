@@ -332,6 +332,7 @@ func Routes() []Route {
 		{http.MethodPatch, "/api/v1/kb/collections/{id}", auth.PermissionConversationsWrite},
 		{http.MethodDelete, "/api/v1/kb/collections/{id}", auth.PermissionConversationsWrite},
 		{http.MethodPost, "/api/v1/kb/collections/{id}/restore", auth.PermissionConversationsWrite},
+		{http.MethodPut, "/api/v1/kb/order", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/kb/articles", auth.PermissionConversationsRead},
 		{http.MethodPost, "/api/v1/kb/articles", auth.PermissionConversationsWrite},
 		{http.MethodGet, "/api/v1/kb/articles/trash", auth.PermissionConversationsRead},

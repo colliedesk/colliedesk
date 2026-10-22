@@ -187,13 +187,58 @@ func (a *API) restoreKBCollection(response http.ResponseWriter, request *http.Re
 	writeJSON(response, http.StatusOK, collection)
 }
 
+// setKBOrder puts the collections and articles directly under one parent in the order given.
+func (a *API) setKBOrder(response http.ResponseWriter, request *http.Request) {
+	var input struct {
+		ParentID      json.RawMessage `json:"parent_id"`
+		CollectionIDs *[]string       `json:"collection_ids"`
+		ArticleIDs    *[]string       `json:"article_ids"`
+	}
+	if err := decodeJSON(request, &input); err != nil || input.ParentID == nil || input.CollectionIDs == nil || input.ArticleIDs == nil {
+		writeError(response, http.StatusBadRequest, "invalid_request",
+			"Send parent_id (null for the top), collection_ids and article_ids: everything directly under that parent, first to last.")
+		return
+	}
+	order := domain.KBOrder{CollectionIDs: *input.CollectionIDs, ArticleIDs: *input.ArticleIDs}
+	if string(input.ParentID) != "null" {
+		var parent string
+		if err := json.Unmarshal(input.ParentID, &parent); err != nil {
+			writeError(response, http.StatusBadRequest, "invalid_request", "parent_id is a collection id, or null for the top.")
+			return
+		}
+		order.ParentID = &parent
+	}
+	order, err := a.store.SetKBOrder(request.Context(), principal(request).Workspace.ID, order)
+	var stale *domain.KBOrderStaleError
+	if errors.As(err, &stale) {
+		writeJSON(response, http.StatusConflict, map[string]any{"error": errorBody(response, map[string]any{"code": "order_stale",
+			"message":        "Something was added, moved or deleted here since you read it. Nothing changed; read the order again and send it whole.",
+			"collection_ids": stale.Current.CollectionIDs, "article_ids": stale.Current.ArticleIDs})})
+		return
+	}
+	if errors.Is(err, domain.ErrKBCollectionNotFound) {
+		writeError(response, http.StatusNotFound, "not_found", "The parent collection was not found, or it is in the trash.")
+		return
+	}
+	if err != nil {
+		writeKBError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, order)
+}
+
 func (a *API) listKBArticles(response http.ResponseWriter, request *http.Request) {
 	limit, ok := savedReplyPage(response, request)
 	if !ok {
 		return
 	}
 	query := request.URL.Query()
-	filter := store.KBArticleFilter{Query: query.Get("q"), Status: query.Get("status"), CollectionID: query.Get("collection_id"), Limit: limit, Cursor: query.Get("cursor")}
+	filter := store.KBArticleFilter{Query: query.Get("q"), Status: query.Get("status"), CollectionID: query.Get("collection_id"), Sort: query.Get("sort"),
+		Limit: limit, Cursor: query.Get("cursor")}
+	if filter.Sort != "" && filter.Sort != store.KBSortRecent && filter.Sort != store.KBSortManual {
+		writeError(response, http.StatusBadRequest, "invalid_request", "sort is recent or manual.")
+		return
+	}
 	if len([]rune(filter.Query)) > 200 {
 		writeError(response, http.StatusBadRequest, "invalid_request", "q holds at most 200 characters.")
 		return

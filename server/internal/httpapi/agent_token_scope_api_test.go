@@ -47,6 +47,7 @@ var routeTiers = map[string]string{
 	"PATCH /api/v1/kb/collections/{id}":                          "send",
 	"DELETE /api/v1/kb/collections/{id}":                         "send",
 	"POST /api/v1/kb/collections/{id}/restore":                   "send",
+	"PUT /api/v1/kb/order":                                       "send",
 	"GET /api/v1/kb/articles":                                    "read",
 	"POST /api/v1/kb/articles":                                   "send",
 	"GET /api/v1/kb/articles/trash":                              "read",

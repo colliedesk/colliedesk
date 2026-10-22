@@ -62,6 +62,13 @@ export const kbMessages = {
   slugChangeWarning: 'Changing the address name changes the help center addresses of this collection and the collections inside it. Old addresses are not redirected, so links to them stop working.',
   maxDepth: 'Collections go three levels deep.',
   collectionActionFailed: 'The collection could not be saved. Try again.',
+  moveUp: 'Move up',
+  moveDown: 'Move down',
+  moveNameUp: (name: string) => `Move ${name} up`,
+  moveNameDown: (name: string) => `Move ${name} down`,
+  moved: (name: string, place: number, total: number) => `Moved ${name} to place ${place} of ${total}.`,
+  moveFailed: (name: string) => `${name} could not be moved. Try again.`,
+  moveGone: (name: string) => `${name} is no longer in this list: someone else moved or deleted it.`,
   // Editor
   backToList: 'Knowledge base',
   newArticleHeading: 'New article',

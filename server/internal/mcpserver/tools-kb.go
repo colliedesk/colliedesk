@@ -51,6 +51,7 @@ type restKBArticle struct {
 	ID            string                `json:"id"`
 	Number        int64                 `json:"number"`
 	CollectionID  string                `json:"collection_id"`
+	Position      int                   `json:"position"`
 	Title         string                `json:"title"`
 	Slug          string                `json:"slug"`
 	Status        string                `json:"status"`
@@ -76,6 +77,7 @@ type kbArticleRowOut struct {
 	ID           string               `json:"id"`
 	Number       int64                `json:"number"`
 	CollectionID string               `json:"collection_id"`
+	Position     int                  `json:"position"`
 	Status       string               `json:"status"`
 	Slug         string               `json:"slug"`
 	PublishedAt  *string              `json:"published_at"`
@@ -89,7 +91,7 @@ type kbArticleRowOut struct {
 }
 
 func kbArticleRow(article restKBArticle) kbArticleRowOut {
-	out := kbArticleRowOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, Status: article.Status, Slug: article.Slug,
+	out := kbArticleRowOut{ID: article.ID, Number: article.Number, CollectionID: article.CollectionID, Position: article.Position, Status: article.Status, Slug: article.Slug,
 		PublishedAt: article.PublishedAt, UpdatedAt: article.UpdatedAt, LastChange: changeOut(article.LastChange), URL: article.URL, TeamText: kbTitle{article.Title}, PurgesAt: article.PurgesAt}
 	if article.DeletedAt != nil {
 		out.DeletedAt = *article.DeletedAt
@@ -256,6 +258,7 @@ func kbArticlesSearch(c *call, arguments map[string]any) (any, error) {
 		Query        string `json:"query"`
 		Status       string `json:"status"`
 		CollectionID string `json:"collection_id"`
+		Sort         string `json:"sort"`
 		Limit        int    `json:"limit"`
 		Cursor       string `json:"cursor"`
 	}](arguments)
@@ -263,7 +266,7 @@ func kbArticlesSearch(c *call, arguments map[string]any) (any, error) {
 		return nil, err
 	}
 	query := url.Values{}
-	for key, value := range map[string]string{"q": args.Query, "status": args.Status, "collection_id": args.CollectionID, "cursor": args.Cursor} {
+	for key, value := range map[string]string{"q": args.Query, "status": args.Status, "collection_id": args.CollectionID, "sort": args.Sort, "cursor": args.Cursor} {
 		if value != "" {
 			query.Set(key, value)
 		}

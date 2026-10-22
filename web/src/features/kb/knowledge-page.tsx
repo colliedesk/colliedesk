@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { api } from '../../api/client';
@@ -19,6 +20,8 @@ import { KBDialog, KBHead } from './kb-ui';
 import { Icon } from './editor/icons';
 import { buildTree, flatten, indent, maxDepth, reason } from './kb-tree';
 import type { TreeNode } from './kb-tree';
+import { OrderAnnouncement, OrderButtons, allArticleIds, useOrderMoves } from './order-buttons';
+import type { Step } from './order-buttons';
 
 export interface KnowledgeSearch {
   collection?: string;
@@ -105,6 +108,38 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
     }
   };
   const items = articles.data?.pages.flatMap((page) => page.items) ?? [];
+  // A collection's whole list, unfiltered, is its order: only then can a row move. A row that cannot be
+  // shown after its move leaves the focus on the list's heading.
+  const focusHeading = () => document.getElementById('kb-articles-heading')?.focus();
+  const moves = useOrderMoves(refresh, focusHeading);
+  const ordered = selected && !search.q && !search.status ? selected : undefined;
+  const articleIds = items.map((article) => article.id);
+  const parent = selected ? nodes.find((node) => node.collection.id === selected.collection.parent_id) : undefined;
+  const siblings = selected ? parent?.children ?? tree : [];
+  const siblingIds = siblings.map((node) => node.collection.id);
+  // An order names every article of the parent: the page has a collection's articles only while it is the
+  // one shown, and maybe a page of them, so the rest is read first (the top holds none, an empty parent
+  // needs no read). A list that went stale meanwhile is completed by the server's answer (sendMove).
+  const moveCollection = (node: TreeNode, step: Step) => moves.send(node.collection.parent_id, async () => ({
+    collection_ids: siblingIds,
+    article_ids: parent && parent.collection.article_count > 0 ? await allArticleIds(parent.collection.id) : [],
+  }), 'collection_ids', node.collection.id, step);
+  const moveArticle = async (collection: TreeNode, id: string, step: Step) => {
+    const loaded = articleIds.length;
+    const saved = await moves.send(collection.collection.id, async () => ({
+      collection_ids: collection.children.map((node) => node.collection.id),
+      article_ids: articles.hasNextPage ? await allArticleIds(collection.collection.id) : articleIds,
+    }), 'article_ids', id, step);
+    // Moved past the loaded rows: load the next page so the row (and the focus on it) comes back.
+    if (saved.indexOf(id) >= loaded) {
+      const next = await articles.fetchNextPage();
+      if (!next.data?.pages.some((page) => page.items.some((item) => item.id === id))) {
+        moves.focus.current = null;
+        focusHeading();
+      }
+    }
+    return saved;
+  };
   const names = new Map(nodes.map((node) => [node.collection.id, node.collection.name]));
   const noCollections = collections.isSuccess && nodes.length === 0;
   const total = nodes.reduce((sum, node) => sum + node.collection.article_count, 0);
@@ -127,6 +162,7 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
         <RouterLink className="button-link" href="/settings#help-center-heading" onFollow={() => void navigate({ to: '/settings', hash: 'help-center-heading' })}>{kbMessages.turnOnInSettings}</RouterLink>
       </div>}
       {trashOpen && <KBTrash timezone={timezone} onChanged={() => void refresh()} onClose={closeTrash} />}
+      <OrderAnnouncement message={moves.message} />
       <div className="kb-art-layout">
         <nav className="kb-collections" aria-labelledby="kb-collections-heading" data-form={form === 'new' || noCollections ? 'true' : undefined}>
           <div className="kb-collections-head">
@@ -139,10 +175,12 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
           {noCollections && <p className="muted-copy">{kbMessages.noCollections}</p>}
           {nodes.length > 0 && <div className="kb-tree-scroll"><CollectionTree tree={tree} total={total} selected={search.collection} onSelect={(collection) => setSearch({ collection: collection?.id })} /></div>}
         </nav>
-        <section className="kb-list" aria-labelledby="kb-articles-heading">
+        <section className="kb-list" aria-labelledby="kb-articles-heading" data-order={ordered ? 'true' : undefined}>
           {selected && <CollectionHead node={selected} tree={tree} form={form} confirming={confirming} problem={problem}
             onForm={(next) => { setProblem(undefined); setConfirming(false); setForm(next); }} onSave={save}
-            onConfirm={setConfirming} onDelete={() => void remove(selected.collection)} />}
+            onConfirm={setConfirming} onDelete={() => void remove(selected.collection)}
+            order={siblingIds.length > 1 && <OrderButtons text ids={siblingIds} id={selected.collection.id} name={selected.collection.name} busy={moves.moving} onAnnounce={moves.announce}
+              focus={moves.focus} onMove={(_next, step) => moveCollection(selected, step)} />} />}
           {!selected && <h2 id="kb-articles-heading" className="sr-only">{kbMessages.allArticles}</h2>}
           <div className="kb-list-tools" role="search">
             {nodes.length > 0 && <span className="kb-phone-collections">
@@ -166,15 +204,18 @@ export function KnowledgeRoute({ search }: { search: KnowledgeSearch }) {
               ))}
             </fieldset>
           </div>
-          <div className="kb-cols-head" aria-hidden="true"><span>{kbMessages.articleColumn}</span><span>{kbMessages.statusFilter}</span><span>{kbMessages.updatedColumn}</span><span /></div>
+          <div className="kb-cols-head" aria-hidden="true"><span>{kbMessages.articleColumn}</span><span>{kbMessages.statusFilter}</span><span>{kbMessages.updatedColumn}</span><span />{ordered && <span />}</div>
           <div className="kb-list-scroll">
             {articles.isError && <p role="alert" className="error-copy kb-list-note">{kbMessages.listFailed}{' '}
               <button type="button" className="link-action" onClick={() => void articles.refetch()}>{kbMessages.retry}</button></p>}
             {articles.isPending && <p role="status" className="empty-copy kb-list-note">{messages.loading}</p>}
             {articles.isSuccess && items.length === 0 && <p className="empty-copy kb-list-note">{search.q ? kbMessages.noMatches : kbMessages.noArticles}</p>}
-            {items.length > 0 && <ul className="kb-article-list" aria-busy={articles.isFetching && !articles.isFetchingNextPage} onPointerOver={editorPart.preload} onFocus={editorPart.preload}>
+            {items.length > 0 && <ul className="kb-article-list" aria-busy={articles.isFetching && !articles.isFetchingNextPage}
+              onPointerOver={editorPart.preload} onFocus={editorPart.preload}>
               {items.map((article) => <ArticleRow key={article.id} article={article} timezone={timezone} isPublic={publicNow}
                 collection={names.get(article.collection_id)}
+                order={ordered && <OrderButtons ids={articleIds} id={article.id} name={article.title} more={articles.hasNextPage} busy={moves.moving} onAnnounce={moves.announce}
+                  focus={moves.focus} onMove={(_next, step) => moveArticle(ordered, article.id, step)} />}
                 onOpen={() => void navigate({ to: '/knowledge/articles/$articleId', params: { articleId: article.id } })} />)}
               {articles.hasNextPage && <li className="kb-more-row"><button type="button" className="kb-more" disabled={articles.isFetchingNextPage} onClick={() => void articles.fetchNextPage()}>
                 {articles.isFetchingNextPage ? messages.loading : kbMessages.loadMore}</button></li>}
@@ -196,15 +237,17 @@ interface CollectionHeadProps {
   onSave: (values: CollectionValues) => Promise<unknown>;
   onConfirm: (confirming: boolean) => void;
   onDelete: () => void;
+  // order holds the buttons that move the collection among the ones beside it.
+  order?: ReactNode;
 }
 
 // CollectionHead names the chosen collection, with its description and what can be done to it.
-function CollectionHead({ node, tree, form, confirming, problem, onForm, onSave, onConfirm, onDelete }: CollectionHeadProps) {
+function CollectionHead({ node, tree, form, confirming, problem, onForm, onSave, onConfirm, onDelete, order }: CollectionHeadProps) {
   const { collection } = node;
   return (
     <div className="kb-collection-head">
       <div className="kb-collection-title">
-        <h2 id="kb-articles-heading">{collection.name}</h2>
+        <h2 id="kb-articles-heading" tabIndex={-1}>{collection.name}</h2>
         {collection.description && <p className="muted-copy">{collection.description}</p>}
       </div>
       {problem && <p role="alert" className="error-copy">{problem}</p>}
@@ -222,6 +265,7 @@ function CollectionHead({ node, tree, form, confirming, problem, onForm, onSave,
               ? <button type="button" aria-label={kbMessages.newSubcollectionOf(collection.name)} onClick={() => onForm('new-inside')}>{kbMessages.newSubcollection}</button>
               : <span className="kb-hint">{kbMessages.maxDepth}</span>}
             <button type="button" className="danger-action" aria-label={kbMessages.deleteCollectionName(collection.name)} onClick={() => onConfirm(true)}>{kbMessages.deleteCollection}</button>
+            {order}
           </div>}
       {form === 'edit' && <CollectionForm key={collection.updated_at} tree={tree} node={node} onSubmit={onSave} onCancel={() => onForm(null)} />}
       {form === 'new-inside' && <CollectionForm tree={tree} parentId={collection.id} onSubmit={onSave} onCancel={() => onForm(null)} />}
@@ -229,7 +273,17 @@ function CollectionHead({ node, tree, form, confirming, problem, onForm, onSave,
   );
 }
 
-function ArticleRow({ article, collection, timezone, isPublic, onOpen }: { article: KBArticleSummary; collection?: string; timezone: string; isPublic?: boolean; onOpen: () => void }) {
+interface ArticleRowProps {
+  article: KBArticleSummary;
+  collection?: string;
+  timezone: string;
+  isPublic?: boolean;
+  // order holds the buttons that move the article in its collection, while the list is the whole order.
+  order?: ReactNode;
+  onOpen: () => void;
+}
+
+function ArticleRow({ article, collection, timezone, isPublic, order, onOpen }: ArticleRowProps) {
   const change = article.last_change;
   const published = article.status === 'published';
   // Readers can open it only while it is published and the help center is on.
@@ -251,6 +305,7 @@ function ArticleRow({ article, collection, timezone, isPublic, onOpen }: { artic
       {open
         ? <a className="kb-article-open icon-button" href={article.url} target="_blank" rel="noreferrer" aria-label={kbMessages.openPublic(article.title)} data-tip={kbMessages.openOnHelpCenter}><Icon name="external" /></a>
         : <span className="kb-article-open" aria-hidden="true" title={published ? kbMessages.turnOnToOpen : undefined}><Icon name="external" /></span>}
+      {order}
     </li>
   );
 }
