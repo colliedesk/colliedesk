@@ -50,7 +50,10 @@ API changes in the email view (the full notes will be on the releases page):
   /help-center/domain/check` (MCP `colliedesk_help_center_domain_get`, `_set`, `_check`, `_remove`).
   While it is active, `HelpCenter.url` and every article `url` name it, the slug addresses answer 301 to it,
   and `tls-ask` answers for it. The export's `help-center.ndjson` has `custom_domain`, `custom_domain_status`
-  and `custom_domain_verified_at`.
+  and `custom_domain_verified_at`. The `CNAME` target is the claim's own `hc-<claim>.<HELP_CENTER_DOMAIN>`;
+  slugs of exactly that shape are reserved. An active domain that no check proves for 7 days goes back to
+  `pending`, and another workspace that proves the host name while its records do not takes it over
+  (`HelpCenterDomain.failing_since`, `pending_reason`). Checks are limited to 10 an hour per workspace.
 - The help center theme takes `custom_css` (`PUT /help-center/theme`, `/check`, `/preview`; MCP
   `colliedesk_help_center_theme_update` and `_check`), served after the brand on every public page;
   CSS that could load anything is 422 `custom_css_refused` with its line and column. `HelpCenterTheme`

@@ -413,8 +413,13 @@ checks and removes it.
 
    | Record | Name | Value | What it does |
    |---|---|---|---|
-   | `CNAME` | `help.example.com` | your help center's host name, such as `acme.colliedesk.com` on Colliedesk Cloud | Sends visitors to the help center and proves the domain is yours |
+   | `CNAME` | `help.example.com` | the target the card shows, such as `hc-5f0c2a9e41b7d36c8a0e2f19.colliedesk.com` on Colliedesk Cloud | Sends visitors to the help center and proves the domain is yours |
    | `TXT` | `_help-center-verify.help.example.com` | the 32-character token the card shows | Proves the domain is yours |
+
+   The `CNAME` target and the token belong to this domain setting: they are made when you set the
+   name, never change while it is set, and are not used again after you remove it. Changing the
+   workspace address name does not change them. Point the `CNAME` at the target the card shows, not at
+   your help center's own address (`acme.colliedesk.com`): that one does not prove the domain is yours.
 
    On Colliedesk Cloud the `CNAME` alone is enough. Add the `TXT` record as well when your DNS
    provider cannot point this name with a `CNAME`, or flattens it into `A` records (for example a
@@ -430,17 +435,28 @@ The certificate (`https://`) is issued automatically the first time someone open
 While the domain is active, the help center answers only help center pages on it: the app, the API
 and MCP stay on the Colliedesk address. Every address Colliedesk gives out uses the domain: the link
 in Settings, the address of each article in the reply box and in the API, and the page's canonical
-link. The server checks the records again every day; if they change, the card warns under **Last
-check**, and the help center keeps serving on the domain until you remove it.
+link. The server checks the records again every day. If they are gone, the card warns under **Last
+check** and says by when they must be back: the help center keeps serving on the domain for 7 days
+without them. After 7 days the domain goes back to *waiting for its DNS records*, the card says why,
+and the help center's other addresses serve it again. Put the records back and press **Check now**
+to serve on the domain again.
 
-- **Another workspace's help center already serves on this host name:** the domain is refused. Only
-  the first workspace that proves a host name gets it.
+- **Another workspace's help center serves on this host name:** you can still set it. It waits until
+  your records prove it and the other workspace's no longer do; **Check now** then moves the domain to
+  your help center at once. While the other workspace's records still prove it (for example its `TXT`
+  record is still there), **Check now** says the name is taken. In the same way, if another workspace
+  proves your domain while your records are gone, the domain moves there, and your card says so.
+- **Check now** can run 10 times an hour per workspace (people and AI agents together); the server
+  asks DNS each time.
 - **Refused names:** an IP address, a single word such as `help`, more than 253 characters, the
   Colliedesk address itself, and names below it. A name with accents, such as `hilfe.bücher.de`, is
   stored in its ASCII form (`hilfe.xn--bcher-kva.de`), which is the form DNS uses.
 - **Remove domain** asks first. The help center then stops answering on the domain with the next
-  page, and its other addresses serve it again. Setting the same name again needs a new check, and a
-  new `TXT` token.
+  page, and its other addresses serve it again. Setting the same name again needs a new check, with a
+  new `CNAME` target and `TXT` token.
+- **Who sees the token:** every agent, and every AI agent token including `read`. The token is not a
+  password: once you add the `TXT` record, anyone can read it in public DNS. It only proves the domain
+  for this domain setting, and it never leaves Colliedesk in an export.
 
 ### What visitors see
 

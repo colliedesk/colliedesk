@@ -97,7 +97,9 @@ and loads it by host name: the first request, which looks the host up (cold cach
 then the home page, the collection and an article 20 times each (warm, 8–9 ms p95), all under the same
 100 ms. The host lookup adds one indexed privileged query per host name per 30 s per process; requests
 to `APP_ORIGIN`'s host and the slug hosts never make it (`TestAppRequestsNeverLookUpACustomHost`
-counts the statements). The gate adds about 0.5 s to the timed shard once the fixture is seeded.
+counts the statements). A name no cache knows is charged to the client first (10 a minute), so 20
+random names from one client make at most 10 queries (`TestRandomHostNamesCostABoundedNumberOfLookups`),
+and a domain write forgets only its own names (`TestDomainWritesForgetOnlyTheirOwnHostNames`). The gate adds about 0.5 s to the timed shard once the fixture is seeded.
 
 `TestHelpCenterHostileArticlesLatencyBudget` holds an article page to the same 100 ms when its
 100,000 characters are built to be slow to parse: one line of quote or list markers (`>`, `> `,

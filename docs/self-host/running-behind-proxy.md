@@ -102,11 +102,14 @@ A workspace can also serve its help center on a domain of its own, such as `help
 ([custom domain](../user/knowledge-base.md#custom-domain)). It works with or without
 `HELP_CENTER_DOMAIN`:
 
-- **With `HELP_CENTER_DOMAIN`**, the owner points the name with a `CNAME` to the workspace's
-  `<slug>.<HELP_CENTER_DOMAIN>`, which also proves the workspace owns it. The wildcard record of
-  `HELP_CENTER_DOMAIN` must then be `A`/`AAAA` records, not a `CNAME`: the check reads where the
-  name's `CNAME` chain ends, and a wildcard that is itself a `CNAME` makes every chain end elsewhere.
-  The owner can always use the `TXT` record instead.
+- **With `HELP_CENTER_DOMAIN`**, the owner points the name with a `CNAME` to the target the card
+  shows, `hc-<claim>.<HELP_CENTER_DOMAIN>`, which also proves the workspace owns it. The target is
+  random, made when the domain is set and kept until it is removed or replaced, and no workspace
+  slug can take its shape; the wildcard record already covers it, so there is nothing to add for it.
+  The workspace's own `<slug>.<HELP_CENTER_DOMAIN>` proves nothing: a slug can be renamed and then
+  taken by another workspace. The wildcard record of `HELP_CENTER_DOMAIN` must be `A`/`AAAA` records,
+  not a `CNAME`: the check reads where the name's `CNAME` chain ends, and a wildcard that is itself a
+  `CNAME` makes every chain end elsewhere. The owner can always use the `TXT` record instead.
 - **Without it**, the owner points the name at the server (the card shows a `CNAME` to `APP_ORIGIN`'s
   host, or an `A`/`AAAA` record when `APP_ORIGIN` is an IP address) and proves ownership with the `TXT`
   record `_help-center-verify.<name>`.
@@ -114,8 +117,9 @@ A workspace can also serve its help center on a domain of its own, such as `help
 The proxy must send every other host name to the server and get its certificate on demand. The
 server answers the `ask` with `200` only for an active custom domain whose help center is on, or a
 pending one whose DNS check passes at that moment (it then becomes active, so one DNS change is
-enough). It runs at most 4 such checks at once and at most one per name every 30 seconds; every other
-name gets `404`. With Caddy, add a catch-all site after your other sites:
+enough). It runs at most 4 such checks at once and at most one per name every 30 seconds, asks DNS
+only for names a workspace has claimed, and records a certificate in the database at most once an
+hour per name; every other name gets `404`. With Caddy, add a catch-all site after your other sites:
 
 ```caddyfile
 {
@@ -144,7 +148,15 @@ yourself and add a `server` block for it.
 
 A domain removed in Settings stops being served with the next request, on every server process:
 each page reads the domain's row. Each process remembers for up to 30 seconds which host names are
-custom domains and which workspace's address to give out, and forgets it at once when a domain
-changes through that process. With several server processes behind one proxy, a domain that has
-just become active through one of them may therefore reach the app's sign-in page on another for up
-to 30 seconds, and API answers there may give the previous address for as long.
+custom domains and which workspace's address to give out, and forgets a name at once when a domain
+write through that process changes it. With several server processes behind one proxy, a domain that
+has just become active through one of them may therefore get the help center's `404` on another for
+up to 30 seconds, and API answers there may give the previous address for as long. A host name the
+server does not know costs one database lookup; each client address may cause at most 10 a minute
+(the help center's busy page beyond), so set [`TRUSTED_PROXIES`](#trusted-proxies) or every visitor
+shares the proxy's 10.
+
+The server checks every active custom domain at start and then daily. A domain whose records no
+check has found for 7 days goes back to pending: it stops serving, and its other addresses serve the
+help center again. Another workspace whose records prove a host name while the active workspace's
+records do not takes it over at once. Both show in Settings and in the API (`pending_reason`).
