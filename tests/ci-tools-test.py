@@ -311,6 +311,30 @@ class GoBuildCache(unittest.TestCase):
             for key in (line.strip() for line in block.splitlines()):
                 self.assertTrue(key.startswith(main_prefix), f'{key} can match an entry a pull request saved')
 
+    def test_only_a_push_saves_the_go_build_cache(self):
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
+        saves = re.findall(r'^      - (.*)\n(?:        .*\n)*?        uses: actions/cache/save@', workflow, re.M)
+        self.assertTrue(saves)
+        for condition in saves:
+            self.assertRegex(condition, r"^if: github\.event_name == 'push'", condition)
+        # setup-go saves its own cache unless told not to: only CodeQL, whose setup-go- entries the Go
+        # jobs never restore, may leave it on.
+        for path in sorted((ROOT / '.github/workflows').glob('*.yml')):
+            for name, body in workflow_jobs(path):
+                text = '\n'.join(body)
+                for step in re.findall(r'uses: actions/setup-go@\S+.*?(?=\n      - |\Z)', text, re.S):
+                    if path.name != 'codeql.yml':
+                        self.assertIn('cache: false', step, f'{path.name} {name}')
+
+
+class BundleBudget(unittest.TestCase):
+    def test_e2e_checks_the_bundle_it_built(self):
+        e2e = '\n'.join(dict(workflow_jobs(ROOT / '.github/workflows/ci.yml'))['e2e'])
+        build = e2e.find('corepack pnpm exec vite build')
+        check = e2e.find('corepack pnpm bundle:check')
+        self.assertGreaterEqual(build, 0)
+        self.assertGreater(check, build, 'bundle:check must run after the Vite build of the same job')
+
 
 class PackageManager(unittest.TestCase):
     def test_workflows_run_pnpm_through_corepack_only(self):
