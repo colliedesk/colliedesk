@@ -50,7 +50,8 @@ var (
 // TestEveryRouteIsClassifiedForAgentsAndCoveredByAnMCPTool keeps a new route from reaching main
 // without a row.
 //
-// read: what triage needs to look at (conversations, messages, contacts, tags, the team list), and the
+// read: what triage needs to look at (conversations, messages, contacts, tags, the team list), saying
+// that a conversation is open (presence, which changes nothing anyone wrote), and the
 // settings a person can see without secrets: the session and invite lists (never a token or a link),
 // the email channel (never the inbound secret or the SMTP password) and the web form.
 // draft: changes that never reach a customer (status, priority, assignee, tags on one conversation or
@@ -162,6 +163,10 @@ var tokenTiers = map[string]TokenAccess{
 	"GET /api/v1/agent-requests/{id}":                            tier(auth.ScopeRead),
 	"POST /api/v1/agent-requests/{id}/cancel":                    tier(auth.ScopeRead),
 	"POST " + problemReportPath:                                  tier(auth.ScopeRead),
+
+	// Saying a conversation is open changes nothing anyone wrote; a row lives minutes at most.
+	"PUT /api/v1/conversations/{id}/presence":               tier(auth.ScopeRead),
+	"DELETE /api/v1/conversations/{id}/presence/{clientId}": tier(auth.ScopeRead),
 
 	"POST /api/v1/agent-requests/{id}/approve": personOnly("an agent approving its own request would make approval meaningless"),
 	"GET " + mailimage.ProxyPath:               personOnly("a signed address for the screen: an agent token reads the original HTML and fetches its own images"),

@@ -1,11 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import { OutboundRefusedError } from '../../api/outbound-error';
 import { InboxRoute } from './inbox-route';
 import { testRouter } from './test-router';
+import { presenceViewPart } from './presence-part';
 
 const api = vi.hoisted(() => ({
+  announcePresence: vi.fn(async (_id: string, _body: unknown): Promise<{ viewers: unknown[]; heartbeat_seconds: number }> => ({ viewers: [], heartbeat_seconds: 5 })), leavePresence: vi.fn(async () => undefined),
   me: vi.fn(), conversations: vi.fn(), conversation: vi.fn(), agents: vi.fn(), tags: vi.fn(), messages: vi.fn(), timeEntries: vi.fn(),
   updateConversation: vi.fn(), bulkUpdateConversations: vi.fn(), createMessage: vi.fn(), createTag: vi.fn(), config: vi.fn(),
   addConversationTag: vi.fn(), removeConversationTag: vi.fn(), retryDelivery: vi.fn(),
@@ -14,7 +16,8 @@ const api = vi.hoisted(() => ({
   emailChannel: vi.fn(async () => ({ channel: null, inbound_url: 'https://desk.example.com/api/v1/channels/email/inbound', smtp: { configured: false, host: '', port: 587, starttls: true, authenticated: false }, from_policy: 'verified', sending_from: null })),
 }));
 
-vi.mock('../../api/client', () => ({ api, InvalidRequestError: class extends Error {} }));
+vi.mock('../../api/client', () => ({ api, InvalidRequestError: class extends Error {}, ReplyConflictError: class extends Error {} }));
+vi.mock('./presence-api', () => ({ presenceApi: { announce: api.announcePresence, leave: api.leavePresence }, RetryLater: class extends Error {} }));
 vi.mock('../contacts/contact-api', () => ({ contactApi: { startConversation: api.createConversation, searchContacts: api.contacts }, existingContact: () => undefined }));
 const views = vi.hoisted(() => ({
   list: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })), trash: vi.fn(async (): Promise<{ items: unknown[] }> => ({ items: [] })),
@@ -24,7 +27,7 @@ vi.mock('../../api/saved-views', () => ({ savedViewsApi: views }));
 vi.mock('@tanstack/react-router', async () => (await import('./test-router')).routerModule);
 beforeEach(() => testRouter.reset());
 
-const conversation = (id: string, subject: string) => ({
+const conversation = (id: string, subject: string) => ({ latest_reply_number: 0,
   id, contact_id: '22222222-2222-4222-8222-222222222222', contact_name: 'Mai Linh', subject,
   status: 'open' as const, priority: 'normal' as const, assignee_id: null, tags: [], channel: 'email' as const, origin: null,
   created_at: '2026-10-14T00:00:00Z', updated_at: '2026-10-14T00:00:00Z',
@@ -32,6 +35,14 @@ const conversation = (id: string, subject: string) => ({
 
 // A ticket opened by its address must not wait for the list or for the conversation detail before it asks for
 // its messages: those three requests are independent, and a chain of them costs a round trip each.
+
+// The presence chunk loads once a conversation is open; start with it there, so no test ends while it is
+// still on its way (vitest refuses a module asked for after the test environment is gone).
+beforeAll(async () => {
+  presenceViewPart.preload();
+  await import('./presence-view');
+});
+
 test('a ticket opened by its address asks for its messages and time entries at once, before the list or the detail arrive', async () => {
   const id = '11111111-1111-4111-8111-111111111111';
   testRouter.params = { conversationId: id };
@@ -686,4 +697,38 @@ test('New conversation takes no input until the plan and the email channel are k
   expect(within(dialog).getByLabelText('Subject')).toBeDisabled();
   expect(within(dialog).getByLabelText('Message')).toBeDisabled();
   expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled();
+});
+
+test('the open ticket is announced only after its own requests and the side lists went out, and names who else is writing', async () => {
+  const alpha = conversation('11111111-1111-4111-8111-111111111111', 'Alpha conversation');
+  testRouter.params = { conversationId: alpha.id };
+  try {
+    api.me.mockResolvedValue({ timezone: 'UTC' });
+    api.conversations.mockReset();
+    api.conversations.mockResolvedValue({ items: [alpha], page: 1, page_size: 50 });
+    api.conversation.mockReset();
+    api.conversation.mockResolvedValue(alpha);
+    api.agents.mockResolvedValue({ items: [] });
+    api.tags.mockResolvedValue({ items: [] });
+    api.messages.mockReset();
+    api.messages.mockResolvedValue({ items: [] });
+    api.timeEntries.mockResolvedValue({ items: [] });
+    api.announcePresence.mockReset();
+    api.announcePresence.mockResolvedValue({ viewers: [{ agent_id: '44444444-4444-4444-8444-444444444444', name: 'Lan', writing: true,
+      writing_since: new Date().toISOString(), edited_at: new Date().toISOString(), agent_token: null }], heartbeat_seconds: 5 });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><InboxRoute /></QueryClientProvider>);
+    expect(await screen.findByText('Lan is writing a reply')).toBeInTheDocument();
+    expect(api.announcePresence).toHaveBeenCalledWith(alpha.id, expect.objectContaining({ writing: false }));
+    const first = (mock: { mock: { invocationCallOrder: number[] } }) => mock.mock.invocationCallOrder[0];
+    for (const earlier of [api.conversations, api.messages, api.timeEntries, api.agents, api.tags, api.savedReplies, api.emailChannel]) {
+      expect(first(earlier)).toBeLessThan(first(api.announcePresence));
+    }
+    // Typing a reply is said to the others (never the text).
+    fireEvent.change(screen.getByLabelText('Message body'), { target: { value: 'On its way' } });
+    await waitFor(() => expect(api.announcePresence).toHaveBeenLastCalledWith(alpha.id, expect.objectContaining({ writing: true })), { timeout: 3_000 });
+    expect(JSON.stringify(api.announcePresence.mock.calls)).not.toContain('On its way');
+  } finally {
+    testRouter.params = {};
+  }
 });

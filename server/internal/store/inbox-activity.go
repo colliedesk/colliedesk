@@ -54,21 +54,31 @@ type InboxActivity struct {
 	NewConversations []NewConversationActivity      `json:"new_conversations"`
 	AssignedToMe     []AssignedConversationActivity `json:"assigned_to_me"`
 	Updated          []UpdatedConversationActivity  `json:"updated"`
+	// Viewing is who else has a conversation open right now, on every call, the first included.
+	Viewing []ConversationViewing `json:"viewing"`
 }
 
 // InboxActivity lists conversations created after since, conversations somebody else assigned to
-// agentID after since, and conversations changed after since. A nil since returns empty lists and the initial cursor.
-func (s *Store) InboxActivity(ctx context.Context, workspaceID, agentID string, since *time.Time) (InboxActivity, error) {
+// the caller after since, and conversations changed after since, and who else has a conversation open
+// now. A nil since returns empty lists, the initial cursor and who has a conversation open, so the
+// list markers show from the first poll.
+func (s *Store) InboxActivity(ctx context.Context, workspaceID string, caller PresenceCaller, since *time.Time) (InboxActivity, error) {
+	agentID, presenceNow := caller.AgentID, s.now()
 	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (InboxActivity, error) {
 		activity := InboxActivity{NewConversations: []NewConversationActivity{}, AssignedToMe: []AssignedConversationActivity{}, Updated: []UpdatedConversationActivity{}}
 		// now() is the transaction start and is the same in every statement, so the lists and the
 		// cursor agree: a row created after it is returned by the next call, never lost between two.
 		if since == nil {
-			if err := tx.QueryRow(ctx, `SELECT now()`).Scan(&activity.Now); err != nil {
+			batch := &pgx.Batch{}
+			batch.Queue(`SELECT now()`)
+			queueInboxViewing(batch, workspaceID, caller, presenceNow)
+			results := tx.SendBatch(ctx, batch)
+			defer results.Close()
+			if err := results.QueryRow().Scan(&activity.Now); err != nil {
 				return InboxActivity{}, fmt.Errorf("read inbox activity cursor: %w", err)
 			}
 			activity.Now = domain.UTC(activity.Now)
-			return activity, nil
+			return readInboxViewing(results, activity)
 		}
 		// One round trip: this endpoint is polled by every open tab.
 		batch := &pgx.Batch{}
@@ -97,6 +107,7 @@ func (s *Store) InboxActivity(ctx context.Context, workspaceID, agentID string, 
 			LEFT JOIN incoming i ON i.conversation_id=c.id
 			WHERE c.workspace_id=$1 AND c.id IN (SELECT conversation_id FROM incoming UNION SELECT id FROM changed)
 			ORDER BY i.incoming_at IS NULL, c.updated_at DESC LIMIT $3`, workspaceID, *since, InboxActivityLimit, inboxActivityLookback, inboxActivityMaxAge)
+		queueInboxViewing(batch, workspaceID, caller, presenceNow)
 		results := tx.SendBatch(ctx, batch)
 		defer results.Close()
 		if err := results.QueryRow().Scan(&activity.Now); err != nil {
@@ -158,6 +169,18 @@ func (s *Store) InboxActivity(ctx context.Context, workspaceID, agentID string, 
 		if err := updated.Err(); err != nil {
 			return InboxActivity{}, fmt.Errorf("list updated conversations: %w", err)
 		}
-		return activity, nil
+		return readInboxViewing(results, activity)
 	})
+}
+
+// readInboxViewing reads the batch's list of who has a conversation open into activity.
+func readInboxViewing(results pgx.BatchResults, activity InboxActivity) (InboxActivity, error) {
+	rows, err := results.Query()
+	if err != nil {
+		return InboxActivity{}, fmt.Errorf("list viewing: %w", err)
+	}
+	if activity.Viewing, err = collectInboxViewing(rows); err != nil {
+		return InboxActivity{}, err
+	}
+	return activity, nil
 }

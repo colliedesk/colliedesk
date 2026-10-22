@@ -13,6 +13,7 @@ function hue(name: string): number {
   return hues[sum % hues.length];
 }
 
-export function Avatar({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' }) {
-  return <span className={`avatar avatar-${size}`} aria-hidden="true" style={{ '--avatar-hue': hue(name) } as React.CSSProperties}>{initials(name)}</span>;
+// agent marks an AI agent working through a token: same initials as its person, another shape.
+export function Avatar({ name, size = 'md', agent = false }: { name: string; size?: 'xs' | 'sm' | 'md'; agent?: boolean }) {
+  return <span className={`avatar avatar-${size}${agent ? ' avatar-agent' : ''}`} aria-hidden="true" style={{ '--avatar-hue': hue(name) } as React.CSSProperties}>{initials(name)}</span>;
 }

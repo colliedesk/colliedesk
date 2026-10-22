@@ -21,6 +21,8 @@ const (
 // by the inbox list budget; timing the query itself keeps a noisy CI runner from failing a budget it
 // does not own. The fixture is a busy workspace: 5,000 conversations, one every 20 seconds, a tenth of
 // them assigned to the caller by a teammate, a customer message on every third of them, plus a second workspace of the same size.
+// Who has a conversation open is read on every poll: the teammate has 30 conversations open (three
+// tabs each, one writing) and 300 expired rows wait for the next announce to remove them.
 func TestInboxActivityLatencyBudget(t *testing.T) {
 	api, service, pool := testAPIWithPool(t)
 	tokenA := createSession(t, api, service, "Activity Budget A", "admin-a@activity-budget.example.com")
@@ -32,10 +34,14 @@ func TestInboxActivityLatencyBudget(t *testing.T) {
 	ctx := context.Background()
 	seedActivityFixture(t, pool, "Activity Budget A", caller, teammate)
 	seedActivityFixture(t, pool, "Activity Budget B", "", "")
+	session := seedActivityPresence(t, pool, workspaceA, caller, teammate)
 	if _, err := pool.Exec(ctx, `ANALYZE conversations`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := pool.Exec(ctx, `ANALYZE messages`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `ANALYZE conversation_presence`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -43,7 +49,7 @@ func TestInboxActivityLatencyBudget(t *testing.T) {
 	since := time.Now().UTC().Add(-30 * time.Minute)
 	poll := func() (store.InboxActivity, time.Duration) {
 		started := time.Now()
-		activity, err := data.InboxActivity(ctx, workspaceA, caller, &since)
+		activity, err := data.InboxActivity(ctx, workspaceA, store.PresenceCaller{AgentID: caller, SessionID: session}, &since)
 		elapsed := time.Since(started)
 		if err != nil {
 			t.Fatal(err)
@@ -58,12 +64,13 @@ func TestInboxActivityLatencyBudget(t *testing.T) {
 	for index := range durations {
 		sample, durations[index] = poll()
 	}
-	if len(sample.NewConversations) == 0 || len(sample.NewConversations) >= store.InboxActivityLimit || len(sample.AssignedToMe) == 0 || len(sample.Updated) == 0 || len(sample.Updated) >= store.InboxActivityLimit {
-		t.Fatalf("fixture is not realistic: new=%d assigned=%d updated=%d", len(sample.NewConversations), len(sample.AssignedToMe), len(sample.Updated))
+	if len(sample.NewConversations) == 0 || len(sample.NewConversations) >= store.InboxActivityLimit || len(sample.AssignedToMe) == 0 || len(sample.Updated) == 0 || len(sample.Updated) >= store.InboxActivityLimit ||
+		len(sample.Viewing) != 30 {
+		t.Fatalf("fixture is not realistic: new=%d assigned=%d updated=%d viewing=%d", len(sample.NewConversations), len(sample.AssignedToMe), len(sample.Updated), len(sample.Viewing))
 	}
 	sort.Slice(durations, func(left, right int) bool { return durations[left] < durations[right] })
 	p95 := durations[activitySamples*95/100-1]
-	t.Logf("inbox activity p95=%s (new=%d assigned=%d updated=%d)", p95, len(sample.NewConversations), len(sample.AssignedToMe), len(sample.Updated))
+	t.Logf("inbox activity p95=%s (new=%d assigned=%d updated=%d viewing=%d)", p95, len(sample.NewConversations), len(sample.AssignedToMe), len(sample.Updated), len(sample.Viewing))
 	if p95 > activityLatencyBudget {
 		t.Fatalf("inbox activity p95 exceeds %s: %s", activityLatencyBudget, p95)
 	}
@@ -101,4 +108,32 @@ func nullIfEmpty(value string) any {
 		return nil
 	}
 	return value
+}
+
+// seedActivityPresence opens 30 conversations of the workspace in three tabs of the teammate (one of
+// them writing), the caller's own tab on one, and leaves 300 expired rows; it returns the caller's session.
+func seedActivityPresence(t *testing.T, pool *pgxpool.Pool, workspace, caller, teammate string) string {
+	t.Helper()
+	ctx := context.Background()
+	sessions := map[string]string{}
+	for _, agent := range []string{caller, teammate} {
+		var session string
+		if err := pool.QueryRow(ctx, `SELECT id::text FROM sessions WHERE workspace_id=$1 AND agent_id=$2 ORDER BY created_at LIMIT 1`, workspace, agent).Scan(&session); err != nil {
+			t.Fatal(err)
+		}
+		sessions[agent] = session
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO conversation_presence(workspace_id,session_id,client_id,agent_id,conversation_id,writing_since,edited_at,seen_at,expires_at)
+		SELECT $1,$2,'fixture-tab-'||c.n||'-'||k,$3,c.id,CASE WHEN k=1 THEN now() END,CASE WHEN k=1 THEN now() END,now(),
+			CASE WHEN c.n<=30 THEN now()+interval '1 hour' ELSE now()-interval '1 minute' END
+		FROM (SELECT id,row_number() OVER (ORDER BY id) AS n FROM conversations WHERE workspace_id=$1 ORDER BY id LIMIT 130) c, generate_series(1,3) AS k`,
+		workspace, sessions[teammate], teammate); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO conversation_presence(workspace_id,session_id,client_id,agent_id,conversation_id,seen_at,expires_at)
+		SELECT $1,$2,'fixture-own-tab',$3,id,now(),now()+interval '1 hour' FROM conversations WHERE workspace_id=$1 ORDER BY id LIMIT 1`,
+		workspace, sessions[caller], caller); err != nil {
+		t.Fatal(err)
+	}
+	return sessions[caller]
 }

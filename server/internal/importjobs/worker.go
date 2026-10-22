@@ -245,7 +245,13 @@ type sample struct {
 func (r *jobRun) now() time.Time { return r.worker.options.Now().UTC() }
 
 func (r *jobRun) update(ctx context.Context, sql string, args ...any) error {
-	err := update(context.WithoutCancel(ctx), r.worker.options.DB, r.item, sql, args...)
+	return r.updateAnd(ctx, nil, sql, args...)
+}
+
+// updateAnd writes the job and also in one transaction. It runs to the end when ctx is cancelled:
+// what it writes belongs together.
+func (r *jobRun) updateAnd(ctx context.Context, also func(context.Context, pgx.Tx) error, sql string, args ...any) error {
+	err := updateAnd(context.WithoutCancel(ctx), r.worker.options.DB, r.item, also, sql, args...)
 	if errors.Is(err, errLeaseLost) {
 		r.cancel(errLeaseLost)
 	}
@@ -381,12 +387,8 @@ func (r *jobRun) preview(ctx context.Context, options freshdesk.Options) error {
 		return err
 	}
 	r.ended = true
-	err = updateAnd(context.WithoutCancel(ctx), r.worker.options.DB, r.item, func(tx pgx.Tx) error { return savePeople(ctx, tx, r.item.workspaceID, result) },
+	return r.updateAnd(ctx, func(ctx context.Context, tx pgx.Tx) error { return savePeople(ctx, tx, r.item.workspaceID, result) },
 		`state='previewed', account_source=$4, preview=$5, claim_token=NULL, lease_until=NULL, updated_at=$6`, result.Source, encoded, r.now())
-	if errors.Is(err, errLeaseLost) {
-		r.cancel(errLeaseLost)
-	}
-	return err
 }
 
 // recent runs the recent pass and saves the move to the full pass before the full pass starts.
@@ -433,13 +435,11 @@ func (r *jobRun) full(ctx context.Context, options freshdesk.Options) error {
 			claim_token=NULL, lease_until=NULL, updated_at=$9`, encoded, report.Markdown(), CodeRetryingFailures,
 			fmt.Sprintf("%d item(s) failed; the import tries them again.", len(report.Failures)), r.now().Add(time.Minute), r.now())
 	}
-	if err := r.end(ctx, StateFinished, report.Status, "", "", encoded, ptr(report.Markdown())); err != nil {
-		return err
-	}
-	// Replies and tickets of people no agent matched while importing get their link now.
-	return r.worker.options.DB.InWorkspace(context.WithoutCancel(ctx), r.item.workspaceID, func(tx pgx.Tx) error {
+	// Replies and tickets of people no agent matched while importing get their link, with the end.
+	return r.endAnd(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		return relinkAll(ctx, tx, r.item.workspaceID, *r.job.AccountSource)
-	})
+	},
+		StateFinished, report.Status, "", "", encoded, ptr(report.Markdown()))
 }
 
 // fewerFailures reports whether a FAILED report is worth another run: the first one is, a later one
@@ -467,13 +467,11 @@ func (r *jobRun) undo(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := r.end(ctx, StateFinished, "", "", "", encoded, ptr(result.Markdown())); err != nil {
-		return err
-	}
-	// The Freshdesk agents of an undone import go with it.
-	return r.worker.options.DB.InWorkspace(context.WithoutCancel(ctx), r.item.workspaceID, func(tx pgx.Tx) error {
+	// The Freshdesk agents of an undone import go with it, in the transaction that ends it.
+	return r.endAnd(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		return forgetPeople(ctx, tx, r.item.workspaceID, *r.job.AccountSource)
-	})
+	},
+		StateFinished, "", "", "", encoded, ptr(result.Markdown()))
 }
 
 // fail turns a run error into the job's next state: retry what may pass later, end the rest.
@@ -547,9 +545,15 @@ func retryDelay(streak time.Duration) time.Duration {
 
 // end moves the job to a terminal state and erases its key in the same update.
 func (r *jobRun) end(ctx context.Context, state, status, code, message string, report []byte, markdown *string) error {
+	return r.endAnd(ctx, nil, state, status, code, message, report, markdown)
+}
+
+// endAnd is end with more writes in its transaction. The end releases the claim, so the run's context
+// may be cancelled right after; nothing that belongs to the end is written after it.
+func (r *jobRun) endAnd(ctx context.Context, also func(context.Context, pgx.Tx) error, state, status, code, message string, report []byte, markdown *string) error {
 	r.ended = true
 	r.flush(ctx)
-	err := r.update(ctx, endSQL+`, report=COALESCE($9, report), report_markdown=COALESCE($10, report_markdown)`,
+	err := r.updateAnd(ctx, also, endSQL+`, report=COALESCE($9, report), report_markdown=COALESCE($10, report_markdown)`,
 		state, nullable(status), nullable(code), nullable(message), r.now(), report, markdown)
 	r.worker.options.Keys.forget(r.item.id)
 	if err == nil {

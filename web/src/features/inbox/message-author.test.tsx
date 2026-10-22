@@ -1,15 +1,25 @@
 import { render, screen, within } from '@testing-library/react';
-import { expect, test } from 'vitest';
+import { beforeAll, expect, test } from 'vitest';
 import type { Message } from '../../api/schemas';
 import { TimelinePanel } from './timeline-panel';
+import { presenceViewPart } from './presence-part';
 
-const base = { conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, body_html: null, origin: null,
+const base = { reply_number: null, conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, body_html: null, origin: null,
   attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null, agent_token: null, agent_request_id: null };
 const ada = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 function avatarOf(article: HTMLElement) {
   return article.querySelector('.avatar')?.textContent;
 }
+
+
+// The presence chunk loads when somebody else is on a conversation, a reply is refused or a notice shows;
+// start with it there, so no test ends while it is still on its way (vitest refuses a module asked for
+// after the test environment is gone).
+beforeAll(async () => {
+  presenceViewPart.preload();
+  await import('./presence-view');
+});
 
 test('a reply and a note written in Colliedesk name the team member who wrote them', () => {
   const reply: Message = { ...base, id: '22222222-2222-4222-8222-222222222222', kind: 'outgoing', body: 'On its way.', author_agent_id: ada, author_name: 'Ada Admin' };
