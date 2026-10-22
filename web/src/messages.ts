@@ -477,6 +477,7 @@ export const messages = {
   onlyAdminApproves: 'Only an admin can approve this.',
   onlyOwnerApproves: 'Only the person who owns this token can approve it: it changes their own settings.',
   draftApproved: (token: string, person: string) => `requested by ${token}, approved by ${person}`,
+  draftAfterReply: 'Someone replied to this conversation while you were reviewing the draft. Nothing was sent: read the new reply, then send the draft again if it still fits.',
   draftRefused: (reason?: string) => `The draft was approved but not sent${reason ? `: ${reason}` : '.'}`,
   reportProblem: 'Report a problem',
   reportClose: 'Close',
