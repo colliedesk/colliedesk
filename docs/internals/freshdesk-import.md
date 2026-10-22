@@ -283,9 +283,11 @@ window ends at `started_at` minus `recent_days` (default 90; 0 skips the recent 
 reads the same window. The phase moves to `full`, with the interim report saved, before the full
 pass starts.
 
-Without `MAILBOX_TOKEN_KEYS` the key stays in the memory of the process that received it and the
-job is pinned to that process (`owner_instance`). Another process, or the same one after a restart,
-moves the job to `waiting_key`. Cloud sets the ring; it is shared with Gmail grants, so rotate it by
+A worker claims only the jobs it can open the key of: sealed with a key id of its ring, or held in its
+memory. Without `MAILBOX_TOKEN_KEYS` the key stays in the memory of the process that received it and the
+job is pinned to that process (`owner_instance`). A job nobody leased or saved for one lease (its process
+is gone, or its key left every ring) is taken by any worker and moves to `waiting_key`. Replicas with
+different rings therefore never take each other's jobs while those are alive. Cloud sets the ring; it is shared with Gmail grants, so rotate it by
 putting a new key in front (`k2:new,k1:old`), never by replacing it.
 
 ## Knowledge base (solutions)

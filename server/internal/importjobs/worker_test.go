@@ -472,3 +472,23 @@ func TestAPreviewNobodyStartedIsDiscardedAfterAnHour(t *testing.T) {
 		t.Fatalf("fresh preview = %+v", got)
 	}
 }
+
+func TestAServerWhoseKeyRingCannotOpenTheKeyLeavesTheJobToOneThatCan(t *testing.T) {
+	e := newEnv(t, true)
+	job := e.started(t)
+	other := e.worker(t, importjobs.NewKeys(ringWithID(t, "k2")))
+	importjobs.StubImporter(other, func(context.Context, freshdesk.Options) (*freshdesk.Report, error) {
+		t.Error("a server that cannot open the key ran the job")
+		return nil, nil
+	}, nil, nil)
+	tick(t, other)
+	if got := e.get(t, job.ID); got.State != importjobs.StateQueued || !got.HasKey {
+		t.Fatalf("job = %+v: another server's ring took it", got)
+	}
+	// Left alone longer than a lease (no server holds its key any more), any worker takes it and asks for the key.
+	e.exec(t, `UPDATE import_jobs SET updated_at=now()-interval '5 minutes' WHERE id=$1`, job.ID)
+	tick(t, other)
+	if got := e.get(t, job.ID); got.State != importjobs.StateWaitingKey {
+		t.Fatalf("orphaned job = %+v", got)
+	}
+}
