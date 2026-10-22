@@ -402,12 +402,35 @@ Code: `solutions-links.go`, `solutions-link-targets.go`, `report-links.go`; the 
   than the one holding it is found. It runs in the full run only, never in a dry run or `ModeRecent`,
   so the CLI and the in-app job (the same `Run`) do the same thing; `Options.Origin` and
   `HelpCenterDomain` (APP_ORIGIN, HELP_CENTER_DOMAIN, passed by `collie import` and the worker) give
-  `helpcenter.SiteURL`, the address every new link uses.
-- **Which links.** An absolute address on the API host, the account's `account_domain` (View Account)
-  or the hostname of the workspace's help center domain claim (an old portal's custom domain usually
-  becomes it), or a relative `/support/...` path that is a Markdown link's or "text (url)"'s address.
-  Any other host is not ours and is neither changed nor listed. Trailing `.,;:!?*` are not part of the
-  address. Translations and `source_html` are left as Freshdesk sent them.
+  `helpcenter.SiteURL`, the address every new link uses. `collie import` passes APP_ORIGIN as set,
+  never the `http://localhost:8080` the other commands fall back to: a rewritten link no longer holds
+  `/support/`, so a wrong origin could never be repaired by a rerun. Without it every link is listed
+  (`no_server_address`). The worker passes the server's own origin, which is where it serves.
+- **Which links.** `oldLinkPattern` finds candidates, `resolveLink` decides. Ours: an absolute
+  address on the API host, the account's `account_domain` (View Account), `Options.OldHelpCenterDomain`
+  (the old portal's own custom domain: CLI `--old-help-center-domain`, in-app and MCP
+  `options.old_help_center_domain`, normalized by `OldHelpCenterHost`) or the hostname of the
+  workspace's help center domain claim (an old portal's custom domain usually becomes it); or a
+  relative path that is a Markdown link's, "text (url)"'s or a quoted attribute's address. Paths match
+  in any case (`ParseLegacyPath`). `/support/solutions/...` on any other host is listed
+  (`unknown_host`; the detail names the old help center address as the fix) and makes the section
+  UNVERIFIED; other `/support/...` paths there are someone else's site and are ignored. A match that
+  goes on as a word (`/supporters`, `/support.html`) is not an address. Trailing `.,;:!?*` are not
+  part of the address. Matches inside a code fence or inline code span (`codeRanges`) are examples and
+  are neither changed nor listed; a span over two lines is not seen as one. `source_html` is left as
+  Freshdesk sent it.
+- **Where they lead.** Home, `/support/home`, `/support/solutions`: the help center's address. The old
+  search: `helpcenter.SearchPath` of its `term`. An item: `linkTargets`. Any other old portal page
+  (`/support/tickets/new`, sign-in) has no counterpart and is listed (`no_new_page`). The fragment is
+  kept. A collection link points at its slug path (`/c/billing/cards`): the help center has no address
+  for a collection by id, so a later rename or move breaks the rewritten link (not redirected), while
+  the old Freshdesk address keeps resolving through the ledger. Accepted and stated in the user doc.
+- **Translations** (`kb_article_translations`) follow their article: rewritten
+  (`RewriteImportedKBTranslationBody`, article row locked first, text compared) while the article's
+  newest version is `import`, listed `changed_in_colliedesk` otherwise. A person changes a translation
+  only through a media replacement, which records an article version, so the article's rule covers
+  it. The translation keeps Freshdesk's timestamps; a newer Freshdesk translation still replaces it
+  and the pass rewrites it again. Listed as entity `kb_translation`, id `<article id>:<locale>`.
 - **Only content nobody changed.** An article only while its newest version is `import` and it is
   outside the trash; the article row is locked and its text compared with what was read
   (`RewriteImportedKBArticleBody`); the change is a new version of kind `import`, so undo and the
@@ -419,8 +442,8 @@ Code: `solutions-links.go`, `solutions-link-targets.go`, `report-links.go`; the 
 - **Only to pages public now, only while the help center is on.** A link to a draft, an item in the
   trash or a collection with nothing published is left (`not_public`), one to an id this account's
   ledger lacks too (`not_imported`); the next run rewrites it once it is public. With the help center
-  off (or no Origin) nothing is rewritten: a saved reply would send customers to a 404 while the
-  Freshdesk link still works.
+  off (`help_center_off`) or no Origin (`no_server_address`) nothing is rewritten: a saved reply would
+  send customers to a 404 while the Freshdesk link still works.
 - **Idempotent.** A rerun finds the new addresses, which are not Freshdesk's, and writes nothing;
   `links.rewritten` counts this run's changes only.
 - **Report `links`.** Its own `OK`/`UNVERIFIED`; links are not data, so the import's status ignores it.

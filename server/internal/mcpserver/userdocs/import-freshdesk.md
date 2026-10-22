@@ -130,18 +130,36 @@ domain once it points at Colliedesk (see [Public help center](knowledge-base.md#
 | `/support/search?term=...` | The help center search for the same words |
 | Any other `/support/...` page (sign-in, tickets) | The home page (302) |
 
-A language prefix such as `/de/support/...` is understood the same way. The redirects work only while
-the help center is on.
+A language prefix such as `/de/support/...` and capital letters (`/Support/Solutions/...`) are
+understood the same way. The redirects work only while the help center is on.
 
-The import also rewrites Freshdesk links inside the imported articles and saved replies, so they point
-at the new pages: links on your account's address (`acme.freshdesk.com`), on the custom domain you set
-for the help center, and relative links such as `/support/solutions/folders/12`. It does this only:
+The import also rewrites Freshdesk links inside the imported articles, their translations and the
+saved replies, so they point at the new pages. It rewrites links on your account's address
+(`acme.freshdesk.com`), on the custom domain you set for the help center, on the old help center
+address you give (below), and relative links such as `/support/solutions/folders/12`. A link keeps
+its `#section` part. An old search link goes to the help center search for the same words. It does
+this only:
 
 - while the help center is on. Turn it on first, or run the import again after turning it on;
+- when the import knows the server's address. On the command line that is `APP_ORIGIN`, as the
+  server has it; without it nothing is rewritten and the report says so;
 - for articles and saved replies nobody changed in Colliedesk since the import. Changed ones are left
-  as they are and listed;
+  as they are and listed. A translation follows its article;
 - for links to a page that is public now. A link to a draft, or to something not imported, stays as
-  written and is listed.
+  written and is listed. So does a link to an old portal page the help center has no counterpart for,
+  such as `/support/tickets/new`.
+
+An address written as code (`` `https://acme.freshdesk.com/support/...` `` or in a code block) is an
+example, not a link: it is left as written.
+
+If your Freshdesk help center had a domain of its own, such as `support.acme.com`, give it so its
+links are rewritten too: `--old-help-center-domain support.acme.com` on the command line, or **Old
+help center address** when you import in the app. A `/support/solutions/...` link on a host the
+import does not know is listed with that advice, and the section stays `UNVERIFIED`.
+
+A link to a folder or category points at the collection's address, which is made of collection
+names (`/c/billing/cards`). If you rename or move that collection later, the link breaks, since that
+change is not redirected. The old Freshdesk address keeps leading to the collection.
 
 Running the import again changes nothing that already points at the help center. `import undo` removes
 the rewritten articles and saved replies like every other imported item; an earlier text stays in the
@@ -173,7 +191,8 @@ never accepts it as a command-line argument and never prints it.
 
 1. Open **Settings > Import from Freshdesk** (admins only; an empty inbox links to it).
 2. Enter your `<account>.freshdesk.com` address and the API key of a Freshdesk **admin** (see
-   "Before you start"), then select **Read account**. Colliedesk reads the account and shows what it
+   "Before you start"). If your Freshdesk help center had a domain of its own, enter it under **Old
+   help center address** (optional; see "Old help center links"). Then select **Read account**. Colliedesk reads the account and shows what it
    found: tickets, contacts, companies and agents, and whether the key can read archived tickets,
    canned responses and the knowledge base. Nothing is written yet. Freshdesk does not count archived
    tickets ahead of time, so the ticket number is "at least".
@@ -261,6 +280,8 @@ Options:
   check then covers at least this far (see "How completeness is checked").
 - `--help-center-portal ID`: on an account with several portals, the portal whose published
   knowledge base articles stay published (see "Knowledge base").
+- `--old-help-center-domain HOST`: your Freshdesk help center's own domain, such as
+  `support.acme.com`, so links on it are rewritten too (see "Old help center links").
 - `--report-dir DIR`: where to write the report. Default: the current directory.
 
 The import respects Freshdesk's rate limit. It waits when Freshdesk says the limit is used up,
