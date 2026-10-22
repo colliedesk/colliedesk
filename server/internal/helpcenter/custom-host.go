@@ -115,36 +115,49 @@ func (c *ttlCache) len() int {
 
 // customHosts finds the workspace of a host name (an active custom domain or a claim's CNAME target)
 // and the custom domain of a workspace, through the store and short caches: known names with their
-// workspace, unknown names, and workspaces with their domain. lookups merges concurrent misses of the
-// same key into one query.
+// workspace, unknown names, and workspaces with their domain. The certificate question (CertifyHost)
+// keeps its own pair, claimed and unclaimed: a name some workspace claims, active or pending, and one
+// nobody claims; a name unknown to the pages may still have a pending claim, which the question checks.
+// lookups merges concurrent misses of the same key into one query.
 type customHosts struct {
-	known, unknown *ttlCache
-	byWorkspace    *ttlCache
-	lookups        singleflight.Group
+	known, unknown     *ttlCache
+	claimed, unclaimed *ttlCache
+	byWorkspace        *ttlCache
+	lookups            singleflight.Group
 }
 
 func newCustomHosts(now func() time.Time) *customHosts {
 	return &customHosts{known: newTTLCache(hostCacheTTL, hostCacheEntries, now), unknown: newTTLCache(hostCacheTTL, hostCacheEntries, now),
+		claimed: newTTLCache(hostCacheTTL, hostCacheEntries, now), unclaimed: newTTLCache(hostCacheTTL, hostCacheEntries, now),
 		byWorkspace: newTTLCache(hostCacheTTL, hostCacheEntries, now)}
 }
 
-// hostGeneration is the generations of the two host caches when a lookup starts.
+// hostGeneration is the generations of a pair of host caches, found and missing names, when a lookup
+// starts.
 type hostGeneration struct{ known, unknown uint64 }
 
-func (h *customHosts) generation() hostGeneration {
-	return hostGeneration{known: h.known.currentGeneration(), unknown: h.unknown.currentGeneration()}
+func (h *customHosts) generation() hostGeneration { return pairGeneration(h.known, h.unknown) }
+
+func pairGeneration(known, unknown *ttlCache) hostGeneration {
+	return hostGeneration{known: known.currentGeneration(), unknown: unknown.currentGeneration()}
 }
 
 // remember stores what a lookup that started at generation found: the workspace of host, or "" for a
-// name that belongs to none. A known name that turned unknown leaves the known cache.
+// name that belongs to none.
 func (h *customHosts) remember(host, workspaceID string, generation hostGeneration) {
-	if workspaceID == "" {
-		h.known.drop(host)
-		h.unknown.set(host, "", generation.unknown)
+	rememberIn(h.known, h.unknown, host, workspaceID, generation)
+}
+
+// rememberIn stores value for host in known, or "" in unknown when value is empty; a name that moved
+// leaves the other cache.
+func rememberIn(known, unknown *ttlCache, host, value string, generation hostGeneration) {
+	if value == "" {
+		known.drop(host)
+		unknown.set(host, "", generation.unknown)
 		return
 	}
-	h.unknown.drop(host)
-	h.known.set(host, workspaceID, generation.known)
+	unknown.drop(host)
+	known.set(host, value, generation.known)
 }
 
 // customHostCandidate is the host name of a request that may be a custom domain, lower case without
@@ -254,5 +267,7 @@ func (s *Site) ForgetDomain(workspaceID, hostname, claim string) {
 	}
 	s.hosts.known.forget(hosts...)
 	s.hosts.unknown.forget(hosts...)
+	s.hosts.claimed.forget(hosts...)
+	s.hosts.unclaimed.forget(hosts...)
 	s.hosts.byWorkspace.forget(workspaceID)
 }

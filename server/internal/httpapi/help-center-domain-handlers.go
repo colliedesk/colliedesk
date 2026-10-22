@@ -200,76 +200,78 @@ func (a *API) recordCheck(ctx context.Context, workspaceID string, current domai
 	return after, err
 }
 
-// certifyClaimHost reports whether the reverse proxy may get a certificate for a claim's CNAME target:
-// a claim exists and its workspace's help center is open, so the target's redirect keeps working.
-func (a *API) certifyClaimHost(ctx context.Context, claim string) (bool, error) {
+// certifyClaimHost reports whether the reverse proxy may get a certificate for a claim's CNAME target
+// (a claim exists and its workspace's help center is open, so the target's redirect keeps working) and
+// whether the claim exists.
+func (a *API) certifyClaimHost(ctx context.Context, claim string) (open, claimed bool, err error) {
 	workspaceID, found, err := a.store.HelpCenterClaim(ctx, claim)
 	if err != nil || !found {
-		return false, err
+		return false, false, err
 	}
-	_, open, err := a.store.OpenHelpCenterWorkspace(ctx, workspaceID)
-	return open, err
+	_, open, err = a.store.OpenHelpCenterWorkspace(ctx, workspaceID)
+	return open, true, err
 }
 
-// certifyCustomHost reports whether the reverse proxy may get a certificate for host: it is an
+// certifyCustomHost reports whether the reverse proxy may get a certificate for host (it is an
 // active custom domain whose help center is open, or the pending domain of a workspace whose DNS
-// proves it within helpCenterLiveCheckTimeout (it then becomes active). Live checks are bounded by
-// liveChecks, so a stream of questions cannot make the server flood DNS.
-func (a *API) certifyCustomHost(ctx context.Context, host string) (bool, error) {
+// proves it within helpCenterLiveCheckTimeout, which then becomes active) and whether any workspace
+// claims host, active or pending. Live checks are bounded by liveChecks, so a stream of questions
+// cannot make the server flood DNS.
+func (a *API) certifyCustomHost(ctx context.Context, host string) (open, claimed bool, err error) {
 	if workspaceID, found, err := a.store.HelpCenterHost(ctx, host); err != nil || found {
 		if err != nil {
-			return false, err
+			return false, false, err
 		}
 		_, open, err := a.store.OpenHelpCenterWorkspace(ctx, workspaceID)
 		if err != nil || !open {
-			return false, err
+			return false, true, err
 		}
 		// The question is public: note the certificate at most once an hour per name in this process
 		// (and in the database across processes), never on every question.
 		if allowed, _ := a.certificateNotes.allow(host, a.now()); !allowed {
-			return true, nil
+			return true, true, nil
 		}
-		return true, a.store.NoteHelpCenterCertificate(ctx, workspaceID, host, a.now())
+		return true, true, a.store.NoteHelpCenterCertificate(ctx, workspaceID, host, a.now())
 	}
 	pending, err := a.store.HelpCenterHostPending(ctx, host)
 	if err != nil || !pending {
-		return false, err
+		return false, false, err
 	}
 	done, ok := a.liveChecks.Begin(host)
 	if !ok {
-		return false, nil
+		return false, true, nil
 	}
 	defer done()
 	evidence := a.lookUpDomain(ctx, host, helpCenterLiveCheckTimeout)
 	// However many workspaces claim the name, only the claims DNS proves are read, oldest first.
 	claims, err := a.store.HelpCenterHostProvenClaims(ctx, host, evidence.Proof)
 	if err != nil {
-		return false, err
+		return false, true, err
 	}
 	for _, workspaceID := range claims {
 		claim, found, err := a.store.GetHelpCenterDomain(ctx, workspaceID)
 		if err != nil {
-			return false, err
+			return false, true, err
 		}
 		if !found || claim.Hostname != host || claim.Status != domain.HelpCenterDomainPending {
 			continue
 		}
 		_, open, err := a.store.OpenHelpCenterWorkspace(ctx, workspaceID)
 		if err != nil {
-			return false, err
+			return false, true, err
 		}
 		after, err := a.recordCheck(ctx, workspaceID, claim, evidence, open)
 		if errors.Is(err, domain.ErrHelpCenterDomainTaken) || errors.Is(err, domain.ErrHelpCenterDomainMissing) {
 			continue
 		}
 		if err != nil {
-			return false, err
+			return false, true, err
 		}
 		if after.Status == domain.HelpCenterDomainActive {
-			return open, nil
+			return open, true, nil
 		}
 	}
-	return false, nil
+	return false, true, nil
 }
 
 // RecheckHelpCenterDomains looks up the DNS of every active custom domain and records what it shows.

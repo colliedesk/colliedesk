@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -65,7 +66,9 @@ func (s *Server) WrapHelpCenter(next http.Handler) http.Handler { return s.api.h
 // name the server serves a help center on that is open (on, workspace not locked): <slug>.<HELP_CENTER_DOMAIN>,
 // a claim's CNAME target hc-<claim>.<HELP_CENTER_DOMAIN> (which redirects), an active custom domain, or a
 // pending one whose DNS check passes now. Every other case is the same 404, so the proxy never gets a
-// certificate for a name nobody serves, and the answer tells nothing about why.
+// certificate for a name nobody serves, and the answer tells nothing about why. A claim target or custom
+// domain is looked up through helpcenter.Site.CertifyHost: names nobody claims are remembered, and a
+// client may make the server look up only helpCenterHostLookupsPerAddress unknown names a minute.
 func (a *API) askHelpCenterCertificate(response http.ResponseWriter, request *http.Request) {
 	name := request.URL.Query().Get("domain")
 	if len(name) > 253 {
@@ -77,9 +80,11 @@ func (a *API) askHelpCenterCertificate(response http.ResponseWriter, request *ht
 	if slug, ok := helpcenter.DomainSlug(name, a.config.HelpCenterDomain); ok {
 		_, open, err = a.store.OpenHelpCenter(request.Context(), slug)
 	} else if claim, ok := helpcenter.DomainClaim(name, a.config.HelpCenterDomain); ok {
-		open, err = a.certifyClaimHost(request.Context(), claim)
+		open, err = a.helpCenter.CertifyHost(request, helpcenter.ClaimHost(a.config.HelpCenterDomain, claim),
+			func(ctx context.Context) (bool, bool, error) { return a.certifyClaimHost(ctx, claim) })
 	} else if host, invalid := helpcenter.CustomHost(name, a.config.Origin, a.config.HelpCenterDomain); invalid == nil {
-		open, err = a.certifyCustomHost(request.Context(), host)
+		open, err = a.helpCenter.CertifyHost(request, host,
+			func(ctx context.Context) (bool, bool, error) { return a.certifyCustomHost(ctx, host) })
 	}
 	if err != nil {
 		writeInternalError(response, err)

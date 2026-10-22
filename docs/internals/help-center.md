@@ -192,8 +192,11 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   `TestTemplatesCarryNoBrandingScriptOrInlineStyle` and the HTTP test check it.
 - **`tls-ask`** (`GET /api/v1/public/help-center/tls-ask?domain=`) answers Caddy's on-demand TLS
   question: 200 only for exactly one valid label below `HELP_CENTER_DOMAIN` whose help center is
-  open. Without `HELP_CENTER_DOMAIN` it is always 404. It is not rate limited: its only client is
-  the proxy, which asks once per name it has no certificate for.
+  open. Without `HELP_CENTER_DOMAIN` it is always 404. A claim target or custom domain goes through
+  `Site.CertifyHost`: a name nobody claims is remembered (30 s, forgotten by a domain write), and a
+  name no cache knows is charged to the client's address (`TRUSTED_PROXIES`-aware, the same 10
+  unknown-name lookups a minute as `Wrap`) before any query, while names found claimed or served
+  are never charged, so random names cannot make the server query without bound.
 
 - **An article renders once per text, behind a guard (`render.go`).** goldmark cannot be stopped and
   has quadratic paths (Traps), so a public page must not parse Markdown on every visit nor let one

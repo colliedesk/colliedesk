@@ -1,8 +1,11 @@
 package httpapi_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"net/netip"
 	"testing"
 	"time"
 
@@ -130,5 +133,84 @@ func TestDomainWritesForgetOnlyTheirOwnHostNames(t *testing.T) {
 	}
 	if response := request(t, api, http.MethodPost, domainPath+"/check", nil, alpha, nil); response.Code != http.StatusTooManyRequests || response.Header().Get("Retry-After") == "" {
 		t.Fatalf("11th check by a person status=%d", response.Code)
+	}
+}
+
+// The proxy's certificate question costs as little for names nobody serves: each client (behind
+// TRUSTED_PROXIES) may make the server look up only a few unknown names a minute, an unknown name is
+// remembered, and every refusal is the same 404. The proxy's own questions for an active domain and
+// for a pending claim whose DNS proves it still answer 200.
+func TestCertificateQuestionsForRandomNamesCostABoundedNumberOfLookups(t *testing.T) {
+	const (
+		pendingLookup = "status='pending')"
+		claimLookup   = "FROM help_center_domains WHERE claim=$1"
+	)
+	tracer := &statementTracer{}
+	api, service, _, dns := testAPIOnPool(t, testPoolTraced(t, tracer), func(config *httpapi.Config) {
+		config.HelpCenterDomain = "help.example.net"
+		config.TrustedProxies = []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}
+	})
+	site := helpCenterSite(api)
+	active := createSession(t, api, service, "Ask Flood Active", "admin@ask-flood-active.example.com")
+	enableHelpCenter(t, api, active, "Active help", true)
+	const activeHost = "help.ask-flood-active.example"
+	view := setDomain(t, api, active, activeHost, http.StatusOK)
+	dns.set("_help-center-verify."+activeHost, view.token())
+	checkDomain(t, api, active, http.StatusOK)
+	wantPage(t, onHost(site, activeHost, "/"), http.StatusOK, []string{"Active help"}, nil)
+	pending := createSession(t, api, service, "Ask Flood Pending", "admin@ask-flood-pending.example.com")
+	enableHelpCenter(t, api, pending, "Pending help", true)
+	const pendingHost = "help.ask-flood-pending.example"
+	dns.set("_help-center-verify."+pendingHost, setDomain(t, api, pending, pendingHost, http.StatusOK).token())
+	tracer.reset()
+
+	// ask puts the question from client; through the proxy (loopback) when client is not the proxy.
+	ask := func(name, client string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/public/help-center/tls-ask?domain="+name, nil)
+		req.Host, req.RemoteAddr = testOriginHost, "127.0.0.1:4242"
+		if client != "127.0.0.1" {
+			req.Header.Set("X-Forwarded-For", client)
+		}
+		return serve(api, req)
+	}
+	var names []string
+	for index := range 20 {
+		names = append(names, fmt.Sprintf("random-%d.ask-flood.example", index), fmt.Sprintf("hc-%024x.help.example.net", index))
+	}
+	for _, name := range names {
+		response := ask(name, "198.51.100.7")
+		var body struct {
+			Error struct{ Code, Message string } `json:"error"`
+		}
+		if response.Code != http.StatusNotFound || json.Unmarshal(response.Body.Bytes(), &body) != nil ||
+			body.Error.Code != "not_found" || body.Error.Message != "The requested resource was not found." {
+			t.Fatalf("tls-ask %q status=%d body=%s", name, response.Code, response.Body.String())
+		}
+	}
+	if lookups, pendings := tracer.count(hostLookup)+tracer.count(claimLookup), tracer.count(pendingLookup); lookups > 10 || pendings > 10 {
+		t.Fatalf("%d random names from one client: %d host lookups, %d pending lookups", len(names), lookups, pendings)
+	}
+	// Remembered unknown names cost nothing more, from any client.
+	before := tracer.count("")
+	for _, name := range names[:10] {
+		if code := ask(name, "198.51.100.8").Code; code != http.StatusNotFound {
+			t.Fatalf("remembered %q status=%d", name, code)
+		}
+	}
+	if queries := tracer.count("") - before; queries != 0 {
+		t.Fatalf("remembered unknown names ran %d queries", queries)
+	}
+	// The active domain answers from its cache, even to the flooding client; the proxy's question for
+	// the pending claim checks it live and activates it.
+	for _, client := range []string{"198.51.100.7", "127.0.0.1"} {
+		if code := ask(activeHost, client).Code; code != http.StatusOK {
+			t.Fatalf("active host for %s = %d", client, code)
+		}
+	}
+	if code := ask(pendingHost, "127.0.0.1").Code; code != http.StatusOK {
+		t.Fatalf("pending host with proving DNS = %d", code)
+	}
+	if view := checkDomain(t, api, pending, http.StatusOK); view.Status != "active" {
+		t.Fatalf("pending host after the question = %+v", view)
 	}
 }
