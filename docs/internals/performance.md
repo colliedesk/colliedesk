@@ -34,6 +34,16 @@ If the gate fails:
 3. Check for N+1 queries, tenant-unscoped scans, missing filter/order indexes, and repeated search scans.
 4. Optimize the query or infrastructure. Do not raise the 100 ms threshold.
 
+## Import status budget
+
+`TestImportStatusLatencyBudget` holds the store calls behind `GET /api/v1/imports/{id}` to 20 ms p95
+and `GET /api/v1/imports` to 100 ms p95. The import screen polls the status every few seconds while an
+import runs for hours. The fixture is two workspaces with 300 finished imports each, every preview
+naming 50 agents, and the newest import with a 4 MB report: the status and the list never read a
+report (`/report` does), so its size must not show. Same method as the inbox activity budget: 10
+warm-up calls, then 200 timed calls of the store call. No handler talks to Freshdesk; the worker does.
+Do not widen either budget.
+
 ## Knowledge base search budget
 
 `TestKnowledgeBaseSearchLatencyBudget` seeds two workspaces at the article cap (`domain.MaxKBArticles`,

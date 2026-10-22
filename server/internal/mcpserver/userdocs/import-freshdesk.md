@@ -128,6 +128,33 @@ may lack the right), the status is `UNVERIFIED`.
 The key gives read access to the whole account. Keep it in an environment variable. Colliedesk
 never accepts it as a command-line argument and never prints it.
 
+## Import through the API or an AI agent
+
+An admin can also have the server run the import, without a terminal, on Colliedesk Cloud and on your
+own server alike. The server reads the account, imports the tickets updated in the last 90 days first
+(newest first, so your team can work on them), then the whole account, and ends with the same
+reconcile report. It leaves a fifth of your Freshdesk API limit to your other Freshdesk apps.
+
+1. `POST /api/v1/imports` with `{"source": "freshdesk", "domain": "<account>.freshdesk.com",
+   "api_key": "..."}` (MCP: `colliedesk_import_preview`) reads the account and writes nothing. Poll
+   `GET /api/v1/imports/{id}` until `state` is `previewed`: `preview` has the counts and says whether
+   the key can read the archive (if not, the report can be UNVERIFIED at best).
+2. `POST /api/v1/imports/{id}/start` (`colliedesk_import_start`) within an hour imports it.
+   `progress` shows the step, the counts and an estimate; `cancel` stops it.
+3. `GET /api/v1/imports/{id}/report` (`colliedesk_import_report`) is the report; add
+   `?format=markdown` to download it. `POST /api/v1/imports/{id}/undo` removes what the import
+   brought in (an agent token's undo waits for a person's approval).
+
+The key is encrypted on the server and erased when the import ends. An agent token below the admin
+tier cannot send it: the call is refused instead of waiting for approval, so the key is never stored
+in a request. If the server restarted without `MAILBOX_TOKEN_KEYS` (see
+[environment variables](../self-host/environment-variables.md)), the import waits in `waiting_key`
+until you give it the key again (`PUT /api/v1/imports/{id}/key`).
+
+The Freshdesk Free plan has no API calls, so it cannot be imported this way: start a 14-day trial of a
+higher Freshdesk plan, then import. If the trial ends during the import, it stops with
+`freshdesk_plan_no_api` and keeps what it imported.
+
 ## Run the import
 
 1. Put the key in an environment variable:

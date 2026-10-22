@@ -54,8 +54,8 @@ func TestPreviewSealsTheKeyForItsWorkspaceAndJobOnly(t *testing.T) {
 func TestPreviewWithoutAKeyRingKeepsTheKeyOnlyInMemory(t *testing.T) {
 	e := newEnv(t, false)
 	job := e.preview(t, e.a)
-	if job.HasKey || !e.keyErased(t, job.ID) {
-		t.Fatalf("a server without a key ring stored the key: %+v", job)
+	if !job.HasKey || !e.keyErased(t, job.ID) {
+		t.Fatalf("a server without a key ring stored the key, or does not say it holds it: %+v", job)
 	}
 	key, err := importjobs.OpenKeyForTest(e.keys, e.a.id, job.ID, nil, "")
 	if err != nil || key != testKey {

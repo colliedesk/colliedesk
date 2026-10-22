@@ -85,6 +85,9 @@ func (s *Store) ExportWorkspace(ctx context.Context, workspaceID string, sink ex
 	if err := exportAgentRequests(ctx, tx, workspaceID, sink); err != nil {
 		return err
 	}
+	if err := exportImportJobs(ctx, tx, workspaceID, sink); err != nil {
+		return err
+	}
 	return exportConversations(ctx, tx, workspaceID, sink)
 }
 
@@ -274,6 +277,32 @@ func exportAgentRequests(ctx context.Context, tx pgx.Tx, workspaceID string, sin
 		}
 	}
 	return rowsError("export agent requests", rows)
+}
+
+// exportImportJobs writes the in-app imports; the sealed key is never selected.
+func exportImportJobs(ctx context.Context, tx pgx.Tx, workspaceID string, sink export.Sink) error {
+	rows, err := tx.Query(ctx, `SELECT id::text,kind,source,domain,account_source,undo_of::text,state,phase,options,preview,interim_report,report,status,
+		error_code,error_message,created_by::text,created_at,started_at,finished_at
+		FROM import_jobs WHERE workspace_id=$1 ORDER BY created_at,id`, workspaceID)
+	if err != nil {
+		return fmt.Errorf("export import jobs: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var record export.ImportJob
+		var options, preview, interim, report []byte
+		if err := rows.Scan(&record.ID, &record.Kind, &record.Source, &record.Domain, &record.AccountSource, &record.UndoOf, &record.State, &record.Phase,
+			&options, &preview, &interim, &report, &record.Status, &record.ErrorCode, &record.ErrorMessage, &record.CreatedBy,
+			&record.CreatedAt, &record.StartedAt, &record.FinishedAt); err != nil {
+			return fmt.Errorf("export import jobs: %w", err)
+		}
+		record.Options, record.Preview, record.InterimReport, record.Report = options, preview, interim, report
+		record.CreatedAt, record.StartedAt, record.FinishedAt = domain.UTC(record.CreatedAt), domain.UTCOptional(record.StartedAt), domain.UTCOptional(record.FinishedAt)
+		if err := sink.ImportJob(record); err != nil {
+			return err
+		}
+	}
+	return rowsError("export import jobs", rows)
 }
 
 func rowsError(what string, rows pgx.Rows) error {
