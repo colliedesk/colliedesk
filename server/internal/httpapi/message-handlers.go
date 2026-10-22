@@ -6,7 +6,6 @@ import (
 	"errors"
 	"mime"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/colliedesk/colliedesk/server/internal/auth"
@@ -182,8 +181,7 @@ func (a *API) writeReplyConflict(response http.ResponseWriter, identity auth.Pri
 		}
 	}
 	writeJSON(response, http.StatusConflict, map[string]any{"error": errorBody(response, map[string]any{
-		"code": "reply_conflict", "message": "Someone replied to this conversation after you started writing. Nothing was sent: read the newer replies, " +
-			"then send again with seen_reply_number " + strconv.Itoa(conflict.Latest) + " if your reply still fits.",
+		"code": "reply_conflict", "message": "Someone replied to this conversation after you started writing. Nothing was sent: read the new reply, then send again if yours still fits.",
 		"latest_reply_number": conflict.Latest, "newer_replies": conflict.Newer})})
 	return true
 }
