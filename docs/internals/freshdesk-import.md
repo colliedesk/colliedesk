@@ -186,6 +186,131 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
   `application/octet-stream`, `Content-Disposition: attachment` (RFC 5987 `filename*`) and
   `nosniff`, and refuses a row whose storage key belongs to another workspace.
 
+## In-app import (#97): importer hooks
+
+The in-app import runs this importer in a background job of `collie serve`. The importer gained
+options for it; with their zero values the CLI behaves as before.
+
+- **`Mode: ModeRecent`** imports the tickets the list returns for `Since`, newest updated first, and
+  nothing account-wide: no knowledge base, no contact or saved-reply list, no id probe, no totals.
+  Its report is `INTERIM` (`interim: true`), never OK, or FAILED when an item failed. The job then runs `ModeFull`, the same run as
+  the CLI, which skips the recent tickets by the re-run rule and alone can report OK. The probe is
+  left out on purpose: it imports every ticket the list does not return (`ticket_not_listed`), so a
+  first `Run` with `Since` imports the whole account and the recent tickets come last. The list is
+  still read oldest first (the 300-page window needs it) and the slice is sorted in memory.
+  Contacts and saved replies are left out because they are written before the slice is sized.
+- **Capped plans in `ModeRecent`** size only the slice (`sizeRefs`) before its first write. The full
+  run sizes everything left with `guardStorage` before its own first write. When that does not fit,
+  the slice stays imported, the job ends FAILED with `storage_cap` and offers undo: a deliberate
+  exception to "nothing is imported" that the owner accepted, so recent tickets do not wait for hours
+  of sizing. The CLI never runs `ModeRecent`.
+- **`ReserveRateLimit`** makes the run pause once `X-Ratelimit-Remaining` is at most
+  max(10, 20 % of `X-Ratelimit-Total`), capped at half the limit, instead of at 0. The limit is per
+  Freshdesk account and shared with the customer's own apps and webhooks; the in-app job runs for
+  hours while the team still works in Freshdesk. Without a `X-Ratelimit-Total` header the reserve is 10.
+- **`OnProgress`** receives every phase, counter and rate-limit wait with the API call count; the
+  progress lines of the CLI are unchanged. The sizing run of a capped plan reports to the callback
+  but writes no lines.
+- **`Preview`** reads `/account`, the agents, the companies, the contact and ticket search totals,
+  the newest listed ticket (with `updated_since=1970-01-01`, or the list answers only the last 30
+  days), one archive lookup and the first page of canned responses and solution categories. It
+  writes nothing. The ticket numbers are "at least": search leaves out archived tickets and archived
+  tickets can have ids above the newest listed one. A 401 is `ErrKeyRejected`, a 403 on `/account` or
+  `/agents` `ErrNeedsAdminKey`.
+- **A refused key or a plan without API calls ends the run.** A 401 (`ErrKeyRejected`) or any
+  answer with `X-Ratelimit-Total: 0` (`ErrPlanNoAPI`) stops the run at once instead of failing every
+  item or waiting for a limit that never returns; what was imported stays (undo removes it). The
+  Freshdesk Free plan has 0 API calls a minute (support article 225439); a Free account can start a
+  14-day trial of a higher plan (support article 50000010099) and import during it, and when that
+  trial ends mid-import the key stops working this way. Before this, the CLI recorded each ticket of
+  a revoked key as a failure and went on.
+- **Author ids.** Messages keep the Freshdesk agent who wrote them (`origin.author_external_id`)
+  and conversations the agent they were assigned to (`origin.responder_external_id`), so a Freshdesk
+  agent can be linked to a Colliedesk agent after the import. Messages imported before this have no
+  id; a re-run updates the conversation origin but not existing messages.
+
+## In-app import (#97): the job
+
+Code: `server/internal/importjobs`. A row of `import_jobs` is the durable state of one in-app import
+(or undo); `collie serve` runs the worker. No HTTP handler talks to Freshdesk.
+
+### States
+
+| State | Meaning | Next |
+|---|---|---|
+| `previewing` | Waiting for a worker to read the account (`freshdesk.Preview`) | `previewed`, `failed` |
+| `previewed` | Counts shown, nothing written; the key is kept one hour | `queued` (start), `discarded` (cancel, a new preview, or one hour) |
+| `queued` | Started, waiting for a worker | `running`, `cancelled` |
+| `running` | A worker holds the lease; `phase` is `recent`, `full` or `undo` | `finished`, `failed`, `cancelled`, `retry_wait`, `waiting_key` |
+| `retry_wait` | Freshdesk unavailable, another import holds the lock, or failed items are retried; runs again at `next_run_at` | `running`, `failed`, `cancelled` |
+| `waiting_key` | The key cannot be opened (server restarted without `MAILBOX_TOKEN_KEYS`, or its key left the ring) | `queued` (new key), `cancelled` |
+| `finished` | The full pass returned a report (`status` OK, UNVERIFIED or FAILED), or an undo finished | |
+| `failed` | The run stopped; `error_code` says why. Imported data stays | |
+| `cancelled`, `discarded` | Stopped by a person; imported data stays | |
+
+One job per workspace is `queued`, `running`, `retry_wait` or `waiting_key` (partial unique index):
+a second start answers "an import is running". The worker also takes the importer's advisory lock,
+so the CLI and a job never run together; a job that finds it taken waits in `retry_wait`.
+
+The key is erased (`sealed_key` and the in-memory copy) in the same update that moves a job to
+`finished`, `failed`, `cancelled`, `discarded` or `waiting_key`; a check constraint refuses a key on
+any of them. An undo job holds no key.
+
+### Error codes
+
+| Code | Cause | State |
+|---|---|---|
+| `freshdesk_key_rejected` | Freshdesk answered 401 (`ErrKeyRejected`) | `failed` |
+| `freshdesk_needs_admin_key` | 403 on the account or the agents (`ErrNeedsAdminKey`) | `failed` |
+| `freshdesk_plan_no_api` | `X-Ratelimit-Total: 0` (`ErrPlanNoAPI`): the Free plan, or a trial of a higher plan that ended | `failed`, never retried |
+| `freshdesk_unavailable` | 5xx, 429 or network after the client's retries (`ErrUnavailable`) | `retry_wait`, backoff 1, 2, 5, 10, then 30 minutes; `failed` after 24 hours without progress |
+| `import_running_elsewhere` | Another import or undo (CLI) holds the lock | `retry_wait` 1 minute, same 24 hours |
+| `retrying_failed_items` | The full pass reported FAILED; it runs again (twice at most, while failures go down) | `retry_wait` 1 minute |
+| `storage_cap` | The full pass does not fit the plan's storage; the recent tickets stay | `failed` |
+| `knowledge_base_limit` | The knowledge base passes a limit (`KnowledgeBaseLimitError`) | `failed` |
+| `key_unavailable` | The key cannot be opened | `waiting_key` |
+| `no_progress` | Found running after a crash five times without progress in between | `failed` |
+| `import_error` | Anything else: never retried, the message is kept | `failed` |
+
+### Lease
+
+The claim crosses workspaces (`PrivilegeImportJobClaim`) and returns only ids; everything else runs
+in the job's workspace. A claim sets `claim_token` and a two-minute lease; the worker renews it every
+30 seconds and reads `cancel_requested_at` then. Every write of a run presents the claim token; a
+write that matches no row means another worker took the job, and the run stops. After a restart the
+lease expires and the job runs its saved phase again; the ledger skips what is done. The recent
+window ends at `started_at` minus `recent_days` (default 90; 0 skips the recent pass), so a rerun
+reads the same window. The phase moves to `full`, with the interim report saved, before the full
+pass starts.
+
+A worker claims only the jobs it can open the key of: sealed with a key id of its ring, or held in its
+memory. Without `MAILBOX_TOKEN_KEYS` the key stays in the memory of the process that received it and the
+job is pinned to that process (`owner_instance`). A job nobody leased or saved for one lease (its process
+is gone, or its key left every ring) is taken by any worker and moves to `waiting_key`. Replicas with
+different rings therefore never take each other's jobs while those are alive. Cloud sets the ring; it is shared with Gmail grants, so rotate it by
+putting a new key in front (`k2:new,k1:old`), never by replacing it.
+
+### Notice to the admins
+
+When an import ends on its own (`finished`, or `failed`), the worker mails the person who started it
+and every active admin, one message each, from `noreply@MAIL_FROM_DOMAIN` like the retention notice
+(`importjobs/notice.go`). A preview, a cancel and an undo send none. It is sent after the end is
+committed, at most once: a crash in between, or a relay failure (logged), means no mail; the page and
+the job always hold the result. Without SMTP the page alone says it. No telemetry event is added (#105).
+
+### Freshdesk agents (import_people)
+
+The preview records the agents of the account (`import_people`, keyed by workspace, ledger source and
+Freshdesk agent id) and links the ones whose email matches an active agent. Redeeming an invite links
+the unlinked ones with that email (`Service.LinkByEmail` in the redeem handler; a failure never stops a
+sign-in). A person links or unlinks through the API. A changed link sets `relink_pending`, and
+`relink_from` keeps the agent the rows are taken from until the worker applies it: in the person's
+workspace, one transaction moves the replies (`origin.author_external_id`) and the tickets
+(`origin.responder_external_id`) that this account's ledger wrote, from `relink_from` to nobody, then from
+nobody to the linked agent. A ticket someone reassigned keeps its assignee; `author_name` and the
+timestamps never change. The end of a full pass marks every link of the account pending again, for the
+rows written while nobody matched. Messages imported before author ids existed are not relinked.
+
 ## Knowledge base (solutions)
 
 Code: `solutions*.go`; the writes are `store/kb-import.go`, which take the same lock, limits,
@@ -287,3 +412,19 @@ that ticket ids are sequential from 1, the archive endpoint's status on plans wi
 the expiry status of attachment URLs, `size` versus downloaded bytes, the filter query syntax and
 totals (including whether spam is counted), rate-limit headers on the plan, conversation `source`
 values for forwards and public notes, and the agent-as-requester case.
+
+For the in-app import, also check (each is handled the safe way until then):
+
+1. What Freshdesk answers on the Free plan, which has no API calls (support article 225439), and
+   after a trial of a higher plan ends. The importer assumes an `X-Ratelimit-Total` of 0 (reported
+   as `ErrPlanNoAPI`), a 401 (key refused) or a 403 on `/account` (needs an admin key, or a plan
+   with the API); a 403 on every ticket is reported as item failures, so the report is FAILED.
+2. Whether `X-Ratelimit-Remaining` reflects the per-endpoint limits (Tickets List 40 a minute on
+   Growth) or only the account total, and whether every plan sends `X-Ratelimit-Total`; without it
+   the reserve falls back to 10 calls.
+3. Whether the rate limit of the plans whose table says "/hr" is per hour or per minute.
+4. Whether `/account` and the archive endpoints need an admin key (a 403 on `/account` is reported
+   as "needs an admin key"; a 403 on the archive as the archive refused, so the report is UNVERIFIED).
+5. Whether the archive lookup of a ticket that is not archived answers 404 (the preview counts a 404
+   as "archive readable").
+6. How long an `attachment_url` stays valid (an expired one is read again, as for the CLI).

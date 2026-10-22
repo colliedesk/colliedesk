@@ -97,6 +97,9 @@ func (r *run) ticketFailed(ctx context.Context, key string, cause error) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if err := r.client.fatalErr(); err != nil {
+		return err
+	}
 	r.itemFailed(ctx, entityTicket, key, "", cause)
 	return r.internalErr
 }

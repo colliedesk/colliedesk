@@ -48,6 +48,9 @@ const (
 	PrivilegeRequestLogin Privilege = "request-login"
 	// PrivilegeOutboxClaim leases due outbox rows of every workspace for the email worker.
 	PrivilegeOutboxClaim Privilege = "outbox-claim"
+	// PrivilegeImportJobClaim leases due in-app import jobs of every workspace for the import worker,
+	// and discards previews nobody started within the hour.
+	PrivilegeImportJobClaim Privilege = "import-job-claim"
 	// PrivilegeVerifiedSender resolves the workspace whose support address domain the email provider
 	// verified, from the From domain of a delivery event. At most one workspace holds a given name.
 	PrivilegeVerifiedSender Privilege = "verified-sender"

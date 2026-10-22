@@ -19,6 +19,9 @@ func (r *Report) Markdown() string {
 	if r.Since != nil {
 		fmt.Fprintf(&b, "- Only tickets updated since: %s\n", r.Since.UTC().Format(time.RFC3339))
 	}
+	if r.Interim {
+		b.WriteString("- Interim: recent tickets only, newest first. Contacts, saved replies, the knowledge base, archived and older tickets, and the completeness checks come with the full import that follows; only its report can be OK.\n")
+	}
 	if r.DryRun {
 		b.WriteString("- Dry run: nothing was written. Message, attachment and time entry counts are known only after an import.\n")
 	}
