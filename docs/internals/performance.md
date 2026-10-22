@@ -139,6 +139,8 @@ On 2026-10-20 the first bundle was 203,268 bytes of 204,800. Plan and billing, t
 
 On 2026-10-21 the reply box got **Articles** (link a help center article in a reply). Its first version kept the button, its strings, the link format and the extended saved reply picker in the first bundle: 201,985 → 202,563 (+578). The saved reply picker and the articles picker then moved together into one lazy part, `reply-pickers` (1.7 KB gzip, plus a 4.0 KB chunk of the API calls and strings it shares with the knowledge base pages), which the composer starts loading when it mounts; the first bundle keeps the two buttons and the part's loading and failure states: 201,776 bytes (−209 against 201,985), CSS 14,267 → 14,317.
 
+On 2026-10-22 presence (issue #101: who else has a conversation open) first kept its list marks, the lines under the conversation title and the tab's heartbeat in the first bundle and went over the gate (204,929). They moved to one lazy part, `presence-view`, loaded once a conversation is open (after the ticket's own requests) or somebody else is on a listed one; the first bundle keeps the two small hooks, the API calls and the schemas: 204,078 bytes, CSS 14,641.
+
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
 
 ## Reply box lists (saved replies, articles)

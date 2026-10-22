@@ -1,6 +1,8 @@
 import { act, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { presenceClientId, useConversationPresence } from './use-conversation-presence';
+import { afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
+import { presenceViewPart } from './presence-part';
+import { presenceClientId } from './presence-runtime';
+import { useConversationPresence } from './use-conversation-presence';
 
 const api = vi.hoisted(() => ({ announcePresence: vi.fn(), leavePresence: vi.fn() }));
 const { TooManyRequestsError } = vi.hoisted(() => ({ TooManyRequestsError: class extends Error { constructor(readonly retryAfterSeconds: number) { super('429'); } } }));
@@ -9,6 +11,13 @@ vi.mock('../../api/client', () => ({ api, TooManyRequestsError }));
 const one = '11111111-1111-4111-8111-111111111111';
 const two = '22222222-2222-4222-8222-222222222222';
 const lan = { agent_id: '44444444-4444-4444-8444-444444444444', name: 'Lan', writing: true, writing_since: '2026-10-22T09:00:00Z', edited_at: '2026-10-22T09:00:00Z', agent_token: null };
+
+// The presence code comes in its own chunk; these tests start with it there.
+beforeAll(async () => {
+  presenceViewPart.preload();
+  await import('./presence-view');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+});
 
 let visibility: DocumentVisibilityState = 'visible';
 const setVisibility = (state: DocumentVisibilityState) => act(() => {

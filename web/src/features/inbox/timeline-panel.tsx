@@ -1,8 +1,9 @@
 import type { RefObject } from 'react';
 import type { Conversation, ConversationViewer, Message, TimeEntry } from '../../api/schemas';
 import { messages } from '../../messages';
-import { ConversationViewers } from './conversation-viewers';
+import { Part } from '../../ui/lazy-part';
 import { MessageItem } from './message-item';
+import { presenceViewPart } from './presence-part';
 import { PriorityLabel, StatusLabel } from './conversation-labels';
 import { TimeEntriesSection } from './time-entries-section';
 
@@ -38,7 +39,7 @@ export function TimelinePanel({ conversation, items, timeEntries = [], loading =
             <a className="timeline-contact" href={`/contacts/${conversation.contact_id}`} aria-label={messages.openContact(conversation.contact_name)}
               onClick={(event) => { if (onOpenContact && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); onOpenContact(conversation.contact_id); } }}>
               {conversation.contact_name}</a></div>}
-          {conversation && <ConversationViewers viewers={viewers} timezone={timezone} />}
+          {conversation && viewers.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ConversationViewers viewers={viewers} timezone={timezone} />} />}
         </div>
         {conversation && onToggleDetails && <button type="button" className="details-toggle" ref={detailsToggleRef}
           aria-expanded={detailsOpen} aria-controls="conversation-details" onClick={onToggleDetails}>{messages.showDetails}</button>}
