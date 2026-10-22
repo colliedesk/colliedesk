@@ -115,8 +115,6 @@ export const messageSchema = z.object({
   attachments: z.array(attachmentSchema), cc: z.array(z.string()), created_at: z.string().datetime(),
   delivery: messageDeliverySchema.nullable(), email: incomingEmailSchema.nullable(), reply_number: z.number().int().positive().nullable(),
 }) satisfies z.ZodType<Generated<'Message'>>;
-export const replyConflictSchema = z.object({ error: z.object({ code: z.literal('reply_conflict'), message: z.string(), request_id: z.string().optional(),
-  latest_reply_number: z.number().int().positive(), newer_replies: z.array(messageSchema) }) }) satisfies z.ZodType<Generated<'ReplyConflict'>>;
 export const emailDnsRecordSchema = z.object({
   record: z.string(), type: z.string(), name: z.string(), value: z.string(), priority: z.number().int().nullable(), status: z.string(),
 }) satisfies z.ZodType<Generated<'EmailDNSRecord'>>;
@@ -173,7 +171,6 @@ export const conversationViewerSchema = z.object({
   agent_id: z.string().uuid(), name: z.string(), writing: z.boolean(), writing_since: z.string().datetime().nullable(), edited_at: z.string().datetime().nullable(),
   agent_token: messageAgentTokenSchema.nullable(),
 }) satisfies z.ZodType<Generated<'ConversationViewer'>>;
-export const conversationPresenceSchema = z.object({ viewers: z.array(conversationViewerSchema), heartbeat_seconds: z.number().int().positive() }) satisfies z.ZodType<Generated<'ConversationPresence'>>;
 export const inboxActivitySchema = z.object({
   now: z.string().datetime(),
   new_conversations: z.array(z.object({ id: z.string().uuid(), subject: z.string(), contact_name: z.string(), created_at: z.string().datetime() })),

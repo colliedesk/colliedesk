@@ -5,8 +5,8 @@ import { presenceClientId } from './presence-runtime';
 import { useConversationPresence } from './use-conversation-presence';
 
 const api = vi.hoisted(() => ({ announcePresence: vi.fn(), leavePresence: vi.fn() }));
-const { TooManyRequestsError } = vi.hoisted(() => ({ TooManyRequestsError: class extends Error { constructor(readonly retryAfterSeconds: number) { super('429'); } } }));
-vi.mock('../../api/client', () => ({ api, TooManyRequestsError }));
+const { RetryLater } = vi.hoisted(() => ({ RetryLater: class extends Error { constructor(readonly seconds: number) { super('429'); } } }));
+vi.mock('./presence-api', () => ({ presenceApi: { announce: api.announcePresence, leave: api.leavePresence }, RetryLater }));
 
 const one = '11111111-1111-4111-8111-111111111111';
 const two = '22222222-2222-4222-8222-222222222222';
@@ -146,7 +146,7 @@ test('a refused announce lists nobody and tries again later, without a burst', a
 test('an announce the server takes later is sent again after Retry-After, not at the next heartbeat', async () => {
   const { rerender } = renderHook(({ writing }) => useConversationPresence(one, writing), { initialProps: { writing: false } });
   await tick(0);
-  api.announcePresence.mockRejectedValueOnce(new TooManyRequestsError(1));
+  api.announcePresence.mockRejectedValueOnce(new RetryLater(1));
   await tick(1_000);
   rerender({ writing: true });
   await tick(0);

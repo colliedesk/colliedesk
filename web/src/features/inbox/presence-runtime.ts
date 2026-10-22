@@ -1,4 +1,4 @@
-import { api, TooManyRequestsError } from '../../api/client';
+import { presenceApi, RetryLater } from './presence-api';
 import type { ConversationViewer } from '../../api/schemas';
 
 // One id per page load, kept in memory only: "Duplicate tab" copies sessionStorage, and two tabs sharing
@@ -42,7 +42,7 @@ export function startPresence(id: string, writing: boolean, onViewers: (viewers:
     clearTimeout(timer);
     if (!announced) return;
     announced = false;
-    void api.leavePresence(id, presenceClientId).catch(() => {});
+    void presenceApi.leave(id, presenceClientId).catch(() => {});
   };
   function announce() {
     if (stopped) return;
@@ -56,15 +56,15 @@ export function startPresence(id: string, writing: boolean, onViewers: (viewers:
     const mine = ++sequence;
     const body = { client_id: presenceClientId, writing: writingNow, edited, hidden: hidden() };
     edited = false;
-    api.announcePresence(id, body).then((result) => {
+    presenceApi.announce(id, body).then((result) => {
       if (stopped || mine !== sequence) return;
       // The tab left while this announce was on its way: the leave may have arrived first.
-      if (!announced) { void api.leavePresence(id, presenceClientId).catch(() => {}); return; }
+      if (!announced) { void presenceApi.leave(id, presenceClientId).catch(() => {}); return; }
       onViewers(result.viewers);
       if (!changeWaiting) later(result.heartbeat_seconds * 1_000);
     }, (error: unknown) => {
       if (stopped || mine !== sequence || !announced) return;
-      const pause = error instanceof TooManyRequestsError ? error.retryAfterSeconds * 1_000 : retryAfter;
+      const pause = error instanceof RetryLater ? error.seconds * 1_000 : retryAfter;
       if (!changeWaiting || pause > minimumGap) later(pause);
     });
   }
