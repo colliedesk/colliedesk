@@ -24,6 +24,11 @@ func TestParseLegacyPathReadsOldFreshdeskAddresses(t *testing.T) {
 		{"/support/solutions/articles/7201-how-do-i_pay--by-card?", LegacyAddress{Kind: LegacyArticle, ID: "7201", Words: "how do i pay by card"}, true},
 		{"/support/search", LegacyAddress{Kind: LegacySearch}, true},
 		{"/en/support/search/solutions", LegacyAddress{Kind: LegacySearch}, true},
+		// Old links typed by hand may change the case of the fixed words and of the language.
+		{"/Support/Solutions/Articles/7201-Reset-Password", LegacyAddress{Kind: LegacyArticle, ID: "7201", Words: "Reset Password"}, true},
+		{"/DE/SUPPORT/solutions/FOLDERS/12000007788", LegacyAddress{Kind: LegacyFolder, ID: "12000007788"}, true},
+		{"/SUPPORT", LegacyAddress{Kind: LegacyHome}, true},
+		{"/Support/Search", LegacyAddress{Kind: LegacySearch}, true},
 		// Shapes that name no item still belong to the old portal: they go to the home page.
 		{"/support/solutions/folders/x", LegacyAddress{Kind: LegacyOther}, true},
 		{"/support/solutions/articles/", LegacyAddress{Kind: LegacyOther}, true},
@@ -66,5 +71,13 @@ func TestLegacyWordsAreBounded(t *testing.T) {
 	got, ok := ParseLegacyPath(long)
 	if !ok || got.Kind != LegacyArticle || len([]rune(got.Words)) > maxSearchChars {
 		t.Fatalf("long slug: %+v %v (%d characters)", got.Kind, ok, len([]rune(got.Words)))
+	}
+}
+
+func TestSearchPathCarriesTheWords(t *testing.T) {
+	for words, want := range map[string]string{"": "", "  ": "", "reset  password": "/search?q=reset+password", "a&b=c": "/search?q=a%26b%3Dc"} {
+		if got := SearchPath(words); got != want {
+			t.Errorf("SearchPath(%q) = %q, want %q", words, got, want)
+		}
 	}
 }

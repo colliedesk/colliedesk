@@ -52,38 +52,42 @@ func (a LegacyAddress) Entity() string {
 	return ""
 }
 
-// legacyLanguage is the language prefix of a multilingual Freshdesk portal (/de/, /pt-BR/).
-var legacyLanguage = regexp.MustCompile(`^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$`)
+// legacyLanguage is the language prefix of a multilingual Freshdesk portal (/de/, /pt-BR/), in any case.
+var legacyLanguage = regexp.MustCompile(`^(?i:[a-z]{2,3}(?:-[a-z0-9]{2,8})?)$`)
 
 // legacyItem is <id> or <id>-<slug>; Freshdesk ids never start with 0.
 var legacyItem = regexp.MustCompile(`^([1-9][0-9]{0,18})(?:-(.*))?$`)
 
 // ParseLegacyPath reads a request path (decoded, below the help center's address) as an old Freshdesk
 // help center address. It reports false for any path outside /support (after an optional language).
+// The fixed words of the path match in any case (/Support/Solutions/...); the slug keeps its own.
 func ParseLegacyPath(path string) (LegacyAddress, bool) {
 	segments := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	if len(segments) > 1 && segments[1] == "support" && legacyLanguage.MatchString(segments[0]) {
+	is := func(index int, word string) bool {
+		return index < len(segments) && strings.EqualFold(segments[index], word)
+	}
+	if is(1, "support") && legacyLanguage.MatchString(segments[0]) {
 		segments = segments[1:]
 	}
-	if segments[0] != "support" {
+	if !is(0, "support") {
 		return LegacyAddress{}, false
 	}
-	rest := segments[1:]
-	if len(rest) > 0 && rest[len(rest)-1] == "" {
-		rest = rest[:len(rest)-1]
+	segments = segments[1:]
+	if len(segments) > 0 && segments[len(segments)-1] == "" {
+		segments = segments[:len(segments)-1]
 	}
 	switch {
-	case len(rest) == 0, len(rest) == 1 && (rest[0] == "home" || rest[0] == "solutions"):
+	case len(segments) == 0, len(segments) == 1 && (is(0, "home") || is(0, "solutions")):
 		return LegacyAddress{Kind: LegacyHome}, true
-	case rest[0] == "search":
+	case is(0, "search"):
 		return LegacyAddress{Kind: LegacySearch}, true
-	case rest[0] != "solutions":
-	case len(rest) == 2:
-		return legacyItemAddress(LegacyCategory, rest[1]), true
-	case len(rest) == 3 && rest[1] == "folders":
-		return legacyItemAddress(LegacyFolder, rest[2]), true
-	case len(rest) == 3 && rest[1] == "articles":
-		return legacyItemAddress(LegacyArticle, rest[2]), true
+	case !is(0, "solutions"):
+	case len(segments) == 2:
+		return legacyItemAddress(LegacyCategory, segments[1]), true
+	case len(segments) == 3 && is(1, "folders"):
+		return legacyItemAddress(LegacyFolder, segments[2]), true
+	case len(segments) == 3 && is(1, "articles"):
+		return legacyItemAddress(LegacyArticle, segments[2]), true
 	}
 	return LegacyAddress{Kind: LegacyOther}, true
 }
@@ -150,12 +154,18 @@ func (s *Site) legacyTarget(ctx context.Context, v view, old LegacyAddress, term
 
 // searchAddress is the help center's search for words, or its home page without any.
 func (v view) searchAddress(words string) string {
+	return v.address + SearchPath(words)
+}
+
+// SearchPath is the path, below a help center's address, of its search for words (cleaned and
+// bounded as the search page reads them), or "" (the home page) without any words.
+func SearchPath(words string) string {
 	words = strings.Join(strings.Fields(strings.ToValidUTF8(words, "")), " ")
 	if runes := []rune(words); len(runes) > maxSearchChars {
 		words = string(runes[:maxSearchChars])
 	}
 	if words == "" {
-		return v.address
+		return ""
 	}
-	return v.address + "/search?q=" + url.QueryEscape(words)
+	return "/search?q=" + url.QueryEscape(words)
 }
