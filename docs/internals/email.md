@@ -451,7 +451,13 @@ stand-in tests and `cmd/google-stand-in` use), `internal/tokenseal`, `store/mail
   uses `NextRawPart` and decodes once, by the part's own `Content-Transfer-Encoding`.
 - **PostgreSQL text rejects NUL bytes.** The parser strips them from bodies.
 - **Header lines must stay under 998 bytes.** Subjects are cut to 250 characters and encoded-words
-  are folded onto continuation lines.
+  are folded onto continuation lines, in Subject and in the names of From, To and Reply-To: a sender
+  name of 100 CJK characters or emoji encodes to well over 998 bytes.
+- **`email_channels.sender_name` is NOT NULL, and an image older than it does not write it.** A
+  `BEFORE INSERT` trigger fills a missing name from the workspace name, the same way the upgrade
+  filled existing channels, so an image rollback that keeps the schema can still connect email. The
+  current code always writes the name; the trigger can go in a cleanup migration once no image older
+  than the column can be rolled back to, as with the billing cleanup in [billing.md](billing.md).
 - **`net/smtp` refuses PLAIN auth without TLS** except on localhost, and has no implicit TLS;
   port 465 is rejected at startup.
 - **Never delete stored objects after a failed request.** Objects are content-addressed per

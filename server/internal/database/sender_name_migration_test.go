@@ -36,7 +36,7 @@ func TestSenderNameMigrationKeepsTheWorkspaceNameCustomersAlreadySee(t *testing.
 			t.Fatalf("seed %s: %v", slug, err)
 		}
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO workspaces(slug,name) VALUES('no-channel','No Channel')`); err != nil {
+	if _, err := pool.Exec(ctx, `INSERT INTO workspaces(slug,name) VALUES('no-channel','No Channel'),('tab-name',E'Tab\tDesk')`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -62,9 +62,17 @@ func TestSenderNameMigrationKeepsTheWorkspaceNameCustomersAlreadySee(t *testing.
 			t.Errorf("%s: the workspace name changed to %q", slug, name)
 		}
 	}
-	if _, err := pool.Exec(ctx, `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token)
-		SELECT id,'support@no-channel.example','token' FROM workspaces WHERE slug='no-channel'`); err == nil {
-		t.Error("a channel without a sender name was stored")
+	// An image older than the migration (after a rollback that kept the schema) connects email without
+	// a sender name; the channel gets the workspace name the way the upgrade gave existing channels theirs.
+	for slug, expected := range map[string]string{"no-channel": "No Channel", "tab-name": "Tab Desk"} {
+		var got string
+		if err := pool.QueryRow(ctx, `INSERT INTO email_channels(workspace_id,support_address,domain_verification_token)
+			SELECT id,'support@'||slug||'.example','token' FROM workspaces WHERE slug=$1 RETURNING sender_name`, slug).Scan(&got); err != nil {
+			t.Fatalf("connect %s the way an older image does: %v", slug, err)
+		}
+		if got != expected {
+			t.Errorf("%s: sender_name=%q, want %q", slug, got, expected)
+		}
 	}
 	for _, bad := range []string{"", strings.Repeat("x", 101), "Line\nbreak"} {
 		if _, err := pool.Exec(ctx, `UPDATE email_channels SET sender_name=$1 WHERE workspace_id=(SELECT id FROM workspaces WHERE slug='plain')`, bad); err == nil {
