@@ -129,8 +129,13 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if billing.Enabled() {
 		importPlans = billing.PlansOnSale()
 	}
-	go importjobs.NewWorker(importjobs.WorkerOptions{Pool: pool, DB: db, Keys: importKeys, Storage: storage,
-		Cloud: billing.Enabled(), PlansOnSale: importPlans, BaseURL: freshdeskBaseURL, Configure: importJobNetwork}).Run(ctx)
+	importOptions := importjobs.WorkerOptions{Pool: pool, DB: db, Keys: importKeys, Storage: storage,
+		Cloud: billing.Enabled(), PlansOnSale: importPlans, BaseURL: freshdeskBaseURL, Configure: importJobNetwork, Origin: origin}
+	// The admins hear when an import ends, from the platform address, as for retention notices.
+	if emailConfig.SMTP.Configured() && emailConfig.MailFromDomain != "" {
+		importOptions.Mailer, importOptions.MailFrom = email.SMTPSender{Config: emailConfig.SMTP}, "noreply@"+emailConfig.MailFromDomain
+	}
+	go importjobs.NewWorker(importOptions).Run(ctx)
 	warnWithoutTrustedProxies(slog.Default(), trustedProxies)
 	// The hosted cloud is cloud sign-in with billing; a self-hosted server may use sign-in alone.
 	hostedCloud := cloudAuth.Enabled() && billing.Enabled()
