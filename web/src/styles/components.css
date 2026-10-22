@@ -544,6 +544,13 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .badge-replying { background: var(--accent-soft); color: var(--accent-text); padding: 0 var(--space-1); font-size: var(--fs-label); line-height: 18px; }
 /* The marker has its own tip: the row's timestamp tip stays hidden while the pointer is on it. */
 .conversation-row:has(.viewer-stack:hover)::after { opacity: 0; }
+.conversation-viewers ul { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; padding: 0; list-style: none; color: var(--text-2); font-size: var(--fs-small); }
+.conversation-viewers li { display: flex; align-items: flex-start; gap: var(--space-2); }
+.conversation-viewers li .avatar { margin-top: 1px; }
+.conversation-viewers li[data-state="typing"], .conversation-viewers li[data-state="left"] { color: var(--text-1); font-weight: 600; }
+.conversation-viewers .viewer-more { margin-top: var(--space-1); font-size: var(--fs-small); }
+@media (pointer: coarse) { .conversation-viewers .viewer-more { min-height: var(--touch); } }
+.badge-draft-open { background: var(--surface-3); color: var(--text-2); padding: 0 var(--space-1); font-size: var(--fs-label); line-height: 18px; }
 .reply-draft { display: grid; gap: var(--space-2); margin: 0 var(--space-6) var(--space-2); border: 1px dashed var(--line-strong); border-radius: var(--radius); background: var(--surface-0); padding: var(--space-3); }
 .reply-draft-by { color: var(--text-2); font-size: var(--fs-small); font-weight: 600; }
 .reply-draft-text { white-space: pre-wrap; overflow-wrap: anywhere; }

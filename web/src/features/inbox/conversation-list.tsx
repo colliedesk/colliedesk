@@ -4,9 +4,10 @@ import type { Conversation, ConversationViewer, OnboardingGoal } from '../../api
 import { dayGroup, formatDate, formatShortDate } from '../../lib/format-date';
 import { useNow } from '../../lib/use-now';
 import { messages } from '../../messages';
-import { Avatar } from '../../ui/avatar';
+import { Part } from '../../ui/lazy-part';
 import { ChevronLeftIcon, ChevronRightIcon } from '../../ui/icons';
 import { PriorityLabel, StatusLabel } from './conversation-labels';
+import { presenceViewPart } from './presence-part';
 
 interface ConversationListProps {
   items: Conversation[];
@@ -63,24 +64,6 @@ function getStartedSteps(goal: OnboardingGoal | null | undefined, canManage: boo
 }
 
 const visibleTags = 2;
-const visibleViewers = 3;
-
-// ViewerStack marks a row with the initials of the others who have it open (an AI agent as its own
-// shape, once per person however many tokens), and a word when one of them is writing a reply. The
-// row's accessible name carries the same in words; the tip lists one name per line.
-function ViewerStack({ viewers }: { viewers: ConversationViewer[] }) {
-  const tip = viewers.map((viewer) => messages.viewerTip(messages.viewerName(viewer), viewer.writing)).join('\n');
-  const faces = [...new Map(viewers.map((viewer) => [`${viewer.agent_id}:${viewer.agent_token ? 'agent' : 'person'}`, viewer])).values()];
-  return <>
-    <span className="viewer-stack" data-tip={tip} aria-hidden="true">
-      {faces.slice(0, visibleViewers).map((viewer) => <Avatar key={`${viewer.agent_id}:${viewer.agent_token ? 'agent' : 'person'}`} name={viewer.name} size="xs" agent={viewer.agent_token !== null} />)}
-      {faces.length > visibleViewers && <span className="viewer-more">+{faces.length - visibleViewers}</span>}
-    </span>
-    {viewers.some((viewer) => viewer.writing) && <span className="badge badge-replying" aria-hidden="true">{messages.replying}</span>}
-    <span className="sr-only">{messages.openNow(viewers.map((viewer) => (viewer.writing ? messages.writingAReply(messages.viewerName(viewer)) : messages.viewerName(viewer))))}</span>
-  </>;
-}
-
 export function ConversationList({ items, selectedId, timezone, onSelect, page, hasNextPage, onPage, filtered = false, nothingOpen = false, loading = false, refreshing = false,
   failed = false, onRetry, onClearFilters, canManage = false, onOpenSettings, checkedIds, onToggle, onToggleAll, selectAllRef, toolbar, draftIds, viewers, grouped = true, onboardingGoal }: ConversationListProps) {
   // An empty list is only "new workspace" when it loaded; a failed request must never look empty.
@@ -156,7 +139,7 @@ export function ConversationList({ items, selectedId, timezone, onSelect, page, 
               <StatusLabel status={item.status} />
               <PriorityLabel priority={item.priority} />
               {draftIds?.has(item.id) && <span className="badge badge-draft">{messages.draftWaiting}</span>}
-              {open && open.length > 0 && <ViewerStack viewers={open} />}
+              {open && open.length > 0 && <Part part={presenceViewPart} render={(view) => <view.ViewerStack viewers={open} timezone={timezone} />} />}
               {item.tags.slice(0, visibleTags).map((tag) => <span className="tag-pill" key={tag.id}>{tag.name}</span>)}
               {item.tags.length > visibleTags && <span className="tag-pill">+{item.tags.length - visibleTags}</span>}
             </span>

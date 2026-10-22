@@ -1,7 +1,15 @@
 import { act, render, screen, within } from '@testing-library/react';
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest';
 import type { Conversation } from '../../api/schemas';
 import { ConversationList } from './conversation-list';
+import { presenceViewPart } from './presence-part';
+
+// The marks come from their own chunk; these tests start with it there.
+beforeAll(async () => {
+  presenceViewPart.preload();
+  await import('./presence-view');
+  await new Promise((resolve) => setTimeout(resolve, 0));
+});
 
 const row = (updated_at: string): Conversation => ({
   id: '11111111-1111-4111-8111-111111111111', contact_id: '22222222-2222-4222-8222-222222222222', contact_name: 'Mai Linh', subject: 'Example request',
@@ -129,5 +137,15 @@ test('an AI agent with several tokens is one tile of its own shape, apart from t
   const marked = screen.getByRole('button', { name: /example request/i });
   expect(marked.querySelectorAll('.viewer-stack .avatar')).toHaveLength(2);
   expect(marked.querySelectorAll('.viewer-stack .avatar-agent')).toHaveLength(1);
-  expect(marked.querySelector('.viewer-stack')).toHaveAttribute('data-tip', 'Ben is viewing\nBen via Claude Code is viewing\nBen via Codex is viewing');
+  expect(marked.querySelector('.viewer-stack')).toHaveAttribute('data-tip', 'Ben is viewing\nBen via Claude Code and Codex is viewing');
+});
+
+test('a reply left untouched for minutes marks the row Draft open, not Replying, like the conversation header', () => {
+  vi.setSystemTime(new Date('2026-10-15T12:00:00Z'));
+  const lan = { agent_id: '44444444-4444-4444-8444-444444444444', name: 'Lan', writing: true, writing_since: '2026-10-15T11:00:00Z', edited_at: '2026-10-15T11:50:00Z', agent_token: null };
+  render(<ConversationList items={[row('2026-10-15T09:05:00Z')]} timezone="UTC" page={1} hasNextPage={false} viewers={new Map([['11111111-1111-4111-8111-111111111111', [lan]]])} />);
+  const marked = screen.getByRole('button', { name: /example request/i });
+  expect(within(marked).getByText('Draft open')).toBeInTheDocument();
+  expect(within(marked).queryByText('Replying')).toBeNull();
+  expect(marked).toHaveAccessibleName(/Open now: Lan \(reply not sent yet\)/);
 });
