@@ -2029,6 +2029,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/help-center/theme/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Render a page of the help center with a candidate theme, saving nothing: the real page templates, the workspace's live collections and published articles (never drafts), also while the help center is off. `page` `article` shows the published article with the lowest number, or a sample text when nothing is published; a video in it shows as a placeholder. The answer is one HTML document for an `<iframe sandbox="allow-same-origin" srcdoc>`: it links the help center's style sheet under `/help/_/`, carries the candidate brand inline and its own policy (`default-src 'none'; img-src <origin>/api/v1/kb/images/ <origin>/api/v1/kb/media/; style-src <origin>/help/_/ 'unsafe-inline'; script-src 'none'; form-action 'none'; base-uri 'none'`), which runs no script; images load from the session's knowledge base routes and links take no pointer. Contrast is answered as in `/theme/check` (200 with `ok` false), so the person sees why Save would refuse; a theme of the wrong shape or a logo that is not an image of the library is 422 as on PUT. Each person may ask for 600 previews a minute (429 with `Retry-After` beyond). */
+        post: operations["previewHelpCenterTheme"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3196,6 +3213,25 @@ export interface components {
             checks: components["schemas"]["ThemeContrastCheck"][];
         };
         HelpCenterThemeChecks: {
+            /** @description True when every pair passes and the theme can be saved. */
+            ok: boolean;
+            checks: components["schemas"]["ThemeContrastCheck"][];
+            /** @description One message per failing color, keyed like colors.text; empty when ok. */
+            fields: {
+                [key: string]: string;
+            };
+        };
+        HelpCenterThemePreviewInput: {
+            /**
+             * @description The page to render.
+             * @enum {string}
+             */
+            page: "home" | "article";
+            theme: components["schemas"]["HelpCenterThemeInput"];
+        };
+        HelpCenterThemePreview: {
+            /** @description A whole HTML document with its own Content-Security-Policy, the help center style sheet linked and the brand inline; it holds no script. */
+            html: string;
             /** @description True when every pair passes and the theme can be saved. */
             ok: boolean;
             checks: components["schemas"]["ThemeContrastCheck"][];
@@ -8485,6 +8521,44 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             422: components["responses"]["ThemeInvalid"];
+        };
+    };
+    previewHelpCenterTheme: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HelpCenterThemePreviewInput"];
+            };
+        };
+        responses: {
+            /** @description The page and the checks of the candidate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpCenterThemePreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ThemeInvalid"];
+            /** @description Too many previews in the last minute; try again after `Retry-After` seconds. */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
 }

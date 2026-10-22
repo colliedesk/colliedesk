@@ -93,6 +93,20 @@ images, and emphasis runs (goldmark's quadratic paths: up to 24 s before `tame`,
 then 20 visits (not 50, to spare the shared latency runner) read the kept page (4–12 ms).
 `TestHelpCenterRenderedPagesAreNeverSharedAcrossWorkspaces` keeps that memory per workspace.
 
+`TestHelpCenterThemePreviewLatencyBudget` holds the brand preview to the same 100 ms p95. A person
+waits for it 300 ms after each pause in typing, so it is a keystroke path. On the same fixture,
+workspace A with a full candidate brand (logo, favicon, links, seven colors, two fonts): the home page
+and the first published article (100,000 characters) are each previewed 50 times through
+`POST /api/v1/help-center/theme/preview`, after one warm-up. The article is also timed cold: its first
+render on the fixture's new server, held to the budget, and it must be the rendered page, not the text
+shown while a render runs late. It reuses the fixture's server and adds about 1 s to the latency
+shard. On 2026-10-22 locally, before the
+change: home 16 ms p95 (22 KB answer), article 19 ms (127 KB), cold 24–37 ms. After it: home
+9–12 ms (6 KB), article 11–13 ms (110 KB), cold 13–30 ms. The change has two parts. The reads became
+one transaction sent as one batch (`TestHelpCenterThemePreviewReadsInOneTransaction` counts the
+transactions: as many as reading the saved theme). `site.css` is linked by its immutable address
+instead of being inlined in every answer.
+
 ## Pending agent requests budget
 
 `TestPendingAgentRequestsLatencyBudget` holds the store query behind
@@ -148,6 +162,15 @@ Warm open (a click on a list row, synthetic data, 5 tickets including a 285 KB H
 On 2026-10-20 the first bundle was 203,268 bytes of 204,800. Plan and billing, the locked screen, the trial survey and their strings (and those of Report a problem) moved to their own chunks, which brought it to 200,433; the knowledge base then added only its rail link and routes (201,420). Its pages with the preview and `remark-gfm`, and the help center card in Settings are lazy parts; the rail link preloads them on hover and focus. The article editor (CodeMirror 6) is a chunk of its own, 117,572 bytes gzip plus 1,502 bytes of CSS, loaded only by an article page; `kb-chunk` is 20,890 bytes. The first bundle went from 201,430 to 201,440 bytes (+10, the names of React hooks the chunks now import) and its CSS from 14,267 to 14,263.
 
 On 2026-10-21 the reply box got **Articles** (link a help center article in a reply). Its first version kept the button, its strings, the link format and the extended saved reply picker in the first bundle: 201,985 → 202,563 (+578). The saved reply picker and the articles picker then moved together into one lazy part, `reply-pickers` (1.7 KB gzip, plus a 4.0 KB chunk of the API calls and strings it shares with the knowledge base pages), which the composer starts loading when it mounts; the first bundle keeps the two buttons and the part's loading and failure states: 201,776 bytes (−209 against 201,985), CSS 14,267 → 14,317.
+
+On 2026-10-22 the help center card got its brand settings and preview. They are a chunk of their own
+(`help-center-theme-form`, 5.9 KB gzip, 0.8 KB CSS) that the card asks for when its own chunk runs,
+by a plain `import()`: through `ui/lazy-part`, or with its CSS in the card's chunk, the first bundle
+would have had to export `lazyPart` to it or list one more file to preload. The library picker
+comes from `kb-chunk` when someone opens it, so it adds no shared chunk. The first bundle holds the
+same modules and went from 203,371 to 203,370–203,372 bytes across builds (the content hashes of the
+chunk names it preloads compress differently; the refusal's `detail` moved from `ConflictError` to
+`InvalidRequestError`, so a 422 keeps its field messages, at no cost). Its CSS stayed at 14,413.
 
 On 2026-10-22 the in-app Freshdesk import (#97) brought the first bundle to 203,852 bytes, and collision detection (#101) needed about 1,100 more. Settings (its route and every section: team, email channel, saved replies, web form, help center, preferences) moved to a lazy part, `settings-route` (7,988 bytes gzip), as Plan and billing already was: the first bundle went from 203,852 to 196,712. The rail link starts loading the chunk on hover and focus; while it loads, `/settings` keeps an empty Settings page (`aria-busy`), so nothing jumps when the sections arrive. Measured with Playwright on the dev host against the e2e server: from a click on the rail link to the Settings heading 29 to 88 ms (5 runs), a full load of `/settings` 64 to 86 ms (3 runs).
 

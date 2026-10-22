@@ -124,7 +124,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_video_poster_set` | Sets a video's poster, the still picture shown before it plays | `send` |
 | `colliedesk_help_center_get` | Says whether the public help center is on, its title and language | `read` |
 | `colliedesk_help_center_theme_get` | Shows the help center's brand (logo, links, colors, fonts) with the contrast of every color pair | `read` |
-| `colliedesk_help_center_theme_check` | Checks a brand for readable contrast without saving it, with a passing color for each that fails | `read` |
+| `colliedesk_help_center_theme_check` | Checks a brand for readable contrast without saving it, with a passing color for each that fails; with `preview`, also renders the home page or an article with it | `read` |
 | `colliedesk_token_revoke` | Revokes the token the agent is using. Cannot be undone | any |
 | `colliedesk_docs_search` | Searches these user guides | any |
 | `colliedesk_reply_draft` | Leaves a reply draft that a person edits, sends or discards; never emails by itself | `read` |

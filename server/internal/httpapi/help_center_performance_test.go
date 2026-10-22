@@ -189,3 +189,54 @@ func helpCenterPercentile(t *testing.T, site http.Handler, path string, visits i
 	sort.Slice(durations, func(left, right int) bool { return durations[left] < durations[right] })
 	return durations[(visits*95+99)/100-1]
 }
+
+// TestHelpCenterThemePreviewLatencyBudget holds the preview a person waits for after each pause in
+// typing to the inbox budget on the shared fixture: workspace A's home page, and its first published
+// article (100,000 characters), with a full candidate brand. The article is timed cold (its first
+// render: the fixture's server is new and has rendered nothing) and warm.
+func TestHelpCenterThemePreviewLatencyBudget(t *testing.T) {
+	api, pool, token, slug := sharedKBBudget(t)
+	storage, err := attachments.NewLocalDisk(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	logo := brandKBBudget(t, pool, storage, slug)
+	theme := map[string]any{"logo_media_id": logo, "favicon_media_id": logo, "logo_alt": "KB Budget", "linkback_url": "https://budget.example/",
+		"contact_url": "mailto:help@budget.example", "contact_phone": "+1 (555) 010-2030",
+		"colors":    map[string]any{"primary": "#0b5cad", "header": "#0b5cad", "header_text": "#ffffff", "background": "#ffffff", "text": "#1f2328", "link": "#0b5cad", "footer": "#f6f8fa"},
+		"body_font": "humanist-sans", "heading_font": "transitional-serif"}
+	call := func(page string) (time.Duration, string) {
+		t.Helper()
+		started := time.Now()
+		response := request(t, api, http.MethodPost, previewPath, map[string]any{"page": page, "theme": theme}, token, nil)
+		elapsed := time.Since(started)
+		if response.Code != http.StatusOK {
+			t.Fatalf("preview %s status=%d body=%.300s", page, response.Code, response.Body.String())
+		}
+		return elapsed, response.Body.String()
+	}
+	// The first article preview renders the text cold: it is held to the budget, as the hostile
+	// articles' first visits are, and must be the rendered page, not the text shown while a render
+	// runs late.
+	cold, first := call("article")
+	t.Logf("help center preview article cold=%s (%d bytes)", cold, len(first))
+	if cold > inboxLatencyBudget || strings.Contains(first, `class="plain-note"`) {
+		t.Errorf("help center preview article rendered cold in %s (budget %s)", cold, inboxLatencyBudget)
+	}
+	for _, page := range []string{"home", "article"} {
+		call(page)
+		durations := make([]time.Duration, 50)
+		size := 0
+		for index := range durations {
+			var body string
+			durations[index], body = call(page)
+			size = len(body)
+		}
+		sort.Slice(durations, func(left, right int) bool { return durations[left] < durations[right] })
+		p95 := durations[(len(durations)*95+99)/100-1]
+		t.Logf("help center preview %s p95=%s (%d bytes)", page, p95, size)
+		if p95 > inboxLatencyBudget {
+			t.Errorf("help center preview %s p95 %s exceeds %s", page, p95, inboxLatencyBudget)
+		}
+	}
+}

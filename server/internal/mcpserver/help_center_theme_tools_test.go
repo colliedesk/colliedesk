@@ -16,6 +16,16 @@ func TestHelpCenterThemeToolsCheckSaveAndPropose(t *testing.T) {
 	if at(t, checked, "ok") != false || !strings.HasPrefix(at(t, checked, "fields", "colors.text").(string), "Text on the background is 2.85:1") {
 		t.Fatalf("check = %v", checked)
 	}
+	// With preview, the check also renders the page the way the settings card shows it, and saves nothing.
+	previewed := e.ok(read, "colliedesk_help_center_theme_check", map[string]any{"colors": map[string]any{"text": "#999999"}, "preview": "article"})
+	page, _ := previewed["html"].(string)
+	if at(t, previewed, "ok") != false || !strings.Contains(page, "<h1>An example article</h1>") || !strings.Contains(page, "--ink:#999999;") ||
+		!strings.Contains(page, "script-src 'none'") || strings.Contains(page, "<script") {
+		t.Fatalf("check with preview = %v", previewed)
+	}
+	if plain := e.ok(read, "colliedesk_help_center_theme_check", low); plain["html"] != nil {
+		t.Fatalf("check without preview carries html: %v", plain)
+	}
 	if theme := e.ok(read, "colliedesk_help_center_theme_get", nil); at(t, theme, "theme", "colors", "text") != nil {
 		t.Fatalf("default theme = %v", theme)
 	}

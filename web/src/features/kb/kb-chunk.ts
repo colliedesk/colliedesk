@@ -5,3 +5,5 @@ import './kb.css';
 export { KnowledgeRoute } from './knowledge-page';
 export { ArticleRoute } from './article-editor';
 export { MediaRoute } from './media-page';
+// The library picker, for the help center's logo and icon in Settings.
+export { MediaPicker } from './media-picker';
