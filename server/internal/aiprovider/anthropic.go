@@ -27,7 +27,8 @@ var fallbackModels = map[string]bool{
 type AnthropicConfig struct {
 	APIKey string
 	// BaseURL is empty for the Claude API, or a proxy that speaks the Messages API.
-	BaseURL    string
+	BaseURL string
+	// HTTPClient is nil for a client that dials public addresses only (netguard).
 	HTTPClient *http.Client
 	// forceFallbacks is a test seam: fallbacks are otherwise sent only to the Claude API.
 	forceFallbacks bool
@@ -46,13 +47,17 @@ func NewAnthropic(config AnthropicConfig) (Provider, error) {
 	if config.APIKey == "" {
 		return nil, errors.New("aiprovider: the Claude adapter needs an API key")
 	}
-	baseURL := strings.TrimRight(config.BaseURL, "/")
-	if baseURL == "" {
-		baseURL = AnthropicAPIURL
+	baseURL := AnthropicAPIURL
+	if strings.TrimSpace(config.BaseURL) != "" {
+		parsed, err := parseBaseURL(config.BaseURL)
+		if err != nil {
+			return nil, err
+		}
+		baseURL = parsed.String()
 	}
 	httpClient := config.HTTPClient
 	if httpClient == nil {
-		httpClient = NewHTTPClient(HTTPOptions{})
+		httpClient = NewHTTPClient(HTTPOptions{Guarded: true})
 	}
 	client := anthropic.NewClient(
 		option.WithoutEnvironmentDefaults(),
@@ -104,8 +109,15 @@ func (p *anthropicProvider) Complete(ctx context.Context, request Request) (Resp
 	message, err := p.client.Beta.Messages.New(ctx, params, option.WithResponseInto(&raw))
 	if err != nil {
 		var apiErr *anthropic.Error
-		if errors.As(err, &apiErr) && apiErr.Response != nil {
+		switch {
+		case errors.As(err, &apiErr) && apiErr.Response != nil:
 			return Response{}, statusError(apiErr.StatusCode, apiErr.Response.Header, apiErr.RequestID)
+		case raw != nil:
+			// An answer came back but is not the API's: a redirect, or a proxy's HTML page.
+			if raw.StatusCode >= 300 {
+				return Response{}, statusError(raw.StatusCode, raw.Header, raw.Header.Get("Request-Id"))
+			}
+			return Response{}, &Error{Code: ErrorInvalidResponse, Status: raw.StatusCode, RequestID: raw.Header.Get("Request-Id")}
 		}
 		return Response{}, transportError(ctx, err)
 	}

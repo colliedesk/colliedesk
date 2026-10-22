@@ -17,9 +17,11 @@ optional JSON Schema. There are no sampling knobs, no streaming and no tool use:
    medium, Sonnet 5.5 to high), so leaving it out would change cost and quality with the model.
 3. A final assistant message (prefill) is refused before it is sent: current Claude models answer
    it with a 400.
-4. No streaming: features run as background tasks, so an answer is a resource the web app, the API
+4. The output limit is at most 16,000 tokens: requests are not streamed, and the Claude SDK refuses
+   a non-streaming request that could run past ten minutes.
+5. No streaming: features run as background tasks, so an answer is a resource the web app, the API
    and MCP read the same way. Streaming would need an SSE route that no MCP tool can mirror.
-5. No tool use: the model never acts. The worst a bad answer can do is a suggestion a person
+6. No tool use: the model never acts. The worst a bad answer can do is a suggestion a person
    declines or a draft a person rewrites.
 
 ## One call is one attempt
@@ -60,7 +62,9 @@ HTTP status, `retry-after` and the provider's request id. It never holds the pro
 body, which can echo the prompt (customer text) or a key, and never the URL. Only rate limits,
 overload, server errors and timeouts are retryable. OpenAI answers an empty account with a 429 whose
 error code is `insufficient_quota`; that is `quota_exhausted`, not a rate limit, because retrying it
-only spends attempts.
+only spends attempts. An answer that is not the API's (a redirect, a proxy's HTML page) is
+`invalid_response` with its status, not retried. `retry-after` is capped at one hour: a base URL an
+admin typed can answer anything.
 
 ## OpenAI-compatible servers
 
@@ -78,7 +82,8 @@ Adapters take an `*http.Client`. `NewHTTPClient` has no response-header timeout,
 non-streaming completion sends its headers only when the whole answer is ready; the request context
 bounds the call. Redirects are not followed. A base URL a workspace admin typed is dialled through
 `netguard` (public addresses only); the server provider and a private URL the operator allowed are not
-guarded. That choice is made where the provider is built, not in the adapter. A dial netguard refuses
+guarded. That choice is made where the provider is built; an adapter given no client is guarded, so
+forgetting to pass one fails closed. A dial netguard refuses
 is `blocked_address`, so Settings can say the address is on a private network.
 
 ## Prompt caching

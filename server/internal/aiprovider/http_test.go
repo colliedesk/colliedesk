@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 )
 
 func TestGuardedClientRefusesPrivateAddresses(t *testing.T) {
@@ -38,5 +39,17 @@ func TestClientDoesNotFollowRedirects(t *testing.T) {
 	provider, _ := NewOpenAICompatible(OpenAIConfig{BaseURL: fake.server.URL + "/v1", HTTPClient: NewHTTPClient(HTTPOptions{})})
 	if _, err := provider.Complete(context.Background(), draftRequest()); CodeOf(err) != ErrorInvalidResponse {
 		t.Fatalf("redirect: %v", err)
+	}
+}
+
+func TestRetryAfterIsBounded(t *testing.T) {
+	for value, want := range map[string]time.Duration{
+		"7": 7 * time.Second, "1e12": maxRetryAfter, "Inf": maxRetryAfter, "9223372037": maxRetryAfter,
+		"NaN": 0, "-3": 0, "soon": 0, "": 0,
+		time.Now().Add(1000 * time.Hour).UTC().Format(http.TimeFormat): maxRetryAfter,
+	} {
+		if got := retryAfter(http.Header{"Retry-After": []string{value}}); got != want {
+			t.Fatalf("Retry-After %q = %v, want %v", value, got, want)
+		}
 	}
 }

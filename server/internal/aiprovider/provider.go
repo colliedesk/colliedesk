@@ -59,6 +59,10 @@ type Request struct {
 	Schema map[string]any
 }
 
+// MaxOutputLimit is the largest output a request may ask for. Requests are not streamed, and the
+// Claude SDK refuses a non-streaming request that could run past ten minutes (about 21,000 tokens).
+const MaxOutputLimit = 16000
+
 // Validate refuses a request no adapter can send. The last message must be the user's: providers
 // refuse an assistant prefill.
 func (r Request) Validate() error {
@@ -71,8 +75,8 @@ func (r Request) Validate() error {
 		return errors.New("aiprovider: request has no messages")
 	case r.Messages[len(r.Messages)-1].Role != RoleUser:
 		return errors.New("aiprovider: the last message must be the user's")
-	case r.MaxOutput <= 0:
-		return errors.New("aiprovider: request has no output limit")
+	case r.MaxOutput <= 0 || r.MaxOutput > MaxOutputLimit:
+		return fmt.Errorf("aiprovider: the output limit must be 1 to %d tokens", MaxOutputLimit)
 	}
 	for _, message := range r.Messages {
 		if message.Role != RoleUser && message.Role != RoleAssistant {

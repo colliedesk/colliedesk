@@ -320,3 +320,61 @@ func TestAnthropicCheckUsesTheRealRequestShape(t *testing.T) {
 		t.Fatalf("check body = %v", body)
 	}
 }
+
+func TestAnthropicAnswersThatAreNotTheAPIsAreNotRetryable(t *testing.T) {
+	for name, setup := range map[string]func(*fakeAPI){
+		"redirect": func(f *fakeAPI) {
+			f.status = http.StatusPermanentRedirect
+			f.header.Set("Location", "https://elsewhere.example/v1/messages")
+		},
+		"html page": func(f *fakeAPI) { f.reply = `<html><body>Sign in to the Wi-Fi</body></html>` },
+	} {
+		fake := newFakeAPI(t, http.StatusOK, "")
+		setup(fake)
+		provider, err := NewAnthropic(AnthropicConfig{APIKey: secretKey, BaseURL: fake.server.URL, HTTPClient: NewHTTPClient(HTTPOptions{})})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = provider.Complete(context.Background(), draftRequest())
+		var providerErr *Error
+		if !errors.As(err, &providerErr) || providerErr.Code != ErrorInvalidResponse || providerErr.Retryable() || providerErr.Status == 0 {
+			t.Fatalf("%s: %+v", name, err)
+		}
+		if hits := len(fake.recorded(t)); hits != 1 {
+			t.Fatalf("%s: %d attempts", name, hits)
+		}
+	}
+}
+
+func TestOutputLimitsTheSDKWouldRefuseAreNeverSent(t *testing.T) {
+	fake := newFakeAPI(t, http.StatusOK, claudeReply)
+	request := draftRequest()
+	request.MaxOutput = 64000
+	var providerErr *Error
+	if _, err := newTestAnthropic(t, fake, false).Complete(context.Background(), request); err == nil || errors.As(err, &providerErr) {
+		t.Fatalf("64000 output tokens: %v", err)
+	}
+	if hits := len(fake.recorded(t)); hits != 0 {
+		t.Fatalf("%d attempts", hits)
+	}
+	request.MaxOutput = MaxOutputLimit
+	if _, err := newTestAnthropic(t, fake, false).Complete(context.Background(), request); err != nil {
+		t.Fatalf("the limit itself: %v", err)
+	}
+}
+
+func TestAnthropicBaseURLIsCheckedAndUnguardedOnlyOnRequest(t *testing.T) {
+	for _, bad := range []string{"https://u:pw@proxy.example", "https://proxy.example/?a=b", "ftp://x", "not a url"} {
+		if _, err := NewAnthropic(AnthropicConfig{APIKey: secretKey, BaseURL: bad}); err == nil {
+			t.Fatalf("base URL %q accepted", bad)
+		}
+	}
+	fake := newFakeAPI(t, http.StatusOK, claudeReply)
+	provider, err := NewAnthropic(AnthropicConfig{APIKey: secretKey, BaseURL: fake.server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.Complete(context.Background(), draftRequest()); CodeOf(err) != ErrorBlockedAddress {
+		t.Fatalf("default client reached loopback: %v", err)
+	}
+}

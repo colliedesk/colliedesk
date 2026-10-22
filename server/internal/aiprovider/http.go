@@ -6,13 +6,19 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"math"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/netguard"
 )
+
+// maxRetryAfter caps a provider's retry-after: a base URL a workspace admin typed can answer anything.
+const maxRetryAfter = time.Hour
 
 // maxResponseBytes caps what an adapter reads from a provider. A complete answer is a few tens of
 // kilobytes; anything larger is not an answer.
@@ -84,18 +90,25 @@ func statusError(status int, header http.Header, requestID string) *Error {
 	return err
 }
 
-// retryAfter reads a retry-after header in seconds or as an HTTP date; zero when absent.
+// retryAfter reads a retry-after header in seconds or as an HTTP date, at most maxRetryAfter; zero
+// when absent or unreadable.
 func retryAfter(header http.Header) time.Duration {
 	value := header.Get("Retry-After")
 	if value == "" {
 		return 0
 	}
-	if seconds, err := strconv.ParseFloat(value, 64); err == nil && seconds > 0 {
+	if seconds, err := strconv.ParseFloat(value, 64); err == nil {
+		switch {
+		case math.IsNaN(seconds) || seconds <= 0:
+			return 0
+		case seconds >= maxRetryAfter.Seconds():
+			return maxRetryAfter
+		}
 		return time.Duration(seconds * float64(time.Second))
 	}
 	if at, err := http.ParseTime(value); err == nil {
 		if wait := time.Until(at); wait > 0 {
-			return wait
+			return min(wait, maxRetryAfter)
 		}
 	}
 	return 0
@@ -116,6 +129,19 @@ func transportError(ctx context.Context, err error) *Error {
 		return &Error{Code: ErrorTimeout}
 	}
 	return &Error{Code: ErrorUnavailable}
+}
+
+// parseBaseURL accepts an http or https URL without credentials, query or fragment: userinfo would
+// be sent as Basic auth next to the key.
+func parseBaseURL(value string) (*url.URL, error) {
+	base, err := url.Parse(strings.TrimRight(strings.TrimSpace(value), "/"))
+	if err != nil || (base.Scheme != "https" && base.Scheme != "http") || base.Host == "" {
+		return nil, errors.New("aiprovider: the base URL must be an http or https URL")
+	}
+	if base.User != nil || base.RawQuery != "" || base.Fragment != "" {
+		return nil, errors.New("aiprovider: the base URL must not carry credentials, a query or a fragment")
+	}
+	return base, nil
 }
 
 // schemaJSON returns text when the request asked for a schema and text is a JSON object.

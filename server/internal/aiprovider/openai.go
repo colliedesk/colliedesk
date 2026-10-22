@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 )
 
@@ -31,16 +29,13 @@ type openAIProvider struct {
 
 // NewOpenAICompatible returns the OpenAI-compatible adapter.
 func NewOpenAICompatible(config OpenAIConfig) (Provider, error) {
-	base, err := url.Parse(strings.TrimRight(config.BaseURL, "/"))
-	if err != nil || (base.Scheme != "https" && base.Scheme != "http") || base.Host == "" {
-		return nil, errors.New("aiprovider: the base URL must be an http or https URL")
-	}
-	if base.User != nil || base.RawQuery != "" || base.Fragment != "" {
-		return nil, errors.New("aiprovider: the base URL must not carry credentials, a query or a fragment")
+	base, err := parseBaseURL(config.BaseURL)
+	if err != nil {
+		return nil, err
 	}
 	httpClient := config.HTTPClient
 	if httpClient == nil {
-		httpClient = NewHTTPClient(HTTPOptions{})
+		httpClient = NewHTTPClient(HTTPOptions{Guarded: true})
 	}
 	return &openAIProvider{
 		endpoint:   base.String() + "/chat/completions",
