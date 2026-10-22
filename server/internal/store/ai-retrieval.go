@@ -38,8 +38,10 @@ const (
 	// aiConversationRunes is the most a conversation's text holds.
 	aiConversationRunes = 4000
 	aiCustomerRunes     = 1800
-	// aiRetrievalBatch is how many queued rows one transaction of the worker builds.
-	aiRetrievalBatch = 200
+	// aiRetrievalBatch is how many queued rows one transaction of the worker builds: about 100 ms.
+	// 82,000 resolved conversations took 43 s to build after the upgrade (docs/internals/ai-retrieval.md).
+	aiRetrievalBatch               = 200
+	aiRetrievalBatchesPerWorkspace = 25
 )
 
 // AIRetrievalQuery is what to look for. Text is the conversation's subject, the customer's newest
@@ -323,7 +325,8 @@ func aiTokens(text string) int {
 }
 
 // BuildAIRetrieval builds the queued sources of every workspace and returns how many it built. A
-// workspace another process is building is left to it.
+// workspace another process is building is left to it, and one with more than a few thousand queued
+// goes on at the next call.
 func (s *Store) BuildAIRetrieval(ctx context.Context) (int, error) {
 	var workspaces []string
 	// Only the ids of workspaces with queued rows cross workspaces; each is built in its own scope.
@@ -343,19 +346,27 @@ func (s *Store) BuildAIRetrieval(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("list workspaces with AI retrieval to build: %w", err)
 	}
 	built := 0
+	var failed []error
 	for _, workspaceID := range workspaces {
-		for {
+		// A workspace with a large import queued yields to the others after a few seconds; the next
+		// call goes on with it.
+		for range aiRetrievalBatchesPerWorkspace {
 			n, more, err := s.buildAIRetrievalBatch(ctx, workspaceID)
 			built += n
 			if err != nil {
-				return built, err
+				// One workspace that fails (its rows stay queued) does not hold up the others.
+				failed = append(failed, err)
+				break
 			}
 			if !more || ctx.Err() != nil {
 				break
 			}
 		}
+		if ctx.Err() != nil {
+			break
+		}
 	}
-	return built, ctx.Err()
+	return built, errors.Join(append(failed, ctx.Err())...)
 }
 
 // buildAIRetrievalBatch builds the oldest queued rows of one workspace and deletes them; more says

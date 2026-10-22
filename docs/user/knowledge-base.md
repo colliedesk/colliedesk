@@ -247,6 +247,20 @@ collection). **Restore version N** makes that version's title, address name and 
 as a new version; the status and collection stay as they are, so a restore never publishes or moves
 an article by surprise. Save or undo your own changes first.
 
+## Keep an article away from AI
+
+AI features (reply drafts and triage suggestions, when an admin turns them on) find the published
+articles that fit a conversation by themselves, in every language an article has, and quote them;
+nobody has to sort the knowledge base for AI. A draft, an article in the trash and an internal note
+of a conversation are never read.
+
+To keep one published article away from AI, open it and select **Exclude from AI** under **Used by
+AI**. From then on drafts and suggestions skip it in every language; people and the help center
+still see it. The article says since when and by whom, and its history has the change. **Let AI use
+it again** undoes it. Neither changes the text, so an edit someone has open still saves. An agent
+token can do the same (`colliedesk_kb_article_ai_exclude`, `colliedesk_kb_article_ai_include`, tier
+`send`).
+
 ## Trash
 
 Select **Trash** at the top of the articles to see deleted articles and collections. Each shows who deleted it and how many days

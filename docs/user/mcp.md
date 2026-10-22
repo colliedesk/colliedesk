@@ -104,6 +104,8 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_article_undelete` | Takes an article out of the trash | `send` |
 | `colliedesk_kb_article_history` | Lists the versions of an article a page at a time (text cut after 2,000 characters; one version by number comes whole) | `read` |
 | `colliedesk_kb_article_version_restore` | Makes the text of an earlier version current again, as a new version | `send` |
+| `colliedesk_kb_article_ai_exclude` | Keeps an article away from reply drafts and triage suggestions, in every language; its text does not change | `send` |
+| `colliedesk_kb_article_ai_include` | Lets AI read an excluded article again | `send` |
 | `colliedesk_kb_image_upload` | Stores an image for articles (base64, at most 5 MiB) and gives the link to put in one | `send` |
 | `colliedesk_kb_image_get` | Shows a knowledge base image to the model | `read` |
 | `colliedesk_kb_media_list` | Lists the media library: what no article uses (with the space it takes) and images missing alt text | `read` |
