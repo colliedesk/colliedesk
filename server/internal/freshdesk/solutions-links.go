@@ -17,19 +17,29 @@ import (
 // center (docs/internals/freshdesk-import.md, "Old help center links"). The help center's own
 // redirect (helpcenter/legacy.go) reads the same addresses with the same parser.
 
-// oldLinkPattern finds a Freshdesk help center address in text: absolute (any host; the host is
-// checked after) or a path that a Markdown link or "text (url)" holds. The query and fragment come with it.
-var oldLinkPattern = regexp.MustCompile(`(?:(?i:https?)://[A-Za-z0-9.-]+(?::[0-9]+)?)?(?:/[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?)?/support/(?:solutions|home)[^\s()<>\[\]"'` + "`" + `]*`)
+// oldLinkPattern finds what may be a Freshdesk help center address in text: absolute (any host; the
+// host is checked after) or a path, in any case, with its query and fragment. Whether it is one is
+// decided by oldLink: the path must be the old portal's and a path must be a link's address.
+var oldLinkPattern = regexp.MustCompile(`(?i)(?:https?://[a-z0-9.-]+(?::[0-9]+)?)?(?:/[a-z]{2,3}(?:-[a-z0-9]{2,8})?)?/support(?:[/?#][^\s()<>\[\]"'` + "`" + `]*)?`)
+
+// solutionsPath is the knowledge base part of an old portal: on a host this run does not know, only
+// these paths are surely Freshdesk's, so only they are listed.
+var solutionsPath = regexp.MustCompile(`^(?i:(?:/[a-z]{2,3}(?:-[a-z0-9]{2,8})?)?/support/solutions(?:/|$))`)
 
 // linkSite is the help center links are pointed at.
 type linkSite struct {
 	address string
 	// open: the help center is on and its address is known, so links may point at it.
 	open, origin bool
-	// hosts are the lower-case hosts (with port) whose /support/ addresses are this account's: the
-	// API host, the account's domain and the help center's custom domain (an old portal's custom domain
-	// often becomes it).
+	// hosts are the lower-case hosts (with port when not the default) whose /support/ addresses are
+	// this account's: the API host, the account's domain, the old help center's domain when named and
+	// the help center's custom domain (an old portal's custom domain often becomes it).
 	hosts map[string]bool
+}
+
+func (s linkSite) knows(host string) bool {
+	host = strings.ToLower(host)
+	return s.hosts[host] || s.hosts[strings.TrimSuffix(strings.TrimSuffix(host, ":443"), ":80")]
 }
 
 // linkTarget is where a Freshdesk item's old address leads: an address, or the reason it leads nowhere.
@@ -53,11 +63,11 @@ func (r *run) rewriteFreshdeskLinks(ctx context.Context) error {
 		{entityKBArticle, `SELECT i.source_id, a.id::text, a.body_md, COALESCE((SELECT v.kind='import' FROM kb_article_versions v
 				WHERE v.workspace_id=a.workspace_id AND v.article_id=a.id ORDER BY v.version DESC LIMIT 1), false)
 			FROM import_items i JOIN kb_articles a ON a.workspace_id=i.workspace_id AND a.id=i.target_id
-			WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_article' AND a.deleted_at IS NULL AND strpos(a.body_md, '/support/') > 0
+			WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='kb_article' AND a.deleted_at IS NULL AND strpos(lower(a.body_md), '/support') > 0
 			ORDER BY length(i.source_id), i.source_id`},
 		{entitySavedReply, `SELECT i.source_id, s.id::text, s.body, s.updated_at=s.created_at
 			FROM import_items i JOIN saved_replies s ON s.workspace_id=i.workspace_id AND s.id=i.target_id
-			WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='saved_reply' AND s.deleted_at IS NULL AND strpos(s.body, '/support/') > 0
+			WHERE i.workspace_id=$1 AND i.source=$2 AND i.entity='saved_reply' AND s.deleted_at IS NULL AND strpos(lower(s.body), '/support') > 0
 			ORDER BY length(i.source_id), i.source_id`},
 	} {
 		items, err := r.linkedItems(ctx, item.sql)
@@ -111,9 +121,13 @@ func (r *run) rewriteItem(ctx context.Context, entity string, item linkedItem, s
 	var text strings.Builder
 	var left []LeftLink
 	links, rewritten, last := 0, 0, 0
+	code := codeRanges(item.text)
 	for _, match := range oldLinkPattern.FindAllStringIndex(item.text, -1) {
 		start, end := match[0], match[1]
 		raw := strings.TrimRight(item.text[start:end], ".,;:!?*")
+		if code.contains(start) || wordContinues(item.text, start+len(raw)) {
+			continue
+		}
 		end = start + len(raw)
 		address, reason, ours := r.resolveLink(item.text, start, raw, site, targets)
 		if !ours {
@@ -168,30 +182,138 @@ func (r *run) writeLinks(ctx context.Context, entity string, item linkedItem, te
 
 // resolveLink reads raw, found at start of text, as an old help center address of this account. ours
 // is false for any other link, which is neither rewritten nor listed. Otherwise address is the new
-// address, or reason says why there is none.
+// address (with the old fragment), or reason says why there is none.
 func (r *run) resolveLink(text string, start int, raw string, site linkSite, targets map[string]linkTarget) (address, reason string, ours bool) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return "", "", false
 	}
-	// A path counts only as the address of a Markdown link or of "text (url)".
-	if u.Host == "" && (start == 0 || text[start-1] != '(') || u.Host != "" && !site.hosts[strings.ToLower(u.Host)] {
+	// A path counts only as a link's address: of a Markdown link, "text (url)", or a quoted attribute.
+	if u.Host == "" && (start == 0 || !strings.ContainsRune(`("'`, rune(text[start-1]))) {
 		return "", "", false
 	}
 	old, ok := helpcenter.ParseLegacyPath(u.Path)
 	switch {
 	case !ok:
 		return "", "", false
+	case u.Host != "" && !site.knows(u.Host):
+		if solutionsPath.MatchString(u.Path) {
+			return "", LinkUnknownHost, true
+		}
+		return "", "", false
 	case !site.origin:
 		return "", LinkNoServerAddress, true
 	case !site.open:
 		return "", LinkHelpCenterOff, true
-	case old.Kind == helpcenter.LegacyHome:
-		return site.address, "", true
 	}
-	target, found := targets[old.Entity()+":"+old.ID]
-	if old.Entity() == "" || !found {
-		return "", LinkNotImported, true
+	switch old.Kind {
+	case helpcenter.LegacyHome:
+		address = site.address
+	case helpcenter.LegacySearch:
+		address = site.address + helpcenter.SearchPath(u.Query().Get("term"))
+	case helpcenter.LegacyOther:
+		return "", LinkNoNewPage, true
+	default:
+		target, found := targets[old.Entity()+":"+old.ID]
+		if !found {
+			return "", LinkNotImported, true
+		}
+		address, reason = target.address, target.reason
 	}
-	return target.address, target.reason, true
+	if address != "" && u.Fragment != "" {
+		address += "#" + u.EscapedFragment()
+	}
+	return address, reason, true
+}
+
+// wordContinues reports whether the text at end goes on with the same word, as in /supporters or
+// /support-team, or /support.html: then the match is not an old address.
+func wordContinues(text string, end int) bool {
+	if end >= len(text) {
+		return false
+	}
+	isWord := func(c byte) bool {
+		return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_'
+	}
+	return isWord(text[end]) || text[end] == '.' && end+1 < len(text) && isWord(text[end+1])
+}
+
+// textRanges are byte ranges [start, end) of a text.
+type textRanges [][2]int
+
+func (t textRanges) contains(offset int) bool {
+	for _, r := range t {
+		if offset >= r[0] && offset < r[1] {
+			return true
+		}
+	}
+	return false
+}
+
+// fenceOpen is a Markdown code fence line: up to three spaces, then three or more ` or ~.
+var fenceOpen = regexp.MustCompile("^ {0,3}(`{3,}|~{3,})")
+
+// codeRanges finds the code of a Markdown text: fenced blocks (to the end when never closed) and
+// inline code spans. An address written there is an example of the old address, not a link.
+func codeRanges(text string) textRanges {
+	var ranges textRanges
+	var fence string
+	fenceStart, offset := 0, 0
+	var prose []int // line starts outside fences, with their ends
+	for _, line := range strings.SplitAfter(text, "\n") {
+		marker := fenceOpen.FindStringSubmatch(line)
+		switch {
+		case fence == "" && marker != nil:
+			fence, fenceStart = marker[1], offset
+		case fence != "" && marker != nil && marker[1][0] == fence[0] && len(marker[1]) >= len(fence) && strings.TrimSpace(line[len(marker[0]):]) == "":
+			ranges, fence = append(ranges, [2]int{fenceStart, offset + len(line)}), ""
+		case fence == "":
+			prose = append(prose, offset, offset+len(line))
+		}
+		offset += len(line)
+	}
+	if fence != "" {
+		ranges = append(ranges, [2]int{fenceStart, len(text)})
+	}
+	for index := 0; index < len(prose); index += 2 {
+		ranges = append(ranges, codeSpans(text, prose[index], prose[index+1])...)
+	}
+	return ranges
+}
+
+// codeSpans finds inline code in text[from:to]: a run of backticks up to the next run of the same
+// length. A run with no partner is literal. A span does not cross lines here, which may miss a rare
+// span over two lines; that link is then rewritten as any other.
+func codeSpans(text string, from, to int) textRanges {
+	var spans textRanges
+	for index := from; index < to; {
+		if text[index] != '`' {
+			index++
+			continue
+		}
+		run := index
+		for run < to && text[run] == '`' {
+			run++
+		}
+		width, closed := run-index, false
+		for next := run; next < to; {
+			if text[next] != '`' {
+				next++
+				continue
+			}
+			end := next
+			for end < to && text[end] == '`' {
+				end++
+			}
+			if end-next == width {
+				spans, index, closed = append(spans, [2]int{index, end}), end, true
+				break
+			}
+			next = end
+		}
+		if !closed {
+			index = run
+		}
+	}
+	return spans
 }

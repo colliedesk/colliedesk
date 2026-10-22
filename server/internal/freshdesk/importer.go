@@ -230,6 +230,11 @@ func newRun(ctx context.Context, db *database.DB, options Options) (*run, error)
 	if options.Storage == nil && !options.DryRun {
 		return nil, errors.New("attachment storage is required")
 	}
+	if options.OldHelpCenterDomain != "" {
+		if options.OldHelpCenterDomain, err = OldHelpCenterHost(options.OldHelpCenterDomain); err != nil {
+			return nil, err
+		}
+	}
 	if options.Sleep == nil {
 		options.Sleep = sleepContext
 	}

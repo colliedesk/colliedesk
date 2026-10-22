@@ -2,6 +2,7 @@ package freshdesk_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -127,8 +128,9 @@ func TestImportPointsFreshdeskLinksAtTheNewHelpCenter(t *testing.T) {
 		left[link.Entity+" "+link.FreshdeskID+" "+link.URL] = link.Reason
 	}
 	wantLeft := map[string]string{
-		"kb_article 101 " + api + "/support/solutions/articles/999-gone": freshdesk.LinkNotImported,
-		"kb_article 101 " + api + "/support/solutions/articles/102":      freshdesk.LinkNotPublic,
+		"kb_article 101 " + api + "/support/solutions/articles/999-gone":      freshdesk.LinkNotImported,
+		"kb_article 101 " + api + "/support/solutions/articles/102":           freshdesk.LinkNotPublic,
+		"kb_article 101 https://other.example/support/solutions/articles/104": freshdesk.LinkUnknownHost,
 	}
 	if fmt.Sprint(left) != fmt.Sprint(wantLeft) {
 		t.Errorf("left = %v, want %v", left, wantLeft)
@@ -153,7 +155,7 @@ func TestImportPointsFreshdeskLinksAtTheNewHelpCenter(t *testing.T) {
 	if after := env.versions(t); after != before {
 		t.Errorf("rerun versions %s, before %s", after, before)
 	}
-	if again.Links == nil || again.Links.Rewritten != (freshdesk.LinkRewrites{}) || len(again.Links.Left) != 2 {
+	if again.Links == nil || again.Links.Rewritten != (freshdesk.LinkRewrites{}) || len(again.Links.Left) != 3 {
 		t.Errorf("rerun links = %+v", again.Links)
 	}
 	if body := env.kbArticles(t, env.workspaceID)["101"].Body; body != articles["101"].Body {
@@ -258,12 +260,109 @@ func TestImportWithoutTheServerAddressRewritesNoLinkAndSaysWhy(t *testing.T) {
 	if detail := strings.Join(links.Detail, " "); !strings.Contains(detail, "APP_ORIGIN") || strings.Contains(detail, "turn the help center on") {
 		t.Errorf("detail = %q", detail)
 	}
+	// A link on a host this run does not know keeps that reason: naming the host is the fix there.
 	for _, link := range links.Left {
-		if link.Reason != freshdesk.LinkNoServerAddress {
+		if link.Reason != freshdesk.LinkNoServerAddress && link.Reason != freshdesk.LinkUnknownHost {
 			t.Errorf("left %s %s %s: reason %s, want %s", link.Entity, link.FreshdeskID, link.URL, link.Reason, freshdesk.LinkNoServerAddress)
 		}
 	}
 	if len(links.Left) == 0 {
 		t.Error("no link was listed as left")
+	}
+}
+
+// withLinkShapes gives article 101 every shape an old link takes in a real article, and a plain-text
+// saved reply that quotes old paths. help.acme.example stands for the old portal's own custom domain.
+func (e *importEnv) withLinkShapes() *importEnv {
+	api := e.fake.api.URL
+	e.withSolutions().withCanned()
+	e.editSolutions(func(fixture map[string]any) {
+		fixtureArticle(fixture, "11", 101)["description"] = `<p><a href="` + api + `/support/solutions/articles/104-use-the-api#step-2">step two</a>,
+<a href="` + api + `/support">old home</a>, <a href="` + api + `/support/search?term=reset+password">search</a>,
+<a href="` + api + `/Support/Solutions/Articles/104">shouting</a>, <a href="` + api + `/support/tickets/new">new ticket</a>,
+<a href="https://help.acme.example/support/solutions/articles/104">portal</a>, <a href="https://help.acme.example/support/home">portal home</a>,
+<a href="` + api + `/supporters">fans</a>.</p>
+<p>Old addresses looked like <code>` + api + `/support/solutions/articles/104</code>.</p>
+<pre><code>curl ` + api + `/support/solutions/articles/104
+</code></pre>`
+	})
+	e.fake.cannedExtra = []map[string]any{{"id": 9171, "title": "Quoted", "folder_id": 801, "attachments": []any{},
+		"content": `Read "/support/solutions/articles/104-use-the-api" or '/support/home'.`, "content_html": ""}}
+	return e
+}
+
+func TestImportRewritesEveryShapeOfOldLinkAndListsWhatItCannot(t *testing.T) {
+	env := newImportEnv(t).withLinkShapes()
+	env.setHelpCenter(t, true)
+	report := env.linkRun(t)
+	api := env.fake.api.URL
+	guide := fmt.Sprintf("%s/a/%d-use-the-api", helpCenterAddress, env.articleNumber(t, "104"))
+	body := env.kbArticles(t, env.workspaceID)["101"].Body
+	for _, want := range []string{
+		"[step two](" + guide + "#step-2)",
+		"[old home](" + helpCenterAddress + ")",
+		"[search](" + helpCenterAddress + "/search?q=reset+password)",
+		"[shouting](" + guide + ")",
+		"[new ticket](" + api + "/support/tickets/new)",
+		"[portal](https://help.acme.example/support/solutions/articles/104)",
+		"[portal home](https://help.acme.example/support/home)",
+		"[fans](" + api + "/supporters)",
+		"`" + api + "/support/solutions/articles/104`",
+		"curl " + api + "/support/solutions/articles/104\n",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("article 101 lacks %q:\n%s", want, body)
+		}
+	}
+	if reply := env.savedReplyBody(t, "General / Quoted").Body; reply != `Read "`+guide+`" or '`+helpCenterAddress+`'.` {
+		t.Errorf("saved reply = %q", reply)
+	}
+	left := map[string]string{}
+	for _, link := range report.Links.Left {
+		left[link.Entity+" "+link.FreshdeskID+" "+link.URL] = link.Reason
+	}
+	wantLeft := map[string]string{
+		"kb_article 101 " + api + "/support/tickets/new":                          freshdesk.LinkNoNewPage,
+		"kb_article 101 https://help.acme.example/support/solutions/articles/104": freshdesk.LinkUnknownHost,
+	}
+	if fmt.Sprint(left) != fmt.Sprint(wantLeft) {
+		t.Errorf("left = %v, want %v", left, wantLeft)
+	}
+	if want := (freshdesk.LinkRewrites{Articles: 1, SavedReplies: 1, Links: 6}); report.Links.Rewritten != want {
+		t.Errorf("rewritten = %+v, want %+v", report.Links.Rewritten, want)
+	}
+	if detail := strings.Join(report.Links.Detail, " "); report.Links.Status != freshdesk.StatusUnverified || !strings.Contains(detail, "old help center address") {
+		t.Errorf("status %s, detail %q", report.Links.Status, detail)
+	}
+
+	// Named as the old help center's address, that host's links are this account's.
+	again, err := env.run(t, context.Background(), func(options *freshdesk.Options) {
+		env.linkOptions(options)
+		options.OldHelpCenterDomain = "help.acme.example"
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body := env.kbArticles(t, env.workspaceID)["101"].Body; !strings.Contains(body, "[portal]("+guide+")") || !strings.Contains(body, "[portal home]("+helpCenterAddress+")") {
+		t.Errorf("article 101 after naming the old help center:\n%s", body)
+	}
+	if len(again.Links.Left) != 1 || again.Links.Left[0].Reason != freshdesk.LinkNoNewPage {
+		t.Errorf("left after naming the old help center = %+v", again.Links.Left)
+	}
+}
+
+func TestOldHelpCenterHostReadsWhatAPersonTypes(t *testing.T) {
+	for typed, want := range map[string]string{
+		"help.acme.example": "help.acme.example", " https://Support.Acme.com/ ": "support.acme.com", "http://support.acme.com": "support.acme.com",
+		"support.acme.com:8443": "support.acme.com:8443",
+	} {
+		if got, err := freshdesk.OldHelpCenterHost(typed); err != nil || got != want {
+			t.Errorf("OldHelpCenterHost(%q) = %q, %v; want %q", typed, got, err, want)
+		}
+	}
+	for _, typed := range []string{"", "support", "https://support.acme.com/support/home", "support acme.com", "-acme.com", "acme..com", "user@acme.com", strings.Repeat("a", 250) + ".com"} {
+		if got, err := freshdesk.OldHelpCenterHost(typed); !errors.Is(err, freshdesk.ErrOldHelpCenterHost) {
+			t.Errorf("OldHelpCenterHost(%q) = %q, %v; want ErrOldHelpCenterHost", typed, got, err)
+		}
 	}
 }

@@ -69,6 +69,13 @@ const (
 	LinkHelpCenterOff = "help_center_off"
 	// LinkNoServerAddress: the run did not know the server's address (APP_ORIGIN), so no link is rewritten.
 	LinkNoServerAddress = "no_server_address"
+	// LinkNoNewPage: a page of the old portal the help center has no counterpart for (sign-in,
+	// tickets, the contact form).
+	LinkNoNewPage = "no_new_page"
+	// LinkUnknownHost: an old help center path (/support/solutions/...) on a host this run does not
+	// know as the account's: the old portal's own custom domain, unless it was named
+	// (Options.OldHelpCenterDomain) or claimed for the help center.
+	LinkUnknownHost = "unknown_host"
 	// LinkWriteFailed: the new text could not be written (for example it would pass the length limit).
 	LinkWriteFailed = "write_failed"
 )
@@ -80,6 +87,8 @@ var linkReasons = map[string]string{
 	LinkHelpCenterOff:       "the help center is off",
 	LinkNoServerAddress:     "the server's address (APP_ORIGIN) was not set for this run",
 	LinkWriteFailed:         "the new text could not be saved",
+	LinkNoNewPage:           "a page of the old portal the help center has no counterpart for",
+	LinkUnknownHost:         "a host this import does not know as the old help center's",
 }
 
 // finish sets the status and its reasons. open is whether the help center serves the addresses.
@@ -96,6 +105,15 @@ func (l *LinksReport) finish(open bool, origin bool) {
 	}
 	if n := len(l.Left); n > 0 {
 		l.Detail = append(l.Detail, fmt.Sprintf("%d Freshdesk link(s) were left as written; they stop working when the Freshdesk account closes.", n))
+	}
+	unknown := 0
+	for _, link := range l.Left {
+		if link.Reason == LinkUnknownHost {
+			unknown++
+		}
+	}
+	if unknown > 0 {
+		l.Detail = append(l.Detail, fmt.Sprintf("%d of them point at /support/solutions/ on another host: if that host was your old help center, give it as the old help center address and run the import again.", unknown))
 	}
 	if len(l.Detail) > 0 {
 		l.Status = StatusUnverified

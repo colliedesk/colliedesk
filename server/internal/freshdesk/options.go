@@ -46,6 +46,9 @@ type Options struct {
 	// (helpcenter.SiteURL), which old Freshdesk help center links in imported articles and saved replies
 	// are pointed at. Without Origin no link is rewritten and the links report is UNVERIFIED.
 	Origin, HelpCenterDomain string
+	// OldHelpCenterDomain is the old Freshdesk help center's own custom domain (OldHelpCenterHost), for
+	// example support.acme.com: its /support/ links are this account's, like the account domain's.
+	OldHelpCenterDomain string
 	// Storage receives attachment bytes; not needed for a dry run.
 	Storage attachments.Storage
 	// Sleep waits between rate-limited requests; tests replace it.

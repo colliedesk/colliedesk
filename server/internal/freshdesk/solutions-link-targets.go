@@ -19,8 +19,10 @@ import (
 // linkSite reads the help center's address, whether it is on, and the hosts of this account's links.
 func (r *run) linkSite(ctx context.Context) (linkSite, error) {
 	site := linkSite{origin: r.opts.Origin != "", hosts: map[string]bool{strings.ToLower(r.client.base.Host): true}}
-	if r.accountDomain != "" {
-		site.hosts[r.accountDomain] = true
+	for _, host := range []string{r.accountDomain, r.opts.OldHelpCenterDomain} {
+		if host != "" {
+			site.hosts[host] = true
+		}
 	}
 	_, open, err := store.NewWithDB(r.db).OpenHelpCenterWorkspace(ctx, r.workspaceID)
 	if err != nil {
