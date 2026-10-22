@@ -267,7 +267,8 @@ published.
 ### Brand
 
 An admin sets the help center's brand through the API (`PUT /api/v1/help-center/theme`) or an AI
-agent (`colliedesk_help_center_theme_update`); the pages show it in a later release. A brand has:
+agent (`colliedesk_help_center_theme_update`). Every page shows it on the next visit (see
+[what visitors see](#what-visitors-see)). A brand has:
 
 - **Logo** and **favicon**: images of the [media library](#media-library), outside its trash, with
   the logo's text for screen readers (empty uses the title). An image the help center uses is kept
@@ -334,6 +335,21 @@ address name** (Settings → Email) changes every help center address, and old l
 Pages have no scripts, no cookies and no tracking, follow the visitor's light or dark setting, and
 fit a phone. The page labels (Search, Home and so on) are in English; the help center's language
 marks your articles' language for browsers and search engines.
+
+With a [brand](#brand):
+
+- The header shows the **logo** in place of the title, at most 40 pixels tall, with the logo's text
+  for screen readers. The **favicon** is the browser tab's icon. A logo or favicon in the media
+  library's trash is not shown; restoring it brings it back.
+- The **website link** is in the header, named by its host (`acme.example`).
+- The footer shows the **contact**: the email address of a `mailto:` contact, **Contact us** for an
+  `https` one, and the **phone number** as a link that calls it.
+- The **colors** and **fonts** replace the default ones. Any color set makes the pages light only,
+  whatever the visitor's setting. Links, the hover color and the keyboard focus outline in the
+  header and footer switch to the header text (or footer text) color where the link or primary
+  color would not read on them.
+- Fonts come from the visitor's device, so the page loads nothing more and looks a little different
+  on each system.
 
 ### Limits
 

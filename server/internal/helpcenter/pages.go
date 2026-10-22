@@ -110,6 +110,14 @@ type page struct {
 
 	Searched bool
 	Results  []searchResult
+
+	// The brand (theme.go): its style sheet, the light-only color scheme, the logo in place of the
+	// title, the favicon, the website link in the masthead and the contact links in the footer.
+	BrandStyle, Favicon string
+	LightOnly           bool
+	Logo                *pageImage
+	Website, Contact    *link
+	Phone               *phoneLink
 }
 
 func (s *Site) page(v view, title string, crumbs []link) page {
@@ -118,8 +126,10 @@ func (s *Site) page(v view, title string, crumbs []link) page {
 	if title != "" {
 		full = title + " · " + siteTitle
 	}
-	return page{Lang: v.site.Locale, Title: full, SiteTitle: siteTitle, Home: v.home, SearchURL: v.base + "/search",
+	data := page{Lang: v.site.Locale, Title: full, SiteTitle: siteTitle, Home: v.home, SearchURL: v.base + "/search",
 		Style: v.base + stylePath + s.pages.styleName, NoIndex: v.site.Trial, Crumbs: crumbs}
+	v.brand.fill(&data, v)
+	return data
 }
 
 // node is a collection in the tree; total counts the published articles in it and below it.
