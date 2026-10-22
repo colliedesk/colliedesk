@@ -43,15 +43,22 @@ func TestHelpCenterLogoIsNeverPurgedOrCalledUnused(t *testing.T) {
 	if _, err := purge.PurgeKBTrash(ctx); err != nil {
 		t.Fatal(err)
 	}
-	kbCall(t, api, http.MethodGet, "/api/v1/kb/media/"+logo.ID+"/details", nil, admin, http.StatusOK, nil)
-	// A trashed logo waits there: neither the daily purge nor an admin's purge deletes it, and a
-	// restore brings it back as the logo.
-	kbCall(t, api, http.MethodDelete, "/api/v1/kb/media/"+logo.ID, nil, admin, http.StatusOK, nil)
-	if _, err := pool.Exec(ctx, `UPDATE kb_media SET deleted_at=now()-interval '31 days' WHERE id=$1`, logo.ID); err != nil {
+	for _, id := range []string{logo.ID, icon.ID} {
+		kbCall(t, api, http.MethodGet, "/api/v1/kb/media/"+id+"/details", nil, admin, http.StatusOK, nil)
+	}
+	// A trashed logo or favicon waits there: neither the daily purge nor an admin's purge deletes it,
+	// and a restore brings it back.
+	for _, id := range []string{logo.ID, icon.ID} {
+		kbCall(t, api, http.MethodDelete, "/api/v1/kb/media/"+id, nil, admin, http.StatusOK, nil)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE kb_media SET deleted_at=now()-interval '31 days' WHERE id IN ($1,$2)`, logo.ID, icon.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := purge.PurgeKBTrash(ctx); err != nil {
 		t.Fatal(err)
+	}
+	for _, id := range []string{logo.ID, icon.ID} {
+		kbCall(t, api, http.MethodGet, "/api/v1/kb/media/"+id+"/details", nil, admin, http.StatusOK, nil)
 	}
 	var purged struct {
 		Results []struct {
@@ -59,14 +66,15 @@ func TestHelpCenterLogoIsNeverPurgedOrCalledUnused(t *testing.T) {
 			Status string `json:"status"`
 		} `json:"results"`
 	}
-	kbCall(t, api, http.MethodPost, "/api/v1/kb/media/purge", map[string]any{"ids": []string{logo.ID}}, admin, http.StatusOK, &purged)
-	if len(purged.Results) != 1 || purged.Results[0].Status != "in_use" {
-		t.Fatalf("admin purge of the trashed logo = %+v, want in_use", purged.Results)
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/media/purge", map[string]any{"ids": []string{logo.ID, icon.ID}}, admin, http.StatusOK, &purged)
+	if len(purged.Results) != 2 || purged.Results[0].Status != "in_use" || purged.Results[1].Status != "in_use" {
+		t.Fatalf("admin purge of the trashed logo and favicon = %+v, want in_use for both", purged.Results)
 	}
+	kbCall(t, api, http.MethodPost, "/api/v1/kb/media/"+icon.ID+"/restore", nil, admin, http.StatusOK, nil)
 	kbCall(t, api, http.MethodPost, "/api/v1/kb/media/"+logo.ID+"/restore", nil, admin, http.StatusOK, nil)
 	var theme themeView
 	kbCall(t, api, http.MethodGet, themePath, nil, admin, http.StatusOK, &theme)
-	if theme.LogoMediaID == nil || *theme.LogoMediaID != logo.ID {
+	if theme.LogoMediaID == nil || *theme.LogoMediaID != logo.ID || theme.FaviconMediaID == nil || *theme.FaviconMediaID != icon.ID {
 		t.Fatalf("theme after restore = %+v", theme)
 	}
 }

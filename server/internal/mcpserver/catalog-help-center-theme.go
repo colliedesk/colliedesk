@@ -10,11 +10,11 @@ const (
 		`"text":` + themeColorSchema + `,"link":` + themeColorSchema + `,"footer":` + themeColorSchema + `}}`
 
 	themeInputSchema = `{"type":"object","additionalProperties":false,"properties":{` +
-		`"logo_media_id":{"type":["string","null"],"description":"An image of the media library (colliedesk_kb_media_list), outside its trash."},` +
+		`"logo_media_id":{"type":["string","null"],"description":"An image of the media library (colliedesk_kb_media_list), outside its trash unless it is the logo the theme already has."},` +
 		`"favicon_media_id":{"type":["string","null"],"description":"An image of the media library for the browser tab."},` +
 		`"logo_alt":{"type":["string","null"],"maxLength":200,"description":"What the logo says, for screen readers; empty uses the title."},` +
 		`"linkback_url":{"type":["string","null"],"maxLength":2000,"description":"Your website, absolute http or https."},` +
-		`"contact_url":{"type":["string","null"],"maxLength":2000,"description":"An https address or mailto:<address>."},` +
+		`"contact_url":{"type":["string","null"],"maxLength":2000,"description":"An https address, or mailto: and one plain email address (no name, no ?subject= or ?bcc=, no %-encoding)."},` +
 		`"contact_phone":{"type":["string","null"],"maxLength":40,"description":"Digits, spaces and + - ( )."},` +
 		themeColors + `,"body_font":` + themeFontSchema + `,"heading_font":` + themeFontSchema + `}}`
 
@@ -65,7 +65,7 @@ func helpCenterThemeUpdateSpec() Spec {
 		Title: "Set the help center's brand",
 		Description: `Replace the brand of the public help center: a field left out or null goes back to its default, so read it first with colliedesk_help_center_theme_get and send the whole theme. ` +
 			themeContrastRule + `A failing pair is refused with the nearest passing color; colliedesk_help_center_theme_check tries a theme first. ` +
-			`The logo and favicon must be images of the media library outside its trash; they are kept while the help center names them. Fonts are stacks of the reader's own system fonts. ` +
+			`The logo and favicon must be images of the media library outside its trash; one the theme already has may stay while it is in the trash, so sending the theme back whole still saves. They are kept while the help center names them and kept no more once it names another. Fonts are stacks of the reader's own system fonts. ` +
 			`It is safe to repeat. ` + belowAdmin + "\n\nTier: admin.",
 		Tier: "admin", Idempotent: true,
 		REST:   []string{"PUT /api/v1/help-center/theme"},

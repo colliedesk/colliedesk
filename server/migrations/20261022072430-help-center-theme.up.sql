@@ -24,7 +24,5 @@ ALTER TABLE help_centers
         REFERENCES kb_media(workspace_id, id) ON DELETE SET NULL (logo_media_id),
     ADD CONSTRAINT help_centers_favicon_media_fkey FOREIGN KEY (workspace_id, favicon_media_id)
         REFERENCES kb_media(workspace_id, id) ON DELETE SET NULL (favicon_media_id);
-
--- A purge of library items looks up the help center that names each one.
-CREATE INDEX help_centers_logo_media_idx ON help_centers(workspace_id, logo_media_id) WHERE logo_media_id IS NOT NULL;
-CREATE INDEX help_centers_favicon_media_idx ON help_centers(workspace_id, favicon_media_id) WHERE favicon_media_id IS NOT NULL;
+-- No index for the media columns: a workspace has one help center row, so its primary key
+-- (workspace_id) already finds the row for the purge's check and the foreign key's action.

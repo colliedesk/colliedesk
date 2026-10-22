@@ -47,44 +47,67 @@ func readHelpCenterTheme(ctx context.Context, tx pgx.Tx, workspaceID string) (do
 	return view, nil
 }
 
-// CheckHelpCenterThemeMedia refuses a logo or favicon that is not an image of the workspace's library
-// outside the trash, with a domain.ThemeError media_not_found. It changes nothing.
+// CheckHelpCenterThemeMedia refuses a logo or favicon that is not an image of the workspace's library,
+// or that is in its trash without being the one the same field already names, with a
+// domain.ThemeError media_not_found. It changes nothing.
 func (s *Store) CheckHelpCenterThemeMedia(ctx context.Context, workspaceID string, theme domain.HelpCenterTheme) error {
 	_, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (struct{}, error) {
-		return struct{}{}, checkThemeMedia(ctx, tx, workspaceID, theme, "")
+		_, err := checkThemeMedia(ctx, tx, workspaceID, theme, false)
+		return struct{}{}, err
 	})
 	return themeStoreError("check help center theme", err)
 }
 
-// checkThemeMedia reads each library item the theme names, with lock appended to the query, and
-// refuses one that is missing (in this workspace), in the trash or not an image.
-func checkThemeMedia(ctx context.Context, tx pgx.Tx, workspaceID string, theme domain.HelpCenterTheme, lock string) error {
+// checkThemeMedia reads each library item the theme names and refuses one that is missing (in this
+// workspace), not an image, or in the trash. An item in the trash is accepted in the field that
+// already names it, so the theme read and sent back whole still saves after its logo was trashed; a
+// trashed item named anew is refused. When saving, the help center row is locked first (FOR UPDATE)
+// and each item FOR SHARE, so the purge, which skips locked items and checks again, never deletes
+// one the save is about to name. It returns the ids the help center names before the save.
+func checkThemeMedia(ctx context.Context, tx pgx.Tx, workspaceID string, theme domain.HelpCenterTheme, saving bool) ([]string, error) {
+	itemLock, centerLock := "", ""
+	if saving {
+		itemLock, centerLock = " FOR SHARE", " FOR UPDATE"
+	}
+	var storedLogo, storedFavicon *string
+	err := tx.QueryRow(ctx, `SELECT logo_media_id::text, favicon_media_id::text FROM help_centers WHERE workspace_id=$1`+centerLock,
+		workspaceID).Scan(&storedLogo, &storedFavicon)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, err
+	}
+	var previous []string
+	for _, id := range []*string{storedLogo, storedFavicon} {
+		if id != nil {
+			previous = append(previous, *id)
+		}
+	}
 	fields := map[string]string{}
 	for _, item := range []struct {
-		field string
-		id    *string
-	}{{"logo_media_id", theme.LogoMediaID}, {"favicon_media_id", theme.FaviconMediaID}} {
+		field  string
+		id     *string
+		stored *string
+	}{{"logo_media_id", theme.LogoMediaID, storedLogo}, {"favicon_media_id", theme.FaviconMediaID, storedFavicon}} {
 		if item.id == nil {
 			continue
 		}
 		var kind string
 		var trashed bool
-		err := tx.QueryRow(ctx, `SELECT kind, deleted_at IS NOT NULL FROM kb_media WHERE workspace_id=$1 AND id=$2`+lock, workspaceID, *item.id).Scan(&kind, &trashed)
+		err := tx.QueryRow(ctx, `SELECT kind, deleted_at IS NOT NULL FROM kb_media WHERE workspace_id=$1 AND id=$2`+itemLock, workspaceID, *item.id).Scan(&kind, &trashed)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			fields[item.field] = "No image with this id in the media library."
 		case err != nil:
-			return err
-		case trashed:
-			fields[item.field] = "This image is in the trash of the media library; restore it first."
+			return nil, err
 		case kind != domain.KBMediaImage:
 			fields[item.field] = "This item is a video; choose an image."
+		case trashed && (item.stored == nil || !strings.EqualFold(*item.stored, *item.id)):
+			fields[item.field] = "This image is in the trash of the media library; restore it first."
 		}
 	}
 	if len(fields) > 0 {
-		return &domain.ThemeError{Code: "media_not_found", Fields: fields}
+		return nil, &domain.ThemeError{Code: "media_not_found", Fields: fields}
 	}
-	return nil
+	return previous, nil
 }
 
 // PutHelpCenterTheme replaces the brand of the help center after domain.CheckTheme and the media
@@ -97,7 +120,8 @@ func (s *Store) PutHelpCenterTheme(ctx context.Context, workspaceID string, them
 		return domain.HelpCenterThemeView{}, err
 	}
 	view, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.HelpCenterThemeView, error) {
-		if err := checkThemeMedia(ctx, tx, workspaceID, cleaned, " FOR SHARE"); err != nil {
+		previous, err := checkThemeMedia(ctx, tx, workspaceID, cleaned, true)
+		if err != nil {
 			return domain.HelpCenterThemeView{}, err
 		}
 		colors := cleaned.Colors
@@ -114,8 +138,14 @@ func (s *Store) PutHelpCenterTheme(ctx context.Context, workspaceID string, them
 			cleaned.BodyFont, cleaned.HeadingFont); err != nil {
 			return domain.HelpCenterThemeView{}, err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE kb_media SET kept=true WHERE workspace_id=$1 AND id IN ($2::uuid,$3::uuid) AND NOT kept`,
+		if _, err := tx.Exec(ctx, `UPDATE kb_media SET kept=true, updated_at=clock_timestamp() WHERE workspace_id=$1 AND id IN ($2::uuid,$3::uuid) AND NOT kept`,
 			workspaceID, cleaned.LogoMediaID, cleaned.FaviconMediaID); err != nil {
+			return domain.HelpCenterThemeView{}, err
+		}
+		// An image the help center no longer shows in either field is kept no more, so "Remove unused"
+		// and the purge treat it like any other image no article uses.
+		if _, err := tx.Exec(ctx, `UPDATE kb_media m SET kept=false, updated_at=clock_timestamp()
+			WHERE m.workspace_id=$1 AND m.id=ANY($2::uuid[]) AND m.kept AND NOT `+kbMediaNamedByHelpCenter, workspaceID, previous); err != nil {
 			return domain.HelpCenterThemeView{}, err
 		}
 		return readHelpCenterTheme(ctx, tx, workspaceID)

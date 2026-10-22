@@ -2765,7 +2765,8 @@ paths:
       description: >
         The library's trash, last moved there first, 60 items a page unless `limit` says otherwise,
         each with `purge_at`, when the daily purge deletes it (30 days after it was moved), and its
-        usage. An item in the trash still counts toward the plan's storage until it is purged.
+        usage. An item the purge keeps (the help center's logo or favicon) has no `purge_at`. An item
+        in the trash still counts toward the plan's storage until it is purged.
       parameters:
         - {name: cursor, in: query, description: The next_cursor of the previous page., schema: {type: string}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 60}}
@@ -4353,14 +4354,21 @@ components:
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
         usage: {$ref: '#/components/schemas/KBMediaUsage'}
-        purge_at: {type: string, format: date-time, description: 'When the purge deletes it: set only for an item nobody kept and no article ever saved.'}
+        purge_at: {type: string, format: date-time, description: 'When the purge deletes it: set only for an item nobody kept, no article ever saved and the help center does not show; in the trash, for an item no live article and not the help center names.'}
     KBMediaUsage:
       type: object
-      required: [articles, trashed_articles, older_versions]
+      required: [articles, trashed_articles, older_versions, help_center]
       properties:
         articles: {type: integer, description: Live articles whose current text or a translation names it; above 0 means in use.}
         trashed_articles: {type: integer, description: Articles in the trash whose current text names it.}
         older_versions: {type: integer, description: Articles where only an older version names it.}
+        help_center:
+          type: array
+          items: {type: string, enum: [logo, favicon]}
+          description: >-
+            What the help center shows it as; empty when it does not. An item the help center shows is
+            in use: it is not listed as unused, Remove unused skips it, and neither the daily purge nor
+            Delete forever deletes it (purge answers in_use), even in the trash.
     KBMediaDetails:
       allOf:
         - {$ref: '#/components/schemas/KBMedia'}
@@ -4485,11 +4493,11 @@ components:
       type: object
       additionalProperties: false
       properties:
-        logo_media_id: {type: [string, 'null'], format: uuid, description: An image of the media library shown at the top of every page.}
-        favicon_media_id: {type: [string, 'null'], format: uuid, description: An image of the media library shown as the browser tab icon.}
+        logo_media_id: {type: [string, 'null'], format: uuid, description: 'An image of the media library shown at the top of every page. Outside its trash, except the image this field already names: a theme read and sent back whole saves even after its logo was moved to the trash.'}
+        favicon_media_id: {type: [string, 'null'], format: uuid, description: 'An image of the media library shown as the browser tab icon; the same trash rule as logo_media_id.'}
         logo_alt: {type: [string, 'null'], maxLength: 200, description: 'What the logo says, for screen readers; empty uses the help center title.'}
         linkback_url: {type: [string, 'null'], maxLength: 2000, description: 'Your website, an absolute http or https address, linked from the top of every page.'}
-        contact_url: {type: [string, 'null'], maxLength: 2000, description: 'Where readers contact you: an https address or mailto:<address>.'}
+        contact_url: {type: [string, 'null'], maxLength: 2000, description: 'Where readers contact you: an https address or mailto: and one plain email address (no name, no ?subject= or ?bcc=, no %-encoding).'}
         contact_phone: {type: [string, 'null'], maxLength: 40, description: 'A phone number shown in the footer: digits, spaces and + - ( ).'}
         colors: {$ref: '#/components/schemas/HelpCenterThemeColors'}
         body_font: {$ref: '#/components/schemas/ThemeFont'}

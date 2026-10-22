@@ -7,10 +7,11 @@ package mcpserver
 const (
 	kbMediaIDProperty = `"media_id":{"type":"string",` + uuid + `,"description":"From colliedesk_kb_media_list, or the id in an article's /api/v1/kb/images/<id> link."}`
 
-	kbMediaUsageSchema = `{"type":"object","required":["articles","trashed_articles","older_versions"],"properties":{` +
+	kbMediaUsageSchema = `{"type":"object","required":["articles","trashed_articles","older_versions","help_center"],"properties":{` +
 		`"articles":{"type":"integer","description":"Live articles whose current text names it; above 0 means in use."},` +
 		`"trashed_articles":{"type":"integer","description":"Articles in the trash that name it."},` +
-		`"older_versions":{"type":"integer","description":"Articles where only an older version names it."}}}`
+		`"older_versions":{"type":"integer","description":"Articles where only an older version names it."},` +
+		`"help_center":{"type":"array","items":{"type":"string","enum":["logo","favicon"]},"description":"What the help center shows it as; empty when it does not. Such an item is in use: never unused, never purged, even in the trash."}}}`
 
 	kbMediaSchema = `{"type":"object","required":["id","kind","content_type","size","url","width","height","kept","in_trash","created_at","updated_at","team_text"],"properties":{` +
 		`"id":{"type":"string"},"kind":{"type":"string","enum":["image","video"]},"content_type":{"type":"string"},"size":{"type":"integer","description":"Bytes."},` +
@@ -130,7 +131,7 @@ func kbMediaPurgeSpec() Spec {
 	return Spec{
 		Name:  "colliedesk_kb_media_purge",
 		Title: "Delete knowledge base media in the trash for good",
-		Description: `Delete for good up to 100 items that are in the library's trash, with their files, freeing their storage now instead of after 30 days. Each id answers purged, not_in_trash or not_found. ` +
+		Description: `Delete for good up to 100 items that are in the library's trash, with their files, freeing their storage now instead of after 30 days. Each id answers purged, not_in_trash, not_found, or in_use: the help center shows it as its logo or favicon (usage.help_center), so it stays in the trash until colliedesk_help_center_theme_update names another image. ` +
 			`This cannot be undone: articles in the trash and older versions that named one show "Media no longer exists". ` + belowAdmin + "\n\nTier: admin.",
 		Tier: "admin", Destructive: true, Idempotent: true,
 		REST:   []string{"POST /api/v1/kb/media/purge"},

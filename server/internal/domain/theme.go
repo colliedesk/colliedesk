@@ -177,11 +177,23 @@ func checkThemeURL(value string, schemes ...string) string {
 	case !allowed:
 		return "Send " + want + "."
 	case scheme == "mailto":
-		if _, err := mail.ParseAddress(parsed.Opaque); err != nil || parsed.Opaque == "" || strings.ContainsAny(parsed.Opaque, ",;") {
-			return "Write mailto: followed by one email address."
+		if !plainMailAddress(parsed) {
+			return "Write mailto: followed by one plain email address, such as mailto:help@example.com, with no name, ? or %."
 		}
 	case parsed.Host == "" || parsed.User != nil:
 		return "Send " + want + " with a host name and no user name."
 	}
 	return ""
+}
+
+// plainMailAddress is true for a mailto that is one bare addr-spec: no display name or comment, no
+// header fields (?bcc= would copy a stranger into every mail) and no fragment. Percent-encoding is
+// refused rather than decoded, so the stored address is exactly the one shown and linked.
+func plainMailAddress(parsed *url.URL) bool {
+	address := parsed.Opaque
+	if address == "" || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || strings.ContainsAny(address, "%,; <>()") {
+		return false
+	}
+	found, err := mail.ParseAddress(address)
+	return err == nil && found.Name == "" && found.Address == address
 }

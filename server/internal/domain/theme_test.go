@@ -142,3 +142,38 @@ func TestCheckThemeCleansWhatItKeeps(t *testing.T) {
 		t.Fatalf("font keys = %d, want 7", len(ThemeFontStacks))
 	}
 }
+
+// A contact mailto is one plain address: no display name, no header fields such as ?bcc= that would
+// copy a stranger into every mail, and no percent-encoding, so what the help center shows is what the
+// admin typed.
+func TestContactMailtoTakesOnePlainAddressOnly(t *testing.T) {
+	for _, item := range []struct {
+		url    string
+		accept bool
+	}{
+		{"mailto:help@acme.example", true},
+		{"mailto:first.last+billing@support.acme.example", true},
+		{"MAILTO:help@acme.example", true},
+		{"mailto:Support Team <help@acme.example>", false},
+		{"mailto:<help@acme.example>", false},
+		{"mailto:help@acme.example (Support)", false},
+		{"mailto:help@acme.example?bcc=x@evil.example", false},
+		{"mailto:help@acme.example?subject=Hello", false},
+		{"mailto:help@acme.example#top", false},
+		{"mailto:help%40acme.example", false},
+		{"mailto:h%65lp@acme.example", false},
+		{"mailto:help@acme.example,sales@acme.example", false},
+		{"mailto://help@acme.example", false},
+		{"mailto:help", false},
+	} {
+		_, _, err := CheckTheme(HelpCenterTheme{ContactURL: color(item.url)})
+		if item.accept && err != nil {
+			t.Errorf("%q refused: %v", item.url, err)
+		}
+		if !item.accept {
+			if invalid := (*ThemeError)(nil); !errors.As(err, &invalid) || invalid.Fields["contact_url"] == "" {
+				t.Errorf("%q accepted, want a contact_url refusal (err = %v)", item.url, err)
+			}
+		}
+	}
+}

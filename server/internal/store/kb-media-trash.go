@@ -281,8 +281,9 @@ func (s *Store) RestoreKBMedia(ctx context.Context, workspaceID string, ids []st
 }
 
 // PurgeKBMediaNow deletes for good the items of ids that are in the library's trash, with their files,
-// and answers each: purged, not_in_trash or not_found. Articles in the trash and older versions that
-// named one then show "Media no longer exists".
+// and answers each: purged, not_in_trash, not_found, or in_use for the help center's logo or favicon,
+// which stays in the trash until the theme names another image. Articles in the trash and older
+// versions that named one then show "Media no longer exists".
 func (s *Store) PurgeKBMediaNow(ctx context.Context, workspaceID string, ids []string) ([]domain.KBMediaResult, error) {
 	ids, err := validKBMediaIDs(ids)
 	if err != nil {
@@ -354,7 +355,7 @@ func (s *Store) PurgeKBMediaNow(ctx context.Context, workspaceID string, ids []s
 }
 
 // ListTrashedKBMedia pages through the library's trash, last moved there first, with each item's usage
-// and when the purge deletes it.
+// and when the purge deletes it: none for an item the purge keeps.
 func (s *Store) ListTrashedKBMedia(ctx context.Context, workspaceID, cursor string, limit int) ([]domain.KBMedia, string, error) {
 	if limit < 1 || limit > domain.MaxKBMediaPage {
 		limit = 60
@@ -399,8 +400,11 @@ func (s *Store) ListTrashedKBMedia(ctx context.Context, workspaceID, cursor stri
 	out := make([]domain.KBMedia, len(items))
 	for i, item := range items {
 		out[i] = item.KBMedia
-		purgeAt := item.DeletedAt.Add(domain.KBTrashRetention)
-		out[i].PurgeAt = &purgeAt
+		// The purge keeps an item a live article or the help center still names (kbMediaPurgeable).
+		if usage := item.Usage; usage == nil || (usage.Articles == 0 && len(usage.HelpCenter) == 0) {
+			purgeAt := item.DeletedAt.Add(domain.KBTrashRetention)
+			out[i].PurgeAt = &purgeAt
+		}
 	}
 	return out, next, nil
 }

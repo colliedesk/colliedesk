@@ -14,6 +14,9 @@ import (
 // before it is stored (settingsFields).
 var themeFields = []string{"logo_media_id", "favicon_media_id", "logo_alt", "linkback_url", "contact_url", "contact_phone", "colors", "body_font", "heading_font"}
 
+// themeColorFields are the keys of the theme's colors object (domain.ThemeColors).
+var themeColorFields = []string{"primary", "header", "header_text", "background", "text", "link", "footer"}
+
 // themeInput is the body of PUT /help-center/theme and its check. A field left out is the default.
 type themeInput struct {
 	LogoMediaID    *string             `json:"logo_media_id"`

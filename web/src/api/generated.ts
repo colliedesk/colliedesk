@@ -1485,7 +1485,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description The library's trash, last moved there first, 60 items a page unless `limit` says otherwise, each with `purge_at`, when the daily purge deletes it (30 days after it was moved), and its usage. An item in the trash still counts toward the plan's storage until it is purged. */
+        /** @description The library's trash, last moved there first, 60 items a page unless `limit` says otherwise, each with `purge_at`, when the daily purge deletes it (30 days after it was moved), and its usage. An item the purge keeps (the help center's logo or favicon) has no `purge_at`. An item in the trash still counts toward the plan's storage until it is purged. */
         get: operations["listTrashedKBMedia"];
         put?: never;
         /** @description Move up to 100 library items to the trash, each only while no live article's current text names it, and answer each id: `trashed`, `already_in_trash`, `in_use` or `not_found`. Send the `batch_id` of an earlier call to add to its batch; `POST /api/v1/kb/media/restore` with that `batch_id` brings back the whole batch. Saving an article that names an item in the trash takes it out again. Calling it twice changes nothing more. */
@@ -2665,7 +2665,7 @@ export interface components {
             usage?: components["schemas"]["KBMediaUsage"];
             /**
              * Format: date-time
-             * @description When the purge deletes it: set only for an item nobody kept and no article ever saved.
+             * @description When the purge deletes it: set only for an item nobody kept, no article ever saved and the help center does not show; in the trash, for an item no live article and not the help center names.
              */
             purge_at?: string;
         };
@@ -2676,6 +2676,8 @@ export interface components {
             trashed_articles: number;
             /** @description Articles where only an older version names it. */
             older_versions: number;
+            /** @description What the help center shows it as; empty when it does not. An item the help center shows is in use: it is not listed as unused, Remove unused skips it, and neither the daily purge nor Delete forever deletes it (purge answers in_use), even in the trash. */
+            help_center: ("logo" | "favicon")[];
         };
         KBMediaDetails: components["schemas"]["KBMedia"] & {
             articles: {
@@ -2802,19 +2804,19 @@ export interface components {
         HelpCenterThemeInput: {
             /**
              * Format: uuid
-             * @description An image of the media library shown at the top of every page.
+             * @description An image of the media library shown at the top of every page. Outside its trash, except the image this field already names: a theme read and sent back whole saves even after its logo was moved to the trash.
              */
             logo_media_id?: string | null;
             /**
              * Format: uuid
-             * @description An image of the media library shown as the browser tab icon.
+             * @description An image of the media library shown as the browser tab icon; the same trash rule as logo_media_id.
              */
             favicon_media_id?: string | null;
             /** @description What the logo says, for screen readers; empty uses the help center title. */
             logo_alt?: string | null;
             /** @description Your website, an absolute http or https address, linked from the top of every page. */
             linkback_url?: string | null;
-            /** @description Where readers contact you: an https address or mailto:<address>. */
+            /** @description Where readers contact you: an https address or mailto: and one plain email address (no name, no ?subject= or ?bcc=, no %-encoding). */
             contact_url?: string | null;
             /** @description A phone number shown in the footer: digits, spaces and + - ( ). */
             contact_phone?: string | null;

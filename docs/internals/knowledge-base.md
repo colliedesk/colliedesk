@@ -225,7 +225,14 @@ The public help center is in `help-center.md`.
   `favicon_media_id`) are library items no article links. `kbMediaNamedByHelpCenter` is part of the
   purge rule (`kbMediaPurgeable`), the `unused` and `in_use` filters, trash-unused and the admin's
   purge; a new query that decides an item is unused must add it, or it deletes a logo. The foreign
-  keys clear the theme's column (`ON DELETE SET NULL (col)`) if a row goes anyway.
+  keys clear the theme's column (`ON DELETE SET NULL (col)`) if a row goes anyway. `usage.help_center`
+  and the trash list's `purge_at` read the same columns, so the library never says "not used" or
+  shows a purge date for an item the purge keeps.
+- **The theme's `kept` mark follows the theme.** A save marks the named images kept and unmarks an
+  image it no longer names in either field, even one a person had kept before (there is no record of
+  who kept it). A trashed image is accepted only in the field that already names it, so a theme read
+  and sent back whole still saves; the save locks the `help_centers` row before the media rows, an
+  order no other path reverses.
 - **A generated column cannot be copied in.** `restore-workspace.sh` skips columns with
   `attgenerated` set; the database computes `kb_articles.search` again.
 - **One file can back several rows.** Storage keys are content addresses, so an image and an attachment

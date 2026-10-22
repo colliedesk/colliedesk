@@ -111,7 +111,7 @@ with `billing` and leave a note with a summary."
 | `colliedesk_kb_media_trash` | Moves library items to the trash by id, or all unused ones; a lower tier's request names the ids | `send` |
 | `colliedesk_kb_media_trash_list` | Lists the library's trash, with when each item is deleted for good | `read` |
 | `colliedesk_kb_media_undelete` | Takes items out of the trash, by id or a whole "move to trash" batch | `send` |
-| `colliedesk_kb_media_purge` | Deletes items in the trash for good, freeing their storage | `admin` |
+| `colliedesk_kb_media_purge` | Deletes items in the trash for good, freeing their storage; the help center's logo or favicon answers `in_use` and stays | `admin` |
 | `colliedesk_kb_media_replace` | Puts another image or video in place of one in every article that shows it | `send` |
 | `colliedesk_kb_media_replace_undo` | Undoes a replacement | `send` |
 | `colliedesk_kb_video_upload_start` | Starts uploading a video (MP4 or WebM, up to 200 MiB) in parts | `send` |

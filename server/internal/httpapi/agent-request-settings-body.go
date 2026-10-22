@@ -1,0 +1,98 @@
+package httpapi
+
+import (
+	"bytes"
+	"encoding/json"
+	"maps"
+	"slices"
+	"strings"
+)
+
+// settingsObjectFields lists, for a settings route, each field that takes a JSON object and the keys
+// that object may hold. Any other field takes a plain value or a list of plain values, so no object
+// can carry a key past the check.
+var settingsObjectFields = map[string]map[string][]string{
+	"PUT /api/v1/help-center/theme": {"colors": themeColorFields},
+}
+
+// settingsBodyProblem says why body cannot be filed for a settings route: it is not a JSON object, or
+// it has a field (at any depth) the route does not take. It returns "" when the body may be filed.
+func settingsBodyProblem(route Route, body json.RawMessage) string {
+	key := route.Method + " " + route.Pattern
+	allowed, ok := settingsFields[key]
+	if !ok || len(body) == 0 {
+		return ""
+	}
+	fields, isObject := jsonObject(body)
+	if !isObject || fields == nil {
+		return "The body of this call must be a JSON object. Nothing was filed."
+	}
+	for _, name := range slices.Sorted(maps.Keys(fields)) {
+		if !slices.Contains(allowed, name) {
+			return unexpectedSettingsField(name)
+		}
+		keys, takesObject := settingsObjectFields[key][name]
+		if !takesObject {
+			if !plainJSONValue(fields[name], true) {
+				return "The field " + name + " takes a plain value, not an object. Nothing was filed."
+			}
+			continue
+		}
+		inner, isObject := jsonObject(fields[name])
+		if !isObject {
+			if string(bytes.TrimSpace(fields[name])) == "null" {
+				continue
+			}
+			return "The field " + name + " takes an object of " + strings.Join(keys, ", ") + ". Nothing was filed."
+		}
+		for _, innerName := range slices.Sorted(maps.Keys(inner)) {
+			if !slices.Contains(keys, innerName) {
+				return unexpectedSettingsField(name + "." + innerName)
+			}
+			if !plainJSONValue(inner[innerName], false) {
+				return "The field " + name + "." + innerName + " takes a plain value, not an object or list. Nothing was filed."
+			}
+		}
+	}
+	return ""
+}
+
+func unexpectedSettingsField(name string) string {
+	return "This call does not take the field " + name + ". Nothing was filed; send only the fields the route takes."
+}
+
+// jsonObject decodes value when it is a JSON object.
+func jsonObject(value json.RawMessage) (map[string]json.RawMessage, bool) {
+	trimmed := bytes.TrimSpace(value)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		return nil, false
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(trimmed, &fields) != nil {
+		return nil, false
+	}
+	return fields, true
+}
+
+// plainJSONValue is true for a string, number, boolean or null and, when lists is set, for a list of
+// those.
+func plainJSONValue(value json.RawMessage, lists bool) bool {
+	trimmed := bytes.TrimSpace(value)
+	switch {
+	case len(trimmed) == 0:
+		return false
+	case trimmed[0] == '{':
+		return false
+	case trimmed[0] == '[':
+		var items []json.RawMessage
+		if !lists || json.Unmarshal(trimmed, &items) != nil {
+			return false
+		}
+		for _, item := range items {
+			if !plainJSONValue(item, false) {
+				return false
+			}
+		}
+	}
+	return true
+}

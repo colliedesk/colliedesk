@@ -120,6 +120,7 @@ The column on the right of the editor lists the images of the article that have 
 name or alt text, a choice of images or videos, of what is in use, not used or missing alt text
 (on a phone, under **Filter**), and a sort (newest, oldest, name, largest). A card shows only what
 needs your attention: **No alt** on an image without alt text, **Not used**, and a pin on a kept item.
+An image the help center shows says **Used by the help center (logo)** (or favicon) and is in use.
 **Upload** takes several files at once, or drop them anywhere on the page; an upload made here is
 kept. The uploads gather in a tray in the corner of the library, one line with how many went in, are
 already in the library or failed, and a bar of the three; open it for each file's progress. A video
@@ -153,8 +154,10 @@ stay (kept: uploaded on the Media page, or marked "Keep even when no article use
 or with nothing ticked **Move all N to trash**: on **All** that takes the kept items too, on **Not
 kept** only the others. A confirmation names how many, how large, which of them are kept and which
 a deleted article still shows; restoring an item brings it back as it was, kept or not, and Undo
-puts the whole batch back. **Trash** lists what is there; restore items, or, as an admin, **Delete
-forever** after a second confirmation.
+puts the whole batch back. **Trash** lists what is there, each item with the day the purge deletes
+it; the help center's logo or favicon has no such day, since it stays until the brand names another
+image. Restore items, or, as an admin, **Delete forever** after a second confirmation; the answer
+says how many were deleted and how many stayed because the help center shows them.
 
 Items no article uses can go to the library's **trash**: one at a time, a chosen set, or all unused
 items at once (kept ones only when you say so). An image a published or draft article still shows
@@ -267,12 +270,16 @@ An admin sets the help center's brand through the API (`PUT /api/v1/help-center/
 agent (`colliedesk_help_center_theme_update`); the pages show it in a later release. A brand has:
 
 - **Logo** and **favicon**: images of the [media library](#media-library), outside its trash, with
-  the logo's text for screen readers (empty uses the title). An image the help center uses is kept:
-  it never counts as **Not used** and is never deleted on its own. It can still go to the trash; it
-  is then not shown, and restoring it brings it back. **Delete forever** leaves it in the trash
-  until the brand no longer names it.
-- **Website link** (an `http` or `https` address) and **contact**: an `https` address or
-  `mailto:<address>`, and a phone number (digits, spaces and `+ - ( )`).
+  the logo's text for screen readers (empty uses the title). An image the help center uses is kept
+  while it uses it: the library shows **Used by the help center**, it never counts as **Not used**
+  and is never deleted on its own. It can still go to the trash; it is then not shown, restoring it
+  brings it back, and a brand read and saved again whole keeps it. **Delete forever** leaves it in
+  the trash (the answer is `in_use`) until the brand names another image. Once the brand names
+  another image, the old one is no longer kept: **Remove unused** can take it, and the purge deletes
+  it 30 days after its last upload unless you keep it.
+- **Website link** (an `http` or `https` address) and **contact**: an `https` address or `mailto:`
+  followed by one plain email address (`mailto:help@example.com`; no name, no `?subject=` or `?bcc=`,
+  no `%` encoding), and a phone number (digits, spaces and `+ - ( )`).
 - **Colors**: primary, header, header text, background, text, links and footer, each `#rrggbb`. Any
   color set makes the help center light only.
 - **Fonts** for text and headings, from fonts already on the reader's device, so nothing is

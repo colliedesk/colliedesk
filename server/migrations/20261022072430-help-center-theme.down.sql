@@ -1,7 +1,5 @@
 -- An older image shows the default look again; the theme set since the upgrade is lost. The library
 -- items it named stay, with the kept mark the theme gave them.
-DROP INDEX IF EXISTS help_centers_favicon_media_idx;
-DROP INDEX IF EXISTS help_centers_logo_media_idx;
 ALTER TABLE help_centers
     DROP CONSTRAINT IF EXISTS help_centers_favicon_media_fkey,
     DROP CONSTRAINT IF EXISTS help_centers_logo_media_fkey,

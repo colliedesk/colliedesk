@@ -165,9 +165,10 @@ func TestHelpCenterThemeStaysInItsWorkspace(t *testing.T) {
 	if seen.LogoMediaID != nil || seen.Colors["primary"] != nil || seen.ContentVersion != 0 {
 		t.Fatalf("beta sees %+v", seen)
 	}
-	// A logo in the library's trash is refused until it is restored.
-	kbCall(t, api, http.MethodDelete, "/api/v1/kb/media/"+logo.ID, nil, alpha, http.StatusOK, nil)
-	themeRefused(t, kbCall(t, api, http.MethodPut, themePath, fullTheme(logo.ID), alpha, http.StatusUnprocessableEntity, nil).Body, "media_not_found")
+	// An image in the library's trash is refused as a new logo until it is restored.
+	trashed := uploadKBImage(t, api, alpha, pngImage(21), http.StatusCreated)
+	kbCall(t, api, http.MethodDelete, "/api/v1/kb/media/"+trashed.ID, nil, alpha, http.StatusOK, nil)
+	themeRefused(t, kbCall(t, api, http.MethodPut, themePath, fullTheme(trashed.ID), alpha, http.StatusUnprocessableEntity, nil).Body, "media_not_found")
 }
 
 func TestHelpCenterThemeTokenTiers(t *testing.T) {
