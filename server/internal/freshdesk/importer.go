@@ -83,7 +83,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 	if err != nil {
 		return nil, err
 	}
-	report := &Report{Domain: r.client.base.Host, Workspace: options.WorkspaceSlug, DryRun: options.DryRun,
+	report := &Report{Domain: r.client.base.Host, Workspace: options.WorkspaceSlug, DryRun: options.DryRun, Interim: options.Mode == ModeRecent,
 		Since: options.Since, StartedAt: time.Now().UTC(), NotImported: notImported}
 	if r.ledger.source, err = r.accountSource(ctx); err != nil {
 		return nil, err
@@ -94,6 +94,12 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 			return nil, err
 		}
 		defer release()
+	}
+	if options.Mode == ModeRecent {
+		if err := r.importRecent(ctx); err != nil {
+			return nil, err
+		}
+		return r.finish(ctx, report)
 	}
 	// The knowledge base is listed in full before anything is written, so its limits and its images'
 	// bytes are checked for the whole import first. --since applies to tickets only.
@@ -130,10 +136,37 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 			return nil, err
 		}
 	}
+	return r.finish(ctx, report)
+}
+
+// importRecent is the run of ModeRecent: the people tickets point at, the listed tickets newest
+// first, and on a capped plan a size check of that slice before its first write.
+func (r *run) importRecent(ctx context.Context) error {
+	for _, step := range []struct {
+		name string
+		run  func(context.Context) error
+	}{{"loading agents", r.loadAgents}, {"loading companies", r.loadCompanies}, {"listing tickets", r.listTickets}} {
+		r.progress.phase(step.name)
+		if err := step.run(ctx); err != nil {
+			return err
+		}
+	}
+	// The list is read oldest-updated first (its 300-page window depends on it); import the other way.
+	sort.SliceStable(r.refs, func(i, j int) bool { return r.refs[i].updatedAt.After(r.refs[j].updatedAt) })
+	if err := r.guardSliceStorage(ctx); err != nil {
+		return err
+	}
+	r.progress.phase("importing tickets")
+	return r.importTickets(ctx)
+}
+
+// finish reconciles and, after a real run, extends a running trial.
+func (r *run) finish(ctx context.Context, report *Report) (*Report, error) {
+	options := r.opts
 	if r.internalErr != nil {
 		return nil, r.internalErr
 	}
-	report, err = r.reconcile(ctx, report)
+	report, err := r.reconcile(ctx, report)
 	if err != nil {
 		return report, err
 	}
@@ -154,7 +187,8 @@ func Run(ctx context.Context, pool *pgxpool.Pool, options Options) (*Report, err
 	return report, nil
 }
 
-func newRun(ctx context.Context, db *database.DB, options Options) (*run, error) {
+// accountBase checks the account URL and the key of options.
+func accountBase(options Options) (*url.URL, error) {
 	base, err := url.Parse(strings.TrimRight(options.BaseURL, "/"))
 	if err != nil || base.Host == "" {
 		return nil, errors.New("invalid Freshdesk base URL")
@@ -164,6 +198,17 @@ func newRun(ctx context.Context, db *database.DB, options Options) (*run, error)
 	}
 	if options.APIKey == "" {
 		return nil, errors.New("Freshdesk API key is empty")
+	}
+	return base, nil
+}
+
+func newRun(ctx context.Context, db *database.DB, options Options) (*run, error) {
+	base, err := accountBase(options)
+	if err != nil {
+		return nil, err
+	}
+	if options.Mode == ModeRecent && (options.Since == nil || options.DryRun) {
+		return nil, errors.New("a recent-tickets run needs a since date and is never a dry run")
 	}
 	if options.Storage == nil && !options.DryRun {
 		return nil, errors.New("attachment storage is required")
@@ -181,7 +226,7 @@ func newRun(ctx context.Context, db *database.DB, options Options) (*run, error)
 	if err != nil {
 		return nil, err
 	}
-	progress := newProgress(options.Progress, options.ProgressInterval)
+	progress := newProgress(options.Progress, options.ProgressInterval, options.OnProgress)
 	httpClient := newClient(base, options.APIKey, options)
 	httpClient.progress = progress
 	return &run{
@@ -257,6 +302,9 @@ func numericLess(a, b string) bool {
 	}
 	return a < b
 }
+
+// ErrKeyRejected means Freshdesk answered 401 to the API key.
+var ErrKeyRejected = errors.New("Freshdesk rejected the API key")
 
 // ErrImportRunning means another import or undo holds the workspace lock.
 var ErrImportRunning = importkit.ErrImportRunning

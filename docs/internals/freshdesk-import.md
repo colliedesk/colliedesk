@@ -186,7 +186,43 @@ waited (requested durations, not measured time). 5xx backoff is not counted.
   `application/octet-stream`, `Content-Disposition: attachment` (RFC 5987 `filename*`) and
   `nosniff`, and refuses a row whose storage key belongs to another workspace.
 
-## Knowledge base (solutions)
+## In-app import (#97): importer hooks
+
+The in-app import runs this importer in a background job of `collie serve`. The importer gained
+options for it; with their zero values the CLI behaves as before.
+
+- **`Mode: ModeRecent`** imports the tickets the list returns for `Since`, newest updated first, and
+  nothing account-wide: no knowledge base, no contact or saved-reply list, no id probe, no totals.
+  Its report is `INTERIM` (`interim: true`), never OK. The job then runs `ModeFull`, the same run as
+  the CLI, which skips the recent tickets by the re-run rule and alone can report OK. The probe is
+  left out on purpose: it imports every ticket the list does not return (`ticket_not_listed`), so a
+  first `Run` with `Since` imports the whole account and the recent tickets come last. The list is
+  still read oldest first (the 300-page window needs it) and the slice is sorted in memory.
+  Contacts and saved replies are left out because they are written before the slice is sized.
+- **Capped plans in `ModeRecent`** size only the slice (`sizeRefs`) before its first write. The full
+  run sizes everything left with `guardStorage` before its own first write. When that does not fit,
+  the slice stays imported, the job ends FAILED with `storage_cap` and offers undo: a deliberate
+  exception to "nothing is imported" that the owner accepted, so recent tickets do not wait for hours
+  of sizing. The CLI never runs `ModeRecent`.
+- **`ReserveRateLimit`** makes the run pause once `X-Ratelimit-Remaining` is at most
+  max(10, 20 % of `X-Ratelimit-Total`), capped at half the limit, instead of at 0. The limit is per
+  Freshdesk account and shared with the customer's own apps and webhooks; the in-app job runs for
+  hours while the team still works in Freshdesk. Without a `X-Ratelimit-Total` header the reserve is 10.
+- **`OnProgress`** receives every phase, counter and rate-limit wait with the API call count; the
+  progress lines of the CLI are unchanged. The sizing run of a capped plan reports to the callback
+  but writes no lines.
+- **`Preview`** reads `/account`, the agents, the companies, the contact and ticket search totals,
+  the newest listed ticket (with `updated_since=1970-01-01`, or the list answers only the last 30
+  days), one archive lookup and the first page of canned responses and solution categories. It
+  writes nothing. The ticket numbers are "at least": search leaves out archived tickets and archived
+  tickets can have ids above the newest listed one. A 401 is `ErrKeyRejected`, a 403 on `/account` or
+  `/agents` `ErrNeedsAdminKey`.
+- **Author ids.** Messages keep the Freshdesk agent who wrote them (`origin.author_external_id`)
+  and conversations the agent they were assigned to (`origin.responder_external_id`), so a Freshdesk
+  agent can be linked to a Colliedesk agent after the import. Messages imported before this have no
+  id; a re-run updates the conversation origin but not existing messages.
+
+
 
 Code: `solutions*.go`; the writes are `store/kb-import.go`, which take the same lock, limits,
 numbering and versions as the API (`docs/internals/knowledge-base.md`).
@@ -287,3 +323,17 @@ that ticket ids are sequential from 1, the archive endpoint's status on plans wi
 the expiry status of attachment URLs, `size` versus downloaded bytes, the filter query syntax and
 totals (including whether spam is counted), rate-limit headers on the plan, conversation `source`
 values for forwards and public notes, and the agent-as-requester case.
+
+For the in-app import, also check (each is handled the safe way until then):
+
+1. The error Freshdesk answers on the Free plan, which has no API calls (support article 225439).
+   Until then it is reported like any other refusal.
+2. Whether `X-Ratelimit-Remaining` reflects the per-endpoint limits (Tickets List 40 a minute on
+   Growth) or only the account total, and whether every plan sends `X-Ratelimit-Total`; without it
+   the reserve falls back to 10 calls.
+3. Whether the rate limit of the plans whose table says "/hr" is per hour or per minute.
+4. Whether `/account` and the archive endpoints need an admin key (a 403 on `/account` is reported
+   as "needs an admin key"; a 403 on the archive as the archive refused, so the report is UNVERIFIED).
+5. Whether the archive lookup of a ticket that is not archived answers 404 (the preview counts a 404
+   as "archive readable").
+6. How long an `attachment_url` stays valid (an expired one is read again, as for the CLI).

@@ -2778,6 +2778,8 @@ export interface components {
             system: string;
             /** @description Ticket id in the source system */
             external_id: string;
+            /** @description Id of the source agent the ticket was assigned to, so it can be linked to a Colliedesk agent later. Missing or null on imports that predate it and when the ticket had no agent. */
+            responder_external_id?: string | null;
             /** @description Ticket type in the source system */
             type: string | null;
             /** @description Channel the ticket came from: email, portal, phone, chat, feedback_widget, outbound_email or other */
@@ -2889,6 +2891,8 @@ export interface components {
         MessageOrigin: {
             system: string;
             external_id: string;
+            /** @description Id of the source agent who wrote the item, so it can be linked to a Colliedesk agent later. Missing or null on imports that predate it and when a customer wrote it. */
+            author_external_id?: string | null;
             /**
              * @description How the source system classified the item. public_note was visible to the customer there; forward went to a third party, not to the customer; automated_response is an automatic reply from the customer side (an out-of-office or a messenger acknowledgement) that the source flagged, which the timeline folds into one line.
              * @enum {string}

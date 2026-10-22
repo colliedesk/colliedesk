@@ -16,6 +16,9 @@ const (
 	// StatusUnverified: nothing failed, but the expected totals could not be
 	// confirmed from an independent source, so completeness is not proven.
 	StatusUnverified = "UNVERIFIED"
+	// StatusInterim is the report of a ModeRecent run: a slice of recent tickets, with the account-wide
+	// steps and checks left to the full run that follows. It never proves completeness.
+	StatusInterim = "INTERIM"
 )
 
 type EntityCount struct {
@@ -42,7 +45,8 @@ type TicketCount struct {
 
 // RateLimitStats counts the waits the importer made for Freshdesk rate limits.
 type RateLimitStats struct {
-	// Pauses are one-minute waits after a response with X-Ratelimit-Remaining 0.
+	// Pauses are one-minute waits after a response with X-Ratelimit-Remaining 0 (or at the reserve
+	// left to other integrations, Options.ReserveRateLimit).
 	Pauses int `json:"pauses_remaining_zero"`
 	// Throttled counts HTTP 429 responses.
 	Throttled   int     `json:"http_429"`
@@ -197,10 +201,12 @@ type Warning struct {
 // Report is the reconcile report of one import run: source counts versus
 // what Colliedesk holds, so a customer can prove nothing was lost.
 type Report struct {
-	Status       string           `json:"status"`
-	Domain       string           `json:"domain"`
-	Workspace    string           `json:"workspace"`
-	DryRun       bool             `json:"dry_run"`
+	Status    string `json:"status"`
+	Domain    string `json:"domain"`
+	Workspace string `json:"workspace"`
+	DryRun    bool   `json:"dry_run"`
+	// Interim is true for a ModeRecent run (status INTERIM).
+	Interim      bool             `json:"interim"`
 	Since        *time.Time       `json:"since"`
 	StartedAt    time.Time        `json:"started_at"`
 	FinishedAt   time.Time        `json:"finished_at"`
