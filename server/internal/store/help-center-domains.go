@@ -14,11 +14,11 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// maxHostClaims bounds the pending claims of one host name the certificate question checks.
-const maxHostClaims = 5
+// takenMessage is the check_error of a claim whose host name another workspace holds and still proves.
+const takenMessage = "Another workspace's help center serves on this host name, and its DNS records still prove it."
 
-// takenMessage is the check_error of a domain another workspace was verified on first.
-const takenMessage = "Another workspace's help center was verified on this host name first."
+// takenOverMessage is the check_error of an active domain another workspace took over.
+const takenOverMessage = "Another workspace's DNS records proved this host name while this domain's records did not, so its help center serves there now."
 
 const helpCenterDomainColumns = `hostname, claim, token, status, created_at, verified_at, checked_at, check_error, certificate_requested_at, failing_since, pending_reason`
 
@@ -92,38 +92,99 @@ func randomHex(size int) (string, error) {
 	return hex.EncodeToString(raw), nil
 }
 
-// RecordHelpCenterDomainCheck stores the result of a DNS check of the claim, the workspace's custom
-// domain when the check started. A check that passed makes it active (certificate also notes that the
-// reverse proxy was told it may get a certificate); one that failed keeps its status and stores why,
-// so a check never deactivates a domain. It returns ErrHelpCenterDomainMissing when the claim was
-// removed or replaced meanwhile, even by the same host name again, and ErrHelpCenterDomainTaken, with
-// the failure recorded, when another workspace became active on the host first.
-func (s *Store) RecordHelpCenterDomainCheck(ctx context.Context, workspaceID, claim string, now time.Time, failure error, certificate bool) (domain.HelpCenterDomain, error) {
-	record := func(query string, args ...any) (domain.HelpCenterDomain, error) {
-		return scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.HelpCenterDomain, error) {
-			return scanHelpCenterDomain(tx.QueryRow(ctx, query, args...))
+// ActivateHelpCenterDomain records a DNS check that proved the claim (proof is what DNS showed): the
+// workspace's custom domain becomes, or stays, active, and any failure and release state is cleared
+// (certificate also notes that the reverse proxy was told it may get a certificate). When another
+// workspace is active on the host name, the claim takes it over if proof does not prove that
+// workspace's claim too: in one transaction the holder goes back to pending (taken_over) and this
+// claim becomes active, and released is the holder's workspace id. Otherwise it records the loss and
+// returns ErrHelpCenterDomainTaken. ErrHelpCenterDomainMissing means the claim was removed or replaced
+// meanwhile, even by the same host name again.
+func (s *Store) ActivateHelpCenterDomain(ctx context.Context, workspaceID, claim string, now time.Time, proof domain.HelpCenterDomainProof, certificate bool) (got domain.HelpCenterDomain, released string, err error) {
+	// A takeover that loses a race to another one finds a new holder; three rounds settle any race.
+	for range 3 {
+		got, err = scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.HelpCenterDomain, error) {
+			return scanHelpCenterDomain(tx.QueryRow(ctx, `UPDATE help_center_domains SET `+activateColumns+`
+				WHERE workspace_id=$1 AND claim=$2 RETURNING `+helpCenterDomainColumns, workspaceID, claim, now, certificate))
 		})
-	}
-	failed := func(message string) (domain.HelpCenterDomain, error) {
-		return record(`UPDATE help_center_domains SET checked_at=$3, check_error=$4 WHERE workspace_id=$1 AND claim=$2
-			RETURNING `+helpCenterDomainColumns, workspaceID, claim, now, clipCheckError(message))
-	}
-	var got domain.HelpCenterDomain
-	var err error
-	if failure != nil {
-		got, err = failed(failure.Error())
-	} else {
-		got, err = record(`UPDATE help_center_domains SET status='active', verified_at=COALESCE(verified_at, $3), checked_at=$3, check_error=NULL,
-			certificate_requested_at=CASE WHEN $4 THEN $3 ELSE certificate_requested_at END
-			WHERE workspace_id=$1 AND claim=$2 RETURNING `+helpCenterDomainColumns, workspaceID, claim, now, certificate)
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == uniqueViolation {
-			if _, err := failed(takenMessage); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				return domain.HelpCenterDomain{}, fmt.Errorf("record help center domain check: %w", err)
-			}
-			return domain.HelpCenterDomain{}, domain.ErrHelpCenterDomainTaken
+		if !isUniqueViolation(err) {
+			break
+		}
+		got, released, err = s.takeOverHelpCenterHost(ctx, workspaceID, claim, now, proof, certificate)
+		if !isUniqueViolation(err) {
+			break
 		}
 	}
+	switch {
+	case errors.Is(err, domain.ErrHelpCenterDomainTaken):
+		if _, failed := s.RecordHelpCenterDomainFailure(ctx, workspaceID, claim, now, takenMessage); failed != nil && !errors.Is(failed, domain.ErrHelpCenterDomainMissing) {
+			return domain.HelpCenterDomain{}, "", fmt.Errorf("record help center domain check: %w", failed)
+		}
+		return domain.HelpCenterDomain{}, "", err
+	case errors.Is(err, pgx.ErrNoRows) || errors.Is(err, domain.ErrHelpCenterDomainMissing):
+		return domain.HelpCenterDomain{}, "", domain.ErrHelpCenterDomainMissing
+	case err != nil:
+		return domain.HelpCenterDomain{}, "", fmt.Errorf("record help center domain check: %w", err)
+	}
+	return got, released, nil
+}
+
+// activateColumns is the SET list of a check that proved a claim; $3 is the check's time and $4
+// whether the reverse proxy was told it may get a certificate.
+const activateColumns = `status='active', verified_at=COALESCE(verified_at, $3), checked_at=$3, check_error=NULL, failing_since=NULL, pending_reason=NULL,
+	certificate_requested_at=CASE WHEN $4 THEN $3 ELSE certificate_requested_at END`
+
+// takeOverHelpCenterHost moves the host name of the workspace's claim from the workspace active on it
+// to this claim, in one transaction, when proof does not prove the holder's claim (its CNAME target or
+// its token). The holder's row is locked first, so two takeovers of one host run one after the other.
+// It crosses workspaces: the holder's claim and token are compared in the database and never leave it.
+func (s *Store) takeOverHelpCenterHost(ctx context.Context, workspaceID, claim string, now time.Time, proof domain.HelpCenterDomainProof, certificate bool) (domain.HelpCenterDomain, string, error) {
+	var got domain.HelpCenterDomain
+	var holder string
+	err := s.db.Privileged(ctx, database.PrivilegeHelpCenterDomainTakeover, func(tx pgx.Tx) error {
+		var holderProves bool
+		err := tx.QueryRow(ctx, `SELECT d.workspace_id::text, (d.claim = $3 OR COALESCE(d.token = ANY($4::text[]), false))
+			FROM help_center_domains d JOIN help_center_domains mine ON lower(mine.hostname) = lower(d.hostname)
+			WHERE mine.workspace_id=$1 AND mine.claim=$2 AND d.status='active' AND d.workspace_id <> $1 FOR UPDATE OF d`,
+			workspaceID, claim, proof.Claim, proof.Tokens).Scan(&holder, &holderProves)
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+			// The holder went back to pending meanwhile: activate as usual (a unique violation means
+			// another claim was faster, and the caller tries again).
+			holder = ""
+		case err != nil:
+			return err
+		case holderProves:
+			return domain.ErrHelpCenterDomainTaken
+		default:
+			if _, err := tx.Exec(ctx, `UPDATE help_center_domains SET status='pending', pending_reason='taken_over', failing_since=NULL,
+				checked_at=$2, check_error=$3 WHERE workspace_id=$1`, holder, now, takenOverMessage); err != nil {
+				return err
+			}
+		}
+		got, err = scanHelpCenterDomain(tx.QueryRow(ctx, `UPDATE help_center_domains SET `+activateColumns+`
+			WHERE workspace_id=$1 AND claim=$2 RETURNING `+helpCenterDomainColumns, workspaceID, claim, now, certificate))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.ErrHelpCenterDomainMissing
+		}
+		return err
+	})
+	return got, holder, err
+}
+
+// RecordHelpCenterDomainFailure records a DNS check that did not prove the claim, with message saying
+// which record to set. A pending domain keeps its status. An active one keeps serving and notes when
+// its checks started failing; once they have failed for domain.HelpCenterDomainRelease, it goes back to
+// pending (proof_lost). ErrHelpCenterDomainMissing means the claim was removed or replaced meanwhile.
+func (s *Store) RecordHelpCenterDomainFailure(ctx context.Context, workspaceID, claim string, now time.Time, message string) (domain.HelpCenterDomain, error) {
+	got, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.HelpCenterDomain, error) {
+		return scanHelpCenterDomain(tx.QueryRow(ctx, `UPDATE help_center_domains SET checked_at=$3, check_error=$4,
+				status = CASE WHEN status='active' AND COALESCE(failing_since, $3) <= $5 THEN 'pending' ELSE status END,
+				pending_reason = CASE WHEN status='active' AND COALESCE(failing_since, $3) <= $5 THEN 'proof_lost' ELSE pending_reason END,
+				failing_since = CASE WHEN status='active' AND COALESCE(failing_since, $3) > $5 THEN COALESCE(failing_since, $3) END
+			WHERE workspace_id=$1 AND claim=$2 RETURNING `+helpCenterDomainColumns,
+			workspaceID, claim, now, clipCheckError(message), now.Add(-domain.HelpCenterDomainRelease)))
+	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.HelpCenterDomain{}, domain.ErrHelpCenterDomainMissing
 	}
@@ -131,6 +192,11 @@ func (s *Store) RecordHelpCenterDomainCheck(ctx context.Context, workspaceID, cl
 		return domain.HelpCenterDomain{}, fmt.Errorf("record help center domain check: %w", err)
 	}
 	return got, nil
+}
+
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == uniqueViolation
 }
 
 func clipCheckError(message string) string {
@@ -201,19 +267,34 @@ func (s *Store) HelpCenterClaim(ctx context.Context, claim string) (string, bool
 	return workspaceID, true, nil
 }
 
-// HelpCenterHostClaims lists the workspaces, oldest claim first and at most five, that set host as
-// their custom domain and wait for a check to pass. Only workspace ids leave the transaction.
-func (s *Store) HelpCenterHostClaims(ctx context.Context, host string) ([]string, error) {
+// HelpCenterHostPending reports whether any workspace has a pending claim of host, so the certificate
+// question asks DNS only for names someone claimed. Only the yes or no leaves the transaction.
+func (s *Store) HelpCenterHostPending(ctx context.Context, host string) (bool, error) {
+	var pending bool
+	err := s.db.Privileged(ctx, database.PrivilegeHelpCenterHost, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM help_center_domains WHERE lower(hostname)=lower($1) AND status='pending')`, host).Scan(&pending)
+	}, pgx.TxOptions{AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return false, fmt.Errorf("find help center host claims: %w", err)
+	}
+	return pending, nil
+}
+
+// HelpCenterHostProvenClaims lists the workspaces, oldest claim first, whose pending claim of host the
+// proof proves: its CNAME target or its token. However many workspaces claim a name, only the ones
+// DNS proves are returned, so no claim can crowd out another. The claims and tokens are compared in
+// the database; only workspace ids leave the transaction.
+func (s *Store) HelpCenterHostProvenClaims(ctx context.Context, host string, proof domain.HelpCenterDomainProof) ([]string, error) {
 	var claims []string
 	err := s.db.Privileged(ctx, database.PrivilegeHelpCenterHost, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `SELECT workspace_id::text FROM help_center_domains WHERE lower(hostname)=lower($1) AND status='pending'
-			ORDER BY created_at, workspace_id LIMIT $2`, host, maxHostClaims)
+			AND (claim = $2 OR token = ANY($3::text[])) ORDER BY created_at, workspace_id`, host, proof.Claim, proof.Tokens)
 		if err != nil {
 			return err
 		}
 		claims, err = pgx.CollectRows(rows, pgx.RowTo[string])
 		return err
-	})
+	}, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return nil, fmt.Errorf("find help center host claims: %w", err)
 	}

@@ -256,18 +256,18 @@ var (
 )
 
 // recheckHelpCenterDomainsDaily looks up the DNS of every active custom help center domain at start
-// and then daily until ctx ends, and records what it finds; a failure warns on the domain and never
-// takes the help center off it.
+// and then daily until ctx ends, and records what it finds: a failure warns on the domain, and a
+// domain no check has proved for 7 days goes back to pending.
 func recheckHelpCenterDomainsDaily(ctx context.Context, api *httpapi.Server) {
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	for {
-		checked, failed, err := api.RecheckHelpCenterDomains(ctx)
+		checked, failed, released, err := api.RecheckHelpCenterDomains(ctx)
 		if err != nil && ctx.Err() == nil {
 			slog.Error("re-check help center domains", "error", err)
 		}
 		if failed > 0 {
-			slog.Warn("help center domains whose DNS no longer proves their workspace", "checked", checked, "failed", failed)
+			slog.Warn("help center domains whose DNS no longer proves their workspace", "checked", checked, "failed", failed, "released", released)
 		}
 		select {
 		case <-ctx.Done():

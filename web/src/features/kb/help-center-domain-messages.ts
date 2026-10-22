@@ -15,7 +15,12 @@ export const domainMessages = {
     ? `The help center is served on ${hostname}.`
     : status === 'pending' ? `${hostname} is waiting for its DNS records. It starts serving as soon as a check finds them.` : 'No custom domain is set.',
   recordsHelp: 'Add these records at your DNS provider, then press Check now. One of the two proving records is enough. DNS changes can take a few minutes.',
-  recordsKeep: 'Keep these records at your DNS provider; the daily check warns here if they change.',
+  recordsKeep: 'Keep these records at your DNS provider; the daily check warns here if they change, and the help center stops serving on the domain after 7 days without them.',
+  failing: (since: string, until: string, hostname: string) =>
+    `No DNS check has found these records since ${since}. The help center stops serving on ${hostname} if none finds them by ${until}.`,
+  released: (reason: 'proof_lost' | 'taken_over', hostname: string) => reason === 'proof_lost'
+    ? `${hostname} stopped serving the help center: no DNS check found its records for 7 days. Its other addresses serve it again until a check finds them.`
+    : `${hostname} stopped serving the help center: another workspace's DNS records proved this host name while these were missing. Set them again and press Check now.`,
   record: (type: string, purpose: Purpose) => `${type} record: ${purposes[purpose]}`,
   recordName: 'Name',
   recordValue: 'Value',

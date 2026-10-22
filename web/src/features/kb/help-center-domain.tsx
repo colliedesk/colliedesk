@@ -16,6 +16,7 @@ const recordSchema = z.object({
 const domainSchema = z.object({
   hostname: z.string().nullable(), status: z.enum(['none', 'pending', 'active']), records: z.array(recordSchema),
   created_at: date, verified_at: date, checked_at: date, check_error: z.string().nullable(), certificate_requested_at: date,
+  failing_since: date, pending_reason: z.enum(['proof_lost', 'taken_over']).nullable(),
 }) satisfies z.ZodType<Generated<'HelpCenterDomain'>>;
 
 export type HelpCenterDomain = z.infer<typeof domainSchema>;
@@ -29,6 +30,8 @@ export const domainApi = {
 };
 
 const failure = (error: unknown) => error instanceof InvalidRequestError ? error.message : messages.settingsActionFailed;
+// An active domain stops serving when no check has proved it for this long (the server's release time).
+const releaseAfterMs = 7 * 24 * 60 * 60 * 1000;
 
 // HelpCenterDomainSection shows the help center's custom domain in its card: its state, the DNS records to
 // set (each copyable), the last check and what it found. Admins set, check and remove it; every agent sees it.
@@ -68,6 +71,9 @@ export function HelpCenterDomainSection({ canManage, timezone }: { canManage: bo
       <p className="muted-copy">{domain.status === 'active' ? domainMessages.recordsKeep : domainMessages.recordsHelp}</p>
       {domain.records.map((record) => <DnsRecord key={`${record.type} ${record.name}`} record={record} />)}
     </div>}
+    {domain.status === 'pending' && domain.pending_reason && domain.hostname && <p className="warning-note">{domainMessages.released(domain.pending_reason, domain.hostname)}</p>}
+    {domain.status === 'active' && domain.failing_since && domain.hostname && <p className="warning-note">{domainMessages.failing(
+      formatDate(domain.failing_since, timezone), formatDate(new Date(Date.parse(domain.failing_since) + releaseAfterMs).toISOString(), timezone), domain.hostname)}</p>}
     {domain.check_error && <p className={domain.status === 'active' ? 'warning-note' : 'muted-copy'}>{domainMessages.lastFinding(domain.check_error)}</p>}
     {domain.checked_at && <p className="muted-copy">{domainMessages.lastChecked(formatDate(domain.checked_at, timezone))}</p>}
     {domain.verified_at && <p className="muted-copy">{domainMessages.verified(formatDate(domain.verified_at, timezone))}</p>}

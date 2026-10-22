@@ -36,6 +36,8 @@ type helpCenterDomainView struct {
 	CheckedAt              *time.Time                `json:"checked_at"`
 	CheckError             *string                   `json:"check_error"`
 	CertificateRequestedAt *time.Time                `json:"certificate_requested_at"`
+	FailingSince           *time.Time                `json:"failing_since"`
+	PendingReason          *string                   `json:"pending_reason"`
 }
 
 func noHelpCenterDomain() helpCenterDomainView {
@@ -46,7 +48,8 @@ func (a *API) helpCenterDomainView(d domain.HelpCenterDomain) helpCenterDomainVi
 	host, created := d.Hostname, d.CreatedAt
 	return helpCenterDomainView{Hostname: &host, Status: d.Status,
 		Records:   helpcenter.Records(d.Hostname, d.Claim, d.Token, a.config.Origin, a.config.HelpCenterDomain),
-		CreatedAt: &created, VerifiedAt: d.VerifiedAt, CheckedAt: d.CheckedAt, CheckError: d.CheckError, CertificateRequestedAt: d.CertificateRequestedAt}
+		CreatedAt: &created, VerifiedAt: d.VerifiedAt, CheckedAt: d.CheckedAt, CheckError: d.CheckError, CertificateRequestedAt: d.CertificateRequestedAt,
+		FailingSince: d.FailingSince, PendingReason: d.PendingReason}
 }
 
 func (a *API) resolvers() helpcenter.Resolvers {
@@ -107,16 +110,9 @@ func (a *API) putHelpCenterDomain(response http.ResponseWriter, request *http.Re
 			"code": "validation_failed", "message": reason + " Nothing was saved.", "fields": map[string]string{"hostname": reason}})})
 		return
 	}
+	// Another workspace active on host does not refuse the claim: it waits, pending, and takes the host
+	// over once DNS proves it while the holder's records no longer do (ActivateHelpCenterDomain).
 	ctx, workspaceID := request.Context(), principal(request).Workspace.ID
-	owner, taken, err := a.store.HelpCenterHost(ctx, host)
-	if err != nil {
-		writeStoreError(response, err)
-		return
-	}
-	if taken && owner != workspaceID {
-		writeDomainTaken(response)
-		return
-	}
 	if _, err := a.store.SetHelpCenterDomain(ctx, workspaceID, host, a.now()); err != nil {
 		writeStoreError(response, err)
 		return
@@ -155,9 +151,7 @@ func (a *API) checkHelpCenterDomain(response http.ResponseWriter, request *http.
 		writeError(response, http.StatusNotFound, "not_found", "No custom domain is set.")
 		return
 	}
-	failure := checkClaim(a.lookUpDomain(ctx, current.Hostname, helpCenterDomainCheckTimeout), who.Workspace.ID, current)
-	_, err = a.store.RecordHelpCenterDomainCheck(ctx, who.Workspace.ID, current.Claim, a.now(), failure, false)
-	a.helpCenter.ForgetDomains()
+	_, err = a.recordCheck(ctx, who.Workspace.ID, current, a.lookUpDomain(ctx, current.Hostname, helpCenterDomainCheckTimeout), false)
 	switch {
 	case errors.Is(err, domain.ErrHelpCenterDomainTaken):
 		writeDomainTaken(response)
@@ -170,6 +164,25 @@ func (a *API) checkHelpCenterDomain(response http.ResponseWriter, request *http.
 		return
 	}
 	a.writeHelpCenterDomain(response, ctx, who.Workspace.ID)
+}
+
+// recordCheck records what a DNS check of the workspace's claim current showed: active when the
+// evidence proves it (taking the host over from a holder it no longer proves), else the failure, which
+// releases an active domain after domain.HelpCenterDomainRelease. A change of status, here or of the
+// holder taken over, is served from the next request.
+func (a *API) recordCheck(ctx context.Context, workspaceID string, current domain.HelpCenterDomain, evidence helpcenter.DomainEvidence, certificate bool) (domain.HelpCenterDomain, error) {
+	var after domain.HelpCenterDomain
+	var released string
+	var err error
+	if failure := checkClaim(evidence, workspaceID, current); failure != nil {
+		after, err = a.store.RecordHelpCenterDomainFailure(ctx, workspaceID, current.Claim, a.now(), failure.Error())
+	} else {
+		after, released, err = a.store.ActivateHelpCenterDomain(ctx, workspaceID, current.Claim, a.now(), evidence.Proof, certificate)
+	}
+	if err == nil && (after.Status != current.Status || released != "") {
+		a.helpCenter.ForgetDomains()
+	}
+	return after, err
 }
 
 // certifyClaimHost reports whether the reverse proxy may get a certificate for a claim's CNAME target:
@@ -198,8 +211,8 @@ func (a *API) certifyCustomHost(ctx context.Context, host string) (bool, error) 
 		}
 		return true, a.store.NoteHelpCenterCertificate(ctx, workspaceID, host, a.now())
 	}
-	claims, err := a.store.HelpCenterHostClaims(ctx, host)
-	if err != nil || len(claims) == 0 {
+	pending, err := a.store.HelpCenterHostPending(ctx, host)
+	if err != nil || !pending {
 		return false, err
 	}
 	done, ok := a.liveChecks.Begin(host)
@@ -208,6 +221,11 @@ func (a *API) certifyCustomHost(ctx context.Context, host string) (bool, error) 
 	}
 	defer done()
 	evidence := a.lookUpDomain(ctx, host, helpCenterLiveCheckTimeout)
+	// However many workspaces claim the name, only the claims DNS proves are read, oldest first.
+	claims, err := a.store.HelpCenterHostProvenClaims(ctx, host, evidence.Proof)
+	if err != nil {
+		return false, err
+	}
 	for _, workspaceID := range claims {
 		claim, found, err := a.store.GetHelpCenterDomain(ctx, workspaceID)
 		if err != nil {
@@ -216,32 +234,33 @@ func (a *API) certifyCustomHost(ctx context.Context, host string) (bool, error) 
 		if !found || claim.Hostname != host || claim.Status != domain.HelpCenterDomainPending {
 			continue
 		}
-		failure := checkClaim(evidence, workspaceID, claim)
 		_, open, err := a.store.OpenHelpCenterWorkspace(ctx, workspaceID)
 		if err != nil {
 			return false, err
 		}
-		_, err = a.store.RecordHelpCenterDomainCheck(ctx, workspaceID, claim.Claim, a.now(), failure, failure == nil && open)
-		if failure != nil || errors.Is(err, domain.ErrHelpCenterDomainTaken) || errors.Is(err, domain.ErrHelpCenterDomainMissing) {
+		after, err := a.recordCheck(ctx, workspaceID, claim, evidence, open)
+		if errors.Is(err, domain.ErrHelpCenterDomainTaken) || errors.Is(err, domain.ErrHelpCenterDomainMissing) {
 			continue
 		}
 		if err != nil {
 			return false, err
 		}
-		a.helpCenter.ForgetDomains()
-		return open, nil
+		if after.Status == domain.HelpCenterDomainActive {
+			return open, nil
+		}
 	}
 	return false, nil
 }
 
 // RecheckHelpCenterDomains looks up the DNS of every active custom domain and records what it shows.
-// A failure warns on the domain (check_error) and never deactivates it: a DNS provider's hiccup must
-// not take a help center off line. It reports how many were checked and how many failed.
-func (s *Server) RecheckHelpCenterDomains(ctx context.Context) (checked, failed int, err error) {
+// A failure warns on the domain (check_error) and keeps it serving, so a DNS provider's hiccup does not
+// take a help center off line; a domain no check has proved for domain.HelpCenterDomainRelease goes
+// back to pending (released). It reports how many were checked, failed and were released.
+func (s *Server) RecheckHelpCenterDomains(ctx context.Context) (checked, failed, released int, err error) {
 	a := s.api
 	workspaces, err := a.store.ActiveHelpCenterDomainWorkspaces(ctx)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	var problems []error
 	for _, workspaceID := range workspaces {
@@ -253,18 +272,24 @@ func (s *Server) RecheckHelpCenterDomains(ctx context.Context) (checked, failed 
 		if !found || current.Status != domain.HelpCenterDomainActive {
 			continue
 		}
-		failure := checkClaim(a.lookUpDomain(ctx, current.Hostname, helpCenterRecheckTimeout), workspaceID, current)
-		if _, err := a.store.RecordHelpCenterDomainCheck(ctx, workspaceID, current.Claim, a.now(), failure, false); err != nil && !errors.Is(err, domain.ErrHelpCenterDomainMissing) {
+		after, err := a.recordCheck(ctx, workspaceID, current, a.lookUpDomain(ctx, current.Hostname, helpCenterRecheckTimeout), false)
+		if errors.Is(err, domain.ErrHelpCenterDomainMissing) {
+			continue
+		}
+		if err != nil {
 			problems = append(problems, err)
 			continue
 		}
 		checked++
-		if failure != nil {
+		if after.CheckError != nil {
 			failed++
+		}
+		if after.Status != domain.HelpCenterDomainActive {
+			released++
 		}
 		if ctx.Err() != nil {
 			break
 		}
 	}
-	return checked, failed, errors.Join(problems...)
+	return checked, failed, released, errors.Join(problems...)
 }

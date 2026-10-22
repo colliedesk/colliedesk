@@ -103,7 +103,7 @@ func TestHelpCenterDomainIsSetCheckedAndRemoved(t *testing.T) {
 	if view.Status != "active" || view.VerifiedAt == nil || view.CheckError != nil {
 		t.Fatalf("check with the CNAME = %+v", view)
 	}
-	// A failed check later warns and never deactivates.
+	// A failed check later warns, and the domain keeps serving.
 	dns.setCNAME("help.acme.example", "elsewhere.example.")
 	view = checkDomain(t, api, admin, http.StatusOK)
 	if view.Status != "active" || view.CheckError == nil {
@@ -232,8 +232,9 @@ func TestHelpCenterDomainsNeverCrossWorkspaces(t *testing.T) {
 	if view.Status != "pending" || view.CheckError == nil {
 		t.Fatalf("alpha after losing = %+v", view)
 	}
-	if response := kbCall(t, api, http.MethodPut, domainPath, map[string]any{"hostname": strings.ToUpper(host)}, alpha, http.StatusConflict, nil); !strings.Contains(response.Body.String(), "domain_taken") {
-		t.Fatalf("claiming beta's active name = %s", response.Body.String())
+	// Alpha keeps its pending claim of beta's active name; it waits until DNS proves alpha and not beta.
+	if view := setDomain(t, api, alpha, strings.ToUpper(host), http.StatusOK); view.Status != "pending" {
+		t.Fatalf("claiming beta's active name again = %+v", view)
 	}
 	page := onHost(site, host, "/").Body.String()
 	if !strings.Contains(page, "Beta answers") || strings.Contains(page, "Alpha answers") {
@@ -569,8 +570,9 @@ func TestAppRequestsNeverLookUpACustomHost(t *testing.T) {
 	}
 }
 
-// The daily re-check records what DNS shows for every active domain and never deactivates one.
-func TestDailyRecheckRecordsAndNeverDeactivates(t *testing.T) {
+// The daily re-check records what DNS shows for every active domain; one failure warns and keeps the
+// domain serving.
+func TestDailyRecheckRecordsAFailureAndKeepsServing(t *testing.T) {
 	api, service, _, dns := testAPIWithConfig(t, nil)
 	admin := createSession(t, api, service, "Recheck Alpha", "admin@recheck-alpha.example.com")
 	pending := createSession(t, api, service, "Recheck Beta", "admin@recheck-beta.example.com")
@@ -580,9 +582,9 @@ func TestDailyRecheckRecordsAndNeverDeactivates(t *testing.T) {
 	checkDomain(t, api, admin, http.StatusOK)
 	setDomain(t, api, pending, "docs.recheck.example", http.StatusOK)
 	dns.set("_help-center-verify."+host, "gone")
-	checked, failed, err := api.(*httpapi.Server).RecheckHelpCenterDomains(context.Background())
-	if err != nil || checked != 1 || failed != 1 {
-		t.Fatalf("recheck = %d checked, %d failed, %v", checked, failed, err)
+	checked, failed, released, err := api.(*httpapi.Server).RecheckHelpCenterDomains(context.Background())
+	if err != nil || checked != 1 || failed != 1 || released != 0 {
+		t.Fatalf("recheck = %d checked, %d failed, %d released, %v", checked, failed, released, err)
 	}
 	kbCall(t, api, http.MethodGet, domainPath, nil, admin, http.StatusOK, &view)
 	if view.Status != "active" || view.CheckError == nil {

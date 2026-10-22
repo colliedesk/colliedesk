@@ -3823,8 +3823,9 @@ paths:
         Unicode host names are stored in
         their ASCII (punycode) form. Refused with 422 `validation_failed` (`fields.hostname`) for an IP
         address, a single label, more than 253 characters, `APP_ORIGIN`'s host, or `HELP_CENTER_DOMAIN`
-        and the names below it; with 409 `domain_taken` when another workspace's help center already
-        serves on it.
+        and the names below it. A host name another workspace's help center serves on can be claimed too:
+        the claim stays `pending`, and its check answers 409 `domain_taken` until DNS proves this claim
+        and no longer proves the other workspace's.
       requestBody:
         required: true
         content:
@@ -3868,10 +3869,13 @@ paths:
         `_help-center-verify.<host name>` holds the token. A pending domain that passes becomes `active`;
         one that fails keeps its status, with `check_error` saying which record to set (never what the
         server's DNS answered). A check counts only for the claim it looked up: when the domain is removed
-        or set again meanwhile, it answers 409 `domain_changed`. An active domain is
-        never deactivated by a check; `check_error` warns instead. 409 `domain_taken` when it passes but
-        another workspace's help center was verified on it first. 404 when no domain is set. Admins only,
-        and an `admin` agent token; agent tokens may check 10 times an hour (429 with `Retry-After`).
+        or set again meanwhile, it answers 409 `domain_changed`. An active domain whose check fails keeps
+        serving, with `check_error` and `failing_since`; the first failed check 7 days after
+        `failing_since` puts it back to `pending` (`pending_reason` `proof_lost`). When another workspace's
+        help center serves on the host name, a passing check takes it over if the same DNS answer does not
+        prove the other workspace's claim (that workspace goes back to `pending` with `taken_over`), and
+        answers 409 `domain_taken` if it does. 404 when no domain is set. Admins only, and an `admin` agent
+        token; agent tokens may check 10 times an hour (429 with `Retry-After`).
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
@@ -5123,13 +5127,16 @@ components:
             slug addresses, and links to the old slug stop working.
     HelpCenterDomain:
       type: object
-      required: [hostname, status, records, created_at, verified_at, checked_at, check_error, certificate_requested_at]
+      required: [hostname, status, records, created_at, verified_at, checked_at, check_error, certificate_requested_at, failing_since, pending_reason]
       properties:
         hostname: {type: [string, 'null'], description: 'The custom host name in ASCII (punycode) form; null when none is set.'}
         status:
           type: string
           enum: [none, pending, active]
-          description: '`pending` until a DNS check passes; `active` while the help center serves on it. A check never moves `active` back.'
+          description: >-
+            `pending` until a DNS check passes; `active` while the help center serves on it. An active domain
+            goes back to `pending` when no check has proved it for 7 days, or when another workspace proves the
+            host name while this domain's records do not (`pending_reason` says which).
         records:
           type: array
           description: The DNS records to set at the domain's DNS provider; empty when no domain is set.
@@ -5139,6 +5146,19 @@ components:
         checked_at: {type: [string, 'null'], format: date-time, description: "The last DNS check: the button, the proxy's certificate question or the daily re-check."}
         check_error: {type: [string, 'null'], description: 'Which record the last check did not find when it did not pass; null after a check that passed.'}
         certificate_requested_at: {type: [string, 'null'], format: date-time, description: When the reverse proxy was last told it may get a certificate for the host name.}
+        failing_since:
+          type: [string, 'null']
+          format: date-time
+          description: >-
+            While the domain is active: the first failed DNS check since the last one that passed, null while
+            checks pass. The first check that fails 7 days after it puts the domain back to `pending`.
+        pending_reason:
+          type: [string, 'null']
+          enum: [proof_lost, taken_over, null]
+          description: >-
+            Why an active domain went back to `pending`: `proof_lost` (no DNS check proved it for 7 days) or
+            `taken_over` (another workspace proved the host name while this domain's records did not). Null
+            otherwise; cleared when a check passes or the host name is set again.
     HelpCenterDomainRecord:
       type: object
       required: [type, name, value, purpose]

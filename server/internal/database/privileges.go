@@ -81,6 +81,12 @@ const (
 	// question, the workspaces still waiting to prove they own it. Only workspace ids leave the
 	// transaction; the token, the check and the pages run scoped to each workspace.
 	PrivilegeHelpCenterHost Privilege = "help-center-host"
+	// PrivilegeHelpCenterDomainTakeover moves a custom help center host name from the workspace active on
+	// it to another workspace whose claim DNS proves now, when the same DNS answer does not prove the
+	// holder's claim (its CNAME target or its TXT token). One transaction locks the holder's row,
+	// compares its claim and token with what DNS showed inside the database, puts it back to pending and
+	// activates the new claim; only the holder's workspace id leaves it, to refresh the server's cache.
+	PrivilegeHelpCenterDomainTakeover Privilege = "help-center-domain-takeover"
 	// PrivilegeHelpCenterDomainRecheck lists the workspaces with an active custom help center domain for
 	// the daily DNS re-check. Only workspace ids leave the transaction; each check reads and records in
 	// its own workspace.
