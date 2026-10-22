@@ -64,12 +64,13 @@ write must stay at or below 200 ms (10–25 ms locally; unnormalized, seconds to
 `TestAIRetrievalLatencyBudget` holds `store.AIRetrieve` (the knowledge base and the resolved
 conversations an AI draft or triage suggestion may quote, `docs/internals/ai-retrieval.md`) to 200 ms
 p95 warm. No screen waits for it: it runs inside a background AI task, before the provider is called.
-The fixture is one workspace with 12,000 resolved conversations of about 3,500 characters (more than
-the 10,000 a search ranks) and 2,000 published articles of about 9,000 characters (20 at 100,000),
-already built, and a second smaller workspace. The query has 16 words, one in every text and one in
-half of them, the worst case. Five warm-up searches, then 20 timed: 80–130 ms locally beside the other
-latency gates. A window of 20,000 conversations took 160–280 ms, so the window was cut, not the budget
-raised; if this gate fails, cut the window again.
+It reads the knowledge base search budget's fixture (1,000 published articles of the 2,000 at the cap
+in each workspace, 20 of them at 100,000 characters), builds their rows and adds 5,200 resolved
+conversations of about 3,500 characters (more than the 5,000 a search ranks) to one workspace and
+300 to the other. The query has 16 words, one in every text and one in half of them, the worst
+case. Five warm-up searches, then 20 timed: 50–65 ms locally beside the other latency gates. The
+window was cut twice instead of raising the budget: 20,000 conversations took 160–280 ms locally, and
+10,000 took 210 ms p95 on the CI runner. If this gate fails, cut the window again.
 
 ## Media library budget
 

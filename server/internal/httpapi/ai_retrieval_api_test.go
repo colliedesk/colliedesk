@@ -404,3 +404,91 @@ func TestExcludingAnArticleFromAIIsAVersionThatKeepsTheTextAndCanBeUndone(t *tes
 	kbCall(t, api, http.MethodDelete, path, nil, admin, http.StatusOK, nil)
 	kbCall(t, api, http.MethodPost, "/api/v1/kb/articles/00000000-0000-4000-8000-000000000000/ai-exclusion", nil, admin, http.StatusNotFound, nil)
 }
+
+// A name's words alone are masked only as a name is written, so English text about a customer named
+// Trần Văn Long keeps "long" and "an"; the names of contacts merged into the customer are masked too.
+func TestAIRetrievalMasksNamesWithoutEatingWords(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Retrieval Names", "admin@retrieval-names.example.com")
+	workspace := workspaceID(t, api, admin)
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "Trần Văn Long", "email": "long@customer.example"})
+	if _, err := pool.Exec(context.Background(), `INSERT INTO contacts(workspace_id,name,email,merged_into_id) VALUES($1,'Duplicate Person','dup@customer.example',$2)`,
+		workspace, contact); err != nil {
+		t.Fatal(err)
+	}
+	conversation := seedResolvedConversation(t, api, pool, admin, workspace, contact, "Export takes too long",
+		"Hi, Long here (also writing as Duplicate Person). The export takes too long and an error shows. Regards, Tran Van Long",
+		"note", "Hello Long, an export of that size takes a while; it is fixed now.")
+	buildAIRetrieval(t, pool)
+	got := aiRetrieve(t, pool, workspace, store.AIRetrievalQuery{Text: "export takes too long error", ConversationLimit: 3})
+	if len(got) != 1 || got[0].ConversationID != conversation {
+		t.Fatalf("search = %+v", got)
+	}
+	text := got[0].Title + "\n" + got[0].Text
+	for _, leak := range []string{"Long here", "Hello Long", "Tran Van Long", "Duplicate Person", "Duplicate"} {
+		if strings.Contains(text, leak) {
+			t.Errorf("retrieved text holds %q:\n%s", leak, text)
+		}
+	}
+	for _, kept := range []string{"takes too long", "and an error", "an export"} {
+		if !strings.Contains(text, kept) {
+			t.Errorf("retrieved text lost %q:\n%s", kept, text)
+		}
+	}
+}
+
+// A contact renamed, given a company, or merged after its conversation was resolved is masked under
+// every name it had: the rows are built again with the new details and keep masking the old ones.
+func TestAIRetrievalMasksAContactRenamedAfterTheConversation(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Retrieval Rename", "admin@retrieval-rename.example.com")
+	workspace := workspaceID(t, api, admin)
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": "hoa.n", "email": "hoa@customer.example"})
+	seedResolvedConversation(t, api, pool, admin, workspace, contact, "Paper jam",
+		"Hello, I am Nguyen Thi Hoa from Lotus Trading, writing as hoa.n. The printer has a paper jam.", "note", "Open the tray.")
+	buildAIRetrieval(t, pool)
+	text := func() string {
+		t.Helper()
+		got := aiRetrieve(t, pool, workspace, store.AIRetrievalQuery{Text: "printer paper jam", ConversationLimit: 3})
+		if len(got) != 1 {
+			t.Fatalf("search = %+v", got)
+		}
+		return got[0].Text
+	}
+	kbCall(t, api, http.MethodPatch, "/api/v1/contacts/"+contact, map[string]any{"name": "Nguyen Thi Hoa"}, admin, http.StatusOK, nil)
+	if _, err := pool.Exec(context.Background(), `UPDATE contacts SET organization='Lotus Trading' WHERE id=$1`, contact); err != nil {
+		t.Fatal(err)
+	}
+	buildAIRetrieval(t, pool)
+	got := text()
+	for _, leak := range []string{"Nguyen", "Lotus", "hoa.n"} {
+		if strings.Contains(got, leak) {
+			t.Errorf("after the rename the text holds %q:\n%s", leak, got)
+		}
+	}
+	// A later rename does not bring the earlier names back.
+	kbCall(t, api, http.MethodPatch, "/api/v1/contacts/"+contact, map[string]any{"name": "Hoa"}, admin, http.StatusOK, nil)
+	buildAIRetrieval(t, pool)
+	if got := text(); strings.Contains(got, "Nguyen") || strings.Contains(got, "hoa.n") {
+		t.Errorf("a second rename unmasked an earlier name:\n%s", got)
+	}
+}
+
+// A name too long for an index entry still renames, and is still masked.
+func TestAIRetrievalKeepsALongFormerName(t *testing.T) {
+	api, service, pool := testAPIWithPool(t)
+	admin := createSession(t, api, service, "Retrieval Long Name", "admin@retrieval-long-name.example.com")
+	workspace := workspaceID(t, api, admin)
+	var long string
+	if err := pool.QueryRow(context.Background(), `SELECT string_agg(chr(97 + floor(random()*26)::int), '') FROM generate_series(1,3000)`).Scan(&long); err != nil {
+		t.Fatal(err)
+	}
+	contact := create(t, api, admin, "/api/v1/contacts", map[string]any{"name": long, "email": "long@customer.example"})
+	seedResolvedConversation(t, api, pool, admin, workspace, contact, "Paper jam", "I am "+long+". The printer has a paper jam.", "note", "Open the tray.")
+	kbCall(t, api, http.MethodPatch, "/api/v1/contacts/"+contact, map[string]any{"name": "Short"}, admin, http.StatusOK, nil)
+	buildAIRetrieval(t, pool)
+	got := aiRetrieve(t, pool, workspace, store.AIRetrievalQuery{Text: "printer paper jam", ConversationLimit: 3})
+	if len(got) != 1 || strings.Contains(got[0].Text, long[:40]) {
+		t.Fatalf("after renaming a long name = %+v", got)
+	}
+}

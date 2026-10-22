@@ -14,10 +14,14 @@ database.
    translation, unless an admin excluded it from AI (`kb_articles.ai_excluded`). Drafts and the trash
    are never in it.
 2. A resolved or closed conversation: its subject, its first customer message (1,800 characters at
-   most) and its last public reply, 4,000 characters in all. Private notes are never read. The name,
-   email and company of that conversation's contact (whole, then each word of the name of two
-   letters or more, with or without accents) become `[customer]`, `[email]`, `[company]`; every email
-   address becomes `[email]` and every run of six or more digits, spaces, dots, dashes, slashes or
+   most) and its last public reply, 4,000 characters in all. Private notes are never read. The names and companies
+   of that conversation's contact and of the contacts merged into it become `[customer]` and
+   `[company]`, with every name and company the contact had since this release
+   (`ai_retrieval_former_names`, written by the trigger on `contacts`, so a rename never unmasks the
+   text; `TestAIRetrievalMasksAContactRenamedAfterTheConversation`): whole in any case, with or without accents, and each word of a name of two letters or
+   more on its own only capitalized as a name ("Long", "Tran" for Trần), so English text about Trần
+   Văn Long keeps "too long" (`TestAIRetrievalMasksNamesWithoutEatingWords`). Every email address
+   becomes `[email]` and every run of six or more digits, with spaces, dots, dashes, slashes or
    brackets allowed between them, `[number]`. A conversation without a customer message yet has no row.
 
 `folded` is `kb_search_vector` of the text after `store.FoldForAIRetrieval`: lower case, accents
@@ -30,7 +34,8 @@ exclusive lock (13.8 s for 120,000 rows).
 
 Triggers queue a source in `ai_retrieval_pending` when it changes: an article's title, text, status,
 trash or exclusion; a translation written; a conversation's status, subject or contact while it is or
-becomes resolved or closed; a reply, or an imported message, on a resolved conversation (an import
+becomes resolved or closed; a contact renamed, given another company, merged or unmerged (its
+resolved conversations and those of the contact it is merged into); a reply, or an imported message, on a resolved conversation (an import
 writes the conversation before its messages, each in its own transaction). New mail from the inbox
 never fires one: it reopens the conversation instead. A conversation that is open, as every new one
 is, costs nothing.
@@ -50,12 +55,13 @@ A source that may no longer be read loses its rows in the same transaction as th
 trash, exclusion, reopen), and a search checks every returned row against its source again, so a
 queue that is behind never hands AI what it should not read. Deletes need nothing: foreign keys
 cascade from the conversation, the article and the translation (undo of an import, retention, purge of
-the trash). `restore-workspace.sh` copies the rows like any other table; they match the restored data.
+the trash). `restore-workspace.sh` copies the rows like any other table; they match the restored data, and the
+queue's ids are uuids, not a sequence, so copied rows never collide with live ones.
 
 ## Ranking
 
 The query's words are folded and split like the text, the 16 longest kept. A search ranks two sets of
-candidates: the workspace's article rows, and its 10,000 newest conversation rows. For each word,
+candidates: the workspace's article rows, and its 5,000 newest conversation rows. For each word,
 `df` is how many candidates match it (as a prefix) and its weight is `ln((N + 1) / (df + 0.5))`; a
 candidate scores the sum over the words it matches. A word in every candidate weighs almost nothing,
 so no stop word list is needed in any language. `ts_rank` is not used: on stripped vectors it only

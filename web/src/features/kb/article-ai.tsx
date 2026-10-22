@@ -19,6 +19,7 @@ function useAIExclusion({ article, onChanged }: Omit<ArticleAIProps, 'timezone'>
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string>();
   const change = async (exclude: boolean) => {
+    if (busy) return;
     setBusy(true);
     setProblem(undefined);
     try {
@@ -42,7 +43,8 @@ export function ArticleAIBox({ article, timezone, onChanged, headingId }: Articl
       <p className="kb-side-status">{exclusion
         ? kbMessages.aiExcludedSince(formatDay(exclusion.at, timezone), exclusion.by?.name)
         : article.status === 'published' ? kbMessages.aiIncluded : kbMessages.aiIncludedDraft}</p>
-      <button type="button" disabled={busy} onClick={() => void change(!exclusion)}>
+      {/* aria-disabled, not disabled: a disabled button drops the keyboard focus to the page. */}
+      <button id={`${headingId}-button`} type="button" aria-disabled={busy || undefined} onClick={() => void change(!exclusion)}>
         <Icon name={exclusion ? 'eye' : 'eyeOff'} />{exclusion ? kbMessages.includeInAI : kbMessages.excludeFromAI}</button>
       {problem && <small role="alert" className="error-copy">{problem}</small>}
     </section>
@@ -56,7 +58,7 @@ export function ArticleAINote({ article, onChanged }: Omit<ArticleAIProps, 'time
     <div className="kb-ai-note" role="status">
       <Icon name="eyeOff" />
       <span><strong>{kbMessages.aiExcludedTitle}</strong> {kbMessages.aiExcludedBody}</span>
-      <button type="button" disabled={busy} onClick={() => void change(false)}>{kbMessages.includeInAI}</button>
+      <button type="button" aria-disabled={busy || undefined} onClick={() => void change(false)}>{kbMessages.includeInAI}</button>
       {problem && <small role="alert" className="error-copy">{problem}</small>}
     </div>
   );

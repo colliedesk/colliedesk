@@ -28,9 +28,9 @@ const (
 const (
 	// aiRetrievalMaxTerms is how many words of a query count: the longest first, short words are the common ones.
 	aiRetrievalMaxTerms = 16
-	// aiRetrievalWindow is how many of the newest resolved conversations a search ranks: 20,000 took
-	// 160-280 ms with the knowledge base at its cap, past the budget (docs/internals/performance.md).
-	aiRetrievalWindow = 10000
+	// aiRetrievalWindow is how many of the newest resolved conversations a search ranks: 10,000 took
+	// 210 ms on the CI runner with the knowledge base at its cap, past the budget (docs/internals/performance.md).
+	aiRetrievalWindow = 5000
 	// aiWholeKBTokens: a knowledge base this small (its articles' own language) is sent whole.
 	aiWholeKBTokens = 15000
 	// aiKBExcerptRunes is the most of one article a search returns, about 1,500 tokens.
@@ -256,9 +256,10 @@ func aiExcerpt(text string, terms []string, limit int) string {
 	return string(excerpt)
 }
 
-// aiContact is who wrote in to a conversation: the details masked out of its text.
+// aiContact is who wrote in to a conversation, and the contacts merged into it: the details masked
+// out of its text.
 type aiContact struct {
-	name, email, organization string
+	names, organizations []string
 }
 
 var (
@@ -268,31 +269,42 @@ var (
 	aiNumberPattern = regexp.MustCompile(`\+?\d(?:[ .\-/()]{0,2}\d){5,}`)
 )
 
-// maskAIText replaces the contact's own email, company and name (whole, then each word of it of two
-// letters or more, with or without accents), every email address, and every long number.
+// maskAIText replaces every email address, the contact's companies and whole names in any case, with
+// or without accents, each word of a name on its own, and every long number. A word alone counts only
+// capitalized as a name is ("Long", "Tran" for Trần): "long" and "an" stay words, so a team writing
+// in English about a customer named Trần Văn Long keeps its text.
 func maskAIText(text string, contact aiContact) string {
 	text = aiEmailPattern.ReplaceAllString(text, "[email]")
-	text = replaceWords(text, []string{contact.organization}, "[company]")
-	names := []string{contact.name}
-	for _, word := range strings.FieldsFunc(contact.name, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsNumber(r) }) {
-		if utf8.RuneCountInString(word) >= 2 {
-			names = append(names, word)
+	text = replaceWords(text, contact.organizations, "[company]", true)
+	text = replaceWords(text, contact.names, "[customer]", true)
+	var words []string
+	for _, name := range contact.names {
+		for _, word := range strings.FieldsFunc(name, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsNumber(r) }) {
+			if utf8.RuneCountInString(word) >= 2 {
+				words = append(words, capitalized(word), capitalized(FoldForAIRetrieval(word)))
+			}
 		}
 	}
-	text = replaceWords(text, names, "[customer]")
+	text = replaceWords(text, words, "[customer]", false)
 	return aiNumberPattern.ReplaceAllString(text, "[number]")
 }
 
-// replaceWords replaces each phrase, ignoring case and accents, where it stands as whole words.
-func replaceWords(text string, phrases []string, with string) string {
+func capitalized(word string) string {
+	first, size := utf8.DecodeRuneInString(word)
+	return string(unicode.ToUpper(first)) + strings.ToLower(word[size:])
+}
+
+// replaceWords replaces each phrase where it stands as whole words; ignoreCase also ignores case and accents.
+func replaceWords(text string, phrases []string, with string, ignoreCase bool) string {
 	var alternatives []string
 	for _, phrase := range phrases {
 		phrase = strings.TrimSpace(phrase)
 		if phrase == "" {
 			continue
 		}
-		for _, form := range []string{phrase, FoldForAIRetrieval(phrase)} {
-			alternatives = append(alternatives, regexp.QuoteMeta(form))
+		alternatives = append(alternatives, regexp.QuoteMeta(phrase))
+		if ignoreCase {
+			alternatives = append(alternatives, regexp.QuoteMeta(FoldForAIRetrieval(phrase)))
 		}
 	}
 	if len(alternatives) == 0 {
@@ -300,7 +312,11 @@ func replaceWords(text string, phrases []string, with string) string {
 	}
 	// The longest first, so a whole name goes before its words.
 	slices.SortFunc(alternatives, func(a, b string) int { return len(b) - len(a) })
-	pattern := regexp.MustCompile(`(?i)(^|[^\p{L}\p{N}])(` + strings.Join(alternatives, "|") + `)([^\p{L}\p{N}]|$)`)
+	flags := ""
+	if ignoreCase {
+		flags = "(?i)"
+	}
+	pattern := regexp.MustCompile(flags + `(^|[^\p{L}\p{N}])(` + strings.Join(alternatives, "|") + `)([^\p{L}\p{N}]|$)`)
 	// A match takes the character after it, so run again for words that follow each other.
 	for range 4 {
 		next := pattern.ReplaceAllString(text, "${1}"+with+"${3}")
@@ -377,15 +393,15 @@ func (s *Store) buildAIRetrievalBatch(ctx context.Context, workspaceID string) (
 		if err := tx.QueryRow(ctx, `SELECT pg_try_advisory_xact_lock(hashtextextended('ai_retrieval:' || $1::text, 0))`, workspaceID).Scan(&locked); err != nil || !locked {
 			return err
 		}
-		var ids []int64
+		var ids []string
 		var articles, conversations []string
-		rows, err := tx.Query(ctx, `SELECT id, kb_article_id::text, conversation_id::text FROM ai_retrieval_pending WHERE workspace_id=$1 ORDER BY id LIMIT $2`,
+		rows, err := tx.Query(ctx, `SELECT id::text, kb_article_id::text, conversation_id::text FROM ai_retrieval_pending WHERE workspace_id=$1 ORDER BY created_at, id LIMIT $2`,
 			workspaceID, aiRetrievalBatch)
 		if err != nil {
 			return err
 		}
 		for rows.Next() {
-			var id int64
+			var id string
 			var article, conversation *string
 			if err := rows.Scan(&id, &article, &conversation); err != nil {
 				rows.Close()
@@ -411,7 +427,7 @@ func (s *Store) buildAIRetrievalBatch(ctx context.Context, workspaceID string) (
 		if err := buildAIConversations(ctx, tx, workspaceID, conversations); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `DELETE FROM ai_retrieval_pending WHERE workspace_id=$1 AND id=ANY($2)`, workspaceID, ids); err != nil {
+		if _, err := tx.Exec(ctx, `DELETE FROM ai_retrieval_pending WHERE workspace_id=$1 AND id=ANY($2::uuid[])`, workspaceID, ids); err != nil {
 			return err
 		}
 		built, more = len(articles)+len(conversations), len(ids) == aiRetrievalBatch
@@ -494,10 +510,19 @@ func buildAIConversations(ctx context.Context, tx pgx.Tx, workspaceID string, id
 	if _, err := tx.Exec(ctx, `DELETE FROM ai_retrieval_docs WHERE workspace_id=$1 AND conversation_id=ANY($2::uuid[])`, workspaceID, ids); err != nil {
 		return err
 	}
-	rows, err := tx.Query(ctx, `SELECT c.id::text, c.subject, ct.name, ct.email, COALESCE(ct.organization, ''), c.updated_at,
+	// The names and companies of the contact and of the contacts merged into it (a merge moves their
+	// conversations, whose text still names them), now and before a rename.
+	rows, err := tx.Query(ctx, `SELECT c.id::text, c.subject,
+			ARRAY(SELECT x.name FROM contacts x WHERE x.workspace_id=c.workspace_id AND (x.id=c.contact_id OR x.merged_into_id=c.contact_id)
+				UNION SELECT f.value FROM ai_retrieval_former_names f JOIN contacts x ON x.workspace_id=f.workspace_id AND x.id=f.contact_id
+				WHERE f.workspace_id=c.workspace_id AND f.kind='name' AND (x.id=c.contact_id OR x.merged_into_id=c.contact_id)),
+			ARRAY(SELECT x.organization FROM contacts x WHERE x.workspace_id=c.workspace_id AND (x.id=c.contact_id OR x.merged_into_id=c.contact_id) AND x.organization IS NOT NULL
+				UNION SELECT f.value FROM ai_retrieval_former_names f JOIN contacts x ON x.workspace_id=f.workspace_id AND x.id=f.contact_id
+				WHERE f.workspace_id=c.workspace_id AND f.kind='organization' AND (x.id=c.contact_id OR x.merged_into_id=c.contact_id)),
+			c.updated_at,
 			(SELECT m.body FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='incoming' ORDER BY m.created_at, m.id LIMIT 1),
 			(SELECT m.body FROM messages m WHERE m.workspace_id=c.workspace_id AND m.conversation_id=c.id AND m.kind='outgoing' ORDER BY m.created_at DESC, m.id DESC LIMIT 1)
-		FROM conversations c JOIN contacts ct ON ct.workspace_id=c.workspace_id AND ct.id=c.contact_id
+		FROM conversations c
 		WHERE c.workspace_id=$1 AND c.id=ANY($2::uuid[]) AND c.status IN ('resolved','closed')`, workspaceID, ids)
 	if err != nil {
 		return err
@@ -508,19 +533,20 @@ func buildAIConversations(ctx context.Context, tx pgx.Tx, workspaceID string, id
 		var contact aiContact
 		var updated time.Time
 		var incoming, reply *string
-		if err := rows.Scan(&id, &subject, &contact.name, &contact.email, &contact.organization, &updated, &incoming, &reply); err != nil {
+		if err := rows.Scan(&id, &subject, &contact.names, &contact.organizations, &updated, &incoming, &reply); err != nil {
 			rows.Close()
 			return err
 		}
 		if incoming == nil {
 			continue
 		}
-		body := "Customer: " + cutRunes(strings.TrimSpace(*incoming), aiCustomerRunes)
+		// Masked before it is cut: a cut through a name would leave the part before it unmasked.
+		body := "Customer: " + cutRunes(maskAIText(strings.TrimSpace(*incoming), contact), aiCustomerRunes)
 		if reply != nil {
-			body += "\n\nReply: " + strings.TrimSpace(*reply)
+			body += "\n\nReply: " + maskAIText(strings.TrimSpace(*reply), contact)
 		}
 		title := cutRunes(maskAIText(subject, contact), 300)
-		docs.add(nil, nil, &id, title, cutRunes(maskAIText(body, contact), aiConversationRunes-utf8.RuneCountInString(title)), updated)
+		docs.add(nil, nil, &id, title, cutRunes(body, aiConversationRunes-utf8.RuneCountInString(title)), updated)
 	}
 	if err := rows.Err(); err != nil {
 		return err

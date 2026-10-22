@@ -370,6 +370,11 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
     setNotice(text);
     void refresh();
   };
+  // The note goes with the exclusion; the keyboard focus moves to the box's button, which stays.
+  const aiChangedFromNote = (changed: KBArticle, text: string) => {
+    aiChanged(changed, text);
+    requestAnimationFrame(() => document.getElementById(`${id}-ai-button`)?.focus());
+  };
 
   const status = base?.status ?? 'draft';
   const heading = base ? kbMessages.editArticleHeading(base.title) : kbMessages.newArticleHeading;
@@ -424,7 +429,7 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         {isPublic === false && <RouterLink className="button-link" href="/settings#help-center-heading" onFollow={() => void navigate({ to: '/settings', hash: 'help-center-heading' })}>
           <Icon name="globe" />{kbMessages.turnOnHelpCenter}</RouterLink>}
       </section>
-      {base && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
+      {base && !phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
       {missing.length > 0 && <section className="kb-alt-warn" aria-labelledby={`${id}-alt-warn`}>
         <strong id={`${id}-alt-warn`}>{kbMessages.imagesWithoutAlt(missing.length)}</strong>
         <span>{kbMessages.imagesWithoutAltHelp}</span>
@@ -472,8 +477,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
           </span>
         </>}
       </header>
-      {(conflict || problem || tooLong || uploading > 0 || imageProblems.length > 0 || base?.has_source_html || base?.ai_exclusion) && <div className="kb-editor-notes">
-        {base?.ai_exclusion && <ArticleAINote article={base} onChanged={aiChanged} />}
+      {(conflict || problem || tooLong || uploading > 0 || imageProblems.length > 0 || base?.has_source_html || (base?.ai_exclusion && !phone)) && <div className="kb-editor-notes">
+        {base?.ai_exclusion && !phone && <ArticleAINote article={base} onChanged={aiChangedFromNote} />}
         {conflict && <div role="alert" className="warning-note kb-conflict">
           <p>{kbMessages.changedElsewhere}</p>
           <div className="button-row">
@@ -488,6 +493,8 @@ export function ArticleEditor({ article, collections, defaultCollection, timezon
         {imageProblems.map((text) => <p key={text} role="alert" className="error-copy">{text}</p>)}
         {base?.has_source_html && <p className="muted-copy">{kbMessages.importedNotice}</p>}
       </div>}
+      {/* On a phone the box stands at the top of the page, as the note does on a wide screen: the way out and back is never behind Details. */}
+      {base && phone && <ArticleAIBox article={base} timezone={timezone} headingId={`${id}-ai`} onChanged={aiChanged} />}
       <form id={`${id}-form`} className="kb-editor" aria-label={heading} onKeyDown={onKeyDown} onSubmit={(event) => { event.preventDefault(); submit.current(); }}>
         <div className="kb-editor-main">
           <div className="field kb-title-field"><label htmlFor={`${id}-title`} className="sr-only">{kbMessages.articleTitle}</label>
