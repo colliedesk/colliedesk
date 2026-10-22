@@ -113,33 +113,45 @@ func (a *API) putHelpCenterDomain(response http.ResponseWriter, request *http.Re
 	// Another workspace active on host does not refuse the claim: it waits, pending, and takes the host
 	// over once DNS proves it while the holder's records no longer do (ActivateHelpCenterDomain).
 	ctx, workspaceID := request.Context(), principal(request).Workspace.ID
-	if _, err := a.store.SetHelpCenterDomain(ctx, workspaceID, host, a.now()); err != nil {
+	previous, _, err := a.store.GetHelpCenterDomain(ctx, workspaceID)
+	if err != nil {
 		writeStoreError(response, err)
 		return
 	}
-	a.helpCenter.ForgetDomains()
+	set, err := a.store.SetHelpCenterDomain(ctx, workspaceID, host, a.now())
+	if err != nil {
+		writeStoreError(response, err)
+		return
+	}
+	if set.Claim != previous.Claim {
+		a.helpCenter.ForgetDomain(workspaceID, previous.Hostname, previous.Claim)
+		a.helpCenter.ForgetDomain(workspaceID, set.Hostname, set.Claim)
+	}
 	a.writeHelpCenterDomain(response, ctx, workspaceID)
 }
 
 func (a *API) deleteHelpCenterDomain(response http.ResponseWriter, request *http.Request) {
-	if err := a.store.DeleteHelpCenterDomain(request.Context(), principal(request).Workspace.ID); err != nil {
+	workspaceID := principal(request).Workspace.ID
+	removed, found, err := a.store.DeleteHelpCenterDomain(request.Context(), workspaceID)
+	if err != nil {
 		writeStoreError(response, err)
 		return
 	}
-	a.helpCenter.ForgetDomains()
+	if found {
+		a.helpCenter.ForgetDomain(workspaceID, removed.Hostname, removed.Claim)
+	}
 	writeJSON(response, http.StatusOK, noHelpCenterDomain())
 }
 
-// checkHelpCenterDomain looks the custom domain up in DNS now and records the result. Agent tokens
-// share the hourly bound of the email domain check, per workspace; a person is not limited.
+// checkHelpCenterDomain looks the custom domain up in DNS now and records the result. Every check
+// makes the server ask DNS, so one workspace's checks share the hourly bound of the email domain
+// check, whether a person or an agent token asks.
 func (a *API) checkHelpCenterDomain(response http.ResponseWriter, request *http.Request) {
 	who := principal(request)
-	if who.Scope != "" {
-		if allowed, wait := a.domainChecks.allow("help-center "+who.Workspace.ID, a.now()); !allowed {
-			response.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
-			writeError(response, http.StatusTooManyRequests, "rate_limited", "Agent tokens may check the help center domain 10 times an hour. Try again later.")
-			return
-		}
+	if allowed, wait := a.domainChecks.allow("help-center "+who.Workspace.ID, a.now()); !allowed {
+		response.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+		writeError(response, http.StatusTooManyRequests, "rate_limited", "The help center domain may be checked 10 times an hour. Try again later.")
+		return
 	}
 	ctx := request.Context()
 	current, found, err := a.store.GetHelpCenterDomain(ctx, who.Workspace.ID)
@@ -179,8 +191,11 @@ func (a *API) recordCheck(ctx context.Context, workspaceID string, current domai
 	} else {
 		after, released, err = a.store.ActivateHelpCenterDomain(ctx, workspaceID, current.Claim, a.now(), evidence.Proof, certificate)
 	}
-	if err == nil && (after.Status != current.Status || released != "") {
-		a.helpCenter.ForgetDomains()
+	if err == nil && after.Status != current.Status {
+		a.helpCenter.ForgetDomain(workspaceID, current.Hostname, current.Claim)
+	}
+	if err == nil && released != "" {
+		a.helpCenter.ForgetDomain(released, current.Hostname, "")
 	}
 	return after, err
 }
@@ -208,6 +223,11 @@ func (a *API) certifyCustomHost(ctx context.Context, host string) (bool, error) 
 		_, open, err := a.store.OpenHelpCenterWorkspace(ctx, workspaceID)
 		if err != nil || !open {
 			return false, err
+		}
+		// The question is public: note the certificate at most once an hour per name in this process
+		// (and in the database across processes), never on every question.
+		if allowed, _ := a.certificateNotes.allow(host, a.now()); !allowed {
+			return true, nil
 		}
 		return true, a.store.NoteHelpCenterCertificate(ctx, workspaceID, host, a.now())
 	}

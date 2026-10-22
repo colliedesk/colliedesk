@@ -208,11 +208,12 @@ func clipCheckError(message string) string {
 }
 
 // NoteHelpCenterCertificate records that the reverse proxy was told it may get a certificate for the
-// workspace's active custom domain host.
+// workspace's active custom domain host, at most once an hour: the question is public, and asking it
+// over and over must not write the row each time.
 func (s *Store) NoteHelpCenterCertificate(ctx context.Context, workspaceID, host string, now time.Time) error {
 	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `UPDATE help_center_domains SET certificate_requested_at=$3 WHERE workspace_id=$1 AND hostname=$2 AND status='active'`,
-			workspaceID, host, now)
+		_, err := tx.Exec(ctx, `UPDATE help_center_domains SET certificate_requested_at=$3 WHERE workspace_id=$1 AND hostname=$2 AND status='active'
+			AND (certificate_requested_at IS NULL OR certificate_requested_at <= $3::timestamptz - interval '1 hour')`, workspaceID, host, now)
 		return err
 	})
 	if err != nil {
@@ -221,16 +222,19 @@ func (s *Store) NoteHelpCenterCertificate(ctx context.Context, workspaceID, host
 	return nil
 }
 
-// DeleteHelpCenterDomain removes the workspace's custom domain; removing none changes nothing.
-func (s *Store) DeleteHelpCenterDomain(ctx context.Context, workspaceID string) error {
-	err := s.db.InWorkspace(ctx, workspaceID, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, `DELETE FROM help_center_domains WHERE workspace_id=$1`, workspaceID)
-		return err
+// DeleteHelpCenterDomain removes the workspace's custom domain and returns it; removing none changes
+// nothing (found is false).
+func (s *Store) DeleteHelpCenterDomain(ctx context.Context, workspaceID string) (removed domain.HelpCenterDomain, found bool, err error) {
+	removed, err = scoped(ctx, s, workspaceID, func(tx pgx.Tx) (domain.HelpCenterDomain, error) {
+		return scanHelpCenterDomain(tx.QueryRow(ctx, `DELETE FROM help_center_domains WHERE workspace_id=$1 RETURNING `+helpCenterDomainColumns, workspaceID))
 	})
-	if err != nil {
-		return fmt.Errorf("delete help center domain: %w", err)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.HelpCenterDomain{}, false, nil
 	}
-	return nil
+	if err != nil {
+		return domain.HelpCenterDomain{}, false, fmt.Errorf("delete help center domain: %w", err)
+	}
+	return removed, true, nil
 }
 
 // HelpCenterHost finds the workspace whose help center serves on host, an active custom domain; found
@@ -240,7 +244,7 @@ func (s *Store) HelpCenterHost(ctx context.Context, host string) (string, bool, 
 	var workspaceID string
 	err := s.db.Privileged(ctx, database.PrivilegeHelpCenterHost, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `SELECT workspace_id::text FROM help_center_domains WHERE lower(hostname)=lower($1) AND status='active'`, host).Scan(&workspaceID)
-	})
+	}, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, nil
 	}
@@ -257,7 +261,7 @@ func (s *Store) HelpCenterClaim(ctx context.Context, claim string) (string, bool
 	var workspaceID string
 	err := s.db.Privileged(ctx, database.PrivilegeHelpCenterHost, func(tx pgx.Tx) error {
 		return tx.QueryRow(ctx, `SELECT workspace_id::text FROM help_center_domains WHERE claim=$1`, claim).Scan(&workspaceID)
-	})
+	}, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, nil
 	}

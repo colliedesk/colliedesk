@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -14,18 +15,19 @@ import (
 )
 
 const (
-	// hostCacheTTL is how long this process remembers which workspace a custom host belongs to (or that
-	// it belongs to none), and a workspace's active custom domain. A domain write in this process clears
-	// both at once; another process sees it within this time.
+	// hostCacheTTL is how long this process trusts what it remembers about a host name (its workspace,
+	// or that it has none) and a workspace's active custom domain. A domain write in this process
+	// forgets the names it changes at once; another process sees it within this time.
 	hostCacheTTL = 30 * time.Second
-	// hostCacheEntries bounds each cache, unknown host names included, so random Host headers cannot
-	// grow it.
+	// hostCacheEntries bounds each cache, so random Host headers cannot grow one. Known and unknown
+	// names have caches of their own: a flood of unknown names only evicts other unknown names.
 	hostCacheEntries = 4096
 )
 
 // ttlCache remembers values for a while, up to max keys. When full it drops expired keys first, then
-// arbitrary ones (map order), so it never grows past max. Every clear starts a new generation; a value
-// read from the store before a clear is not kept after it (set takes the generation it started in).
+// arbitrary ones (map order), so it never grows past max. Every forget starts a new generation; a
+// value read from the store before a forget is not kept after it (set takes the generation it started
+// in), so a lookup that raced a domain write never stores what the write changed.
 type ttlCache struct {
 	mu         sync.Mutex
 	generation uint64
@@ -44,14 +46,19 @@ func newTTLCache(ttl time.Duration, max int, now func() time.Time) *ttlCache {
 	return &ttlCache{ttl: ttl, max: max, now: now, entries: map[string]cacheEntry{}}
 }
 
+// get returns the value of key while it is fresh.
 func (c *ttlCache) get(key string) (string, bool) {
+	value, fresh, _ := c.peek(key)
+	return value, fresh
+}
+
+// peek returns the value of key, whether it is still fresh, and whether the cache holds it at all
+// (fresh or expired).
+func (c *ttlCache) peek(key string) (value string, fresh, held bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	entry, ok := c.entries[key]
-	if !ok || !c.now().Before(entry.expires) {
-		return "", false
-	}
-	return entry.value, true
+	entry, held := c.entries[key]
+	return entry.value, held && c.now().Before(entry.expires), held
 }
 
 func (c *ttlCache) currentGeneration() uint64 {
@@ -83,10 +90,20 @@ func (c *ttlCache) set(key, value string, generation uint64) {
 	c.entries[key] = cacheEntry{value: value, expires: now.Add(c.ttl)}
 }
 
-func (c *ttlCache) clear() {
+// drop removes key without starting a new generation.
+func (c *ttlCache) drop(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	clear(c.entries)
+	delete(c.entries, key)
+}
+
+// forget removes keys and starts a new generation, so no lookup that began before stores its value.
+func (c *ttlCache) forget(keys ...string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, key := range keys {
+		delete(c.entries, key)
+	}
 	c.generation++
 }
 
@@ -96,16 +113,38 @@ func (c *ttlCache) len() int {
 	return len(c.entries)
 }
 
-// customHosts finds the workspace of a custom host name and the custom domain of a workspace, through
-// the store and a short cache. lookups merges concurrent misses of the same key into one query.
+// customHosts finds the workspace of a host name (an active custom domain or a claim's CNAME target)
+// and the custom domain of a workspace, through the store and short caches: known names with their
+// workspace, unknown names, and workspaces with their domain. lookups merges concurrent misses of the
+// same key into one query.
 type customHosts struct {
-	byHost      *ttlCache
-	byWorkspace *ttlCache
-	lookups     singleflight.Group
+	known, unknown *ttlCache
+	byWorkspace    *ttlCache
+	lookups        singleflight.Group
 }
 
 func newCustomHosts(now func() time.Time) *customHosts {
-	return &customHosts{byHost: newTTLCache(hostCacheTTL, hostCacheEntries, now), byWorkspace: newTTLCache(hostCacheTTL, hostCacheEntries, now)}
+	return &customHosts{known: newTTLCache(hostCacheTTL, hostCacheEntries, now), unknown: newTTLCache(hostCacheTTL, hostCacheEntries, now),
+		byWorkspace: newTTLCache(hostCacheTTL, hostCacheEntries, now)}
+}
+
+// hostGeneration is the generations of the two host caches when a lookup starts.
+type hostGeneration struct{ known, unknown uint64 }
+
+func (h *customHosts) generation() hostGeneration {
+	return hostGeneration{known: h.known.currentGeneration(), unknown: h.unknown.currentGeneration()}
+}
+
+// remember stores what a lookup that started at generation found: the workspace of host, or "" for a
+// name that belongs to none. A known name that turned unknown leaves the known cache.
+func (h *customHosts) remember(host, workspaceID string, generation hostGeneration) {
+	if workspaceID == "" {
+		h.known.drop(host)
+		h.unknown.set(host, "", generation.unknown)
+		return
+	}
+	h.unknown.drop(host)
+	h.known.set(host, workspaceID, generation.known)
 }
 
 // customHostCandidate is the host name of a request that may be a custom domain, lower case without
@@ -127,11 +166,23 @@ func (s *Site) customHostCandidate(host string) (string, bool) {
 }
 
 // workspaceOfHost returns the workspace whose help center serves on the custom host, or whose claim
-// has the host as its CNAME target, from the cache or the store. A remembered workspace is only a
-// candidate: the page's own query confirms the domain is still active for it (serve).
-func (s *Site) workspaceOfHost(ctx context.Context, host string) (string, bool, error) {
-	if workspaceID, ok := s.hosts.byHost.get(host); ok {
-		return workspaceID, workspaceID != "", nil
+// has the host as its CNAME target, from the caches or the store. A remembered workspace is only a
+// candidate: the page's own query confirms the domain is still active for it (serve). A name no cache
+// knows costs a privileged query, so the client must be allowed one more (Config.AllowLookup) first;
+// otherwise wait is how long until it may. A name that was known before, its cache entry expired, is
+// looked up without that charge.
+func (s *Site) workspaceOfHost(request *http.Request, host string) (workspaceID string, found bool, wait time.Duration, err error) {
+	workspaceID, fresh, known := s.hosts.known.peek(host)
+	if fresh {
+		return workspaceID, true, 0, nil
+	}
+	if _, unknown := s.hosts.unknown.get(host); unknown {
+		return "", false, 0, nil
+	}
+	if !known && s.config.AllowLookup != nil {
+		if allowed, wait := s.config.AllowLookup(request); !allowed {
+			return "", false, max(wait, time.Second), nil
+		}
 	}
 	find := s.config.Store.HelpCenterHost
 	if claim, ok := claimOfHost(host, s.config.Domain); ok {
@@ -139,20 +190,20 @@ func (s *Site) workspaceOfHost(ctx context.Context, host string) (string, bool, 
 			return s.config.Store.HelpCenterClaim(ctx, claim)
 		}
 	}
-	generation := s.hosts.byHost.currentGeneration()
-	found, err, _ := s.hosts.lookups.Do(fmt.Sprintf("host %d %s", generation, host), func() (any, error) {
-		workspaceID, _, err := find(context.WithoutCancel(ctx), host)
+	generation := s.hosts.generation()
+	result, err, _ := s.hosts.lookups.Do(fmt.Sprintf("host %d %d %s", generation.known, generation.unknown, host), func() (any, error) {
+		workspaceID, _, err := find(context.WithoutCancel(request.Context()), host)
 		if err != nil {
 			return "", err
 		}
-		s.hosts.byHost.set(host, workspaceID, generation)
+		s.hosts.remember(host, workspaceID, generation)
 		return workspaceID, nil
 	})
 	if err != nil {
-		return "", false, err
+		return "", false, 0, err
 	}
-	workspaceID := found.(string)
-	return workspaceID, workspaceID != "", nil
+	workspaceID = result.(string)
+	return workspaceID, workspaceID != "", 0, nil
 }
 
 // Address is the public address of a workspace's help center as the API hands it out: SiteURL with
@@ -189,9 +240,19 @@ func (s *Site) CustomHost(ctx context.Context, workspaceID string) (string, erro
 	return found.(string), nil
 }
 
-// ForgetDomains clears what this process remembers about custom domains; every domain write calls it,
-// so this process serves a new, changed or removed domain with its next request.
-func (s *Site) ForgetDomains() {
-	s.hosts.byHost.clear()
-	s.hosts.byWorkspace.clear()
+// ForgetDomain makes this process look up again what a domain write changed: the workspace's address,
+// and the host name and CNAME target of a claim it set, replaced, removed or whose status changed
+// (hostname or claim may be ""). Every other name stays cached, and a check that changes nothing
+// forgets nothing.
+func (s *Site) ForgetDomain(workspaceID, hostname, claim string) {
+	var hosts []string
+	if hostname != "" {
+		hosts = append(hosts, hostname)
+	}
+	if target := ClaimHost(s.config.Domain, claim); target != "" {
+		hosts = append(hosts, target)
+	}
+	s.hosts.known.forget(hosts...)
+	s.hosts.unknown.forget(hosts...)
+	s.hosts.byWorkspace.forget(workspaceID)
 }

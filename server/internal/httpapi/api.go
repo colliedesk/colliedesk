@@ -161,6 +161,10 @@ type API struct {
 	helpCenter                          *helpcenter.Site
 	// liveChecks bounds the DNS checks the reverse proxy's certificate question starts.
 	liveChecks *helpcenter.LiveChecks
+	// certificateNotes lets the certificate question record a certificate once an hour per host name.
+	certificateNotes *webFormLimiter
+	// helpCenterHostLookups counts each client address's lookups of host names the server does not know.
+	helpCenterHostLookups *webFormLimiter
 	// domainChecks limits how often agent tokens make the server look up DNS for one workspace.
 	domainChecks *webFormLimiter
 	// providerChecks limits the domain checks of one workspace that reach the email provider.
@@ -230,6 +234,7 @@ func New(pool *pgxpool.Pool, config Config) *Server {
 		providerChecks:  newWindowLimiter(1, webFormMaxKeys, domain.ProviderCheckMinInterval),
 		problemReports:  newWindowLimiter(problemReportsPerHour, webFormMaxKeys, time.Hour),
 		helpCenterPages: newWebFormLimiter(helpCenterPagesPerAddress, webFormMaxKeys), helpCenterSearches: newWebFormLimiter(helpCenterSearchesPerAddress, webFormMaxKeys),
+		helpCenterHostLookups: newWebFormLimiter(helpCenterHostLookupsPerAddress, webFormMaxKeys), certificateNotes: newWindowLimiter(1, webFormMaxKeys, time.Hour),
 		auth:  auth.NewWithDB(db, config.Origin).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale()),
 		store: store.NewWithDB(db).WithObjects(config.Attachments).WithOutbound(outbound).WithClock(clock).WithPlanLimits(limits).WithPlansOnSale(config.Billing.PlansOnSale())}
 	api.auth = api.auth.WithSignupKey(config.SignupHashKey)

@@ -69,6 +69,9 @@ type Config struct {
 	// Allow reports whether the client of request may load one more page (or run one more search),
 	// and how long to wait when not. Nil allows everything.
 	Allow func(request *http.Request, search bool) (bool, time.Duration)
+	// AllowLookup reports whether the client of request may make the server look up one more host
+	// name it does not know (a privileged query), and how long to wait when not. Nil allows everything.
+	AllowLookup func(request *http.Request) (bool, time.Duration)
 	// Client names the address a request comes from (behind trusted proxies), for the bound on videos
 	// sent at once; nil uses the connection's address.
 	Client func(request *http.Request) string
@@ -153,10 +156,12 @@ func (s *Site) appHost(host string) bool {
 // lookup (custom-host.go): an active custom domain, or a claim's CNAME target (claim), which moves to
 // the help center's address. A name that belongs to none is the help center's 404.
 func (s *Site) serveHost(response http.ResponseWriter, request *http.Request, host string, claim bool) {
-	workspaceID, found, err := s.workspaceOfHost(request.Context(), host)
+	workspaceID, found, wait, err := s.workspaceOfHost(request, host)
 	switch {
 	case err != nil:
 		s.writeError(response, err)
+	case wait > 0:
+		s.writeBusy(response, wait, "")
 	case !found:
 		s.writeNotFound(response, true)
 	default:

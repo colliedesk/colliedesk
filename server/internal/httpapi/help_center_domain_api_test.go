@@ -186,8 +186,10 @@ func TestHelpCenterDomainTokenTiers(t *testing.T) {
 	if asked := dns.questions() - before; asked > 10 {
 		t.Fatalf("the refused check asked DNS: %d questions for 10 checks", asked)
 	}
-	// A person is not limited.
-	checkDomain(t, api, admin, http.StatusOK)
+	// The bound is the workspace's: a person of the same workspace waits too.
+	if response := request(t, api, http.MethodPost, domainPath+"/check", nil, admin, nil); response.Code != http.StatusTooManyRequests {
+		t.Fatalf("a person's check after 10 token checks status=%d", response.Code)
+	}
 }
 
 // Pending claims never block, serve or prove anything for another workspace: each check uses its

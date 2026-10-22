@@ -2091,7 +2091,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Look up the custom domain's DNS now (at most 3 seconds) and record the result: the host name's CNAME chain ends at the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>`, or `_help-center-verify.<host name>` holds the token. A pending domain that passes becomes `active`; one that fails keeps its status, with `check_error` saying which record to set (never what the server's DNS answered). A check counts only for the claim it looked up: when the domain is removed or set again meanwhile, it answers 409 `domain_changed`. An active domain whose check fails keeps serving, with `check_error` and `failing_since`; the first failed check 7 days after `failing_since` puts it back to `pending` (`pending_reason` `proof_lost`). When another workspace's help center serves on the host name, a passing check takes it over if the same DNS answer does not prove the other workspace's claim (that workspace goes back to `pending` with `taken_over`), and answers 409 `domain_taken` if it does. 404 when no domain is set. Admins only, and an `admin` agent token; agent tokens may check 10 times an hour (429 with `Retry-After`). */
+        /** @description Look up the custom domain's DNS now (at most 3 seconds) and record the result: the host name's CNAME chain ends at the claim's own target `hc-<claim>.<HELP_CENTER_DOMAIN>`, or `_help-center-verify.<host name>` holds the token. A pending domain that passes becomes `active`; one that fails keeps its status, with `check_error` saying which record to set (never what the server's DNS answered). A check counts only for the claim it looked up: when the domain is removed or set again meanwhile, it answers 409 `domain_changed`. An active domain whose check fails keeps serving, with `check_error` and `failing_since`; the first failed check 7 days after `failing_since` puts it back to `pending` (`pending_reason` `proof_lost`). When another workspace's help center serves on the host name, a passing check takes it over if the same DNS answer does not prove the other workspace's claim (that workspace goes back to `pending` with `taken_over`), and answers 409 `domain_taken` if it does. 404 when no domain is set. Admins only, and an `admin` agent token. One workspace's checks, by people and agent tokens together, are limited to 10 an hour (429 with `Retry-After`): each makes the server ask DNS. */
         post: operations["checkHelpCenterDomain"];
         delete?: never;
         options?: never;
@@ -3249,7 +3249,7 @@ export interface components {
             check_error: string | null;
             /**
              * Format: date-time
-             * @description When the reverse proxy was last told it may get a certificate for the host name.
+             * @description When the reverse proxy was last told it may get a certificate for the host name; recorded at most once an hour.
              */
             certificate_requested_at: string | null;
             /**
@@ -8836,7 +8836,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
-            /** @description An agent token checked 10 times in the last hour; retry after `Retry-After` seconds. */
+            /** @description The workspace checked its domain 10 times in the last hour; retry after `Retry-After` seconds. */
             429: {
                 headers: {
                     "Retry-After"?: number;

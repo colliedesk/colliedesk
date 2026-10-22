@@ -3875,7 +3875,8 @@ paths:
         help center serves on the host name, a passing check takes it over if the same DNS answer does not
         prove the other workspace's claim (that workspace goes back to `pending` with `taken_over`), and
         answers 409 `domain_taken` if it does. 404 when no domain is set. Admins only, and an `admin` agent
-        token; agent tokens may check 10 times an hour (429 with `Retry-After`).
+        token. One workspace's checks, by people and agent tokens together, are limited to 10 an hour (429
+        with `Retry-After`): each makes the server ask DNS.
       responses:
         '202': {$ref: '#/components/responses/AgentRequestAccepted'}
         '200':
@@ -3886,7 +3887,7 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
         '429':
-          description: An agent token checked 10 times in the last hour; retry after `Retry-After` seconds.
+          description: The workspace checked its domain 10 times in the last hour; retry after `Retry-After` seconds.
           headers:
             Retry-After: {schema: {type: integer}}
           content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
@@ -5145,7 +5146,7 @@ components:
         verified_at: {type: [string, 'null'], format: date-time, description: When a DNS check first passed.}
         checked_at: {type: [string, 'null'], format: date-time, description: "The last DNS check: the button, the proxy's certificate question or the daily re-check."}
         check_error: {type: [string, 'null'], description: 'Which record the last check did not find when it did not pass; null after a check that passed.'}
-        certificate_requested_at: {type: [string, 'null'], format: date-time, description: When the reverse proxy was last told it may get a certificate for the host name.}
+        certificate_requested_at: {type: [string, 'null'], format: date-time, description: 'When the reverse proxy was last told it may get a certificate for the host name; recorded at most once an hour.'}
         failing_since:
           type: [string, 'null']
           format: date-time

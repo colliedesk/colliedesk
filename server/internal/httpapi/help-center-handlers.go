@@ -15,11 +15,15 @@ const (
 	// helpCenterSearchesPerAddress is how many help center searches one client address may run per
 	// minute, across every workspace. A search reads every article of the workspace.
 	helpCenterSearchesPerAddress = 30
+	// helpCenterHostLookupsPerAddress is how many host names the server does not know one client
+	// address may make it look up per minute; each is a privileged query, and a random Host header
+	// is free to send.
+	helpCenterHostLookupsPerAddress = 10
 )
 
 func (a *API) newHelpCenter() *helpcenter.Site {
 	return helpcenter.New(helpcenter.Config{Store: a.store, Objects: a.config.Attachments, Origin: a.config.Origin,
-		Domain: a.config.HelpCenterDomain, Version: a.config.Version, Allow: a.allowHelpCenter,
+		Domain: a.config.HelpCenterDomain, Version: a.config.Version, Allow: a.allowHelpCenter, AllowLookup: a.allowHelpCenterHostLookup,
 		Client: func(request *http.Request) string { return clientAddress(request, a.config.TrustedProxies) }})
 }
 
@@ -34,6 +38,12 @@ func (a *API) allowHelpCenter(request *http.Request, search bool) (bool, time.Du
 		return a.helpCenterSearches.allow(client, now)
 	}
 	return true, 0
+}
+
+// allowHelpCenterHostLookup charges a lookup of a host name the server does not know to the request's
+// client address, before the privileged query runs.
+func (a *API) allowHelpCenterHostLookup(request *http.Request) (bool, time.Duration) {
+	return a.helpCenterHostLookups.allow(clientAddress(request, a.config.TrustedProxies), a.now())
 }
 
 // helpCenterHome is the public address of the requesting workspace's help center, its custom domain

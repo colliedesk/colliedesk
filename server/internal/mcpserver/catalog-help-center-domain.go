@@ -58,7 +58,7 @@ func helpCenterDomainCheckSpec() Spec {
 		Description: `Look up the custom domain's DNS now and record the result. ` + helpCenterDomainRule +
 			`A pending domain that passes becomes active; a failed check says which record to set in check_error. An active domain keeps serving while checks fail, ` +
 			`and goes back to pending after 7 days without proof. When another workspace serves on the host name, a passing check takes it over if DNS no longer proves ` +
-			`that workspace's claim, else domain_taken. Agent tokens may check 10 times an hour. ` + belowAdmin + "\n\nTier: admin.",
+			`that workspace's claim, else domain_taken. One workspace may check 10 times an hour, people and agents together. ` + belowAdmin + "\n\nTier: admin.",
 		Tier: "admin", Idempotent: true,
 		REST:   []string{"POST " + helpCenterDomainPath + "/check"},
 		Input:  noArguments,
