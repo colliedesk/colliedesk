@@ -11,9 +11,12 @@ const pollMs = 3000;
 const moving = new Set<ImportJob['state']>(['previewing', 'queued', 'running', 'retry_wait']);
 const open = new Set<ImportJob['state']>(['previewing', 'previewed', 'queued', 'running', 'retry_wait', 'waiting_key']);
 
-// currentJob is the one the page is about: one still open, else the newest.
-export function currentJob(items: ImportJob[]): ImportJob | undefined {
-  return items.find((job) => open.has(job.state)) ?? items[0];
+// currentJob is the one the page is about: one still open, else the preview this page just asked for,
+// else the newest import or undo. A preview that ended without starting does not hide the import
+// before it (its report, its undo).
+export function currentJob(items: ImportJob[], justAsked?: string): ImportJob | undefined {
+  const ended = (job: ImportJob) => job.phase === 'preview' && !open.has(job.state);
+  return items.find((job) => open.has(job.state)) ?? items.find((job) => job.id === justAsked) ?? items.find((job) => !ended(job)) ?? items[0];
 }
 
 // onOpenInbox follows the inbox link through the router.
@@ -27,7 +30,9 @@ export function ImportRoute({ onOpenInbox, onOpenBilling }: { onOpenInbox?: () =
     refetchInterval: (query) => (query.state.data?.items.some((job) => moving.has(job.state)) ? pollMs : false),
   });
   const items = imports.data?.items ?? [];
-  const job = currentJob(items);
+  // The preview asked for on this page stays on it when it fails, so its error shows.
+  const [justAsked, setJustAsked] = useState<string>();
+  const job = currentJob(items, justAsked);
   // The report is read again only when a new one exists: after the recent pass, and at the end.
   const reportReady = Boolean(job && (job.has_report || job.has_interim_report));
   const report = useQuery({
@@ -37,7 +42,8 @@ export function ImportRoute({ onOpenInbox, onOpenBilling }: { onOpenInbox?: () =
   const [connecting, setConnecting] = useState(false);
   const refresh = () => client.invalidateQueries({ queryKey: ['imports'] });
   const after = { onSuccess: () => { setConnecting(false); void refresh(); } };
-  const preview = useMutation({ mutationFn: ({ domain, key }: { domain: string; key: string }) => importsApi.preview(domain, key), ...after });
+  const preview = useMutation({ mutationFn: ({ domain, key }: { domain: string; key: string }) => importsApi.preview(domain, key),
+    onSuccess: (created) => { setJustAsked(created.id); after.onSuccess(); } });
   const start = useMutation({ mutationFn: importsApi.start, ...after });
   const cancel = useMutation({ mutationFn: importsApi.cancel, ...after });
   const setKey = useMutation({ mutationFn: ({ id, key }: { id: string; key: string }) => importsApi.setKey(id, key), ...after });

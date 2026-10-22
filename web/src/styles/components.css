@@ -663,8 +663,8 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 /* On a phone the actions of the import stay at the bottom of the screen, whatever the table above
    them holds: nothing to scroll to before starting, stopping or confirming. */
 @media (max-width: 40rem) {
-  .import-page .import-actions { position: sticky; bottom: 0; z-index: 1; margin-inline: calc(-1 * var(--space-2)); border-top: 1px solid var(--line);
-    background: var(--surface-1); padding: var(--space-2) var(--space-2) calc(var(--space-2) + env(safe-area-inset-bottom)); }
+  .import-page .import-actions { position: sticky; bottom: 0; z-index: 1; border-top: 1px solid var(--line);
+    background: var(--surface-1); padding: var(--space-2) 0 calc(var(--space-2) + env(safe-area-inset-bottom)); }
 }
 .import-page details p { overflow-wrap: anywhere; }
 .import-page .section-heading p { overflow-wrap: anywhere; }

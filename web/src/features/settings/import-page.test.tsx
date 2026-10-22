@@ -109,6 +109,14 @@ test('a plan without API calls says to start a Freshdesk trial, and the imported
   expect(onNewImport).toHaveBeenCalled();
 });
 
+test('a preview that ended without starting does not hide the import before it, unless it was just asked for', () => {
+  const done = job({ id: '22222222-2222-4222-8222-222222222222', state: 'finished', phase: 'full', status: 'OK' });
+  const refused = job({ state: 'failed', phase: 'preview' });
+  expect(currentJob([refused, done])?.id).toBe(done.id);
+  expect(currentJob([refused, done], refused.id)?.id).toBe(refused.id);
+  expect(currentJob([refused])?.id).toBe(refused.id);
+});
+
 test('the page is about the import still open, else the newest', () => {
   const finished = job({ id: '22222222-2222-4222-8222-222222222222', state: 'finished' });
   const waiting = job({ state: 'waiting_key' });
@@ -171,9 +179,10 @@ test('a recent pass that found nothing says so instead of sending the team to an
   expect(screen.queryByRole('link', { name: 'Open the inbox' })).not.toBeInTheDocument();
 });
 
-test('a stopped import with nothing in the inbox offers no undo', () => {
-  page({ job: job({ state: 'failed', phase: 'full', imported_conversations: 0, error_code: 'freshdesk_key_rejected' }) });
-  expect(screen.queryByRole('button', { name: 'Undo import' })).not.toBeInTheDocument();
+test('an import stopped before any ticket still offers its undo: contacts and saved replies come first', () => {
+  page({ job: job({ state: 'cancelled', phase: 'full', imported_conversations: 0 }) });
+  expect(screen.getByRole('button', { name: 'Undo import' })).toBeInTheDocument();
+  expect(screen.queryByText(/conversations from this account are in your inbox/)).not.toBeInTheDocument();
 });
 
 test('a wrong address is pointed at on its field', () => {

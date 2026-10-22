@@ -257,19 +257,24 @@ function Finished({ job, report, onUndo, onNewImport, onOpenInbox, busy }: Impor
   return <Heading title={m[`status${status}`]} help={job.domain}>
     <p className="import-status" data-status={status}>{m[`explain${status}`]}</p>
     {report && <ReportLedger report={report} />}
-    <div className="button-row import-actions">
-      <RouterLink className="button primary-action" href="/" onFollow={onOpenInbox}>{m.openInbox}</RouterLink>
+    <div className="button-row">
       <a className="link-action" href={reportDownloadPath(job.id)} download>{m.downloadReport}</a>
       <a className="link-action" href={`/api/v1/imports/${job.id}/report`} download={`freshdesk-import-${job.id}.json`}>{m.downloadReportJSON}</a>
-      <button type="button" onClick={onNewImport}>{m.newImport}</button>
       <UndoButton onUndo={() => onUndo(job.id)} busy={busy} />
+    </div>
+    {/* Only the way on stays at the bottom of a phone screen; the report and the undo scroll with the page. */}
+    <div className="button-row import-actions">
+      <RouterLink className="button primary-action" href="/" onFollow={onOpenInbox}>{m.openInbox}</RouterLink>
+      <button type="button" onClick={onNewImport}>{m.newImport}</button>
     </div>
   </Heading>;
 }
 
 function Stopped({ job, report, onUndo, onNewImport, onOpenBilling, showBilling, busy }: ImportPageProps & { job: ImportJob }) {
   // The count is taken when the import ends; an older row without it falls back to what the job knows.
-  const imported = job.imported_conversations !== null ? job.imported_conversations > 0 : job.has_interim_report || job.has_report || job.phase === 'full';
+  // Contacts, saved replies and the knowledge base are written before any ticket, so a stopped full
+  // pass may hold data without a conversation: undo stays offered.
+  const imported = (job.imported_conversations ?? 0) > 0 || job.has_interim_report || job.has_report || job.phase === 'full';
   const preview = job.phase === 'preview';
   const explain = job.state === 'cancelled' ? m.cancelled
     : preview ? (job.error_code && m.previewFailure[job.error_code]) || m.previewFailureOther
