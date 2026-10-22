@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ColorRow, Hint, ImageField, controlId, normalize, validHex } from './help-center-theme-fields';
+import { ColorRow, Hint, ImageField, controlId, linkShapes, normalize, validHex } from './help-center-theme-fields';
 import { themeMessages as text } from './help-center-theme-messages';
 import { HelpCenterPreview, useThemePreview } from './help-center-preview';
 import { ThemeInvalidError, colorFields, fontKeys, themeApi } from './theme-api';
@@ -13,7 +13,8 @@ type Draft = {
   logo_media_id: string | null; favicon_media_id: string | null; logo_alt: string; linkback_url: string; contact_url: string; contact_phone: string;
   colors: Record<ColorField, string>; body_font: string; heading_font: string;
 };
-type TextField = 'logo_alt' | 'linkback_url' | 'contact_url' | 'contact_phone';
+type TextField = 'logo_alt' | LinkField;
+type LinkField = keyof typeof linkShapes;
 
 const blankColors = Object.fromEntries(colorFields.map((field) => [field, ''])) as Record<ColorField, string>;
 const defaultLook: Draft = { logo_media_id: null, favicon_media_id: null, logo_alt: '', linkback_url: '', contact_url: '', contact_phone: '', colors: blankColors, body_font: '', heading_font: '' };
@@ -26,11 +27,15 @@ const draftOf = (theme: HelpCenterTheme): Draft => ({
 });
 
 const orNull = (value: string) => value.trim() || null;
+// incomplete is true for a link or phone number written but not yet of a shape the server accepts.
+const incomplete = (draft: Draft, field: LinkField) => draft[field].trim() !== '' && !linkShapes[field](draft[field].trim());
+// For the preview, a link or phone number still being typed counts as none.
+const previewable = (draft: Draft, field: LinkField) => (incomplete(draft, field) ? null : orNull(draft[field]));
 type Font = (typeof fontKeys)[number];
 const fontOrNull = (value: string) => (fontKeys as readonly string[]).includes(value) ? value as Font : null;
 
-// inputOf is what Save sends. For the preview, a color still being typed counts as the default, so a
-// half-written value does not stop the page from showing.
+// inputOf is what Save sends. For the preview, a color, link or phone number still being typed counts as
+// the default, so a half-written value does not stop the page from showing.
 function inputOf(draft: Draft, forPreview = false): ThemeInput {
   const colors = Object.fromEntries(colorFields.map((field) => {
     const value = draft.colors[field].trim();
@@ -38,7 +43,9 @@ function inputOf(draft: Draft, forPreview = false): ThemeInput {
   })) as Record<ColorField, string | null>;
   return {
     logo_media_id: draft.logo_media_id, favicon_media_id: draft.favicon_media_id, logo_alt: draft.logo_alt.trim(),
-    linkback_url: orNull(draft.linkback_url), contact_url: orNull(draft.contact_url), contact_phone: orNull(draft.contact_phone),
+    linkback_url: forPreview ? previewable(draft, 'linkback_url') : orNull(draft.linkback_url),
+    contact_url: forPreview ? previewable(draft, 'contact_url') : orNull(draft.contact_url),
+    contact_phone: forPreview ? previewable(draft, 'contact_phone') : orNull(draft.contact_phone),
     colors, body_font: fontOrNull(draft.body_font), heading_font: fontOrNull(draft.heading_font),
   };
 }
@@ -64,6 +71,8 @@ export function HelpCenterThemeForm({ canManage }: { canManage: boolean }) {
   const [draft, setDraft] = useState<Draft>();
   const [page, setPage] = useState<PreviewPage>('home');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Set by a refused save: the next errors shown move the focus to the first control they name.
+  const refused = useRef(false);
   // The form starts from the saved brand once; a refetch in the background never replaces what is being typed.
   useEffect(() => { if (theme.data) setDraft((editing) => editing ?? draftOf(theme.data)); }, [theme.data]);
   const save = useMutation({
@@ -73,12 +82,19 @@ export function HelpCenterThemeForm({ canManage }: { canManage: boolean }) {
       client.setQueryData(['help-center-theme'], saved);
       setDraft(draftOf(saved));
     },
-    onError: (error) => { if (error instanceof ThemeInvalidError) setErrors(error.fields); },
+    onError: (error) => {
+      if (!(error instanceof ThemeInvalidError)) return;
+      refused.current = true;
+      setErrors(error.fields);
+    },
   });
   const current = draft ?? (theme.data ? draftOf(theme.data) : defaultLook);
-  const live = useThemePreview(page, inputOf(canManage ? current : (theme.data ? draftOf(theme.data) : defaultLook), true));
-  // After a refused save, the first control it names takes the focus.
+  // No preview of the default look while the saved brand loads: the first one shows the saved brand.
+  const live = useThemePreview(page, inputOf(canManage ? current : (theme.data ? draftOf(theme.data) : defaultLook), true), theme.data !== undefined);
+  // After a refused save, the first control it names takes the focus; an edit that clears one does not move it.
   useEffect(() => {
+    if (!refused.current) return;
+    refused.current = false;
     const first = fieldOrder.find((field) => errors[field]);
     if (first) document.getElementById(controlId(first))?.focus();
   }, [errors]);
@@ -86,7 +102,17 @@ export function HelpCenterThemeForm({ canManage }: { canManage: boolean }) {
   if (!theme.data) return null;
   const checks = live.preview?.checks ?? theme.data.checks;
   const effective = effectiveColors(checks);
-  const change = (next: Partial<Draft>) => { save.reset(); setDraft({ ...current, ...next }); };
+  // An edit clears the refusal of each field it changes, so the field shows its live hint again.
+  const change = (next: Partial<Draft>) => {
+    save.reset();
+    const edited = Object.keys(next).flatMap((key) => (key === 'colors'
+      ? colorFields.filter((field) => next.colors?.[field] !== current.colors[field]).map((field) => `colors.${field}`)
+      : [key]));
+    setErrors((shown) => (edited.some((field) => shown[field])
+      ? Object.fromEntries(Object.entries(shown).filter(([field]) => !edited.includes(field)))
+      : shown));
+    setDraft({ ...current, ...next });
+  };
   const preview = <HelpCenterPreview html={live.preview?.html} pending={live.pending} error={live.error} page={page} onPage={setPage} />;
   if (!canManage) return <div className="theme-layout"><ReadOnly theme={theme.data} />{preview}</div>;
 
@@ -96,7 +122,7 @@ export function HelpCenterThemeForm({ canManage }: { canManage: boolean }) {
       <div className="field"><label htmlFor={id}>{label}</label>
         <input id={id} type={type} value={current[field]} maxLength={maxLength} aria-invalid={errors[field] ? true : undefined} aria-describedby={`${id}-hint`}
           onChange={(event) => change({ [field]: event.target.value })} />
-        <Hint id={`${id}-hint`} help={help} error={errors[field]} /></div>
+        <Hint id={`${id}-hint`} help={help} error={errors[field]} warning={field !== 'logo_alt' && incomplete(current, field) ? text.shapeHints[field] : undefined} /></div>
     );
   };
   const fontField = (field: 'body_font' | 'heading_font', label: string, fallback: string) => (

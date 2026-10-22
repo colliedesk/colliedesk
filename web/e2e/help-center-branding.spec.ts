@@ -4,8 +4,6 @@ import type { Page } from '@playwright/test';
 import { servers } from './support/cli';
 import { createWorkspaceWithSlug } from './support/workspace';
 
-// axe is a script the test injects; the help center's own CSP (script-src 'none') would refuse it.
-test.use({ bypassCSP: true });
 
 // A 4 × 2 white PNG: a logo for the blue header.
 const logoPNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAIAAADwyuo0AAAADklEQVR4nGP4jwQYkDkANvEX6SAXxcIAAAAASUVORK5CYII=', 'base64');
@@ -51,59 +49,65 @@ async function helpCenter(page: Page, name: string) {
   return { slug, base: `${servers.main}/help/${slug}`, headers };
 }
 
-test('help center branding: with the default look every page passes axe, in light and in dark', async ({ page }) => {
-  const { base } = await helpCenter(page, 'default-look');
-  await noViolations(page, base, 'default', ['light', 'dark']);
-});
+test.describe('public pages', () => {
+  // axe is a script the test injects; the help center's own CSP (script-src 'none') would refuse it.
+  // Only these tests bypass it: the preview test below runs under the preview's own policy.
+  test.use({ bypassCSP: true });
 
-test('help center branding: a brand set through the API shows on every page, light only, passes axe, keeps keyboard focus and hover readable and fits a 320 px phone', async ({ page }) => {
-  const { slug, base, headers } = await helpCenter(page, 'brand');
-  const upload = await page.request.post(`${servers.main}/api/v1/kb/images`, { headers: { ...headers, 'Content-Type': 'image/png' }, data: logoPNG });
-  expect(upload.status()).toBe(201);
-  const { id: logo } = await upload.json() as { id: string };
-  expect((await page.request.put(`${servers.main}/api/v1/help-center/theme`, { headers, data: theme(logo) })).status()).toBe(200);
+  test('help center branding: with the default look every page passes axe, in light and in dark', async ({ page }) => {
+    const { base } = await helpCenter(page, 'default-look');
+    await noViolations(page, base, 'default', ['light', 'dark']);
+  });
 
-  await page.emulateMedia({ colorScheme: 'dark' });
-  await page.goto(base);
-  const masthead = page.getByRole('banner');
-  await expect(masthead.getByRole('link', { name: 'Acme', exact: true })).toHaveAttribute('href', `/help/${slug}`);
-  const image = masthead.getByRole('img', { name: 'Acme' });
-  await expect(image).toHaveJSProperty('naturalWidth', 4);
-  await expect(masthead.getByRole('link', { name: host })).toHaveAttribute('href', `https://${host}/`);
-  await expect(page.getByRole('contentinfo').getByRole('link', { name: 'help@acme.example' })).toHaveAttribute('href', 'mailto:help@acme.example');
-  await expect(page.getByRole('contentinfo').getByRole('link', { name: '+1 (555) 010-2030' })).toHaveAttribute('href', 'tel:+15550102030');
-  await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', `/help/${slug}/_/icon/${logo}`);
-  // A brand is light only: a reader set to dark still sees the brand's colors.
-  await expect(masthead).toHaveCSS('background-color', 'rgb(11, 92, 173)');
-  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  test('help center branding: a brand set through the API shows on every page, light only, passes axe, keeps keyboard focus and hover readable and fits a 320 px phone', async ({ page }) => {
+    const { slug, base, headers } = await helpCenter(page, 'brand');
+    const upload = await page.request.post(`${servers.main}/api/v1/kb/images`, { headers: { ...headers, 'Content-Type': 'image/png' }, data: logoPNG });
+    expect(upload.status()).toBe(201);
+    const { id: logo } = await upload.json() as { id: string };
+    expect((await page.request.put(`${servers.main}/api/v1/help-center/theme`, { headers, data: theme(logo) })).status()).toBe(200);
 
-  // The brand is light only (proved above under dark), so axe checks its colors once, in light.
-  await noViolations(page, base, 'brand', ['light']);
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.goto(base);
+    const masthead = page.getByRole('banner');
+    await expect(masthead.getByRole('link', { name: 'Acme', exact: true })).toHaveAttribute('href', `/help/${slug}`);
+    const image = masthead.getByRole('img', { name: 'Acme' });
+    await expect(image).toHaveJSProperty('naturalWidth', 4);
+    await expect(masthead.getByRole('link', { name: host })).toHaveAttribute('href', `https://${host}/`);
+    await expect(page.getByRole('contentinfo').getByRole('link', { name: 'help@acme.example' })).toHaveAttribute('href', 'mailto:help@acme.example');
+    await expect(page.getByRole('contentinfo').getByRole('link', { name: '+1 (555) 010-2030' })).toHaveAttribute('href', 'tel:+15550102030');
+    await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', `/help/${slug}/_/icon/${logo}`);
+    // A brand is light only: a reader set to dark still sees the brand's colors.
+    await expect(masthead).toHaveCSS('background-color', 'rgb(11, 92, 173)');
+    await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
 
-  // Focus rings next to the blue header band: the skip link takes the header's white ring there, and
-  // the compact search button draws its ring inside itself, in its own white ink. Hovered, the button
-  // darkens (#0a5198), so its white text gains contrast.
-  await page.goto(`${base}/a/1-reset-your-password`);
-  await page.keyboard.press('Tab');
-  const skip = page.getByRole('link', { name: 'Skip to content' });
-  await expect(skip).toBeFocused();
-  await expect.soft(skip).toHaveCSS('outline-color', 'rgb(255, 255, 255)');
-  const searchButton = page.getByRole('banner').getByRole('button', { name: 'Search' });
-  await searchButton.focus();
-  await expect.soft(searchButton).toHaveCSS('outline-color', 'rgb(255, 255, 255)');
-  await expect.soft(searchButton).toHaveCSS('outline-offset', '-6px');
-  await searchButton.hover();
-  await expect.soft(searchButton).toHaveCSS('background-color', 'rgb(10, 81, 152)');
+    // The brand is light only (proved above under dark), so axe checks its colors once, in light.
+    await noViolations(page, base, 'brand', ['light']);
 
-  // On a 320 px phone the long host ends in an ellipsis instead of scrolling the page sideways; its
-  // title still holds it whole.
-  await page.setViewportSize({ width: 320, height: 640 });
-  await page.goto(base);
-  await expect.soft(masthead.getByRole('link', { name: host })).toHaveAttribute('title', host);
-  const { scrollWidth, clientWidth } = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth,
-  }));
-  expect.soft(scrollWidth, 'page width at 320 px').toBeLessThanOrEqual(clientWidth);
+    // Focus rings next to the blue header band: the skip link takes the header's white ring there, and
+    // the compact search button draws its ring inside itself, in its own white ink. Hovered, the button
+    // darkens (#0a5198), so its white text gains contrast.
+    await page.goto(`${base}/a/1-reset-your-password`);
+    await page.keyboard.press('Tab');
+    const skip = page.getByRole('link', { name: 'Skip to content' });
+    await expect(skip).toBeFocused();
+    await expect.soft(skip).toHaveCSS('outline-color', 'rgb(255, 255, 255)');
+    const searchButton = page.getByRole('banner').getByRole('button', { name: 'Search' });
+    await searchButton.focus();
+    await expect.soft(searchButton).toHaveCSS('outline-color', 'rgb(255, 255, 255)');
+    await expect.soft(searchButton).toHaveCSS('outline-offset', '-6px');
+    await searchButton.hover();
+    await expect.soft(searchButton).toHaveCSS('background-color', 'rgb(10, 81, 152)');
+
+    // On a 320 px phone the long host ends in an ellipsis instead of scrolling the page sideways; its
+    // title still holds it whole.
+    await page.setViewportSize({ width: 320, height: 640 });
+    await page.goto(base);
+    await expect.soft(masthead.getByRole('link', { name: host })).toHaveAttribute('title', host);
+    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth,
+    }));
+    expect.soft(scrollWidth, 'page width at 320 px').toBeLessThanOrEqual(clientWidth);
+  });
 });
 
 // counted wraps the person's clicks and typed inputs, so the test can hold the path to a branded help
@@ -142,9 +146,25 @@ test('help center branding: from Settings to a branded public page takes at most
   await expect(frame).toHaveAttribute('srcdoc', /--accent:#0b5cad;/);
   await expect(frame).toHaveAttribute('srcdoc', /script-src 'none'/);
   const inside = page.frameLocator('iframe[title="Preview of the help center"]');
+  // Under the preview's own policy (CSP is not bypassed here): the logo loads from the library, the help
+  // center's sheet from its hashed address and the brand from the inline block.
   await expect(inside.getByRole('banner').getByRole('img', { name: 'Acme help' })).toHaveJSProperty('naturalWidth', 4);
-  // Not a step to the branded page, so not counted: a link in the preview leaves the page where it is.
-  await inside.getByRole('link', { name: 'Guides' }).first().click();
+  await expect(inside.getByRole('button', { name: 'Search', exact: true })).toHaveCSS('background-color', 'rgb(11, 92, 173)');
+  // Not a step to the branded page, so not counted: a link in the preview leaves the page where it is,
+  // clicked or opened from the keyboard. A navigation would be a framenavigated event away from
+  // about:srcdoc; the race gives it 1.5 s after both attempts and expects none.
+  const preview = await (await frame.elementHandle())!.contentFrame();
+  expect(preview).not.toBeNull();
+  await preview!.waitForLoadState('load');
+  const navigated = page.waitForEvent('framenavigated', { predicate: (changed) => changed === preview && changed.url() !== 'about:srcdoc', timeout: 1_500 })
+    .then((changed) => changed.url(), () => undefined);
+  const guides = inside.getByRole('link', { name: 'Guides' }).first();
+  // force: the link takes no pointer (that is the point), so the click lands where a person's would.
+  await guides.click({ force: true });
+  await guides.focus();
+  await page.keyboard.press('Enter');
+  expect(await navigated, 'address the preview navigated to').toBeUndefined();
+  expect(preview!.url()).toBe('about:srcdoc');
   await expect(inside.getByRole('heading', { name: 'How can we help?' })).toBeVisible();
 
   await person.click(brand.getByRole('button', { name: 'Save brand' }));

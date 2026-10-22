@@ -10,8 +10,21 @@ import (
 const previewPath = "/api/v1/help-center/theme/preview"
 
 // previewCSP is the policy every preview document carries in a meta element: it is shown in a frame of
-// the app, so it must hold its own rules whatever the app's page allows.
-const previewCSP = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'none'; form-action 'none'; base-uri 'none'">`
+// the app, so it must hold its own rules whatever the app's page allows. Images load only from the
+// workspace's own image and media routes, and style only from the help center's hashed sheets and the
+// inline brand block.
+const previewCSP = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ` + testOrigin + `/api/v1/kb/images/ ` + testOrigin +
+	`/api/v1/kb/media/; style-src ` + testOrigin + `/help/_/ 'unsafe-inline'; script-src 'none'; form-action 'none'; base-uri 'none'">`
+
+// previewStyle is the inline block of a preview document: the candidate brand only, with links inert.
+func previewStyle(t *testing.T, html string) string {
+	t.Helper()
+	start, end := strings.Index(html, "<style>"), strings.Index(html, "</style>")
+	if start < 0 || end < start {
+		t.Fatalf("the preview has no inline style:\n%.500s", html)
+	}
+	return html[start:end]
+}
 
 type previewView struct {
 	HTML   string            `json:"html"`
@@ -76,11 +89,24 @@ func TestHelpCenterThemePreviewShowsTheCandidateOnTheWorkspacesOwnPages(t *testi
 	shared := []string{
 		"<!doctype html>", previewCSP, "<style>", "--accent:#0b5cad;", "--font-body:Seravek", `<meta name="color-scheme" content="light">`,
 		`<img class="brand-logo" src="/api/v1/kb/media/` + logo.ID + `" alt="Acme"`,
+		// The help center's own sheet loads by its hashed, immutable address, so the browser keeps it
+		// between previews instead of receiving it again in every answer.
+		`<link rel="stylesheet" href="/help/_/site-`,
 	}
-	never := []string{"<script", "<link rel=\"stylesheet\"", "style=", "Secret roadmap", "Unreleased plans", "Other team", otherLogo.ID, "/_/brand-"}
+	never := []string{"<script", "style=", "Secret roadmap", "Unreleased plans", "Other team", otherLogo.ID, "/_/brand-"}
 	wantHTML(t, "home preview", home.HTML, append(shared, "Guides", "Reset your password"), never)
-	if strings.Index(home.HTML, previewCSP) > strings.Index(home.HTML, "<style>") {
+	if strings.Index(home.HTML, previewCSP) > strings.Index(home.HTML, "<style>") || strings.Index(home.HTML, previewCSP) > strings.Index(home.HTML, "<link rel=\"stylesheet\"") {
 		t.Error("the policy must come before the style it governs")
+	}
+	// The brand overrides the sheet's defaults, as the brand sheet does on the public pages: it comes after.
+	if strings.Index(home.HTML, "<style>") < strings.Index(home.HTML, `<link rel="stylesheet" href="/help/_/site-`) {
+		t.Error("the inline brand must come after the help center's sheet")
+	}
+	// The inline block is the brand, not the help center's sheet, and makes links inert from the first
+	// paint: nothing in the frame follows a pointer before the app can hold its links.
+	style := previewStyle(t, home.HTML)
+	if strings.Contains(style, ".masthead") || !strings.Contains(style, "pointer-events:none") {
+		t.Errorf("preview inline style = %.400s", style)
 	}
 
 	article := preview(t, api, admin, "article", theme, http.StatusOK)
@@ -178,4 +204,55 @@ func TestHelpCenterThemePreviewIsLimitedPerPerson(t *testing.T) {
 		t.Fatalf("601st preview status=%d headers=%v, want 429 with Retry-After", busy.Code, busy.Header())
 	}
 	preview(t, api, agent, "home", map[string]any{}, http.StatusOK)
+}
+
+// A preview is one workspace transaction after the session's, whichever page it shows: no more than
+// reading the saved theme.
+func TestHelpCenterThemePreviewReadsInOneTransaction(t *testing.T) {
+	counter := &queryCounter{}
+	api, service, _, _ := testAPIOnPool(t, testPoolTraced(t, counter), nil)
+	admin := createSession(t, api, service, "Preview Trips", "admin@preview-trips.example.com")
+	guides := kbCollection(t, api, admin, map[string]any{"name": "Guides"})
+	kbArticle(t, api, admin, map[string]any{"collection_id": guides.ID, "title": "Reset your password", "status": "published", "body_md": "Open **Settings**."})
+	logo := uploadKBImage(t, api, admin, kbPNG, http.StatusCreated)
+	theme := map[string]any{"logo_media_id": logo.ID, "favicon_media_id": logo.ID, "colors": map[string]any{"primary": "#0b5cad"}}
+	begins := func(method, path string, body any) int {
+		t.Helper()
+		// The second call of each: the first may write the session's last-seen time.
+		for range 2 {
+			counter.mu.Lock()
+			counter.begins = 0
+			counter.mu.Unlock()
+			if response := request(t, api, method, path, body, admin, nil); response.Code != http.StatusOK {
+				t.Fatalf("%s %s status=%d body=%.300s", method, path, response.Code, response.Body.String())
+			}
+		}
+		counter.mu.Lock()
+		defer counter.mu.Unlock()
+		return counter.begins
+	}
+	read := begins(http.MethodGet, themePath, nil)
+	for _, page := range []string{"home", "article"} {
+		if got := begins(http.MethodPost, previewPath, map[string]any{"page": page, "theme": theme}); got != read {
+			t.Errorf("%s preview cost %d transactions, reading the theme %d", page, got, read)
+		}
+	}
+}
+
+// A video or player in the previewed article shows as a plain box that says where it plays, instead of
+// a box the preview's policy blocks: the frame loads no media and no other site.
+func TestHelpCenterThemePreviewShowsVideosAsAPlaceholder(t *testing.T) {
+	api, service, _, _ := testAPIWithStorage(t)
+	admin := createSession(t, api, service, "Preview Video", "admin@preview-video.example.com")
+	data := mediaVideo(t, "h264.mp4")
+	video := uploadKBVideo(t, api, admin, data, len(data), nil)
+	guides := kbCollection(t, api, admin, map[string]any{"name": "Guides"})
+	kbArticle(t, api, admin, map[string]any{"collection_id": guides.ID, "title": "Product tour", "status": "published",
+		"body_md": "Watch this.\n\n<video src=\"" + video.URL + "\"></video>\n\n<iframe src=\"https://www.youtube.com/embed/jNQXAC9IVRw\"></iframe>\n\nThe end."})
+	article := preview(t, api, admin, "article", map[string]any{}, http.StatusOK)
+	wantHTML(t, "article preview with videos", article.HTML, []string{previewCSP, "Watch this.", "The end.", `<span class="preview-video">Video shown on the live help center</span>`},
+		[]string{"<video", "<iframe", "youtube", video.ID})
+	if got := strings.Count(article.HTML, "Video shown on the live help center"); got != 2 {
+		t.Errorf("placeholders = %d, want 2", got)
+	}
 }

@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
+import { previewPolicy } from './help-center-preview';
 import { HelpCenterThemeForm } from './help-center-theme-form';
 import { ids, json, serve } from './kb.test.fixture';
 
@@ -18,7 +19,10 @@ const saved = {
   logo_media_id: ids.image, favicon_media_id: null, logo_alt: 'Acme', linkback_url: 'https://acme.example/', contact_url: null, contact_phone: '+1 555 0100',
   colors: { ...noColors, primary: '#0b5cad' }, body_font: 'humanist-sans', heading_font: null, content_version: 4, updated_at: '2026-10-22T00:00:00Z', checks: defaultChecks,
 };
-const preview = { html: '<!doctype html><meta charset="utf-8">', ok: true, checks: defaultChecks, fields: {} };
+const preview = {
+  html: `<!doctype html><meta charset="utf-8">\n<meta http-equiv="Content-Security-Policy" content="${previewPolicy(window.location.origin)}">\n<h1>Acme help</h1>`,
+  ok: true, checks: defaultChecks, fields: {},
+};
 
 function open(canManage: boolean) {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><HelpCenterThemeForm canManage={canManage} /></QueryClientProvider>);
@@ -120,4 +124,87 @@ test('an agent sees the brand but has no control to change it', async () => {
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Save|Reset|Upload|Remove/ })).not.toBeInTheDocument();
+});
+
+test('a website, contact link or phone number still being typed leaves the preview working: it is sent as empty and its field says the shape', async () => {
+  const calls = serve({
+    'GET /api/v1/help-center/theme': () => json(200, saved),
+    'POST /api/v1/help-center/theme/preview': () => json(200, preview),
+    'PUT /api/v1/help-center/theme': () => json(422, { error: { code: 'validation_failed', message: 'Check the highlighted fields. Nothing was saved.', fields: { linkback_url: 'Send an absolute http or https address with a host name and no user name.' } } }),
+  });
+  open(true);
+  const website = await screen.findByRole('textbox', { name: 'Your website' });
+  const contact = screen.getByRole('textbox', { name: 'Contact link' });
+  const phone = screen.getByRole('textbox', { name: 'Phone number' });
+  fireEvent.change(website, { target: { value: 'https:' } });
+  fireEvent.change(contact, { target: { value: 'mailto:help@' } });
+  fireEvent.change(phone, { target: { value: '+1 555 01a' } });
+  await waitFor(() => {
+    const sent = calls.filter((call) => call.method === 'POST').at(-1)?.body as { theme: Record<string, unknown> } | undefined;
+    expect(sent?.theme).toMatchObject({ linkback_url: null, contact_url: null, contact_phone: null });
+  });
+  expect(website).toHaveAccessibleDescription('Not in the preview yet: write an address such as https://example.com.');
+  expect(contact).toHaveAccessibleDescription('Not in the preview yet: write an https:// address, or mailto: and one email address.');
+  expect(phone).toHaveAccessibleDescription('Not in the preview yet: use digits, spaces and + - ( ).');
+  expect(website).not.toHaveAttribute('aria-invalid');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+  // Complete values go to the preview as typed.
+  fireEvent.change(website, { target: { value: 'https://acme.example' } });
+  fireEvent.change(contact, { target: { value: 'mailto:help@acme.example' } });
+  fireEvent.change(phone, { target: { value: '+1 (555) 010-2030' } });
+  await waitFor(() => {
+    const sent = calls.filter((call) => call.method === 'POST').at(-1)?.body as { theme: Record<string, unknown> };
+    expect(sent.theme).toMatchObject({ linkback_url: 'https://acme.example', contact_url: 'mailto:help@acme.example', contact_phone: '+1 (555) 010-2030' });
+  });
+  expect(website).toHaveAccessibleDescription('Linked from the top of every page. An address starting with https:// or http://.');
+
+  // Save still sends what is written, and the server decides.
+  fireEvent.change(website, { target: { value: 'https:' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save brand' }));
+  await waitFor(() => expect(website).toHaveAttribute('aria-invalid', 'true'));
+  expect((calls.find((call) => call.method === 'PUT')?.body as { linkback_url: string }).linkback_url).toBe('https:');
+});
+
+test('editing a field a refused save named clears its message there, shows its live hint again, and leaves the focus where the person types', async () => {
+  const text = 'Text on the background is 2.85:1; it needs 4.5:1. #5c5c5c passes.';
+  const link = 'Links on the background is 3:1; it needs 4.5:1.';
+  serve({
+    'GET /api/v1/help-center/theme': () => json(200, saved),
+    'POST /api/v1/help-center/theme/preview': () => json(200, preview),
+    'PUT /api/v1/help-center/theme': () => json(422, { error: { code: 'contrast_too_low', message: `${text} Nothing was saved.`, fields: { 'colors.text': text, 'colors.link': link, linkback_url: 'Send an absolute http or https address.' } } }),
+  });
+  open(true);
+  const textColor = await screen.findByRole('textbox', { name: 'Text color' });
+  fireEvent.change(textColor, { target: { value: '#999999' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save brand' }));
+  const website = screen.getByRole('textbox', { name: 'Your website' });
+  await waitFor(() => expect(website).toHaveFocus());
+
+  fireEvent.change(textColor, { target: { value: '#5c5c5c' } });
+  textColor.focus();
+  expect(textColor).not.toHaveAttribute('aria-invalid');
+  await waitFor(() => expect(textColor).toHaveAccessibleDescription('Contrast 15.51:1 (needs 4.5:1)'));
+  // The others keep theirs until they are edited, and the focus stays in the field being typed in.
+  expect(screen.getByRole('textbox', { name: 'Link color' })).toHaveAttribute('aria-invalid', 'true');
+  expect(website).toHaveAttribute('aria-invalid', 'true');
+  expect(textColor).toHaveFocus();
+
+  fireEvent.change(website, { target: { value: 'https://acme.example' } });
+  expect(website).not.toHaveAttribute('aria-invalid');
+  expect(website).toHaveAccessibleDescription('Linked from the top of every page. An address starting with https:// or http://.');
+});
+
+test('the preview waits for the saved brand: no request for the default look while it loads', async () => {
+  let loaded: (response: Response) => void = () => {};
+  const calls = serve({
+    'GET /api/v1/help-center/theme': () => new Promise<Response>((resolve) => { loaded = resolve; }),
+    'POST /api/v1/help-center/theme/preview': () => json(200, preview),
+  });
+  open(true);
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  expect(calls.filter((call) => call.method === 'POST')).toHaveLength(0);
+  loaded(json(200, saved));
+  await waitFor(() => expect(calls.filter((call) => call.method === 'POST')).toHaveLength(1));
+  expect((calls.find((call) => call.method === 'POST')?.body as { theme: { linkback_url: string } }).theme.linkback_url).toBe('https://acme.example/');
 });

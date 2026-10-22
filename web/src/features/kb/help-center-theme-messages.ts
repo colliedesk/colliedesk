@@ -31,6 +31,11 @@ export const themeMessages = {
   contactHelp: 'Shown in the footer: an https:// address, or mailto: and one email address.',
   phone: 'Phone number',
   phoneHelp: 'Shown in the footer: digits, spaces and + - ( ).',
+  shapeHints: {
+    linkback_url: 'Not in the preview yet: write an address such as https://example.com.',
+    contact_url: 'Not in the preview yet: write an https:// address, or mailto: and one email address.',
+    contact_phone: 'Not in the preview yet: use digits, spaces and + - ( ).',
+  },
   colors: 'Colors',
   colorsHelp: 'Empty uses the default. With any color set, the pages stay light even for readers who use dark mode.',
   colorNames: {

@@ -9,12 +9,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const policy = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'none'; form-action 'none'; base-uri 'none'">`;
+const origin = window.location.origin;
+const expectedPolicy = `default-src 'none'; img-src ${origin}/api/v1/kb/images/ ${origin}/api/v1/kb/media/; style-src ${origin}/help/_/ 'unsafe-inline'; script-src 'none'; form-action 'none'; base-uri 'none'`;
+const policy = `<meta http-equiv="Content-Security-Policy" content="${expectedPolicy}">`;
 const page = (title: string) => `<!doctype html><html><head><meta charset="utf-8">\n${policy}\n<style>:root{}</style><title>${title}</title></head><body><h1>${title}</h1></body></html>`;
 const answer = (html: string) => ({ html, ok: true, checks: [], fields: {} });
 
-test('the preview frame may show images of the app but run nothing: sandbox without allow-scripts, and the document holds script-src none', () => {
-  expect(previewPolicy).toBe("default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'none'; form-action 'none'; base-uri 'none'");
+test('the preview frame may show images of the workspace but run nothing: sandbox without allow-scripts, and the document holds script-src none', () => {
+  // Images only from the knowledge base's image and media routes, style only from the help center's sheets.
+  expect(previewPolicy(origin)).toBe(expectedPolicy);
   render(<HelpCenterPreview html={page('Acme help')} pending={false} page="home" onPage={() => {}} />);
   const frame = screen.getByTitle('Preview of the help center');
   expect(frame.tagName).toBe('IFRAME');
@@ -24,10 +27,14 @@ test('the preview frame may show images of the app but run nothing: sandbox with
   expect(frame.getAttribute('srcdoc')).toContain('<h1>Acme help</h1>');
 });
 
-test('a document without its own policy is never put in the frame', () => {
-  render(<HelpCenterPreview html="<!doctype html><title>x</title><h1>Unsafe</h1>" pending={false} page="home" onPage={() => {}} />);
-  expect(screen.queryByTitle('Preview of the help center')).not.toBeInTheDocument();
-  expect(screen.getByRole('alert')).toHaveTextContent('The preview could not be shown.');
+test('a document without its own policy, or with a wider one, is never put in the frame', () => {
+  const wider = page('Wide').replace(expectedPolicy, "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'none'; form-action 'none'; base-uri 'none'");
+  for (const html of ['<!doctype html><title>x</title><h1>Unsafe</h1>', wider]) {
+    const { unmount } = render(<HelpCenterPreview html={html} pending={false} page="home" onPage={() => {}} />);
+    expect(screen.queryByTitle('Preview of the help center')).not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('The preview could not be shown.');
+    unmount();
+  }
 });
 
 test('the width and page controls are labelled radios; Phone narrows the frame and the page choice is passed on', () => {
@@ -87,4 +94,32 @@ test('a failed preview says so and keeps the last page shown', async () => {
   await act(async () => { await vi.advanceTimersByTimeAsync(300); });
   expect(result.current.preview?.html).toBe('first');
   expect(result.current.error).toBe('The preview could not be shown.');
+});
+
+test('nothing is asked after the preview goes away, not even the change that was waiting', async () => {
+  vi.useFakeTimers();
+  const pending: ((response: Response) => void)[] = [];
+  serve({ 'POST /api/v1/help-center/theme/preview': () => new Promise<Response>((resolve) => pending.push(resolve)) });
+  const { rerender, unmount } = renderHook(({ value }) => useThemePreview('home', value), { initialProps: { value: { colors: { primary: '#000001' } } as ThemeInput } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+  expect(pending).toHaveLength(1);
+  rerender({ value: { colors: { primary: '#000002' } } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+  unmount();
+  await act(async () => { pending[0]!(json(200, answer('late'))); await vi.advanceTimersByTimeAsync(1000); });
+  expect(pending).toHaveLength(1);
+});
+
+test('no preview is asked while the hook is not enabled; once enabled, the theme of that moment goes out', async () => {
+  vi.useFakeTimers();
+  const calls = serve({ 'POST /api/v1/help-center/theme/preview': () => json(200, answer('saved')) });
+  const { result, rerender } = renderHook(({ value, enabled }) => useThemePreview('home', value, enabled),
+    { initialProps: { value: {} as ThemeInput, enabled: false } });
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(calls.filter((call) => call.method === 'POST')).toHaveLength(0);
+  rerender({ value: { colors: { primary: '#0b5cad' } }, enabled: true });
+  await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+  const posts = calls.filter((call) => call.method === 'POST');
+  expect(posts.map((call) => (call.body as { theme: ThemeInput }).theme.colors?.primary)).toEqual(['#0b5cad']);
+  expect(result.current.preview?.html).toBe('saved');
 });

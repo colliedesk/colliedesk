@@ -265,27 +265,31 @@ func (s *Site) homePage(ctx context.Context, v view) (page, error) {
 	if err != nil {
 		return page{}, err
 	}
-	roots := visible(t.roots)
-	byCollection := map[string][]articleLink{}
-	if len(roots) > 0 {
+	var articles []domain.PublicKBArticle
+	if roots := visible(t.roots); len(roots) > 0 {
 		ids := make([]string, len(roots))
 		for index, root := range roots {
 			ids[index] = root.ID
 		}
-		articles, err := s.config.Store.HelpCenterArticles(ctx, v.site.WorkspaceID, ids, 0, homeArticles)
-		if err != nil {
+		if articles, err = s.config.Store.HelpCenterArticles(ctx, v.site.WorkspaceID, ids, 0, homeArticles); err != nil {
 			return page{}, err
 		}
-		for _, article := range articles {
-			byCollection[article.CollectionID] = append(byCollection[article.CollectionID], v.articleLinks([]domain.PublicKBArticle{article}, 0)...)
-		}
+	}
+	return s.homeOf(v, t, articles), nil
+}
+
+// homeOf is the home page of the tree t, with articles the first ones of its top collections.
+func (s *Site) homeOf(v view, t tree, articles []domain.PublicKBArticle) page {
+	byCollection := map[string][]articleLink{}
+	for _, article := range articles {
+		byCollection[article.CollectionID] = append(byCollection[article.CollectionID], v.articleLinks([]domain.PublicKBArticle{article}, 0)...)
 	}
 	data := s.page(v, "", nil)
 	data.HeroSearch, data.Canonical = true, v.address
-	for _, root := range roots {
+	for _, root := range visible(t.roots) {
 		data.Collections = append(data.Collections, v.card(root, byCollection[root.ID]))
 	}
-	return data, nil
+	return data
 }
 
 func (s *Site) collection(response http.ResponseWriter, request *http.Request, v view, path string) {
@@ -401,6 +405,13 @@ func (s *Site) articlePage(ctx context.Context, v view, article domain.PublicKBA
 	if err != nil {
 		return page{}, false, err
 	}
+	data, plain = s.articleOf(v, t, article, neighbours)
+	return data, plain, nil
+}
+
+// articleOf is the page of article in the tree t, beside neighbours, the first articles of its
+// collection. plain is true when it shows the text as written because rendering took too long.
+func (s *Site) articleOf(v view, t tree, article domain.PublicKBArticle, neighbours []domain.PublicKBArticle) (data page, plain bool) {
 	rendered := s.renders.article(v.site.WorkspaceID, article.Number, v.base, article.BodyMD, article.Videos...)
 	collection := t.byID[article.CollectionID]
 	data = s.page(v, article.Title, v.crumbs(collection))
@@ -412,7 +423,7 @@ func (s *Site) articlePage(ctx context.Context, v view, article domain.PublicKBA
 		data.CollectionName, data.Collection = collection.Name, v.collectionURL(collection)
 	}
 	data.Neighbours = v.articleLinks(neighbours, article.Number)
-	return data, rendered.plain, nil
+	return data, rendered.plain
 }
 
 func (s *Site) search(response http.ResponseWriter, request *http.Request, v view) {

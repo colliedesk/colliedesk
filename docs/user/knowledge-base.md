@@ -304,14 +304,17 @@ In Settings:
   greyed in the field. Under each color is its contrast; one that would be refused says why and
   which color passes. **Reset** clears one color; **Reset to default look** clears the whole brand
   in the form (nothing changes until you save).
+- **Your website**, **Contact link** and **Phone number**: while one is not yet a complete address
+  or number, the preview leaves it out and its field says what shape it needs.
 - **Save brand** saves it. A refused save shows each message under its field and moves the focus to
-  the first one.
+  the first one; editing a field clears its message.
 
 **Preview** shows the home page or an article with the brand being edited, at desktop or phone
 width, about 300 ms after you stop typing, before anything is saved. It is the real page built from
 your collections and published articles (never drafts), also while the help center is off; with
-nothing published, the article page shows a sample text. Links in the preview do not open, and the
-preview runs no script. `POST /api/v1/help-center/theme/preview` gives the same page as one HTML
+nothing published, the article page shows a sample text, and a video in the article shows as a box
+that says it plays on the live help center. Links in the preview do not open, and the preview runs
+no script. `POST /api/v1/help-center/theme/preview` gives the same page as one HTML
 document, and `colliedesk_help_center_theme_check` with `preview` (`home` or `article`) gives it to an
 AI agent. Each person may ask for 600 previews a minute.
 

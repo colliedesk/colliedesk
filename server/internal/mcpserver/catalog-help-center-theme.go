@@ -12,7 +12,7 @@ const (
 	themeInputSchema = `{"type":"object","additionalProperties":false,"properties":{` + themeInputProperties + `}}`
 	// The check takes the theme and, to render a page with it, preview.
 	themeCheckInputSchema = `{"type":"object","additionalProperties":false,"properties":{` + themeInputProperties +
-		`,"preview":{"type":"string","enum":["home","article"],"description":"Also render this page of the help center with the theme, as the settings card shows it: html is a whole document with inline style and no script."}}}`
+		`,"preview":{"type":"string","enum":["home","article"],"description":"Also render this page of the help center with the theme, as the settings card shows it: html is a whole document with its own policy, the help center style sheet linked under /help/_/, the brand inline and no script."}}}`
 	themeInputProperties = `"logo_media_id":{"type":["string","null"],"description":"An image of the media library (colliedesk_kb_media_list), outside its trash unless it is the logo the theme already has."},` +
 		`"favicon_media_id":{"type":["string","null"],"description":"An image of the media library for the browser tab."},` +
 		`"logo_alt":{"type":["string","null"],"maxLength":200,"description":"What the logo says, for screen readers; empty uses the title."},` +

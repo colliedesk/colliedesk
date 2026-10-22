@@ -16,10 +16,11 @@ const picker = () => (loadPicker ??= import('./kb-chunk').then((module) => modul
 // controlId is the id of the control that shows a field of the theme, so a refusal can name it.
 export const controlId = (field: string) => `theme-${field.replace(/[._]/g, '-')}`;
 
-// Hint holds what a control's description says: its help, the server's refusal, a local problem.
-export function Hint({ id, help, error }: { id: string; help?: string; error?: string }) {
-  if (!help && !error) return null;
-  return <small id={id} className={error ? 'error-copy theme-hint' : 'muted-copy theme-hint'}>{error ?? help}</small>;
+// Hint holds what a control's description says: the server's refusal, else a local warning (a value the
+// preview leaves out until it is complete), else its help.
+export function Hint({ id, help, warning, error }: { id: string; help?: string; warning?: string; error?: string }) {
+  if (!help && !warning && !error) return null;
+  return <small id={id} className={error ? 'error-copy theme-hint' : warning ? 'theme-hint theme-hint-warn' : 'muted-copy theme-hint'}>{error ?? warning ?? help}</small>;
 }
 
 // ImageField chooses the logo or the favicon: an upload into the media library, a pick from it, or none.
@@ -109,3 +110,26 @@ export function normalize(value: string): string {
 }
 
 export const validHex = (value: string) => hex.test(value.trim());
+
+// The shapes the server accepts for the links and the phone (domain.CleanTheme), checked here only to keep
+// a value still being typed out of the preview; Save sends what is written and the server decides.
+const atom = "[A-Za-z0-9!#$&'*+/=^_`{|}~-]+";
+const dotAtom = `${atom}(?:\\.${atom})*`;
+const mailto = new RegExp(`^mailto:${dotAtom}@${dotAtom}$`, 'i');
+const phoneShape = /^[0-9 +\-()]+$/;
+
+function webAddress(value: string, schemes: readonly string[]): boolean {
+  if (value.length > 2000) return false;
+  try {
+    const parsed = new URL(value);
+    return schemes.includes(parsed.protocol) && parsed.hostname !== '' && !parsed.username && !parsed.password;
+  } catch {
+    return false;
+  }
+}
+
+export const linkShapes = {
+  linkback_url: (value: string) => webAddress(value, ['http:', 'https:']),
+  contact_url: (value: string) => mailto.test(value) || webAddress(value, ['https:']),
+  contact_phone: (value: string) => value.length <= 40 && phoneShape.test(value) && /[0-9]/.test(value),
+};

@@ -143,16 +143,14 @@ func (a *API) previewHelpCenterTheme(response http.ResponseWriter, request *http
 		return
 	}
 	cleaned, err := domain.CleanTheme(input.Theme.theme())
-	if err == nil {
-		err = a.store.CheckHelpCenterThemeMedia(request.Context(), who.Workspace.ID, cleaned)
-	}
 	if err != nil {
 		writeThemeError(response, err)
 		return
 	}
+	// The logo and favicon are checked in the preview's own transaction.
 	html, err := a.helpCenter.Preview(request.Context(), who.Workspace.ID, cleaned, input.Page)
 	if err != nil {
-		writeStoreError(response, err)
+		writeThemeError(response, err)
 		return
 	}
 	checks, fields := domain.ThemeContrast(cleaned.Colors)

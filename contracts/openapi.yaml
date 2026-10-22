@@ -3393,10 +3393,12 @@ paths:
         Render a page of the help center with a candidate theme, saving nothing: the real page templates,
         the workspace's live collections and published articles (never drafts), also while the help center
         is off. `page` `article` shows the published article with the lowest number, or a sample text when
-        nothing is published. The answer is one self-contained HTML document for an
-        `<iframe sandbox="allow-same-origin" srcdoc>`: its style is inline and its own policy
-        (`default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'none'`) runs no
-        script; images load from the session's knowledge base routes. Contrast is answered as in
+        nothing is published; a video in it shows as a placeholder. The answer is one HTML document
+        for an `<iframe sandbox="allow-same-origin" srcdoc>`: it links the help center's style sheet
+        under `/help/_/`, carries the candidate brand inline and its own policy (`default-src 'none';
+        img-src <origin>/api/v1/kb/images/ <origin>/api/v1/kb/media/; style-src <origin>/help/_/
+        'unsafe-inline'; script-src 'none'; form-action 'none'; base-uri 'none'`), which runs no script;
+        images load from the session's knowledge base routes and links take no pointer. Contrast is answered as in
         `/theme/check` (200 with `ok` false), so the person sees why Save would refuse; a theme of the
         wrong shape or a logo that is not an image of the library is 422 as on PUT. Each person may ask
         for 600 previews a minute (429 with `Retry-After` beyond).
@@ -4579,7 +4581,7 @@ components:
       type: object
       required: [html, ok, checks, fields]
       properties:
-        html: {type: string, description: 'A whole HTML document with inline style and its own Content-Security-Policy; it holds no script.'}
+        html: {type: string, description: 'A whole HTML document with its own Content-Security-Policy, the help center style sheet linked and the brand inline; it holds no script.'}
         ok: {type: boolean, description: True when every pair passes and the theme can be saved.}
         checks:
           type: array

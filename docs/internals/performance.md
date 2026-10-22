@@ -83,6 +83,18 @@ images, and emphasis runs (goldmark's quadratic paths: up to 24 s before `tame`,
 then 20 visits (not 50, to spare the shared latency runner) read the kept page (4–12 ms).
 `TestHelpCenterRenderedPagesAreNeverSharedAcrossWorkspaces` keeps that memory per workspace.
 
+`TestHelpCenterThemePreviewLatencyBudget` holds the brand preview to the same 100 ms p95. A person
+waits for it 300 ms after each pause in typing, so it is a keystroke path. On the same fixture,
+workspace A with a full candidate brand (logo, favicon, links, seven colors, two fonts): the home page
+and the first published article (100,000 characters) are each previewed 50 times through
+`POST /api/v1/help-center/theme/preview`, after one warm-up. The article is also timed cold: its first
+render on each of three new servers, each held to the budget. On 2026-10-22 locally, before the
+change: home 16 ms p95 (22 KB answer), article 19 ms (127 KB), cold 24–37 ms. After it: home
+9–12 ms (6 KB), article 11–13 ms (110 KB), cold 13–30 ms. The change has two parts. The reads became
+one transaction sent as one batch (`TestHelpCenterThemePreviewReadsInOneTransaction` counts the
+transactions: as many as reading the saved theme). `site.css` is linked by its immutable address
+instead of being inlined in every answer.
+
 ## Pending agent requests budget
 
 `TestPendingAgentRequestsLatencyBudget` holds the store query behind

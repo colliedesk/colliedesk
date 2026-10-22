@@ -4,9 +4,13 @@ import { themeApi } from './theme-api';
 import type { PreviewPage, ThemeInput, ThemePreview } from './theme-api';
 
 // The policy the server writes into every preview document. The frame holds the document only when it
-// carries it, so a preview never runs under whatever the app's own page would allow.
-export const previewPolicy = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'none'; form-action 'none'; base-uri 'none'";
-const policyMeta = `<meta http-equiv="Content-Security-Policy" content="${previewPolicy}">`;
+// carries exactly this one, so a preview never runs under whatever the app's own page would allow. The
+// frame is same-origin and sends the cookie, so the policy names paths rather than the origin: images
+// only from the workspace's image and media routes, style only from the help center's hashed sheets
+// and the inline brand block.
+export const previewPolicy = (origin: string) => `default-src 'none'; img-src ${origin}/api/v1/kb/images/ ${origin}/api/v1/kb/media/; `
+  + `style-src ${origin}/help/_/ 'unsafe-inline'; script-src 'none'; form-action 'none'; base-uri 'none'`;
+const policyMeta = (origin: string) => `<meta http-equiv="Content-Security-Policy" content="${previewPolicy(origin)}">`;
 
 // No allow-scripts, allow-forms, allow-popups or allow-top-navigation: nothing in the page runs, submits
 // or opens. allow-same-origin lets its images load from the app with the session, and lets this page stop
@@ -18,14 +22,15 @@ export const previewDelay = 300;
 
 // useThemePreview renders page with theme on the server: 300 ms after the last change, one request at a
 // time, and an answer for a theme that is no longer the latest is dropped (the latest goes out next).
-// A failure keeps the last page shown.
-export function useThemePreview(page: PreviewPage, theme: ThemeInput) {
+// A failure keeps the last page shown. Nothing is asked while enabled is false (the saved theme is still
+// loading) or after the caller goes away.
+export function useThemePreview(page: PreviewPage, theme: ThemeInput, enabled = true) {
   const key = JSON.stringify({ page, theme });
   const [shown, setShown] = useState<{ key?: string; preview?: ThemePreview; error?: string }>({});
   const queue = useRef({ latest: key, due: undefined as string | undefined, busy: false, timer: 0, alive: true });
   const run = () => {
     const state = queue.current;
-    if (state.busy || state.due === undefined) return;
+    if (!state.alive || state.busy || state.due === undefined) return;
     const body = state.due;
     state.due = undefined;
     state.busy = true;
@@ -42,11 +47,12 @@ export function useThemePreview(page: PreviewPage, theme: ThemeInput) {
     const state = queue.current;
     state.latest = key;
     window.clearTimeout(state.timer);
+    if (!enabled) return;
     state.timer = window.setTimeout(() => {
       state.due = state.latest;
       run();
     }, previewDelay);
-  }, [key]);
+  }, [key, enabled]);
   useEffect(() => {
     const state = queue.current;
     state.alive = true;
@@ -59,7 +65,9 @@ export function useThemePreview(page: PreviewPage, theme: ThemeInput) {
 }
 
 // A click on a link inside the preview would load that address into the frame; the preview is a picture
-// of the page, so it stays where it is. The listener lives in this page, so the frame needs no script.
+// of the page, so it stays where it is. The document's own style takes pointers off its links from the
+// first paint; this listener, which lives in this page so the frame needs no script, also holds a link
+// opened from the keyboard.
 function holdLinks(event: { currentTarget: HTMLIFrameElement }) {
   event.currentTarget.contentDocument?.addEventListener('click', (click) => {
     if ((click.target as Element | null)?.closest?.('a, button')) click.preventDefault();
@@ -75,7 +83,7 @@ export function HelpCenterPreview({ html, pending, error, page, onPage }: {
 }) {
   const id = useId();
   const [width, setWidth] = useState<Width>('desktop');
-  const safe = html !== undefined && html.includes(policyMeta);
+  const safe = html !== undefined && html.includes(policyMeta(window.location.origin));
   const radios = <T extends string>(name: string, legend: string, value: T, options: readonly (readonly [T, string])[], change: (next: T) => void) => (
     <fieldset className="segmented">
       <legend className="sr-only">{legend}</legend>
