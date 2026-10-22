@@ -132,7 +132,7 @@ export function ReplyConflict({ replies, timezone, onSendAnyway, onEdit }: { rep
   const edit = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     edit.current?.focus({ preventScroll: true });
-    return keepInView(panel.current);
+    return keepInView(panel.current, edit.current?.parentElement);
   }, []);
   return (
     <section className="reply-conflict" aria-label={text.newReplies} ref={panel}>

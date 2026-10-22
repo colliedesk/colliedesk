@@ -147,6 +147,11 @@
   .rail-brand { margin-right: 0; }
   .rail-link { gap: var(--space-1); }
 }
+/* A short wide screen (a phone on its side): the reply box and what stands above it (a reply warning, a
+   draft) scroll on their own instead of being cut below the pane. */
+@media (min-width: 44.01rem) {
+  .conversation-center .composer { max-height: 75dvh; overflow-y: auto; }
+}
 @media (max-width: 44rem) {
   .app-main, .app-content { overflow: visible; }
   .account-menu { margin: 0 0 0 auto; }
