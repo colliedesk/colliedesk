@@ -19,7 +19,8 @@ const text = {
   leftOpenShort: (name: string) => `${name} (reply not sent yet)`,
   replying: 'Replying',
   draftOpen: 'Draft open',
-  more: (count: number) => `+${count} more`,
+  more: (count: number) => `Show ${count} more`,
+  fewer: 'Show fewer',
 };
 
 // A reply nobody changed for this long is a draft left open in a tab, not someone typing now.
@@ -93,15 +94,17 @@ export function ConversationViewers({ viewers, timezone }: { viewers: Conversati
     previous.current = now;
     if (added.length > 0) setAnnouncement(added.join('. '));
   }, [said]);
-  const hidden = lines.slice(shownLines);
+  // Past three lines the rest waits behind a button, which works the same with a pointer, a finger or a key.
+  const [expanded, setExpanded] = useState(false);
+  const hidden = expanded ? [] : lines.slice(shownLines);
   return (
     <div className="conversation-viewers">
       <span className="sr-only" aria-live="polite">{announcement}</span>
       {lines.length > 0 && <ul>
-        {lines.slice(0, shownLines).map(({ entry, words }) => <li key={entry.key} data-state={entry.state}><Face entry={entry} /><span>{words}</span></li>)}
-        {hidden.length > 0 && <li className="viewer-more" data-tip={hidden.map((line) => line.words).join('\n')}>
-          <span className="sr-only">{hidden.map((line) => line.words).join('. ')}</span><span aria-hidden="true">{text.more(hidden.length)}</span></li>}
+        {lines.slice(0, expanded ? lines.length : shownLines).map(({ entry, words }) => <li key={entry.key} data-state={entry.state}><Face entry={entry} /><span>{words}</span></li>)}
       </ul>}
+      {(hidden.length > 0 || (expanded && lines.length > shownLines)) && <button type="button" className="link-action viewer-more" aria-expanded={expanded}
+        onClick={() => setExpanded((open) => !open)}>{expanded ? text.fewer : text.more(hidden.length)}</button>}
     </div>
   );
 }

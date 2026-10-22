@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { ConversationViewer } from '../../api/schemas';
 import { ConversationViewers } from './presence-view';
@@ -28,12 +28,14 @@ test('a reply untouched for more than two minutes is a draft left open: the time
   expect(screen.getByRole('listitem')).toHaveTextContent('Lan has a reply not sent yet, untouched since Oct 22, 4:07 PM. Ask them before replying.');
 });
 
-test('past three people the rest is one line, named for a screen reader and in the tip', () => {
+test('past three people the rest waits behind a button that shows them, on any device', () => {
   render(<ConversationViewers timezone="UTC" viewers={['Ann', 'Bob', 'Cy', 'Dee', 'Eve'].map((name) => person(name))} />);
-  const items = screen.getAllByRole('listitem');
-  expect(items).toHaveLength(4);
-  expect(items[3]).toHaveTextContent('+2 more');
-  expect(items[3]).toHaveAttribute('data-tip', 'Dee is viewing\nEve is viewing');
+  expect(screen.getAllByRole('listitem')).toHaveLength(3);
+  const more = screen.getByRole('button', { name: 'Show 2 more' });
+  expect(more).toHaveAttribute('aria-expanded', 'false');
+  fireEvent.click(more);
+  expect(screen.getAllByRole('listitem').map((item) => item.lastElementChild?.textContent).slice(3)).toEqual(['Dee is viewing', 'Eve is viewing']);
+  expect(screen.getByRole('button', { name: 'Show fewer' })).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('a screen reader hears what changed, not the whole list again', () => {
