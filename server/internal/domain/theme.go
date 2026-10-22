@@ -66,6 +66,9 @@ type HelpCenterTheme struct {
 	Colors         ThemeColors `json:"colors"`
 	BodyFont       *string     `json:"body_font"`
 	HeadingFont    *string     `json:"heading_font"`
+	// CustomCSS follows the theme on every page, served exactly as saved; "" is none. Its rules are
+	// helpcenter.CheckCustomCSS, which every write runs before the store.
+	CustomCSS string `json:"custom_css"`
 }
 
 // HelpCenterThemeView is the theme as the API answers it: with the help center's content version and
@@ -151,6 +154,10 @@ func CleanTheme(theme HelpCenterTheme) (HelpCenterTheme, error) {
 	}
 	clean("body_font", &theme.BodyFont, font)
 	clean("heading_font", &theme.HeadingFont, font)
+	// Custom CSS is kept as written, so what is served is what the admin sees; only blank is none.
+	if strings.TrimSpace(theme.CustomCSS) == "" {
+		theme.CustomCSS = ""
+	}
 	if len(fields) > 0 {
 		return HelpCenterTheme{}, &ThemeError{Code: themeInvalidCode, Fields: fields}
 	}

@@ -195,7 +195,8 @@ SOFTWARE.
 
 ## gorilla/css
 
-`github.com/gorilla/css` (https://github.com/gorilla/css), a dependency of bluemonday.
+`github.com/gorilla/css` (https://github.com/gorilla/css), a dependency of bluemonday, also used by
+the server to read the help center's custom CSS (its tokenizer, `scanner`).
 
 ```text
 Copyright (c) 2023 The Gorilla Authors. All rights reserved.

@@ -120,14 +120,50 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   on a help center host). There is no sitemap.
 - **The brand is a second style sheet, not inline style** (`theme.go`). `style-src 'self'` refuses
   inline style, and the CSP stays byte for byte as it is, so `brandCSS` writes the theme as custom
-  properties of `site.css` into `<base>/_/brand-<sha256[:6]>.css`, served after `OpenHelpCenter`,
+  properties of `site.css` into `<base>/_/brand-<sha256[:16]>.css`, served after `OpenHelpCenter`,
   `immutable` like `site.css`; any other `brand-*.css` name is the help center's 404, so a cache
-  never keeps an old look under a live name. It loads after `site.css`, so its `:root` also wins
+  never keeps an old look under a live name. The name keeps 128 bits because an admin writes every
+  byte of the custom CSS: with 48 bits, a second sheet with the name of the current one is a few
+  seconds of brute force, and caches would serve it for a year after the owner restored the first. It loads after `site.css`, so its `:root` also wins
   over the dark palette: with any color set, it sets every color and `color-scheme: light` (owner
   decision: brand colors are chosen for light; the `<meta name="color-scheme">` says `light` too).
-  A theme without colors or fonts has no sheet, so an untouched help center sends what it sent
-  before. Only validated `#rrggbb` colors and the fixed font stacks (system fonts, no `font-src`)
-  reach it; `TestTemplatesCarryNoBrandingScriptOrInlineStyle` checks it with every font.
+  A theme without colors, fonts or custom CSS has no sheet, so an untouched help center sends what
+  it sent before. Only validated `#rrggbb` colors, the fixed font stacks (system fonts, no
+  `font-src`) and checked custom CSS (below) reach it; `TestTemplatesCarryNoBrandingScriptOrInlineStyle`
+  checks it with every font.
+- **Custom CSS is the end of the brand sheet, not a sheet of its own** (`custom-css.go`). Appended
+  after the `:root` variables, it overrides them, its bytes are in the sheet's hash (a new text is a
+  new immutable name, the old one the help center's 404) and it costs no extra request or route;
+  the CSP stays byte for byte. It is stored and served exactly as the admin wrote it (reject, never
+  rewrite), so the export round-trips. `CheckCustomCSS` runs in the theme handlers (save, check,
+  preview) before anything else sees the text; the column only bounds its size (32 KiB, `octet_length`),
+  since the store cannot import the checker. It reads the text with gorilla/css's tokenizer and
+  refuses, at a line and column: a URL token or a function that takes an address or an image
+  (`url`, `image`, `image-set`, `cross-fade`, `element`, `src`, `paint`, `image-rect`, vendor prefix
+  dropped) and `expression()`; the properties `behavior` and `-moz-binding` (the name followed by `:`,
+  not after `.` or `:`, so the class `.behavior` stays); a control character other than tab and line
+  ends; at-rules other than `@media`,
+  `@supports`, `@keyframes`, `@layer`, `@container` (an allowlist, so a new at-rule is refused); a
+  backslash outside a string token, so no escape spells a refused name; an unbalanced bracket, an
+  unclosed string or comment, `<!--`/`-->`. Two checks do not trust the tokenizer: `</` anywhere
+  (the preview inlines the sheet in a `<style>` element), and, after decoding escapes and
+  lowercasing, `url(`, `@import`, `image-set(`, `image(`, `cross-fade(`, `element(`, `src(`, `paint(`,
+  `expression(`, `javascript:`, `vbscript:` or `</` anywhere, strings and comments included. The
+  image functions are in that list because the tokenizer's names are not the browser's: it reads
+  `U+0-image(` as a unicode range and a function `-image(`, which no vendor prefix explains. The
+  tokenizer follows CSS 2.1 and is stricter than a browser; the one difference people hit, a raw tab
+  in a string (an unclosed string to it), is read as a space before tokenizing (same length, so every
+  line and column stays). Any other difference refuses rather than lets through;
+  `FuzzCheckCustomCSS` holds the property, and the browser's `img-src 'self'` and
+  `default-src 'none'` are the second gate. Contrast is not checked: the docs and the field say so.
+  A 32 KiB text takes 7–57 ms to check (the regex tokenizer), once per save or preview. The limit
+  is 32,768 bytes of UTF-8, not characters: the contract and the MCP schema carry no `maxLength`
+  (a JSON schema counts characters) and the settings field counts bytes.
+- **A save must name `custom_css`** (`HelpCenterThemeSave`, `customCSSRequired`). The save replaces the
+  whole theme, so a body without the field, from a web bundle loaded before it existed or an agent
+  request filed before it, would clear the CSS silently. It is 422 `validation_failed` instead, an
+  agent request without it is not filed, and one stored earlier fails on approval with the same 422;
+  null or `""` clears it. The check and the preview save nothing and keep it optional.
 - **Every color pair the pages show reads (WCAG AA), not only the six the save checks.**
   `domain.ThemeBrandPalette` derives surface, muted, rule and the accent tints from the saved
   colors and falls back (surface to the background, muted to the text, tints to the surface) when
@@ -187,7 +223,9 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
   - *Style.* The document links `site.css` by its hashed, immutable address under `/help/_/` (the
     browser keeps it between previews; it is not sent again in every answer) and carries only the
     brand sheet inline, last in the head so it overrides the sheet's defaults (a theme not saved has
-    no hashed brand sheet). The home answer went from 22 KB to 6 KB. `vite.config.ts` proxies `/help/` so the sheet loads in development too.
+    no hashed brand sheet). The custom CSS ends that block, alone in its `<style>` element, so text
+    that leaves a selector or an at-rule open (`x`, `@media print`, accepted since its brackets
+    balance) runs into the end of the element instead of into the next rule. The home answer went from 22 KB to 6 KB. `vite.config.ts` proxies `/help/` so the sheet loads in development too.
   - *Policy.* Its own meta policy comes first: `default-src 'none'; img-src <origin>/api/v1/kb/images/
     <origin>/api/v1/kb/media/; style-src <origin>/help/_/ 'unsafe-inline'; script-src 'none';
     form-action 'none'; base-uri 'none'` (`previewPolicy`, origin = `APP_ORIGIN`). The frame is
@@ -199,9 +237,16 @@ Decisions and traps only. Code: `server/internal/helpcenter` (routing, pages, Ma
     the logo at `/api/v1/kb/media/<id>`), which serve the session's own workspace whether the help
     center is on or off. Videos and players would be blocked boxes under this policy, and loosening
     it for them is not worth it, so each becomes "Video shown on the live help center"
-    (`playerElement`: kbhtml writes both as an empty element with escaped attributes). The inline
-    block sets `pointer-events: none` on links and controls, so they are inert from the first paint;
-    the web app's capture listener, added on load, also holds a link opened from the keyboard.
+    (`playerElement`: kbhtml writes both as an empty element with escaped attributes).
+  - *Inert links.* The first `<style>` element, right after the policy, sets `pointer-events: none
+    !important` on links, buttons, inputs, labels and summaries, everything inside them and their
+    `::before`/`::after` boxes, inside an anonymous `@layer`. For `!important` the first-declared layer
+    wins over every later layer and unlayered rule whatever their specificity or order, and no sheet
+    can add to a layer without a name, so custom CSS cannot hand a link its pointer back (specificity,
+    `@layer x`, `a *`, a `::before` box over the frame, `all: unset`). A rule placed after the custom
+    CSS was beaten all those ways; the e2e test clicks each one in a frame without the app's listener.
+    The web app keeps the frame `inert` until its document has loaded and its capture listener (which
+    also holds a link opened from the keyboard) is attached, again on every new preview.
   - *Frame.* The web app shows it in `<iframe sandbox="allow-same-origin" srcdoc>`, never with
     `allow-scripts`; same origin lets the images load with the session and lets the page stop link
     clicks inside the frame. The e2e test runs the preview with CSP enforced (only the axe tests on

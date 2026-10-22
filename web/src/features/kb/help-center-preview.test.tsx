@@ -1,7 +1,7 @@
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { HelpCenterPreview, previewPolicy, useThemePreview } from './help-center-preview';
-import type { ThemeInput } from './theme-api';
+import type { PreviewTheme } from './theme-api';
 import { json, serve } from './kb.test.fixture';
 
 afterEach(() => {
@@ -25,6 +25,19 @@ test('the preview frame may show images of the workspace but run nothing: sandbo
   expect(frame.getAttribute('sandbox')).not.toContain('allow-scripts');
   expect(frame.getAttribute('srcdoc')).toContain("script-src 'none'");
   expect(frame.getAttribute('srcdoc')).toContain('<h1>Acme help</h1>');
+});
+
+test('the frame takes no input until its document has loaded, and again while the next page replaces it', () => {
+  // A click or a key before load reaches the page before the app holds its links; inert keeps both out.
+  const { rerender } = render(<HelpCenterPreview html={page('One')} pending={false} page="home" onPage={() => {}} />);
+  const frame = screen.getByTitle('Preview of the help center');
+  expect(frame).toHaveAttribute('inert');
+  fireEvent.load(frame);
+  expect(frame).not.toHaveAttribute('inert');
+  rerender(<HelpCenterPreview html={page('Two')} pending={false} page="home" onPage={() => {}} />);
+  expect(screen.getByTitle('Preview of the help center')).toHaveAttribute('inert');
+  fireEvent.load(screen.getByTitle('Preview of the help center'));
+  expect(screen.getByTitle('Preview of the help center')).not.toHaveAttribute('inert');
 });
 
 test('a document without its own policy, or with a wider one, is never put in the frame', () => {
@@ -51,9 +64,9 @@ test('the width and page controls are labelled radios; Phone narrows the frame a
 
 test('preview requests wait 300 ms after the last change, one at a time, and an answer to an older theme is dropped', async () => {
   vi.useFakeTimers();
-  const pending: { body: { theme: ThemeInput }; resolve: (response: Response) => void }[] = [];
-  serve({ 'POST /api/v1/help-center/theme/preview': (call) => new Promise<Response>((resolve) => pending.push({ body: call.body as { theme: ThemeInput }, resolve })) });
-  const theme = (primary: string): ThemeInput => ({ colors: { primary } });
+  const pending: { body: { theme: PreviewTheme }; resolve: (response: Response) => void }[] = [];
+  serve({ 'POST /api/v1/help-center/theme/preview': (call) => new Promise<Response>((resolve) => pending.push({ body: call.body as { theme: PreviewTheme }, resolve })) });
+  const theme = (primary: string): PreviewTheme => ({ colors: { primary } });
   const { result, rerender } = renderHook(({ value }) => useThemePreview('home', value), { initialProps: { value: theme('#000001') } });
 
   rerender({ value: theme('#000002') });
@@ -86,7 +99,7 @@ test('a failed preview says so and keeps the last page shown', async () => {
   vi.useFakeTimers();
   let fail = false;
   serve({ 'POST /api/v1/help-center/theme/preview': () => (fail ? json(500) : json(200, answer('first'))) });
-  const { result, rerender } = renderHook(({ value }) => useThemePreview('home', value), { initialProps: { value: { colors: { primary: '#000001' } } as ThemeInput } });
+  const { result, rerender } = renderHook(({ value }) => useThemePreview('home', value), { initialProps: { value: { colors: { primary: '#000001' } } as PreviewTheme } });
   await act(async () => { await vi.advanceTimersByTimeAsync(300); });
   expect(result.current.preview?.html).toBe('first');
   fail = true;
@@ -100,7 +113,7 @@ test('nothing is asked after the preview goes away, not even the change that was
   vi.useFakeTimers();
   const pending: ((response: Response) => void)[] = [];
   serve({ 'POST /api/v1/help-center/theme/preview': () => new Promise<Response>((resolve) => pending.push(resolve)) });
-  const { rerender, unmount } = renderHook(({ value }) => useThemePreview('home', value), { initialProps: { value: { colors: { primary: '#000001' } } as ThemeInput } });
+  const { rerender, unmount } = renderHook(({ value }) => useThemePreview('home', value), { initialProps: { value: { colors: { primary: '#000001' } } as PreviewTheme } });
   await act(async () => { await vi.advanceTimersByTimeAsync(300); });
   expect(pending).toHaveLength(1);
   rerender({ value: { colors: { primary: '#000002' } } });
@@ -114,12 +127,12 @@ test('no preview is asked while the hook is not enabled; once enabled, the theme
   vi.useFakeTimers();
   const calls = serve({ 'POST /api/v1/help-center/theme/preview': () => json(200, answer('saved')) });
   const { result, rerender } = renderHook(({ value, enabled }) => useThemePreview('home', value, enabled),
-    { initialProps: { value: {} as ThemeInput, enabled: false } });
+    { initialProps: { value: {} as PreviewTheme, enabled: false } });
   await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
   expect(calls.filter((call) => call.method === 'POST')).toHaveLength(0);
   rerender({ value: { colors: { primary: '#0b5cad' } }, enabled: true });
   await act(async () => { await vi.advanceTimersByTimeAsync(300); });
   const posts = calls.filter((call) => call.method === 'POST');
-  expect(posts.map((call) => (call.body as { theme: ThemeInput }).theme.colors?.primary)).toEqual(['#0b5cad']);
+  expect(posts.map((call) => (call.body as { theme: PreviewTheme }).theme.colors?.primary)).toEqual(['#0b5cad']);
   expect(result.current.preview?.html).toBe('saved');
 });

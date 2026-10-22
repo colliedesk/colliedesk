@@ -20,7 +20,7 @@ const colorsSchema = z.object({ primary: color, header: color, header_text: colo
 const themeSchema = z.object({
   logo_media_id: z.string().uuid().nullable(), favicon_media_id: z.string().uuid().nullable(), logo_alt: z.string(),
   linkback_url: z.string().nullable(), contact_url: z.string().nullable(), contact_phone: z.string().nullable(),
-  colors: colorsSchema, body_font: font, heading_font: font, content_version: z.number().int(), updated_at: z.string().datetime().nullable(),
+  colors: colorsSchema, body_font: font, heading_font: font, custom_css: z.string(), content_version: z.number().int(), updated_at: z.string().datetime().nullable(),
   checks: z.array(checkSchema),
 }) satisfies z.ZodType<Generated<'HelpCenterTheme'>>;
 // A map of messages by field. catchall rather than z.record: the first bundle, which holds zod, then keeps
@@ -34,6 +34,8 @@ export type HelpCenterTheme = z.infer<typeof themeSchema>;
 export type ThemeCheck = z.infer<typeof checkSchema>;
 export type ThemePreview = z.infer<typeof previewSchema>;
 export type ThemeInput = RequestBody<'putHelpCenterTheme'>;
+// A preview saves nothing, so its theme may leave custom_css out; a save may not.
+export type PreviewTheme = RequestBody<'previewHelpCenterTheme'>['theme'];
 export type PreviewPage = RequestBody<'previewHelpCenterTheme'>['page'];
 
 // ThemeInvalidError is a theme the server refused (400 or 422). fields holds one message per field, keyed
@@ -67,6 +69,6 @@ const themePath = '/api/v1/help-center/theme';
 export const themeApi = {
   get: () => send(themePath, themeSchema),
   save: (theme: ThemeInput) => send(themePath, themeSchema, { method: 'PUT', body: JSON.stringify(theme) }),
-  preview: (page: PreviewPage, theme: ThemeInput) => send('/api/v1/help-center/theme/preview', previewSchema,
+  preview: (page: PreviewPage, theme: PreviewTheme) => send('/api/v1/help-center/theme/preview', previewSchema,
     { method: 'POST', body: JSON.stringify({ page, theme } satisfies RequestBody<'previewHelpCenterTheme'>) }),
 };

@@ -15,12 +15,19 @@ var settingsObjectFields = map[string]map[string][]string{
 	"PUT /api/v1/help-center/theme": {"colors": themeColorFields},
 }
 
-// settingsBodyProblem says why body cannot be filed for a settings route: it is not a JSON object, or
-// it has a field (at any depth) the route does not take. It returns "" when the body may be filed.
+// settingsRequiredFields lists, for a settings route, the fields its call refuses to run without; a
+// request without one would fail on approval, so it is not filed.
+var settingsRequiredFields = map[string]map[string]string{
+	"PUT /api/v1/help-center/theme": {"custom_css": customCSSRequired},
+}
+
+// settingsBodyProblem says why body cannot be filed for a settings route: it is not a JSON object, it
+// lacks a field the route requires, or it has a field (at any depth) the route does not take. It
+// returns "" when the body may be filed.
 func settingsBodyProblem(route Route, body json.RawMessage) string {
 	key := route.Method + " " + route.Pattern
 	allowed, ok := settingsFields[key]
-	if !ok || len(body) == 0 {
+	if !ok || len(body) == 0 && settingsRequiredFields[key] == nil {
 		return ""
 	}
 	fields, isObject := jsonObject(body)
@@ -52,6 +59,11 @@ func settingsBodyProblem(route Route, body json.RawMessage) string {
 			if !plainJSONValue(inner[innerName], false) {
 				return "The field " + name + "." + innerName + " takes a plain value, not an object or list. Nothing was filed."
 			}
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(settingsRequiredFields[key])) {
+		if _, sent := fields[name]; !sent {
+			return settingsRequiredFields[key][name] + " Nothing was filed."
 		}
 	}
 	return ""

@@ -309,6 +309,8 @@ see the saved brand and its preview, without the controls. A brand has:
 - **Fonts** for text and headings, from fonts already on the reader's device, so nothing is
   downloaded: `system-sans` (the default text font), `humanist-sans`, `geometric-sans`,
   `classic-serif` (the default heading font), `transitional-serif`, `rounded-sans`, `mono`.
+- **Custom CSS** (`custom_css`), for details the fields above do not cover, such as
+  `.masthead{border-bottom:2px solid #0b5cad}`. See [custom CSS](#custom-css).
 
 Every color pair must be readable (WCAG AA): 4.5:1 for text, links, header text, footer text and
 the button text on the primary color (white or black, whichever reads better), and 3:1 for the
@@ -328,6 +330,7 @@ In Settings:
   in the form (nothing changes until you save).
 - **Your website**, **Contact link** and **Phone number**: while one is not yet a complete address
   or number, the preview leaves it out and its field says what shape it needs.
+- **Advanced** holds **Custom CSS**. It is folded until the brand has some.
 - **Save brand** saves it. A refused save shows each message under its field and moves the focus to
   the first one; editing a field clears its message.
 
@@ -336,9 +339,42 @@ width, about 300 ms after you stop typing, before anything is saved. It is the r
 your collections and published articles (never drafts), also while the help center is off; with
 nothing published, the article page shows a sample text, and a video in the article shows as a box
 that says it plays on the live help center. Links in the preview do not open, and the preview runs
-no script. `POST /api/v1/help-center/theme/preview` gives the same page as one HTML
+no script; custom CSS cannot change that. `POST /api/v1/help-center/theme/preview` gives the same page as one HTML
 document, and `colliedesk_help_center_theme_check` with `preview` (`home` or `article`) gives it to an
 AI agent. Each person may ask for 600 previews a minute.
+
+#### Custom CSS
+
+Custom CSS is added after the brand's colors and fonts on every public page and in the preview, so
+its rules win over them. It is saved and served exactly as written, at most 32,768 bytes of UTF-8 (a
+letter outside ASCII takes 2 to 4 bytes; the field counts them as you type). An empty field (or only
+spaces) removes it. A save through the API must send `custom_css` (null or `""` for none): a save
+without it is refused with 422 and changes nothing, so a page or an agent that does not know the field
+cannot remove your CSS by accident. Pages keep the same security policy: the CSS comes from the help
+center's own address, in the brand's style sheet, never inline in a page.
+
+**The contrast checks do not cover custom CSS.** A color or a hidden element it sets can make a page
+hard to read. Check the preview before you save, and clear the field to go back.
+
+The help center loads nothing from other sites, so CSS that could load anything, run a script in an
+old browser or reach past its own rules is refused. Nothing is saved, and the message says the line
+and column, for example "line 3, column 14: url() is not allowed". Settings opens **Advanced** and puts
+the cursor there. While the text is refused, the preview keeps the last custom CSS it could show, and
+the field says why. These are refused:
+
+- `url()`, and the image functions `image()`, `image-set()`, `cross-fade()`, `element()`, `src()` and
+  `paint()`, with or without a vendor prefix such as `-webkit-`.
+- `expression()`, and the properties `behavior` and `-moz-binding` (a class such as `.behavior` is fine).
+- Every at-rule except `@media`, `@supports`, `@keyframes`, `@layer` and `@container`. So `@import`,
+  `@font-face`, `@namespace`, `@charset` and `@property` are refused.
+- A backslash outside quotes (an escape such as `u\72l(` spells `url(`).
+- `</` and `<!--` anywhere, a bracket that does not close or closes nothing, a string or comment that
+  never ends, a NUL or other control character (a tab is fine), and a byte order mark.
+- `url(`, `@import`, `image-set(`, `image(`, `cross-fade(`, `element(`, `src(`, `paint(`,
+  `expression(`, `javascript:` or `vbscript:` anywhere, also inside quotes or comments, once escapes
+  are read.
+
+Images and fonts of your own are not possible this way. Use the logo, the favicon and the fonts above.
 
 ## Public help center
 
@@ -395,6 +431,8 @@ With a [brand](#brand):
   color would not read on them.
 - Fonts come from the visitor's device, so the page loads nothing more and looks a little different
   on each system.
+- **Custom CSS** applies after the colors and fonts. Custom CSS alone keeps the visitor's light or
+  dark setting.
 
 ### Limits
 
