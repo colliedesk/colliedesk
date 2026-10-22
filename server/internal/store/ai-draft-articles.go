@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -13,6 +14,40 @@ import (
 
 // aiArticleIndexLimit caps the list of titles a chooser reads: 800 titles are about 12,000 tokens.
 const aiArticleIndexLimit = 800
+
+const (
+	// aiDraftWholeArticles is how many of retrieval's best articles a draft reads whole instead of an
+	// excerpt. Measured: drafts citing an article the model saw only in part missed one of its
+	// conditions about two and a half times as often.
+	aiDraftWholeArticles = 3
+	// aiDraftArticleRunes is the most of one article a draft reads, about 5,000 tokens.
+	aiDraftArticleRunes = 20000
+)
+
+// wholeArticles gives the first n articles of docs their whole text when it fits in
+// aiDraftArticleRunes, and returns the articles still shown only in part.
+func wholeArticles(ctx context.Context, tx pgx.Tx, workspaceID string, docs []AIRetrievedDoc, n int) ([]AIRetrievedDoc, map[string]bool, error) {
+	cut := map[string]bool{}
+	seen := 0
+	for i := range docs {
+		if docs[i].Kind != AIRetrievedKBArticle {
+			continue
+		}
+		var body string
+		if err := tx.QueryRow(ctx, `SELECT body FROM ai_retrieval_docs WHERE workspace_id=$1 AND kb_article_id=$2 AND kb_locale IS NOT DISTINCT FROM NULLIF($3,'')`,
+			workspaceID, docs[i].KBArticleID, docs[i].KBLocale).Scan(&body); err != nil {
+			return nil, nil, fmt.Errorf("read whole article for AI: %w", err)
+		}
+		whole := utf8.RuneCountInString(body) <= aiDraftArticleRunes
+		if seen < n && whole {
+			docs[i].Text = body
+		} else if utf8.RuneCountInString(docs[i].Text) < utf8.RuneCountInString(body) {
+			cut[docs[i].KBArticleID] = true
+		}
+		seen++
+	}
+	return docs, cut, nil
+}
 
 // AIArticleIndexEntry is one article AI may read, as the chooser sees it.
 type AIArticleIndexEntry struct {
@@ -37,13 +72,15 @@ func aiArticleIndex(ctx context.Context, tx pgx.Tx, workspaceID string) ([]AIArt
 }
 
 // AIDraftArticles returns the articles of the workspace with these ids, in their own language, in the
-// order asked, each cut to the paragraphs that best match query. An article that may no longer be read
-// (unpublished, trashed, excluded from AI) is left out.
-func (s *Store) AIDraftArticles(ctx context.Context, workspaceID string, ids []string, query string) ([]AIRetrievedDoc, error) {
+// order asked, whole when they fit in aiDraftArticleRunes and otherwise cut to the paragraphs that best
+// match query (and named in the second result). An article that may no longer be read (unpublished,
+// trashed, excluded from AI) is left out.
+func (s *Store) AIDraftArticles(ctx context.Context, workspaceID string, ids []string, query string) ([]AIRetrievedDoc, map[string]bool, error) {
 	if len(ids) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
-	return scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]AIRetrievedDoc, error) {
+	cut := map[string]bool{}
+	docs, err := scoped(ctx, s, workspaceID, func(tx pgx.Tx) ([]AIRetrievedDoc, error) {
 		terms, err := aiTerms(ctx, tx, query)
 		if err != nil {
 			return nil, err
@@ -58,8 +95,12 @@ func (s *Store) AIDraftArticles(ctx context.Context, workspaceID string, ids []s
 		return pgx.CollectRows(rows, func(row pgx.CollectableRow) (AIRetrievedDoc, error) {
 			doc := AIRetrievedDoc{Kind: AIRetrievedKBArticle}
 			err := row.Scan(&doc.KBArticleID, &doc.Number, &doc.Title, &doc.Text)
-			doc.Text = aiExcerpt(doc.Text, terms, aiKBExcerptRunes)
+			if utf8.RuneCountInString(doc.Text) > aiDraftArticleRunes {
+				doc.Text = aiExcerpt(doc.Text, terms, aiKBExcerptRunes)
+				cut[doc.KBArticleID] = true
+			}
 			return doc, err
 		})
 	})
+	return docs, cut, err
 }

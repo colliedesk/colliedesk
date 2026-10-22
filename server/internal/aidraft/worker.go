@@ -108,7 +108,10 @@ func (w *Worker) lease() time.Duration {
 
 // JobInput turns a claimed job into what the prompt is written from.
 func JobInput(job *store.AIDraftJob) Input {
-	in := Input{WorkspaceName: job.WorkspaceName, Subject: job.Subject, Sources: job.Sources, Tags: job.Tags}
+	in := Input{WorkspaceName: job.WorkspaceName, Subject: job.Subject, Sources: job.Sources, Tags: job.Tags, Cut: map[string]bool{}}
+	for id := range job.Cut {
+		in.Cut[id] = true
+	}
 	for _, turn := range job.Turns {
 		from := FromTeam
 		if turn.FromCustomer {
@@ -176,6 +179,7 @@ func (w *Worker) write(ctx context.Context, job *store.AIDraftJob) error {
 	if err != nil {
 		return w.Store.FailAIDraft(ctx, job.WorkspaceID, job.DraftID, job.Attempt, code, retryable, retryAfter)
 	}
+	keepWholeSourcesOnly(in, &result)
 	if err := w.review(ctx, job, in, &result); err != nil {
 		return errors.Join(err, w.Store.FailAIDraft(ctx, job.WorkspaceID, job.DraftID, job.Attempt, "store_error", true, retryBase))
 	}
@@ -205,6 +209,23 @@ func (w *Worker) meter(ctx context.Context, job *store.AIDraftJob, feature, mode
 		}
 	}
 	return nil
+}
+
+// ReasonSourceCut is a draft citing an article it was shown only in part.
+const ReasonSourceCut = "source_cut"
+
+// keepWholeSourcesOnly lowers a high draft that cites an article the model saw only in part: it cannot
+// vouch that it left none of the article's conditions out.
+func keepWholeSourcesOnly(in Input, result *Result) {
+	for _, source := range result.Sources {
+		if source.Kind == store.AIRetrievedKBArticle && in.Cut[source.ID] {
+			if result.Confidence == ConfidenceHigh {
+				result.Confidence = ConfidenceMedium
+			}
+			result.Reasons = append(result.Reasons, ReasonSourceCut)
+			return
+		}
+	}
 }
 
 func toDomain(result Result, model string) domain.AIDraftResult {

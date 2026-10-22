@@ -45,6 +45,9 @@ type AIDraftJob struct {
 	// Index lists the articles AI may read, for a chooser; WholeKB says Sources already holds every one.
 	Index   []AIArticleIndexEntry
 	WholeKB bool
+	// Cut names the articles among Sources shown only in part: a draft resting on one cannot vouch
+	// that it left nothing out.
+	Cut map[string]bool
 	// Query is what retrieval searched for.
 	Query string
 }
@@ -128,6 +131,9 @@ func (s *Store) ClaimAIDraft(ctx context.Context, workspaceID string, lease time
 		job.Sources, err = AIRetrieve(ctx, tx, workspaceID, AIRetrievalQuery{Text: job.Query, ExcludeConversationID: job.ConversationID,
 			KBLimit: 5, ConversationLimit: 3})
 		if err != nil {
+			return nil, err
+		}
+		if job.Sources, job.Cut, err = wholeArticles(ctx, tx, workspaceID, job.Sources, aiDraftWholeArticles); err != nil {
 			return nil, err
 		}
 		if job.Index, err = aiArticleIndex(ctx, tx, workspaceID); err != nil {

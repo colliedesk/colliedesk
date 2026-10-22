@@ -41,6 +41,8 @@ type Input struct {
 	Sources []store.AIRetrievedDoc
 	// Tags are the workspace's tag names; triage picks among them only.
 	Tags []string
+	// Cut names the articles among Sources shown only in part.
+	Cut map[string]bool
 }
 
 // Settings choose the models. SelectModel, when set, chooses articles from their titles before the

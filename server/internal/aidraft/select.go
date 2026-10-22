@@ -115,9 +115,16 @@ func (w *Worker) choose(ctx context.Context, job *store.AIDraftJob, in *Input) e
 		return nil
 	}
 	ids := ParseSelection(response.JSON, job.Index)
-	chosen, err := w.Store.AIDraftArticles(ctx, job.WorkspaceID, ids, job.Query)
+	chosen, cut, err := w.Store.AIDraftArticles(ctx, job.WorkspaceID, ids, job.Query)
 	if err != nil {
 		return err
+	}
+	for _, doc := range chosen {
+		// The chosen copy replaces retrieval's excerpt of the same article.
+		delete(in.Cut, doc.KBArticleID)
+	}
+	for id := range cut {
+		in.Cut[id] = true
 	}
 	in.Sources = mergeSources(chosen, in.Sources)
 	return nil
