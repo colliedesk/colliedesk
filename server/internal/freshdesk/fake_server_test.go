@@ -82,6 +82,13 @@ type fakeFreshdesk struct {
 	// path answers 404, an account without a knowledge base. solutionsEdit changes the fixture first.
 	solutions     bool
 	solutionsEdit func(map[string]any)
+	// noAPI answers like an account whose plan has no API calls: 429 with an X-Ratelimit-Total of 0.
+	noAPI bool
+	// revokeKeyAfter makes every API request after the first one to this path answer 401.
+	revokeKeyAfter string
+	revoked        bool
+	// remaining replaces the X-Ratelimit-Remaining of every API response (default 399 of 400).
+	remaining string
 }
 
 func newFakeFreshdesk(t *testing.T) *fakeFreshdesk {
@@ -129,7 +136,20 @@ func (f *fakeFreshdesk) stall(r *http.Request) {
 func (f *fakeFreshdesk) serveAPI(w http.ResponseWriter, r *http.Request) {
 	n := f.hit(r.URL.Path)
 	want := "Basic " + base64.StdEncoding.EncodeToString([]byte(testAPIKey+":X"))
-	if r.Header.Get("Authorization") != want {
+	f.mu.Lock()
+	revoked, noAPI := f.revoked, f.noAPI
+	if r.URL.Path == f.revokeKeyAfter {
+		f.revoked = true
+	}
+	f.mu.Unlock()
+	if noAPI {
+		w.Header().Set("X-Ratelimit-Total", "0")
+		w.Header().Set("X-Ratelimit-Remaining", "0")
+		w.Header().Set("Retry-After", "60")
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"message": "You have exceeded the limit of requests per minute"})
+		return
+	}
+	if r.Header.Get("Authorization") != want || revoked {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"code": "invalid_credentials", "message": "You have to be logged in to perform this action."})
 		return
 	}
@@ -154,6 +174,9 @@ func (f *fakeFreshdesk) serveAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("X-Ratelimit-Total", "400")
 	w.Header().Set("X-Ratelimit-Remaining", "399")
+	if f.remaining != "" {
+		w.Header().Set("X-Ratelimit-Remaining", f.remaining)
+	}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v2/"), "/")
 	switch {
 	case strings.HasPrefix(r.URL.Path, "/helpdesk/attachments/"):
@@ -193,6 +216,10 @@ func (f *fakeFreshdesk) serveAPI(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/api/v2/tickets":
 		if f.allArchived || f.noTickets {
 			writeJSON(w, http.StatusOK, []any{})
+			return
+		}
+		if query := r.URL.Query(); query.Get("order_by") == "created_at" && query.Get("order_type") == "desc" {
+			f.newestTickets(w, r)
 			return
 		}
 		f.page(w, r, f.ticketList(r.URL.Query().Get("updated_since")))
@@ -401,6 +428,17 @@ func (f *fakeFreshdesk) ticketList(since string) []map[string]any {
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i]["updated_at"].(string) < items[j]["updated_at"].(string) })
 	return items
+}
+
+// newestTickets answers a list ordered by created_at desc, as the preview asks for the newest ticket:
+// ids grow with created_at in the fixture.
+func (f *fakeFreshdesk) newestTickets(w http.ResponseWriter, r *http.Request) {
+	items := f.ticketList(r.URL.Query().Get("updated_since"))
+	sort.Slice(items, func(i, j int) bool { return items[i]["id"].(float64) > items[j]["id"].(float64) })
+	if n, _ := strconv.Atoi(r.URL.Query().Get("per_page")); n > 0 && n < len(items) {
+		items = items[:n]
+	}
+	writeJSON(w, http.StatusOK, items)
 }
 
 // withFiles points attachment URLs at the file host. The version number is

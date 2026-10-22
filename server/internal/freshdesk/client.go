@@ -44,14 +44,27 @@ type client struct {
 	idle   time.Duration
 	sleep  func(context.Context, time.Duration) error
 	pause  time.Duration
+	// reserve leaves calls to the account's other integrations (Options.ReserveRateLimit).
+	reserve bool
 
 	progress *progress
 
 	mu    sync.Mutex
 	stats RateLimitStats
-	// exhausted is set when the last response reported no remaining calls.
+	// exhausted is set when the last response reported no remaining calls (or no more than the reserve).
 	exhausted bool
+	// limit is the last X-Ratelimit-Total seen, 0 before any.
+	limit int
+	// fatal is the first answer that ends the whole run: the key refused (401) or a plan without API calls.
+	fatal error
 }
+
+// Reserve bounds: at least minReserve calls a minute stay with the account's other integrations, or
+// reservePercent of the limit when that is more, but never more than half the limit.
+const (
+	minReserve     = 10
+	reservePercent = 20
+)
 
 func newClient(base *url.URL, apiKey string, options Options) *client {
 	api, files := newHTTPClients(base, options.hooks)
@@ -59,7 +72,7 @@ func newClient(base *url.URL, apiKey string, options Options) *client {
 	if idle <= 0 {
 		idle = defaultIdleTimeout
 	}
-	return &client{base: base, apiKey: apiKey, api: api, files: files, idle: idle, sleep: options.Sleep, pause: options.RateLimitPause}
+	return &client{base: base, apiKey: apiKey, api: api, files: files, idle: idle, sleep: options.Sleep, pause: options.RateLimitPause, reserve: options.ReserveRateLimit}
 }
 
 func (c *client) wait(ctx context.Context, d time.Duration) error {
@@ -156,6 +169,7 @@ func (c *client) do(ctx context.Context, target string, apiCall bool) (*http.Res
 		if withKey {
 			request.SetBasicAuth(c.apiKey, "X")
 		}
+		c.progress.call()
 		response, err := httpClient.Do(request)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -174,10 +188,14 @@ func (c *client) do(ctx context.Context, target string, apiCall bool) (*http.Res
 				}
 				continue
 			}
-			return nil, fmt.Errorf("GET %s: network error after %d retries (%s)", redact(target), serverRetries, networkReason(err))
+			return nil, fmt.Errorf("GET %s: network error after %d retries (%s): %w", redact(target), serverRetries, networkReason(err), ErrUnavailable)
 		}
 		if withKey {
-			c.noteRemaining(response.Header.Get("X-Ratelimit-Remaining"))
+			if response.Header.Get("X-Ratelimit-Total") == "0" {
+				drain(response)
+				return nil, c.fail(fmt.Errorf("GET %s: HTTP %d: %w", redact(target), response.StatusCode, ErrPlanNoAPI))
+			}
+			c.noteRemaining(response.Header.Get("X-Ratelimit-Remaining"), response.Header.Get("X-Ratelimit-Total"))
 		}
 		switch {
 		case response.StatusCode >= 200 && response.StatusCode < 300:
@@ -199,9 +217,30 @@ func (c *client) do(ctx context.Context, target string, apiCall bool) (*http.Res
 			}
 		default:
 			drain(response)
-			return nil, statusError(response.StatusCode, target, !apiCall)
+			err := statusError(response.StatusCode, target, !apiCall)
+			if errors.Is(err, ErrKeyRejected) {
+				return nil, c.fail(err)
+			}
+			return nil, err
 		}
 	}
+}
+
+// fail records err as the run's fatal error (the first one wins) and returns it.
+func (c *client) fail(err error) error {
+	c.mu.Lock()
+	if c.fatal == nil {
+		c.fatal = err
+	}
+	c.mu.Unlock()
+	return err
+}
+
+// fatalErr is the error that ends the run, nil while the key works.
+func (c *client) fatalErr() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.fatal
 }
 
 func (c *client) respectExhausted(ctx context.Context, withKey bool) error {
@@ -219,6 +258,9 @@ func (c *client) respectExhausted(ctx context.Context, withKey bool) error {
 // noteWait counts a rate-limit wait and announces it before the client sleeps.
 func (c *client) noteWait(d time.Duration, throttled bool) {
 	cause := "X-Ratelimit-Remaining 0"
+	if c.reserve {
+		cause = "X-Ratelimit-Remaining at the reserve left to other integrations"
+	}
 	c.mu.Lock()
 	if throttled {
 		c.stats.Throttled++
@@ -228,7 +270,7 @@ func (c *client) noteWait(d time.Duration, throttled bool) {
 	}
 	c.stats.WaitSeconds += d.Seconds()
 	c.mu.Unlock()
-	c.progress.note(fmt.Sprintf("rate limit: waiting %s (%s)", d, cause))
+	c.progress.rateLimitWait(d, cause)
 }
 
 func (c *client) rateLimitStats() RateLimitStats {
@@ -237,10 +279,37 @@ func (c *client) rateLimitStats() RateLimitStats {
 	return c.stats
 }
 
-func (c *client) noteRemaining(header string) {
-	if remaining, err := strconv.Atoi(header); err == nil && remaining <= 0 {
+func (c *client) noteRemaining(remainingHeader, totalHeader string) {
+	total, err := strconv.Atoi(totalHeader)
+	c.mu.Lock()
+	if err == nil && total > 0 {
+		c.limit = total
+	}
+	floor := c.reserveCalls()
+	c.mu.Unlock()
+	if remaining, err := strconv.Atoi(remainingHeader); err == nil && remaining <= floor {
 		c.setExhausted(true)
 	}
+}
+
+// reserveCalls is the remaining count at which the client pauses; c.mu must be held. Without a known
+// limit the floor is minReserve.
+func (c *client) reserveCalls() int {
+	if !c.reserve {
+		return 0
+	}
+	reserve := max(minReserve, c.limit*reservePercent/100)
+	if c.limit > 0 {
+		reserve = min(reserve, c.limit/2)
+	}
+	return reserve
+}
+
+// rateLimitPerMinute is the last X-Ratelimit-Total Freshdesk sent, 0 when none was seen.
+func (c *client) rateLimitPerMinute() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.limit
 }
 
 func (c *client) setExhausted(value bool) {

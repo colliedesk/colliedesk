@@ -14,6 +14,9 @@ const (
 	// PermissionWorkspaceExport covers the bulk export of every record of the workspace, contact
 	// details included; admins only.
 	PermissionWorkspaceExport = "workspace:export"
+	// PermissionWorkspaceImport covers imports from another helpdesk inside the app: they read and
+	// write the whole workspace and carry the other helpdesk's admin key; admins only.
+	PermissionWorkspaceImport = "workspace:import"
 	// PermissionChannelInbound marks routes authenticated by a channel secret instead of a session.
 	PermissionChannelInbound = "channels:inbound"
 )

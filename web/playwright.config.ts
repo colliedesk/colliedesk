@@ -4,6 +4,7 @@ import { scratchDir } from './e2e/support/checkout';
 import { defineConfig } from '@playwright/test';
 import { attachmentsDir, databaseURL, goEnv, servers } from './e2e/support/cli';
 import { identity, jwksURL } from './e2e/support/identity-provider';
+import { inAppFreshdesk } from './e2e/support/fake-freshdesk';
 import { mailpit } from './e2e/support/mailpit';
 
 const localChrome = !process.env.CI && existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined;
@@ -12,11 +13,12 @@ const localChrome = !process.env.CI && existsSync('/usr/bin/google-chrome') ? '/
 // environment an operator sets. They differ in what is plugged in: nothing, an SMTP relay, cloud sign-in.
 // serve refuses to start until row-level security is migrated: the main server migrates first, like
 // compose does, and the others wait for it so two migrations never race on the shared database.
-function server(origin: string, env: Record<string, string> = {}) {
-  const serve = `go run ./cmd/collie serve --listen 127.0.0.1:${new URL(origin).port}`;
+function server(origin: string, env: Record<string, string> = {}, tags = '') {
+  const run = tags ? `go run -tags ${tags} ./cmd/collie` : 'go run ./cmd/collie';
+  const serve = `${run} serve --listen 127.0.0.1:${new URL(origin).port}`;
   const first = origin === servers.main;
   return {
-    command: first ? `go run ./cmd/collie migrate && ${serve}` : `node ../web/e2e/support/wait-for-url.mjs ${servers.main} && ${serve}`,
+    command: first ? `${run} migrate && ${serve}` : `node ../web/e2e/support/wait-for-url.mjs ${servers.main} && ${serve}`,
     cwd: '../server',
     env: {
       ...process.env as Record<string, string>, ...goEnv,
@@ -38,7 +40,9 @@ export default defineConfig({
   workers: 1,
   use: { trace: 'retain-on-failure', launchOptions: { executablePath: localChrome } },
   webServer: [
-    server(servers.main),
+    // The main server also imports in the app from the fake Freshdesk (-tags e2e lets it reach a loopback
+    // address), with a key ring as a fresh install has one.
+    server(servers.main, { ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'k1:ZTJlLWluLWFwcC1pbXBvcnQta2V5LTMyLWJ5dGVzISE=' }, 'e2e'),
     server(servers.mail, { SMTP_HOST: '127.0.0.1', SMTP_PORT: mailpit.smtpPort, SMTP_STARTTLS: 'false', EMAIL_FROM_POLICY: 'any' }),
     server(servers.cloud, {
       CLOUD_AUTH_ISSUER: identity.issuer, CLOUD_AUTH_JWKS_URL: jwksURL,

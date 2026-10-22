@@ -220,6 +220,8 @@ func (s idleSink) KBMediaReplacement(export.KBMediaReplacement) error     { retu
 func (s idleSink) KBVideo(export.KBVideo) error                           { return nil }
 func (s idleSink) HelpCenter(export.HelpCenter) error                     { return nil }
 func (s idleSink) AgentRequest(export.AgentRequest) error                 { return nil }
+func (s idleSink) ImportJob(export.ImportJob) error                       { return nil }
+func (s idleSink) ImportPerson(export.ImportPerson) error                 { return nil }
 func (s idleSink) BeginConversation(export.ConversationHead) error        { return nil }
 func (s idleSink) Message(export.Message) error                           { return nil }
 func (s idleSink) EndConversation([]domain.TimeEntry) error               { return nil }
