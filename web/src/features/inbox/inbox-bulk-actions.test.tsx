@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { expect, test, vi } from 'vitest';
+import { beforeAll, expect, test, vi } from 'vitest';
 import type { Conversation } from '../../api/schemas';
 import { InboxPage } from './inbox-page';
+import { presenceViewPart } from './presence-part';
 
 const row = (id: string, subject: string): Conversation => ({ latest_reply_number: 0,
   id, contact_id: '22222222-2222-4222-8222-222222222222', contact_name: 'Mai Linh', subject, status: 'open', priority: 'normal',
@@ -21,6 +22,15 @@ function renderInbox(onBulkUpdate = vi.fn().mockResolvedValue({ updated: 2 })) {
 }
 const pick = (subject: RegExp) => fireEvent.click(screen.getByRole('checkbox', { name: subject }));
 const bar = () => screen.getByRole('group', { name: /bulk actions/i });
+
+
+// The presence chunk loads when somebody else is on a conversation, a reply is refused or a notice shows;
+// start with it there, so no test ends while it is still on its way (vitest refuses a module asked for
+// after the test environment is gone).
+beforeAll(async () => {
+  presenceViewPart.preload();
+  await import('./presence-view');
+});
 
 test('shows no action bar until a row is selected', () => {
   renderInbox();
