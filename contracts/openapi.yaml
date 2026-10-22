@@ -437,6 +437,7 @@ paths:
                 subject: {type: string, minLength: 1}
                 body: {type: string, minLength: 1, description: Markdown source}
                 cc: {$ref: '#/components/schemas/CopiedAddresses'}
+                seen_reply_number: {type: integer, minimum: 0}
                 files:
                   type: array
                   maxItems: 10
@@ -577,6 +578,15 @@ paths:
         refused address, and nothing is stored. Each reply counts its contact and every `cc` address
         against the trial's 200 people a day. A retry of a
         failed delivery sends to the same stored list. There is no Bcc.
+
+
+        Every reply gets the next `reply_number` of its conversation (`latest_reply_number` of the
+        conversation is the newest). Send `seen_reply_number`, the newest reply the sender had seen when
+        they started writing, and a reply is refused with 409 `reply_conflict` when someone replied
+        since: nothing is stored or sent, and the error lists `newer_replies` (oldest first by
+        `created_at`; an imported one keeps its own time and `origin`) and `latest_reply_number`. To send
+        anyway, send again with that number. Without `seen_reply_number` nothing is checked; a note is
+        never checked. In `multipart/form-data`, send it before the files: a refused reply stores none.
       requestBody:
         required: true
         content:
@@ -588,6 +598,7 @@ paths:
                 kind: {type: string, enum: [outgoing, note]}
                 body: {type: string, minLength: 1, description: Markdown source}
                 cc: {$ref: '#/components/schemas/CopiedAddresses'}
+                seen_reply_number: {type: integer, minimum: 0, description: 'The newest reply number the sender had seen; 0 when there was none.'}
                 draft:
                   type: boolean
                   description: >-
@@ -621,6 +632,9 @@ paths:
         '402': {$ref: '#/components/responses/WorkspaceLocked'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: A reply with `seen_reply_number` older than the conversation's latest reply (`reply_conflict`); nothing was stored or sent
+          content: {application/json: {schema: {$ref: '#/components/schemas/ReplyConflict'}}}
         '413': {$ref: '#/components/responses/AttachmentsTooLarge'}
         '429': {$ref: '#/components/responses/TrialOutboundLimit'}
         '507':
@@ -894,6 +908,65 @@ paths:
                   items: {type: array, items: {$ref: '#/components/schemas/TimeEntry'}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/conversations/{id}/presence:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    put:
+      operationId: putConversationPresence
+      x-permission: conversations:read
+      description: >-
+        Says that the caller has this conversation open, and whether its reply box holds a reply not
+        sent yet (`writing`; the text itself is never sent). The answer lists the other people and AI
+        agents who have it open, so one call both announces and reads. A browser tab calls it every
+        `heartbeat_seconds` while the conversation is open; a row not renewed in time disappears on its
+        own (15 seconds for viewing, 150 seconds with a reply not sent yet, 2 minutes for an agent
+        token, which does not call on a schedule). `client_id` names one tab: a person with two tabs
+        open has two rows and is listed once. One tab announces one conversation at most every 2
+        seconds, and a call that starts or ends a reply (`writing` changes) at most every half
+        second: a quicker call is answered 429 `too_many_requests` with `Retry-After` and changes
+        nothing. Changes nothing a customer or a teammate wrote, so the read tier is enough for an
+        agent token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PresenceUpdate'}
+      responses:
+        '200':
+          description: The others who have the conversation open
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConversationPresence'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429':
+          description: This tab announced this conversation too recently (2 seconds, half a second to start or end a reply); nothing changed
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  /api/v1/conversations/{id}/presence/{clientId}:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - name: clientId
+        in: path
+        required: true
+        schema: {$ref: '#/components/schemas/PresenceClientID'}
+    delete:
+      operationId: deleteConversationPresence
+      x-permission: conversations:read
+      description: >-
+        Says that the caller closed the conversation in the tab `clientId` (or, for an agent token,
+        stopped working on it). Only the caller's own row is removed; another person's row, an unknown
+        `clientId` or one already gone answer 204 the same, so calling it twice is harmless. A browser
+        sends it with `fetch` `keepalive` when the tab closes.
+      responses:
+        '204': {description: The caller's row for this tab is gone}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
   /api/v1/inbox/activity:
     get:
       operationId: getInboxActivity
@@ -906,7 +979,7 @@ paths:
         newest first; in `updated`, conversations with a customer message in the window come first, so
         a bulk change cannot push a customer reply out of the list. Send the returned `now`
         as the next `since`. A `since` older than 10 minutes is treated as 10 minutes old; an agent who
-        was away longer reloads the inbox. A list can repeat an item from the previous call (a short lookback covers conversations that committed late), so the client removes duplicates by id (`updated` items by `id` and `updated_at`). Without `since` the lists are empty and `now` is the first cursor.
+        was away longer reloads the inbox. A list can repeat an item from the previous call (a short lookback covers conversations that committed late), so the client removes duplicates by id (`updated` items by `id` and `updated_at`). Without `since` the lists are empty and `now` is the first cursor. `viewing` is not a change list: every call, with or without `since`, says who has which conversation open now.
       parameters:
         - {name: since, in: query, schema: {type: string, format: date-time}}
       responses:
@@ -2412,6 +2485,9 @@ paths:
         approvals at once run the call once. A person whose role may not run the call gets 403 and the
         request keeps waiting (`approvable_by`). `cc` keeps only some of a reply draft's copies; it
         cannot add one. The approval finishes even if the approver's connection closes.
+        `seen_reply_number` is the newest reply the approving person had on screen: when someone replied
+        since, a reply draft answers 409 `reply_conflict` like `POST .../messages` and keeps waiting, so
+        it can be read again and approved with the new number.
       requestBody:
         required: false
         content:
@@ -2426,6 +2502,7 @@ paths:
                   maxItems: 10
                   items: {type: string}
                   description: The copies to keep on a reply draft; only addresses the draft already copied (400 otherwise).
+                seen_reply_number: {type: integer, minimum: 0, description: 'Reply drafts only: the newest reply number on the approver''s screen.'}
       responses:
         '200':
           description: The decided request and the answer of its call
@@ -4780,8 +4857,9 @@ components:
         updated_at: {type: string, format: date-time}
     Conversation:
       type: object
-      required: [id, contact_id, contact_name, subject, status, priority, assignee_id, tags, channel, origin, created_at, updated_at]
+      required: [id, contact_id, contact_name, subject, status, priority, assignee_id, tags, channel, origin, created_at, updated_at, latest_reply_number]
       properties:
+        latest_reply_number: {type: integer, minimum: 0, description: 'The reply_number of the newest reply; 0 before the first. Send it as seen_reply_number with a reply.'}
         id: {type: string, format: uuid}
         contact_id: {type: string, format: uuid}
         contact_name: {type: string}
@@ -4845,11 +4923,86 @@ components:
         items: {type: array, items: {$ref: '#/components/schemas/Conversation'}}
         page: {type: integer, minimum: 1}
         page_size: {type: integer, minimum: 1}
+    ReplyConflict:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, latest_reply_number, newer_replies]
+          properties:
+            code: {type: string, enum: [reply_conflict]}
+            message: {type: string}
+            request_id: {type: string}
+            latest_reply_number: {type: integer, minimum: 1, description: Send this as seen_reply_number to send anyway.}
+            newer_replies:
+              type: array
+              description: The replies after the sender's seen_reply_number, oldest first by created_at.
+              items: {$ref: '#/components/schemas/Message'}
+    PresenceClientID:
+      type: string
+      pattern: '^[A-Za-z0-9_-]{8,64}$'
+      description: A random id a browser tab makes when the page loads (not stored across reloads), or a fixed name an agent token picks.
+    PresenceUpdate:
+      type: object
+      additionalProperties: false
+      required: [client_id, writing]
+      properties:
+        client_id: {$ref: '#/components/schemas/PresenceClientID'}
+        writing: {type: boolean, description: The reply box (not a private note) holds text that is not sent yet.}
+        edited: {type: boolean, default: false, description: The reply text changed since the last call; keeps `edited_at` current.}
+        hidden: {type: boolean, default: false, description: The tab is in the background; the answer then asks for fewer calls.}
+    ConversationViewer:
+      type: object
+      required: [agent_id, name, writing, writing_since, edited_at, agent_token]
+      properties:
+        agent_id: {type: string, format: uuid}
+        name: {type: string, description: 'Display name, or the email when there is none'}
+        writing: {type: boolean, description: A reply not sent yet is open in one of their tabs.}
+        writing_since:
+          type: [string, 'null']
+          format: date-time
+          description: When that reply was started; null when not writing.
+        edited_at:
+          type: [string, 'null']
+          format: date-time
+          description: When that reply last changed; a reply untouched for minutes is a draft left open, not someone typing. Null when not writing.
+        agent_token:
+          description: The agent token an AI agent has the conversation open with, acting as `agent_id`; null for a person.
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/MessageAgentToken'}
+    ConversationPresence:
+      type: object
+      required: [viewers, heartbeat_seconds]
+      properties:
+        viewers:
+          type: array
+          description: Everyone else who has the conversation open, once per person and per agent token, people first then by name. The caller's own tabs are left out.
+          items: {$ref: '#/components/schemas/ConversationViewer'}
+        heartbeat_seconds: {type: integer, minimum: 1, description: Call again after this many seconds to stay listed.}
     InboxActivity:
       type: object
-      required: [now, new_conversations, assigned_to_me, updated]
+      required: [now, new_conversations, assigned_to_me, updated, viewing]
       properties:
         now: {type: string, format: date-time}
+        viewing:
+          type: array
+          maxItems: 200
+          description: >-
+            Who else has a conversation open right now, on every call (the first one included), so the
+            inbox list can mark those conversations: the same viewers `PUT
+            /api/v1/conversations/{id}/presence` answers, per conversation. The caller's own tabs are left
+            out; conversations nobody else has open are not listed.
+          items:
+            type: object
+            required: [conversation_id, viewers]
+            properties:
+              conversation_id: {type: string, format: uuid}
+              viewers:
+                type: array
+                minItems: 1
+                items: {$ref: '#/components/schemas/ConversationViewer'}
         new_conversations:
           type: array
           maxItems: 50
@@ -4890,8 +5043,12 @@ components:
                 description: Time of the newest customer message inside the polled window, or null when the change was not a customer message.
     Message:
       type: object
-      required: [id, conversation_id, author_agent_id, author_name, agent_token, agent_request_id, kind, body, body_html, origin, attachments, cc, created_at, delivery, email]
+      required: [id, conversation_id, author_agent_id, author_name, agent_token, agent_request_id, kind, body, body_html, origin, attachments, cc, created_at, delivery, email, reply_number]
       properties:
+        reply_number:
+          type: [integer, 'null']
+          minimum: 1
+          description: The replies of a conversation numbered 1, 2, 3... in the order they were stored (an imported reply gets the next number whatever its time); null for a note or a customer message.
         id: {type: string, format: uuid}
         conversation_id: {type: string, format: uuid}
         author_agent_id: {type: [string, 'null'], format: uuid}

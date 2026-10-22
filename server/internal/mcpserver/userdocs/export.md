@@ -100,7 +100,10 @@ and compare it with `sha256` in `manifest.json`.
 ## What is not exported
 
 Sessions and API tokens, pairing and invite links, the email channel's inbound secret, queued
-email delivery state, and billing records. They are credentials or server internals, not your data.
+email delivery state, billing records, and who has a conversation open right now (it is gone
+within minutes). They are credentials or server internals, not your data. The reply numbers the API
+shows (`reply_number`, `latest_reply_number`) are not exported either: they count a conversation's
+`outgoing` messages in the order they were stored, which the file keeps.
 
 ## Limits
 

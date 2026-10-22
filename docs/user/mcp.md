@@ -54,13 +54,14 @@ with `billing` and leave a note with a summary."
 | `colliedesk_whoami` | Shows the workspace, the team member, the token tier and the tools you can use | any |
 | `colliedesk_inbox_search` | Lists conversations in pages by any [inbox filter](inbox.md#filter-and-sort) or a saved view, in any of the inbox orders | `read` |
 | `colliedesk_inbox_activity` | Lists what changed since the last call: new conversations, conversations assigned to you, conversations that changed | `read` |
-| `colliedesk_conversation_get` | Reads one conversation with its messages, attachment ids and customer | `read` |
+| `colliedesk_conversation_get` | Reads one conversation with its messages, attachment ids and customer, and who else has it open | `read` |
+| `colliedesk_conversation_presence` | Shows the team that the agent is working on a conversation (as "your name via the token label", for 2 minutes), lists who else has it open and warns when someone has a reply not sent yet; `leave` takes it off the list | `read` |
 | `colliedesk_time_entries_list` | Lists the time logged on a conversation, with the total | `read` |
 | `colliedesk_attachment_get` | Reads an attachment: name, size, type, and the text of a plain text file | `read` |
 | `colliedesk_conversation_update` | Sets status, priority, assignee and adds or removes tags in one idempotent call; a tag name that does not exist yet is created | `draft` |
 | `colliedesk_conversations_bulk_update` | Sets status, assignee and tags of up to 50 conversations at once, all or nothing | `draft` |
 | `colliedesk_note_add` | Adds a private note | `draft` |
-| `colliedesk_reply_send` | Sends a reply to the customer by email. Cannot be undone | `send` |
+| `colliedesk_reply_send` | Sends a reply to the customer by email. Cannot be undone. Takes `seen_reply_number` (from `colliedesk_conversation_get`): when someone replied since, nothing is sent and their reply is shown; warns when a teammate has a reply open | `send` |
 | `colliedesk_reply_retry` | Sends again a reply whose delivery failed. Cannot be undone | `send` |
 | `colliedesk_conversation_create` | Opens a conversation with a customer; sends nothing | `send` |
 | `colliedesk_conversation_start` | Opens a conversation and emails its first message to the customer in one step, for a customer found or one added with it (`new_contact`); nothing is stored if the email is refused. Cannot be undone | `send` |

@@ -63,8 +63,14 @@ func (a *API) approveAgentRequest(response http.ResponseWriter, request *http.Re
 	var input struct {
 		Body *string   `json:"body"`
 		CC   *[]string `json:"cc"`
+		// SeenReplyNumber is the newest reply on the approver's screen (reply drafts only).
+		SeenReplyNumber *int `json:"seen_reply_number"`
 	}
 	if !decodeOptionalJSON(response, request, &input) {
+		return
+	}
+	if input.SeenReplyNumber != nil && *input.SeenReplyNumber < 0 {
+		writeError(response, http.StatusBadRequest, "invalid_request", "seen_reply_number is the number of a reply, 0 or more.")
 		return
 	}
 	who := principal(request)
@@ -92,11 +98,27 @@ func (a *API) approveAgentRequest(response http.ResponseWriter, request *http.Re
 			return
 		}
 	}
+	if input.SeenReplyNumber != nil {
+		if existing.Kind != domain.AgentRequestReplyDraft || existing.ConversationID == nil {
+			writeError(response, http.StatusBadRequest, "invalid_request", "seen_reply_number is for a reply draft only.")
+			return
+		}
+		// Checked before the draft is claimed, so a reply sent meanwhile leaves it waiting, to be read again.
+		err := a.store.CheckReplySeen(ctx, workspaceID, *existing.ConversationID, *input.SeenReplyNumber)
+		if a.writeReplyConflict(response, who, err) {
+			return
+		}
+		if err != nil {
+			writeStoreError(response, err)
+			return
+		}
+	}
 	claimed, err := a.store.ClaimAgentRequest(ctx, workspaceID, id, who.Agent.ID, edited)
 	if writeDecisionError(response, err) {
 		return
 	}
-	status, answer, complete := a.replayApproved(ctx, who, claimed)
+	// The call checks the number again under the conversation's lock; a reply in between fails the call (409).
+	status, answer, complete := a.replayApproved(ctx, who, claimed, input.SeenReplyNumber)
 	stored, note := json.RawMessage(nil), (*string)(nil)
 	switch {
 	case !complete:

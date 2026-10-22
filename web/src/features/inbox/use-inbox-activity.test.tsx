@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider, QueryObserver } from '@tanstack/react
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { useInboxActivity } from './use-inbox-activity';
+import { useInboxActivity, useInboxViewing } from './use-inbox-activity';
 
 const me = '66666666-6666-4666-8666-666666666666';
 
@@ -300,4 +300,24 @@ test('a mounted timeline query fetches again when its conversation received a cu
   expect(timeline).toHaveBeenCalledTimes(2);
   expect(other).toHaveBeenCalledTimes(1);
   watching(); unrelated();
+});
+
+test('the inbox reads who has which conversation open from the same poll, from its first answer, and never polls itself', async () => {
+  const lan = { agent_id: me, name: 'Lan', writing: true, writing_since: '2026-10-15T10:00:00Z', edited_at: '2026-10-15T10:00:00Z', agent_token: null };
+  api.inboxActivity.mockResolvedValueOnce({ ...idle('2026-10-15T10:00:00Z'), viewing: [{ conversation_id: id(1), viewers: [lan] }] })
+    .mockResolvedValue({ ...idle('2026-10-15T10:00:20Z'), viewing: [] });
+  const { result, unmount } = renderHook(() => { useInboxActivity(true, me); return useInboxViewing(); }, { wrapper });
+  await tick(0);
+  expect(result.current.get(id(1))).toEqual([lan]);
+  await tick(20_000);
+  expect(api.inboxActivity).toHaveBeenCalledTimes(2);
+  expect(result.current.size).toBe(0);
+  // Without the app's poll the inbox shows nothing and asks for nothing.
+  unmount();
+  api.inboxActivity.mockClear();
+  client = new QueryClient();
+  const alone = renderHook(() => useInboxViewing(), { wrapper });
+  await tick(30_000);
+  expect(alone.result.current.size).toBe(0);
+  expect(api.inboxActivity).not.toHaveBeenCalled();
 });

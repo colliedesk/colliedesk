@@ -3,7 +3,7 @@ import { expect, test, vi } from 'vitest';
 import type { Message } from '../../api/schemas';
 import { TimelinePanel } from './timeline-panel';
 
-const base = { conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, body_html: null, origin: null,
+const base = { reply_number: null, conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: null, body_html: null, origin: null,
   attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null, email: null, agent_token: null, agent_request_id: null };
 const incoming: Message = {
   ...base, id: '22222222-2222-4222-8222-222222222222', kind: 'incoming', body: 'Please help.',
