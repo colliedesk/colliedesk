@@ -22,8 +22,8 @@ names = sorted({line.strip() for line in sys.stdin
                 if re.fullmatch(r'(Test|Example|Fuzz)\w*', line.strip())})
 if not names:
     parser.error('no tests discovered; refusing an empty suite')
-# Large latency fixtures seed thousands of rows and time a request against a budget. Give them one
-# runner so the contract-heavy shards do not also pay that cost, and so the packages those shards run
+# Large latency fixtures seed thousands of rows and time a request against a budget. Give them their
+# own runners so the contract-heavy shards do not also pay that cost, and so the packages those shards run
 # at the same time do not load the shared database while they measure. Keep every threshold intact.
 # They are named ...LatencyBudget, ...StaysInBudget or ...StaysFast...; beside other packages'
 # tests one measured 389 ms against 200 ms, another a 266 ms p95 against 100 ms.
