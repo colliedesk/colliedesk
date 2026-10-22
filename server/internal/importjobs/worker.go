@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
@@ -30,6 +31,8 @@ const (
 	maxCrashes = 5
 	// maxFullRetries is how often a FAILED full pass runs again while its failures go down.
 	maxFullRetries = 2
+	// relinkBatch is how many changed links one tick applies.
+	relinkBatch = 20
 	// etaWindow is the span the remaining-time estimate is computed over.
 	etaWindow = 5 * time.Minute
 )
@@ -61,6 +64,8 @@ type Worker struct {
 	options WorkerOptions
 	slots   chan struct{}
 	wg      sync.WaitGroup
+	// relinking is set while a batch of links is applied.
+	relinking atomic.Bool
 	// The importer; tests replace it (export_test.go) to drive the job's states.
 	runImport func(context.Context, *pgxpool.Pool, freshdesk.Options) (*freshdesk.Report, error)
 	preview   func(context.Context, freshdesk.Options) (*freshdesk.PreviewResult, error)
@@ -115,6 +120,7 @@ func (w *Worker) Run(ctx context.Context) {
 func (w *Worker) Tick(ctx context.Context) error {
 	expired, err := expirePreviews(ctx, w.options.DB, w.options.Now().UTC())
 	w.options.Keys.forget(expired...)
+	w.startRelinks(ctx)
 	free := cap(w.slots) - len(w.slots)
 	if free == 0 || err != nil {
 		return err
@@ -131,6 +137,26 @@ func (w *Worker) Tick(ctx context.Context) error {
 		}()
 	}
 	return err
+}
+
+// startRelinks applies the changed links of imported people in the background, one batch at a time.
+func (w *Worker) startRelinks(ctx context.Context) {
+	if !w.relinking.CompareAndSwap(false, true) {
+		return
+	}
+	w.wg.Add(1)
+	go func() {
+		defer func() { w.relinking.Store(false); w.wg.Done() }()
+		pending, err := claimRelinks(ctx, w.options.DB, relinkBatch)
+		if err != nil && ctx.Err() == nil {
+			w.options.Logger.Error("import links", "error", err)
+		}
+		for _, person := range pending {
+			if err := applyLink(ctx, w.options.DB, person); err != nil && ctx.Err() == nil {
+				w.options.Logger.Error("import link", "workspace", person.workspaceID, "error", err)
+			}
+		}
+	}()
 }
 
 // Wait blocks until every job this worker started has stopped.
@@ -349,8 +375,12 @@ func (r *jobRun) preview(ctx context.Context, options freshdesk.Options) error {
 		return err
 	}
 	r.ended = true
-	return r.update(ctx, `state='previewed', account_source=$4, preview=$5, claim_token=NULL, lease_until=NULL, updated_at=$6`,
-		result.Source, encoded, r.now())
+	err = updateAnd(context.WithoutCancel(ctx), r.worker.options.DB, r.item, func(tx pgx.Tx) error { return savePeople(ctx, tx, r.item.workspaceID, result) },
+		`state='previewed', account_source=$4, preview=$5, claim_token=NULL, lease_until=NULL, updated_at=$6`, result.Source, encoded, r.now())
+	if errors.Is(err, errLeaseLost) {
+		r.cancel(errLeaseLost)
+	}
+	return err
 }
 
 // recent runs the recent pass and saves the move to the full pass before the full pass starts.
@@ -397,7 +427,13 @@ func (r *jobRun) full(ctx context.Context, options freshdesk.Options) error {
 			claim_token=NULL, lease_until=NULL, updated_at=$9`, encoded, report.Markdown(), CodeRetryingFailures,
 			fmt.Sprintf("%d item(s) failed; the import tries them again.", len(report.Failures)), r.now().Add(time.Minute), r.now())
 	}
-	return r.end(ctx, StateFinished, report.Status, "", "", encoded, ptr(report.Markdown()))
+	if err := r.end(ctx, StateFinished, report.Status, "", "", encoded, ptr(report.Markdown())); err != nil {
+		return err
+	}
+	// Replies and tickets of people no agent matched while importing get their link now.
+	return r.worker.options.DB.InWorkspace(context.WithoutCancel(ctx), r.item.workspaceID, func(tx pgx.Tx) error {
+		return relinkAll(ctx, tx, r.item.workspaceID, *r.job.AccountSource)
+	})
 }
 
 // fewerFailures reports whether a FAILED report is worth another run: the first one is, a later one

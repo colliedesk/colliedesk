@@ -244,8 +244,11 @@ func successfulContractCases(f contractFixture) map[string]contractCase {
 		"POST /api/v1/imports":                          {path: "/api/v1/imports", body: map[string]any{"source": "freshdesk", "domain": "contract.freshdesk.com", "api_key": "contract-key"}, token: admin, status: 202},
 		"GET /api/v1/imports/{id}/report":               {path: "/api/v1/imports/" + f.imports.finished + "/report", token: admin, status: 200},
 		// The import started above holds the workspace: an undo now answers 409 import_running.
-		"POST /api/v1/imports/{id}/undo":             {path: "/api/v1/imports/" + f.imports.finished + "/undo", token: admin, status: 409},
-		"POST /api/v1/public/forms/{workspace_slug}": {path: "/api/v1/public/forms/contract-desk" /* the slug set by PATCH /api/v1/workspace/slug, which runs earlier */, body: map[string]any{"email": "visitor@contract.example.com", "source": "site:updates"}, status: 202},
+		"POST /api/v1/imports/{id}/undo":                       {path: "/api/v1/imports/" + f.imports.finished + "/undo", token: admin, status: 409},
+		"GET /api/v1/imports/{id}/people":                      {path: "/api/v1/imports/" + f.imports.finished + "/people", token: admin, status: 200},
+		"PUT /api/v1/imports/{id}/people/{externalId}/link":    {path: "/api/v1/imports/" + f.imports.finished + "/people/102/link", body: map[string]any{"agent_id": f.agentID}, token: admin, status: 200},
+		"DELETE /api/v1/imports/{id}/people/{externalId}/link": {path: "/api/v1/imports/" + f.imports.finished + "/people/102/link", token: admin, status: 200},
+		"POST /api/v1/public/forms/{workspace_slug}":           {path: "/api/v1/public/forms/contract-desk" /* the slug set by PATCH /api/v1/workspace/slug, which runs earlier */, body: map[string]any{"email": "visitor@contract.example.com", "source": "site:updates"}, status: 202},
 	}
 	maps.Copy(cases, kbContractCases(f))
 	return cases

@@ -1166,6 +1166,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/imports/{id}/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The agents of the import's Freshdesk account and the Colliedesk agent each is linked to. A link makes that agent the author of their imported replies and the assignee of the imported tickets they held; the preview links the agents whose email matches, and accepting an invite links the ones with the invited email. 409 `import_state` before the preview read the account. */
+        get: operations["listImportPeople"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/imports/{id}/people/{externalId}/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                /** @description The Freshdesk agent id */
+                externalId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Links a Freshdesk agent to an active agent of this workspace, replacing an earlier link. Their imported replies get that author and the imported tickets assigned to them, unless someone reassigned them since, that assignee, within seconds (`pending` until then). Timestamps do not change. `DELETE` takes the link back. */
+        put: operations["linkImportPerson"];
+        post?: never;
+        /** @description Takes a link back: the imported replies show the Freshdesk name again and the imported tickets the link assigned lose that assignee, unless someone reassigned them since. */
+        delete: operations["unlinkImportPerson"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/export": {
         parameters: {
             query?: never;
@@ -1916,6 +1957,22 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ImportPerson: {
+            /** @description The Freshdesk agent id */
+            external_id: string;
+            name: string;
+            email: string;
+            /** @description An active agent in Freshdesk */
+            active: boolean;
+            /** Format: uuid */
+            linked_agent_id: string | null;
+            /** @description Linked because the emails match, not by a person */
+            linked_by_email: boolean;
+            /** @description The link changed and the imported replies and tickets are still being moved */
+            pending: boolean;
+            /** Format: date-time */
+            updated_at: string;
+        };
         ImportOptions: {
             /** @description The tickets updated in these last days are imported first, newest first; 0 skips that pass. Default 90. */
             recent_days?: number;
@@ -6076,6 +6133,101 @@ export interface operations {
                     "application/json": components["schemas"]["ImportJob"] | components["schemas"]["AgentRequestAccepted"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    listImportPeople: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Freshdesk agents */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ImportPerson"][];
+                    };
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    linkImportPerson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                /** @description The Freshdesk agent id */
+                externalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    agent_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The Freshdesk agent */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportPerson"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    unlinkImportPerson: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                /** @description The Freshdesk agent id */
+                externalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The Freshdesk agent */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportPerson"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];

@@ -118,8 +118,9 @@ may lack the right), the status is `UNVERIFIED`.
 
 1. Create the Colliedesk workspace (on your own server, see
    [self-host](../self-host/README.md)).
-2. Invite your team first. Replies by an agent link to that agent only when a Colliedesk agent
-   with the same email exists.
+2. Invite your team. With the CLI, replies by an agent link to that agent only when a Colliedesk
+   agent with the same email exists when you run it. In the app you can also invite them from the
+   import page, before or after the import: joining links them (see "Import in the app").
 3. Get a Freshdesk API key from an **admin** account with access to all tickets. The import reads
    the account id (View Account), which needs an admin key:
    1. Sign in to Freshdesk.
@@ -144,6 +145,13 @@ never accepts it as a command-line argument and never prints it.
    or sign out: the import runs on the server and survives a restart.
 4. At the end the page shows the result, **In Freshdesk** next to **In Colliedesk** for each kind of
    data, with **Download report** for the Markdown report. **Undo import** removes what it brought in.
+
+Under **Freshdesk agents** the page lists the agents of the account. Each one linked to a Colliedesk
+agent becomes the author of their imported replies and the assignee of the imported tickets they held
+(unless someone reassigned a ticket since); the original times do not change. Agents with the same email
+are linked when the account is read. **Invite** sends a Colliedesk invite to the others: when they join,
+they are linked by their email, before or after the import. To link someone whose email differs, choose
+the agent and select **Link**; **Unlink** takes it back. A link is applied within seconds.
 
 **Stop import** stops it within a minute; what was imported stays. Start a new import to finish it, or
 undo it. Only one import or undo runs in a workspace at a time.

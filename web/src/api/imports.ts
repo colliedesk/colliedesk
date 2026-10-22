@@ -35,6 +35,13 @@ export const importJobSchema = z.object({
   next_run_at: nullableDate, created_by: z.string().uuid().nullable(), created_at: z.string().datetime(),
   started_at: nullableDate, finished_at: nullableDate, updated_at: z.string().datetime(),
 }) satisfies z.ZodType<Generated<'ImportJob'>>;
+export const importPersonSchema = z.object({
+  external_id: z.string(), name: z.string(), email: z.string(), active: z.boolean(), linked_agent_id: z.string().uuid().nullable(),
+  linked_by_email: z.boolean(), pending: z.boolean(), updated_at: z.string().datetime(),
+}) satisfies z.ZodType<Generated<'ImportPerson'>>;
+export const importPeopleSchema = z.object({ items: z.array(importPersonSchema) }) satisfies z.ZodType<JsonResponse<'listImportPeople', 200>>;
+export type ImportPerson = z.infer<typeof importPersonSchema>;
+
 export const importListSchema = z.object({ items: z.array(importJobSchema) }) satisfies z.ZodType<JsonResponse<'listImports', 200>>;
 
 // The report is the importer's own JSON; the page reads the counts it shows and keeps the rest opaque.
@@ -58,7 +65,7 @@ export type ImportPreview = z.infer<typeof importPreviewSchema>;
 export type ImportReport = z.infer<typeof importReportSchema>;
 export type UndoReport = z.infer<typeof undoReportSchema>;
 
-const json = <Operation extends 'previewImport' | 'setImportKey'>(value: RequestBody<Operation>): string => JSON.stringify(value);
+const json = <Operation extends 'previewImport' | 'setImportKey' | 'linkImportPerson'>(value: RequestBody<Operation>): string => JSON.stringify(value);
 
 export const importsApi = {
   list: () => request('/api/v1/imports', importListSchema),
@@ -70,6 +77,10 @@ export const importsApi = {
   setKey: (id: string, apiKey: string) => request(`/api/v1/imports/${id}/key`, importJobSchema, { method: 'PUT', body: json<'setImportKey'>({ api_key: apiKey }) }),
   report: (id: string) => request(`/api/v1/imports/${id}/report`, anyReportSchema),
   undo: (id: string) => request(`/api/v1/imports/${id}/undo`, importJobSchema, { method: 'POST' }),
+  people: (id: string) => request(`/api/v1/imports/${id}/people`, importPeopleSchema),
+  link: (id: string, externalId: string, agentId: string) =>
+    request(`/api/v1/imports/${id}/people/${externalId}/link`, importPersonSchema, { method: 'PUT', body: json<'linkImportPerson'>({ agent_id: agentId }) }),
+  unlink: (id: string, externalId: string) => request(`/api/v1/imports/${id}/people/${externalId}/link`, importPersonSchema, { method: 'DELETE' }),
 };
 
 // reportDownloadPath is the Markdown report as a file to save.

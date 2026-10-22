@@ -135,6 +135,11 @@ var errLeaseLost = errors.New("import job lease was lost")
 
 // update runs one write of a claimed job; it fails with errLeaseLost when the claim is gone.
 func update(ctx context.Context, db *database.DB, item claimed, sql string, args ...any) error {
+	return updateAnd(ctx, db, item, nil, sql, args...)
+}
+
+// updateAnd is update with more writes in the same transaction, made only while the claim holds.
+func updateAnd(ctx context.Context, db *database.DB, item claimed, also func(pgx.Tx) error, sql string, args ...any) error {
 	return db.InWorkspace(ctx, item.workspaceID, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE import_jobs SET `+sql+` WHERE workspace_id=$1 AND id=$2 AND claim_token=$3`,
 			append([]any{item.workspaceID, item.id, item.token}, args...)...)
@@ -143,6 +148,9 @@ func update(ctx context.Context, db *database.DB, item claimed, sql string, args
 		}
 		if tag.RowsAffected() == 0 {
 			return errLeaseLost
+		}
+		if also != nil {
+			return also(tx)
 		}
 		return nil
 	})

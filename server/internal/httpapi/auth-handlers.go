@@ -37,6 +37,11 @@ func (a *API) redeem(response http.ResponseWriter, request *http.Request) {
 		writeError(response, http.StatusUnauthorized, "invalid_link", "This link is invalid, expired, revoked, or already used.")
 		return
 	}
+	// A person who joins takes over the imported replies and tickets of the Freshdesk agent with
+	// their email. A failure never stops the sign-in; a person can link them in the import page.
+	if _, err := a.imports.LinkByEmail(request.Context(), result.Workspace.ID, result.Agent.ID, result.Agent.Email); err != nil {
+		slog.Error("link imported Freshdesk agent", "workspace_id", result.Workspace.ID, "error", err)
+	}
 	if input.SessionType == "cookie" {
 		setSessionCookie(response, result.Token)
 		result.Token = ""

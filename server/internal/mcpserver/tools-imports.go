@@ -131,3 +131,52 @@ func importUndoRequest(c *call, arguments map[string]any) (any, error) {
 	c.notFound = importNotFound
 	return ask(c, http.MethodPost, importPath(args.ID, "/undo"), nil)
 }
+
+func importPeopleList(c *call, arguments map[string]any) (any, error) {
+	args, err := decodeArguments[importIDArgument](arguments)
+	if err != nil {
+		return nil, err
+	}
+	c.notFound = importNotFound
+	var list struct {
+		Items []json.RawMessage `json:"items"`
+	}
+	if err := c.get(importPath(args.ID, "/people"), nil, &list); err != nil {
+		return nil, err
+	}
+	if list.Items == nil {
+		list.Items = []json.RawMessage{}
+	}
+	return map[string]any{"people": list.Items}, nil
+}
+
+type importPersonArguments struct {
+	ID      string `json:"import_id"`
+	Person  string `json:"freshdesk_agent_id"`
+	AgentID string `json:"agent_id"`
+}
+
+func importPersonChange(c *call, arguments map[string]any, method string, link bool) (any, error) {
+	args, err := decodeArguments[importPersonArguments](arguments)
+	if err != nil {
+		return nil, err
+	}
+	c.notFound = "No such import, or no Freshdesk agent with that id in it. List them with colliedesk_import_people_list."
+	var body any
+	if link {
+		body = map[string]any{"agent_id": args.AgentID}
+	}
+	var person json.RawMessage
+	if err := c.send(method, importPath(args.ID, "/people/"+url.PathEscape(args.Person)+"/link"), body, &person); err != nil {
+		return nil, err
+	}
+	return map[string]any{"person": person}, nil
+}
+
+func importPersonLink(c *call, arguments map[string]any) (any, error) {
+	return importPersonChange(c, arguments, http.MethodPut, true)
+}
+
+func importPersonUnlink(c *call, arguments map[string]any) (any, error) {
+	return importPersonChange(c, arguments, http.MethodDelete, false)
+}

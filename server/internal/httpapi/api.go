@@ -404,6 +404,9 @@ func Routes() []Route {
 		{http.MethodPost, "/api/v1/imports", auth.PermissionWorkspaceImport},
 		{http.MethodGet, "/api/v1/imports/{id}/report", auth.PermissionWorkspaceImport},
 		{http.MethodPost, "/api/v1/imports/{id}/undo", auth.PermissionWorkspaceImport},
+		{http.MethodGet, "/api/v1/imports/{id}/people", auth.PermissionWorkspaceImport},
+		{http.MethodPut, "/api/v1/imports/{id}/people/{externalId}/link", auth.PermissionWorkspaceImport},
+		{http.MethodDelete, "/api/v1/imports/{id}/people/{externalId}/link", auth.PermissionWorkspaceImport},
 	}
 }
 

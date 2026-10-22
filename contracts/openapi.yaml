@@ -2075,6 +2075,82 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/imports/{id}/people:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: listImportPeople
+      x-permission: workspace:import
+      description: >
+        The agents of the import's Freshdesk account and the Colliedesk agent each is linked to. A link
+        makes that agent the author of their imported replies and the assignee of the imported tickets
+        they held; the preview links the agents whose email matches, and accepting an invite links the
+        ones with the invited email. 409 `import_state` before the preview read the account.
+      responses:
+        '200':
+          description: Freshdesk agents
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/ImportPerson'}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/imports/{id}/people/{externalId}/link:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - name: externalId
+        in: path
+        required: true
+        schema: {type: string, pattern: '^[0-9]{1,20}$'}
+        description: The Freshdesk agent id
+    put:
+      operationId: linkImportPerson
+      x-permission: workspace:import
+      description: >
+        Links a Freshdesk agent to an active agent of this workspace, replacing an earlier link. Their
+        imported replies get that author and the imported tickets assigned to them, unless someone
+        reassigned them since, that assignee, within seconds (`pending` until then). Timestamps do not
+        change. `DELETE` takes the link back.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [agent_id]
+              properties:
+                agent_id: {type: string, format: uuid}
+      responses:
+        '200':
+          description: The Freshdesk agent
+          content: {application/json: {schema: {$ref: '#/components/schemas/ImportPerson'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: unlinkImportPerson
+      x-permission: workspace:import
+      description: >
+        Takes a link back: the imported replies show the Freshdesk name again and the imported tickets the
+        link assigned lose that assignee, unless someone reassigned them since.
+      responses:
+        '200':
+          description: The Freshdesk agent
+          content: {application/json: {schema: {$ref: '#/components/schemas/ImportPerson'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/export:
     get:
       operationId: exportWorkspace
@@ -3640,6 +3716,18 @@ components:
       description: Resource not found in this workspace
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
   schemas:
+    ImportPerson:
+      type: object
+      required: [external_id, name, email, active, linked_agent_id, linked_by_email, pending, updated_at]
+      properties:
+        external_id: {type: string, description: The Freshdesk agent id}
+        name: {type: string}
+        email: {type: string}
+        active: {type: boolean, description: An active agent in Freshdesk}
+        linked_agent_id: {type: [string, 'null'], format: uuid}
+        linked_by_email: {type: boolean, description: 'Linked because the emails match, not by a person'}
+        pending: {type: boolean, description: The link changed and the imported replies and tickets are still being moved}
+        updated_at: {type: string, format: date-time}
     ImportOptions:
       type: object
       additionalProperties: false

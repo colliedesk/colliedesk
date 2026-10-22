@@ -206,6 +206,11 @@ var tokenTiers = map[string]TokenAccess{
 	"PUT /api/v1/imports/{id}/key":     tier(auth.ScopeAdmin),
 	"GET /api/v1/imports/{id}/report":  tier(auth.ScopeAdmin),
 	"POST /api/v1/imports/{id}/undo":   approvalRequired,
+	// A link only changes who wrote imported replies and holds imported tickets, and is taken back
+	// the same way.
+	"GET /api/v1/imports/{id}/people":                      tier(auth.ScopeAdmin),
+	"PUT /api/v1/imports/{id}/people/{externalId}/link":    tier(auth.ScopeAdmin),
+	"DELETE /api/v1/imports/{id}/people/{externalId}/link": tier(auth.ScopeAdmin),
 
 	"GET /api/v1/config": notForPeople,
 	// Google's redirect after consent: it finishes only with the session cookie of the person who started.

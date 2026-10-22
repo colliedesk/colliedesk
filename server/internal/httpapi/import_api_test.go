@@ -226,3 +226,62 @@ func TestTheExportKeepsImportsButNeverTheirKey(t *testing.T) {
 		t.Fatalf("import-jobs.ndjson = %s", entries["import-jobs.ndjson"])
 	}
 }
+
+func TestAnInvitedFreshdeskAgentIsLinkedWhenTheyJoin(t *testing.T) {
+	api, admin, _, _, jobs, _ := newImportDesk(t)
+	bob := joinAsAgent(t, api, admin, "Bob@Old.Example")
+	var me struct {
+		Agent struct {
+			ID string `json:"id"`
+		} `json:"agent"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/auth/me", nil, bob, nil), &me)
+	var people struct {
+		Items []struct {
+			ExternalID    string  `json:"external_id"`
+			LinkedAgentID *string `json:"linked_agent_id"`
+			LinkedByEmail bool    `json:"linked_by_email"`
+			Pending       bool    `json:"pending"`
+		} `json:"items"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/imports/"+jobs.finished+"/people", nil, admin, nil), &people)
+	if len(people.Items) != 2 || people.Items[1].ExternalID != "102" || people.Items[1].LinkedAgentID == nil || *people.Items[1].LinkedAgentID != me.Agent.ID ||
+		!people.Items[1].LinkedByEmail || !people.Items[1].Pending {
+		t.Fatalf("people = %+v", people.Items)
+	}
+	// A person takes it back.
+	response := request(t, api, http.MethodDelete, "/api/v1/imports/"+jobs.finished+"/people/102/link", nil, admin, nil)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"linked_agent_id":null`) {
+		t.Fatalf("unlink: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestAnotherWorkspaceCannotSeeOrLinkTheFreshdeskAgents(t *testing.T) {
+	api, adminA, adminB, agentA, jobs, _ := newImportDesk(t)
+	var me struct {
+		Agent struct {
+			ID string `json:"id"`
+		} `json:"agent"`
+	}
+	decode(t, request(t, api, http.MethodGet, "/api/v1/auth/me", nil, adminB, nil), &me)
+	for _, call := range []struct {
+		method, path string
+		body         any
+	}{
+		{http.MethodGet, "/api/v1/imports/" + jobs.finished + "/people", nil},
+		{http.MethodPut, "/api/v1/imports/" + jobs.finished + "/people/102/link", map[string]any{"agent_id": me.Agent.ID}},
+		{http.MethodDelete, "/api/v1/imports/" + jobs.finished + "/people/101/link", nil},
+	} {
+		if response := request(t, api, call.method, call.path, call.body, adminB, nil); response.Code != http.StatusNotFound {
+			t.Errorf("%s %s from another workspace: %d %s", call.method, call.path, response.Code, response.Body.String())
+		}
+		if response := request(t, api, call.method, call.path, call.body, agentA, nil); response.Code != http.StatusForbidden {
+			t.Errorf("%s %s by an agent: %d", call.method, call.path, response.Code)
+		}
+	}
+	// Workspace A cannot link to an agent of workspace B.
+	response := request(t, api, http.MethodPut, "/api/v1/imports/"+jobs.finished+"/people/102/link", map[string]any{"agent_id": me.Agent.ID}, adminA, nil)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "invalid_agent") {
+		t.Fatalf("link to another workspace's agent: %d %s", response.Code, response.Body.String())
+	}
+}

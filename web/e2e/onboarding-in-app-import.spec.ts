@@ -29,6 +29,10 @@ test('in-app freshdesk import: an admin reads the account, imports it in the bac
     await expect(page.getByRole('heading', { name: 'Found in acme.freshdesk.com' })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByRole('row', { name: /Tickets/ })).toContainText(`at least ${fixture.tickets - 1}`);
     await expect(page.getByRole('row', { name: /Contacts/ })).toContainText(String(fixture.contacts));
+    // The Freshdesk agents come along: the admin is linked by email, the former agent can be invited.
+    const agents = page.getByRole('region', { name: 'Freshdesk agents' });
+    await expect(agents.getByRole('listitem').filter({ hasText: 'Alice Agent' })).toContainText('Linked to');
+    await expect(agents.getByRole('listitem').filter({ hasText: 'Bob Former' }).getByRole('button', { name: 'Invite' })).toBeVisible();
     // Nothing is written by the preview.
     const before = await (await page.request.get(`${baseURL}/api/v1/conversations`)).json() as { items: unknown[] };
     expect(before.items).toHaveLength(0);

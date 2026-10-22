@@ -290,6 +290,19 @@ is gone, or its key left every ring) is taken by any worker and moves to `waitin
 different rings therefore never take each other's jobs while those are alive. Cloud sets the ring; it is shared with Gmail grants, so rotate it by
 putting a new key in front (`k2:new,k1:old`), never by replacing it.
 
+### Freshdesk agents (import_people)
+
+The preview records the agents of the account (`import_people`, keyed by workspace, ledger source and
+Freshdesk agent id) and links the ones whose email matches an active agent. Redeeming an invite links
+the unlinked ones with that email (`Service.LinkByEmail` in the redeem handler; a failure never stops a
+sign-in). A person links or unlinks through the API. A changed link sets `relink_pending`, and
+`relink_from` keeps the agent the rows are taken from until the worker applies it: in the person's
+workspace, one transaction moves the replies (`origin.author_external_id`) and the tickets
+(`origin.responder_external_id`) that this account's ledger wrote, from `relink_from` to nobody, then from
+nobody to the linked agent. A ticket someone reassigned keeps its assignee; `author_name` and the
+timestamps never change. The end of a full pass marks every link of the account pending again, for the
+rows written while nobody matched. Messages imported before author ids existed are not relinked.
+
 ## Knowledge base (solutions)
 
 Code: `solutions*.go`; the writes are `store/kb-import.go`, which take the same lock, limits,
