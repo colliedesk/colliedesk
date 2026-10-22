@@ -58,8 +58,8 @@ func seedAIRetrievalBudget(t *testing.T, pool *pgxpool.Pool, workspaceName strin
 func TestAIRetrievalLatencyBudget(t *testing.T) {
 	_, pool, _, _ := sharedKBBudget(t)
 	started := time.Now()
-	seedAIRetrievalBudget(t, pool, "KB Budget A", 6000)
-	seedAIRetrievalBudget(t, pool, "KB Budget B", 1000)
+	seedAIRetrievalBudget(t, pool, "KB Budget A", 5200)
+	seedAIRetrievalBudget(t, pool, "KB Budget B", 300)
 	if _, err := pool.Exec(context.Background(), `ANALYZE ai_retrieval_docs; ANALYZE conversations`); err != nil {
 		t.Fatal(err)
 	}
