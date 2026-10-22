@@ -458,6 +458,22 @@ func fixture(t *testing.T, db *database.DB) (acme, beta string) {
 	exec(`INSERT INTO email_channels(workspace_id,support_address,domain_verification_token,sender_name) VALUES($1,'support@beta.example','token','Beta')`, b.ID)
 	exec(`INSERT INTO web_form_channels(workspace_id,enabled) VALUES($1,false)`, a.ID)
 	exec(`INSERT INTO import_items(workspace_id,source,entity,source_id,status) VALUES($1,'freshdesk:account:42','ticket','1','done')`, a.ID)
+	// Acme's first import report was ready 1 hour 30 minutes 20 seconds after sign-up; a later import
+	// and its undo do not move it. A preview, a failed import, an import still running and a report
+	// being retried (retry_wait) came earlier but are no report ready. Beta never imported in the app.
+	job := func(kind, state, status, finished string) {
+		exec(`INSERT INTO import_jobs(workspace_id,kind,source,domain,state,phase,status,undo_of,finished_at)
+			SELECT w.id,$2::text,'freshdesk','acme.freshdesk.com',$3::text,CASE $2::text WHEN 'undo' THEN 'undo' ELSE 'full' END,NULLIF($4,''),
+				CASE $2::text WHEN 'undo' THEN (SELECT id FROM import_jobs WHERE workspace_id=w.id AND kind='import' AND state='finished' ORDER BY finished_at LIMIT 1) END,
+				w.created_at+NULLIF($5,'')::interval
+			FROM workspaces w WHERE w.id=$1`, a.ID, kind, state, status, finished)
+	}
+	job("import", "previewed", "", "")
+	job("import", "failed", "", "10 minutes")
+	job("import", "retry_wait", "", "")
+	job("import", "finished", "UNVERIFIED", "1 hour 30 minutes 20 seconds")
+	job("import", "finished", "OK", "3 hours")
+	job("undo", "finished", "", "2 hours")
 	return a.ID, b.ID
 }
 
@@ -541,6 +557,7 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 			"replies_7d": float64(1), "replies_30d": float64(2), "ai_agent_replies_7d": float64(1),
 			"conversations_open": float64(1), "conversations_created_7d": float64(1),
 			"email_channel": false, "web_form": true, "tokens_active": float64(1), "freshdesk_import": true,
+			"time_to_first_result_seconds": float64(5420),
 			"workspace_name": "Acme Support", "workspace_slug": "acme-support",
 		},
 		beta: {
@@ -549,6 +566,7 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 			"replies_7d": float64(0), "replies_30d": float64(0), "ai_agent_replies_7d": float64(0),
 			"conversations_open": float64(0), "conversations_created_7d": float64(0),
 			"email_channel": true, "web_form": false, "tokens_active": float64(0), "freshdesk_import": false,
+			"time_to_first_result_seconds": nil,
 			"workspace_name": "Beta Help", "workspace_slug": "beta-help",
 		},
 	}
@@ -566,7 +584,7 @@ func TestCloudSendsOneSnapshotPerWorkspace(t *testing.T) {
 			t.Errorf("workspace %s realm/version/$process_person_profile = %#v/%#v/%#v", id, event.Properties["realm"], event.Properties["version"], event.Properties["$process_person_profile"])
 		}
 		// The fields are exactly the ones docs/user/telemetry.md lists; a new one needs the docs first.
-		const listed = "$process_person_profile,agents_active_30d,agents_active_7d,agents_total,ai_agent_replies_7d,conversations_created_7d,conversations_open,days_since_created,email_channel,freshdesk_import,plan,realm,replies_30d,replies_7d,tokens_active,trial_days_left,version,web_form,workspace_name,workspace_slug"
+		const listed = "$process_person_profile,agents_active_30d,agents_active_7d,agents_total,ai_agent_replies_7d,conversations_created_7d,conversations_open,days_since_created,email_channel,freshdesk_import,plan,realm,replies_30d,replies_7d,time_to_first_result_seconds,tokens_active,trial_days_left,version,web_form,workspace_name,workspace_slug"
 		if got := keys(event.Properties); got != listed {
 			t.Errorf("workspace %s property keys = %s, want %s", id, got, listed)
 		}
