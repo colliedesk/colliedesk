@@ -19,9 +19,11 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/database"
 	"github.com/colliedesk/colliedesk/server/internal/email"
 	"github.com/colliedesk/colliedesk/server/internal/emailoutbox"
+	"github.com/colliedesk/colliedesk/server/internal/freshdesk"
 	"github.com/colliedesk/colliedesk/server/internal/google"
 	"github.com/colliedesk/colliedesk/server/internal/helpcenter"
 	"github.com/colliedesk/colliedesk/server/internal/httpapi"
+	"github.com/colliedesk/colliedesk/server/internal/importjobs"
 	"github.com/colliedesk/colliedesk/server/internal/mcpserver"
 	"github.com/colliedesk/colliedesk/server/internal/polar"
 	"github.com/colliedesk/colliedesk/server/internal/providerdomain"
@@ -31,6 +33,10 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/webui"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// importJobNetwork changes the importer options of in-app imports; only end-to-end builds set it,
+// to reach a local fake Freshdesk.
+var importJobNetwork func(*freshdesk.Options)
 
 // googleBaseURL replaces Google's addresses with a local stand-in; only end-to-end builds set it.
 var googleBaseURL = ""
@@ -116,6 +122,15 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		client := &resend.Client{APIKey: emailConfig.ResendAPIKey, Base: emailConfig.ResendAPIBase}
 		go providerdomain.New(store.NewWithDB(db), client, providerdomain.Options{}).Run(ctx, time.Minute)
 	}
+	// In-app imports run here, on the owner pool like the CLI. Their keys are sealed with the Gmail ring
+	// (MAILBOX_TOKEN_KEYS); without one they stay in this process's memory.
+	importKeys := importjobs.NewKeys(googleConfig.Keys)
+	var importPlans []string
+	if billing.Enabled() {
+		importPlans = billing.PlansOnSale()
+	}
+	go importjobs.NewWorker(importjobs.WorkerOptions{Pool: pool, DB: db, Keys: importKeys, Storage: storage,
+		Cloud: billing.Enabled(), PlansOnSale: importPlans, BaseURL: freshdeskBaseURL, Configure: importJobNetwork}).Run(ctx)
 	warnWithoutTrustedProxies(slog.Default(), trustedProxies)
 	// The hosted cloud is cloud sign-in with billing; a self-hosted server may use sign-in alone.
 	hostedCloud := cloudAuth.Enabled() && billing.Enabled()

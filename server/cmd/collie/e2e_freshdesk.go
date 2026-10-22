@@ -26,6 +26,14 @@ func init() {
 	}
 	freshdeskBaseURL = func(string) string { return base }
 	importRun = withE2ENetwork(importRun)
+	importJobNetwork = func(options *freshdesk.Options) {
+		pem, err := os.ReadFile(os.Getenv("COLLIEDESK_E2E_FRESHDESK_CA"))
+		roots := x509.NewCertPool()
+		if err != nil || !roots.AppendCertsFromPEM(pem) {
+			return // the run then refuses the loopback address and says so
+		}
+		freshdesk.UseE2ENetwork(options, roots, strings.Split(os.Getenv("COLLIEDESK_E2E_FRESHDESK_DIAL"), ",")...)
+	}
 }
 
 // withE2ENetwork wraps the importer entry point; the pool passes through untouched (its type is
