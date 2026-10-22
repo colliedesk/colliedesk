@@ -19,7 +19,8 @@ import (
 // TestHelpCenterPagesLatencyBudget holds every public help center page to the inbox budget, HTML
 // rendering included, at the article cap: the shared fixture of TestKnowledgeBaseSearchLatencyBudget,
 // two workspaces of domain.MaxKBArticles articles each (half published, 20 of them 100,000 characters
-// long), all in one collection, help centers on, workspace A's with a full theme. It times the home
+// long), all in one collection, help centers on, workspace A's with a full theme and close to the
+// largest custom CSS (read and hashed into the brand sheet's name on every page). It times the home
 // page, the first and last page of that collection, a short and a 100,000-character article,
 // searches, the brand style sheet and the logo.
 func TestHelpCenterPagesLatencyBudget(t *testing.T) {
@@ -62,10 +63,10 @@ func TestHelpCenterPagesLatencyBudget(t *testing.T) {
 
 // brandColumns are the columns of help_centers brandKBBudget changes and puts back.
 const brandColumns = `logo_media_id, favicon_media_id, logo_alt, linkback_url, contact_url, contact_phone, color_primary, color_header,
-	color_header_text, color_background, color_text, color_link, color_footer, body_font, heading_font, content_version`
+	color_header_text, color_background, color_text, color_link, color_footer, body_font, heading_font, custom_css, content_version`
 
 // brandKBBudget gives workspace A of the shared fixture a full theme whose logo and favicon are an
-// image of its own, and returns that image's id. The cleanup removes the image and puts A's help
+// image of its own, with about 31 KiB of custom CSS, and returns that image's id. The cleanup removes the image and puts A's help
 // center back as it was, so the other gates on the fixture see it as seeded whatever order they run in.
 func brandKBBudget(t *testing.T, pool *pgxpool.Pool, storage attachments.Storage, slug string) string {
 	t.Helper()
@@ -90,7 +91,8 @@ func brandKBBudget(t *testing.T, pool *pgxpool.Pool, storage attachments.Storage
 	if _, err := pool.Exec(ctx, `UPDATE help_centers SET logo_media_id=$2, favicon_media_id=$2, logo_alt='KB Budget', linkback_url='https://budget.example/',
 		contact_url='mailto:help@budget.example', contact_phone='+1 (555) 010-2030', color_primary='#0b5cad', color_header='#0b5cad',
 		color_header_text='#ffffff', color_background='#ffffff', color_text='#1f2328', color_link='#0b5cad', color_footer='#f6f8fa',
-		body_font='humanist-sans', heading_font='transitional-serif', content_version=content_version+1 WHERE workspace_id=$1`, workspaceID, logo); err != nil {
+		body_font='humanist-sans', heading_font='transitional-serif', custom_css=repeat(E'.budget-rule a:hover{border-bottom:2px solid #0b5cad}\n', 600),
+		content_version=content_version+1 WHERE workspace_id=$1`, workspaceID, logo); err != nil {
 		t.Fatal(err)
 	}
 	return logo

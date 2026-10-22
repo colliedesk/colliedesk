@@ -76,3 +76,31 @@ func TestHelpCenterThemeUpdateKeepsATrashedLogoItAlreadyHas(t *testing.T) {
 		t.Fatalf("saved = %v", saved)
 	}
 }
+
+// Custom CSS goes through the same tools: checked and previewed with a read token, saved with an admin
+// token, refused at its line and column, and cleared by sending it empty.
+func TestHelpCenterThemeToolsTakeCustomCSS(t *testing.T) {
+	e := newEnv(t)
+	w := e.newWorkspace("Theme CSS Tools", "admin@theme-css-tools.example.com")
+	css := ".masthead{border-bottom:2px solid #0b5cad}"
+
+	read := e.connect(w.read, "")
+	previewed := e.ok(read, "colliedesk_help_center_theme_check", map[string]any{"custom_css": css, "preview": "home"})
+	if page, _ := previewed["html"].(string); !strings.Contains(page, css) {
+		t.Fatalf("check with preview = %v", previewed)
+	}
+
+	admin := e.connect(w.adminTier, "")
+	if message := e.fails(admin, "colliedesk_help_center_theme_update", map[string]any{"custom_css": "a{background:url(x)}"}); !strings.Contains(message, "line 1, column 14: url() is not allowed") {
+		t.Fatalf("refused custom CSS: %q", message)
+	}
+	if saved := e.ok(admin, "colliedesk_help_center_theme_update", map[string]any{"custom_css": css}); at(t, saved, "theme", "custom_css") != css {
+		t.Fatalf("saved = %v", saved)
+	}
+	if theme := e.ok(read, "colliedesk_help_center_theme_get", nil); at(t, theme, "theme", "custom_css") != css {
+		t.Fatalf("theme after save = %v", theme)
+	}
+	if cleared := e.ok(admin, "colliedesk_help_center_theme_update", map[string]any{"custom_css": ""}); at(t, cleared, "theme", "custom_css") != "" {
+		t.Fatalf("cleared = %v", cleared)
+	}
+}

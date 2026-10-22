@@ -18,7 +18,7 @@ const kbMediaNamedByHelpCenter = `EXISTS(SELECT 1 FROM help_centers h WHERE h.wo
 // helpCenterThemeColumns are the theme's columns in the order of domain.HelpCenterTheme; the read
 // casts the media ids to text.
 const helpCenterThemeColumns = `logo_media_id,favicon_media_id,logo_alt,linkback_url,contact_url,contact_phone,
-	color_primary,color_header,color_header_text,color_background,color_text,color_link,color_footer,body_font,heading_font`
+	color_primary,color_header,color_header_text,color_background,color_text,color_link,color_footer,body_font,heading_font,custom_css`
 
 // GetHelpCenterTheme returns the brand of the help center with its contrast checks; a workspace
 // without a help center row has the default look.
@@ -38,7 +38,7 @@ func readHelpCenterTheme(ctx context.Context, tx pgx.Tx, workspaceID string) (do
 	err := tx.QueryRow(ctx, `SELECT logo_media_id::text,favicon_media_id::text,`+strings.TrimPrefix(helpCenterThemeColumns, "logo_media_id,favicon_media_id,")+`,content_version,updated_at FROM help_centers WHERE workspace_id=$1`, workspaceID).Scan(
 		&theme.LogoMediaID, &theme.FaviconMediaID, &theme.LogoAlt, &theme.LinkbackURL, &theme.ContactURL, &theme.ContactPhone,
 		&colors.Primary, &colors.Header, &colors.HeaderText, &colors.Background, &colors.Text, &colors.Link, &colors.Footer,
-		&theme.BodyFont, &theme.HeadingFont, &view.ContentVersion, &view.UpdatedAt)
+		&theme.BodyFont, &theme.HeadingFont, &theme.CustomCSS, &view.ContentVersion, &view.UpdatedAt)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return domain.HelpCenterThemeView{}, err
 	}
@@ -122,7 +122,8 @@ func themeMediaProblem(found, image, trashed bool, stored *string, id string) st
 }
 
 // PutHelpCenterTheme replaces the brand of the help center after domain.CheckTheme and the media
-// check. The logo and favicon are marked kept and locked FOR SHARE until the save commits, so the
+// check; the caller has checked the custom CSS (helpcenter.CheckCustomCSS), and the column bounds its
+// size. The logo and favicon are marked kept and locked FOR SHARE until the save commits, so the
 // purge, which skips locked rows and checks again, never deletes one the theme is about to name. A
 // save bumps content_version, since every page shows the theme.
 func (s *Store) PutHelpCenterTheme(ctx context.Context, workspaceID string, theme domain.HelpCenterTheme) (domain.HelpCenterThemeView, error) {
@@ -137,16 +138,16 @@ func (s *Store) PutHelpCenterTheme(ctx context.Context, workspaceID string, them
 		}
 		colors := cleaned.Colors
 		if _, err := tx.Exec(ctx, `INSERT INTO help_centers(workspace_id,content_version,updated_at,`+helpCenterThemeColumns+`)
-			VALUES($1,1,clock_timestamp(),$2::uuid,$3::uuid,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+			VALUES($1,1,clock_timestamp(),$2::uuid,$3::uuid,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
 			ON CONFLICT (workspace_id) DO UPDATE SET logo_media_id=EXCLUDED.logo_media_id, favicon_media_id=EXCLUDED.favicon_media_id,
 				logo_alt=EXCLUDED.logo_alt, linkback_url=EXCLUDED.linkback_url, contact_url=EXCLUDED.contact_url, contact_phone=EXCLUDED.contact_phone,
 				color_primary=EXCLUDED.color_primary, color_header=EXCLUDED.color_header, color_header_text=EXCLUDED.color_header_text,
 				color_background=EXCLUDED.color_background, color_text=EXCLUDED.color_text, color_link=EXCLUDED.color_link,
 				color_footer=EXCLUDED.color_footer, body_font=EXCLUDED.body_font, heading_font=EXCLUDED.heading_font,
-				content_version=help_centers.content_version+1, updated_at=clock_timestamp()`,
+				custom_css=EXCLUDED.custom_css, content_version=help_centers.content_version+1, updated_at=clock_timestamp()`,
 			workspaceID, cleaned.LogoMediaID, cleaned.FaviconMediaID, cleaned.LogoAlt, cleaned.LinkbackURL, cleaned.ContactURL, cleaned.ContactPhone,
 			colors.Primary, colors.Header, colors.HeaderText, colors.Background, colors.Text, colors.Link, colors.Footer,
-			cleaned.BodyFont, cleaned.HeadingFont); err != nil {
+			cleaned.BodyFont, cleaned.HeadingFont, cleaned.CustomCSS); err != nil {
 			return domain.HelpCenterThemeView{}, err
 		}
 		if _, err := tx.Exec(ctx, `UPDATE kb_media SET kept=true, updated_at=clock_timestamp() WHERE workspace_id=$1 AND id IN ($2::uuid,$3::uuid) AND NOT kept`,

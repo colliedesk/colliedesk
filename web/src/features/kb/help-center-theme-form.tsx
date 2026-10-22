@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ColorRow, Hint, ImageField, controlId, linkShapes, normalize, validHex } from './help-center-theme-fields';
 import { themeMessages as text } from './help-center-theme-messages';
 import { HelpCenterPreview, useThemePreview } from './help-center-preview';
+import { CustomCSSField, caretAt } from './help-center-custom-css-field';
 import { ThemeInvalidError, colorFields, fontKeys, themeApi } from './theme-api';
 import type { ColorField, HelpCenterTheme, PreviewPage, ThemeCheck, ThemeInput } from './theme-api';
 import './help-center-theme.css';
@@ -11,19 +12,19 @@ import './help-center-theme.css';
 // The theme as the form edits it: text fields hold '' for the default.
 type Draft = {
   logo_media_id: string | null; favicon_media_id: string | null; logo_alt: string; linkback_url: string; contact_url: string; contact_phone: string;
-  colors: Record<ColorField, string>; body_font: string; heading_font: string;
+  colors: Record<ColorField, string>; body_font: string; heading_font: string; custom_css: string;
 };
 type TextField = 'logo_alt' | LinkField;
 type LinkField = keyof typeof linkShapes;
 
 const blankColors = Object.fromEntries(colorFields.map((field) => [field, ''])) as Record<ColorField, string>;
-const defaultLook: Draft = { logo_media_id: null, favicon_media_id: null, logo_alt: '', linkback_url: '', contact_url: '', contact_phone: '', colors: blankColors, body_font: '', heading_font: '' };
+const defaultLook: Draft = { logo_media_id: null, favicon_media_id: null, logo_alt: '', linkback_url: '', contact_url: '', contact_phone: '', colors: blankColors, body_font: '', heading_font: '', custom_css: '' };
 
 const draftOf = (theme: HelpCenterTheme): Draft => ({
   logo_media_id: theme.logo_media_id, favicon_media_id: theme.favicon_media_id, logo_alt: theme.logo_alt,
   linkback_url: theme.linkback_url ?? '', contact_url: theme.contact_url ?? '', contact_phone: theme.contact_phone ?? '',
   colors: Object.fromEntries(colorFields.map((field) => [field, theme.colors[field] ?? ''])) as Record<ColorField, string>,
-  body_font: theme.body_font ?? '', heading_font: theme.heading_font ?? '',
+  body_font: theme.body_font ?? '', heading_font: theme.heading_font ?? '', custom_css: theme.custom_css,
 });
 
 const orNull = (value: string) => value.trim() || null;
@@ -35,7 +36,8 @@ type Font = (typeof fontKeys)[number];
 const fontOrNull = (value: string) => (fontKeys as readonly string[]).includes(value) ? value as Font : null;
 
 // inputOf is what Save sends. For the preview, a color, link or phone number still being typed counts as
-// the default, so a half-written value does not stop the page from showing.
+// the default, so a half-written value does not stop the page from showing. Custom CSS goes as written
+// to both: only the server can say whether it passes.
 function inputOf(draft: Draft, forPreview = false): ThemeInput {
   const colors = Object.fromEntries(colorFields.map((field) => {
     const value = draft.colors[field].trim();
@@ -46,7 +48,7 @@ function inputOf(draft: Draft, forPreview = false): ThemeInput {
     linkback_url: forPreview ? previewable(draft, 'linkback_url') : orNull(draft.linkback_url),
     contact_url: forPreview ? previewable(draft, 'contact_url') : orNull(draft.contact_url),
     contact_phone: forPreview ? previewable(draft, 'contact_phone') : orNull(draft.contact_phone),
-    colors, body_font: fontOrNull(draft.body_font), heading_font: fontOrNull(draft.heading_font),
+    colors, body_font: fontOrNull(draft.body_font), heading_font: fontOrNull(draft.heading_font), custom_css: draft.custom_css,
   };
 }
 
@@ -61,7 +63,7 @@ function effectiveColors(checks: ThemeCheck[]): Partial<Record<ColorField, strin
 }
 
 // The order of the controls on the page: a refused save puts the focus on the first one named.
-const fieldOrder = ['logo_media_id', 'favicon_media_id', 'logo_alt', 'linkback_url', 'contact_url', 'contact_phone', ...colorFields.map((field) => `colors.${field}`), 'body_font', 'heading_font'];
+const fieldOrder = ['logo_media_id', 'favicon_media_id', 'logo_alt', 'linkback_url', 'contact_url', 'contact_phone', ...colorFields.map((field) => `colors.${field}`), 'body_font', 'heading_font', 'custom_css'];
 
 // HelpCenterThemeForm is the brand part of the Help center card: an admin edits it beside a live preview;
 // anyone else sees the saved values and the preview.
@@ -91,12 +93,19 @@ export function HelpCenterThemeForm({ canManage }: { canManage: boolean }) {
   const current = draft ?? (theme.data ? draftOf(theme.data) : defaultLook);
   // No preview of the default look while the saved brand loads: the first one shows the saved brand.
   const live = useThemePreview(page, inputOf(canManage ? current : (theme.data ? draftOf(theme.data) : defaultLook), true), theme.data !== undefined);
-  // After a refused save, the first control it names takes the focus; an edit that clears one does not move it.
+  // After a refused save, the first control it names takes the focus (opening Advanced when it is there,
+  // with the caret where a custom CSS refusal points); an edit that clears one does not move it.
   useEffect(() => {
     if (!refused.current) return;
     refused.current = false;
     const first = fieldOrder.find((field) => errors[field]);
-    if (first) document.getElementById(controlId(first))?.focus();
+    const control = first ? document.getElementById(controlId(first)) : null;
+    if (!first || !control) return;
+    const fold = control.closest('details');
+    if (fold) fold.open = true;
+    control.focus();
+    const caret = control instanceof HTMLTextAreaElement ? caretAt(control.value, errors[first]!) : undefined;
+    if (caret !== undefined) (control as HTMLTextAreaElement).setSelectionRange(caret, caret);
   }, [errors]);
   if (theme.isError) return <p role="alert" className="error-copy">{text.loadFailed}</p>;
   if (!theme.data) return null;
@@ -113,7 +122,8 @@ export function HelpCenterThemeForm({ canManage }: { canManage: boolean }) {
       : shown));
     setDraft({ ...current, ...next });
   };
-  const preview = <HelpCenterPreview html={live.preview?.html} pending={live.pending} error={live.error} page={page} onPage={setPage} />;
+  const cssPending = live.refused?.custom_css;
+  const preview = <HelpCenterPreview html={live.preview?.html} pending={live.pending} error={cssPending ? text.previewCustomCSS : live.error} page={page} onPage={setPage} />;
   if (!canManage) return <div className="theme-layout"><ReadOnly theme={theme.data} />{preview}</div>;
 
   const textField = (field: TextField, label: string, help: string, type = 'text', maxLength = 2000) => {
@@ -162,6 +172,8 @@ export function HelpCenterThemeForm({ canManage }: { canManage: boolean }) {
           {fontField('body_font', text.bodyFont, 'system-sans')}
           {fontField('heading_font', text.headingFont, 'classic-serif')}
         </fieldset>
+        <CustomCSSField value={current.custom_css} savedHasCSS={theme.data.custom_css !== ''} error={errors.custom_css} pending={cssPending}
+          onChange={(value) => change({ custom_css: value })} />
         <span className="button-row">
           <button className="primary-action" type="submit" disabled={save.isPending}>{save.isPending ? text.saving : text.save}</button>
           <button type="button" aria-describedby="theme-reset-help" onClick={() => change(defaultLook)}>{text.resetAll}</button>
@@ -194,6 +206,7 @@ function ReadOnly({ theme }: { theme: HelpCenterTheme }) {
     [text.website, theme.linkback_url ?? text.none], [text.contact, theme.contact_url ?? text.none], [text.phone, theme.contact_phone ?? text.none],
     ...colorFields.map((field): [string, string] => [text.colorNames[field], theme.colors[field] ?? text.byDefault]),
     [text.bodyFont, font(theme.body_font, 'system-sans')], [text.headingFont, font(theme.heading_font, 'classic-serif')],
+    [text.customCSS, theme.custom_css ? text.isSet : text.none],
   ];
   return (
     <div className="theme-form">

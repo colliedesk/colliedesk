@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { themeMessages } from './help-center-theme-messages';
-import { themeApi } from './theme-api';
+import { ThemeInvalidError, themeApi } from './theme-api';
 import type { PreviewPage, ThemeInput, ThemePreview } from './theme-api';
 
 // The policy the server writes into every preview document. The frame holds the document only when it
@@ -22,11 +22,12 @@ export const previewDelay = 300;
 
 // useThemePreview renders page with theme on the server: 300 ms after the last change, one request at a
 // time, and an answer for a theme that is no longer the latest is dropped (the latest goes out next).
-// A failure keeps the last page shown. Nothing is asked while enabled is false (the saved theme is still
-// loading) or after the caller goes away.
+// A failure keeps the last page shown; a refusal also gives its messages by field (refused), so a field
+// can say why it is not in the preview yet. Nothing is asked while enabled is false (the saved theme is
+// still loading) or after the caller goes away.
 export function useThemePreview(page: PreviewPage, theme: ThemeInput, enabled = true) {
   const key = JSON.stringify({ page, theme });
-  const [shown, setShown] = useState<{ key?: string; preview?: ThemePreview; error?: string }>({});
+  const [shown, setShown] = useState<{ key?: string; preview?: ThemePreview; error?: string; refused?: Record<string, string> }>({});
   const queue = useRef({ latest: key, due: undefined as string | undefined, busy: false, timer: 0, alive: true });
   const run = () => {
     const state = queue.current;
@@ -37,7 +38,11 @@ export function useThemePreview(page: PreviewPage, theme: ThemeInput, enabled = 
     const sent = JSON.parse(body) as { page: PreviewPage; theme: ThemeInput };
     themeApi.preview(sent.page, sent.theme).then(
       (preview) => { if (state.alive && body === state.latest) setShown({ key: body, preview }); },
-      () => { if (state.alive && body === state.latest) setShown((current) => ({ ...current, key: body, error: themeMessages.previewFailed })); },
+      (error: unknown) => {
+        if (!state.alive || body !== state.latest) return;
+        const refused = error instanceof ThemeInvalidError ? error.fields : undefined;
+        setShown((current) => ({ ...current, key: body, error: themeMessages.previewFailed, refused }));
+      },
     ).finally(() => {
       state.busy = false;
       run();
@@ -61,7 +66,8 @@ export function useThemePreview(page: PreviewPage, theme: ThemeInput, enabled = 
       window.clearTimeout(state.timer);
     };
   }, []);
-  return { preview: shown.preview, error: shown.key === key ? shown.error : undefined, pending: shown.key !== key };
+  const current = shown.key === key;
+  return { preview: shown.preview, error: current ? shown.error : undefined, refused: current ? shown.refused : undefined, pending: !current };
 }
 
 // A click on a link inside the preview would load that address into the frame; the preview is a picture

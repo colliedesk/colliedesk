@@ -27,6 +27,7 @@ type themeView struct {
 	Colors         map[string]*string `json:"colors"`
 	BodyFont       *string            `json:"body_font"`
 	HeadingFont    *string            `json:"heading_font"`
+	CustomCSS      string             `json:"custom_css"`
 	ContentVersion int64              `json:"content_version"`
 	UpdatedAt      *string            `json:"updated_at"`
 	Checks         []themeCheckView   `json:"checks"`
@@ -46,7 +47,7 @@ func fullTheme(logoID string) map[string]any {
 		"linkback_url": "https://acme.example/", "contact_url": "mailto:help@acme.example", "contact_phone": "+1 (555) 010-2030",
 		"colors": map[string]any{"primary": "#0B5CAD", "header": "#ffffff", "header_text": "#16201c", "background": "#ffffff",
 			"text": "#1f2328", "link": "#0b5cad", "footer": "#f6f8fa"},
-		"body_font": "humanist-sans", "heading_font": "transitional-serif",
+		"body_font": "humanist-sans", "heading_font": "transitional-serif", "custom_css": "h2{letter-spacing:.01em}",
 	}
 }
 
@@ -76,7 +77,7 @@ func TestHelpCenterThemeRoundTripBumpsTheContentVersion(t *testing.T) {
 	var saved themeView
 	kbCall(t, api, http.MethodPut, themePath, fullTheme(logo.ID), admin, http.StatusOK, &saved)
 	if saved.LogoMediaID == nil || *saved.LogoMediaID != logo.ID || *saved.Colors["primary"] != "#0b5cad" || *saved.ContactPhone != "+1 (555) 010-2030" ||
-		*saved.HeadingFont != "transitional-serif" || saved.ContentVersion != 1 || saved.UpdatedAt == nil {
+		*saved.HeadingFont != "transitional-serif" || saved.CustomCSS != "h2{letter-spacing:.01em}" || saved.ContentVersion != 1 || saved.UpdatedAt == nil {
 		t.Fatalf("saved theme = %+v", saved)
 	}
 	var read themeView
@@ -86,7 +87,7 @@ func TestHelpCenterThemeRoundTripBumpsTheContentVersion(t *testing.T) {
 	}
 	var reset themeView
 	kbCall(t, api, http.MethodPut, themePath, map[string]any{}, admin, http.StatusOK, &reset)
-	if reset.LogoMediaID != nil || reset.Colors["primary"] != nil || reset.BodyFont != nil || reset.ContentVersion != 2 {
+	if reset.LogoMediaID != nil || reset.Colors["primary"] != nil || reset.BodyFont != nil || reset.CustomCSS != "" || reset.ContentVersion != 2 {
 		t.Fatalf("reset theme = %+v", reset)
 	}
 	var center struct {

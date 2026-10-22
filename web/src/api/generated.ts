@@ -1804,7 +1804,7 @@ export interface paths {
         };
         /** @description The brand of the public help center: logo, favicon, website and contact links, colors and fonts, with the contrast `checks` of the colors it shows. A null color or font is the default. */
         get: operations["getHelpCenterTheme"];
-        /** @description Replace the brand of the public help center. A field left out or null goes back to its default, so send the whole theme (read it first). Admins only, and an `admin` agent token. Every color pair must meet WCAG AA (4.5:1 for text, 3:1 for the primary color against the background): 422 `contrast_too_low` names each failing color in `fields` with a color that passes, and nothing is saved. A logo or favicon must be an image of the workspace's media library outside the trash (422 `media_not_found` otherwise); it is marked kept, so the library never deletes it while the help center names it. A save changes `content_version`, so every page is new. */
+        /** @description Replace the brand of the public help center. A field left out or null goes back to its default, so send the whole theme (read it first). Admins only, and an `admin` agent token. Every color pair must meet WCAG AA (4.5:1 for text, 3:1 for the primary color against the background): 422 `contrast_too_low` names each failing color in `fields` with a color that passes, and nothing is saved. A logo or favicon must be an image of the workspace's media library outside the trash (422 `media_not_found` otherwise); it is marked kept, so the library never deletes it while the help center names it. `custom_css` is checked as its schema says (422 `custom_css_refused`). A save changes `content_version`, so every page is new. */
         put: operations["putHelpCenterTheme"];
         post?: never;
         delete?: never;
@@ -2873,6 +2873,8 @@ export interface components {
             colors?: components["schemas"]["HelpCenterThemeColors"];
             body_font?: components["schemas"]["ThemeFont"];
             heading_font?: components["schemas"]["ThemeFont"];
+            /** @description CSS served after the theme's colors and fonts on every public page, for details the other fields do not cover; empty or null is none. At most 32,768 bytes. Refused (422 `custom_css_refused`, with the line and column) when it could load anything or leave its style sheet: `url()` and the image functions (`image()`, `image-set()`, `cross-fade()`, `element()`, `src()`, `paint()`), `expression()`, `behavior`, `-moz-binding`, at-rules other than `@media`, `@supports`, `@keyframes`, `@layer` and `@container`, a backslash outside quotes, `</`, `<!--`, an unbalanced bracket, an unclosed string or comment, and `url(`, `@import`, `image-set(`, `expression(`, `javascript:` or `vbscript:` anywhere once escapes are read. It is stored and served exactly as sent. The contrast checks do not cover it. */
+            custom_css?: string | null;
         };
         HelpCenterTheme: {
             /** Format: uuid */
@@ -2886,6 +2888,8 @@ export interface components {
             colors: WithRequired<components["schemas"]["HelpCenterThemeColors"], "primary" | "header" | "header_text" | "background" | "text" | "link" | "footer">;
             body_font: components["schemas"]["ThemeFont"];
             heading_font: components["schemas"]["ThemeFont"];
+            /** @description The custom CSS, empty for none. */
+            custom_css: string;
             content_version: number;
             /**
              * Format: date-time
@@ -3510,7 +3514,7 @@ export interface components {
             };
             content?: never;
         };
-        /** @description The theme was not saved. `error.code` is `validation_failed` (a field of the wrong shape), `media_not_found` (a logo or favicon that is not an image of the library outside the trash) or `contrast_too_low` (a color pair below WCAG AA; `error.checks` lists every pair). `error.fields` holds one message per field, such as `colors.text`. */
+        /** @description The theme was not saved. `error.code` is `validation_failed` (a field of the wrong shape), `media_not_found` (a logo or favicon that is not an image of the library outside the trash) or `contrast_too_low` (a color pair below WCAG AA; `error.checks` lists every pair) or `custom_css_refused` (`error.fields.custom_css` says where and why, such as `line 3, column 14: url() is not allowed`). `error.fields` holds one message per field, such as `colors.text`. */
         ThemeInvalid: {
             headers: {
                 [name: string]: unknown;

@@ -12,10 +12,12 @@ import (
 	"github.com/colliedesk/colliedesk/server/internal/domain"
 )
 
-// brandCSS is the second style sheet of a themed help center: it only sets the custom properties of
-// site.css, so the page's Content-Security-Policy (style-src 'self', no inline style) stays as it is.
-// It is built from validated #rrggbb colors and the fixed font stacks; no text of the customer's
-// reaches it. A theme that sets no color and no font has none (nil), so its pages are unchanged.
+// brandCSS is the second style sheet of a themed help center: the custom properties of site.css, then
+// the admin's custom CSS byte for byte, so the page's Content-Security-Policy (style-src 'self', no
+// inline style) stays as it is. The properties come from validated #rrggbb colors and the fixed font
+// stacks; the custom CSS passed CheckCustomCSS before it was saved, and its rules come last so they
+// can override the theme. A theme that sets no color, no font and no custom CSS has none (nil), so its
+// pages are unchanged.
 //
 // Brand colors are chosen for a light page, so with any color set the sheet sets every color and
 // color-scheme: light. It loads after site.css, so its :root wins over site.css's dark palette too.
@@ -49,10 +51,14 @@ func brandCSS(theme domain.HelpCenterTheme) []byte {
 			fmt.Fprintf(&sheet, "--%s:%s;", font.name, stack)
 		}
 	}
-	if sheet.Len() == 0 {
-		return nil
+	var out []byte
+	if sheet.Len() > 0 {
+		out = []byte(":root{" + sheet.String() + "}\n")
 	}
-	return []byte(":root{" + sheet.String() + "}\n")
+	if theme.CustomCSS != "" {
+		out = append(out, theme.CustomCSS...)
+	}
+	return out
 }
 
 func colorsSet(colors domain.ThemeColors) bool {

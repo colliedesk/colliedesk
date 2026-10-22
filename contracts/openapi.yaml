@@ -3390,7 +3390,8 @@ paths:
         422 `contrast_too_low` names each failing color in `fields` with a color that passes, and
         nothing is saved. A logo or favicon must be an image of the workspace's media library outside
         the trash (422 `media_not_found` otherwise); it is marked kept, so the library never deletes it
-        while the help center names it. A save changes `content_version`, so every page is new.
+        while the help center names it. `custom_css` is checked as its schema says (422
+        `custom_css_refused`). A save changes `content_version`, so every page is new.
       requestBody:
         required: true
         content:
@@ -3550,8 +3551,9 @@ components:
       description: >-
         The theme was not saved. `error.code` is `validation_failed` (a field of the wrong shape),
         `media_not_found` (a logo or favicon that is not an image of the library outside the trash) or
-        `contrast_too_low` (a color pair below WCAG AA; `error.checks` lists every pair). `error.fields`
-        holds one message per field, such as `colors.text`.
+        `contrast_too_low` (a color pair below WCAG AA; `error.checks` lists every pair) or
+        `custom_css_refused` (`error.fields.custom_css` says where and why, such as `line 3, column 14:
+        url() is not allowed`). `error.fields` holds one message per field, such as `colors.text`.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Error400:
       description: Invalid request
@@ -4596,9 +4598,22 @@ components:
         colors: {$ref: '#/components/schemas/HelpCenterThemeColors'}
         body_font: {$ref: '#/components/schemas/ThemeFont'}
         heading_font: {$ref: '#/components/schemas/ThemeFont'}
+        custom_css:
+          type: [string, 'null']
+          maxLength: 32768
+          description: >-
+            CSS served after the theme's colors and fonts on every public page, for details the other
+            fields do not cover; empty or null is none. At most 32,768 bytes. Refused (422
+            `custom_css_refused`, with the line and column) when it could load anything or leave its
+            style sheet: `url()` and the image functions (`image()`, `image-set()`, `cross-fade()`,
+            `element()`, `src()`, `paint()`), `expression()`, `behavior`, `-moz-binding`, at-rules other
+            than `@media`, `@supports`, `@keyframes`, `@layer` and `@container`, a backslash outside
+            quotes, `</`, `<!--`, an unbalanced bracket, an unclosed string or comment, and `url(`,
+            `@import`, `image-set(`, `expression(`, `javascript:` or `vbscript:` anywhere once escapes
+            are read. It is stored and served exactly as sent. The contrast checks do not cover it.
     HelpCenterTheme:
       type: object
-      required: [logo_media_id, favicon_media_id, logo_alt, linkback_url, contact_url, contact_phone, colors, body_font, heading_font, content_version, updated_at, checks]
+      required: [logo_media_id, favicon_media_id, logo_alt, linkback_url, contact_url, contact_phone, colors, body_font, heading_font, custom_css, content_version, updated_at, checks]
       properties:
         logo_media_id: {type: [string, 'null'], format: uuid}
         favicon_media_id: {type: [string, 'null'], format: uuid}
@@ -4611,6 +4626,7 @@ components:
           required: [primary, header, header_text, background, text, link, footer]
         body_font: {$ref: '#/components/schemas/ThemeFont'}
         heading_font: {$ref: '#/components/schemas/ThemeFont'}
+        custom_css: {type: string, description: 'The custom CSS, empty for none.'}
         content_version: {type: integer, minimum: 0}
         updated_at: {type: [string, 'null'], format: date-time, description: Null until the help center settings were first changed.}
         checks:

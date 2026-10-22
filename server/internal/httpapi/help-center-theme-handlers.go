@@ -14,7 +14,7 @@ import (
 
 // themeFields are the fields a theme call takes; an agent request carrying any other is refused
 // before it is stored (settingsFields).
-var themeFields = []string{"logo_media_id", "favicon_media_id", "logo_alt", "linkback_url", "contact_url", "contact_phone", "colors", "body_font", "heading_font"}
+var themeFields = []string{"logo_media_id", "favicon_media_id", "logo_alt", "linkback_url", "contact_url", "contact_phone", "colors", "body_font", "heading_font", "custom_css"}
 
 // themeColorFields are the keys of the theme's colors object (domain.ThemeColors).
 var themeColorFields = []string{"primary", "header", "header_text", "background", "text", "link", "footer"}
@@ -30,6 +30,7 @@ type themeInput struct {
 	Colors         *domain.ThemeColors `json:"colors"`
 	BodyFont       *string             `json:"body_font"`
 	HeadingFont    *string             `json:"heading_font"`
+	CustomCSS      *string             `json:"custom_css"`
 }
 
 func (input themeInput) theme() domain.HelpCenterTheme {
@@ -42,7 +43,23 @@ func (input themeInput) theme() domain.HelpCenterTheme {
 	if input.Colors != nil {
 		theme.Colors = *input.Colors
 	}
+	if input.CustomCSS != nil {
+		theme.CustomCSS = *input.CustomCSS
+	}
 	return theme
+}
+
+// cleanTheme is domain.CleanTheme and the custom CSS check, which every call taking a theme runs: a
+// refused text never reaches the store or a preview's <style> element.
+func cleanTheme(theme domain.HelpCenterTheme) (domain.HelpCenterTheme, error) {
+	cleaned, err := domain.CleanTheme(theme)
+	if err != nil {
+		return domain.HelpCenterTheme{}, err
+	}
+	if err := helpcenter.CheckCustomCSS(cleaned.CustomCSS); err != nil {
+		return domain.HelpCenterTheme{}, &domain.ThemeError{Code: "custom_css_refused", Fields: map[string]string{"custom_css": err.Error()}}
+	}
+	return cleaned, nil
 }
 
 func decodeTheme(response http.ResponseWriter, request *http.Request) (domain.HelpCenterTheme, bool) {
@@ -65,6 +82,8 @@ func writeThemeError(response http.ResponseWriter, err error) {
 	switch invalid.Code {
 	case "media_not_found":
 		message = "The logo and favicon must be images of the media library, outside its trash. Nothing was saved."
+	case "custom_css_refused":
+		message = "The custom CSS was refused: " + invalid.Fields["custom_css"] + ". Nothing was saved."
 	case "contrast_too_low":
 		var lines []string
 		for _, field := range slices.Sorted(maps.Keys(invalid.Fields)) {
@@ -93,7 +112,12 @@ func (a *API) putHelpCenterTheme(response http.ResponseWriter, request *http.Req
 	if !ok {
 		return
 	}
-	view, err := a.store.PutHelpCenterTheme(request.Context(), principal(request).Workspace.ID, theme)
+	cleaned, err := cleanTheme(theme)
+	if err != nil {
+		writeThemeError(response, err)
+		return
+	}
+	view, err := a.store.PutHelpCenterTheme(request.Context(), principal(request).Workspace.ID, cleaned)
 	if err != nil {
 		writeThemeError(response, err)
 		return
@@ -108,7 +132,7 @@ func (a *API) checkHelpCenterTheme(response http.ResponseWriter, request *http.R
 	if !ok {
 		return
 	}
-	cleaned, err := domain.CleanTheme(theme)
+	cleaned, err := cleanTheme(theme)
 	if err == nil {
 		err = a.store.CheckHelpCenterThemeMedia(request.Context(), principal(request).Workspace.ID, cleaned)
 	}
@@ -142,7 +166,7 @@ func (a *API) previewHelpCenterTheme(response http.ResponseWriter, request *http
 		writeThemeError(response, &domain.ThemeError{Code: "validation_failed", Fields: map[string]string{"page": "Choose home or article."}})
 		return
 	}
-	cleaned, err := domain.CleanTheme(input.Theme.theme())
+	cleaned, err := cleanTheme(input.Theme.theme())
 	if err != nil {
 		writeThemeError(response, err)
 		return

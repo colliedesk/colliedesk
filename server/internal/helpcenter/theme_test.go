@@ -15,6 +15,7 @@ func brandedTheme() domain.HelpCenterTheme {
 		Colors: domain.ThemeColors{Primary: themeValue("#0b5cad"), Header: themeValue("#ffffff"), HeaderText: themeValue("#16201c"), Background: themeValue("#ffffff"),
 			Text: themeValue("#1f2328"), Link: themeValue("#0b5cad"), Footer: themeValue("#f6f8fa")},
 		BodyFont: themeValue("humanist-sans"), HeadingFont: themeValue("transitional-serif"),
+		CustomCSS: "@media (max-width:600px){.masthead{border-bottom:2px solid #0b5cad}}",
 	}
 }
 

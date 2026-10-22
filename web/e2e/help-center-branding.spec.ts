@@ -110,6 +110,29 @@ test.describe('public pages', () => {
   });
 });
 
+// Not in the bypassCSP block: the page's own policy (style-src 'self') is enforced, so the custom CSS
+// shows only because it is served from the help center's own origin, inside the brand sheet.
+test('help center branding: custom CSS shows on the public page under its own policy, CSS that could load anything is refused at its line, and clearing it removes it', async ({ page }) => {
+  const { base, headers } = await helpCenter(page, 'custom-css');
+  const themePath = `${servers.main}/api/v1/help-center/theme`;
+  const refused = await page.request.put(themePath, { headers, data: { custom_css: '.masthead{\n  border-bottom:6px solid #8b0000;\n  background:url(https://tracker.example/p.gif)\n}' } });
+  expect(refused.status()).toBe(422);
+  expect(await refused.json()).toMatchObject({ error: { code: 'custom_css_refused', fields: { custom_css: 'line 3, column 14: url() is not allowed' } } });
+
+  expect((await page.request.put(themePath, { headers, data: { custom_css: '.masthead{border-bottom:6px solid #8b0000}' } })).status()).toBe(200);
+  const blocked: string[] = [];
+  page.on('console', (message) => { if (/Content Security Policy/i.test(message.text())) blocked.push(message.text()); });
+  await page.goto(base);
+  const masthead = page.getByRole('banner');
+  await expect(masthead).toHaveCSS('border-bottom-width', '6px');
+  await expect(masthead).toHaveCSS('border-bottom-color', 'rgb(139, 0, 0)');
+  expect(blocked, 'requests the page policy refused').toEqual([]);
+
+  expect((await page.request.put(themePath, { headers, data: { custom_css: '' } })).status()).toBe(200);
+  await page.goto(base);
+  await expect(masthead).not.toHaveCSS('border-bottom-width', '6px');
+});
+
 // counted wraps the person's clicks and typed inputs, so the test can hold the path to a branded help
 // center to a number of steps a person would take.
 function counted(page: Page) {

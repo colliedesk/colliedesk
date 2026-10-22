@@ -20,7 +20,7 @@ const colorsSchema = z.object({ primary: color, header: color, header_text: colo
 const themeSchema = z.object({
   logo_media_id: z.string().uuid().nullable(), favicon_media_id: z.string().uuid().nullable(), logo_alt: z.string(),
   linkback_url: z.string().nullable(), contact_url: z.string().nullable(), contact_phone: z.string().nullable(),
-  colors: colorsSchema, body_font: font, heading_font: font, content_version: z.number().int(), updated_at: z.string().datetime().nullable(),
+  colors: colorsSchema, body_font: font, heading_font: font, custom_css: z.string(), content_version: z.number().int(), updated_at: z.string().datetime().nullable(),
   checks: z.array(checkSchema),
 }) satisfies z.ZodType<Generated<'HelpCenterTheme'>>;
 // A map of messages by field. catchall rather than z.record: the first bundle, which holds zod, then keeps

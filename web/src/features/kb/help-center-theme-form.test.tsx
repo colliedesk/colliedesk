@@ -17,7 +17,7 @@ const defaultChecks = [
 const noColors = { primary: null, header: null, header_text: null, background: null, text: null, link: null, footer: null };
 const saved = {
   logo_media_id: ids.image, favicon_media_id: null, logo_alt: 'Acme', linkback_url: 'https://acme.example/', contact_url: null, contact_phone: '+1 555 0100',
-  colors: { ...noColors, primary: '#0b5cad' }, body_font: 'humanist-sans', heading_font: null, content_version: 4, updated_at: '2026-10-22T00:00:00Z', checks: defaultChecks,
+  colors: { ...noColors, primary: '#0b5cad' }, body_font: 'humanist-sans', heading_font: null, custom_css: '', content_version: 4, updated_at: '2026-10-22T00:00:00Z', checks: defaultChecks,
 };
 const preview = {
   html: `<!doctype html><meta charset="utf-8">\n<meta http-equiv="Content-Security-Policy" content="${previewPolicy(window.location.origin)}">\n<h1>Acme help</h1>`,
@@ -60,7 +60,7 @@ test('an admin saves the brand and is told it is live on the next page load', as
   expect(await screen.findByText('Saved. Live on the next page load.')).toHaveAttribute('role', 'status');
   expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({
     logo_media_id: ids.image, favicon_media_id: null, logo_alt: 'Acme', linkback_url: 'https://acme.example/help', contact_url: null, contact_phone: '+1 555 0100',
-    colors: { ...noColors, primary: '#0b5cad' }, body_font: 'humanist-sans', heading_font: 'classic-serif',
+    colors: { ...noColors, primary: '#0b5cad' }, body_font: 'humanist-sans', heading_font: 'classic-serif', custom_css: '',
   });
 });
 
@@ -87,7 +87,7 @@ test('each color resets to its default, and the whole brand resets to the defaul
   await screen.findByText('Saved. Live on the next page load.');
   expect(calls.find((call) => call.method === 'PUT')?.body).toEqual({
     logo_media_id: null, favicon_media_id: null, logo_alt: '', linkback_url: null, contact_url: null, contact_phone: null,
-    colors: noColors, body_font: null, heading_font: null,
+    colors: noColors, body_font: null, heading_font: null, custom_css: '',
   });
 });
 
@@ -120,6 +120,7 @@ test('an agent sees the brand but has no control to change it', async () => {
   expect(within(values).getByText('https://acme.example/')).toBeInTheDocument();
   expect(within(values).getByText('#0b5cad')).toBeInTheDocument();
   expect(within(values).getByText('Humanist sans')).toBeInTheDocument();
+  expect(within(values).getByText('Custom CSS').nextElementSibling).toHaveTextContent('None');
   expect(screen.getByText('Only admins can change the brand.')).toBeInTheDocument();
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
@@ -207,4 +208,55 @@ test('the preview waits for the saved brand: no request for the default look whi
   loaded(json(200, saved));
   await waitFor(() => expect(calls.filter((call) => call.method === 'POST')).toHaveLength(1));
   expect((calls.find((call) => call.method === 'POST')?.body as { theme: { linkback_url: string } }).theme.linkback_url).toBe('https://acme.example/');
+});
+
+const cssRefusal = (message: string) => json(422, { error: { code: 'custom_css_refused', message: `The custom CSS was refused: ${message}. Nothing was saved.`, fields: { custom_css: message } } });
+
+test('custom CSS sits under Advanced, is saved as written, and a refusal opens it with the message there and the caret at the reported line', async () => {
+  const message = 'line 2, column 14: url() is not allowed';
+  const calls = serve({
+    'GET /api/v1/help-center/theme': () => json(200, saved),
+    'POST /api/v1/help-center/theme/preview': () => json(200, preview),
+    'PUT /api/v1/help-center/theme': () => cssRefusal(message),
+  });
+  open(true);
+  await screen.findByRole('textbox', { name: 'Text color' });
+  const css = screen.getByRole('textbox', { name: 'Custom CSS' });
+  expect(css).not.toBeVisible();
+  const advanced = screen.getByText('Advanced');
+  fireEvent.click(advanced);
+  expect(css).toBeVisible();
+  expect(css).toHaveAccessibleDescription(expect.stringContaining('The contrast checks above do not cover it'));
+  const first = '.masthead{border-bottom:2px solid #0b5cad}\n';
+  const written = `${first}a{background:url(x)}\n`;
+  fireEvent.change(css, { target: { value: written } });
+  // Folded again: the refusal must open it to show where.
+  fireEvent.click(advanced);
+  expect(css).not.toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Save brand' }));
+  await waitFor(() => expect(css).toHaveFocus());
+  expect(css).toBeVisible();
+  expect(css).toHaveAttribute('aria-invalid', 'true');
+  expect(css).toHaveAccessibleDescription(message);
+  expect((css as HTMLTextAreaElement).selectionStart).toBe(first.length + 13);
+  expect((calls.find((call) => call.method === 'PUT')?.body as { custom_css: string }).custom_css).toBe(written);
+});
+
+test('the preview shows custom CSS as it is typed, and while the server refuses it keeps the last page and says why at the field', async () => {
+  const message = 'line 1, column 14: url() is not allowed';
+  const calls = serve({
+    'GET /api/v1/help-center/theme': () => json(200, { ...saved, custom_css: '.masthead{border-bottom:2px solid #0b5cad}' }),
+    'POST /api/v1/help-center/theme/preview': (call) => ((call.body as { theme: { custom_css: string } }).theme.custom_css.includes('url(') ? cssRefusal(message) : json(200, preview)),
+  });
+  open(true);
+  // Saved custom CSS shows unfolded.
+  const css = await screen.findByRole('textbox', { name: 'Custom CSS' });
+  expect(css).toBeVisible();
+  await screen.findByTitle('Preview of the help center');
+  fireEvent.change(css, { target: { value: 'a{background:url(x)}' } });
+  await waitFor(() => expect(css).toHaveAccessibleDescription(`Not in the preview yet: ${message}`));
+  expect(css).not.toHaveAttribute('aria-invalid');
+  expect(screen.getByTitle('Preview of the help center')).toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent('The preview keeps the last custom CSS it could show.');
+  expect((calls.filter((call) => call.method === 'POST').at(-1)?.body as { theme: { custom_css: string } }).theme.custom_css).toBe('a{background:url(x)}');
 });

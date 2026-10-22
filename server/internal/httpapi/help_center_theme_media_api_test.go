@@ -98,6 +98,7 @@ func TestExportCarriesTheHelpCenterTheme(t *testing.T) {
 		"contact_url": "mailto:help@acme.example", "contact_phone": "+1 (555) 010-2030", "color_primary": "#0b5cad",
 		"color_header": "#ffffff", "color_header_text": "#16201c", "color_background": "#ffffff", "color_text": "#1f2328",
 		"color_link": "#0b5cad", "color_footer": "#f6f8fa", "body_font": "humanist-sans", "heading_font": "transitional-serif",
+		"custom_css": "h2{letter-spacing:.01em}",
 	} {
 		if center[key] != want {
 			t.Errorf("help-center.ndjson %s = %v, want %v", key, center[key], want)

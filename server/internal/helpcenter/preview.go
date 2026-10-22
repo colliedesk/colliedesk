@@ -35,9 +35,10 @@ func previewPolicy(origin string) string {
 }
 
 // previewStyle follows the brand in the preview's inline block. Links and controls take no pointer from
-// the first paint, so a click before the app holds the frame's links cannot navigate it; a video or
-// player, which the policy would block, is a plain box saying where it plays.
-const previewStyle = "a,button,input,label,summary{pointer-events:none}" +
+// the first paint, so a click before the app holds the frame's links cannot navigate it; !important and
+// its place after the custom CSS keep that rule whatever the custom CSS says. A video or player, which
+// the policy would block, is a plain box saying where it plays.
+const previewStyle = "a,button,input,label,summary{pointer-events:none!important}" +
 	".preview-video{display:flex;align-items:center;justify-content:center;aspect-ratio:16/9;margin:0 0 1.25rem;padding:1rem;" +
 	"border:1px dashed var(--rule);border-radius:8px;background:var(--surface);color:var(--muted);text-align:center}"
 
