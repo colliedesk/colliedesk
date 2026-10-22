@@ -2,9 +2,8 @@
 
 Colliedesk can use a language model to suggest how to sort a new ticket (tags, priority, assignee)
 and to draft a reply an agent edits and sends. A model only suggests and drafts: a person accepts each
-suggestion, and nothing reaches a customer until someone presses **Send**. Reply drafts are here;
-triage suggestions are being built ([#89](https://github.com/colliedesk/colliedesk/issues/89)).
-**Settings > AI** decides which model each feature uses and records who agreed to send data to it.
+suggestion, and nothing reaches a customer until someone presses **Send**. **Settings > AI** decides
+which model each feature uses and records who agreed to send data to it.
 
 ## Every feature starts off
 
@@ -96,6 +95,20 @@ drafts used it this month. A reply sent from a draft says so on the timeline.
 A draft's text and prompt are erased 90 days after it ended; the numbers stay. At most 30 drafts a
 minute are asked for in a workspace.
 
+## Triage suggestions
+
+With **Triage suggestions** on, a new ticket's first customer message (by email, the web form or the
+API) asks the model for tags, a priority and the teammate best placed to answer. The suggestion appears
+under **Suggested by AI** in the conversation's details within a few seconds, with a one-sentence
+reason. It names only your own tags and active teammates; anything else the model names is dropped.
+
+Nothing changes until someone applies it. Each part has a box: **Apply** sets all of them,
+**Apply selected** only the ones left checked, **Dismiss** none. Tags are added, never removed, and
+anything applied is changed back like any other change. **Suggest tags and priority** asks again by
+hand. Imported tickets get no suggestion, and automatic suggestions count against the automatic limits
+below. A suggestion nobody used for 7 days expires. Colliedesk keeps whether each one was applied, in
+part, or dismissed.
+
 ## Limits
 
 1. **Automatic runs.** Work Colliedesk starts on its own (a triage suggestion for each new ticket)
@@ -122,7 +135,8 @@ Usage** sums a month per feature and provider. Both are in the [export](export.m
 Agents see these settings but only admins change them. An AI agent with a draft token asks for a
 reply draft, reads it and discards it like a person (`colliedesk_ai_draft_create`,
 `colliedesk_ai_draft_get`, `colliedesk_ai_drafts_list`, `colliedesk_ai_draft_discard`); sending a
-reply still needs the send tier or a person's approval. Through [MCP](mcp.md), an AI agent with a read
+reply still needs the send tier or a person's approval. With a draft token it reads, asks for, applies
+and dismisses triage suggestions too (`colliedesk_ai_triage_get`, `_create`, `_accept`, `_dismiss`). Through [MCP](mcp.md), an AI agent with a read
 token can read them, and one with an admin token can add, check, change and delete providers (a token
 below admin is refused outright on the two calls that carry a key, so a key never waits in a request).
 Turning a feature on or moving it always becomes a [request a person approves](agent-requests.md).

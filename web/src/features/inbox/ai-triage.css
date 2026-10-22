@@ -1,0 +1,14 @@
+/* The AI triage suggestion in the details panel. Loaded with its lazy part; scrollbars follow base.css. */
+.ai-triage { display: grid; gap: var(--space-2); border-radius: var(--radius); background: var(--accent-soft); padding: var(--space-3); }
+.ai-triage h2 { display: flex; align-items: center; gap: var(--space-1); margin: 0; }
+.ai-triage h2 > svg { flex: none; color: var(--text-3); }
+.ai-triage p { margin: 0; }
+.ai-triage-items { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.ai-triage-items label { display: flex; align-items: center; gap: var(--space-2); min-width: 0; overflow-wrap: anywhere; cursor: pointer; }
+.ai-triage-reason { color: var(--text-2); font-size: var(--fs-small); }
+.ai-triage-note { font-size: var(--fs-label); }
+.ai-triage-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ai-triage-actions:empty { display: none; }
+@media (pointer: coarse) {
+  .ai-triage-items label, .ai-triage-actions button { min-height: var(--touch); }
+}

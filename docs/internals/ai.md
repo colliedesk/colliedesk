@@ -207,6 +207,23 @@ workspace).
 6. **Drafts left.** The allowance shows about how many drafts what is left pays for, at the workspace's
    average draft cost over 30 days, or a typical draft (6,000 tokens in, 500 out) before its first.
 
+## Triage suggestions
+
+1. **Queued by a trigger.** `ai_triage_on_first_message` (AFTER INSERT ON messages) queues an automatic
+   task and a pending suggestion for the first `incoming` message of a conversation when triage is on.
+   Every way a conversation starts inserts that message; an import sets `origin`, so it queues nothing.
+   A trigger, not a call in each path: the five paths that create messages cannot forget it. The worker
+   is not woken by it; it finds the task at its next look (5 s).
+2. **Checked against the database.** The model answers with tag and teammate names from the lists in
+   the prompt; unknown names, another workspace's tags and deactivated teammates are dropped. A prose
+   answer (no structured output) fails the task (`invalid_answer`): names in prose cannot be checked.
+3. **Applied through the ordinary update.** Accepting runs `UpdateConversation` (tags added to the
+   current ones, priority, assignee) as the person, so history and notifications are the usual ones,
+   then records what was applied. Each part must be the suggestion's own (400 otherwise). Accepting
+   again answers the decided suggestion unchanged.
+4. **One minute cap.** Drafts and suggestions asked for by hand share the 30-a-minute cap; automatic
+   ones are bounded by the automatic limits instead.
+
 ## Testing
 
 `aiprovider.Fake` records every `Request` and answers from a script, without a network. Feature tests

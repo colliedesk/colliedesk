@@ -1453,6 +1453,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/conversations/{id}/ai-triage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        /** @description The conversation's newest AI triage suggestion (tags, priority, assignee), or null. A new ticket's first customer message queues one by itself when triage is on (never an imported message). */
+        get: operations["getAITriage"];
+        put?: never;
+        /** @description Asks for a triage suggestion by hand (202, `status` queued), replacing the open one. Refused at once like an AI draft: 409 `ai_feature_off`, 402 `ai_allowance_reached`, 429 `ai_drafts_rate_limited` (30 drafts and suggestions a minute in the workspace). */
+        post: operations["createAITriage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-triage/{suggestionId}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                suggestionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Applies a ready suggestion to the conversation, as a person's change would: without a body all of it; with one, only what it names (each from the suggestion; 400 otherwise). Tags are added, never removed. Undo is an ordinary conversation change. 409 `ai_triage_decided` when it is not ready or was already decided. */
+        post: operations["acceptAITriage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                suggestionId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Stops a suggestion still being written or dismisses a ready one; nothing changes on the conversation. Again on one already stopped or dismissed it changes nothing. */
+        post: operations["dismissAITriage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/export": {
         parameters: {
             query?: never;
@@ -2664,6 +2724,43 @@ export interface components {
             ready_at: string | null;
             /** Format: date-time */
             decided_at: string | null;
+        };
+        AITriage: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            conversation_id: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "ready" | "failed" | "cancelled";
+            error_code: string | null;
+            /** @description Queued by a new ticket rather than asked for by a person. */
+            automatic: boolean;
+            /** @description Tags of the workspace the suggestion names. */
+            tag_ids: string[];
+            /** @enum {string|null} */
+            priority: "low" | "normal" | "high" | "urgent" | null;
+            /** Format: uuid */
+            assignee_agent_id: string | null;
+            /** @description One sentence a teammate can check; generated text. */
+            reason: string | null;
+            model: string | null;
+            /** @enum {string|null} */
+            outcome: "accepted" | "partly_accepted" | "dismissed" | "superseded" | "expired" | null;
+            /** @description What a person applied of it. */
+            applied: {
+                tag_ids: string[];
+                priority: string | null;
+                /** Format: uuid */
+                assignee_agent_id: string | null;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            ready_at: string | null;
+            /** Format: date-time */
+            decided_at: string | null;
+            /** Format: uuid */
+            decided_by_agent_id: string | null;
         };
         AISettings: {
             /** @description The server's provider, set by the operator with AI_SERVER_* variables; null when the server has none. */
@@ -7296,6 +7393,128 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AIDraft"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    getAITriage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The newest suggestion */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        suggestion: null | components["schemas"]["AITriage"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    createAITriage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The suggestion, queued; or an agent request when the token is below the draft tier */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AITriage"] | components["schemas"]["AgentRequestAccepted"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["PlanLimitReached"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            429: components["responses"]["AIChecksRateLimited"];
+        };
+    };
+    acceptAITriage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                suggestionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    tag_ids?: string[];
+                    /** @enum {string|null} */
+                    priority?: "low" | "normal" | "high" | "urgent" | null;
+                    /** Format: uuid */
+                    assignee_agent_id?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description The suggestion, decided */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AITriage"];
+                };
+            };
+            202: components["responses"]["AgentRequestAccepted"];
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+        };
+    };
+    dismissAITriage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ID"];
+                suggestionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The suggestion */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AITriage"];
                 };
             };
             202: components["responses"]["AgentRequestAccepted"];
