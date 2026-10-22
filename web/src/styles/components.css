@@ -154,6 +154,8 @@
 .message-kind svg { width: 12px; height: 12px; }
 .ai-chip { display: inline-flex; align-items: center; gap: 2px; border-radius: 999px; background: var(--accent-soft); color: var(--text-2); padding: 0 6px; font-weight: 600; }
 .ai-off-label { margin-left: var(--space-1); color: var(--text-3); font-size: var(--fs-label); }
+/* The drafts-off state is a link that looks and sizes like the tools beside it, on one line. */
+a.saved-reply-button { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--control, 32px); border-radius: var(--radius); font-size: var(--fs-small); font-weight: 500; white-space: nowrap; text-decoration: none; }
 .message-meta time { color: var(--text-3); font-size: var(--fs-label); white-space: nowrap; }
 .markdown-body { line-height: 1.6; overflow-wrap: anywhere; }
 .markdown-body p + p { margin-top: var(--space-3); }
