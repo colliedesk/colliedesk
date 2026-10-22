@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/database"
+	"github.com/colliedesk/colliedesk/server/internal/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -29,6 +30,9 @@ func scanJob(row pgx.Row) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
+	// The API answers in UTC whatever the session time zone.
+	job.CreatedAt, job.UpdatedAt = domain.UTC(job.CreatedAt), domain.UTC(job.UpdatedAt)
+	job.NextRunAt, job.StartedAt, job.FinishedAt = domain.UTCOptional(job.NextRunAt), domain.UTCOptional(job.StartedAt), domain.UTCOptional(job.FinishedAt)
 	if err := json.Unmarshal(options, &job.Options); err != nil {
 		return Job{}, fmt.Errorf("decode import options: %w", err)
 	}

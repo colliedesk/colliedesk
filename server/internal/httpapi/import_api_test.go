@@ -47,6 +47,9 @@ func TestAnImportPreviewIsAcceptedAndNoAnswerCarriesTheKey(t *testing.T) {
 	if job.State != "previewing" || job.Domain != "beta.freshdesk.com" || !job.HasKey || job.Options.RecentDays != 30 {
 		t.Fatalf("job = %+v", job)
 	}
+	if !strings.Contains(response.Body.String(), `Z","started_at"`) || strings.Contains(response.Body.String(), "+0") {
+		t.Fatalf("times are not UTC: %s", response.Body.String())
+	}
 	answers := []string{response.Body.String()}
 	for _, path := range []string{"/api/v1/imports", "/api/v1/imports/" + job.ID} {
 		read := request(t, api, http.MethodGet, path, nil, admin, nil)
