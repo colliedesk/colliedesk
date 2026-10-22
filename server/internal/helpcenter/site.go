@@ -295,6 +295,10 @@ func (s *Site) serve(response http.ResponseWriter, request *http.Request, at add
 	case sub == "/robots.txt" && base == "":
 		s.robots(response, request, view)
 	default:
+		if old, ok := ParseLegacyPath(sub); ok {
+			s.legacy(response, request, view, old)
+			return
+		}
 		s.writeSiteNotFound(response, view)
 	}
 }

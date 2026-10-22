@@ -1,6 +1,9 @@
 package helpcenter
 
 import (
+	"context"
+	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"unicode"
@@ -100,4 +103,59 @@ func legacyWords(slug string) string {
 		words = strings.TrimSpace(string(runes[:maxSearchChars]))
 	}
 	return words
+}
+
+// legacy answers an old Freshdesk address of an open help center. Every target is built from the
+// help center's own address (SiteURL), never from the request's host or path, so no old address can
+// send a visitor anywhere else. A redirect is never cached: an item published later takes over.
+func (s *Site) legacy(response http.ResponseWriter, request *http.Request, v view, old LegacyAddress) {
+	target, status, err := s.legacyTarget(request.Context(), v, old, request.URL.Query().Get("term"))
+	if err != nil {
+		s.writeError(response, err)
+		return
+	}
+	response.Header().Set("Cache-Control", "no-store")
+	http.Redirect(response, request, target, status)
+}
+
+// legacyTarget is where an old address goes and with which status: 301 to a page that is public now,
+// 302 to the search with the old address's words (or home without words) otherwise.
+func (s *Site) legacyTarget(ctx context.Context, v view, old LegacyAddress, term string) (string, int, error) {
+	switch old.Kind {
+	case LegacyHome:
+		return v.address, http.StatusMovedPermanently, nil
+	case LegacySearch:
+		return v.searchAddress(term), http.StatusFound, nil
+	case LegacyOther:
+		return v.address, http.StatusFound, nil
+	}
+	found, err := s.config.Store.HelpCenterLegacyTarget(ctx, v.site.WorkspaceID, old.Entity(), old.ID)
+	if err != nil {
+		return "", 0, err
+	}
+	switch {
+	case found.Number > 0:
+		return v.address + ArticlePath(found.Number, found.Slug), http.StatusMovedPermanently, nil
+	case found.CollectionID != "":
+		t, err := s.loadTree(ctx, v)
+		if err != nil {
+			return "", 0, err
+		}
+		if n := t.byID[found.CollectionID]; n != nil && n.total > 0 {
+			return v.address + n.path(), http.StatusMovedPermanently, nil
+		}
+	}
+	return v.searchAddress(old.Words), http.StatusFound, nil
+}
+
+// searchAddress is the help center's search for words, or its home page without any.
+func (v view) searchAddress(words string) string {
+	words = strings.Join(strings.Fields(strings.ToValidUTF8(words, "")), " ")
+	if runes := []rune(words); len(runes) > maxSearchChars {
+		words = string(runes[:maxSearchChars])
+	}
+	if words == "" {
+		return v.address
+	}
+	return v.address + "/search?q=" + url.QueryEscape(words)
 }
