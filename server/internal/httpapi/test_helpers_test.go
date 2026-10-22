@@ -40,10 +40,35 @@ func testAPIWithPool(t *testing.T) (http.Handler, *auth.Service, *pgxpool.Pool) 
 	return api, service, pool
 }
 
-// fakeDNS stands in for the public DNS resolver, an external boundary.
+// fakeDNS stands in for the public DNS resolver, an external boundary. cnames maps a host to the end
+// of its CNAME chain; lookups counts every question asked.
 type fakeDNS struct {
 	mu      sync.Mutex
 	records map[string][]string
+	cnames  map[string]string
+	lookups int
+}
+
+func (d *fakeDNS) setCNAME(host, canonical string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.cnames[host] = canonical
+}
+
+func (d *fakeDNS) lookupCNAME(_ context.Context, host string) (string, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.lookups++
+	if canonical, ok := d.cnames[host]; ok {
+		return canonical, nil
+	}
+	return "", &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+}
+
+func (d *fakeDNS) questions() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.lookups
 }
 
 func (d *fakeDNS) set(name string, values ...string) {
@@ -55,6 +80,7 @@ func (d *fakeDNS) set(name string, values ...string) {
 func (d *fakeDNS) lookupTXT(_ context.Context, name string) ([]string, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.lookups++
 	if values, ok := d.records[name]; ok {
 		return values, nil
 	}
@@ -74,12 +100,12 @@ func testAPIOnPool(t *testing.T, pool *pgxpool.Pool, mutate func(*httpapi.Config
 	if err := database.Migrate(context.Background(), pool); err != nil {
 		t.Fatal(err)
 	}
-	dns := &fakeDNS{records: map[string][]string{}}
+	dns := &fakeDNS{records: map[string][]string{}, cnames: map[string]string{}}
 	storage, err := attachments.NewLocalDisk(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	config := httpapi.Config{Origin: testOrigin, LookupTXT: dns.lookupTXT, Attachments: storage, Email: email.Config{
+	config := httpapi.Config{Origin: testOrigin, LookupTXT: dns.lookupTXT, LookupCNAME: dns.lookupCNAME, Attachments: storage, Email: email.Config{
 		SMTP:              email.SMTPConfig{Host: "smtp.test.invalid", Port: 587, StartTLS: true},
 		FromPolicy:        email.FromPolicyAny,
 		TrustedAuthServID: "mx.example.net",

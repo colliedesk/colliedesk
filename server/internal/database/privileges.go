@@ -76,4 +76,13 @@ const (
 	// address, after a workspace dropped its own. Google revokes an account's whole grant to the project, so
 	// the grant is revoked only when no workspace holds it. Only a yes or no leaves the transaction.
 	PrivilegeMailboxGrantShared Privilege = "mailbox-grant-shared"
+	// PrivilegeHelpCenterHost finds the workspace whose help center serves on a custom host name (the
+	// request's Host, or the name the reverse proxy asks a certificate for), and, for the certificate
+	// question, the workspaces still waiting to prove they own it. Only workspace ids leave the
+	// transaction; the token, the check and the pages run scoped to each workspace.
+	PrivilegeHelpCenterHost Privilege = "help-center-host"
+	// PrivilegeHelpCenterDomainRecheck lists the workspaces with an active custom help center domain for
+	// the daily DNS re-check. Only workspace ids leave the transaction; each check reads and records in
+	// its own workspace.
+	PrivilegeHelpCenterDomainRecheck Privilege = "help-center-domain-recheck"
 )

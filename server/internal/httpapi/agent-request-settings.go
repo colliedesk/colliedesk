@@ -30,6 +30,9 @@ var settingsFields = map[string][]string{
 	"DELETE /api/v1/auth/sessions/{id}":               {},
 	"GET /api/v1/billing":                             {},
 	"PUT /api/v1/help-center/theme":                   themeFields,
+	"PUT /api/v1/help-center/domain":                  {"hostname"},
+	"DELETE /api/v1/help-center/domain":               {},
+	"POST /api/v1/help-center/domain/check":           {},
 }
 
 // summarizeSettingsRequest is what a person reads before approving a settings change: what changes,

@@ -284,6 +284,9 @@ type HelpCenterSite struct {
 	Theme HelpCenterTheme
 	// LogoWidth and LogoHeight are the logo's size in pixels, 0 when unknown.
 	LogoWidth, LogoHeight int
+	// CustomHost is the workspace's active custom domain, "" when it has none: the help center serves
+	// there and its other addresses redirect there.
+	CustomHost string
 }
 
 // PublicKBCollection is a live collection as the help center lists it; Published counts its own

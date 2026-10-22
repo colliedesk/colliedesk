@@ -22,6 +22,12 @@ func (s *Store) OpenHelpCenter(ctx context.Context, slug string) (domain.HelpCen
 	if err != nil || !found {
 		return domain.HelpCenterSite{}, false, err
 	}
+	return s.OpenHelpCenterWorkspace(ctx, workspaceID)
+}
+
+// OpenHelpCenterWorkspace is OpenHelpCenter for a workspace already found, such as the one a custom
+// domain belongs to. CustomHost is the workspace's active custom domain, read in the same query.
+func (s *Store) OpenHelpCenterWorkspace(ctx context.Context, workspaceID string) (domain.HelpCenterSite, bool, error) {
 	type state struct {
 		site    domain.HelpCenterSite
 		enabled bool
@@ -36,15 +42,16 @@ func (s *Store) OpenHelpCenter(ctx context.Context, slug string) (domain.HelpCen
 		err := tx.QueryRow(ctx, `SELECT w.slug, w.name, COALESCE(h.enabled, false), COALESCE(h.title, ''), COALESCE(h.locale, 'en'), COALESCE(h.content_version, 0),
 				logo.id::text, logo.width, logo.height, icon.id::text, COALESCE(h.logo_alt, ''), h.linkback_url, h.contact_url, h.contact_phone,
 				h.color_primary, h.color_header, h.color_header_text, h.color_background, h.color_text, h.color_link, h.color_footer, h.body_font, h.heading_font,
-				COALESCE(h.custom_css, '')
+				COALESCE(h.custom_css, ''), COALESCE(d.hostname, '')
 			FROM workspaces w LEFT JOIN help_centers h ON h.workspace_id=w.id
+			LEFT JOIN help_center_domains d ON d.workspace_id=w.id AND d.status='active'
 			LEFT JOIN kb_media logo ON logo.workspace_id=w.id AND logo.id=h.logo_media_id AND logo.kind='image' AND logo.deleted_at IS NULL
 			LEFT JOIN kb_media icon ON icon.workspace_id=w.id AND icon.id=h.favicon_media_id AND icon.kind='image' AND icon.deleted_at IS NULL
 			WHERE w.id=$1`, workspaceID).
 			Scan(&site.Slug, &site.Name, &got.enabled, &site.Title, &site.Locale, &site.ContentVersion,
 				&theme.LogoMediaID, &logoWidth, &logoHeight, &theme.FaviconMediaID, &theme.LogoAlt, &theme.LinkbackURL, &theme.ContactURL, &theme.ContactPhone,
 				&colors.Primary, &colors.Header, &colors.HeaderText, &colors.Background, &colors.Text, &colors.Link, &colors.Footer, &theme.BodyFont, &theme.HeadingFont,
-				&theme.CustomCSS)
+				&theme.CustomCSS, &site.CustomHost)
 		if logoWidth != nil && logoHeight != nil {
 			site.LogoWidth, site.LogoHeight = *logoWidth, *logoHeight
 		}
