@@ -195,6 +195,10 @@ func (w *Worker) sweep(ctx context.Context) error {
 			now, now.Add(-draftExpiry)); err != nil {
 			return err
 		}
+		if _, err := tx.Exec(ctx, `UPDATE ai_triage_suggestions SET outcome='expired',decided_at=$1 WHERE status='ready' AND outcome IS NULL AND ready_at<$2`,
+			now, now.Add(-triageExpiry)); err != nil {
+			return err
+		}
 		_, err := tx.Exec(ctx, `UPDATE ai_drafts SET text=NULL,prompt='',missing_info=NULL,warnings='[]',text_cleared_at=$1
 			WHERE text_cleared_at IS NULL AND (decided_at IS NOT NULL OR status<>'ready') AND COALESCE(decided_at,created_at)<$2`, now, now.Add(-draftTextRetention))
 		return err

@@ -2525,6 +2525,97 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/conversations/{id}/ai-triage:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getAITriage
+      x-permission: conversations:read
+      description: >
+        The conversation's newest AI triage suggestion (tags, priority, assignee), or null. A new ticket's
+        first customer message queues one by itself when triage is on (never an imported message).
+      responses:
+        '200':
+          description: The newest suggestion
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [suggestion]
+                properties:
+                  suggestion:
+                    oneOf:
+                      - {type: 'null'}
+                      - {$ref: '#/components/schemas/AITriage'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      operationId: createAITriage
+      x-permission: conversations:write
+      description: >
+        Asks for a triage suggestion by hand (202, `status` queued), replacing the open one. Refused at
+        once like an AI draft: 409 `ai_feature_off`, 402 `ai_allowance_reached`, 429
+        `ai_drafts_rate_limited` (30 drafts and suggestions a minute in the workspace).
+      responses:
+        '202':
+          description: The suggestion, queued; or an agent request when the token is below the draft tier
+          content: {application/json: {schema: {oneOf: [{$ref: '#/components/schemas/AITriage'}, {$ref: '#/components/schemas/AgentRequestAccepted'}]}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/PlanLimitReached'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429': {$ref: '#/components/responses/AIChecksRateLimited'}
+  /api/v1/conversations/{id}/ai-triage/{suggestionId}/accept:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: suggestionId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: acceptAITriage
+      x-permission: conversations:write
+      description: >
+        Applies a ready suggestion to the conversation, as a person's change would: without a body all of
+        it; with one, only what it names (each from the suggestion; 400 otherwise). Tags are added, never
+        removed. Undo is an ordinary conversation change. 409 `ai_triage_decided` when it is not ready or
+        was already decided.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                tag_ids: {type: array, items: {type: string, format: uuid}}
+                priority: {type: [string, 'null'], enum: [low, normal, high, urgent, null]}
+                assignee_agent_id: {type: [string, 'null'], format: uuid}
+      responses:
+        '200':
+          description: The suggestion, decided
+          content: {application/json: {schema: {$ref: '#/components/schemas/AITriage'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/conversations/{id}/ai-triage/{suggestionId}/dismiss:
+    parameters:
+      - {$ref: '#/components/parameters/ID'}
+      - {name: suggestionId, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: dismissAITriage
+      x-permission: conversations:write
+      description: Stops a suggestion still being written or dismisses a ready one; nothing changes on the conversation. Again on one already stopped or dismissed it changes nothing.
+      responses:
+        '200':
+          description: The suggestion
+          content: {application/json: {schema: {$ref: '#/components/schemas/AITriage'}}}
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/export:
     get:
       operationId: exportWorkspace
@@ -4526,6 +4617,33 @@ components:
         created_at: {type: string, format: date-time}
         ready_at: {type: [string, 'null'], format: date-time}
         decided_at: {type: [string, 'null'], format: date-time}
+    AITriage:
+      type: object
+      required: [id, conversation_id, status, error_code, automatic, tag_ids, priority, assignee_agent_id, reason, model, outcome, applied, created_at, ready_at, decided_at, decided_by_agent_id]
+      properties:
+        id: {type: string, format: uuid}
+        conversation_id: {type: string, format: uuid}
+        status: {type: string, enum: [queued, running, ready, failed, cancelled]}
+        error_code: {type: [string, 'null']}
+        automatic: {type: boolean, description: Queued by a new ticket rather than asked for by a person.}
+        tag_ids: {type: array, items: {type: string, format: uuid}, description: Tags of the workspace the suggestion names.}
+        priority: {type: [string, 'null'], enum: [low, normal, high, urgent, null]}
+        assignee_agent_id: {type: [string, 'null'], format: uuid}
+        reason: {type: [string, 'null'], description: One sentence a teammate can check; generated text.}
+        model: {type: [string, 'null']}
+        outcome: {type: [string, 'null'], enum: [accepted, partly_accepted, dismissed, superseded, expired, null]}
+        applied:
+          type: object
+          required: [tag_ids, priority, assignee_agent_id]
+          description: What a person applied of it.
+          properties:
+            tag_ids: {type: array, items: {type: string, format: uuid}}
+            priority: {type: [string, 'null']}
+            assignee_agent_id: {type: [string, 'null'], format: uuid}
+        created_at: {type: string, format: date-time}
+        ready_at: {type: [string, 'null'], format: date-time}
+        decided_at: {type: [string, 'null'], format: date-time}
+        decided_by_agent_id: {type: [string, 'null'], format: uuid}
     AISettings:
       type: object
       required: [server, providers, slots, events, provider_limit, can_store_keys, allow_private_base_urls, automatic, allowance]

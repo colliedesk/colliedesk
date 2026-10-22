@@ -3,10 +3,12 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
+	"github.com/colliedesk/colliedesk/server/internal/store"
 )
 
 // AI settings (docs/user/ai.md). The handlers read and change the workspace's providers and features;
@@ -148,7 +150,7 @@ func writeAIError(response http.ResponseWriter, err error) {
 	case errors.Is(err, ai.ErrNoServerProvider):
 		writeError(response, http.StatusConflict, "no_server_provider", "This server has no AI provider for that feature. Add your own provider, or ask the server operator.")
 	case errors.Is(err, ai.ErrFeatureOff):
-		writeError(response, http.StatusConflict, "ai_feature_off", "Reply drafts are off in this workspace, or their provider is gone. An admin turns them on in Settings → AI.")
+		writeError(response, http.StatusConflict, "ai_feature_off", "This AI feature is off in this workspace, or its provider is gone. An admin turns it on in Settings → AI.")
 	case errors.Is(err, ai.ErrDraftsRateLimited):
 		response.Header().Set("Retry-After", "60")
 		writeError(response, http.StatusTooManyRequests, "ai_drafts_rate_limited", "At most 30 AI drafts a minute in a workspace; try again shortly.")
@@ -156,6 +158,10 @@ func writeAIError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusNotFound, "not_found", "No AI draft with that id on this conversation.")
 	case errors.Is(err, ai.ErrConversationNotFound):
 		writeError(response, http.StatusNotFound, "not_found", "No conversation with that id in this workspace.")
+	case errors.Is(err, ai.ErrTriageNotFound):
+		writeError(response, http.StatusNotFound, "not_found", "No AI triage suggestion with that id on this conversation.")
+	case errors.Is(err, ai.ErrTriageDecided):
+		writeError(response, http.StatusConflict, "ai_triage_decided", "This suggestion is not ready, or was already accepted, dismissed or replaced.")
 	case errors.Is(err, ai.ErrDraftDecided):
 		writeError(response, http.StatusConflict, "ai_draft_decided", "This AI draft was already sent, discarded or replaced.")
 	case errors.Is(err, ai.ErrAllowanceReached):
@@ -274,4 +280,97 @@ func (a *API) discardAIDraft(response http.ResponseWriter, request *http.Request
 		return
 	}
 	writeJSON(response, http.StatusOK, draft)
+}
+
+func (a *API) getAITriage(response http.ResponseWriter, request *http.Request) {
+	triage, err := a.ai.LatestTriage(request.Context(), principal(request).Workspace.ID, request.PathValue("id"))
+	if err != nil {
+		writeAIError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, map[string]any{"suggestion": triage})
+}
+
+func (a *API) createAITriage(response http.ResponseWriter, request *http.Request) {
+	triage, err := a.ai.CreateTriage(request.Context(), principal(request).Workspace.ID, aiActor(request), request.PathValue("id"))
+	if err != nil {
+		writeAIError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusAccepted, triage)
+}
+
+// acceptAITriage applies what the person accepts of a ready suggestion (all of it without a body)
+// to the conversation, through the same update as a person's change, then records it.
+func (a *API) acceptAITriage(response http.ResponseWriter, request *http.Request) {
+	identity := principal(request)
+	workspace, conversation, id := identity.Workspace.ID, request.PathValue("id"), request.PathValue("suggestionId")
+	current, err := a.ai.GetTriage(request.Context(), workspace, conversation, id)
+	if err != nil {
+		writeAIError(response, err)
+		return
+	}
+	// Accepting again changes nothing.
+	if current.Outcome != nil && (*current.Outcome == "accepted" || *current.Outcome == "partly_accepted") {
+		writeJSON(response, http.StatusOK, current)
+		return
+	}
+	var want ai.TriageSet
+	all := request.ContentLength == 0
+	if !all {
+		if err := decodeJSON(request, &want); err != nil {
+			writeError(response, http.StatusBadRequest, "invalid_request", "Send tag_ids, priority and assignee_agent_id to accept, each from the suggestion; no body accepts all of it.")
+			return
+		}
+	}
+	if all {
+		want = ai.TriageSet{TagIDs: current.TagIDs, Priority: current.Priority, AssigneeAgentID: current.AssigneeAgentID}
+	}
+	set, err := a.ai.TriageToApply(request.Context(), workspace, conversation, id, want)
+	if err != nil {
+		writeAIError(response, err)
+		return
+	}
+	update := store.ConversationUpdate{Priority: set.Priority, ActorID: identity.Agent.ID}
+	if set.AssigneeAgentID != nil {
+		update.AssigneeID = &set.AssigneeAgentID
+	}
+	if len(set.TagIDs) > 0 {
+		current, err := a.store.GetConversation(request.Context(), workspace, conversation)
+		if err != nil {
+			writeStoreError(response, err)
+			return
+		}
+		tags := []string{}
+		for _, tag := range current.Tags {
+			tags = append(tags, tag.ID)
+		}
+		for _, tag := range set.TagIDs {
+			if !slices.Contains(tags, tag) {
+				tags = append(tags, tag)
+			}
+		}
+		update.TagIDs = &tags
+	}
+	if update.Priority != nil || update.AssigneeID != nil || update.TagIDs != nil {
+		if _, err := a.store.UpdateConversation(request.Context(), workspace, conversation, update); err != nil {
+			writeStoreError(response, err)
+			return
+		}
+	}
+	triage, err := a.ai.DecideTriage(request.Context(), workspace, aiActor(request), conversation, id, set, false)
+	if err != nil {
+		writeAIError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, triage)
+}
+
+func (a *API) dismissAITriage(response http.ResponseWriter, request *http.Request) {
+	triage, err := a.ai.DecideTriage(request.Context(), principal(request).Workspace.ID, aiActor(request), request.PathValue("id"), request.PathValue("suggestionId"), ai.TriageSet{}, true)
+	if err != nil {
+		writeAIError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, triage)
 }
