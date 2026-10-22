@@ -162,11 +162,16 @@ const articleRoute = createRoute({
     return <Part part={kbPart} failed={kbFailed} render={({ ArticleRoute }) => <ArticleRoute key={articleId} articleId={articleId} />} />;
   },
 });
-// While the chunk loads the page keeps its frame (an empty Settings page), so nothing jumps when it arrives.
+// While the chunk loads the page keeps its frame and title, so a slow network shows Settings at once and
+// nothing jumps when the sections arrive. A chunk that cannot load says so, with Reload page: a browser
+// keeps a failed import failed until the page loads again.
 function SettingsPage() {
   const part = settingsRoutePart.use();
   if (part.status === 'ready') return <part.module.SettingsRoute />;
-  return <main className="settings-page" aria-busy={part.status === 'loading'}>{part.status === 'error' && <PartUnavailable />}</main>;
+  return <main className="settings-page" aria-busy={part.status === 'loading'}>
+    <header><h1>{messages.settings}</h1><p>{messages.settingsDescription}</p></header>
+    {part.status === 'error' ? <PartUnavailable /> : <p role="status" className="muted-copy">{messages.loadingList}</p>}
+  </main>;
 }
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage });
 const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: RequestsRoute });
