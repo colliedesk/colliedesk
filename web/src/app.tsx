@@ -9,7 +9,6 @@ import { RequestsRoute } from './features/requests/requests-route';
 import { usePendingRequests } from './features/requests/use-pending-requests';
 import { RedeemRoute } from './features/auth/redeem-route';
 import { clearCheckoutIntent, readCheckoutIntent, rememberCheckoutIntent } from './features/settings/checkout-intent';
-import { SettingsRoute } from './features/settings/settings-route';
 import { SettingsNavLinkContext } from './features/settings/settings-nav';
 import type { NavItem } from './features/settings/settings-nav';
 import { AppShell } from './features/shell/app-shell';
@@ -24,6 +23,8 @@ import { resetProductAnalytics, useProductAnalytics } from './lib/product-analyt
 import { inboxQueryFromSearch } from './lib/inbox-query';
 
 // Billing, the locked screen and the trial survey are seen by few sessions, so they load from their own chunks.
+// Settings is its own chunk: the rail link starts loading it on hover and focus, and the inbox never waits for it.
+const settingsRoutePart = lazyPart(() => import('./features/settings/settings-route'));
 const billingRoutePart = lazyPart(() => import('./features/settings/billing-route'));
 const importRoutePart = lazyPart(() => import('./features/settings/import-route'));
 const lockedRoutePart = lazyPart(() => import('./features/shell/locked-route'));
@@ -80,7 +81,8 @@ function AppLayout() {
         {waiting > 0 && <span className="rail-badge" aria-hidden="true">{waiting > 99 ? '99+' : waiting}</span>}</Link>
       <Link to="/knowledge" className="rail-link" data-tip={messages.knowledge} aria-label={messages.knowledge} aria-current={inKnowledge ? 'page' : undefined}
         onPointerEnter={kbPart.preload} onFocus={kbPart.preload}><BookIcon /><span className="rail-label" aria-hidden="true">{messages.knowledge}</span></Link>
-      <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}><SettingsIcon /><span className="rail-label" aria-hidden="true">{messages.settings}</span></Link>
+      <Link to="/settings" className="rail-link" data-tip={messages.settings} aria-label={messages.settings} aria-current={inSettings ? 'page' : undefined}
+        onPointerEnter={settingsRoutePart.preload} onFocus={settingsRoutePart.preload}><SettingsIcon /><span className="rail-label" aria-hidden="true">{messages.settings}</span></Link>
     </>}>
     <Outlet />
   </AppShell></SettingsNavLinkContext.Provider>;
@@ -160,7 +162,13 @@ const articleRoute = createRoute({
     return <Part part={kbPart} failed={kbFailed} render={({ ArticleRoute }) => <ArticleRoute key={articleId} articleId={articleId} />} />;
   },
 });
-const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsRoute });
+// While the chunk loads the page keeps its frame (an empty Settings page), so nothing jumps when it arrives.
+function SettingsPage() {
+  const part = settingsRoutePart.use();
+  if (part.status === 'ready') return <part.module.SettingsRoute />;
+  return <main className="settings-page" aria-busy={part.status === 'loading'}>{part.status === 'error' && <PartUnavailable />}</main>;
+}
+const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage });
 const requestsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/requests', component: RequestsRoute });
 const billingRoute = createRoute({
   getParentRoute: () => rootRoute,
