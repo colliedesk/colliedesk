@@ -239,39 +239,54 @@ func TestHelpCenterPagesForbidScriptsFramingAndBranding(t *testing.T) {
 		"body_md": "<script>alert(1)</script>\n\n[x](javascript:alert(1))\n\n<img src=x onerror=alert(1)>\n\n![a](https://tracker.example/pixel.gif)\n\n<iframe src=\"https://www.youtube.com/embed/jNQXAC9IVRw\" onload=\"alert(1)\"></iframe>"})
 	base := "/help/" + slug
 	page := visit(site, base, "192.0.2.40")
-	var style string
-	for _, path := range []string{base, base + "/c/guides", fmt.Sprintf("%s/a/%d-%s", base, article.Number, article.Slug), base + "/search?q=tricky", base + "/missing", "/help/nobody"} {
-		response := visit(site, path, "192.0.2.40")
-		header := response.Header()
-		if got := header.Get("Content-Security-Policy"); got != "default-src 'none'; img-src 'self'; style-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; media-src 'self'; script-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'" {
-			t.Errorf("%s CSP=%q", path, got)
+	logo := uploadKBImage(t, api, admin, kbPNG, http.StatusCreated)
+	// Every guard holds with the default look and with every setting of a theme used.
+	for _, themed := range []bool{false, true} {
+		if themed {
+			kbCall(t, api, http.MethodPut, themePath, fullTheme(logo.ID), admin, http.StatusOK, nil)
 		}
-		if header.Get("X-Content-Type-Options") != "nosniff" || header.Get("X-Frame-Options") != "DENY" || header.Get("Content-Type") != "text/html; charset=utf-8" {
-			t.Errorf("%s headers=%v", path, header)
-		}
-		body := strings.ToLower(response.Body.String())
-		for _, bad := range []string{"<script", "onerror", "javascript:", "style=", "colliedesk", "<b>title", "<img src=\"https://"} {
-			if strings.Contains(body, bad) {
-				t.Errorf("%s holds %q:\n%s", path, bad, body)
+		styles := map[string]bool{}
+		for _, path := range []string{base, base + "/c/guides", fmt.Sprintf("%s/a/%d-%s", base, article.Number, article.Slug), base + "/search?q=tricky", base + "/missing", "/help/nobody"} {
+			response := visit(site, path, "192.0.2.40")
+			header := response.Header()
+			if got := header.Get("Content-Security-Policy"); got != "default-src 'none'; img-src 'self'; style-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; media-src 'self'; script-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'" {
+				t.Errorf("themed=%v %s CSP=%q", themed, path, got)
+			}
+			if header.Get("X-Content-Type-Options") != "nosniff" || header.Get("X-Frame-Options") != "DENY" || header.Get("Content-Type") != "text/html; charset=utf-8" {
+				t.Errorf("themed=%v %s headers=%v", themed, path, header)
+			}
+			body := strings.ToLower(response.Body.String())
+			for _, bad := range []string{"<script", "onerror", "javascript:", "style=", "colliedesk", "<b>title", "<img src=\"https://"} {
+				if strings.Contains(body, bad) {
+					t.Errorf("themed=%v %s holds %q:\n%s", themed, path, bad, body)
+				}
+			}
+			if strings.Contains(path, "/a/") && !strings.Contains(body, `<iframe src="https://www.youtube-nocookie.com/embed/jnqxac9ivrw" title="youtube video" allow="encrypted-media; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-presentation allow-popups" referrerpolicy="strict-origin-when-cross-origin" loading="lazy"></iframe>`) {
+				t.Errorf("themed=%v %s shows no sandboxed player:\n%s", themed, path, body)
+			}
+			sheets := stylesheets(body)
+			if len(sheets) == 0 {
+				t.Errorf("themed=%v %s has no style sheet", themed, path)
+			}
+			for _, sheet := range sheets {
+				styles[sheet] = true
 			}
 		}
-		if strings.Contains(path, "/a/") && !strings.Contains(body, `<iframe src="https://www.youtube-nocookie.com/embed/jnqxac9ivrw" title="youtube video" allow="encrypted-media; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-presentation allow-popups" referrerpolicy="strict-origin-when-cross-origin" loading="lazy"></iframe>`) {
-			t.Errorf("%s shows no sandboxed player:\n%s", path, body)
+		if brand := len(styles) > 2; brand != themed {
+			t.Errorf("themed=%v style sheets %v", themed, styles)
 		}
-		if start := strings.Index(body, `<link rel="stylesheet" href="`); start >= 0 {
-			style = body[start+len(`<link rel="stylesheet" href="`):]
-			style = style[:strings.Index(style, `"`)]
-		} else {
-			t.Errorf("%s has no style sheet", path)
+		for style := range styles {
+			sheet := visit(site, style, "192.0.2.40")
+			body := strings.ToLower(sheet.Body.String())
+			if sheet.Code != http.StatusOK || sheet.Header().Get("Content-Type") != "text/css; charset=utf-8" ||
+				sheet.Header().Get("Cache-Control") != "public, max-age=31536000, immutable" || strings.Contains(body, "colliedesk") ||
+				strings.Contains(body, "url(") || strings.Contains(body, "@import") || strings.Contains(body, "<") {
+				t.Fatalf("style sheet %s status=%d headers=%v", style, sheet.Code, sheet.Header())
+			}
 		}
 	}
 	// The workspace name stands in for an empty title.
 	wantPage(t, page, http.StatusOK, []string{"Help Safe"}, nil)
-	sheet := visit(site, style, "192.0.2.40")
-	if sheet.Code != http.StatusOK || sheet.Header().Get("Content-Type") != "text/css; charset=utf-8" ||
-		sheet.Header().Get("Cache-Control") != "public, max-age=31536000, immutable" || strings.Contains(strings.ToLower(sheet.Body.String()), "colliedesk") {
-		t.Fatalf("style sheet %s status=%d headers=%v", style, sheet.Code, sheet.Header())
-	}
 	if response := serve(site, httptest.NewRequest(http.MethodPost, base+"/search", nil)); response.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST status=%d, want 405", response.Code)
 	}
