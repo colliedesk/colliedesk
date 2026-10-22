@@ -49,7 +49,7 @@ test('each Freshdesk agent says whether an agent here takes over their replies, 
 
 test('the link of an invite just made shows once in the row of that person, to copy and send', () => {
   show([person({ external_id: '102', name: 'Bob', email: 'bob@old.example' })],
-    { createdInvite: { email: 'bob@old.example', url: 'https://desk.example.com/join?token=abc', expiresAt: '2026-10-22T08:15:00Z' } });
+    { createdInvites: [{ inviteId: 'i1', email: 'bob@old.example', url: 'https://desk.example.com/join?token=abc', expiresAt: '2026-10-22T08:15:00Z' }] });
   expect(screen.getByLabelText('One-time invite link')).toHaveValue('https://desk.example.com/join?token=abc');
   expect(screen.getByRole('button', { name: 'Copy link' })).toBeInTheDocument();
   expect(screen.getByText(/works once, until/)).toBeInTheDocument();
@@ -66,4 +66,16 @@ test('agents that could not be loaded say so and can be asked again', () => {
   expect(screen.getByRole('alert')).toHaveTextContent('could not be loaded');
   fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
   expect(onRetry).toHaveBeenCalled();
+});
+
+test('each invite made on the page keeps its own link, and a refused copy says so', async () => {
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } });
+  show([person({ external_id: '102', name: 'Bob', email: 'bob@old.example' }), person({ external_id: '103', name: 'Dan', email: 'dan@acme.example' })],
+    { createdInvites: [{ inviteId: 'i1', email: 'bob@old.example', url: 'https://desk.example.com/join?token=bob', expiresAt: '2026-10-22T08:15:00Z' },
+      { inviteId: 'i2', email: 'dan@acme.example', url: 'https://desk.example.com/join?token=dan', expiresAt: '2026-10-22T08:16:00Z' }] });
+  const [bob, dan] = screen.getAllByRole('listitem');
+  expect(within(bob).getByLabelText('One-time invite link')).toHaveValue('https://desk.example.com/join?token=bob');
+  expect(within(dan).getByLabelText('One-time invite link')).toHaveValue('https://desk.example.com/join?token=dan');
+  fireEvent.click(within(bob).getByRole('button', { name: 'Copy link' }));
+  expect(await within(bob).findByRole('alert')).toHaveTextContent('did not let the page copy');
 });
