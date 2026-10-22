@@ -161,9 +161,13 @@ func (s *Store) SubmitWebForm(ctx context.Context, workspaceID string, in WebFor
 	if err != nil {
 		return fmt.Errorf("encode web form metadata: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,email_meta,created_at) VALUES($1,$2,'incoming',$3,$4,$5)`,
-		workspaceID, conversationID, body, meta, now); err != nil {
+	var messageID string
+	if err := tx.QueryRow(ctx, `INSERT INTO messages(workspace_id,conversation_id,kind,body,email_meta,created_at) VALUES($1,$2,'incoming',$3,$4,$5) RETURNING id::text`,
+		workspaceID, conversationID, body, meta, now).Scan(&messageID); err != nil {
 		return fmt.Errorf("store web form message: %w", err)
+	}
+	if err := s.queueAIDraft(ctx, tx, workspaceID, conversationID, messageID); err != nil {
+		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit web form submission: %w", err)

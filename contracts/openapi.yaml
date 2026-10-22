@@ -599,6 +599,13 @@ paths:
                 body: {type: string, minLength: 1, description: Markdown source}
                 cc: {$ref: '#/components/schemas/CopiedAddresses'}
                 seen_reply_number: {type: integer, minimum: 0, description: 'The newest reply number the sender had seen; 0 when there was none.'}
+                ai_draft_id:
+                  type: string
+                  format: uuid
+                  description: >-
+                    With `kind: outgoing`: the AI draft this reply was written from. The draft is marked used and
+                    how much the reply differs from it is recorded (`outcome`, `similarity`). 404 for a draft
+                    not on the conversation, 409 `ai_draft_state` for one that was discarded or already used.
                 draft:
                   type: boolean
                   description: >-
@@ -633,8 +640,10 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409':
-          description: A reply with `seen_reply_number` older than the conversation's latest reply (`reply_conflict`); nothing was stored or sent
-          content: {application/json: {schema: {$ref: '#/components/schemas/ReplyConflict'}}}
+          description: >-
+            A reply with `seen_reply_number` older than the conversation's latest reply (`reply_conflict`),
+            or one naming an AI draft that can no longer be used (`ai_draft_state`); nothing was stored or sent
+          content: {application/json: {schema: {oneOf: [{$ref: '#/components/schemas/ReplyConflict'}, {$ref: '#/components/schemas/Error'}]}}}
         '413': {$ref: '#/components/responses/AttachmentsTooLarge'}
         '429': {$ref: '#/components/responses/TrialOutboundLimit'}
         '507':
@@ -967,6 +976,117 @@ paths:
         '402': {$ref: '#/components/responses/WorkspaceLocked'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+  /api/v1/conversations/{id}/ai-draft:
+    parameters: [{$ref: '#/components/parameters/ID'}]
+    get:
+      operationId: getAIDraft
+      x-permission: conversations:read
+      description: >-
+        The conversation's newest AI draft: a reply and a triage suggestion the server wrote from the
+        workspace's published knowledge base and resolved conversations when the customer wrote. It is
+        written in the background (a few seconds), so `status` is `queued` until it is `ready`; the
+        screen never waits for it. `draft` is null when there is none. `available` says whether this
+        server has an AI provider, `drafts_enabled` whether the workspace has drafts on. `confidence` is
+        decided by Colliedesk, not taken from the model: `high` only when every statement of the reply
+        cites a knowledge base article that was shown to the model, the model is sure, and none of the
+        risks applies (refunds, the customer's own account, security, legal, an angry customer, an outage,
+        work only the team can do); `confidence_reasons` says what kept it lower. `sources` come from the
+        database, never from the model.
+      responses:
+        '200':
+          description: The newest draft, or null
+          content: {application/json: {schema: {$ref: '#/components/schemas/AIDraftState'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    post:
+      operationId: requestAIDraft
+      x-permission: conversations:write
+      description: >-
+        Ask for a new draft of a reply to the newest customer message. The conversation's drafts that
+        were still open (queued, ready or scheduled) are superseded. Answers 202 with the queued draft;
+        read it with GET. 409 `ai_unavailable` when the server has no AI provider, `ai_drafts_off` when
+        the workspace turned drafts off.
+      responses:
+        '202':
+          description: The queued draft; for an agent token below the draft tier, the agent request a person approves
+          content: {application/json: {schema: {oneOf: [{$ref: '#/components/schemas/AIDraftEnvelope'}, {$ref: '#/components/schemas/AgentRequestAccepted'}]}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429':
+          description: The workspace asked for 60 new drafts in the last hour; nothing was queued
+          headers:
+            Retry-After: {schema: {type: integer}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  /api/v1/conversations/{id}/ai-draft/{draftId}/discard:
+    parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/AIDraftID'}]
+    post:
+      operationId: discardAIDraft
+      x-permission: conversations:write
+      description: >-
+        Say the draft is not wanted. A ready or scheduled draft counts against its topic's record
+        (auto-answer is earned per knowledge base article); a scheduled answer is stopped. Ask for a new
+        draft with POST on the conversation. Discarding it again changes nothing (200). 409
+        `ai_draft_state` for a draft that was already used or superseded.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: The discarded draft
+          content: {application/json: {schema: {$ref: '#/components/schemas/AIDraftEnvelope'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/conversations/{id}/ai-draft/{draftId}/apply-triage:
+    parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/AIDraftID'}]
+    post:
+      operationId: applyAITriage
+      x-permission: conversations:write
+      description: >-
+        Apply the draft's triage suggestion: add its tags that still exist and set its priority. Undo
+        each like any other change (remove the tag, set the priority back). 409 `ai_draft_state` when
+        the draft has no suggestion.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: The draft and the conversation after the change
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [draft, conversation]
+                properties:
+                  draft: {$ref: '#/components/schemas/AIDraft'}
+                  conversation: {$ref: '#/components/schemas/Conversation'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /api/v1/conversations/{id}/ai-draft/{draftId}/cancel-auto-answer:
+    parameters: [{$ref: '#/components/parameters/ID'}, {$ref: '#/components/parameters/AIDraftID'}]
+    post:
+      operationId: cancelAutoAnswer
+      x-permission: conversations:write
+      description: >-
+        Stop a scheduled answer before it goes out. The draft stays on the conversation as `ready` for a
+        person to send, edit or discard. A draft that is not scheduled is returned as it is (nothing will
+        go out); 409 `ai_draft_state` when auto-answer already sent it.
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: The draft, ready again
+          content: {application/json: {schema: {$ref: '#/components/schemas/AIDraftEnvelope'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
   /api/v1/inbox/activity:
     get:
       operationId: getInboxActivity
@@ -1345,6 +1465,44 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '422': {$ref: '#/components/responses/NameNotAllowed'}
+  /api/v1/workspace/ai:
+    get:
+      operationId: getAISettings
+      x-permission: access:read
+      description: >-
+        The workspace's AI settings, the record of every topic (knowledge base article) its
+        high-confidence drafts rest on, and the last 30 days of usage. A topic is `eligible` for
+        auto-answer when auto-answer is on, at least `auto_answer_min_reviewed` of its drafts were
+        reviewed by a person, and at least `auto_answer_min_accuracy` percent of those were sent with
+        small changes at most (the sent reply shares 85 % of its words, in order, with the draft).
+        Answers sent on their own never count toward a record.
+      responses:
+        '200':
+          description: Settings, topics and usage
+          content: {application/json: {schema: {$ref: '#/components/schemas/AIWorkspace'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    patch:
+      operationId: updateAISettings
+      x-permission: access:write
+      description: >-
+        Change any of the AI settings (admins). Turning drafts off stops the queued drafts; turning
+        drafts or auto-answer off stops every scheduled answer, which stays as a draft for a person.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AISettingsUpdate'}
+      responses:
+        '202': {$ref: '#/components/responses/AgentRequestAccepted'}
+        '200':
+          description: The settings after the change
+          content: {application/json: {schema: {$ref: '#/components/schemas/AISettings'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/WorkspaceLocked'}
+        '403': {$ref: '#/components/responses/Forbidden'}
   /api/v1/workspace/slug:
     patch:
       operationId: updateWorkspaceSlug
@@ -3694,6 +3852,11 @@ components:
       in: path
       required: true
       schema: {type: string, format: uuid}
+    AIDraftID:
+      name: draftId
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
   responses:
     AgentRequestAccepted:
       description: >-
@@ -5089,9 +5252,132 @@ components:
                 type: [string, 'null']
                 format: date-time
                 description: Time of the newest customer message inside the polled window, or null when the change was not a customer message.
+    AIDraftSource:
+      type: object
+      required: [kind, id, title]
+      properties:
+        kind: {type: string, enum: [kb_article, conversation]}
+        id: {type: string, format: uuid, description: The knowledge base article or the resolved conversation.}
+        number: {type: integer, description: The article's number; absent for a conversation.}
+        title: {type: string}
+        locale: {type: string, description: The translation quoted; absent for the article's own language.}
+    AITriage:
+      type: object
+      required: [tags]
+      properties:
+        tags: {type: array, items: {type: string}, description: Names of tags that exist in the workspace.}
+        priority: {type: string, enum: [low, normal, high, urgent]}
+        reason: {type: string}
+    AIDraft:
+      type: object
+      required: [id, conversation_id, message_id, status, action, body, confidence, confidence_reasons, handoff_reason, topic_article_id, sources, triage,
+        triage_applied_at, outcome, similarity, auto_send_at, error_code, model, created_at, ready_at]
+      properties:
+        id: {type: string, format: uuid}
+        conversation_id: {type: string, format: uuid}
+        message_id: {type: [string, 'null'], format: uuid, description: The customer message the draft answers.}
+        status:
+          type: string
+          enum: [queued, ready, failed, superseded, used, discarded, scheduled, auto_sent, cancelled]
+          description: >-
+            queued until written; ready for a person; failed (see error_code); superseded when the customer
+            wrote again or a new draft was asked for; used when a reply was sent from it; discarded;
+            scheduled to be sent on its own at auto_send_at; auto_sent; cancelled when a scheduled answer
+            was stopped by a new message.
+        action: {type: [string, 'null'], enum: [answer, clarify, handoff, null], description: 'answer the customer, ask them one question, or hand over to a person'}
+        body: {type: [string, 'null'], description: The reply text; null for a handoff and until it is written.}
+        confidence: {type: [string, 'null'], enum: [high, medium, low, null]}
+        confidence_reasons:
+          type: array
+          items: {type: string}
+          description: >-
+            Why the draft is not high: model_unsure, no_kb_source, uncited_claim, unknown_source,
+            not_an_answer, handoff, unsourced_link (a link or address no source holds), review_flagged or
+            review_failed (a second read of a high draft against its sources found something to fix, which
+            handoff_reason says, or could not be done), or risk:<name> (refund_or_billing_exception, account_specific_data,
+            security_or_access, legal_or_complaint, angry_customer, outage_or_incident, needs_action_by_team).
+        handoff_reason: {type: [string, 'null'], description: For the team what is missing or must be done.}
+        topic_article_id: {type: [string, 'null'], format: uuid, description: The knowledge base article the reply rests on.}
+        sources: {type: array, items: {$ref: '#/components/schemas/AIDraftSource'}}
+        triage:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/AITriage'}
+        triage_applied_at: {type: [string, 'null'], format: date-time}
+        outcome: {type: [string, 'null'], enum: [sent_unchanged, sent_edited, discarded, ignored, auto_sent, auto_cancelled, null], description: 'What a person did with it; ignored is a reply in their own words instead. Null for a draft an agent token sent.'}
+        similarity: {type: [number, 'null'], minimum: 0, maximum: 1, description: How close the sent reply is to the draft.}
+        auto_send_at: {type: [string, 'null'], format: date-time}
+        error_code: {type: [string, 'null'], description: 'The last failure: a provider error code (auth, rate_limited, ...), invalid_answer or refused.'}
+        model: {type: [string, 'null']}
+        created_at: {type: string, format: date-time}
+        ready_at: {type: [string, 'null'], format: date-time}
+    AIDraftEnvelope:
+      type: object
+      required: [draft]
+      properties:
+        draft: {$ref: '#/components/schemas/AIDraft'}
+    AIDraftState:
+      type: object
+      required: [draft, available, drafts_enabled]
+      properties:
+        draft:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/AIDraft'}
+        available: {type: boolean, description: This server has an AI provider.}
+        drafts_enabled: {type: boolean}
+    AISettings:
+      type: object
+      required: [available, drafts_enabled, auto_answer_enabled, auto_answer_delay_seconds, auto_answer_min_reviewed, auto_answer_min_accuracy, updated_at]
+      properties:
+        available: {type: boolean, description: This server has an AI provider.}
+        drafts_enabled: {type: boolean}
+        auto_answer_enabled: {type: boolean}
+        auto_answer_delay_seconds: {type: integer, minimum: 0, maximum: 86400}
+        auto_answer_min_reviewed: {type: integer, minimum: 3, maximum: 1000}
+        auto_answer_min_accuracy: {type: integer, minimum: 50, maximum: 100, description: Percent.}
+        updated_at: {type: [string, 'null'], format: date-time}
+    AISettingsUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        drafts_enabled: {type: boolean}
+        auto_answer_enabled: {type: boolean}
+        auto_answer_delay_seconds: {type: integer, minimum: 0, maximum: 86400}
+        auto_answer_min_reviewed: {type: integer, minimum: 3, maximum: 1000}
+        auto_answer_min_accuracy: {type: integer, minimum: 50, maximum: 100}
+    AITopicRecord:
+      type: object
+      required: [article_id, article_number, title, reviewed, accepted, eligible]
+      properties:
+        article_id: {type: string, format: uuid}
+        article_number: {type: integer}
+        title: {type: string}
+        reviewed: {type: integer}
+        accepted: {type: integer}
+        eligible: {type: boolean}
+    AIUsageSummary:
+      type: object
+      required: [drafts, calls, input_tokens, output_tokens, sent_unchanged, sent_edited, discarded, auto_sent]
+      properties:
+        drafts: {type: integer}
+        calls: {type: integer}
+        input_tokens: {type: integer}
+        output_tokens: {type: integer}
+        sent_unchanged: {type: integer}
+        sent_edited: {type: integer}
+        discarded: {type: integer}
+        auto_sent: {type: integer}
+    AIWorkspace:
+      type: object
+      required: [settings, topics, usage]
+      properties:
+        settings: {$ref: '#/components/schemas/AISettings'}
+        topics: {type: array, items: {$ref: '#/components/schemas/AITopicRecord'}}
+        usage: {$ref: '#/components/schemas/AIUsageSummary'}
     Message:
       type: object
-      required: [id, conversation_id, author_agent_id, author_name, agent_token, agent_request_id, kind, body, body_html, origin, attachments, cc, created_at, delivery, email, reply_number]
+      required: [id, conversation_id, author_agent_id, author_name, agent_token, agent_request_id, ai_draft_id, kind, body, body_html, origin, attachments, cc, created_at, delivery, email, reply_number]
       properties:
         reply_number:
           type: [integer, 'null']
@@ -5112,6 +5398,11 @@ components:
           description: >-
             The agent request whose approval sent this message (a reply draft): `agent_token` drafted it,
             `author_agent_id` approved and sent it. Null otherwise.
+        ai_draft_id:
+          type: [string, 'null']
+          format: uuid
+          description: >-
+            The AI draft this reply was sent from. With `author_agent_id` null, auto-answer sent it on its own.
         kind: {type: string, enum: [incoming, outgoing, note]}
         body: {type: string}
         body_html:

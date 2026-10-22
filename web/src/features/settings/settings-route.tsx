@@ -7,6 +7,8 @@ import { gmailReturn } from './gmail-return';
 import { SavedRepliesSection } from './saved-replies-section';
 import { TeamSection } from './team-section';
 import { WebFormSection } from './web-form-section';
+import { AISection } from './ai-section';
+import { aiSettingsApi } from './ai-settings-api';
 import { SettingsPage } from './settings-page';
 import { messages } from '../../messages';
 import { Part, PartUnavailable } from '../../ui/lazy-part';
@@ -66,6 +68,8 @@ export function SettingsRoute() {
   const createSavedReply = useMutation({ mutationFn: ({ title, body }: { title: string; body: string }) => api.createSavedReply(title, body), onSuccess: refreshSavedReplies });
   const updateSavedReply = useMutation({ mutationFn: ({ id, ...change }: { id: string; title: string; body: string; updated_at: string }) => api.updateSavedReply(id, change), onSuccess: refreshSavedReplies });
   const deleteSavedReply = useMutation({ mutationFn: ({ id, updatedAt }: { id: string; updatedAt: string }) => api.deleteSavedReply(id, updatedAt), onSuccess: refreshSavedReplies });
+  const aiSettings = useQuery({ queryKey: ['ai-settings'], queryFn: aiSettingsApi.get });
+  const saveAISettings = useMutation({ mutationFn: aiSettingsApi.update, onSuccess: () => refresh('ai-settings') });
   const isAdmin = me.data?.agent.role === 'admin';
   // Plan and billing exists only on the hosted cloud and only admins manage it.
   const showBilling = isAdmin && config.data?.billing.enabled === true;
@@ -103,6 +107,7 @@ export function SettingsRoute() {
       <div className="settings-body"><Part part={helpCenterPart} failed={<PartUnavailable />}
         render={({ HelpCenterSettings }) => <HelpCenterSettings canManage={isAdmin} workspaceName={me.data?.workspace.name} />} /></div>
     </section>}
+    aiSection={<AISection workspace={aiSettings.data} canManage={isAdmin} save={saveState(saveAISettings)} onSave={(change) => saveAISettings.mutate(change)} />}
     webFormSection={<WebFormSection settings={webForm.data} canManage={isAdmin} save={saveState(saveWebForm)} onSave={(enabled, origins) => saveWebForm.mutate({ enabled, origins })} />}
     inviteError={createInvite.error instanceof PlanLimitError || createInvite.error instanceof InvalidRequestError ? createInvite.error.message : createInvite.isError ? messages.settingsActionFailed : undefined}
     createdInviteUrl={createInvite.data?.url}

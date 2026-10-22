@@ -6,6 +6,7 @@ import { attachmentsDir, databaseURL, goEnv, servers } from './e2e/support/cli';
 import { identity, jwksURL } from './e2e/support/identity-provider';
 import { inAppFreshdesk } from './e2e/support/fake-freshdesk';
 import { mailpit } from './e2e/support/mailpit';
+import { fakeAI } from './e2e/support/fake-ai';
 
 const localChrome = !process.env.CI && existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined;
 
@@ -43,6 +44,8 @@ export default defineConfig({
     // The main server also imports in the app from the fake Freshdesk (-tags e2e lets it reach a loopback
     // address), with a key ring as a fresh install has one.
     server(servers.main, { ...inAppFreshdesk.env(), MAILBOX_TOKEN_KEYS: 'k1:ZTJlLWluLWFwcC1pbXBvcnQta2V5LTMyLWJ5dGVzISE=' }, 'e2e'),
+    // AI drafts with a local stand-in that speaks the OpenAI-compatible API (e2e/support/fake-ai.ts).
+    server(servers.ai, fakeAI.env()),
     server(servers.mail, { SMTP_HOST: '127.0.0.1', SMTP_PORT: mailpit.smtpPort, SMTP_STARTTLS: 'false', EMAIL_FROM_POLICY: 'any' }),
     // The cloud server also imports in the app and sends replies by SMTP, for the golden path. Every server
     // with a relay runs an outbox worker that sends any workspace's queued reply, and the worker picks the

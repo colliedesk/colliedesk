@@ -44,6 +44,7 @@ type contractFixture struct {
 	requestToken                                       string
 	approveRequestID, rejectRequestID, cancelRequestID string
 	kb                                                 contractKB
+	ai                                                 contractAI
 	imports                                            importJobs
 }
 
@@ -62,6 +63,7 @@ func newContractFixture(t *testing.T) contractFixture {
 		hostedConfig(config)
 		config.Email.ResendWebhookSecret = resendWebhookSecret
 		config.ProblemReportWorkspace = "contract-support"
+		config.AI = true
 		keys, _ := tokenseal.ParseKeys("k1:AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=")
 		config.Google = google.Config{ClientID: "contract-client", ClientSecret: "not-a-secret", Keys: keys, Base: "http://127.0.0.1:1"}
 	})
@@ -98,6 +100,7 @@ func newContractFixture(t *testing.T) contractFixture {
 	}
 	restoreReplySeen := seenAt(t, api, adminToken, restoreReplyID)
 	kb := seedContractKB(t, api, adminToken)
+	ai := seedContractAI(t, api, pool, adminToken, contactID)
 	updateViewID := create(t, api, adminToken, "/api/v1/saved-views", map[string]any{"name": "Update contract view", "scope": "shared", "filters": map[string]any{"status": []string{"open"}}})
 	updateViewSeen := viewSeen(t, api, adminToken, updateViewID)
 	deleteViewID := create(t, api, adminToken, "/api/v1/saved-views", map[string]any{"name": "Delete contract view", "scope": "personal", "filters": map[string]any{}})
@@ -183,7 +186,7 @@ func newContractFixture(t *testing.T) contractFixture {
 	imports := seedImportJobs(t, pool, workspaceID(t, api, adminToken))
 	return contractFixture{imports: imports, requestToken: requestToken, approveRequestID: approveRequestID, rejectRequestID: rejectRequestID, cancelRequestID: cancelRequestID, agentID: agentID, api: api, portalToken: portalToken, webhookBody: string(subscription.event("subscription.updated")), inboundSecret: inboundSecret, failedReplyID: failedReplyID, deleteChannelToken: deleteChannelToken, adminToken: adminToken, agentToken: agentSession.Token,
 		contactID: contactID, conversationID: conversationID, mergeDuplicateID: mergeDuplicateID, undoMergeID: undoMergeID, inviteID: inviteID, sessionID: sessionID,
-		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token, kb: kb}
+		updateTagID: updateTagID, deleteTagID: deleteTagID, updateReplyID: updateReplyID, updateReplySeen: updateReplySeen, deleteReplyID: deleteReplyID, trashReplyID: trashReplyID, restoreReplyID: restoreReplyID, restoreReplySeen: restoreReplySeen, deleteReplySeen: deleteReplySeen, trashReplySeen: trashReplySeen, updateViewID: updateViewID, updateViewSeen: updateViewSeen, deleteViewID: deleteViewID, trashViewID: trashViewID, attachmentID: attachmentID, mailImagePath: mailImagePath, redeemToken: linkToken(t, redeemURL), logoutToken: logout.Token, kb: kb, ai: ai}
 }
 
 // seedMailImage gives the conversation's incoming message HTML with one remote image and returns the

@@ -59,6 +59,7 @@ function FullMessage({ item, timezone, onRetryDelivery, approvedBy }: MessageIte
         <Avatar name={item.author_name ?? item.email?.from ?? kindLabel(item.kind)} />
         <div className="message-byline">
           {plainAuthor && <span className="message-author">{item.author_name}</span>}
+          {item.ai_draft_id && item.kind === 'outgoing' && <span className="message-author">{item.author_agent_id ? messages.fromAIDraft : messages.sentByAutoAnswer}</span>}
           {!item.agent_token && item.agent_request_id && <span className="message-author">{messages.draftRewritten(sender)}</span>}
           {item.agent_token && <span className="message-author" title={item.agent_token.scope}>{item.agent_request_id
             ? messages.draftApproved(item.agent_token.label, sender)

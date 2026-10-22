@@ -3,6 +3,8 @@ name: colliedesk
 services:
   postgres:
     image: postgres:17-bookworm
+    # Tests drop their schemas with CASCADE, one lock per object; see .github/scripts/ci-services.sh.
+    command: ["postgres", "-c", "max_locks_per_transaction=256"]
     environment:
       POSTGRES_DB: colliedesk
       POSTGRES_USER: colliedesk

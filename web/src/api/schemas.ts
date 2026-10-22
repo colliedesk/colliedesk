@@ -109,7 +109,7 @@ export const messageAgentTokenSchema = z.object({
 }) satisfies z.ZodType<Generated<'MessageAgentToken'>>;
 export const messageSchema = z.object({
   id: z.string().uuid(), conversation_id: z.string().uuid(), author_agent_id: z.string().uuid().nullable(),
-  author_name: z.string().nullable(), agent_token: messageAgentTokenSchema.nullable(), agent_request_id: z.string().uuid().nullable(),
+  author_name: z.string().nullable(), agent_token: messageAgentTokenSchema.nullable(), agent_request_id: z.string().uuid().nullable(), ai_draft_id: z.string().uuid().nullable(),
   kind: z.enum(['incoming', 'outgoing', 'note']), body: z.string(),
   body_html: z.string().nullable(), origin: messageOriginSchema.nullable(),
   attachments: z.array(attachmentSchema), cc: z.array(z.string()), created_at: z.string().datetime(),

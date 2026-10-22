@@ -9,6 +9,8 @@ export const servers = {
   main: `http://localhost:${ports.main}`,
   cloud: `http://localhost:${ports.cloud}`,
   mail: `http://localhost:${ports.mail}`,
+  // The only server with an AI provider (a local stand-in), so AI drafts appear in its specs only.
+  ai: `http://localhost:${ports.aiServer}`,
 } as const;
 
 export const databaseURL = process.env.TEST_DATABASE_URL

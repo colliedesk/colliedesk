@@ -12,6 +12,10 @@ import (
 // toolNames is the list a client sees, written out by hand: the SDK lists tools by name.
 var toolNames = []string{
 	"colliedesk_agents_list",
+	"colliedesk_ai_draft_get",
+	"colliedesk_ai_draft_update",
+	"colliedesk_ai_settings_get",
+	"colliedesk_ai_settings_update",
 	"colliedesk_attachment_get",
 	"colliedesk_billing_get",
 	"colliedesk_billing_request",
@@ -138,6 +142,10 @@ var wantAnnotations = map[string]struct {
 	tier                              string
 }{
 	"colliedesk_agents_list":                      {readOnly: true, tier: "read"},
+	"colliedesk_ai_draft_get":                     {readOnly: true, tier: "read"},
+	"colliedesk_ai_draft_update":                  {tier: "draft"},
+	"colliedesk_ai_settings_get":                  {readOnly: true, tier: "read"},
+	"colliedesk_ai_settings_update":               {idempotent: true, tier: "admin"},
 	"colliedesk_attachment_get":                   {readOnly: true, tier: "read"},
 	"colliedesk_contact_create":                   {tier: "send"},
 	"colliedesk_contact_get":                      {readOnly: true, tier: "read"},

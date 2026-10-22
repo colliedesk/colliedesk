@@ -40,3 +40,16 @@ func TestInboundDropsOurOwnSystemMailSoItCannotLoop(t *testing.T) {
 		t.Fatalf("drop reason=%q, want %q", parsed.DropReason, email.DropAutoSubmitted)
 	}
 }
+
+func TestAnAnswerSentOnItsOwnIsMarkedAutoRepliedAndStaysInTheThread(t *testing.T) {
+	reply := systemMail()
+	reply.Standalone, reply.AutoReplied = false, true
+	reply.Subject, reply.InReplyTo = "Refund", "customer.1@example.org"
+	parsed := parseComposed(t, reply)
+	if got := parsed.Header.Get("Auto-Submitted"); got != "auto-replied" {
+		t.Fatalf("Auto-Submitted=%q, want auto-replied (RFC 3834), so an auto-responder does not answer it", got)
+	}
+	if got := parsed.Header.Get("Subject"); got != "Re: Refund" {
+		t.Errorf("Subject=%q, want the reply's Re: Refund", got)
+	}
+}

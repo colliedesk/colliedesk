@@ -20,7 +20,39 @@ service of `compose.yaml`.
 | `PROBLEM_REPORT_WORKSPACE` | empty | Send problem reports to a workspace on this server. See [problem reports](#problem-reports). |
 | `SMTP_*`, `EMAIL_FROM_POLICY`, `MAIL_FROM_*`, `EMAIL_TRUSTED_AUTHSERV_ID` | | Outgoing and incoming email. See [configuring email](email.md). |
 | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | empty | Replies sent through a connected Gmail mailbox. See [send replies through Gmail](email.md#send-replies-through-gmail). |
+| `AI_SERVER_*` | empty | AI drafts, triage and auto-answer with your own model provider key. Off when empty. See [AI drafts](#ai-drafts). |
 | `MAILBOX_TOKEN_KEYS` | set by the installer on new installs; empty on older ones | Key ring that encrypts the stored Gmail access and the Freshdesk API key of an import running in the app: `k1:` followed by 32 random bytes in base64 (`k1:$(openssl rand -base64 32)`). Without it an import keeps its key in memory only, and after a restart someone enters the key again. Keep a copy; to change it, put the new key first (`k2:<new>,k1:<old>`), never replace it. See [send replies through Gmail](email.md#send-replies-through-gmail). |
+
+## AI drafts
+
+AI drafts, triage and auto-answer ([user guide](../user/ai-drafts.md)) use a model provider you choose,
+with your own key. Without these variables the AI controls are hidden, nothing is queued and nothing
+leaves your server.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `AI_SERVER_PROVIDER` | empty (AI off) | `anthropic` (the Claude API) or `openai_compatible` (OpenAI, OpenRouter, Groq, Ollama, vLLM, LM Studio). |
+| `AI_SERVER_API_KEY` | empty | The provider key. Required for `anthropic`; empty is fine for a local server without authentication. |
+| `AI_SERVER_BASE_URL` | the Claude API | For `openai_compatible`, the base URL with its version path, for example `https://api.openai.com/v1` or `http://ollama:11434/v1`. A private address is allowed: you chose it. |
+| `AI_SERVER_MODEL` | `claude-sonnet-5-5` for `anthropic` | The model that writes drafts. Required for `openai_compatible`. |
+| `AI_SERVER_SELECT_MODEL` | `claude-haiku-5-5` for `anthropic`, none otherwise | A small model that first picks articles from the list of titles, so a customer who words a question differently from the article still gets it. Empty uses the keyword search only. |
+| `AI_SERVER_EFFORT` | `low` | `low`, `medium` or `high`. |
+
+A setting the server cannot use (an unknown provider, a missing key) turns AI off and logs the reason;
+the inbox keeps working.
+
+### What it costs
+
+Measured on a public help center of 102 articles: about 15,000 input and 800 output tokens per draft
+with the defaults, and one call to the small model. Every call is stored in `ai_usage` per workspace,
+with its tokens (NULL when the provider sends none), and the last 30 days are in Settings, AI drafts.
+
+### What leaves the server
+
+For each draft: the conversation's newest public messages (never a private note), the subject, the
+names of the workspace's tags, and the articles and resolved conversations retrieval found, with the
+customer's name, email, company and long numbers masked ([AI retrieval](https://github.com/colliedesk/colliedesk/blob/main/docs/internals/ai-retrieval.md)).
+The chooser gets the article titles and the newest customer message.
 
 ## Usage report
 

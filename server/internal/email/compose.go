@@ -37,6 +37,9 @@ type Outgoing struct {
 	// Opening is the first message of a thread a person starts: Subject stays as written, without
 	// "Re: ", and nothing marks it automatic.
 	Opening bool
+	// AutoReplied is a reply sent on its own (AI auto-answer): a reply in the thread, marked
+	// Auto-Submitted: auto-replied so an auto-responder does not answer it.
+	AutoReplied bool
 }
 
 // Compose renders a plain-text UTF-8 RFC 5322 message, or multipart/mixed with one part per file when
@@ -78,6 +81,8 @@ func Compose(message Outgoing) ([]byte, error) {
 	if message.Standalone {
 		// RFC 3834: mail the system writes says so, and an auto-responder must not answer it.
 		header("Auto-Submitted", "auto-generated")
+	} else if message.AutoReplied {
+		header("Auto-Submitted", "auto-replied")
 	}
 	header("In-Reply-To", angle(message.InReplyTo))
 	references := make([]string, 0, len(message.References))

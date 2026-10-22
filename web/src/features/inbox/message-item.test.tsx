@@ -5,7 +5,7 @@ import { MessageItem } from './message-item';
 
 const base: Message = { reply_number: null,
   id: '22222222-2222-4222-8222-222222222222', conversation_id: '11111111-1111-4111-8111-111111111111', author_agent_id: null, author_name: 'Vic Customer',
-  agent_token: null, agent_request_id: null, kind: 'incoming', body: 'Plain version of the newsletter', body_html: null, origin: null,
+  agent_token: null, agent_request_id: null, ai_draft_id: null, kind: 'incoming', body: 'Plain version of the newsletter', body_html: null, origin: null,
   attachments: [], cc: [], created_at: '2026-10-14T00:00:00Z', delivery: null,
   email: { from: 'vic@customer.example', authentication: 'pass', attachments: [], original_attachment_id: null, cc: [] },
 };
@@ -122,4 +122,12 @@ test('a failed delivery says why in text, not only on hover', () => {
   render(<MessageItem item={{ ...base, kind: 'outgoing', email: null, delivery: { status: 'failed', attempts: 1, last_error: reason, sent_at: null } }} timezone="UTC" />);
   expect(screen.getByText(reason)).toBeVisible();
   expect(screen.getByRole('button', { name: 'Retry delivery' })).toBeInTheDocument();
+});
+
+test('a reply sent from an AI draft says so, and one auto-answer sent on its own says that', () => {
+  const reply = { ...base, kind: 'outgoing' as const, email: null, author_name: 'Ada', ai_draft_id: '33333333-3333-4333-8333-333333333333' };
+  const { rerender } = render(<MessageItem item={{ ...reply, author_agent_id: '44444444-4444-4444-8444-444444444444' }} timezone="UTC" />);
+  expect(screen.getByText('from an AI draft')).toBeInTheDocument();
+  rerender(<MessageItem item={{ ...reply, author_agent_id: null, author_name: null }} timezone="UTC" />);
+  expect(screen.getByText('Answered by AI on its own')).toBeInTheDocument();
 });

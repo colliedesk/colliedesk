@@ -16,6 +16,11 @@ import type { DraftEdit } from './reply-draft-card';
 import { suggestedCc } from './suggested-cc';
 import { TimelinePanel } from './timeline-panel';
 import { messages } from '../../messages';
+import { lazyPart, Part } from '../../ui/lazy-part';
+
+// The AI draft of the open conversation is a chunk of its own; it reads its draft on its own, so the
+// conversation never waits for it.
+const aiDraftPart = lazyPart(() => import('./ai-draft-panel'));
 
 interface InboxPageProps {
   // The hosted cloud, where the server trusts a Cc line only on mail from the platform forwarder.
@@ -196,6 +201,8 @@ export function InboxPage({ hosted = false, conversations = [], selected, timeli
         {deliveryNotice && <p role="alert" className="composer-notice" ref={deliveryRef}>{deliveryNotice}</p>}
         {replyDrafts.map((draft) => <ReplyDraftCard key={draft.id} draft={draft} customer={customerName}
           onSend={(edit) => onSendDraft?.(draft, edit) ?? Promise.resolve()} onDiscard={() => onDiscardDraft?.(draft) ?? Promise.resolve()} />)}
+        {selected && <Part part={aiDraftPart} render={({ AIDraftPanel }) => <AIDraftPanel key={selected.id} conversationId={selected.id}
+          latestMessageId={timeline[timeline.length - 1]?.id} timezone={timezone} />} />}
         {/* One composer per conversation: its draft and refusal belong to the customer it was written for. */}
         <ReplyComposer key={selected?.id} disabled={!selected} onSubmit={onMessage} attachmentLimits={attachmentLimits} suggestedCc={copied}
           latestReplyNumber={selected && !timelineLoading ? latestReply : undefined} timezone={timezone}

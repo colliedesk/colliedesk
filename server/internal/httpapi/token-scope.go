@@ -163,6 +163,17 @@ var tokenTiers = map[string]TokenAccess{
 	"POST /api/v1/agent-requests/{id}/cancel":                    tier(auth.ScopeRead),
 	"POST " + problemReportPath:                                  tier(auth.ScopeRead),
 
+	// An AI draft is read like the conversation. Asking for one, discarding it, applying its triage
+	// (tags and priority, each undone as usual) and stopping a scheduled answer never reach a customer.
+	"GET /api/v1/conversations/{id}/ai-draft":                               tier(auth.ScopeRead),
+	"POST /api/v1/conversations/{id}/ai-draft":                              tier(auth.ScopeDraft),
+	"POST /api/v1/conversations/{id}/ai-draft/{draftId}/discard":            tier(auth.ScopeDraft),
+	"POST /api/v1/conversations/{id}/ai-draft/{draftId}/apply-triage":       tier(auth.ScopeDraft),
+	"POST /api/v1/conversations/{id}/ai-draft/{draftId}/cancel-auto-answer": tier(auth.ScopeDraft),
+	"GET /api/v1/workspace/ai":                                              tier(auth.ScopeRead),
+	// The AI settings decide whether replies go to customers on their own: workspace settings, admin.
+	"PATCH /api/v1/workspace/ai": tier(auth.ScopeAdmin),
+
 	// Saying a conversation is open changes nothing anyone wrote; a row lives minutes at most.
 	"PUT /api/v1/conversations/{id}/presence":               tier(auth.ScopeRead),
 	"DELETE /api/v1/conversations/{id}/presence/{clientId}": tier(auth.ScopeRead),

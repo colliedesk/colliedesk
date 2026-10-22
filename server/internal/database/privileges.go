@@ -80,4 +80,7 @@ const (
 	// queued for AI retrieval to build. Only workspace ids leave the transaction; each is built in its
 	// own scope.
 	PrivilegeAIRetrievalQueue Privilege = "ai-retrieval-queue"
+	// PrivilegeAIDraftQueue lists the workspaces with an AI draft queued or a scheduled answer due. Only
+	// workspace ids leave the transaction; each draft is written in its own workspace's scope.
+	PrivilegeAIDraftQueue Privilege = "ai-draft-queue"
 )

@@ -24,6 +24,8 @@ type Store struct {
 	paidStorage int64
 	// objects is attachment storage, used to verify and discard objects; nil skips both.
 	objects attachments.Storage
+	// ai says this server has an AI provider: customer messages queue AI drafts (WithAI).
+	ai bool
 }
 
 func New(pool *pgxpool.Pool) *Store {
