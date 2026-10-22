@@ -137,6 +137,47 @@ add check) and outlives it. Tokens the provider did not report stay `NULL`. `hop
 usage of a refusal fallback. `TestProvidersAreCalledOnlyThroughMetered` fails when code outside the
 adapters and `meter.go` calls `Complete` or `Check`. No prompt or answer is stored.
 
+## The task queue
+
+`ai_tasks` (migration `20261022160000-ai-tasks`) holds AI work the server runs in the background;
+`ai.Worker` in `collie serve` runs it, in the pattern of `importjobs`:
+
+1. Claim under `PrivilegeAIJobClaim`: due tasks (people's before automatic, then oldest) get a
+   `claim_token` and a 3-minute lease, longer than the longest call (90 s) plus closing its usage row.
+   Every later write names the token, so a task cancelled or leased again ignores a late result.
+2. Then, in the task's own workspace: a locked workspace (`PlanLimits`) cancels it
+   (`workspace_locked`); an automatic task past the daily limit is cancelled (`automatic_limit`), one
+   past the per-minute limit waits for the next minute (a backlog after an outage must not lose its
+   work); a feature off or without its provider cancels it (`feature_off`). Only then is the provider
+   resolved and the handler run, with no transaction open. A handler writes its result with
+   `Run.Record`, in the same transaction that marks the task done and only while it still holds the
+   claim: a person who cancelled meanwhile never sees a late result.
+3. A retryable provider error queues the task again after `retry-after` or a doubling backoff, three
+   attempts at most; every attempt is its own metered call. A process stopping mid-call (a deploy)
+   puts the task back at once without counting the attempt. At most 8 calls run in the process, and the
+   claim takes no more than 2 per workspace counting what already runs under a live lease, so one
+   workspace's backlog never holds back another's.
+4. The sweep closes `started` usage rows older than a lease and two minutes (the process died) as
+   `error/unknown`, under the same privilege.
+5. A restored workspace never gets its tasks back (`restore-workspace.sh` drops them in the scratch
+   copy): a queued task would spend again.
+
+Handlers register per kind (`Worker.Handle`); a task without one fails (`no_handler`).
+
+## Automatic limits and the allowance
+
+Automatic tasks count against `ai_automatic_limits` (default 300 a UTC day, 30 a minute) when they
+first start; tasks count, not calls, so retries use no more. An advisory lock per workspace serializes
+the admission, so two workers cannot both take the last place.
+
+`ai_usage.cost_micro_usd` is computed when a call of the server's provider finishes, per hop at the
+served model's price from `AI_SERVER_PRICES` (unknown model: the highest declared price of each kind,
+and a log line), and stored: a price change never rewrites history. `Metered` sums the month (UTC) and
+refuses a server call once the allowance (`AI_SERVER_MONTHLY_ALLOWANCE`; on the cloud per active agent,
+another amount for a trial) is spent, before writing a usage row: no call, no row. Calls still running
+have no cost yet, so concurrent calls can pass the allowance by what they cost together (at most 2 per
+workspace).
+
 ## Testing
 
 `aiprovider.Fake` records every `Request` and answers from a script, without a network. Feature tests

@@ -155,6 +155,8 @@ On 2026-10-22 presence (issue #101: who else has a conversation open) first kept
 
 On 2026-10-22 Settings → AI (#89: AI providers and features) became its own lazy part, `ai-route` (9,400 bytes gzip plus 2,380 bytes of CSS), with its strings, schemas and calls. The first bundle keeps the menu link, the route and the `ai` field of the public config: 198,143 → 198,290 bytes (+147), CSS unchanged at 15,444. The page asks for nothing before it opens, and no inbox or conversation request waits for an AI provider.
 
+The same day its Usage tab, the paused and allowance notices and the automatic-runs dialog grew `ai-route` to 12,071 bytes gzip plus 2,854 of CSS; the first bundle did not change. The usage of a month is asked for only when the tab opens. AI work runs as background tasks (`ai.Worker`): no request waits for a provider.
+
 If the gate fails, inspect the generated assets and remove or lazy-load the dependency that caused the increase. Do not compare raw file size with the gzip threshold, and do not loosen the limits to pass CI.
 
 ## Reply box lists (saved replies, articles)

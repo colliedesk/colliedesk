@@ -138,3 +138,36 @@ func aiSlotSetRequestSpec() Spec {
 			`"source":{"type":"string","enum":["server","provider","none"]},"provider_id":{"type":"string",`+uuid+`},"model":{"type":"string","maxLength":200},`+
 			`"effort":{"type":"string","enum":["low","medium","high"],"default":"low"},"enabled":{"type":"boolean"}}}`, aiSlotSetRequest)
 }
+
+func aiUsageGetSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_ai_usage_get",
+		Title: "Show AI usage",
+		Description: `Show one UTC month of the workspace's AI calls per feature and provider: calls, failed and automatic calls, tokens in and out, ` +
+			`and what the server's provider spent in micro-dollars, with this month's allowance when the server sets one. No prompt or answer is ever stored.` +
+			"\n\nTier: admin.",
+		Tier: "admin", ReadOnly: true,
+		REST:  []string{"GET /api/v1/ai/usage"},
+		Input: `{"type":"object","additionalProperties":false,"properties":{"month":{"type":"string","pattern":"^[0-9]{4}-[0-9]{2}$","description":"YYYY-MM; the current month when left out."}}}`,
+		Output: `{"type":"object","required":["usage"],"properties":{"usage":{"type":"object","required":["month","rows"],"properties":{"month":{"type":"string"},` +
+			`"allowance":{"type":["object","null"]},"rows":{"type":"array","items":{"type":"object"}}}}}}`,
+		run: aiUsageGet,
+	}
+}
+
+func aiAutomaticLimitsSetSpec() Spec {
+	return Spec{
+		Name:  "colliedesk_ai_automatic_limits_set",
+		Title: "Set the automatic AI limits",
+		Description: `Set how many automatic AI tasks (a triage suggestion for each new ticket) the workspace runs a UTC day and a minute; ` +
+			`the defaults are 300 and 30. Past the daily limit automatic tasks wait for the next day; what a person asks for is never limited this way.` +
+			"\n\nTier: admin.",
+		Tier: "admin", Idempotent: true,
+		REST: []string{"PUT /api/v1/ai/automatic-limits"},
+		Input: `{"type":"object","additionalProperties":false,"required":["per_day","per_minute"],"properties":{` +
+			`"per_day":{"type":"integer","minimum":0,"maximum":10000},"per_minute":{"type":"integer","minimum":0,"maximum":1000}}}`,
+		Output: `{"type":"object","required":["automatic"],"properties":{"automatic":{"type":"object","required":["per_day","per_minute","used_today"],"properties":{` +
+			`"per_day":{"type":"integer"},"per_minute":{"type":"integer"},"used_today":{"type":"integer"},"paused_until":{"type":["string","null"]}}}}}`,
+		run: aiAutomaticLimitsSet,
+	}
+}

@@ -93,6 +93,17 @@ type Settings struct {
 	ProviderLimit        int  `json:"provider_limit"`
 	CanStoreKeys         bool `json:"can_store_keys"`
 	AllowPrivateBaseURLs bool `json:"allow_private_base_urls"`
+	// Automatic is the workspace's automatic limits and today's use; Allowance what the server's
+	// provider may still spend this month, null when the server sets no allowance.
+	Automatic AutomaticLimits `json:"automatic"`
+	Allowance *AllowanceView  `json:"allowance"`
+}
+
+// AllowanceView is this month's allowance of the server's provider, in micro-dollars.
+type AllowanceView struct {
+	LimitMicroUSD int64     `json:"limit_micro_usd"`
+	UsedMicroUSD  int64     `json:"used_micro_usd"`
+	ResetsAt      time.Time `json:"resets_at"`
 }
 
 // Actor is who changes the settings: the agent, and the token's session when a token did.

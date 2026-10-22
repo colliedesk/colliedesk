@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/colliedesk/colliedesk/server/internal/ai"
+	"github.com/colliedesk/colliedesk/server/internal/aiprovider"
 	"github.com/colliedesk/colliedesk/server/internal/attachments"
 	"github.com/colliedesk/colliedesk/server/internal/auth"
 	"github.com/colliedesk/colliedesk/server/internal/cloudauth"
@@ -111,6 +112,9 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 	if err != nil {
 		return err
 	}
+	if aiServer != nil && aiServer.Allowance != nil && aiServer.Kind != aiprovider.KindAnthropic {
+		slog.Warn("AI_SERVER_MONTHLY_ALLOWANCE holds only while the OpenAI-compatible server reports token usage; calls without usage cost nothing against it")
+	}
 	googleConfig.Base = googleBaseURL
 	if emailConfig.SMTP.Configured() || googleConfig.Enabled() {
 		// A server with Gmail and no relay still runs the worker; replies that need SMTP fail with the reason.
@@ -165,7 +169,7 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		}
 	}
 	// Workspace AI keys are sealed with the same ring as Gmail and imports (MAILBOX_TOKEN_KEYS).
-	aiConfig := ai.Config{Server: aiServer, Keys: googleConfig.Keys, AllowPrivateBaseURLs: os.Getenv("AI_ALLOW_PRIVATE_BASE_URLS") == "1"}
+	aiConfig := ai.Config{Server: aiServer, Keys: googleConfig.Keys, AllowPrivateBaseURLs: os.Getenv("AI_ALLOW_PRIVATE_BASE_URLS") == "1", PlanLimits: billing.Enabled()}
 	apiConfig := httpapi.Config{AI: aiConfig, ImportKeys: importKeys, Origin: origin, HelpCenterDomain: helpCenterDomain, Version: version, CloudAuth: cloudAuth, Email: emailConfig, Google: googleConfig, Attachments: storage, MailImageCacheBytes: mailImageCacheBytes, KBVideoMaxBytes: kbVideoMaxBytes, RequestPool: requestPool, Billing: billing, TrustedProxies: trustedProxies, SignupHashKey: signupKey, SignupDisabled: signupWarning != "", InternalSignups: internalSignups, Funnel: telemetry.NewFunnel(telemetryConfig, nil),
 		ProblemReportWorkspace: strings.TrimSpace(os.Getenv("PROBLEM_REPORT_WORKSPACE"))}
 	// The web app reports how it is used, on the cloud and self-hosted alike; the same switch as the
@@ -178,6 +182,9 @@ func serve(ctx context.Context, pool *pgxpool.Pool, origin string, args []string
 		apiConfig.AlertMailer = email.SMTPSender{Config: emailConfig.SMTP}
 	}
 	api := httpapi.New(pool, apiConfig)
+	// AI tasks run in this process with the API's service, so a queued task wakes the worker at once.
+	// Nothing queues one yet: reply drafts and triage suggestions register their handlers when they ship.
+	go ai.NewWorker(api.AI(), db, ai.WorkerOptions{}).Run(ctx)
 	if billing.Enabled() {
 		go refreshFoundingAtStart(ctx, api)
 	}

@@ -145,6 +145,8 @@ func writeAIError(response http.ResponseWriter, err error) {
 		writeError(response, http.StatusConflict, "ai_provider_name_taken", "Another provider of this workspace has that name.")
 	case errors.Is(err, ai.ErrNoServerProvider):
 		writeError(response, http.StatusConflict, "no_server_provider", "This server has no AI provider for that feature. Add your own provider, or ask the server operator.")
+	case errors.Is(err, ai.ErrAllowanceReached):
+		writeError(response, http.StatusPaymentRequired, "ai_allowance_reached", "This month's included AI is used up. Add your own provider in Settings → AI, or move to a larger plan.")
 	case errors.Is(err, ai.ErrCheckRateLimited):
 		response.Header().Set("Retry-After", "60")
 		writeError(response, http.StatusTooManyRequests, "ai_checks_rate_limited", "At most 10 provider checks a minute in a workspace; try again shortly.")
@@ -174,4 +176,35 @@ func aiCheckMessage(check *ai.CheckError) string {
 		return "The provider refused the request; it may not support structured output for this model. Nothing was saved."
 	}
 	return "The provider could not be reached or did not answer properly. Check the address and try again. Nothing was saved."
+}
+
+func (a *API) getAIUsage(response http.ResponseWriter, request *http.Request) {
+	month, err := a.ai.ParseMonth(request.URL.Query().Get("month"))
+	if err != nil {
+		writeAIError(response, err)
+		return
+	}
+	usage, err := a.ai.Usage(request.Context(), principal(request).Workspace.ID, month)
+	if err != nil {
+		writeAIError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, usage)
+}
+
+func (a *API) setAIAutomaticLimits(response http.ResponseWriter, request *http.Request) {
+	var input struct {
+		PerDay    *int `json:"per_day"`
+		PerMinute *int `json:"per_minute"`
+	}
+	if err := decodeJSON(request, &input); err != nil || input.PerDay == nil || input.PerMinute == nil {
+		writeError(response, http.StatusBadRequest, "invalid_request", "Send per_day (0 to 10000) and per_minute (0 to 1000).")
+		return
+	}
+	limits, err := a.ai.SetAutomaticLimits(request.Context(), principal(request).Workspace.ID, aiActor(request), *input.PerDay, *input.PerMinute)
+	if err != nil {
+		writeAIError(response, err)
+		return
+	}
+	writeJSON(response, http.StatusOK, limits)
 }

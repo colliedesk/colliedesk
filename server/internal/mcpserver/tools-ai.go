@@ -98,3 +98,23 @@ func aiSlotSetRequest(c *call, arguments map[string]any) (any, error) {
 	}
 	return ask(c, http.MethodPut, "/api/v1/ai/slots/"+url.PathEscape(slot), body)
 }
+
+func aiUsageGet(c *call, arguments map[string]any) (any, error) {
+	query := url.Values{}
+	if month, _ := arguments["month"].(string); month != "" {
+		query.Set("month", month)
+	}
+	var usage json.RawMessage
+	if err := c.get("/api/v1/ai/usage", query, &usage); err != nil {
+		return nil, err
+	}
+	return map[string]any{"usage": usage}, nil
+}
+
+func aiAutomaticLimitsSet(c *call, arguments map[string]any) (any, error) {
+	var limits json.RawMessage
+	if err := c.send(http.MethodPut, "/api/v1/ai/automatic-limits", arguments, &limits); err != nil {
+		return nil, err
+	}
+	return map[string]any{"automatic": limits}, nil
+}
