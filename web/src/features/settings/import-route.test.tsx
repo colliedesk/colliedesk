@@ -60,12 +60,16 @@ test('a later people action clears what an earlier one said', async () => {
   imports.report.mockResolvedValue({ status: 'OK' });
   Object.assign(imports, { people: vi.fn().mockResolvedValue({ items: [
     { external_id: '102', name: 'Bob', email: 'bob@old.example', active: false, linked_agent_id: null, linked_by_email: false, pending: false, updated_at: '2026-10-22T08:00:00Z' }] }),
-  link: vi.fn(), unlink: vi.fn() });
-  Object.assign(api, { agents: vi.fn().mockResolvedValue({ items: [] }), invites: vi.fn().mockResolvedValue({ items: [] }),
-    createInvite: vi.fn().mockRejectedValueOnce(new InvalidRequestError('No seat left for an invite')).mockResolvedValue({}) });
+  link: vi.fn().mockResolvedValue({}), unlink: vi.fn() });
+  const sam = { id: '33333333-3333-4333-8333-333333333333', email: 'sam@acme.example', display_name: 'Sam', role: 'admin', timezone_override: null,
+    deactivated_at: null, last_active_at: null, open_conversations: 0 };
+  Object.assign(api, { agents: vi.fn().mockResolvedValue({ items: [sam] }), invites: vi.fn().mockResolvedValue({ items: [] }),
+    createInvite: vi.fn().mockRejectedValue(new InvalidRequestError('No seat left for an invite')) });
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ImportRoute /></QueryClientProvider>);
   fireEvent.click(await screen.findByRole('button', { name: 'Invite' }));
   expect(await screen.findByText('No seat left for an invite')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Invite' }));
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Link Bob to' }), { target: { value: sam.id } });
+  fireEvent.click(screen.getByRole('button', { name: 'Link' }));
+  await waitFor(() => expect(imports.link).toHaveBeenCalled());
   await waitFor(() => expect(screen.queryByText('No seat left for an invite')).not.toBeInTheDocument());
 });
