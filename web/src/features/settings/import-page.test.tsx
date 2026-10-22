@@ -148,6 +148,27 @@ test('trying again keeps the address that was typed', () => {
   expect(screen.getByLabelText('Freshdesk address')).toHaveValue('beta.freshdesk.com');
 });
 
+test('a finished import says where the old help center addresses and links lead now', () => {
+  const links = {
+    status: 'UNVERIFIED', detail: ['1 Freshdesk link(s) were left as written; they stop working when the Freshdesk account closes.'],
+    help_center: 'https://acme.help.example.net',
+    old_addresses: { found: 36, redirected: 36, languages: ['en', 'es'], unmapped: [] },
+    rewritten: { articles: 2, saved_replies: 1, links: 5 },
+    left: [{ entity: 'kb_article', freshdesk_id: '101', url: 'https://acme.freshdesk.com/support/solutions/articles/999-gone', reason: 'not_imported' }],
+  };
+  page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }), report: { status: 'OK', links } });
+  const section = screen.getByRole('region', { name: 'Old help center links' });
+  expect(section).toHaveTextContent('36 of 36 old addresses lead to their new page on https://acme.help.example.net.');
+  expect(section).toHaveTextContent('5 Freshdesk links in 2 articles and 1 saved reply now point at the help center.');
+  expect(section).toHaveTextContent('1 Freshdesk link(s) were left as written');
+  expect(within(section).getByText('Needs a look')).toBeInTheDocument();
+});
+
+test('an import without a knowledge base shows no links section', () => {
+  page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }), report: { status: 'OK' } });
+  expect(screen.queryByRole('region', { name: 'Old help center links' })).not.toBeInTheDocument();
+});
+
 test('the undo question is brought into view with the safe answer focused', () => {
   page({ job: job({ state: 'finished', phase: 'full', status: 'OK', has_report: true }) });
   fireEvent.click(screen.getByRole('button', { name: 'Undo import' }));

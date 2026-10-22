@@ -5,6 +5,7 @@ import { reportDownloadPath } from '../../api/imports';
 import { RouterLink } from '../../ui/router-link';
 import { formatDate } from '../../lib/format-date';
 import { formatWait } from '../../lib/format-wait';
+import { ImportLinksSummary } from './import-links';
 import { importMessages as m } from './import-messages';
 import { SettingsNav } from './settings-nav';
 
@@ -260,6 +261,7 @@ function Finished({ job, report, onUndo, onNewImport, onOpenInbox, busy }: Impor
   return <Heading title={m[`status${status}`]} help={job.domain}>
     <p className="import-status" data-status={status}>{m[`explain${status}`]}</p>
     {report && <ReportLedger report={report} />}
+    {report?.links && <ImportLinksSummary links={report.links} />}
     <div className="button-row">
       <a className="link-action" href={reportDownloadPath(job.id)} download>{m.downloadReport}</a>
       <a className="link-action" href={`/api/v1/imports/${job.id}/report`} download={`freshdesk-import-${job.id}.json`}>{m.downloadReportJSON}</a>

@@ -46,6 +46,14 @@ export const importListSchema = z.object({ items: z.array(importJobSchema) }) sa
 
 // The report is the importer's own JSON; the page reads the counts it shows and keeps the rest opaque.
 const countSchema = z.object({ source: z.number(), imported: z.number(), failed: z.number() }).partial();
+// links is the section on the old Freshdesk help center: where its addresses and the links inside
+// imported content lead now (server/internal/freshdesk/report-links.go).
+const linksSchema = z.object({
+  status: z.string(), detail: z.array(z.string()).nullable().optional(), help_center: z.string(),
+  old_addresses: z.object({ found: z.number(), redirected: z.number() }).passthrough(),
+  rewritten: z.object({ articles: z.number(), saved_replies: z.number(), links: z.number() }),
+  left: z.array(z.object({ entity: z.string(), freshdesk_id: z.string(), url: z.string(), reason: z.string() })).nullable().optional(),
+}).passthrough();
 export const importReportSchema = z.object({
   status: z.string(),
   interim: z.boolean().optional(),
@@ -54,6 +62,7 @@ export const importReportSchema = z.object({
   knowledge_base: z.object({ articles: countSchema.optional() }).partial().optional(),
   missing: z.array(z.string()).nullable().optional(),
   failures: z.array(z.object({ entity: z.string(), freshdesk_id: z.string(), error: z.string() })).nullable().optional(),
+  links: linksSchema.optional(),
 }).passthrough();
 // An undo's report says what it removed, with counts, not the import's report.
 export const undoReportSchema = z.object({ conversations: z.number(), contacts: z.number() }).passthrough();
@@ -64,6 +73,7 @@ export type ImportJob = z.infer<typeof importJobSchema>;
 export type ImportPreview = z.infer<typeof importPreviewSchema>;
 export type ImportReport = z.infer<typeof importReportSchema>;
 export type UndoReport = z.infer<typeof undoReportSchema>;
+export type ImportLinks = z.infer<typeof linksSchema>;
 
 const json = <Operation extends 'previewImport' | 'setImportKey' | 'linkImportPerson'>(value: RequestBody<Operation>): string => JSON.stringify(value);
 

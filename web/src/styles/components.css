@@ -663,6 +663,8 @@ fieldset:disabled .tag-check { opacity: 0.5; cursor: not-allowed; }
 .import-ledger tbody th { font-weight: 500; color: var(--text-1); }
 .import-ledger tr[data-short] td:last-child { color: var(--danger); font-weight: 600; }
 .import-report { margin: 0; display: grid; gap: var(--space-2); }
+.import-links { display: grid; gap: var(--space-2); }
+.import-links p, .import-links ul { margin: 0; }
 .import-phases { display: flex; gap: var(--space-2); margin: 0; padding: 0; list-style: none; font-size: var(--fs-small); }
 .import-phases li { flex: 1; border-top: 3px solid var(--surface-3); padding-top: var(--space-2); color: var(--text-3); }
 .import-phases li[data-state="done"] { border-color: var(--ok); color: var(--text-2); }
