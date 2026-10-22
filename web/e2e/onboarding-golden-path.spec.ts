@@ -10,7 +10,7 @@ import { signUp } from './support/signup';
 // conversation by email. The stand-ins are the identity provider, the Freshdesk API v2 and Mailpit as the
 // SMTP relay. Later steps extend this test, never a copy of it:
 //   #100: the results page shows the baseline, after the reconcile report.
-//   #99: the AI backtest is ready, after the baseline (the time to first result then ends there too).
+//   #99: the AI backtest is ready, after the baseline (with its own time-to-backtest usage field).
 const baseURL = servers.cloud;
 const apiKey = 'fd-e2e-golden-path-key-never-shown';
 const provider = new IdentityProvider();
@@ -48,6 +48,7 @@ test('golden path: a new team signs up on the cloud, imports Freshdesk in the ap
     await page.getByRole('link', { name: 'Settings' }).click();
     await page.getByRole('textbox', { name: 'Support address' }).fill(support);
     await page.getByRole('button', { name: 'Save support address' }).click();
+    await expect(page.getByText(`Replies are sent from ${support}.`)).toBeVisible();
 
     // Answer a first conversation: a customer who wrote in Freshdesk (ticket 296, open, an active contact)
     // gets the reply by SMTP from the support address.
