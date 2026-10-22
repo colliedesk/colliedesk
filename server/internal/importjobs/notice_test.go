@@ -83,8 +83,12 @@ func TestAStoppedImportIsMailedButAPreviewOrACancelIsNot(t *testing.T) {
 	// A preview: the person is on the page.
 	e.preview(t, e.a)
 	w := e.mailingWorker(t, mailer)
-	importjobs.StubImporter(w, func(context.Context, freshdesk.Options) (*freshdesk.Report, error) { return nil, freshdesk.ErrPlanNoAPI },
-		func(context.Context, freshdesk.Options) (*freshdesk.PreviewResult, error) { return nil, freshdesk.ErrKeyRejected }, nil)
+	importjobs.StubImporter(w, func(context.Context, freshdesk.Options) (*freshdesk.Report, error) {
+		return nil, freshdesk.ErrPlanNoAPI
+	},
+		func(context.Context, freshdesk.Options) (*freshdesk.PreviewResult, error) {
+			return nil, freshdesk.ErrKeyRejected
+		}, nil)
 	tick(t, w)
 	if len(mailer.sent) != 0 {
 		t.Fatalf("a failed preview was mailed: %v", mailer.sent)
