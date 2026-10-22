@@ -129,8 +129,18 @@ export function ReplyConflict({ replies, timezone, onSendAnyway, onEdit }: { rep
   const panel = useRef<HTMLElement>(null);
   const edit = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    panel.current?.scrollIntoView?.({ block: 'nearest' });
+    const reveal = () => panel.current?.scrollIntoView?.({ block: 'nearest' });
+    reveal();
     edit.current?.focus({ preventScroll: true });
+    // The timeline reloads right after the refusal and grows above the box; keep the warning in view while it settles.
+    if (typeof ResizeObserver === 'undefined') return;
+    const page = new ResizeObserver(reveal);
+    page.observe(document.body);
+    const settled = setTimeout(() => page.disconnect(), 2_000);
+    return () => {
+      clearTimeout(settled);
+      page.disconnect();
+    };
   }, []);
   return (
     <section className="reply-conflict" aria-label={text.newReplies} ref={panel}>
