@@ -121,13 +121,16 @@ func TestBaseURLRules(t *testing.T) {
 		_, err := e.service.AddProvider(context.Background(), e.a.id, e.actor(e.a), ai.ProviderInput{Kind: "openai_compatible", Label: "P " + url, BaseURL: url, APIKey: key, Models: []string{"m"}})
 		return err
 	}
-	for _, blocked := range []string{"http://api.example.com/v1", "https://10.0.0.12:11434/v1", "https://localhost:11434/v1", "https://[::1]/v1", "https://169.254.169.254/v1"} {
+	var refused *ai.InvalidError
+	if err := add("http://api.example.com/v1", testKey); !errors.As(err, &refused) || !strings.Contains(err.Error(), "https") {
+		t.Fatalf("public http: %v", err)
+	}
+	for _, blocked := range []string{"http://10.0.0.12:11434/v1", "https://10.0.0.12:11434/v1", "https://localhost:11434/v1", "https://[::1]/v1", "https://169.254.169.254/v1"} {
 		var failed *ai.CheckError
 		if err := add(blocked, testKey); !errors.As(err, &failed) || failed.Code != aiprovider.ErrorBlockedAddress {
 			t.Fatalf("%s: %v", blocked, err)
 		}
 	}
-	var refused *ai.InvalidError
 	if err := add("https://openrouter.ai/api/v1", ""); !errors.As(err, &refused) {
 		t.Fatalf("public URL without a key: %v", err)
 	}

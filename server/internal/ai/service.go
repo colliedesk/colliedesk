@@ -224,12 +224,13 @@ func (s *Service) cleanBaseURL(value string) (string, error) {
 	if s.config.AllowPrivateBaseURLs {
 		return value, nil
 	}
-	if parsed.Scheme != "https" {
+	host := parsed.Hostname()
+	ip := net.ParseIP(host)
+	if (ip != nil && netguard.Blocked(ip)) || strings.EqualFold(host, "localhost") || strings.HasSuffix(strings.ToLower(host), ".localhost") {
 		return "", &CheckError{Code: aiprovider.ErrorBlockedAddress}
 	}
-	host := parsed.Hostname()
-	if ip := net.ParseIP(host); (ip != nil && netguard.Blocked(ip)) || strings.EqualFold(host, "localhost") || strings.HasSuffix(strings.ToLower(host), ".localhost") {
-		return "", &CheckError{Code: aiprovider.ErrorBlockedAddress}
+	if parsed.Scheme != "https" {
+		return "", invalid("Use an https address: a key must not cross the network in clear.")
 	}
 	return value, nil
 }
