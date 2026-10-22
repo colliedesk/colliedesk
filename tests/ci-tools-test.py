@@ -269,6 +269,23 @@ class PublishEdge(unittest.TestCase):
         ci = (ROOT / '.github/workflows/ci.yml').read_text()
         self.assertIsNone(re.search(r'^  publish-edge:', ci, re.M), 'ci.yml still defines publish-edge')
 
+class GoBuildCache(unittest.TestCase):
+    """actions/cache tries every key on the pull request's own ref before main's. CodeQL's setup-go
+    saves a build-only setup-go-* entry on that ref, so a restore key matching it shadowed main's
+    entry with the test builds, and every Go shard compiled the tests again (24 to 42 seconds)."""
+
+    def test_go_jobs_restore_only_entries_main_saves(self):
+        workflow = (ROOT / '.github/workflows/ci.yml').read_text()
+        saved = re.findall(r'uses: actions/cache/save@\S+.*?\n\s+key: (.+?)\$\{\{ github\.sha \}\}', workflow, re.S)
+        self.assertTrue(saved)
+        main_prefix = saved[0].split('${{')[0]
+        restores = re.findall(r'restore-keys: \|\n((?:\s{12}\S.*\n)+)', workflow)
+        self.assertEqual(len(restores), 3, 'the go, e2e and onboarding jobs restore the Go cache')
+        for block in restores:
+            for key in (line.strip() for line in block.splitlines()):
+                self.assertTrue(key.startswith(main_prefix), f'{key} can match an entry a pull request saved')
+
+
 class PackageManager(unittest.TestCase):
     def test_workflows_run_pnpm_through_corepack_only(self):
         # corepack reads packageManager; pnpm/action-setup installed a second pnpm from npm on

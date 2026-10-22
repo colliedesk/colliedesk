@@ -75,9 +75,9 @@ jobs:
           cache: false
       # setup-go's own cache is keyed on go.sum alone: saved once, never refreshed while the code
       # moves, and empty after a go.sum change. Each main run saves under its commit instead, and a
-      # run restores the newest one with the same go.sum, else the newest one at all. The paths are
-      # setup-go's, literally and in its order (a cache entry is restored only for the same path
-      # list), so the last key also reads the entries setup-go saved before this layout.
+      # run restores the newest one with the same go.sum, else the newest one at all. No key may
+      # match setup-go-*: actions/cache searches the pull request's ref before main's, and CodeQL's
+      # setup-go saves a build-only entry there, which shadowed main's entry with the test builds.
       - name: Restore the Go build cache of the newest main run
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -88,16 +88,23 @@ jobs:
           restore-keys: |
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
-            setup-go-${{ runner.os }}-
+            go-${{ runner.os }}-
+      # Compiling and linking every test binary needs no database, so it runs while PostgreSQL
+      # starts (the wait took up to 16 seconds after the cache restore); go test reuses the cached
+      # binaries below.
+      - name: Format and compile the tests
+        working-directory: server
+        run: |
+          if [ -n "$(gofmt -l .)" ]; then gofmt -l .; echo 'gofmt: format the files above' >&2; exit 1; fi
+          go test -c -o "$RUNNER_TEMP/go-test-binaries/" ./...
       - name: Wait for test services
         run: sh .github/scripts/ci-services.sh wait postgres
-      - name: Format and test
+      - name: Test
         working-directory: server
         env:
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ strategy.job-total }}
         run: |
-          if [ -n "$(gofmt -l .)" ]; then gofmt -l .; echo 'gofmt: format the files above' >&2; exit 1; fi
           go test -list . ./... > "$RUNNER_TEMP/go-test-list.txt"
           # Three go test processes per regular shard (go-test-shard.py says why); one on the latency shard.
           python3 ../.github/scripts/go-test-shard.py "$SHARD" "$SHARDS" --parts 3 < "$RUNNER_TEMP/go-test-list.txt" > "$RUNNER_TEMP/go-test-patterns.txt"
@@ -131,10 +138,11 @@ jobs:
       - name: Install frozen dependencies
         working-directory: web
         run: corepack pnpm install --frozen-lockfile
-      - name: Typecheck, test, and build
+      - name: Unit tests
         working-directory: web
-        # The type check runs in the e2e job, which finishes early; Vitest was this job's long pole.
-        run: corepack pnpm test && corepack pnpm exec vite build && corepack pnpm bundle:check
+        # The type check runs in the e2e job, and the bundle budget after the e2e job's own Vite build
+        # of the same commit: Vitest is this job's long pole.
+        run: corepack pnpm test
   e2e:
     needs: pr-verified
     if: ${{ !cancelled() && needs.pr-verified.outputs.reuse != 'true' }}
@@ -167,9 +175,9 @@ jobs:
           cache: false
       # setup-go's own cache is keyed on go.sum alone: saved once, never refreshed while the code
       # moves, and empty after a go.sum change. Each main run saves under its commit instead, and a
-      # run restores the newest one with the same go.sum, else the newest one at all. The paths are
-      # setup-go's, literally and in its order (a cache entry is restored only for the same path
-      # list), so the last key also reads the entries setup-go saved before this layout.
+      # run restores the newest one with the same go.sum, else the newest one at all. No key may
+      # match setup-go-*: actions/cache searches the pull request's ref before main's, and CodeQL's
+      # setup-go saves a build-only entry there, which shadowed main's entry with the test builds.
       - name: Restore the Go build cache of the newest main run
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -180,7 +188,7 @@ jobs:
           restore-keys: |
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
-            setup-go-${{ runner.os }}-
+            go-${{ runner.os }}-
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22.x'
@@ -205,6 +213,10 @@ jobs:
       - name: Run end-to-end workflows
         working-directory: web
         run: corepack pnpm exec vite build && corepack pnpm e2e --grep-invert @onboarding --fully-parallel --workers=3
+      - name: The production bundle stays within its size budget
+        if: ${{ !cancelled() }}
+        working-directory: web
+        run: corepack pnpm bundle:check
       - name: The web app type-checks and matches the API contract
         if: ${{ !cancelled() }}
         run: sh .github/scripts/ci-background.sh wait typecheck
@@ -257,9 +269,9 @@ jobs:
           cache: false
       # setup-go's own cache is keyed on go.sum alone: saved once, never refreshed while the code
       # moves, and empty after a go.sum change. Each main run saves under its commit instead, and a
-      # run restores the newest one with the same go.sum, else the newest one at all. The paths are
-      # setup-go's, literally and in its order (a cache entry is restored only for the same path
-      # list), so the last key also reads the entries setup-go saved before this layout.
+      # run restores the newest one with the same go.sum, else the newest one at all. No key may
+      # match setup-go-*: actions/cache searches the pull request's ref before main's, and CodeQL's
+      # setup-go saves a build-only entry there, which shadowed main's entry with the test builds.
       - name: Restore the Go build cache of the newest main run
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -270,7 +282,7 @@ jobs:
           restore-keys: |
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-${{ hashFiles('server/go.sum') }}-
             go-${{ runner.os }}-${{ steps.go.outputs.go-version }}-
-            setup-go-${{ runner.os }}-
+            go-${{ runner.os }}-
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22.x'
@@ -465,6 +477,8 @@ jobs:
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
       - name: Every job passed or was skipped
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
